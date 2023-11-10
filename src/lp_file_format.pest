@@ -1,0 +1,94 @@
+// Spec:
+// https://www.ibm.com/docs/en/icos/22.1.1?topic=cplex-lp-file-format-algebraic-representation
+
+// Common
+WHITESPACE   = _{ " " }
+POS_INFINITY =  { "+" ~ "inf" ~ "inity"? }
+NEG_INFINITY =  { "-" ~ "inf" ~ "inity"? }
+FLOAT        =  { POS_INFINITY | NEG_INFINITY | ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT+)? }
+PLUS_OP      =  { "+" }
+MINUS_OP     =  { "-" }
+OPERATOR     =  { PLUS_OP | MINUS_OP }
+COLON        = _{ ":" }
+
+// Comments
+// https://www.ibm.com/docs/en/icos/22.1.1?topic=representation-comments-in-lp-file-format
+COMMENT_TEXT = { (ASCII_ALPHANUMERIC)* }
+COMMENTS     = { "\\" ~ COMMENT_TEXT ~ NEWLINE }
+
+// Problem sense in LP file format
+// https://www.ibm.com/docs/en/icos/22.1.1?topic=representation-problem-sense-in-lp-file-format
+// Example:
+MIN_SENSE     =  { ^"MIN" ~ ^"IMIZE"? | ^"MINIMUM" }
+MAX_SENSE     =  { ^"MAX" ~ ^"IMIZE"? | ^"MAXIMUM" }
+PROBLEM_SENSE = _{ NEWLINE* ~ (MIN_SENSE | MAX_SENSE) }
+
+// Variable Names
+// https://www.ibm.com/docs/en/icos/22.1.1?topic=representation-variable-names-in-lp-file-format
+// alphanumeric (a-z, A-Z, 0-9) or one of these symbols:
+VALID_CHARS = _{
+    ASCII_ALPHANUMERIC
+  | "!"
+  | "#"
+  | "$"
+  | "%"
+  | "&"
+  | "("
+  | ")"
+  | ","
+  | "."
+  | ";"
+  | "?"
+  | "@"
+  | "_"
+  | "‘"
+  | "’"
+  | "{"
+  | "}"
+  | "~"
+}
+VARIABLE    =  { VALID_CHARS{1, 255} }
+
+// Objective function
+// https://www.ibm.com/docs/en/icos/22.1.1?topic=representation-objective-in-lp-file-format
+// Example: obj:  x1 + 2 x2 + 3.1415
+OBJECTIVE_EXPR = { FLOAT? ~ VARIABLE | FLOAT }
+OBJECTIVE      = {
+    NEWLINE* ~ ^"obj" ~ COLON ~ OBJECTIVE_EXPR ~ (NEWLINE? ~ OPERATOR ~ OBJECTIVE_EXPR)*
+}
+
+// Constraints
+// https://www.ibm.com/docs/en/icos/22.1.1?topic=representation-constraints-in-lp-file-format
+GT                =  { ">" }
+GTE               =  { ">=" }
+LT                =  { "<" }
+LTE               =  { "<=" }
+EQ                =  { "=" }
+CMP               = _{ GTE | GT | LTE | LT | EQ }
+CONSTRAINT_PREFIX = _{
+    (^"subject to" | ^"ST" | ^"such that" | ^"S.T.") ~ COLON ~ NEWLINE?
+}
+CONSTRAINT_EXPR   =  { FLOAT? ~ VARIABLE | FLOAT }
+CONSTRAINT_NAME   =  { ASCII_ALPHANUMERIC{1, 255} }
+CONSTRAINT        =  {
+    NEWLINE? ~ CONSTRAINT_NAME ~ COLON ~ CONSTRAINT_EXPR ~ (OPERATOR ~ CONSTRAINT_EXPR)* ~ CMP ~ FLOAT
+}
+CONSTRAINTS       =  { NEWLINE* ~ CONSTRAINT_PREFIX ~ CONSTRAINT+ }
+
+// Bounds
+// https://www.ibm.com/docs/en/icos/22.1.1?topic=representation-bounds-in-lp-file-format
+// bounds or bound
+BOUND_PREFIX = _{ ^"bound" ~ ^"s"? }
+BOUND        =  {
+    NEWLINE ~ (FLOAT ~ LTE ~ VARIABLE ~ LTE ~ FLOAT | VARIABLE ~ LTE ~ FLOAT | FLOAT ~ LTE ~ VARIABLE)
+}
+BOUNDS       =  { NEWLINE* ~ BOUND_PREFIX ~ BOUND+ }
+
+// End of file
+// https://www.ibm.com/docs/en/icos/22.1.1?topic=representation-end-file-in-lp-file-format
+EOF = _{ NEWLINE* ~ ^"END" }
+
+// Global
+LP_FILE = {
+    COMMENTS* ~ PROBLEM_SENSE ~ OBJECTIVE ~ CONSTRAINTS ~ BOUNDS? ~ EOF
+}

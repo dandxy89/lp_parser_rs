@@ -1,0 +1,14 @@
+[package]
+name = "congenial-enigma"
+version = "0.1.0"
+edition = "2021"
+authors = ["Dan Dixey", "Dan Dixey <dan@functorml.co.uk>"]
+rust-version = "1.70"
+publish = false
+
+[dependencies]
+pest = "2.7.5"
+pest_derive = "2.7.5"
+
+[dev-dependencies]
+divan = "0.1.2"
