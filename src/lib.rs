@@ -27,3 +27,9 @@
     clippy::wildcard_enum_match_arm
 )]
 #![allow(clippy::module_name_repetitions)]
+
+use pest_derive::Parser;
+
+#[derive(Parser)]
+#[grammar = "lp_file_format.pest"]
+pub struct LParser;
