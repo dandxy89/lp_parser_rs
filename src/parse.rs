@@ -6,7 +6,7 @@ use std::{
 
 use crate::{
     common::Filterable,
-    model::{Constraint, LPDefinition, Objective, Sense},
+    model::{Constraint, LPDefinition, Objective, Sense, VariableType},
     LParser, Rule,
 };
 use pest::{iterators::Pair, Parser};
@@ -63,54 +63,89 @@ fn compose_constraint(pair: Pair<'_, Rule>) -> anyhow::Result<Constraint> {
     Ok(Constraint { name, coefficients: coefficients?, sense, rhs })
 }
 
+#[allow(clippy::wildcard_enum_match_arm, clippy::unwrap_used)]
+fn get_bound(pair: Pair<'_, Rule>) -> Option<(&str, VariableType)> {
+    match pair.as_rule() {
+        Rule::LOWER_BOUND => {
+            let mut parts = pair.into_inner();
+            let name = parts.next().unwrap().as_str().trim();
+            let _ = parts.next();
+            Some((name, VariableType::LB(parts.next().unwrap().as_str().trim().parse().unwrap())))
+        }
+        Rule::UPPER_BOUND => {
+            let mut parts = pair.into_inner();
+            let name = parts.next().unwrap().as_str().trim();
+            let _ = parts.next();
+            Some((name, VariableType::UB(parts.next().unwrap().as_str().trim().parse().unwrap())))
+        }
+        Rule::BOUNDED => {
+            let mut parts = pair.into_inner();
+            let lb = parts.next().unwrap().as_str().trim();
+            let _ = parts.next();
+            let name = parts.next().unwrap().as_str().trim();
+            let _ = parts.next();
+            let ub = parts.next().unwrap().as_str().trim();
+            Some((name, VariableType::Bounded(lb.parse().unwrap(), ub.parse().unwrap())))
+        }
+        Rule::FREE => {
+            let mut parts = pair.into_inner();
+            let name = parts.next().unwrap().as_str().trim();
+            Some((name, VariableType::Free))
+        }
+        _ => None,
+    }
+}
+
 #[allow(clippy::wildcard_enum_match_arm)]
 fn compose(pair: Pair<'_, Rule>, mut parsed: LPDefinition) -> anyhow::Result<LPDefinition> {
     match pair.as_rule() {
         // Problem sense
-        Rule::MIN_SENSE => Ok(parsed.with_sense(Sense::Minimize)),
-        Rule::MAX_SENSE => Ok(parsed.with_sense(Sense::Maximize)),
+        Rule::MIN_SENSE => return Ok(parsed.with_sense(Sense::Minimize)),
+        Rule::MAX_SENSE => return Ok(parsed.with_sense(Sense::Maximize)),
         // Problem Objectives
         Rule::OBJECTIVES => {
             let objectives: anyhow::Result<Vec<Objective>> = pair.into_inner().map(|inner_pair| compose_objective(inner_pair)).collect();
             parsed.add_objective(objectives?);
-            Ok(parsed)
         }
         // Problem Constraints
         Rule::CONSTRAINTS => {
             let constraints: anyhow::Result<Vec<Constraint>> = pair.into_inner().map(|inner_pair| compose_constraint(inner_pair)).collect();
             parsed.add_constraints(constraints?);
-            Ok(parsed)
         }
         // Problem Bounds
+        Rule::BOUNDS => {
+            for bound_pair in pair.into_inner() {
+                if let Some((name, kind)) = get_bound(bound_pair) {
+                    parsed.set_var_bounds(name, kind);
+                }
+            }
+        }
         // Problem Integers
+        Rule::INTEGERS => {
+            for int_pair in pair.into_inner() {
+                if matches!(int_pair.as_rule(), Rule::VARIABLE) {
+                    parsed.set_var_bounds(int_pair.as_str(), VariableType::Integer);
+                }
+            }
+        }
         // Problem Generals
+        Rule::GENERALS => {
+            for gen_pair in pair.into_inner() {
+                if matches!(gen_pair.as_rule(), Rule::VARIABLE) {
+                    parsed.set_var_bounds(gen_pair.as_str(), VariableType::General);
+                }
+            }
+        }
         // Problem Binaries
-        _ => Ok(parsed),
+        Rule::BINARIES => {
+            for bin_pair in pair.into_inner() {
+                if matches!(bin_pair.as_rule(), Rule::VARIABLE) {
+                    parsed.set_var_bounds(bin_pair.as_str(), VariableType::Binary);
+                }
+            }
+        }
+        // Otherwise, skip!
+        _ => (),
     }
+    Ok(parsed)
 }
-
-//     // Problem Bounds
-//     Rule::BOUND_PREFIX => todo!(),
-//     Rule::BOUND => todo!(),
-//     Rule::BOUNDS => todo!(),
-//     // Problem Integers
-//     Rule::INTEGER_PREFIX => todo!(),
-//     Rule::INTEGERS => todo!(),
-//     // Problem Generals
-//     Rule::GENERALS_PREFIX => todo!(),
-//     Rule::GENERALS => todo!(),
-//     // Problem Binaries
-//     Rule::BINARIES_PREFIX => todo!(),
-//     Rule::BINARIES => todo!(),
-//     // Other
-//     Rule::WHITESPACE => todo!(),
-//     Rule::COLON => todo!(),
-//     Rule::ASTERIX => todo!(),
-//     Rule::FREE => todo!(),
-//     Rule::END => todo!(),
-//     Rule::COMMENT_TEXT => todo!(),
-//     Rule::COMMENTS => todo!(),
-//     Rule::PROBLEM_SENSE => todo!(),
-//     Rule::VALID_CHARS => todo!(),
-//     Rule::CONSTRAINT_PREFIX => todo!(),
-//     Rule::VARIABLE => todo!(),
