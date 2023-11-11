@@ -11,6 +11,7 @@ fn afiro() {
     assert_eq!(result.problem_sense, Sense::Minimize);
     assert_eq!(result.objectives.len(), 3);
     assert_eq!(result.constraints.len(), 27);
+    assert_eq!(result.variables.len(), 44);
 }
 
 #[test]

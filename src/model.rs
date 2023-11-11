@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{hash_map::Entry, HashMap};
 
 use pest::iterators::Pairs;
 
@@ -11,6 +11,8 @@ use crate::{
 pub enum VariableType {
     #[default]
     Free,
+    LB(f64),
+    UB(f64),
     Bounded(f64, f64),
     Integer,
     Binary,
@@ -78,19 +80,34 @@ impl LPDefinition {
         Self { problem_sense, ..Default::default() }
     }
 
-    pub fn add_variable(&mut self, name: String) {
-        self.variables.entry(name).or_default();
+    pub fn add_variable(&mut self, name: &str) {
+        self.variables.entry(name.to_string()).or_default();
     }
 
-    pub fn set_var_bounds(&mut self, name: String, kind: VariableType) {
-        self.variables.entry(name).and_modify(|bound_kind| *bound_kind = kind);
+    pub fn set_var_bounds(&mut self, name: &str, kind: VariableType) {
+        match self.variables.entry(name.to_string()) {
+            Entry::Occupied(k) => *k.into_mut() = kind,
+            Entry::Vacant(k) => {
+                k.insert(kind);
+            }
+        }
     }
 
     pub fn add_objective(&mut self, objectives: Vec<Objective>) {
+        for ob in &objectives {
+            ob.coefficients.iter().for_each(|c| {
+                self.add_variable(&c.var_name);
+            });
+        }
         self.objectives = objectives;
     }
 
     pub fn add_constraints(&mut self, constraints: Vec<Constraint>) {
+        for ob in &constraints {
+            ob.coefficients.iter().for_each(|c| {
+                self.add_variable(&c.var_name);
+            });
+        }
         self.constraints = constraints;
     }
 }
