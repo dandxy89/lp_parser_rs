@@ -55,11 +55,15 @@ fn fit1d() {
     assert_eq!(result.variables.len(), 2053);
 }
 
-// #[test]
-// fn fit2d() {
-//     let result = read_file_from_resources("fit2d.lp").unwrap();
-//     assert_eq!(result.problem_sense, Sense::Minimize);
-// }
+#[test]
+#[ignore = "fit2d.mps takes > 60 seconds"]
+fn fit2d() {
+    let result = read_file_from_resources("fit2d.lp").unwrap();
+    assert_eq!(result.problem_sense, Sense::Minimize);
+    assert_eq!(result.objectives.len(), 1);
+    assert_eq!(result.constraints.len(), 25);
+    assert_eq!(result.variables.len(), 21001);
+}
 
 #[test]
 fn kb2() {
@@ -99,6 +103,82 @@ fn sc50a() {
     assert_eq!(result.objectives.len(), 1);
     assert_eq!(result.constraints.len(), 49);
     assert_eq!(result.variables.len(), 70);
+}
+
+#[test]
+fn invalid() {
+    let result = read_file_from_resources("invalid.lp");
+    assert!(result.is_err());
+}
+
+#[test]
+fn no_end_section() {
+    let result = read_file_from_resources("no_end_section.lp").unwrap();
+    assert_eq!("", result.problem_name);
+    assert_eq!(result.problem_sense, Sense::Minimize);
+    assert_eq!(result.objectives.len(), 4);
+    assert_eq!(result.constraints.len(), 2);
+    assert_eq!(result.variables.len(), 6);
+}
+
+#[test]
+fn model2() {
+    let result = read_file_from_resources("model2.lp").unwrap();
+    assert_eq!("", result.problem_name);
+    assert_eq!(result.problem_sense, Sense::Minimize);
+    assert_eq!(result.objectives.len(), 1);
+    assert_eq!(result.constraints.len(), 4);
+    assert_eq!(result.variables.len(), 16);
+}
+
+#[test]
+fn limbo() {
+    let result = read_file_from_resources("limbo.lp").unwrap();
+    assert_eq!("", result.problem_name);
+    assert_eq!(result.problem_sense, Sense::Minimize);
+    assert_eq!(result.objectives.len(), 2);
+    assert_eq!(result.constraints.len(), 2);
+    assert_eq!(result.variables.len(), 8);
+}
+
+#[test]
+fn obj3_2cons() {
+    let result = read_file_from_resources("3obj_2cons.lp").unwrap();
+    assert_eq!("", result.problem_name);
+    assert_eq!(result.problem_sense, Sense::Minimize);
+    assert_eq!(result.objectives.len(), 4);
+    assert_eq!(result.constraints.len(), 2);
+    assert_eq!(result.variables.len(), 6);
+}
+
+#[test]
+fn obj_2cons_only_binary_vars() {
+    let result = read_file_from_resources("2obj_2cons_only_binary_vars.lp").unwrap();
+    assert_eq!("", result.problem_name);
+    assert_eq!(result.problem_sense, Sense::Minimize);
+    assert_eq!(result.objectives.len(), 2);
+    assert_eq!(result.constraints.len(), 2);
+    assert_eq!(result.variables.len(), 7);
+}
+
+#[test]
+fn obj_2cons_all_variable_types() {
+    let result = read_file_from_resources("2obj_2cons_all_variable_types.lp").unwrap();
+    assert_eq!("", result.problem_name);
+    assert_eq!(result.problem_sense, Sense::Minimize);
+    assert_eq!(result.objectives.len(), 2);
+    assert_eq!(result.constraints.len(), 2);
+    assert_eq!(result.variables.len(), 7);
+}
+
+#[test]
+fn obj_1cons_all_variables_with_bounds() {
+    let result = read_file_from_resources("1obj_1cons_all_variables_with_bounds.lp").unwrap();
+    assert_eq!("", result.problem_name);
+    assert_eq!(result.problem_sense, Sense::Maximize);
+    assert_eq!(result.objectives.len(), 1);
+    assert_eq!(result.constraints.len(), 1);
+    assert_eq!(result.variables.len(), 6);
 }
 
 fn read_file_from_resources(file_name: &str) -> anyhow::Result<LPDefinition> {

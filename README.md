@@ -38,3 +38,5 @@ A Rust LP file parser leveraging [PEST](https://docs.rs/pest/latest/pest/) and a
 Test data has been taken from another similar project:
 
 - [asbestian/jplex](https://github.com/asbestian/jplex/blob/main/instances/afiro.lp)
+- [odow/LPWriter.jl](https://github.com/odow/LPWriter.jl/blob/master/test/model2.lp)
+- [aphi/Lp-Parser](https://github.com/aphi/Lp-Parser)

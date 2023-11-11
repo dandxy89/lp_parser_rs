@@ -40,6 +40,12 @@ fn get_bound(pair: Pair<'_, Rule>) -> Option<(&str, VariableType)> {
             let _ = parts.next();
             Some((name, VariableType::LB(parts.next().unwrap().as_str().trim().parse().unwrap())))
         }
+        Rule::LOWER_BOUND_REV => {
+            let mut parts = pair.into_inner();
+            let value = parts.next().unwrap().as_str().trim().parse().unwrap();
+            let _ = parts.next();
+            Some((parts.next().unwrap().as_str().trim(), VariableType::LB(value)))
+        }
         Rule::UPPER_BOUND => {
             let mut parts = pair.into_inner();
             let name = parts.next().unwrap().as_str().trim();
