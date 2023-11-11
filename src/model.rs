@@ -8,6 +8,7 @@ use crate::{
 };
 
 #[derive(Debug, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 /// A enum representing the bounds of a variable
 pub enum VariableType {
     /// Unbounded variable (-Infinity, +Infinity)
@@ -28,12 +29,14 @@ pub enum VariableType {
 }
 
 #[derive(Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Objective {
     pub name: String,
     pub coefficients: Vec<Coefficient>,
 }
 
 #[derive(Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Coefficient {
     pub var_name: String,
     pub coefficient: f64,
@@ -61,6 +64,7 @@ impl TryFrom<Pairs<'_, Rule>> for Coefficient {
 }
 
 #[derive(Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Constraint {
     pub name: String,
     pub coefficients: Vec<Coefficient>,
@@ -69,6 +73,7 @@ pub struct Constraint {
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Sense {
     #[default]
     Minimize,
@@ -76,6 +81,7 @@ pub enum Sense {
 }
 
 #[derive(Debug, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct LPDefinition {
     pub problem_sense: Sense,
     pub variables: HashMap<String, VariableType>,
