@@ -17,7 +17,7 @@ A Rust LP file parser leveraging [PEST](https://docs.rs/pest/latest/pest/) and a
   - Multi-Objective Case
 - Constraints
 - Bounds
-- Variable Type: Integer, Generals, Lower Bounded, Upper Bounded, Free & Upper and Lower Bounded
+- Variable Types: Integer, Generals, Lower Bounded, Upper Bounded, Free & Upper and Lower Bounded
 
 ## TODOs List
 
@@ -35,6 +35,8 @@ A Rust LP file parser leveraging [PEST](https://docs.rs/pest/latest/pest/) and a
 
 ## Test data
 
-Test data has been taken from another similar project:
+Test data has been taken from another similar/related projects:
 
 - [asbestian/jplex](https://github.com/asbestian/jplex/blob/main/instances/afiro.lp)
+- [odow/LPWriter.jl](https://github.com/odow/LPWriter.jl/blob/master/test/model2.lp)
+- [aphi/Lp-Parser](https://github.com/aphi/Lp-Parser)
