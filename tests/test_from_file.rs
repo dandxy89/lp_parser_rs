@@ -12,7 +12,7 @@ fn afiro() {
     assert_eq!(result.problem_sense, Sense::Minimize);
     assert_eq!(result.objectives.len(), 3);
     assert_eq!(result.constraints.len(), 27);
-    assert_eq!(result.variables.len(), 44);
+    assert_eq!(result.variables.len(), 32);
 }
 
 #[test]
@@ -22,7 +22,7 @@ fn afiro_ext() {
     assert_eq!(result.problem_sense, Sense::Minimize);
     assert_eq!(result.objectives.len(), 4);
     assert_eq!(result.constraints.len(), 27);
-    assert_eq!(result.variables.len(), 66);
+    assert_eq!(result.variables.len(), 47);
 }
 
 #[test]
@@ -32,7 +32,7 @@ fn boeing1() {
     assert_eq!(result.problem_sense, Sense::Minimize);
     assert_eq!(result.objectives.len(), 1);
     assert_eq!(result.constraints.len(), 348);
-    assert_eq!(result.variables.len(), 856);
+    assert_eq!(result.variables.len(), 473);
 }
 
 #[test]
@@ -42,7 +42,7 @@ fn boeing2() {
     assert_eq!(result.problem_sense, Sense::Minimize);
     assert_eq!(result.objectives.len(), 1);
     assert_eq!(result.constraints.len(), 140);
-    assert_eq!(result.variables.len(), 280);
+    assert_eq!(result.variables.len(), 162);
 }
 
 #[test]
@@ -52,7 +52,7 @@ fn fit1d() {
     assert_eq!(result.problem_sense, Sense::Minimize);
     assert_eq!(result.objectives.len(), 1);
     assert_eq!(result.constraints.len(), 24);
-    assert_eq!(result.variables.len(), 2053);
+    assert_eq!(result.variables.len(), 1026);
 }
 
 #[test]
@@ -62,7 +62,7 @@ fn fit2d() {
     assert_eq!(result.problem_sense, Sense::Minimize);
     assert_eq!(result.objectives.len(), 1);
     assert_eq!(result.constraints.len(), 25);
-    assert_eq!(result.variables.len(), 21001);
+    assert_eq!(result.variables.len(), 10500);
 }
 
 #[test]
@@ -72,7 +72,7 @@ fn kb2() {
     assert_eq!(result.problem_sense, Sense::Minimize);
     assert_eq!(result.objectives.len(), 1);
     assert_eq!(result.constraints.len(), 43);
-    assert_eq!(result.variables.len(), 79);
+    assert_eq!(result.variables.len(), 41);
 }
 
 #[test]
@@ -82,7 +82,7 @@ fn pulp() {
     assert_eq!(result.problem_sense, Sense::Minimize);
     assert_eq!(result.objectives.len(), 1);
     assert_eq!(result.constraints.len(), 49);
-    assert_eq!(result.variables.len(), 86);
+    assert_eq!(result.variables.len(), 62);
 }
 
 #[test]
@@ -92,7 +92,7 @@ fn pulp2() {
     assert_eq!(result.problem_sense, Sense::Maximize);
     assert_eq!(result.objectives.len(), 1);
     assert_eq!(result.constraints.len(), 7);
-    assert_eq!(result.variables.len(), 148);
+    assert_eq!(result.variables.len(), 139);
 }
 
 #[test]
@@ -102,7 +102,7 @@ fn sc50a() {
     assert_eq!(result.problem_sense, Sense::Minimize);
     assert_eq!(result.objectives.len(), 1);
     assert_eq!(result.constraints.len(), 49);
-    assert_eq!(result.variables.len(), 70);
+    assert_eq!(result.variables.len(), 48);
 }
 
 #[test]
@@ -118,7 +118,7 @@ fn no_end_section() {
     assert_eq!(result.problem_sense, Sense::Minimize);
     assert_eq!(result.objectives.len(), 4);
     assert_eq!(result.constraints.len(), 2);
-    assert_eq!(result.variables.len(), 6);
+    assert_eq!(result.variables.len(), 3);
 }
 
 #[test]
@@ -128,7 +128,7 @@ fn model2() {
     assert_eq!(result.problem_sense, Sense::Minimize);
     assert_eq!(result.objectives.len(), 1);
     assert_eq!(result.constraints.len(), 4);
-    assert_eq!(result.variables.len(), 16);
+    assert_eq!(result.variables.len(), 8);
 }
 
 #[test]
@@ -138,7 +138,7 @@ fn limbo() {
     assert_eq!(result.problem_sense, Sense::Minimize);
     assert_eq!(result.objectives.len(), 2);
     assert_eq!(result.constraints.len(), 2);
-    assert_eq!(result.variables.len(), 8);
+    assert_eq!(result.variables.len(), 5);
 }
 
 #[test]
@@ -148,7 +148,7 @@ fn obj3_2cons() {
     assert_eq!(result.problem_sense, Sense::Minimize);
     assert_eq!(result.objectives.len(), 4);
     assert_eq!(result.constraints.len(), 2);
-    assert_eq!(result.variables.len(), 6);
+    assert_eq!(result.variables.len(), 3);
 }
 
 #[test]
@@ -158,7 +158,7 @@ fn obj_2cons_only_binary_vars() {
     assert_eq!(result.problem_sense, Sense::Minimize);
     assert_eq!(result.objectives.len(), 2);
     assert_eq!(result.constraints.len(), 2);
-    assert_eq!(result.variables.len(), 7);
+    assert_eq!(result.variables.len(), 4);
 }
 
 #[test]
@@ -168,7 +168,7 @@ fn obj_2cons_all_variable_types() {
     assert_eq!(result.problem_sense, Sense::Minimize);
     assert_eq!(result.objectives.len(), 2);
     assert_eq!(result.constraints.len(), 2);
-    assert_eq!(result.variables.len(), 7);
+    assert_eq!(result.variables.len(), 3);
 }
 
 #[test]
@@ -178,7 +178,17 @@ fn obj_1cons_all_variables_with_bounds() {
     assert_eq!(result.problem_sense, Sense::Maximize);
     assert_eq!(result.objectives.len(), 1);
     assert_eq!(result.constraints.len(), 1);
-    assert_eq!(result.variables.len(), 6);
+    assert_eq!(result.variables.len(), 3);
+}
+
+#[test]
+fn semi_continuous() {
+    let result = read_file_from_resources("semi_continuous.lp").unwrap();
+    assert_eq!("", result.problem_name);
+    assert_eq!(result.problem_sense, Sense::Minimize);
+    assert_eq!(result.objectives.len(), 2);
+    assert_eq!(result.constraints.len(), 2);
+    assert_eq!(dbg!(result.variables).len(), 8);
 }
 
 fn read_file_from_resources(file_name: &str) -> anyhow::Result<LPDefinition> {

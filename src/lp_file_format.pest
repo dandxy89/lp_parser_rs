@@ -43,14 +43,15 @@ PROBLEM_SENSE = _{ NEWLINE* ~ (MIN_SENSE | MAX_SENSE) }
 // https://www.ibm.com/docs/en/icos/22.1.1?topic=representation-variable-names-in-lp-file-format
 // alphanumeric (a-z, A-Z, 0-9) or one of these symbols: !"#$%&/,.;?@_`'{}()|~'
 VALID_CHARS       = _{
-    !(FREE | END | CONSTRAINT_PREFIX) ~ (ASCII_ALPHANUMERIC | "!" | "#" | "$" | "%" | "&" | "(" | ")" | "," | "." | ";" | "?" | "@" | "_" | "‘" | "’" | "{" | "}" | "~")
+    !WHITESPACE ~ (ASCII_ALPHANUMERIC | "!" | "#" | "$" | "%" | "&" | "(" | ")" | "," | "." | ";" | "?" | "@" | "_" | "‘" | "’" | "{" | "}" | "~")
 }
 CONSTRAINT_PREFIX = _{
     (^"subject to" | ^"such that" | ^"S.T.") ~ COLON? ~ NEWLINE?
 }
 VARIABLE          =  {
-    !(FREE | END | CONSTRAINT_PREFIX | GENERALS_PREFIX | BINARIES_PREFIX) ~ VALID_CHARS{1, 255}
+    !(FREE | END | CONSTRAINT_PREFIX | GENERALS_PREFIX | BINARIES_PREFIX | SEMI_CONTINUOUS_PREFIX) ~ VALID_CHARS{1, 255}
 }
+SEMI_VARIABLE     =  { !(FREE | END | CONSTRAINT_PREFIX | GENERALS_PREFIX | BINARIES_PREFIX | SEMI_CONTINUOUS_PREFIX) ~ VALID_CHARS ~ (!WHITESPACE ~ VALID_CHARS) }
 
 // Objective function
 // https://www.ibm.com/docs/en/icos/22.1.1?topic=representation-objective-in-lp-file-format
@@ -109,12 +110,18 @@ GENERALS        =  { NEWLINE ~ GENERALS_PREFIX ~ (NEWLINE ~ VARIABLE)+ }
 BINARIES_PREFIX = _{ ^"Binar" ~ (^"ies" | ^"y") }
 BINARIES        =  { NEWLINE ~ BINARIES_PREFIX ~ (NEWLINE ~ VARIABLE)+ }
 
+// Semi-Continuous
+// To specify any of the variables as semi-continuous variables, that is as variables that
+// may take the value 0 or values between the specified lower and upper bounds
+SEMI_CONTINUOUS_PREFIX = _{ ^"SEMI" ~ (^"S" | ^"-CONTINUOUS") }
+SEMI_CONTINUOUS        =  { NEWLINE ~ SEMI_CONTINUOUS_PREFIX ~ (NEWLINE? ~ SEMI_VARIABLE)+ }
+
 // End of file
 // https://www.ibm.com/docs/en/icos/22.1.1?topic=representation-end-file-in-lp-file-format
 EOF = _{ NEWLINE* ~ END }
 
 // Global
-OPTIONAL_SECTIONS = _{ BOUNDS? ~ INTEGERS? ~ GENERALS? ~ BINARIES? ~ EOF? }
+OPTIONAL_SECTIONS = _{ BOUNDS? ~ INTEGERS? ~ GENERALS? ~ BINARIES? ~ SEMI_CONTINUOUS? ~ EOF? }
 LP_FILE           =  {
     LP_PROBLEM_NAME? ~ COMMENTS* ~ PROBLEM_SENSE ~ OBJECTIVES ~ CONSTRAINTS ~ OPTIONAL_SECTIONS
 }
