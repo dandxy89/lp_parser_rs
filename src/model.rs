@@ -3,16 +3,15 @@ use std::collections::HashMap;
 use pest::iterators::Pairs;
 
 use crate::{
-    common::{AsFloat, IsNumeric},
+    common::{AsFloat, Filterable},
     Rule,
 };
 
 #[derive(Debug, Default)]
 pub enum VariableType {
     #[default]
-    Unbounded,
-    Bounded(f64, f64),
     Free,
+    Bounded(f64, f64),
     Integer,
     Binary,
 }
@@ -25,7 +24,7 @@ pub struct Objective {
 
 #[derive(Debug)]
 pub struct Coefficient {
-    pub name: String,
+    pub var_name: String,
     pub coefficient: f64,
 }
 
@@ -34,19 +33,19 @@ impl TryFrom<Pairs<'_, Rule>> for Coefficient {
 
     #[allow(clippy::unreachable, clippy::wildcard_enum_match_arm)]
     fn try_from(values: Pairs<'_, Rule>) -> anyhow::Result<Self> {
-        let (mut value, mut name) = (1.0, String::new());
+        let (mut value, mut var_name) = (1.0, String::new());
         for item in values {
             match item.as_rule() {
                 r if r.is_numeric() => {
                     value *= item.as_float()?;
                 }
                 Rule::VARIABLE => {
-                    name = item.as_str().to_string();
+                    var_name = item.as_str().to_string();
                 }
-                _ => unreachable!(),
+                _ => unreachable!("Unexpected rule encountered"),
             }
         }
-        Ok(Self { name, coefficient: value })
+        Ok(Self { var_name, coefficient: value })
     }
 }
 

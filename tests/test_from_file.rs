@@ -10,6 +10,7 @@ fn afiro() {
     let result = read_file_from_resources("afiro.lp").unwrap();
     assert_eq!(result.problem_sense, Sense::Minimize);
     assert_eq!(result.objectives.len(), 3);
+    assert_eq!(result.constraints.len(), 27);
 }
 
 #[test]
