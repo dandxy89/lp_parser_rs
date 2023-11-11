@@ -26,6 +26,8 @@ pub enum VariableType {
     #[default]
     // General variable [0, +Infinity]
     General,
+    // Semi-continuous
+    SemiContinuous,
 }
 
 #[derive(Debug)]
@@ -102,14 +104,18 @@ impl LPDefinition {
     }
 
     pub fn add_variable(&mut self, name: &str) {
-        self.variables.entry(name.to_string()).or_default();
+        if !name.is_empty() {
+            self.variables.entry(name.trim().to_string()).or_default();
+        }
     }
 
     pub fn set_var_bounds(&mut self, name: &str, kind: VariableType) {
-        match self.variables.entry(name.to_string()) {
-            Entry::Occupied(k) => *k.into_mut() = kind,
-            Entry::Vacant(k) => {
-                k.insert(kind);
+        if !name.is_empty() {
+            match self.variables.entry(name.trim().to_string()) {
+                Entry::Occupied(k) => *k.into_mut() = kind,
+                Entry::Vacant(k) => {
+                    k.insert(kind);
+                }
             }
         }
     }

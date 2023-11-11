@@ -122,6 +122,14 @@ pub fn compose(pair: Pair<'_, Rule>, mut parsed: LPDefinition) -> anyhow::Result
                 }
             }
         }
+        // Problem Semi-continuous
+        Rule::SEMI_CONTINUOUS => {
+            for bin_pair in pair.into_inner() {
+                if matches!(bin_pair.as_rule(), Rule::SEMI_VARIABLE) {
+                    parsed.set_var_bounds(bin_pair.as_str(), VariableType::SemiContinuous);
+                }
+            }
+        }
         // Otherwise, skip!
         _ => (),
     }
