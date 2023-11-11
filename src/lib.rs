@@ -30,6 +30,10 @@
 
 use pest_derive::Parser;
 
+pub mod common;
+pub mod model;
+pub mod parse;
+
 #[derive(Parser)]
 #[grammar = "lp_file_format.pest"]
 pub struct LParser;
