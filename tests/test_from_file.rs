@@ -15,6 +15,15 @@ fn afiro() {
 }
 
 #[test]
+fn afiro_ext() {
+    let result = read_file_from_resources("afiro_ext.lp").unwrap();
+    assert_eq!(result.problem_sense, Sense::Minimize);
+    assert_eq!(result.objectives.len(), 4);
+    assert_eq!(result.constraints.len(), 27);
+    assert_eq!(result.variables.len(), 59);
+}
+
+#[test]
 fn boeing1() {
     let result = read_file_from_resources("boeing1.lp").unwrap();
     assert_eq!(result.problem_sense, Sense::Minimize);
