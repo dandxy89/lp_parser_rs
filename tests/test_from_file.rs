@@ -23,24 +23,32 @@ fn afiro_ext() {
     assert_eq!(result.variables.len(), 66);
 }
 
-// #[test]
-// fn boeing1() {
-//     let result = read_file_from_resources("boeing1.lp").unwrap();
-//     assert_eq!(result.problem_sense, Sense::Minimize);
-// }
+#[test]
+fn boeing1() {
+    let result = read_file_from_resources("boeing1.lp").unwrap();
+    assert_eq!(result.problem_sense, Sense::Minimize);
+    assert_eq!(result.objectives.len(), 1);
+    assert_eq!(result.constraints.len(), 348);
+    assert_eq!(result.variables.len(), 856);
+}
 
-// #[test]
-// fn boeing2() {
-//     let result = read_file_from_resources("boeing2.lp").unwrap();
-//     assert_eq!(result.problem_sense, Sense::Minimize);
-// }
+#[test]
+fn boeing2() {
+    let result = read_file_from_resources("boeing2.lp").unwrap();
+    assert_eq!(result.problem_sense, Sense::Minimize);
+    assert_eq!(result.objectives.len(), 1);
+    assert_eq!(result.constraints.len(), 140);
+    assert_eq!(result.variables.len(), 280);
+}
 
-// #[test]
-// fn fit1d() {
-//     let result = read_file_from_resources("fit1d.lp").unwrap();
-//     assert_eq!(result.problem_sense, Sense::Minimize);
-
-// }
+#[test]
+fn fit1d() {
+    let result = read_file_from_resources("fit1d.lp").unwrap();
+    assert_eq!(result.problem_sense, Sense::Minimize);
+    assert_eq!(result.objectives.len(), 1);
+    assert_eq!(result.constraints.len(), 24);
+    assert_eq!(result.variables.len(), 2053);
+}
 
 // #[test]
 // fn fit2d() {
