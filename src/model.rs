@@ -83,6 +83,7 @@ pub enum Sense {
 #[derive(Debug, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct LPDefinition {
+    pub problem_name: String,
     pub problem_sense: Sense,
     pub variables: HashMap<String, VariableType>,
     pub objectives: Vec<Objective>,
@@ -91,8 +92,13 @@ pub struct LPDefinition {
 
 impl LPDefinition {
     #[must_use]
-    pub fn with_sense(&mut self, problem_sense: Sense) -> Self {
-        Self { problem_sense, ..Default::default() }
+    pub fn with_problem_name(self, problem_name: &str) -> Self {
+        Self { problem_name: problem_name.to_string(), ..self }
+    }
+
+    #[must_use]
+    pub fn with_sense(self, problem_sense: Sense) -> Self {
+        Self { problem_sense, ..self }
     }
 
     pub fn add_variable(&mut self, name: &str) {

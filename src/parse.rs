@@ -99,6 +99,8 @@ fn get_bound(pair: Pair<'_, Rule>) -> Option<(&str, VariableType)> {
 #[allow(clippy::wildcard_enum_match_arm)]
 fn compose(pair: Pair<'_, Rule>, mut parsed: LPDefinition) -> anyhow::Result<LPDefinition> {
     match pair.as_rule() {
+        // Problem Name
+        Rule::PROBLEM_NAME => return Ok(parsed.with_problem_name(pair.as_str())),
         // Problem sense
         Rule::MIN_SENSE => return Ok(parsed.with_sense(Sense::Minimize)),
         Rule::MAX_SENSE => return Ok(parsed.with_sense(Sense::Maximize)),

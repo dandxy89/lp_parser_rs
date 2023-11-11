@@ -11,7 +11,6 @@ A Rust LP file parser leveraging [PEST](https://docs.rs/pest/latest/pest/) and a
 ## TODOs List
 
 - Semi-continuous
-- get Problem Name
 - Quadratic
 - SOS
 - Lazy

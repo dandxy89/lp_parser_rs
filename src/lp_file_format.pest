@@ -22,6 +22,10 @@ ASTERIX      = _{ "*" }
 FREE         =  { ^"FREE" }
 END          = _{ ^"END" }
 
+// Problem Name
+PROBLEM_NAME    =  { VALID_CHARS+ }
+LP_PROBLEM_NAME = _{ "\\" ~ "Problem name:" ~ PROBLEM_NAME }
+
 // Comments
 // https://www.ibm.com/docs/en/icos/22.1.1?topic=representation-comments-in-lp-file-format
 // TODO: Problem Name
@@ -110,5 +114,5 @@ EOF = _{ NEWLINE* ~ END }
 
 // Global
 LP_FILE = {
-    COMMENTS* ~ PROBLEM_SENSE ~ OBJECTIVES ~ CONSTRAINTS ~ BOUNDS? ~ INTEGERS? ~ GENERALS? ~ BINARIES? ~ EOF
+    LP_PROBLEM_NAME? ~ COMMENTS* ~ PROBLEM_SENSE ~ OBJECTIVES ~ CONSTRAINTS ~ BOUNDS? ~ INTEGERS? ~ GENERALS? ~ BINARIES? ~ EOF
 }
