@@ -5,7 +5,7 @@ use std::{
 };
 
 use crate::{
-    common::Filterable,
+    common::RuleExt,
     model::{Constraint, LPDefinition, Objective, Sense, VariableType},
     LParser, Rule,
 };

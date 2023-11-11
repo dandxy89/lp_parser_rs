@@ -1,12 +1,12 @@
 use crate::Rule;
 use pest::iterators::Pair;
 
-pub trait Filterable {
+pub trait RuleExt {
     fn is_numeric(&self) -> bool;
     fn is_cmp(&self) -> bool;
 }
 
-impl Filterable for Rule {
+impl RuleExt for Rule {
     fn is_numeric(&self) -> bool {
         matches!(self, Self::FLOAT | Self::PLUS | Self::MINUS | Self::POS_INFINITY | Self::NEG_INFINITY)
     }

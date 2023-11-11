@@ -3,7 +3,7 @@ use std::collections::{hash_map::Entry, HashMap};
 use pest::iterators::Pairs;
 
 use crate::{
-    common::{AsFloat, Filterable},
+    common::{AsFloat, RuleExt},
     Rule,
 };
 
