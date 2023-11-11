@@ -5,6 +5,7 @@ use std::{
 };
 
 use crate::{
+    common::Filterable,
     model::{Constraint, LPDefinition, Objective, Sense},
     LParser, Rule,
 };
@@ -32,46 +33,54 @@ pub fn parse_lp_file(contents: &str) -> anyhow::Result<LPDefinition> {
     };
     let mut parsed_contents = LPDefinition::default();
     for pair in pair.clone().into_inner() {
-        parsed_contents = build(pair, parsed_contents)?;
+        parsed_contents = compose(pair, parsed_contents)?;
     }
-
-    Ok(dbg!(parsed_contents))
+    Ok(parsed_contents)
 }
 
 #[allow(clippy::unwrap_used)]
-fn build_objective(pair: Pair<'_, Rule>) -> anyhow::Result<Objective> {
-    let mut components = pair.into_inner();
-    let name = components.next().unwrap().as_str().to_string();
-    let coefficients: anyhow::Result<Vec<_>> = components.map(|p| p.into_inner().try_into()).collect();
+fn compose_objective(pair: Pair<'_, Rule>) -> anyhow::Result<Objective> {
+    let mut parts = pair.into_inner();
+    let name = parts.next().unwrap().as_str().to_string();
+    let coefficients: anyhow::Result<Vec<_>> = parts.map(|p| p.into_inner().try_into()).collect();
     Ok(Objective { name, coefficients: coefficients? })
 }
 
-fn build_constraint(_pair: Pair<'_, Rule>) -> anyhow::Result<Constraint> {
-    // pub name: String,
-    // pub coefficients: Vec<Coefficient>,
-    // pub sense: String,
-    // pub rhs: f64,
-    unimplemented!()
+#[allow(clippy::unwrap_used)]
+fn compose_constraint(pair: Pair<'_, Rule>) -> anyhow::Result<Constraint> {
+    let mut parts = pair.into_inner();
+    let name = parts.next().unwrap().as_str().to_string();
+    let mut coefficients: Vec<_> = vec![];
+    while let Some(p) = parts.peek() {
+        if p.as_rule().is_cmp() {
+            break;
+        }
+        coefficients.push(parts.next().unwrap());
+    }
+    let coefficients: anyhow::Result<Vec<_>> = coefficients.into_iter().map(|p| p.into_inner().try_into()).collect();
+    let sense = parts.next().unwrap().as_str().to_string();
+    let rhs = parts.next().unwrap().as_str().parse()?;
+    Ok(Constraint { name, coefficients: coefficients?, sense, rhs })
 }
 
 #[allow(clippy::wildcard_enum_match_arm)]
-fn build(pair: Pair<'_, Rule>, mut parsed: LPDefinition) -> anyhow::Result<LPDefinition> {
+fn compose(pair: Pair<'_, Rule>, mut parsed: LPDefinition) -> anyhow::Result<LPDefinition> {
     match pair.as_rule() {
         // Problem sense
         Rule::MIN_SENSE => Ok(parsed.with_sense(Sense::Minimize)),
         Rule::MAX_SENSE => Ok(parsed.with_sense(Sense::Maximize)),
         // Problem Objectives
         Rule::OBJECTIVES => {
-            let objectives: anyhow::Result<Vec<Objective>> = pair.into_inner().map(|inner_pair| build_objective(inner_pair)).collect();
+            let objectives: anyhow::Result<Vec<Objective>> = pair.into_inner().map(|inner_pair| compose_objective(inner_pair)).collect();
             parsed.add_objective(objectives?);
             Ok(parsed)
         }
         // Problem Constraints
-        // Rule::CONSTRAINTS => {
-        //     let constraints: anyhow::Result<Vec<Constraint>> = pair.into_inner().map(|inner_pair| build_constraint(inner_pair)).collect();
-        //     parsed.add_constraints(constraints?);
-        //     Ok(parsed)
-        // }
+        Rule::CONSTRAINTS => {
+            let constraints: anyhow::Result<Vec<Constraint>> = pair.into_inner().map(|inner_pair| compose_constraint(inner_pair)).collect();
+            parsed.add_constraints(constraints?);
+            Ok(parsed)
+        }
         // Problem Bounds
         // Problem Integers
         // Problem Generals
@@ -80,10 +89,6 @@ fn build(pair: Pair<'_, Rule>, mut parsed: LPDefinition) -> anyhow::Result<LPDef
     }
 }
 
-//     Rule::CONSTRAINT_EXPR => todo!(),
-//     Rule::CONSTRAINT_NAME => todo!(),
-//     Rule::CONSTRAINT => todo!(),
-//     Rule::CONSTRAINTS => todo!(),
 //     // Problem Bounds
 //     Rule::BOUND_PREFIX => todo!(),
 //     Rule::BOUND => todo!(),
@@ -99,12 +104,6 @@ fn build(pair: Pair<'_, Rule>, mut parsed: LPDefinition) -> anyhow::Result<LPDef
 //     Rule::BINARIES => todo!(),
 //     // Other
 //     Rule::WHITESPACE => todo!(),
-//     Rule::POS_INFINITY => todo!(),
-//     Rule::NEG_INFINITY => todo!(),
-//     Rule::FLOAT => todo!(),
-//     Rule::PLUS => todo!(),
-//     Rule::MINUS => todo!(),
-//     Rule::OPERATOR => todo!(),
 //     Rule::COLON => todo!(),
 //     Rule::ASTERIX => todo!(),
 //     Rule::FREE => todo!(),
@@ -115,10 +114,3 @@ fn build(pair: Pair<'_, Rule>, mut parsed: LPDefinition) -> anyhow::Result<LPDef
 //     Rule::VALID_CHARS => todo!(),
 //     Rule::CONSTRAINT_PREFIX => todo!(),
 //     Rule::VARIABLE => todo!(),
-//     Rule::GT => todo!(),
-//     Rule::GTE => todo!(),
-//     Rule::LT => todo!(),
-//     Rule::LTE => todo!(),
-//     Rule::EQ => todo!(),
-//     Rule::CMP => todo!(),
-//     Rule::EOF => todo!(),
