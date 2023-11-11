@@ -1,6 +1,8 @@
 // Spec:
 // https://www.ibm.com/docs/en/icos/22.1.1?topic=cplex-lp-file-format-algebraic-representation
 // https://www.fico.com/fico-xpress-optimization/docs/dms2020-03/solver/optimizer/HTML/chapter10_sec_section102.html
+// https://www.gurobi.com/documentation/current/refman/lp_format.html
+// 
 
 // Common
 WHITESPACE   = _{ " " }
@@ -9,7 +11,7 @@ NEG_INFINITY =  { "-" ~ ^"inf" ~ ^"inity"? }
 FLOAT        =  { POS_INFINITY | NEG_INFINITY | ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT+)? }
 PLUS         =  { "+" }
 MINUS        =  { "-" }
-OPERATOR     =  { PLUS | MINUS }
+OPERATOR     = _{ PLUS | MINUS }
 COLON        = _{ ":" }
 ASTERIX      = _{ "*" }
 FREE         =  { ^"FREE" }
@@ -17,6 +19,7 @@ END          = _{ ^"END" }
 
 // Comments
 // https://www.ibm.com/docs/en/icos/22.1.1?topic=representation-comments-in-lp-file-format
+// TODO: Problem Name
 COMMENT_TEXT = _{ (VALID_CHARS | COLON)* }
 COMMENTS     = _{ "\\" ~ ASTERIX? ~ COMMENT_TEXT ~ ASTERIX? ~ NEWLINE? }
 
