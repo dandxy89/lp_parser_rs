@@ -8,6 +8,7 @@ use congenial_enigma::{
 #[test]
 fn afiro() {
     let result = read_file_from_resources("afiro.lp").unwrap();
+    assert_eq!("afiro.mps", result.problem_name);
     assert_eq!(result.problem_sense, Sense::Minimize);
     assert_eq!(result.objectives.len(), 3);
     assert_eq!(result.constraints.len(), 27);
@@ -17,6 +18,7 @@ fn afiro() {
 #[test]
 fn afiro_ext() {
     let result = read_file_from_resources("afiro_ext.lp").unwrap();
+    assert_eq!("afiro.mps", result.problem_name);
     assert_eq!(result.problem_sense, Sense::Minimize);
     assert_eq!(result.objectives.len(), 4);
     assert_eq!(result.constraints.len(), 27);
@@ -26,6 +28,7 @@ fn afiro_ext() {
 #[test]
 fn boeing1() {
     let result = read_file_from_resources("boeing1.lp").unwrap();
+    assert_eq!("boeing1.lp", result.problem_name);
     assert_eq!(result.problem_sense, Sense::Minimize);
     assert_eq!(result.objectives.len(), 1);
     assert_eq!(result.constraints.len(), 348);
@@ -35,6 +38,7 @@ fn boeing1() {
 #[test]
 fn boeing2() {
     let result = read_file_from_resources("boeing2.lp").unwrap();
+    assert_eq!("boeing2.mps", result.problem_name);
     assert_eq!(result.problem_sense, Sense::Minimize);
     assert_eq!(result.objectives.len(), 1);
     assert_eq!(result.constraints.len(), 140);
@@ -44,6 +48,7 @@ fn boeing2() {
 #[test]
 fn fit1d() {
     let result = read_file_from_resources("fit1d.lp").unwrap();
+    assert_eq!("fit1d.mps", result.problem_name);
     assert_eq!(result.problem_sense, Sense::Minimize);
     assert_eq!(result.objectives.len(), 1);
     assert_eq!(result.constraints.len(), 24);
@@ -59,6 +64,7 @@ fn fit1d() {
 #[test]
 fn kb2() {
     let result = read_file_from_resources("kb2.lp").unwrap();
+    assert_eq!("kb2.mps", result.problem_name);
     assert_eq!(result.problem_sense, Sense::Minimize);
     assert_eq!(result.objectives.len(), 1);
     assert_eq!(result.constraints.len(), 43);
@@ -68,6 +74,7 @@ fn kb2() {
 #[test]
 fn pulp() {
     let result = read_file_from_resources("pulp.lp").unwrap();
+    assert_eq!("", result.problem_name);
     assert_eq!(result.problem_sense, Sense::Minimize);
     assert_eq!(result.objectives.len(), 1);
     assert_eq!(result.constraints.len(), 49);
@@ -77,6 +84,7 @@ fn pulp() {
 #[test]
 fn pulp2() {
     let result = read_file_from_resources("pulp2.lp").unwrap();
+    assert_eq!("", result.problem_name);
     assert_eq!(result.problem_sense, Sense::Maximize);
     assert_eq!(result.objectives.len(), 1);
     assert_eq!(result.constraints.len(), 7);
@@ -86,6 +94,7 @@ fn pulp2() {
 #[test]
 fn sc50a() {
     let result = read_file_from_resources("sc50a.lp").unwrap();
+    assert_eq!("sc50a.lp", result.problem_name);
     assert_eq!(result.problem_sense, Sense::Minimize);
     assert_eq!(result.objectives.len(), 1);
     assert_eq!(result.constraints.len(), 49);
