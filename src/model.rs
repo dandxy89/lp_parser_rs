@@ -10,12 +10,13 @@ use crate::{
 #[derive(Debug, Default)]
 pub enum VariableType {
     #[default]
-    Free,
+    Free, // [-Infinity, +Infinity]
     LB(f64),
     UB(f64),
     Bounded(f64, f64),
-    Integer,
+    Integer, // [0, 1]
     Binary,
+    General, // [0, +Infinity]
 }
 
 #[derive(Debug)]
