@@ -32,6 +32,7 @@ use pest_derive::Parser;
 
 pub mod common;
 pub mod model;
+pub mod lp_parts;
 pub mod parse;
 
 #[derive(Parser)]
