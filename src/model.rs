@@ -8,15 +8,23 @@ use crate::{
 };
 
 #[derive(Debug, Default)]
+/// A enum representing the bounds of a variable
 pub enum VariableType {
-    #[default]
-    Free, // [-Infinity, +Infinity]
+    /// Unbounded variable (-Infinity, +Infinity)
+    Free,
+    // Lower bounded variable
     LB(f64),
+    // Upper bounded variable
     UB(f64),
+    // Bounded variable
     Bounded(f64, f64),
-    Integer, // [0, 1]
+    // Integer variable [0, 1]
+    Integer,
+    // Binary variable
     Binary,
-    General, // [0, +Infinity]
+    #[default]
+    // General variable [0, +Infinity]
+    General,
 }
 
 #[derive(Debug)]
