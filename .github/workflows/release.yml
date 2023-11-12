@@ -31,5 +31,5 @@ jobs:
               { "type": "revert", "section": "Reverts", "hidden": false },
               { "type": "refactor", "section": "Code Refactoring", "hidden": false },
               { "type": "style", "section": "Styles", "hidden": true },
-              { "type": "test", "section": "Tests", "hidden": false }
+              { "type": "test", "section": "Tests", "hidden": true }
             ]
