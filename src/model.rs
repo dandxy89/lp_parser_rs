@@ -1,4 +1,7 @@
-use std::collections::{hash_map::Entry, HashMap};
+use std::{
+    collections::{hash_map::Entry, HashMap},
+    str::FromStr,
+};
 
 use pest::iterators::Pairs;
 
@@ -89,11 +92,36 @@ impl TryFrom<Pairs<'_, Rule>> for Coefficient {
 
 #[derive(Debug)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct Constraint {
-    pub name: String,
-    pub coefficients: Vec<Coefficient>,
-    pub sense: String,
-    pub rhs: f64,
+pub enum SOSClass {
+    S1,
+    S2,
+}
+
+impl FromStr for SOSClass {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "s1" | "s1::" => Ok(Self::S1),
+            "s2" | "s2::" => Ok(Self::S2),
+            _ => Err(anyhow::anyhow!("Invalid SOS class: {}", s)),
+        }
+    }
+}
+
+#[derive(Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum Constraint {
+    Standard { name: String, coefficients: Vec<Coefficient>, sense: String, rhs: f64 },
+    SOS { name: String, kind: SOSClass, coefficients: Vec<Coefficient> },
+}
+
+impl Constraint {
+    fn coefficients(&self) -> &[Coefficient] {
+        match self {
+            Self::Standard { coefficients, .. } | Self::SOS { coefficients, .. } => coefficients,
+        }
+    }
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -156,7 +184,7 @@ impl LPDefinition {
 
     pub fn add_constraints(&mut self, constraints: Vec<Constraint>) {
         for ob in &constraints {
-            ob.coefficients.iter().for_each(|c| {
+            ob.coefficients().iter().for_each(|c| {
                 self.add_variable(&c.var_name);
             });
         }

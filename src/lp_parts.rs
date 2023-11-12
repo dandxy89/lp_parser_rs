@@ -1,8 +1,10 @@
+use std::str::FromStr;
+
 use pest::iterators::Pair;
 
 use crate::{
     common::RuleExt,
-    model::{Constraint, LPDefinition, Objective, Sense, VariableType},
+    model::{Constraint, LPDefinition, Objective, SOSClass, Sense, VariableType},
     Rule,
 };
 
@@ -28,7 +30,16 @@ fn compose_constraint(pair: Pair<'_, Rule>) -> anyhow::Result<Constraint> {
     let coefficients: anyhow::Result<Vec<_>> = coefficients.into_iter().map(|p| p.into_inner().try_into()).collect();
     let sense = parts.next().unwrap().as_str().to_string();
     let rhs = parts.next().unwrap().as_str().parse()?;
-    Ok(Constraint { name, coefficients: coefficients?, sense, rhs })
+    Ok(Constraint::Standard { name, coefficients: coefficients?, sense, rhs })
+}
+
+#[allow(clippy::unwrap_used)]
+fn compose_sos(pair: Pair<'_, Rule>) -> anyhow::Result<Constraint> {
+    let mut parts = pair.into_inner();
+    let name = parts.next().unwrap().as_str().to_string();
+    let kind = parts.next().unwrap().as_str().to_lowercase();
+    let coefficients: anyhow::Result<Vec<_>> = parts.map(|p| p.into_inner().try_into()).collect();
+    Ok(Constraint::SOS { name, kind: SOSClass::from_str(&kind)?, coefficients: coefficients? })
 }
 
 #[allow(clippy::wildcard_enum_match_arm, clippy::unwrap_used)]
@@ -88,6 +99,10 @@ pub fn compose(pair: Pair<'_, Rule>, mut parsed: LPDefinition) -> anyhow::Result
         // Problem Constraints
         Rule::CONSTRAINTS => {
             let constraints: anyhow::Result<Vec<Constraint>> = pair.into_inner().map(|inner_pair| compose_constraint(inner_pair)).collect();
+            parsed.add_constraints(constraints?);
+        }
+        Rule::SOS => {
+            let constraints: anyhow::Result<Vec<Constraint>> = pair.into_inner().map(|inner_pair| compose_sos(inner_pair)).collect();
             parsed.add_constraints(constraints?);
         }
         // Problem Bounds
