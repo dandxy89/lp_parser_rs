@@ -22,27 +22,10 @@ ASTERIX      = _{ "*" }
 FREE         =  { ^"FREE" }
 END          = _{ ^"END" }
 
-// Problem Name
-PROBLEM_NAME    = ${ VALID_CHARS+ }
-LP_PROBLEM_NAME = _{ "\\" ~ "Problem name:" ~ PROBLEM_NAME }
-
-// Comments
-// https://www.ibm.com/docs/en/icos/22.1.1?topic=representation-comments-in-lp-file-format
-// TODO: Problem Name
-COMMENT_TEXT = _{ (VALID_CHARS | COLON)* }
-COMMENTS     = _{ "\\" ~ ASTERIX? ~ COMMENT_TEXT ~ ASTERIX? ~ NEWLINE? }
-
-// Problem sense in LP file format
-// https://www.ibm.com/docs/en/icos/22.1.1?topic=representation-problem-sense-in-lp-file-format
-// Example:
-MIN_SENSE     =  { ^"MIN" ~ ^"IMIZE"? | ^"MINIMUM" }
-MAX_SENSE     =  { ^"MAX" ~ ^"IMIZE"? | ^"MAXIMUM" }
-PROBLEM_SENSE = _{ NEWLINE* ~ (MIN_SENSE | MAX_SENSE) }
-
 // Variable Names
 // https://www.ibm.com/docs/en/icos/22.1.1?topic=representation-variable-names-in-lp-file-format
 // alphanumeric (a-z, A-Z, 0-9) or one of these symbols: !"#$%&/,.;?@_`'{}()|~'
-VALID_CHARS       = _{
+VALID_CHARS = _{
     ASCII_ALPHANUMERIC
   | "!"
   | "#"
@@ -63,12 +46,26 @@ VALID_CHARS       = _{
   | "}"
   | "~"
 }
-CONSTRAINT_PREFIX = _{
-    (^"subject to" | ^"such that" | ^"S.T.") ~ COLON? ~ NEWLINE?
+VARIABLE    = ${
+    !(FREE | END | CONSTRAINT_SECTION | BOUND_SECTION | GENERALS_SECTION | BINARIES_SECTION | SEMI_CONTINUOUS_SECTION) ~ VALID_CHARS{1, 255}
 }
-VARIABLE          = ${
-    !(FREE | END | CONSTRAINT_PREFIX | GENERALS_PREFIX | BINARIES_PREFIX | SEMI_CONTINUOUS_PREFIX) ~ VALID_CHARS{1, 255}
-}
+
+// Problem Name
+PROBLEM_NAME    = ${ VALID_CHARS+ }
+LP_PROBLEM_NAME = _{ "\\" ~ "Problem name:" ~ PROBLEM_NAME }
+
+// Comments
+// https://www.ibm.com/docs/en/icos/22.1.1?topic=representation-comments-in-lp-file-format
+// TODO: Problem Name
+COMMENT_TEXT = _{ (VALID_CHARS | COLON)* }
+COMMENTS     = _{ "\\" ~ ASTERIX? ~ COMMENT_TEXT ~ ASTERIX? ~ NEWLINE? }
+
+// Problem sense in LP file format
+// https://www.ibm.com/docs/en/icos/22.1.1?topic=representation-problem-sense-in-lp-file-format
+// Example:
+MIN_SENSE     =  { ^"MIN" ~ ^"IMIZE"? | ^"MINIMUM" }
+MAX_SENSE     =  { ^"MAX" ~ ^"IMIZE"? | ^"MAXIMUM" }
+PROBLEM_SENSE = _{ NEWLINE* ~ (MIN_SENSE | MAX_SENSE) }
 
 // Objective function
 // https://www.ibm.com/docs/en/icos/22.1.1?topic=representation-objective-in-lp-file-format
@@ -84,22 +81,25 @@ OBJECTIVES     = { OBJECTIVE* }
 
 // Constraints
 // https://www.ibm.com/docs/en/icos/22.1.1?topic=representation-constraints-in-lp-file-format
-GT              =  { ">" }
-GTE             =  { ">=" }
-LT              =  { "<" }
-LTE             =  { "<=" }
-EQ              =  { "=" }
-CMP             = _{ GTE | GT | LTE | LT | EQ }
-CONSTRAINT_EXPR =  { OPERATOR? ~ FLOAT? ~ VARIABLE | OPERATOR? ~ FLOAT }
-CONSTRAINT_NAME = ${ VALID_CHARS{1, 255} }
-CONSTRAINT      =  {
+CONSTRAINT_SECTION = _{
+    (^"subject to" | ^"such that" | ^"S.T.") ~ COLON? ~ NEWLINE?
+}
+GT                 =  { ">" }
+GTE                =  { ">=" }
+LT                 =  { "<" }
+LTE                =  { "<=" }
+EQ                 =  { "=" }
+CMP                = _{ GTE | GT | LTE | LT | EQ }
+CONSTRAINT_EXPR    =  { OPERATOR? ~ FLOAT? ~ VARIABLE | OPERATOR? ~ FLOAT }
+CONSTRAINT_NAME    = ${ VALID_CHARS{1, 255} }
+CONSTRAINT         =  {
     NEWLINE? ~ (CONSTRAINT_NAME ~ COLON?)? ~ CONSTRAINT_EXPR ~ (NEWLINE? ~ OPERATOR ~ CONSTRAINT_EXPR)* ~ NEWLINE? ~ CMP ~ FLOAT
 }
-CONSTRAINTS     =  { NEWLINE* ~ CONSTRAINT_PREFIX ~ CONSTRAINT+ }
+CONSTRAINTS        =  { NEWLINE* ~ CONSTRAINT_SECTION ~ CONSTRAINT+ }
 
 // Bounds
 // https://www.ibm.com/docs/en/icos/22.1.1?topic=representation-bounds-in-lp-file-format
-BOUND_PREFIX    = _{ ^"bound" ~ ^"s"? }
+BOUND_SECTION   = _{ ^"bound" ~ ^"s"? }
 BOUNDED         =  { FLOAT ~ LTE ~ VARIABLE ~ LTE ~ FLOAT }
 FREE_VARIABLE   =  { VARIABLE ~ FREE }
 LOWER_BOUND     =  { VARIABLE ~ GTE ~ FLOAT }
@@ -108,30 +108,32 @@ UPPER_BOUND     =  { VARIABLE ~ LTE ~ FLOAT }
 BOUND           = _{
     NEWLINE ~ (FREE_VARIABLE | BOUNDED | UPPER_BOUND | LOWER_BOUND | LOWER_BOUND_REV)
 }
-BOUNDS          =  { NEWLINE* ~ BOUND_PREFIX ~ BOUND+ }
+BOUNDS          =  { NEWLINE* ~ BOUND_SECTION ~ BOUND+ }
 
 // Integers
 // A list of variable names of integer variables. Unless otherwise specified in the
 // bounds section, the default relaxation interval of the variables is [0, 1].
-INTEGER_PREFIX = _{ ^"Integers" }
-INTEGERS       =  { NEWLINE ~ INTEGER_PREFIX ~ (NEWLINE? ~ VARIABLE)* }
+INTEGER_SECTION = _{ ^"Integers" }
+INTEGERS        =  { NEWLINE ~ INTEGER_SECTION ~ (NEWLINE? ~ VARIABLE)* }
 
 // Generals
 // A list of variable names of integer variables. Unless otherwise specified in the
 // bounds section, the default relaxation interval of the variables is [0, +Infinity].
-GENERALS_PREFIX = _{ ^"Gen" ~ ^"eral"? ~ ^"s"? }
-GENERALS        =  { NEWLINE ~ GENERALS_PREFIX ~ (NEWLINE? ~ VARIABLE)* }
+GENERALS_SECTION = _{ ^"Gen" ~ ^"eral"? ~ ^"s"? }
+GENERALS         =  { NEWLINE ~ GENERALS_SECTION ~ (NEWLINE? ~ VARIABLE)* }
 
 // Binaries
 // A list of variable names of binary variables.
-BINARIES_PREFIX = _{ ^"Binar" ~ (^"ies" | ^"y") }
-BINARIES        =  { NEWLINE ~ BINARIES_PREFIX ~ (NEWLINE? ~ VARIABLE)* }
+BINARIES_SECTION = _{ ^"Binar" ~ (^"ies" | ^"y") }
+BINARIES         =  { NEWLINE ~ BINARIES_SECTION ~ (NEWLINE? ~ VARIABLE)* }
 
 // Semi-Continuous
 // To specify any of the variables as semi-continuous variables, that is as variables that
 // may take the value 0 or values between the specified lower and upper bounds
-SEMI_CONTINUOUS_PREFIX = _{ ^"SEMI" ~ (^"S" | ^"-CONTINUOUS") }
-SEMI_CONTINUOUS        =  { NEWLINE ~ SEMI_CONTINUOUS_PREFIX ~ (NEWLINE? ~ VARIABLE)* }
+SEMI_CONTINUOUS_SECTION = _{ ^"SEMI" ~ (^"S" | ^"-CONTINUOUS") }
+SEMI_CONTINUOUS         =  { NEWLINE ~ SEMI_CONTINUOUS_SECTION ~ (NEWLINE? ~ VARIABLE)* }
+
+// SOS: Special Ordered Sets
 
 // End of file
 // https://www.ibm.com/docs/en/icos/22.1.1?topic=representation-end-file-in-lp-file-format
