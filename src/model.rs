@@ -31,6 +31,7 @@ pub enum VariableType {
 }
 
 impl From<Rule> for VariableType {
+    #[allow(clippy::wildcard_enum_match_arm, clippy::unreachable)]
     fn from(value: Rule) -> Self {
         match value {
             Rule::INTEGERS => Self::Integer,
