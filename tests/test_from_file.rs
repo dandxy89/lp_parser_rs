@@ -138,7 +138,7 @@ fn limbo() {
     assert_eq!(result.problem_sense, Sense::Minimize);
     assert_eq!(result.objectives.len(), 2);
     assert_eq!(result.constraints.len(), 2);
-    assert_eq!(result.variables.len(), 5);
+    assert_eq!(result.variables.len(), 4);
 }
 
 #[test]
@@ -158,7 +158,7 @@ fn obj_2cons_only_binary_vars() {
     assert_eq!(result.problem_sense, Sense::Minimize);
     assert_eq!(result.objectives.len(), 2);
     assert_eq!(result.constraints.len(), 2);
-    assert_eq!(result.variables.len(), 4);
+    assert_eq!(result.variables.len(), 3);
 }
 
 #[test]
@@ -188,7 +188,7 @@ fn semi_continuous() {
     assert_eq!(result.problem_sense, Sense::Minimize);
     assert_eq!(result.objectives.len(), 2);
     assert_eq!(result.constraints.len(), 2);
-    assert_eq!(dbg!(result.variables).len(), 8);
+    assert_eq!(dbg!(result.variables).len(), 7);
 }
 
 fn read_file_from_resources(file_name: &str) -> anyhow::Result<LPDefinition> {

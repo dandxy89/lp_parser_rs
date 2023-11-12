@@ -27,7 +27,7 @@ impl AsFloat for Pair<'_, Rule> {
         match self.as_rule() {
             Rule::POS_INFINITY => Ok(f64::INFINITY),
             Rule::NEG_INFINITY => Ok(f64::NEG_INFINITY),
-            Rule::FLOAT => Ok(self.as_str().trim().parse()?),
+            Rule::FLOAT => Ok(self.as_str().parse()?),
             Rule::PLUS => Ok(1.0),
             Rule::MINUS => Ok(-1.0),
             _ => unreachable!("Unexpected rule observed: {:?}", self.as_rule()),

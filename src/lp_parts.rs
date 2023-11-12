@@ -36,34 +36,34 @@ fn get_bound(pair: Pair<'_, Rule>) -> Option<(&str, VariableType)> {
     match pair.as_rule() {
         Rule::LOWER_BOUND => {
             let mut parts = pair.into_inner();
-            let name = parts.next().unwrap().as_str().trim();
+            let name = parts.next().unwrap().as_str();
             let _ = parts.next();
-            Some((name, VariableType::LB(parts.next().unwrap().as_str().trim().parse().unwrap())))
+            Some((name, VariableType::LB(parts.next().unwrap().as_str().parse().unwrap())))
         }
         Rule::LOWER_BOUND_REV => {
             let mut parts = pair.into_inner();
-            let value = parts.next().unwrap().as_str().trim().parse().unwrap();
+            let value = parts.next().unwrap().as_str().parse().unwrap();
             let _ = parts.next();
-            Some((parts.next().unwrap().as_str().trim(), VariableType::LB(value)))
+            Some((parts.next().unwrap().as_str(), VariableType::LB(value)))
         }
         Rule::UPPER_BOUND => {
             let mut parts = pair.into_inner();
-            let name = parts.next().unwrap().as_str().trim();
+            let name = parts.next().unwrap().as_str();
             let _ = parts.next();
-            Some((name, VariableType::UB(parts.next().unwrap().as_str().trim().parse().unwrap())))
+            Some((name, VariableType::UB(parts.next().unwrap().as_str().parse().unwrap())))
         }
         Rule::BOUNDED => {
             let mut parts = pair.into_inner();
-            let lb = parts.next().unwrap().as_str().trim();
+            let lb = parts.next().unwrap().as_str();
             let _ = parts.next();
-            let name = parts.next().unwrap().as_str().trim();
+            let name = parts.next().unwrap().as_str();
             let _ = parts.next();
-            let ub = parts.next().unwrap().as_str().trim();
-            Some((name, VariableType::Bounded(lb.parse().unwrap(), ub.parse().unwrap())))
+            let ub = parts.next().unwrap().as_str();
+            Some((name, VariableType::Bounded(lb.parse().unwrap(), ub.parse().unwrap(), false)))
         }
         Rule::FREE => {
             let mut parts = pair.into_inner();
-            let name = parts.next().unwrap().as_str().trim();
+            let name = parts.next().unwrap().as_str();
             Some((name, VariableType::Free))
         }
         _ => None,
@@ -98,35 +98,11 @@ pub fn compose(pair: Pair<'_, Rule>, mut parsed: LPDefinition) -> anyhow::Result
                 }
             }
         }
-        // Problem Integers
-        Rule::INTEGERS => {
+        // Variable Bounds
+        r @ (Rule::INTEGERS | Rule::GENERALS | Rule::BINARIES | Rule::SEMI_CONTINUOUS) => {
             for int_pair in pair.into_inner() {
                 if matches!(int_pair.as_rule(), Rule::VARIABLE) {
-                    parsed.set_var_bounds(int_pair.as_str(), VariableType::Integer);
-                }
-            }
-        }
-        // Problem Generals
-        Rule::GENERALS => {
-            for gen_pair in pair.into_inner() {
-                if matches!(gen_pair.as_rule(), Rule::VARIABLE) {
-                    parsed.set_var_bounds(gen_pair.as_str(), VariableType::General);
-                }
-            }
-        }
-        // Problem Binaries
-        Rule::BINARIES => {
-            for bin_pair in pair.into_inner() {
-                if matches!(bin_pair.as_rule(), Rule::VARIABLE) {
-                    parsed.set_var_bounds(bin_pair.as_str(), VariableType::Binary);
-                }
-            }
-        }
-        // Problem Semi-continuous
-        Rule::SEMI_CONTINUOUS => {
-            for bin_pair in pair.into_inner() {
-                if matches!(bin_pair.as_rule(), Rule::SEMI_VARIABLE) {
-                    parsed.set_var_bounds(bin_pair.as_str(), VariableType::SemiContinuous);
+                    parsed.set_var_bounds(int_pair.as_str(), r.into());
                 }
             }
         }

@@ -14,5 +14,5 @@ b_5829890_x2 b_5880854_x2
 Binary
 b_5829890_x1
 Semi-continuous
-x1 x2 x3
+b_5880854_x2 x1 x2 x3
 End
