@@ -12,9 +12,6 @@ pest = "2.7.5"
 pest_derive = "2.7.5"
 serde = { version = "1", features = ["derive"], optional = true }
 
-[dev-dependencies]
-divan = "0.1.2"
-
 [features]
 default = []
 serde = ["dep:serde"]

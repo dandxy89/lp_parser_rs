@@ -19,13 +19,10 @@ A Rust LP file parser leveraging [PEST](https://docs.rs/pest/latest/pest/) and a
 - Bounds
 - Variable Types: Integer, Generals, Lower Bounded, Upper Bounded, Free & Upper and Lower Bounded
 - Semi-continuous
+- Special Order Sets (SOS)
 
 ## TODOs List
 
-- Remaining LP format changes:
-  - Special ordered sets: SOS
-    - Keyword: `SOS`
-    - Example: `Sos101: 1.2 x1 + 1.3 x2 + 1.4 x4 = S1`
 - Extensions:
   - Compares two LP files
 

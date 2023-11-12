@@ -188,7 +188,17 @@ fn semi_continuous() {
     assert_eq!(result.problem_sense, Sense::Minimize);
     assert_eq!(result.objectives.len(), 2);
     assert_eq!(result.constraints.len(), 2);
-    assert_eq!(dbg!(result.variables).len(), 7);
+    assert_eq!(result.variables.len(), 7);
+}
+
+#[test]
+fn sos() {
+    let result = read_file_from_resources("sos.lp").unwrap();
+    assert_eq!("", result.problem_name);
+    assert_eq!(result.problem_sense, Sense::Maximize);
+    assert_eq!(result.objectives.len(), 1);
+    assert_eq!(result.constraints.len(), 2);
+    assert_eq!(result.variables.len(), 8);
 }
 
 fn read_file_from_resources(file_name: &str) -> anyhow::Result<LPDefinition> {
