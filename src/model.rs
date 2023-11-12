@@ -18,7 +18,7 @@ pub enum VariableType {
     // Upper bounded variable
     UB(f64),
     // Bounded variable
-    Bounded(f64, f64),
+    Bounded(f64, f64, bool),
     // Integer variable [0, 1]
     Integer,
     // Binary variable
@@ -28,6 +28,27 @@ pub enum VariableType {
     General,
     // Semi-continuous
     SemiContinuous,
+}
+
+impl From<Rule> for VariableType {
+    fn from(value: Rule) -> Self {
+        match value {
+            Rule::INTEGERS => Self::Integer,
+            Rule::GENERALS => Self::General,
+            Rule::BINARIES => Self::Binary,
+            Rule::SEMI_CONTINUOUS => Self::SemiContinuous,
+            _ => unreachable!(),
+        }
+    }
+}
+
+impl VariableType {
+    #[allow(clippy::wildcard_enum_match_arm)]
+    pub fn set_semi_continuous(&mut self) {
+        if let Self::Bounded(lb, ub, _) = self {
+            *self = Self::Bounded(*lb, *ub, true);
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -105,13 +126,16 @@ impl LPDefinition {
 
     pub fn add_variable(&mut self, name: &str) {
         if !name.is_empty() {
-            self.variables.entry(name.trim().to_string()).or_default();
+            self.variables.entry(name.to_string()).or_default();
         }
     }
 
     pub fn set_var_bounds(&mut self, name: &str, kind: VariableType) {
         if !name.is_empty() {
-            match self.variables.entry(name.trim().to_string()) {
+            match self.variables.entry(name.to_string()) {
+                Entry::Occupied(k) if matches!(kind, VariableType::SemiContinuous) => {
+                    k.into_mut().set_semi_continuous();
+                }
                 Entry::Occupied(k) => *k.into_mut() = kind,
                 Entry::Vacant(k) => {
                     k.insert(kind);

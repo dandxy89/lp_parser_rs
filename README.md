@@ -26,8 +26,6 @@ A Rust LP file parser leveraging [PEST](https://docs.rs/pest/latest/pest/) and a
   - Special ordered sets: SOS
     - Keyword: `SOS`
     - Example: `Sos101: 1.2 x1 + 1.3 x2 + 1.4 x4 = S1`
-  - Semi-Continuous
-    - See finer details in FICO® Xpress
 - Extensions:
   - Compares two LP files
 
