@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use congenial_enigma::{
+use lp_parser_rs::{
     model::{lp_problem::LPProblem, sense::Sense},
     parse::{parse_file, parse_lp_file},
 };
