@@ -36,6 +36,18 @@ impl From<Rule> for VariableType {
     }
 }
 
+impl PartialEq for VariableType {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::LB(l0), Self::LB(r0)) | (Self::UB(l0), Self::UB(r0)) => l0 == r0,
+            (Self::Bounded(l0, l1, l2), Self::Bounded(r0, r1, r2)) => l2 == r2 && l1 == r1 && l0 == r0,
+            _ => core::mem::discriminant(self) == core::mem::discriminant(other),
+        }
+    }
+}
+
+impl Eq for VariableType {}
+
 impl VariableType {
     #[allow(clippy::wildcard_enum_match_arm)]
     pub fn set_semi_continuous(&mut self) {

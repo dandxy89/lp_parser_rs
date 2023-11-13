@@ -12,6 +12,14 @@ pub struct Coefficient {
     pub coefficient: f64,
 }
 
+impl PartialEq for Coefficient {
+    fn eq(&self, other: &Self) -> bool {
+        self.var_name == other.var_name && self.coefficient == other.coefficient
+    }
+}
+
+impl Eq for Coefficient {}
+
 impl TryFrom<Pairs<'_, Rule>> for Coefficient {
     type Error = anyhow::Error;
 
