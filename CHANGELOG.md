@@ -1,12 +1,17 @@
 # Changelog
 
-## 0.1.0 (2023-11-13)
+## 0.1.1 (2023-11-13)
 
+### Bug Fixes
+
+* Allow zero or more colons in constraints
+* Adding additional test cases and fixes for .pest
+
+## 0.1.0 (2023-11-13)
 
 ### Continuous Integration
 
 * Updating CI Action condition ([#3](https://github.com/dandxy89/lp_parser_rs/issues/3)) ([75e3fe0](https://github.com/dandxy89/lp_parser_rs/commit/75e3fe057ce8461e339c4697bf9790aec56ccd84))
-
 
 ### Features
 
@@ -24,7 +29,6 @@
 * Updating .pest grammar to support Special Order Sets ([191a55e](https://github.com/dandxy89/lp_parser_rs/commit/191a55e425c096268148cba8a57bfef44f996ea5))
 * Updating model and compose fn to support SOS constraints ([b955db1](https://github.com/dandxy89/lp_parser_rs/commit/b955db1baa51d3356c4ae6123239480fc480eb73))
 * Updating PartialEq and Eq for all models ([a627902](https://github.com/dandxy89/lp_parser_rs/commit/a6279025132debdc6e3ca8166c8b0545dce284ae))
-
 
 ### Code Refactoring
 
