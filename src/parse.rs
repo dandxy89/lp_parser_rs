@@ -4,7 +4,7 @@ use std::{
     path::Path,
 };
 
-use crate::{lp_parts::compose, model::LPDefinition, LParser, Rule};
+use crate::{lp_parts::compose, model::lp_problem::LPProblem, LParser, Rule};
 use pest::Parser;
 
 /// # Errors
@@ -22,12 +22,12 @@ pub fn parse_file(path: &Path) -> anyhow::Result<String> {
 
 /// # Errors
 /// Returns an error if the parse fails
-pub fn parse_lp_file(contents: &str) -> anyhow::Result<LPDefinition> {
+pub fn parse_lp_file(contents: &str) -> anyhow::Result<LPProblem> {
     let mut parsed = LParser::parse(Rule::LP_FILE, contents)?;
     let Some(pair) = parsed.next() else {
         anyhow::bail!("Invalid LP file");
     };
-    let mut parsed_contents = LPDefinition::default();
+    let mut parsed_contents = LPProblem::default();
     for pair in pair.clone().into_inner() {
         parsed_contents = compose(pair, parsed_contents)?;
     }

@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use congenial_enigma::{
-    model::{LPDefinition, Sense},
+    model::{lp_problem::LPProblem, sense::Sense},
     parse::{parse_file, parse_lp_file},
 };
 
@@ -65,7 +65,7 @@ fn invalid() {
     assert!(result.is_err());
 }
 
-fn read_file_from_resources(file_name: &str) -> anyhow::Result<LPDefinition> {
+fn read_file_from_resources(file_name: &str) -> anyhow::Result<LPProblem> {
     let mut file_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     file_path.push(format!("resources/{file_name}"));
     let contents = parse_file(&file_path)?;

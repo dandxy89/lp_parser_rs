@@ -4,7 +4,7 @@ use pest::iterators::Pair;
 
 use crate::{
     common::RuleExt,
-    model::{Constraint, LPDefinition, Objective, SOSClass, Sense, VariableType},
+    model::{constraint::Constraint, lp_problem::LPProblem, objective::Objective, sense::Sense, sos::SOSClass, variable::VariableType},
     Rule,
 };
 
@@ -84,7 +84,7 @@ fn get_bound(pair: Pair<'_, Rule>) -> Option<(&str, VariableType)> {
 #[allow(clippy::wildcard_enum_match_arm)]
 /// # Errors
 /// Returns an error if the `compose` fails
-pub fn compose(pair: Pair<'_, Rule>, mut parsed: LPDefinition) -> anyhow::Result<LPDefinition> {
+pub fn compose(pair: Pair<'_, Rule>, mut parsed: LPProblem) -> anyhow::Result<LPProblem> {
     match pair.as_rule() {
         // Problem Name
         Rule::PROBLEM_NAME => return Ok(parsed.with_problem_name(pair.as_str())),
