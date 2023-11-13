@@ -48,6 +48,8 @@ generate_test!(obj_2cons_all_variable_types, "2obj_2cons_all_variable_types.lp",
 generate_test!(obj_1cons_all_variables_with_bounds, "1obj_1cons_all_variables_with_bounds.lp", Maximize, 1, 1, 3);
 generate_test!(semi_continuous, "semi_continuous.lp", Minimize, 2, 2, 7);
 generate_test!(sos, "sos.lp", Maximize, 1, 6, 8);
+generate_test!(test, "test.lp", Maximize, 1, 4, 12);
+generate_test!(test2, "test2.lp", Maximize, 1, 7, 139);
 
 #[test]
 #[ignore = "fit2d.mps takes > 60 seconds"]

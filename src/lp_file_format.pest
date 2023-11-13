@@ -82,7 +82,7 @@ OBJECTIVES     = { OBJECTIVE* }
 // Constraints
 // https://www.ibm.com/docs/en/icos/22.1.1?topic=representation-constraints-in-lp-file-format
 CONSTRAINT_SECTION = _{
-    (^"subject to" | ^"such that" | ^"S.T.") ~ COLON? ~ NEWLINE?
+    (^"subject to" | ^"such that" | ^"S.T." | ^"st") ~ COLON? ~ NEWLINE?
 }
 GT                 =  { ">" }
 GTE                =  { ">=" }
@@ -93,14 +93,14 @@ CMP                = _{ GTE | GT | LTE | LT | EQ }
 CONSTRAINT_EXPR    =  { OPERATOR? ~ FLOAT? ~ VARIABLE | OPERATOR? ~ FLOAT }
 CONSTRAINT_NAME    = ${ VALID_CHARS{1, 255} }
 CONSTRAINT         =  {
-    NEWLINE? ~ (CONSTRAINT_NAME ~ COLON?)? ~ CONSTRAINT_EXPR ~ (NEWLINE? ~ OPERATOR ~ CONSTRAINT_EXPR)* ~ NEWLINE? ~ CMP ~ FLOAT
+    NEWLINE? ~ (CONSTRAINT_NAME ~ COLON? ~ COLON?)? ~ CONSTRAINT_EXPR ~ (NEWLINE? ~ OPERATOR ~ CONSTRAINT_EXPR)* ~ NEWLINE? ~ CMP ~ FLOAT
 }
 CONSTRAINTS        =  { NEWLINE* ~ CONSTRAINT_SECTION ~ CONSTRAINT+ }
 
 // Bounds
 // https://www.ibm.com/docs/en/icos/22.1.1?topic=representation-bounds-in-lp-file-format
 BOUND_SECTION   = _{ ^"bound" ~ ^"s"? }
-BOUNDED         =  { FLOAT ~ LTE ~ VARIABLE ~ LTE ~ FLOAT }
+BOUNDED         =  { FLOAT ~ (LTE | LT) ~ VARIABLE ~ (LTE | LT) ~ FLOAT }
 FREE_VARIABLE   =  { VARIABLE ~ FREE }
 LOWER_BOUND     =  { VARIABLE ~ GTE ~ FLOAT }
 LOWER_BOUND_REV =  { FLOAT ~ GTE ~ VARIABLE }
