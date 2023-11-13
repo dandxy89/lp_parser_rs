@@ -5,55 +5,49 @@ use congenial_enigma::{
     parse::{parse_file, parse_lp_file},
 };
 
-#[test]
-fn afiro() {
-    let result = read_file_from_resources("afiro.lp").unwrap();
-    assert_eq!("afiro.mps", result.problem_name);
-    assert_eq!(result.problem_sense, Sense::Minimize);
-    assert_eq!(result.objectives.len(), 3);
-    assert_eq!(result.constraints.len(), 27);
-    assert_eq!(result.variables.len(), 32);
+#[macro_export]
+macro_rules! generate_test {
+    ($test_name:ident, $file:expr, $sense:ident, $obj_len:expr, $con_len:expr, $var_len:expr) => {
+        #[test]
+        fn $test_name() {
+            let result = read_file_from_resources($file).unwrap();
+            assert_eq!(result.problem_sense, Sense::$sense);
+            assert_eq!(result.objectives.len(), $obj_len);
+            assert_eq!(result.constraints.len(), $con_len);
+            assert_eq!(result.variables.len(), $var_len);
+        }
+    };
+    ($test_name:ident, $file:expr, $name:expr, $sense:ident, $obj_len:expr, $con_len:expr, $var_len:expr) => {
+        #[test]
+        fn $test_name() {
+            let result = read_file_from_resources($file).unwrap();
+            assert_eq!($name, result.problem_name);
+            assert_eq!(result.problem_sense, Sense::$sense);
+            assert_eq!(result.objectives.len(), $obj_len);
+            assert_eq!(result.constraints.len(), $con_len);
+            assert_eq!(result.variables.len(), $var_len);
+        }
+    };
 }
 
-#[test]
-fn afiro_ext() {
-    let result = read_file_from_resources("afiro_ext.lp").unwrap();
-    assert_eq!("afiro.mps", result.problem_name);
-    assert_eq!(result.problem_sense, Sense::Minimize);
-    assert_eq!(result.objectives.len(), 4);
-    assert_eq!(result.constraints.len(), 27);
-    assert_eq!(result.variables.len(), 47);
-}
-
-#[test]
-fn boeing1() {
-    let result = read_file_from_resources("boeing1.lp").unwrap();
-    assert_eq!("boeing1.lp", result.problem_name);
-    assert_eq!(result.problem_sense, Sense::Minimize);
-    assert_eq!(result.objectives.len(), 1);
-    assert_eq!(result.constraints.len(), 348);
-    assert_eq!(result.variables.len(), 473);
-}
-
-#[test]
-fn boeing2() {
-    let result = read_file_from_resources("boeing2.lp").unwrap();
-    assert_eq!("boeing2.mps", result.problem_name);
-    assert_eq!(result.problem_sense, Sense::Minimize);
-    assert_eq!(result.objectives.len(), 1);
-    assert_eq!(result.constraints.len(), 140);
-    assert_eq!(result.variables.len(), 162);
-}
-
-#[test]
-fn fit1d() {
-    let result = read_file_from_resources("fit1d.lp").unwrap();
-    assert_eq!("fit1d.mps", result.problem_name);
-    assert_eq!(result.problem_sense, Sense::Minimize);
-    assert_eq!(result.objectives.len(), 1);
-    assert_eq!(result.constraints.len(), 24);
-    assert_eq!(result.variables.len(), 1026);
-}
+generate_test!(afiro, "afiro.lp", "afiro.mps", Minimize, 3, 27, 32);
+generate_test!(afiro_ext, "afiro_ext.lp", "afiro_ext.mps", Minimize, 4, 27, 47);
+generate_test!(boeing1, "boeing1.lp", "boeing1.lp", Minimize, 1, 348, 473);
+generate_test!(boeing2, "boeing2.lp", "boeing2.mps", Minimize, 1, 140, 162);
+generate_test!(fit1d, "fit1d.lp", "fit1d.mps", Minimize, 1, 24, 1026);
+generate_test!(kb2, "kb2.lp", "kb2.mps", Minimize, 1, 43, 41);
+generate_test!(pulp, "pulp.lp", Minimize, 1, 49, 62);
+generate_test!(pulp2, "pulp2.lp", Maximize, 1, 7, 139);
+generate_test!(sc50a, "sc50a.lp", "sc50a.lp", Minimize, 1, 49, 48);
+generate_test!(no_end_section, "no_end_section.lp", "", Minimize, 4, 2, 3);
+generate_test!(model2, "model2.lp", Minimize, 1, 4, 8);
+generate_test!(limbo, "limbo.lp", Minimize, 2, 2, 4);
+generate_test!(obj3_2cons, "3obj_2cons.lp", Minimize, 4, 2, 3);
+generate_test!(obj_2cons_only_binary_vars, "2obj_2cons_only_binary_vars.lp", Minimize, 2, 2, 3);
+generate_test!(obj_2cons_all_variable_types, "2obj_2cons_all_variable_types.lp", Minimize, 2, 2, 3);
+generate_test!(obj_1cons_all_variables_with_bounds, "1obj_1cons_all_variables_with_bounds.lp", Maximize, 1, 1, 3);
+generate_test!(semi_continuous, "semi_continuous.lp", Minimize, 2, 2, 7);
+generate_test!(sos, "sos.lp", Maximize, 1, 6, 8);
 
 #[test]
 #[ignore = "fit2d.mps takes > 60 seconds"]
@@ -66,139 +60,9 @@ fn fit2d() {
 }
 
 #[test]
-fn kb2() {
-    let result = read_file_from_resources("kb2.lp").unwrap();
-    assert_eq!("kb2.mps", result.problem_name);
-    assert_eq!(result.problem_sense, Sense::Minimize);
-    assert_eq!(result.objectives.len(), 1);
-    assert_eq!(result.constraints.len(), 43);
-    assert_eq!(result.variables.len(), 41);
-}
-
-#[test]
-fn pulp() {
-    let result = read_file_from_resources("pulp.lp").unwrap();
-    assert_eq!("", result.problem_name);
-    assert_eq!(result.problem_sense, Sense::Minimize);
-    assert_eq!(result.objectives.len(), 1);
-    assert_eq!(result.constraints.len(), 49);
-    assert_eq!(result.variables.len(), 62);
-}
-
-#[test]
-fn pulp2() {
-    let result = read_file_from_resources("pulp2.lp").unwrap();
-    assert_eq!("", result.problem_name);
-    assert_eq!(result.problem_sense, Sense::Maximize);
-    assert_eq!(result.objectives.len(), 1);
-    assert_eq!(result.constraints.len(), 7);
-    assert_eq!(result.variables.len(), 139);
-}
-
-#[test]
-fn sc50a() {
-    let result = read_file_from_resources("sc50a.lp").unwrap();
-    assert_eq!("sc50a.lp", result.problem_name);
-    assert_eq!(result.problem_sense, Sense::Minimize);
-    assert_eq!(result.objectives.len(), 1);
-    assert_eq!(result.constraints.len(), 49);
-    assert_eq!(result.variables.len(), 48);
-}
-
-#[test]
 fn invalid() {
     let result = read_file_from_resources("invalid.lp");
     assert!(result.is_err());
-}
-
-#[test]
-fn no_end_section() {
-    let result = read_file_from_resources("no_end_section.lp").unwrap();
-    assert_eq!("", result.problem_name);
-    assert_eq!(result.problem_sense, Sense::Minimize);
-    assert_eq!(result.objectives.len(), 4);
-    assert_eq!(result.constraints.len(), 2);
-    assert_eq!(result.variables.len(), 3);
-}
-
-#[test]
-fn model2() {
-    let result = read_file_from_resources("model2.lp").unwrap();
-    assert_eq!("", result.problem_name);
-    assert_eq!(result.problem_sense, Sense::Minimize);
-    assert_eq!(result.objectives.len(), 1);
-    assert_eq!(result.constraints.len(), 4);
-    assert_eq!(result.variables.len(), 8);
-}
-
-#[test]
-fn limbo() {
-    let result = read_file_from_resources("limbo.lp").unwrap();
-    assert_eq!("", result.problem_name);
-    assert_eq!(result.problem_sense, Sense::Minimize);
-    assert_eq!(result.objectives.len(), 2);
-    assert_eq!(result.constraints.len(), 2);
-    assert_eq!(result.variables.len(), 4);
-}
-
-#[test]
-fn obj3_2cons() {
-    let result = read_file_from_resources("3obj_2cons.lp").unwrap();
-    assert_eq!("", result.problem_name);
-    assert_eq!(result.problem_sense, Sense::Minimize);
-    assert_eq!(result.objectives.len(), 4);
-    assert_eq!(result.constraints.len(), 2);
-    assert_eq!(result.variables.len(), 3);
-}
-
-#[test]
-fn obj_2cons_only_binary_vars() {
-    let result = read_file_from_resources("2obj_2cons_only_binary_vars.lp").unwrap();
-    assert_eq!("", result.problem_name);
-    assert_eq!(result.problem_sense, Sense::Minimize);
-    assert_eq!(result.objectives.len(), 2);
-    assert_eq!(result.constraints.len(), 2);
-    assert_eq!(result.variables.len(), 3);
-}
-
-#[test]
-fn obj_2cons_all_variable_types() {
-    let result = read_file_from_resources("2obj_2cons_all_variable_types.lp").unwrap();
-    assert_eq!("", result.problem_name);
-    assert_eq!(result.problem_sense, Sense::Minimize);
-    assert_eq!(result.objectives.len(), 2);
-    assert_eq!(result.constraints.len(), 2);
-    assert_eq!(result.variables.len(), 3);
-}
-
-#[test]
-fn obj_1cons_all_variables_with_bounds() {
-    let result = read_file_from_resources("1obj_1cons_all_variables_with_bounds.lp").unwrap();
-    assert_eq!("", result.problem_name);
-    assert_eq!(result.problem_sense, Sense::Maximize);
-    assert_eq!(result.objectives.len(), 1);
-    assert_eq!(result.constraints.len(), 1);
-    assert_eq!(result.variables.len(), 3);
-}
-
-#[test]
-fn semi_continuous() {
-    let result = read_file_from_resources("semi_continuous.lp").unwrap();
-    assert_eq!("", result.problem_name);
-    assert_eq!(result.problem_sense, Sense::Minimize);
-    assert_eq!(result.objectives.len(), 2);
-    assert_eq!(result.constraints.len(), 2);
-    assert_eq!(result.variables.len(), 7);
-}
-
-#[test]
-fn sos() {
-    let result = read_file_from_resources("sos.lp").unwrap();
-    assert_eq!("", result.problem_name);
-    assert_eq!(result.problem_sense, Sense::Maximize);
-    assert_eq!(result.objectives.len(), 1);
-    assert_eq!(result.constraints.len(), 6);
-    assert_eq!(result.variables.len(), 8);
 }
 
 fn read_file_from_resources(file_name: &str) -> anyhow::Result<LPDefinition> {

@@ -1,4 +1,4 @@
-\Problem name: afiro.mps
+\Problem name: afiro_ext.mps
 
 Minimize
  OBJ1: - 0.4 X02 - 0.32 X14 - 0.6 X23 - 0.48 X36 + 10 X39
