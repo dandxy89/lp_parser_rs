@@ -22,6 +22,10 @@ A Rust LP file parser leveraging [PEST](https://docs.rs/pest/latest/pest/) and a
 - Semi-continuous
 - Special Order Sets (SOS)
 
+## Features
+
+- `serde`: Adds `Serde` annotations to each of the model Structs and Enums.
+
 ## TODOs List
 
 - Extensions:
