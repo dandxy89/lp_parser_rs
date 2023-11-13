@@ -9,6 +9,7 @@ use crate::{
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Coefficient {
     pub var_name: String,
+    /// Coefficient or SOS variable weight
     pub coefficient: f64,
 }
 

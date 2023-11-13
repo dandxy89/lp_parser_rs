@@ -3,7 +3,9 @@ use super::{coefficient::Coefficient, sos::SOSClass};
 #[derive(Debug)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Constraint {
+    /// Standard LP constraint
     Standard { name: String, coefficients: Vec<Coefficient>, sense: String, rhs: f64 },
+    /// Special Order Set (SOS)
     SOS { name: String, kind: SOSClass, coefficients: Vec<Coefficient> },
 }
 

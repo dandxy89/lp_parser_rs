@@ -1,6 +1,7 @@
 # LP File Parser
 
 [![Cargo Test](https://github.com/dandxy89/congenial-enigma/actions/workflows/cargo_test.yml/badge.svg)](https://github.com/dandxy89/congenial-enigma/actions/workflows/cargo_test.yml)
+[![Crates.io](https://img.shields.io/crates/v/lp_parser_rs.svg)](https://crates.io/crates/lp_parser_rs)
 
 A Rust LP file parser leveraging [PEST](https://docs.rs/pest/latest/pest/) and adhering to the following specifications:
 

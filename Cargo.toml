@@ -4,7 +4,11 @@ version = "0.1.0"
 edition = "2021"
 authors = ["Dan Dixey", "Dan Dixey <dan@functorml.co.uk>"]
 rust-version = "1.70"
-publish = false
+license = "MIT OR Apache-2.0"
+description = "A Rust parser for the LP file format."
+keywords = ["linear-programming", "optimization", "parser", "math", "solver"]
+categories = ["mathematics", "algorithms", "science"]
+repository = "https://github.com/dandxy89/lp_parser_rs"
 
 [dependencies]
 anyhow = "1.0.75"
