@@ -117,6 +117,12 @@ pub enum Constraint {
 }
 
 impl Constraint {
+    fn name(&self) -> String {
+        match self {
+            Self::Standard { name, .. } | Self::SOS { name, .. } => name.to_string(),
+        }
+    }
+
     fn coefficients(&self) -> &[Coefficient] {
         match self {
             Self::Standard { coefficients, .. } | Self::SOS { coefficients, .. } => coefficients,
@@ -139,7 +145,7 @@ pub struct LPDefinition {
     pub problem_sense: Sense,
     pub variables: HashMap<String, VariableType>,
     pub objectives: Vec<Objective>,
-    pub constraints: Vec<Constraint>,
+    pub constraints: HashMap<String, Constraint>,
 }
 
 impl LPDefinition {
@@ -183,11 +189,12 @@ impl LPDefinition {
     }
 
     pub fn add_constraints(&mut self, constraints: Vec<Constraint>) {
-        for ob in &constraints {
-            ob.coefficients().iter().for_each(|c| {
+        for con in constraints {
+            let name = if con.name().is_empty() { format!("UnnamedConstraint:{}", self.constraints.len()) } else { con.name() };
+            con.coefficients().iter().for_each(|c| {
                 self.add_variable(&c.var_name);
             });
+            self.constraints.entry(name).or_insert(con);
         }
-        self.constraints = constraints;
     }
 }

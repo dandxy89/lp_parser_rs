@@ -197,7 +197,7 @@ fn sos() {
     assert_eq!("", result.problem_name);
     assert_eq!(result.problem_sense, Sense::Maximize);
     assert_eq!(result.objectives.len(), 1);
-    assert_eq!(result.constraints.len(), 2);
+    assert_eq!(result.constraints.len(), 6);
     assert_eq!(result.variables.len(), 8);
 }
 
