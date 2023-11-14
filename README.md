@@ -32,9 +32,9 @@ A Rust LP file parser leveraging [PEST](https://docs.rs/pest/latest/pest/) and a
 - Extensions:
   - Compares two LP files
 
-## Acknowledgement to sources of Test data
+## Acknowledgement to the original sources of Test data
 
-Test data has been taken from another similar/related projects:
+Test data has been copied from other similar or related projects:
 
 - [asbestian/jplex](https://github.com/asbestian/jplex/blob/main/instances/afiro.lp)
 - [odow/LPWriter.jl](https://github.com/odow/LPWriter.jl/blob/master/test/model2.lp)

@@ -1,8 +1,6 @@
 //! LP Parser
 //!
-//! This is a parser for the [LP](https://en.wikipedia.org/wiki/Linear_programming) file format leveraging the [pest](https://pest.rs) crate for parsing.
-//!
-//! The PEST file has been derived from the following resources:
+//! A Rust LP file parser leveraging [PEST](https://docs.rs/pest/latest/pest/) and adhering to the following specifications:
 //! - [IBM v22.1.1 Specification](https://www.ibm.com/docs/en/icos/22.1.1?topic=cplex-lp-file-format-algebraic-representation)
 //! - [fico](https://www.fico.com/fico-xpress-optimization/docs/dms2020-03/solver/optimizer/HTML/chapter10_sec_section102.html)
 //! - [Gurobi](https://www.gurobi.com/documentation/current/refman/lp_format.html)
