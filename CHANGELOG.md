@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.2 (2023-11-14)
+
+### Documentation
+
+* Documentation site init
+
 ## 0.1.1 (2023-11-13)
 
 ### Bug Fixes
