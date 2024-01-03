@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.1.4](https://github.com/dandxy89/lp_parser_rs/compare/v0.1.3...v0.1.4) (2024-01-03)
+
+
+### Bug Fixes
+
+* Blank lines aren't ignored ([#30](https://github.com/dandxy89/lp_parser_rs/issues/30)) ([5a58e64](https://github.com/dandxy89/lp_parser_rs/commit/5a58e64638e2aeb618a5291199cd454866b1d058))
+* Empty Bounds sections should be allowed ([#28](https://github.com/dandxy89/lp_parser_rs/issues/28)) ([cd266cd](https://github.com/dandxy89/lp_parser_rs/commit/cd266cd51082ae63d94e9df134b75ddd99dae8ed))
+* Updating parser such that objective names can be omitted ([#31](https://github.com/dandxy89/lp_parser_rs/issues/31)) ([ab2c7da](https://github.com/dandxy89/lp_parser_rs/commit/ab2c7daf53b591c353057e75d6cefa4d4c17988a))
+
 ## 0.1.2 (2023-11-14)
 
 ### Documentation
