@@ -56,6 +56,7 @@ generate_test!(empty_bounds, "empty_bounds.lp", Minimize, 1, 1, 2);
 generate_test!(blank_lines, "blank_lines.lp", Minimize, 1, 1, 3);
 generate_test!(optional_labels, "optional_labels.lp", Minimize, 1, 1, 4);
 generate_test!(infile_comments, "infile_comments.lp", Minimize, 1, 1, 7);
+generate_test!(missing_signs, "missing_signs.lp", Minimize, 1, 1, 6);
 
 #[test]
 #[ignore = "fit2d.mps takes > 60 seconds"]
