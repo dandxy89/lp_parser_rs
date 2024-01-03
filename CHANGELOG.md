@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.1.5](https://github.com/dandxy89/lp_parser_rs/compare/v0.1.4...v0.1.5) (2024-01-03)
+
+
+### Bug Fixes
+
+* Allow constraints to be commented ([0606b55](https://github.com/dandxy89/lp_parser_rs/commit/0606b553da043e6c7d9e543d1a1d80693918d582))
+* Inline comments ([56252e1](https://github.com/dandxy89/lp_parser_rs/commit/56252e194c485304578977d63612e7a1764f20ab))
+* Signs were not correctly being assigned ([282bbf8](https://github.com/dandxy89/lp_parser_rs/commit/282bbf8178b345187e9f6407d0789d6102563d55))
+
 ## [0.1.4](https://github.com/dandxy89/lp_parser_rs/compare/v0.1.3...v0.1.4) (2024-01-03)
 
 
