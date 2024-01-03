@@ -15,6 +15,7 @@ anyhow = "1.0"
 pest = "2.7"
 pest_derive = "2.7"
 serde = { version = "1", features = ["derive"], optional = true }
+tiny_id = "0.1.6"
 
 [features]
 default = []
