@@ -11,6 +11,7 @@ macro_rules! generate_test {
         #[test]
         fn $test_name() {
             let result = read_file_from_resources($file).unwrap();
+            // dbg!(&result);
             assert_eq!(result.problem_sense, Sense::$sense);
             assert_eq!(result.objectives.len(), $obj_len);
             assert_eq!(result.constraints.len(), $con_len);
@@ -21,6 +22,7 @@ macro_rules! generate_test {
         #[test]
         fn $test_name() {
             let result = read_file_from_resources($file).unwrap();
+            // dbg!(&result);
             assert_eq!($name, result.problem_name);
             assert_eq!(result.problem_sense, Sense::$sense);
             assert_eq!(result.objectives.len(), $obj_len);
@@ -53,6 +55,7 @@ generate_test!(test2, "test2.lp", Maximize, 1, 7, 139);
 generate_test!(empty_bounds, "empty_bounds.lp", Minimize, 1, 1, 2);
 generate_test!(blank_lines, "blank_lines.lp", Minimize, 1, 1, 3);
 generate_test!(optional_labels, "optional_labels.lp", Minimize, 1, 1, 4);
+generate_test!(infile_comments, "infile_comments.lp", Minimize, 1, 1, 7);
 
 #[test]
 #[ignore = "fit2d.mps takes > 60 seconds"]
