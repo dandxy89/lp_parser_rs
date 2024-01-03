@@ -23,9 +23,14 @@ fn compose_objective(pair: Pair<'_, Rule>, gen: &mut ShortCodeGenerator<char>) -
 }
 
 #[allow(clippy::unwrap_used)]
-fn compose_constraint(pair: Pair<'_, Rule>) -> anyhow::Result<Constraint> {
-    let mut parts = pair.into_inner();
-    let name = parts.next().unwrap().as_str().to_string();
+fn compose_constraint(pair: Pair<'_, Rule>, gen: &mut ShortCodeGenerator<char>) -> anyhow::Result<Constraint> {
+    let mut parts = pair.into_inner().peekable();
+    // Constraint name can be omitted in LP files, so we need to handle that case
+    let name = if parts.peek().unwrap().as_rule() == Rule::CONSTRAINT_NAME {
+        parts.next().unwrap().as_str().to_string()
+    } else {
+        format!("con_{}", gen.next_string())
+    };
     let mut coefficients: Vec<_> = vec![];
     while let Some(p) = parts.peek() {
         if p.as_rule().is_cmp() {
@@ -33,7 +38,8 @@ fn compose_constraint(pair: Pair<'_, Rule>) -> anyhow::Result<Constraint> {
         }
         coefficients.push(parts.next().unwrap());
     }
-    let coefficients: anyhow::Result<Vec<_>> = coefficients.into_iter().map(|p| p.into_inner().try_into()).collect();
+    let coefficients: anyhow::Result<Vec<_>> =
+        coefficients.into_iter().filter(|p| !matches!(p.as_rule(), Rule::PLUS | Rule::MINUS)).map(|p| p.into_inner().try_into()).collect();
     let sense = parts.next().unwrap().as_str().to_string();
     let rhs = parts.next().unwrap().as_str().parse()?;
     Ok(Constraint::Standard { name, coefficients: coefficients?, sense, rhs })
@@ -105,7 +111,8 @@ pub fn compose(pair: Pair<'_, Rule>, mut parsed: LPProblem, gen: &mut ShortCodeG
         }
         // Problem Constraints
         Rule::CONSTRAINTS => {
-            let constraints: anyhow::Result<Vec<Constraint>> = pair.into_inner().map(|inner_pair| compose_constraint(inner_pair)).collect();
+            let constraints: anyhow::Result<Vec<Constraint>> =
+                pair.into_inner().map(|inner_pair| compose_constraint(inner_pair, gen)).collect();
             parsed.add_constraints(constraints?);
         }
         Rule::SOS => {

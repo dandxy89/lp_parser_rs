@@ -97,7 +97,7 @@ LTE                =  { "<=" }
 EQ                 =  { "=" }
 CMP                = _{ GTE | GT | LTE | LT | EQ }
 CONSTRAINT_EXPR    =  { OPERATOR? ~ FLOAT? ~ VARIABLE | OPERATOR? ~ FLOAT }
-CONSTRAINT_NAME    = ${ VALID_CHARS{1, 255} }
+CONSTRAINT_NAME    = ${ VALID_CHARS{1, 255} ~ COLON }
 CONSTRAINT         =  {
     NEWLINE* ~ (CONSTRAINT_NAME ~ COLON*)? ~ CONSTRAINT_EXPR ~ (NEWLINE? ~ OPERATOR ~ CONSTRAINT_EXPR)* ~ NEWLINE? ~ CMP ~ FLOAT
 }

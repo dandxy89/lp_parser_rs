@@ -11,23 +11,23 @@ macro_rules! generate_test {
         #[test]
         fn $test_name() {
             let result = read_file_from_resources($file).unwrap();
-            // dbg!(&result);
+            dbg!(&result);
             assert_eq!(result.problem_sense, Sense::$sense);
-            assert_eq!(result.objectives.len(), $obj_len);
-            assert_eq!(result.constraints.len(), $con_len);
-            assert_eq!(result.variables.len(), $var_len);
+            assert_eq!(result.objectives.len(), $obj_len, "Failed Objective Count");
+            assert_eq!(result.constraints.len(), $con_len, "Failed Constraint Count");
+            assert_eq!(result.variables.len(), $var_len, "Failed Variable Count");
         }
     };
     ($test_name:ident, $file:expr, $name:expr, $sense:ident, $obj_len:expr, $con_len:expr, $var_len:expr) => {
         #[test]
         fn $test_name() {
             let result = read_file_from_resources($file).unwrap();
-            // dbg!(&result);
+            dbg!(&result);
             assert_eq!($name, result.problem_name);
             assert_eq!(result.problem_sense, Sense::$sense);
-            assert_eq!(result.objectives.len(), $obj_len);
-            assert_eq!(result.constraints.len(), $con_len);
-            assert_eq!(result.variables.len(), $var_len);
+            assert_eq!(result.objectives.len(), $obj_len, "Failed Objective Count");
+            assert_eq!(result.constraints.len(), $con_len, "Failed Constraint Count");
+            assert_eq!(result.variables.len(), $var_len, "Failed Variable Count");
         }
     };
 }
