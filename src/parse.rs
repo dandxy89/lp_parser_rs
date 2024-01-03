@@ -6,6 +6,7 @@ use std::{
 
 use crate::{lp_parts::compose, model::lp_problem::LPProblem, LParser, Rule};
 use pest::Parser;
+use tiny_id::ShortCodeGenerator;
 
 /// # Errors
 /// Returns an error if the `read_to_string` or `open` fails
@@ -28,8 +29,9 @@ pub fn parse_lp_file(contents: &str) -> anyhow::Result<LPProblem> {
         anyhow::bail!("Invalid LP file");
     };
     let mut parsed_contents = LPProblem::default();
+    let mut code_generator = ShortCodeGenerator::new_lowercase_alphanumeric(6);
     for pair in pair.clone().into_inner() {
-        parsed_contents = compose(pair, parsed_contents)?;
+        parsed_contents = compose(pair, parsed_contents, &mut code_generator)?;
     }
     Ok(parsed_contents)
 }
