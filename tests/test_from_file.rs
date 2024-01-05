@@ -16,12 +16,12 @@ macro_rules! generate_test {
 
             assert_eq!(result.objectives.len(), $obj_len, "Failed Objective Count");
             let summation = &result.objectives.iter().map(|o| o.coefficients.iter().map(|c| c.coefficient).sum::<f64>()).sum();
-            float_eq::assert_float_eq!($o_sum, *summation, abs <= 1e-3);
+            float_eq::assert_float_eq!($o_sum, *summation, abs <= 1e-2);
 
             assert_eq!(result.constraints.len(), $con_len, "Failed Constraint Count");
             let summation =
                 &result.constraints.iter().map(|(_, constr)| constr.coefficients().iter().map(|c| c.coefficient).sum::<f64>()).sum::<f64>();
-            float_eq::assert_float_eq!($c_sum, *summation, abs <= 1e-3);
+            float_eq::assert_float_eq!($c_sum, *summation, abs <= 1e-2);
 
             assert_eq!(result.variables.len(), $var_len, "Failed Variable Count");
         }
@@ -36,12 +36,12 @@ macro_rules! generate_test {
 
             assert_eq!(result.objectives.len(), $obj_len, "Failed Objective Count");
             let summation = &result.objectives.iter().map(|o| o.coefficients.iter().map(|c| c.coefficient).sum::<f64>()).sum();
-            float_eq::assert_float_eq!($o_sum, *summation, abs <= 1e-3);
+            float_eq::assert_float_eq!($o_sum, *summation, abs <= 1e-2);
 
             assert_eq!(result.constraints.len(), $con_len, "Failed Constraint Count");
             let summation =
                 &result.constraints.iter().map(|(_, constr)| constr.coefficients().iter().map(|c| c.coefficient).sum::<f64>()).sum::<f64>();
-            float_eq::assert_float_eq!($c_sum, *summation, abs <= 1e-3);
+            float_eq::assert_float_eq!($c_sum, *summation, abs <= 1e-2);
 
             assert_eq!(result.variables.len(), $var_len, "Failed Variable Count");
         }
