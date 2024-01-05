@@ -11,7 +11,7 @@ macro_rules! generate_test {
         #[test]
         fn $test_name() {
             let result = read_file_from_resources($file).unwrap();
-            dbg!(&result);
+            // dbg!(&result);
             assert_eq!(result.problem_sense, Sense::$sense);
             assert_eq!(result.objectives.len(), $obj_len, "Failed Objective Count");
             assert_eq!(result.constraints.len(), $con_len, "Failed Constraint Count");
@@ -22,7 +22,7 @@ macro_rules! generate_test {
         #[test]
         fn $test_name() {
             let result = read_file_from_resources($file).unwrap();
-            dbg!(&result);
+            // dbg!(&result);
             assert_eq!($name, result.problem_name);
             assert_eq!(result.problem_sense, Sense::$sense);
             assert_eq!(result.objectives.len(), $obj_len, "Failed Objective Count");
@@ -56,6 +56,7 @@ generate_test!(empty_bounds, "empty_bounds.lp", Minimize, 1, 1, 2);
 generate_test!(blank_lines, "blank_lines.lp", Minimize, 1, 1, 3);
 generate_test!(optional_labels, "optional_labels.lp", Minimize, 1, 1, 4);
 generate_test!(infile_comments, "infile_comments.lp", Minimize, 1, 1, 7);
+generate_test!(infile_comments2, "infile_comments2.lp", Minimize, 1, 0, 7);
 generate_test!(missing_signs, "missing_signs.lp", Minimize, 1, 1, 6);
 
 #[test]
