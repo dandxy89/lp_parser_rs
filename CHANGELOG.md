@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.6](https://github.com/dandxy89/lp_parser_rs/compare/v0.1.5...v0.1.6) (2024-01-05)
+
+
+### Bug Fixes
+
+* Another fix for comments inline ([0955e0a](https://github.com/dandxy89/lp_parser_rs/commit/0955e0afbdaaf70e86b80567100e34563df11014))
+
 ## [0.1.5](https://github.com/dandxy89/lp_parser_rs/compare/v0.1.4...v0.1.5) (2024-01-03)
 
 
