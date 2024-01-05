@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.7](https://github.com/dandxy89/lp_parser_rs/compare/v0.1.6...v0.1.7) (2024-01-05)
+
+
+### Bug Fixes
+
+* Adding Clone derive macro to internal model ([#38](https://github.com/dandxy89/lp_parser_rs/issues/38)) ([ee5799e](https://github.com/dandxy89/lp_parser_rs/commit/ee5799ead46f2d8eaf9a607d0a2fb5ae6adb4714))
+
 ## [0.1.6](https://github.com/dandxy89/lp_parser_rs/compare/v0.1.5...v0.1.6) (2024-01-05)
 
 
