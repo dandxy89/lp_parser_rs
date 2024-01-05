@@ -1,4 +1,4 @@
-use super::{coefficient::Coefficient, sos::SOSClass};
+use crate::model::{coefficient::Coefficient, sos::SOSClass};
 
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]

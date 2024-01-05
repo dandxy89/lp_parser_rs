@@ -1,5 +1,6 @@
-use crate::Rule;
 use pest::iterators::Pair;
+
+use crate::Rule;
 
 pub trait RuleExt {
     fn is_numeric(&self) -> bool;

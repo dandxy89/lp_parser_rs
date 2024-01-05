@@ -4,9 +4,10 @@ use std::{
     path::Path,
 };
 
-use crate::{lp_parts::compose, model::lp_problem::LPProblem, LParser, Rule};
 use pest::Parser;
 use tiny_id::ShortCodeGenerator;
+
+use crate::{lp_parts::compose, model::lp_problem::LPProblem, LParser, Rule};
 
 /// # Errors
 /// Returns an error if the `read_to_string` or `open` fails
