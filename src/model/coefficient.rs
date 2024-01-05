@@ -5,7 +5,7 @@ use crate::{
     Rule,
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Coefficient {
     pub var_name: String,
