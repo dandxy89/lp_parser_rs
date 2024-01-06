@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.8](https://github.com/dandxy89/lp_parser_rs/compare/v0.1.7...v0.1.8) (2024-01-06)
+
+
+### Continuous Integration
+
+* Downgrade action to v3 ([1d3e22d](https://github.com/dandxy89/lp_parser_rs/commit/1d3e22d00cc78a81a6cbd323c3530fd7ac1fd2d0))
+* Run tests on main branch ([ca652a8](https://github.com/dandxy89/lp_parser_rs/commit/ca652a866d19fea9b94d737ff60856bbdc446cca))
+
 ## [0.1.7](https://github.com/dandxy89/lp_parser_rs/compare/v0.1.6...v0.1.7) (2024-01-05)
 
 
