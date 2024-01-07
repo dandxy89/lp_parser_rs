@@ -5,7 +5,7 @@ use std::{
 };
 
 use pest::Parser;
-use tiny_id::ShortCodeGenerator;
+use unique_id::{sequence::SequenceGenerator, GeneratorFromSeed};
 
 use crate::{lp_parts::compose, model::lp_problem::LPProblem, LParser, Rule};
 
@@ -30,7 +30,7 @@ pub fn parse_lp_file(contents: &str) -> anyhow::Result<LPProblem> {
         anyhow::bail!("Invalid LP file");
     };
     let mut parsed_contents = LPProblem::default();
-    let mut code_generator = ShortCodeGenerator::new_lowercase_alphanumeric(6);
+    let mut code_generator = SequenceGenerator::new(2024);
     for pair in pair.clone().into_inner() {
         parsed_contents = compose(pair, parsed_contents, &mut code_generator)?;
     }

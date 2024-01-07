@@ -11,6 +11,10 @@ on:
 
 name: Cargo Test
 
+env:
+  CARGO_TERM_COLOR: always
+  CI: true # insta will not write new snapshot files
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -35,6 +39,5 @@ jobs:
           toolchain: stable
           override: true
       # Run cargo test
-      - uses: actions-rs/cargo@v1
-        with:
-          command: test
+      - name: Test
+        run: cargo test --all-features

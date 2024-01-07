@@ -1,0 +1,507 @@
+---
+source: tests/test_from_file.rs
+expression: result
+---
+problem_name: ""
+problem_sense: Maximize
+variables:
+  __dummy: General
+  x_0_0_10: Binary
+  x_0_0_11: Binary
+  x_0_0_5: General
+  x_0_0_6: General
+  x_0_0_7: General
+  x_0_0_8: General
+  x_0_0_9: General
+  x_0_1_10: General
+  x_0_2_10: General
+  x_0_3_10: General
+  x_0_3_11: General
+  x_0_3_5: General
+  x_0_3_6: General
+  x_0_3_7: General
+  x_0_3_8: General
+  x_0_3_9: General
+  x_0_4_10: General
+  x_0_4_11: General
+  x_0_4_5: General
+  x_0_4_6: General
+  x_0_4_7: General
+  x_0_4_8: General
+  x_0_4_9: General
+  x_0_5_10: General
+  x_0_6_10: General
+  x_0_6_11: General
+  x_0_6_5: General
+  x_0_6_6: General
+  x_0_6_7: General
+  x_0_6_8: General
+  x_0_6_9: General
+  x_11_0_0: General
+  x_11_3_0: General
+  x_11_4_0: General
+  x_11_6_0: General
+  x_15_0_0: General
+  x_15_3_0: General
+  x_15_4_0: General
+  x_15_6_0: General
+  x_32_0_0: General
+  x_32_3_0: General
+  x_32_4_0: General
+  x_32_6_0: General
+  x_3_2_9: General
+  x_3_4_9: General
+  x_3_5_9: General
+  x_3_6_9: General
+  x_48_2_9: General
+  x_48_4_9: General
+  x_48_5_9: General
+  x_48_6_9: General
+  x_54_0_0: General
+  x_54_15_0: General
+  x_54_16_0: General
+  x_54_17_0: General
+  x_54_18_0: General
+  x_54_19_0: General
+  x_54_20_0: General
+  x_54_25_0: General
+  x_54_26_0: General
+  x_54_27_0: General
+  x_54_28_0: General
+  x_54_30_0: General
+  x_54_5_0: General
+  x_54_6_0: General
+  x_54_7_0: General
+  x_54_8_0: General
+  x_56_0_0: General
+  x_56_15_0: General
+  x_56_16_0: General
+  x_56_17_0: General
+  x_56_18_0: General
+  x_56_19_0: General
+  x_56_20_0: General
+  x_56_25_0: General
+  x_56_26_0: General
+  x_56_27_0: General
+  x_56_28_0: General
+  x_56_30_0: General
+  x_56_5_0: General
+  x_56_6_0: General
+  x_56_7_0: General
+  x_56_8_0: General
+  x_59_0_0: General
+  x_59_3_0: General
+  x_59_4_0: General
+  x_59_6_0: General
+  x_5_2_9: General
+  x_5_4_9: General
+  x_5_5_9: General
+  x_5_6_9: General
+  x_9_0_9: General
+  x_9_1_9: General
+  x_9_2_10: General
+  x_9_2_11: General
+  x_9_2_13: General
+  x_9_2_14: General
+  x_9_2_15: General
+  x_9_2_4: General
+  x_9_2_5: General
+  x_9_2_6: General
+  x_9_2_7: General
+  x_9_2_8: General
+  x_9_2_9: General
+  x_9_3_9: General
+  x_9_4_10: General
+  x_9_4_11: General
+  x_9_4_13: General
+  x_9_4_14: General
+  x_9_4_15: General
+  x_9_4_4: General
+  x_9_4_5: General
+  x_9_4_6: General
+  x_9_4_7: General
+  x_9_4_8: General
+  x_9_4_9: General
+  x_9_5_10: General
+  x_9_5_11: General
+  x_9_5_13: General
+  x_9_5_14: General
+  x_9_5_15: General
+  x_9_5_4: General
+  x_9_5_5: General
+  x_9_5_6: General
+  x_9_5_7: General
+  x_9_5_8: General
+  x_9_5_9: General
+  x_9_6_10: General
+  x_9_6_11: General
+  x_9_6_13: General
+  x_9_6_14: General
+  x_9_6_15: General
+  x_9_6_4: General
+  x_9_6_5: General
+  x_9_6_6: General
+  x_9_6_7: General
+  x_9_6_8: Binary
+  x_9_6_9: Binary
+objectives:
+  - name: OBJ
+    coefficients:
+      - var_name: x_0_0_10
+        coefficient: -0.666666666667
+      - var_name: x_0_0_11
+        coefficient: -0.666666666667
+      - var_name: x_0_0_5
+        coefficient: -0.666666666667
+      - var_name: x_0_0_6
+        coefficient: -0.666666666667
+      - var_name: x_0_0_7
+        coefficient: -0.666666666667
+      - var_name: x_0_0_8
+        coefficient: -0.666666666667
+      - var_name: x_0_0_9
+        coefficient: -0.666666666667
+      - var_name: x_0_1_10
+        coefficient: -0.666666666667
+      - var_name: x_9_5_8
+        coefficient: -0.333333333333
+      - var_name: x_9_5_9
+        coefficient: -0.333333333333
+constraints:
+  "c1_0_0_0:":
+    Standard:
+      name: "c1_0_0_0:"
+      coefficients:
+        - var_name: __dummy
+          coefficient: 1
+      sense: "<="
+      rhs: 1
+  "c1_0_0_1:":
+    Standard:
+      name: "c1_0_0_1:"
+      coefficients:
+        - var_name: x_11_0_0
+          coefficient: 1
+        - var_name: x_11_3_0
+          coefficient: 1
+        - var_name: x_11_4_0
+          coefficient: 1
+        - var_name: x_11_6_0
+          coefficient: 1
+        - var_name: x_15_0_0
+          coefficient: 1
+        - var_name: x_15_3_0
+          coefficient: 1
+        - var_name: x_15_4_0
+          coefficient: 1
+        - var_name: x_15_6_0
+          coefficient: 1
+        - var_name: x_32_0_0
+          coefficient: 1
+        - var_name: x_32_3_0
+          coefficient: 1
+        - var_name: x_32_4_0
+          coefficient: 1
+        - var_name: x_32_6_0
+          coefficient: 1
+        - var_name: x_54_0_0
+          coefficient: 1
+        - var_name: x_54_15_0
+          coefficient: 1
+        - var_name: x_54_16_0
+          coefficient: 1
+        - var_name: x_54_17_0
+          coefficient: 1
+        - var_name: x_54_18_0
+          coefficient: 1
+        - var_name: x_54_19_0
+          coefficient: 1
+        - var_name: x_54_20_0
+          coefficient: 1
+        - var_name: x_54_25_0
+          coefficient: 1
+        - var_name: x_54_26_0
+          coefficient: 1
+        - var_name: x_54_27_0
+          coefficient: 1
+        - var_name: x_54_28_0
+          coefficient: 1
+        - var_name: x_54_30_0
+          coefficient: 1
+        - var_name: x_54_5_0
+          coefficient: 1
+        - var_name: x_54_6_0
+          coefficient: 1
+        - var_name: x_54_7_0
+          coefficient: 1
+        - var_name: x_54_8_0
+          coefficient: 1
+        - var_name: x_56_0_0
+          coefficient: 1
+        - var_name: x_56_15_0
+          coefficient: 1
+        - var_name: x_56_16_0
+          coefficient: 1
+        - var_name: x_56_17_0
+          coefficient: 1
+        - var_name: x_56_18_0
+          coefficient: 1
+        - var_name: x_56_19_0
+          coefficient: 1
+        - var_name: x_56_20_0
+          coefficient: 1
+        - var_name: x_56_25_0
+          coefficient: 1
+        - var_name: x_56_26_0
+          coefficient: 1
+        - var_name: x_56_27_0
+          coefficient: 1
+        - var_name: x_56_28_0
+          coefficient: 1
+        - var_name: x_56_30_0
+          coefficient: 1
+        - var_name: x_56_5_0
+          coefficient: 1
+        - var_name: x_56_6_0
+          coefficient: 1
+        - var_name: x_56_7_0
+          coefficient: 1
+        - var_name: x_56_8_0
+          coefficient: 1
+        - var_name: x_59_0_0
+          coefficient: 1
+        - var_name: x_59_3_0
+          coefficient: 1
+        - var_name: x_59_4_0
+          coefficient: 1
+        - var_name: x_59_6_0
+          coefficient: 1
+      sense: "<="
+      rhs: 1
+  "c1_9_4_4:":
+    Standard:
+      name: "c1_9_4_4:"
+      coefficients:
+        - var_name: x_3_2_9
+          coefficient: 1
+        - var_name: x_3_4_9
+          coefficient: 1
+        - var_name: x_3_5_9
+          coefficient: 1
+        - var_name: x_3_6_9
+          coefficient: 1
+        - var_name: x_48_2_9
+          coefficient: 1
+        - var_name: x_48_4_9
+          coefficient: 1
+        - var_name: x_48_5_9
+          coefficient: 1
+        - var_name: x_48_6_9
+          coefficient: 1
+        - var_name: x_5_2_9
+          coefficient: 1
+        - var_name: x_5_4_9
+          coefficient: 1
+        - var_name: x_5_5_9
+          coefficient: 1
+        - var_name: x_5_6_9
+          coefficient: 1
+      sense: "<="
+      rhs: 1
+  "c2_0_0:":
+    Standard:
+      name: "c2_0_0:"
+      coefficients:
+        - var_name: x_0_0_10
+          coefficient: 1
+        - var_name: x_0_0_11
+          coefficient: 1
+        - var_name: x_0_0_5
+          coefficient: 1
+        - var_name: x_0_0_6
+          coefficient: 1
+        - var_name: x_0_0_7
+          coefficient: 1
+        - var_name: x_0_0_8
+          coefficient: 1
+        - var_name: x_0_0_9
+          coefficient: 1
+        - var_name: x_0_3_10
+          coefficient: 1
+        - var_name: x_0_3_11
+          coefficient: 1
+        - var_name: x_0_3_5
+          coefficient: 1
+        - var_name: x_0_3_6
+          coefficient: 1
+        - var_name: x_0_3_7
+          coefficient: 1
+        - var_name: x_0_3_8
+          coefficient: 1
+        - var_name: x_0_3_9
+          coefficient: 1
+        - var_name: x_0_4_10
+          coefficient: 1
+        - var_name: x_0_4_11
+          coefficient: 1
+        - var_name: x_0_4_5
+          coefficient: 1
+        - var_name: x_0_4_6
+          coefficient: 1
+        - var_name: x_0_4_7
+          coefficient: 1
+        - var_name: x_0_4_8
+          coefficient: 1
+        - var_name: x_0_4_9
+          coefficient: 1
+        - var_name: x_0_6_10
+          coefficient: 1
+        - var_name: x_0_6_11
+          coefficient: 1
+        - var_name: x_0_6_5
+          coefficient: 1
+        - var_name: x_0_6_6
+          coefficient: 1
+        - var_name: x_0_6_7
+          coefficient: 1
+        - var_name: x_0_6_8
+          coefficient: 1
+        - var_name: x_0_6_9
+          coefficient: 1
+      sense: "="
+      rhs: 1
+  "c2_9_2:":
+    Standard:
+      name: "c2_9_2:"
+      coefficients:
+        - var_name: x_9_2_10
+          coefficient: 1
+        - var_name: x_9_2_11
+          coefficient: 1
+        - var_name: x_9_2_13
+          coefficient: 1
+        - var_name: x_9_2_14
+          coefficient: 1
+        - var_name: x_9_2_15
+          coefficient: 1
+        - var_name: x_9_2_4
+          coefficient: 1
+        - var_name: x_9_2_5
+          coefficient: 1
+        - var_name: x_9_2_6
+          coefficient: 1
+        - var_name: x_9_2_7
+          coefficient: 1
+        - var_name: x_9_2_8
+          coefficient: 1
+        - var_name: x_9_2_9
+          coefficient: 1
+        - var_name: x_9_4_10
+          coefficient: 1
+        - var_name: x_9_4_11
+          coefficient: 1
+        - var_name: x_9_4_13
+          coefficient: 1
+        - var_name: x_9_4_14
+          coefficient: 1
+        - var_name: x_9_4_15
+          coefficient: 1
+        - var_name: x_9_4_4
+          coefficient: 1
+        - var_name: x_9_4_5
+          coefficient: 1
+        - var_name: x_9_4_6
+          coefficient: 1
+        - var_name: x_9_4_7
+          coefficient: 1
+        - var_name: x_9_4_8
+          coefficient: 1
+        - var_name: x_9_4_9
+          coefficient: 1
+        - var_name: x_9_5_10
+          coefficient: 1
+        - var_name: x_9_5_11
+          coefficient: 1
+        - var_name: x_9_5_13
+          coefficient: 1
+        - var_name: x_9_5_14
+          coefficient: 1
+        - var_name: x_9_5_15
+          coefficient: 1
+        - var_name: x_9_5_4
+          coefficient: 1
+        - var_name: x_9_5_5
+          coefficient: 1
+        - var_name: x_9_5_6
+          coefficient: 1
+        - var_name: x_9_5_7
+          coefficient: 1
+        - var_name: x_9_5_8
+          coefficient: 1
+        - var_name: x_9_5_9
+          coefficient: 1
+        - var_name: x_9_6_10
+          coefficient: 1
+        - var_name: x_9_6_11
+          coefficient: 1
+        - var_name: x_9_6_13
+          coefficient: 1
+        - var_name: x_9_6_14
+          coefficient: 1
+        - var_name: x_9_6_15
+          coefficient: 1
+        - var_name: x_9_6_4
+          coefficient: 1
+        - var_name: x_9_6_5
+          coefficient: 1
+        - var_name: x_9_6_6
+          coefficient: 1
+        - var_name: x_9_6_7
+          coefficient: 1
+        - var_name: x_9_6_8
+          coefficient: 1
+        - var_name: x_9_6_9
+          coefficient: 1
+      sense: "="
+      rhs: 1
+  "c3_0_10:":
+    Standard:
+      name: "c3_0_10:"
+      coefficients:
+        - var_name: x_0_0_10
+          coefficient: 1
+        - var_name: x_0_1_10
+          coefficient: 1
+        - var_name: x_0_2_10
+          coefficient: 1
+        - var_name: x_0_3_10
+          coefficient: 1
+        - var_name: x_0_4_10
+          coefficient: 1
+        - var_name: x_0_5_10
+          coefficient: 1
+        - var_name: x_0_6_10
+          coefficient: 1
+      sense: "<="
+      rhs: 1
+  "c3_9_9:":
+    Standard:
+      name: "c3_9_9:"
+      coefficients:
+        - var_name: x_9_0_9
+          coefficient: 1
+        - var_name: x_9_1_9
+          coefficient: 1
+        - var_name: x_9_2_9
+          coefficient: 1
+        - var_name: x_9_3_9
+          coefficient: 1
+        - var_name: x_9_4_9
+          coefficient: 1
+        - var_name: x_9_5_9
+          coefficient: 1
+        - var_name: x_9_6_9
+          coefficient: 1
+      sense: "<="
+      rhs: 1
+
