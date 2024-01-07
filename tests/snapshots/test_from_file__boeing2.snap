@@ -1,0 +1,4022 @@
+---
+source: tests/test_from_file.rs
+expression: result
+---
+problem_name: boeing2.mps
+problem_sense: Minimize
+variables:
+  BBOSCLE0: General
+  BBOSCLE1: General
+  BBOSORD0: General
+  BBOSORD1: General
+  BORDBOS0: General
+  CBOSCLE0: General
+  CBOSCLE1: General
+  CBOSCLE2: General
+  CBOSCLE3: General
+  CBOSORD0: General
+  CBOSORD1: General
+  CBOSORD2: General
+  CBOSORD3: General
+  CBOSORD4: General
+  CCLELGA0: General
+  CCLELGA1: General
+  CCLELGA2: General
+  CCLELGA3: General
+  CLGACLE0: General
+  CLGACLE1: General
+  CLGACLE2: General
+  CLGAORD0: General
+  CLGAORD1: General
+  CLGAORD2: General
+  CLGAORD3: General
+  CORDBOS0: General
+  CORDBOS1: General
+  CORDBOS2: General
+  CORDBOS3: General
+  CORDBOS4: General
+  CORDLGA0: General
+  CORDLGA1: General
+  CORDLGA2: General
+  CORDLGA3: General
+  GRDTIMN1:
+    Bounded:
+      - -100
+      - 0
+      - false
+  GRDTIMN2:
+    Bounded:
+      - -90
+      - 0
+      - false
+  GRDTIMN3:
+    Bounded:
+      - -45
+      - 0
+      - false
+  GRDTIMN4:
+    Bounded:
+      - -45
+      - 0
+      - false
+  GRDTIMO1: General
+  GRDTIMO2: General
+  N1002AC1:
+    Bounded:
+      - 0
+      - 7
+      - false
+  N1002AC2:
+    Bounded:
+      - 0
+      - 7
+      - false
+  N1002AC3:
+    Bounded:
+      - 0
+      - 2
+      - false
+  N1002AC4:
+    Bounded:
+      - 0
+      - 2
+      - false
+  N1003AC1:
+    Bounded:
+      - 0
+      - 7
+      - false
+  N1003AC2:
+    Bounded:
+      - 0
+      - 7
+      - false
+  N1003AC3:
+    Bounded:
+      - 0
+      - 2
+      - false
+  N1003AC4:
+    Bounded:
+      - 0
+      - 2
+      - false
+  N1004AC2:
+    Bounded:
+      - 0
+      - 7
+      - false
+  N1004AC4:
+    Bounded:
+      - 0
+      - 2
+      - false
+  N1005AC1:
+    Bounded:
+      - 0
+      - 7
+      - false
+  N1005AC2:
+    Bounded:
+      - 0
+      - 7
+      - false
+  N1005AC3:
+    Bounded:
+      - 0
+      - 2
+      - false
+  N1005AC4:
+    Bounded:
+      - 0
+      - 2
+      - false
+  N1006AC1:
+    Bounded:
+      - 0
+      - 7
+      - false
+  N1006AC2:
+    Bounded:
+      - 0
+      - 7
+      - false
+  N1006AC3:
+    Bounded:
+      - 0
+      - 2
+      - false
+  N1006AC4:
+    Bounded:
+      - 0
+      - 2
+      - false
+  N1008AC2:
+    Bounded:
+      - 0
+      - 14
+      - false
+  N1008AC4:
+    Bounded:
+      - 0
+      - 2
+      - false
+  N1010AC2:
+    Bounded:
+      - 0
+      - 14
+      - false
+  N1010AC4:
+    Bounded:
+      - 0
+      - 2
+      - false
+  N1011AC1:
+    Bounded:
+      - 0
+      - 7
+      - false
+  N1011AC2:
+    Bounded:
+      - 0
+      - 7
+      - false
+  N1011AC3:
+    Bounded:
+      - 0
+      - 2
+      - false
+  N1011AC4:
+    Bounded:
+      - 0
+      - 2
+      - false
+  N1012AC2:
+    Bounded:
+      - 0
+      - 7
+      - false
+  N1012AC4:
+    Bounded:
+      - 0
+      - 2
+      - false
+  N1013AC2:
+    Bounded:
+      - 0
+      - 14
+      - false
+  N1013AC4:
+    Bounded:
+      - 0
+      - 2
+      - false
+  N1014AC2:
+    Bounded:
+      - 0
+      - 14
+      - false
+  N1014AC4:
+    Bounded:
+      - 0
+      - 2
+      - false
+  N1015AC2:
+    Bounded:
+      - 0
+      - 7
+      - false
+  N1015AC4:
+    Bounded:
+      - 0
+      - 2
+      - false
+  N1017AC2:
+    Bounded:
+      - 0
+      - 7
+      - false
+  N1017AC4:
+    Bounded:
+      - 0
+      - 2
+      - false
+  N1019AC2:
+    Bounded:
+      - 0
+      - 7
+      - false
+  N1019AC4:
+    Bounded:
+      - 0
+      - 2
+      - false
+  N1021AC1:
+    Bounded:
+      - 0
+      - 7
+      - false
+  N1021AC2:
+    Bounded:
+      - 0
+      - 7
+      - false
+  N1021AC3:
+    Bounded:
+      - 0
+      - 2
+      - false
+  N1021AC4:
+    Bounded:
+      - 0
+      - 2
+      - false
+  N1100AC2:
+    Bounded:
+      - 0
+      - 7
+      - false
+  N1100AC4:
+    Bounded:
+      - 0
+      - 7
+      - false
+  N1102AC2:
+    Bounded:
+      - 0
+      - 7
+      - false
+  N1102AC4:
+    Bounded:
+      - 0
+      - 7
+      - false
+  N1200AC2:
+    Bounded:
+      - 0
+      - 14
+      - false
+  N1200AC4:
+    Bounded:
+      - 0
+      - 7
+      - false
+  N1201AC2:
+    Bounded:
+      - 0
+      - 14
+      - false
+  N1201AC4:
+    Bounded:
+      - 0
+      - 7
+      - false
+  PBOSCLE0: General
+  PBOSCLE1: General
+  PBOSCLE2: General
+  PBOSCLE3: General
+  PBOSLGA0: General
+  PBOSLGA1: General
+  PBOSLGA2: General
+  PBOSLGA3: General
+  PBOSORD0: General
+  PBOSORD1: General
+  PBOSORD2: General
+  PBOSORD3: General
+  PBOSORD4: General
+  PCLEBOS0: General
+  PCLEBOS1: General
+  PCLEBOS2: General
+  PCLEBOS3: General
+  PCLEBOS4: General
+  PCLELGA0: General
+  PCLELGA1: General
+  PCLELGA2: General
+  PCLELGA3: General
+  PCLEORD0: General
+  PCLEORD1: General
+  PCLEORD2: General
+  PCLEORD3: General
+  PCLEORD4: General
+  PLGABOS0: General
+  PLGABOS1: General
+  PLGABOS2: General
+  PLGABOS3: General
+  PLGABOS4: General
+  PLGABOS5: General
+  PLGACLE0: General
+  PLGACLE1: General
+  PLGACLE2: General
+  PLGAORD0: General
+  PLGAORD1: General
+  PLGAORD2: General
+  PLGAORD3: General
+  PORDBOS0: General
+  PORDBOS1: General
+  PORDBOS2: General
+  PORDBOS3: General
+  PORDBOS4: General
+  PORDCLE0: General
+  PORDCLE1: General
+  PORDCLE2: General
+  PORDCLE3: General
+  PORDLGA0: General
+  PORDLGA1: General
+  PORDLGA2: General
+  PORDLGA3: General
+  RgDCBOSCLE:
+    Bounded:
+      - -3.2
+      - 0
+      - false
+  RgDCBOSORD:
+    Bounded:
+      - -12
+      - 0
+      - false
+  RgDCCLELGA:
+    Bounded:
+      - -5
+      - 0
+      - false
+  RgDCLGACLE:
+    Bounded:
+      - -3.2
+      - 0
+      - false
+  RgDCLGAORD:
+    Bounded:
+      - -9
+      - 0
+      - false
+  RgDCORDBOS:
+    Bounded:
+      - -4.8
+      - 0
+      - false
+  RgDCORDLGA:
+    Bounded:
+      - -2.6
+      - 0
+      - false
+  RgDMBOSCLE:
+    Bounded:
+      - -29
+      - 0
+      - false
+  RgDMBOSLGA:
+    Bounded:
+      - -471
+      - 0
+      - false
+  RgDMBOSORD:
+    Bounded:
+      - -61
+      - 0
+      - false
+  RgDMCLEBOS:
+    Bounded:
+      - -27
+      - 0
+      - false
+  RgDMCLELGA:
+    Bounded:
+      - -82
+      - 0
+      - false
+  RgDMCLEORD:
+    Bounded:
+      - -143
+      - 0
+      - false
+  RgDMLGABOS:
+    Bounded:
+      - -549
+      - 0
+      - false
+  RgDMLGACLE:
+    Bounded:
+      - -104
+      - 0
+      - false
+  RgDMLGAORD:
+    Bounded:
+      - -143
+      - 0
+      - false
+  RgDMORDBOS:
+    Bounded:
+      - -61
+      - 0
+      - false
+  RgDMORDCLE:
+    Bounded:
+      - -124
+      - 0
+      - false
+  RgDMORDLGA:
+    Bounded:
+      - -103
+      - 0
+      - false
+objectives:
+  - name: OBJECTIV
+    coefficients:
+      - var_name: PBOSORD0
+        coefficient: -0.075
+      - var_name: PBOSORD1
+        coefficient: -0.075
+      - var_name: PBOSORD2
+        coefficient: -0.075
+      - var_name: PBOSORD3
+        coefficient: -0.075
+      - var_name: PBOSORD4
+        coefficient: -0.075
+      - var_name: PBOSLGA0
+        coefficient: -0.027
+      - var_name: PBOSLGA1
+        coefficient: -0.027
+      - var_name: PBOSLGA2
+        coefficient: -0.027
+      - var_name: PBOSLGA3
+        coefficient: -0.027
+      - var_name: PBOSCLE0
+        coefficient: -0.053
+      - var_name: PBOSCLE1
+        coefficient: -0.053
+      - var_name: PBOSCLE2
+        coefficient: -0.053
+      - var_name: PBOSCLE3
+        coefficient: -0.053
+      - var_name: PORDBOS0
+        coefficient: -0.075
+      - var_name: PORDBOS1
+        coefficient: -0.075
+      - var_name: PORDBOS2
+        coefficient: -0.075
+      - var_name: PORDBOS3
+        coefficient: -0.075
+      - var_name: PORDBOS4
+        coefficient: -0.075
+      - var_name: PORDLGA0
+        coefficient: -0.068
+      - var_name: PORDLGA1
+        coefficient: -0.068
+      - var_name: PORDLGA2
+        coefficient: -0.068
+      - var_name: PORDLGA3
+        coefficient: -0.068
+      - var_name: PORDCLE0
+        coefficient: -0.035
+      - var_name: PORDCLE1
+        coefficient: -0.035
+      - var_name: PORDCLE2
+        coefficient: -0.035
+      - var_name: PORDCLE3
+        coefficient: -0.035
+      - var_name: PLGABOS0
+        coefficient: -0.027
+      - var_name: PLGABOS1
+        coefficient: -0.027
+      - var_name: PLGABOS2
+        coefficient: -0.027
+      - var_name: PLGABOS3
+        coefficient: -0.027
+      - var_name: PLGABOS4
+        coefficient: -0.027
+      - var_name: PLGABOS5
+        coefficient: -0.027
+      - var_name: PLGAORD0
+        coefficient: -0.068
+      - var_name: PLGAORD1
+        coefficient: -0.068
+      - var_name: PLGAORD2
+        coefficient: -0.068
+      - var_name: PLGAORD3
+        coefficient: -0.068
+      - var_name: PLGACLE0
+        coefficient: -0.037
+      - var_name: PLGACLE1
+        coefficient: -0.037
+      - var_name: PLGACLE2
+        coefficient: -0.037
+      - var_name: PCLEBOS0
+        coefficient: -0.053
+      - var_name: PCLEBOS1
+        coefficient: -0.053
+      - var_name: PCLEBOS2
+        coefficient: -0.053
+      - var_name: PCLEBOS3
+        coefficient: -0.053
+      - var_name: PCLEBOS4
+        coefficient: -0.053
+      - var_name: PCLEORD0
+        coefficient: -0.035
+      - var_name: PCLEORD1
+        coefficient: -0.035
+      - var_name: PCLEORD2
+        coefficient: -0.035
+      - var_name: PCLEORD3
+        coefficient: -0.035
+      - var_name: PCLEORD4
+        coefficient: -0.035
+      - var_name: PCLELGA0
+        coefficient: -0.037
+      - var_name: PCLELGA1
+        coefficient: -0.037
+      - var_name: PCLELGA2
+        coefficient: -0.037
+      - var_name: PCLELGA3
+        coefficient: -0.037
+      - var_name: BBOSORD0
+        coefficient: -0.75
+      - var_name: BBOSORD1
+        coefficient: -0.75
+      - var_name: BBOSCLE0
+        coefficient: -0.53
+      - var_name: BBOSCLE1
+        coefficient: -0.53
+      - var_name: BORDBOS0
+        coefficient: -0.75
+      - var_name: CBOSORD0
+        coefficient: -0.75
+      - var_name: CBOSORD1
+        coefficient: -0.75
+      - var_name: CBOSORD2
+        coefficient: -0.75
+      - var_name: CBOSORD3
+        coefficient: -0.75
+      - var_name: CBOSORD4
+        coefficient: -0.75
+      - var_name: CBOSCLE0
+        coefficient: -0.53
+      - var_name: CBOSCLE1
+        coefficient: -0.53
+      - var_name: CBOSCLE2
+        coefficient: -0.53
+      - var_name: CBOSCLE3
+        coefficient: -0.53
+      - var_name: CORDBOS0
+        coefficient: -0.75
+      - var_name: CORDBOS1
+        coefficient: -0.75
+      - var_name: CORDBOS2
+        coefficient: -0.75
+      - var_name: CORDBOS3
+        coefficient: -0.75
+      - var_name: CORDBOS4
+        coefficient: -0.75
+      - var_name: CORDLGA0
+        coefficient: -0.68
+      - var_name: CORDLGA1
+        coefficient: -0.68
+      - var_name: CORDLGA2
+        coefficient: -0.68
+      - var_name: CORDLGA3
+        coefficient: -0.68
+      - var_name: CLGAORD0
+        coefficient: -0.68
+      - var_name: CLGAORD1
+        coefficient: -0.68
+      - var_name: CLGAORD2
+        coefficient: -0.68
+      - var_name: CLGAORD3
+        coefficient: -0.68
+      - var_name: CLGACLE0
+        coefficient: -0.37
+      - var_name: CLGACLE1
+        coefficient: -0.37
+      - var_name: CLGACLE2
+        coefficient: -0.37
+      - var_name: CCLELGA0
+        coefficient: -0.37
+      - var_name: CCLELGA1
+        coefficient: -0.37
+      - var_name: CCLELGA2
+        coefficient: -0.37
+      - var_name: CCLELGA3
+        coefficient: -0.37
+      - var_name: GRDTIMO1
+        coefficient: 0.65
+      - var_name: GRDTIMN1
+        coefficient: -0.05
+      - var_name: GRDTIMO2
+        coefficient: 0.275
+      - var_name: GRDTIMN2
+        coefficient: -0.02889
+      - var_name: GRDTIMN3
+        coefficient: -0.03611
+      - var_name: GRDTIMN4
+        coefficient: -0.01333
+      - var_name: N1003AC1
+        coefficient: 0.01
+      - var_name: N1003AC2
+        coefficient: 0.02
+      - var_name: N1003AC3
+        coefficient: 0.03
+      - var_name: N1003AC4
+        coefficient: 0.04
+      - var_name: N1005AC1
+        coefficient: 4.04337
+      - var_name: N1005AC2
+        coefficient: 1.60964
+      - var_name: N1005AC3
+        coefficient: 1.93119
+      - var_name: N1005AC4
+        coefficient: 1.34618
+      - var_name: N1011AC1
+        coefficient: 1.1
+      - var_name: N1011AC2
+        coefficient: 1.2
+      - var_name: N1011AC3
+        coefficient: 1.3
+      - var_name: N1011AC4
+        coefficient: 2.34647
+      - var_name: N1013AC2
+        coefficient: 2.36783
+      - var_name: N1013AC4
+        coefficient: 1.90292
+      - var_name: N1015AC2
+        coefficient: 1.36416
+      - var_name: N1015AC4
+        coefficient: 1.14401
+      - var_name: N1017AC2
+        coefficient: 1.64736
+      - var_name: N1017AC4
+        coefficient: 1.33312
+      - var_name: N1019AC2
+        coefficient: 2.55381
+      - var_name: N1019AC4
+        coefficient: 2.14431
+      - var_name: N1021AC1
+        coefficient: 3.12679
+      - var_name: N1021AC2
+        coefficient: 1.18965
+      - var_name: N1021AC3
+        coefficient: 1.42472
+      - var_name: N1021AC4
+        coefficient: 1.0003
+      - var_name: N1002AC1
+        coefficient: 3.12679
+      - var_name: N1002AC2
+        coefficient: 1.18965
+      - var_name: N1002AC3
+        coefficient: 1.42472
+      - var_name: N1002AC4
+        coefficient: 1.0003
+      - var_name: N1004AC2
+        coefficient: 1.64736
+      - var_name: N1004AC4
+        coefficient: 1.33312
+      - var_name: N1006AC1
+        coefficient: 7.17016
+      - var_name: N1006AC2
+        coefficient: 2.79929
+      - var_name: N1006AC3
+        coefficient: 3.35591
+      - var_name: N1006AC4
+        coefficient: 2.34647
+      - var_name: N1008AC2
+        coefficient: 2.36783
+      - var_name: N1008AC4
+        coefficient: 1.90292
+      - var_name: N1010AC2
+        coefficient: 3.27428
+      - var_name: N1010AC4
+        coefficient: 2.71411
+      - var_name: N1012AC2
+        coefficient: 1.36416
+      - var_name: N1012AC4
+        coefficient: 1.14401
+      - var_name: N1014AC2
+        coefficient: 2.08463
+      - var_name: N1014AC4
+        coefficient: 1.71382
+      - var_name: N1100AC2
+        coefficient: 6.07357
+      - var_name: N1100AC4
+        coefficient: 5.06059
+      - var_name: N1102AC2
+        coefficient: 5.16712
+      - var_name: N1102AC4
+        coefficient: 4.24939
+      - var_name: N1200AC2
+        coefficient: 0.72047
+      - var_name: N1200AC4
+        coefficient: 0.5698
+      - var_name: N1201AC2
+        coefficient: 0.72047
+      - var_name: N1201AC4
+        coefficient: 0.5698
+constraints:
+  "ACMILES:":
+    Standard:
+      name: "ACMILES:"
+      coefficients:
+        - var_name: N1003AC1
+          coefficient: 0.86441
+        - var_name: N1003AC2
+          coefficient: 0.86441
+        - var_name: N1003AC3
+          coefficient: 0.86441
+        - var_name: N1003AC4
+          coefficient: 0.86441
+        - var_name: N1005AC1
+          coefficient: 0.56156
+        - var_name: N1005AC2
+          coefficient: 0.56156
+        - var_name: N1005AC3
+          coefficient: 0.56156
+        - var_name: N1005AC4
+          coefficient: 0.56156
+        - var_name: N1011AC1
+          coefficient: 0.87605
+        - var_name: N1011AC2
+          coefficient: 0.87605
+        - var_name: N1011AC3
+          coefficient: 0.87605
+        - var_name: N1011AC4
+          coefficient: 0.87605
+        - var_name: N1013AC2
+          coefficient: 0.91637
+        - var_name: N1013AC4
+          coefficient: 0.91637
+        - var_name: N1015AC2
+          coefficient: 0.41715
+        - var_name: N1015AC4
+          coefficient: 0.41715
+        - var_name: N1017AC2
+          coefficient: 0.7308
+        - var_name: N1017AC4
+          coefficient: 0.7308
+        - var_name: N1019AC2
+          coefficient: 0.73165
+        - var_name: N1019AC4
+          coefficient: 0.73165
+        - var_name: N1021AC1
+          coefficient: 0.3145
+        - var_name: N1021AC2
+          coefficient: 0.3145
+        - var_name: N1021AC3
+          coefficient: 0.3145
+        - var_name: N1021AC4
+          coefficient: 0.3145
+        - var_name: N1002AC1
+          coefficient: 0.3145
+        - var_name: N1002AC2
+          coefficient: 0.3145
+        - var_name: N1002AC3
+          coefficient: 0.3145
+        - var_name: N1002AC4
+          coefficient: 0.3145
+        - var_name: N1004AC2
+          coefficient: 0.7308
+        - var_name: N1004AC4
+          coefficient: 0.7308
+        - var_name: N1006AC1
+          coefficient: 0.87605
+        - var_name: N1006AC2
+          coefficient: 0.87605
+        - var_name: N1006AC3
+          coefficient: 0.87605
+        - var_name: N1006AC4
+          coefficient: 0.87605
+        - var_name: N1008AC2
+          coefficient: 0.91637
+        - var_name: N1008AC4
+          coefficient: 0.91637
+        - var_name: N1010AC2
+          coefficient: 0.91722
+        - var_name: N1010AC4
+          coefficient: 0.91722
+        - var_name: N1012AC2
+          coefficient: 0.41715
+        - var_name: N1012AC4
+          coefficient: 0.41715
+        - var_name: N1014AC2
+          coefficient: 0.60273
+        - var_name: N1014AC4
+          coefficient: 0.60273
+        - var_name: N1100AC2
+          coefficient: 1.79328
+        - var_name: N1100AC4
+          coefficient: 1.79328
+        - var_name: N1102AC2
+          coefficient: 1.79242
+        - var_name: N1102AC4
+          coefficient: 1.79242
+        - var_name: N1200AC2
+          coefficient: 0.18557
+        - var_name: N1200AC4
+          coefficient: 0.18557
+        - var_name: N1201AC2
+          coefficient: 0.18557
+        - var_name: N1201AC4
+          coefficient: 0.18557
+      sense: ">="
+      rhs: 0
+  "ACOCOSTS:":
+    Standard:
+      name: "ACOCOSTS:"
+      coefficients:
+        - var_name: GRDTIMO1
+          coefficient: 0.65
+        - var_name: GRDTIMN1
+          coefficient: -0.05
+        - var_name: GRDTIMO2
+          coefficient: 0.275
+        - var_name: GRDTIMN2
+          coefficient: -0.02889
+        - var_name: GRDTIMN3
+          coefficient: -0.03611
+        - var_name: GRDTIMN4
+          coefficient: -0.01333
+        - var_name: N1003AC1
+          coefficient: 0.01
+        - var_name: N1003AC2
+          coefficient: 0.02
+        - var_name: N1003AC3
+          coefficient: 0.03
+        - var_name: N1003AC4
+          coefficient: 0.04
+        - var_name: N1005AC1
+          coefficient: 4.04337
+        - var_name: N1005AC2
+          coefficient: 1.60964
+        - var_name: N1005AC3
+          coefficient: 1.93119
+        - var_name: N1005AC4
+          coefficient: 1.34618
+        - var_name: N1011AC1
+          coefficient: 1.1
+        - var_name: N1011AC2
+          coefficient: 1.2
+        - var_name: N1011AC3
+          coefficient: 1.3
+        - var_name: N1011AC4
+          coefficient: 2.34647
+        - var_name: N1013AC2
+          coefficient: 2.36783
+        - var_name: N1013AC4
+          coefficient: 1.90292
+        - var_name: N1015AC2
+          coefficient: 1.36416
+        - var_name: N1015AC4
+          coefficient: 1.14401
+        - var_name: N1017AC2
+          coefficient: 1.64736
+        - var_name: N1017AC4
+          coefficient: 1.33312
+        - var_name: N1019AC2
+          coefficient: 2.55381
+        - var_name: N1019AC4
+          coefficient: 2.14431
+        - var_name: N1021AC1
+          coefficient: 3.12679
+        - var_name: N1021AC2
+          coefficient: 1.18965
+        - var_name: N1021AC3
+          coefficient: 1.42472
+        - var_name: N1021AC4
+          coefficient: 1.0003
+        - var_name: N1002AC1
+          coefficient: 3.12679
+        - var_name: N1002AC2
+          coefficient: 1.18965
+        - var_name: N1002AC3
+          coefficient: 1.42472
+        - var_name: N1002AC4
+          coefficient: 1.0003
+        - var_name: N1004AC2
+          coefficient: 1.64736
+        - var_name: N1004AC4
+          coefficient: 1.33312
+        - var_name: N1006AC1
+          coefficient: 7.17016
+        - var_name: N1006AC2
+          coefficient: 2.79929
+        - var_name: N1006AC3
+          coefficient: 3.35591
+        - var_name: N1006AC4
+          coefficient: 2.34647
+        - var_name: N1008AC2
+          coefficient: 2.36783
+        - var_name: N1008AC4
+          coefficient: 1.90292
+        - var_name: N1010AC2
+          coefficient: 3.27428
+        - var_name: N1010AC4
+          coefficient: 2.71411
+        - var_name: N1012AC2
+          coefficient: 1.36416
+        - var_name: N1012AC4
+          coefficient: 1.14401
+        - var_name: N1014AC2
+          coefficient: 2.08463
+        - var_name: N1014AC4
+          coefficient: 1.71382
+        - var_name: N1100AC2
+          coefficient: 6.07357
+        - var_name: N1100AC4
+          coefficient: 5.06059
+        - var_name: N1102AC2
+          coefficient: 5.16712
+        - var_name: N1102AC4
+          coefficient: 4.24939
+        - var_name: N1200AC2
+          coefficient: 0.72047
+        - var_name: N1200AC4
+          coefficient: 0.5698
+        - var_name: N1201AC2
+          coefficient: 0.72047
+        - var_name: N1201AC4
+          coefficient: 0.5698
+      sense: ">="
+      rhs: 0
+  "ASMILES:":
+    Standard:
+      name: "ASMILES:"
+      coefficients:
+        - var_name: N1003AC1
+          coefficient: 351.81396
+        - var_name: N1003AC2
+          coefficient: 113.23743
+        - var_name: N1005AC1
+          coefficient: 228.55299
+        - var_name: N1005AC2
+          coefficient: 73.56374
+        - var_name: N1011AC1
+          coefficient: 356.55371
+        - var_name: N1011AC2
+          coefficient: 114.76299
+        - var_name: N1013AC2
+          coefficient: 120.04449
+        - var_name: N1015AC2
+          coefficient: 54.64705
+        - var_name: N1017AC2
+          coefficient: 95.73444
+        - var_name: N1019AC2
+          coefficient: 95.8463
+        - var_name: N1021AC1
+          coefficient: 128.00075
+        - var_name: N1021AC2
+          coefficient: 41.19926
+        - var_name: N1002AC1
+          coefficient: 128.00075
+        - var_name: N1002AC2
+          coefficient: 41.19926
+        - var_name: N1004AC2
+          coefficient: 95.73444
+        - var_name: N1006AC1
+          coefficient: 356.55371
+        - var_name: N1006AC2
+          coefficient: 114.76299
+        - var_name: N1008AC2
+          coefficient: 120.04449
+        - var_name: N1010AC2
+          coefficient: 120.15637
+        - var_name: N1012AC2
+          coefficient: 54.64705
+        - var_name: N1014AC2
+          coefficient: 78.95706
+        - var_name: N1100AC2
+          coefficient: 234.91937
+        - var_name: N1102AC2
+          coefficient: 234.80756
+        - var_name: N1200AC2
+          coefficient: 24.31007
+        - var_name: N1201AC2
+          coefficient: 24.31007
+      sense: ">="
+      rhs: 0
+  "ATONMILE:":
+    Standard:
+      name: "ATONMILE:"
+      coefficients:
+        - var_name: N1003AC1
+          coefficient: 25.93224
+        - var_name: N1003AC3
+          coefficient: 34.57631
+        - var_name: N1003AC4
+          coefficient: 12.96612
+        - var_name: N1005AC1
+          coefficient: 16.84665
+        - var_name: N1005AC3
+          coefficient: 22.4622
+        - var_name: N1005AC4
+          coefficient: 8.42333
+        - var_name: N1011AC1
+          coefficient: 26.2816
+        - var_name: N1011AC3
+          coefficient: 35.04214
+        - var_name: N1011AC4
+          coefficient: 13.1408
+        - var_name: N1013AC4
+          coefficient: 13.74556
+        - var_name: N1015AC4
+          coefficient: 6.25729
+        - var_name: N1017AC4
+          coefficient: 10.96196
+        - var_name: N1019AC4
+          coefficient: 10.97477
+        - var_name: N1021AC1
+          coefficient: 9.43495
+        - var_name: N1021AC3
+          coefficient: 12.57993
+        - var_name: N1021AC4
+          coefficient: 4.71747
+        - var_name: N1002AC1
+          coefficient: 9.43495
+        - var_name: N1002AC3
+          coefficient: 12.57993
+        - var_name: N1002AC4
+          coefficient: 4.71747
+        - var_name: N1004AC4
+          coefficient: 10.96196
+        - var_name: N1006AC1
+          coefficient: 26.2816
+        - var_name: N1006AC3
+          coefficient: 35.04214
+        - var_name: N1006AC4
+          coefficient: 13.1408
+        - var_name: N1008AC4
+          coefficient: 13.74556
+        - var_name: N1010AC4
+          coefficient: 13.75836
+        - var_name: N1012AC4
+          coefficient: 6.25729
+        - var_name: N1014AC4
+          coefficient: 9.04089
+        - var_name: N1100AC4
+          coefficient: 26.89915
+        - var_name: N1102AC4
+          coefficient: 26.88635
+        - var_name: N1200AC4
+          coefficient: 2.7836
+        - var_name: N1201AC4
+          coefficient: 2.7836
+      sense: ">="
+      rhs: 0
+  "CONTBOS1:":
+    Standard:
+      name: "CONTBOS1:"
+      coefficients:
+        - var_name: N1003AC1
+          coefficient: 1
+        - var_name: N1005AC1
+          coefficient: 1
+        - var_name: N1011AC1
+          coefficient: 1
+        - var_name: N1006AC1
+          coefficient: -1
+      sense: ">="
+      rhs: 0
+  "CONTBOS2:":
+    Standard:
+      name: "CONTBOS2:"
+      coefficients:
+        - var_name: N1003AC2
+          coefficient: 1
+        - var_name: N1005AC2
+          coefficient: 1
+        - var_name: N1011AC2
+          coefficient: 1
+        - var_name: N1013AC2
+          coefficient: 1
+        - var_name: N1006AC2
+          coefficient: -1
+        - var_name: N1008AC2
+          coefficient: -1
+        - var_name: N1010AC2
+          coefficient: -1
+        - var_name: N1014AC2
+          coefficient: -1
+        - var_name: N1200AC2
+          coefficient: 1
+        - var_name: N1201AC2
+          coefficient: -1
+      sense: ">="
+      rhs: 0
+  "CONTBOS3:":
+    Standard:
+      name: "CONTBOS3:"
+      coefficients:
+        - var_name: N1003AC3
+          coefficient: 1
+        - var_name: N1005AC3
+          coefficient: 1
+        - var_name: N1011AC3
+          coefficient: 1
+        - var_name: N1006AC3
+          coefficient: -1
+      sense: ">="
+      rhs: 0
+  "CONTBOS4:":
+    Standard:
+      name: "CONTBOS4:"
+      coefficients:
+        - var_name: N1003AC4
+          coefficient: 1
+        - var_name: N1005AC4
+          coefficient: 1
+        - var_name: N1011AC4
+          coefficient: 1
+        - var_name: N1013AC4
+          coefficient: 1
+        - var_name: N1006AC4
+          coefficient: -1
+        - var_name: N1008AC4
+          coefficient: -1
+        - var_name: N1010AC4
+          coefficient: -1
+        - var_name: N1014AC4
+          coefficient: -1
+        - var_name: N1200AC4
+          coefficient: 1
+        - var_name: N1201AC4
+          coefficient: -1
+      sense: ">="
+      rhs: 0
+  "CONTCLE1:":
+    Standard:
+      name: "CONTCLE1:"
+      coefficients:
+        - var_name: N1005AC1
+          coefficient: -1
+        - var_name: N1021AC1
+          coefficient: 1
+        - var_name: N1002AC1
+          coefficient: -1
+      sense: ">="
+      rhs: 0
+  "CONTCLE2:":
+    Standard:
+      name: "CONTCLE2:"
+      coefficients:
+        - var_name: N1005AC2
+          coefficient: -1
+        - var_name: N1015AC2
+          coefficient: -1
+        - var_name: N1021AC2
+          coefficient: 1
+        - var_name: N1002AC2
+          coefficient: -1
+        - var_name: N1012AC2
+          coefficient: 1
+        - var_name: N1014AC2
+          coefficient: 1
+      sense: ">="
+      rhs: 0
+  "CONTCLE3:":
+    Standard:
+      name: "CONTCLE3:"
+      coefficients:
+        - var_name: N1005AC3
+          coefficient: -1
+        - var_name: N1021AC3
+          coefficient: 1
+        - var_name: N1002AC3
+          coefficient: -1
+      sense: ">="
+      rhs: 0
+  "CONTCLE4:":
+    Standard:
+      name: "CONTCLE4:"
+      coefficients:
+        - var_name: N1005AC4
+          coefficient: -1
+        - var_name: N1015AC4
+          coefficient: -1
+        - var_name: N1021AC4
+          coefficient: 1
+        - var_name: N1002AC4
+          coefficient: -1
+        - var_name: N1012AC4
+          coefficient: 1
+        - var_name: N1014AC4
+          coefficient: 1
+      sense: ">="
+      rhs: 0
+  "CONTLGA2:":
+    Standard:
+      name: "CONTLGA2:"
+      coefficients:
+        - var_name: N1015AC2
+          coefficient: 1
+        - var_name: N1017AC2
+          coefficient: 1
+        - var_name: N1019AC2
+          coefficient: 1
+        - var_name: N1004AC2
+          coefficient: -1
+        - var_name: N1012AC2
+          coefficient: -1
+        - var_name: N1200AC2
+          coefficient: -1
+        - var_name: N1201AC2
+          coefficient: 1
+      sense: ">="
+      rhs: 0
+  "CONTLGA4:":
+    Standard:
+      name: "CONTLGA4:"
+      coefficients:
+        - var_name: N1015AC4
+          coefficient: 1
+        - var_name: N1017AC4
+          coefficient: 1
+        - var_name: N1019AC4
+          coefficient: 1
+        - var_name: N1004AC4
+          coefficient: -1
+        - var_name: N1012AC4
+          coefficient: -1
+        - var_name: N1200AC4
+          coefficient: -1
+        - var_name: N1201AC4
+          coefficient: 1
+      sense: ">="
+      rhs: 0
+  "CONTORD1:":
+    Standard:
+      name: "CONTORD1:"
+      coefficients:
+        - var_name: N1003AC1
+          coefficient: -1
+        - var_name: N1011AC1
+          coefficient: -1
+        - var_name: N1021AC1
+          coefficient: -1
+        - var_name: N1002AC1
+          coefficient: 1
+        - var_name: N1006AC1
+          coefficient: 1
+      sense: ">="
+      rhs: 0
+  "CONTORD2:":
+    Standard:
+      name: "CONTORD2:"
+      coefficients:
+        - var_name: N1003AC2
+          coefficient: -1
+        - var_name: N1011AC2
+          coefficient: -1
+        - var_name: N1013AC2
+          coefficient: -1
+        - var_name: N1017AC2
+          coefficient: -1
+        - var_name: N1019AC2
+          coefficient: -1
+        - var_name: N1021AC2
+          coefficient: -1
+        - var_name: N1002AC2
+          coefficient: 1
+        - var_name: N1004AC2
+          coefficient: 1
+        - var_name: N1006AC2
+          coefficient: 1
+        - var_name: N1008AC2
+          coefficient: 1
+        - var_name: N1010AC2
+          coefficient: 1
+      sense: ">="
+      rhs: 0
+  "CONTORD3:":
+    Standard:
+      name: "CONTORD3:"
+      coefficients:
+        - var_name: N1003AC3
+          coefficient: -1
+        - var_name: N1011AC3
+          coefficient: -1
+        - var_name: N1021AC3
+          coefficient: -1
+        - var_name: N1002AC3
+          coefficient: 1
+        - var_name: N1006AC3
+          coefficient: 1
+      sense: ">="
+      rhs: 0
+  "CONTORD4:":
+    Standard:
+      name: "CONTORD4:"
+      coefficients:
+        - var_name: N1003AC4
+          coefficient: -1
+        - var_name: N1011AC4
+          coefficient: -1
+        - var_name: N1013AC4
+          coefficient: -1
+        - var_name: N1017AC4
+          coefficient: -1
+        - var_name: N1019AC4
+          coefficient: -1
+        - var_name: N1021AC4
+          coefficient: -1
+        - var_name: N1002AC4
+          coefficient: 1
+        - var_name: N1004AC4
+          coefficient: 1
+        - var_name: N1006AC4
+          coefficient: 1
+        - var_name: N1008AC4
+          coefficient: 1
+        - var_name: N1010AC4
+          coefficient: 1
+      sense: ">="
+      rhs: 0
+  "DCBOSCLE:":
+    Standard:
+      name: "DCBOSCLE:"
+      coefficients:
+        - var_name: BBOSCLE0
+          coefficient: 1
+        - var_name: BBOSCLE1
+          coefficient: 1
+        - var_name: CBOSCLE0
+          coefficient: 1
+        - var_name: CBOSCLE1
+          coefficient: 1
+        - var_name: CBOSCLE2
+          coefficient: 1
+        - var_name: CBOSCLE3
+          coefficient: 1
+        - var_name: RgDCBOSCLE
+          coefficient: -1
+      sense: "="
+      rhs: 16
+  "DCBOSORD:":
+    Standard:
+      name: "DCBOSORD:"
+      coefficients:
+        - var_name: BBOSORD0
+          coefficient: 1
+        - var_name: BBOSORD1
+          coefficient: 1
+        - var_name: CBOSORD0
+          coefficient: 1
+        - var_name: CBOSORD1
+          coefficient: 1
+        - var_name: CBOSORD2
+          coefficient: 1
+        - var_name: CBOSORD3
+          coefficient: 1
+        - var_name: CBOSORD4
+          coefficient: 1
+        - var_name: RgDCBOSORD
+          coefficient: -1
+      sense: "="
+      rhs: 12
+  "DCCLELGA:":
+    Standard:
+      name: "DCCLELGA:"
+      coefficients:
+        - var_name: CCLELGA0
+          coefficient: 1
+        - var_name: CCLELGA1
+          coefficient: 1
+        - var_name: CCLELGA2
+          coefficient: 1
+        - var_name: CCLELGA3
+          coefficient: 1
+        - var_name: RgDCCLELGA
+          coefficient: -1
+      sense: "="
+      rhs: 5
+  "DCLGACLE:":
+    Standard:
+      name: "DCLGACLE:"
+      coefficients:
+        - var_name: CLGACLE0
+          coefficient: 1
+        - var_name: CLGACLE1
+          coefficient: 1
+        - var_name: CLGACLE2
+          coefficient: 1
+        - var_name: RgDCLGACLE
+          coefficient: -1
+      sense: "="
+      rhs: 16
+  "DCLGAORD:":
+    Standard:
+      name: "DCLGAORD:"
+      coefficients:
+        - var_name: CLGAORD0
+          coefficient: 1
+        - var_name: CLGAORD1
+          coefficient: 1
+        - var_name: CLGAORD2
+          coefficient: 1
+        - var_name: CLGAORD3
+          coefficient: 1
+        - var_name: RgDCLGAORD
+          coefficient: -1
+      sense: "="
+      rhs: 45
+  "DCORDBOS:":
+    Standard:
+      name: "DCORDBOS:"
+      coefficients:
+        - var_name: BORDBOS0
+          coefficient: 1
+        - var_name: CORDBOS0
+          coefficient: 1
+        - var_name: CORDBOS1
+          coefficient: 1
+        - var_name: CORDBOS2
+          coefficient: 1
+        - var_name: CORDBOS3
+          coefficient: 1
+        - var_name: CORDBOS4
+          coefficient: 1
+        - var_name: RgDCORDBOS
+          coefficient: -1
+      sense: "="
+      rhs: 24
+  "DCORDLGA:":
+    Standard:
+      name: "DCORDLGA:"
+      coefficients:
+        - var_name: CORDLGA0
+          coefficient: 1
+        - var_name: CORDLGA1
+          coefficient: 1
+        - var_name: CORDLGA2
+          coefficient: 1
+        - var_name: CORDLGA3
+          coefficient: 1
+        - var_name: RgDCORDLGA
+          coefficient: -1
+      sense: "="
+      rhs: 13
+  "DMBOSCLE:":
+    Standard:
+      name: "DMBOSCLE:"
+      coefficients:
+        - var_name: PBOSCLE0
+          coefficient: 1
+        - var_name: PBOSCLE1
+          coefficient: 1
+        - var_name: PBOSCLE2
+          coefficient: 1
+        - var_name: PBOSCLE3
+          coefficient: 1
+        - var_name: RgDMBOSCLE
+          coefficient: -1
+      sense: "="
+      rhs: 142
+  "DMBOSLGA:":
+    Standard:
+      name: "DMBOSLGA:"
+      coefficients:
+        - var_name: PBOSLGA0
+          coefficient: 1
+        - var_name: PBOSLGA1
+          coefficient: 1
+        - var_name: PBOSLGA2
+          coefficient: 1
+        - var_name: PBOSLGA3
+          coefficient: 1
+        - var_name: RgDMBOSLGA
+          coefficient: -1
+      sense: "="
+      rhs: 2352
+  "DMBOSORD:":
+    Standard:
+      name: "DMBOSORD:"
+      coefficients:
+        - var_name: PBOSORD0
+          coefficient: 1
+        - var_name: PBOSORD1
+          coefficient: 1
+        - var_name: PBOSORD2
+          coefficient: 1
+        - var_name: PBOSORD3
+          coefficient: 1
+        - var_name: PBOSORD4
+          coefficient: 1
+        - var_name: RgDMBOSORD
+          coefficient: -1
+      sense: "="
+      rhs: 302
+  "DMCLEBOS:":
+    Standard:
+      name: "DMCLEBOS:"
+      coefficients:
+        - var_name: PCLEBOS0
+          coefficient: 1
+        - var_name: PCLEBOS1
+          coefficient: 1
+        - var_name: PCLEBOS2
+          coefficient: 1
+        - var_name: PCLEBOS3
+          coefficient: 1
+        - var_name: PCLEBOS4
+          coefficient: 1
+        - var_name: RgDMCLEBOS
+          coefficient: -1
+      sense: "="
+      rhs: 131
+  "DMCLELGA:":
+    Standard:
+      name: "DMCLELGA:"
+      coefficients:
+        - var_name: PCLELGA0
+          coefficient: 1
+        - var_name: PCLELGA1
+          coefficient: 1
+        - var_name: PCLELGA2
+          coefficient: 1
+        - var_name: PCLELGA3
+          coefficient: 1
+        - var_name: RgDMCLELGA
+          coefficient: -1
+      sense: "="
+      rhs: 409
+  "DMCLEORD:":
+    Standard:
+      name: "DMCLEORD:"
+      coefficients:
+        - var_name: PCLEORD0
+          coefficient: 1
+        - var_name: PCLEORD1
+          coefficient: 1
+        - var_name: PCLEORD2
+          coefficient: 1
+        - var_name: PCLEORD3
+          coefficient: 1
+        - var_name: PCLEORD4
+          coefficient: 1
+        - var_name: RgDMCLEORD
+          coefficient: -1
+      sense: "="
+      rhs: 712
+  "DMLGABOS:":
+    Standard:
+      name: "DMLGABOS:"
+      coefficients:
+        - var_name: PLGABOS0
+          coefficient: 1
+        - var_name: PLGABOS1
+          coefficient: 1
+        - var_name: PLGABOS2
+          coefficient: 1
+        - var_name: PLGABOS3
+          coefficient: 1
+        - var_name: PLGABOS4
+          coefficient: 1
+        - var_name: PLGABOS5
+          coefficient: 1
+        - var_name: RgDMLGABOS
+          coefficient: -1
+      sense: "="
+      rhs: 2743
+  "DMLGACLE:":
+    Standard:
+      name: "DMLGACLE:"
+      coefficients:
+        - var_name: PLGACLE0
+          coefficient: 1
+        - var_name: PLGACLE1
+          coefficient: 1
+        - var_name: PLGACLE2
+          coefficient: 1
+        - var_name: RgDMLGACLE
+          coefficient: -1
+      sense: "="
+      rhs: 517
+  "DMLGAORD:":
+    Standard:
+      name: "DMLGAORD:"
+      coefficients:
+        - var_name: PLGAORD0
+          coefficient: 1
+        - var_name: PLGAORD1
+          coefficient: 1
+        - var_name: PLGAORD2
+          coefficient: 1
+        - var_name: PLGAORD3
+          coefficient: 1
+        - var_name: RgDMLGAORD
+          coefficient: -1
+      sense: "="
+      rhs: 712
+  "DMORDBOS:":
+    Standard:
+      name: "DMORDBOS:"
+      coefficients:
+        - var_name: PORDBOS0
+          coefficient: 1
+        - var_name: PORDBOS1
+          coefficient: 1
+        - var_name: PORDBOS2
+          coefficient: 1
+        - var_name: PORDBOS3
+          coefficient: 1
+        - var_name: PORDBOS4
+          coefficient: 1
+        - var_name: RgDMORDBOS
+          coefficient: -1
+      sense: "="
+      rhs: 302
+  "DMORDCLE:":
+    Standard:
+      name: "DMORDCLE:"
+      coefficients:
+        - var_name: PORDCLE0
+          coefficient: 1
+        - var_name: PORDCLE1
+          coefficient: 1
+        - var_name: PORDCLE2
+          coefficient: 1
+        - var_name: PORDCLE3
+          coefficient: 1
+        - var_name: RgDMORDCLE
+          coefficient: -1
+      sense: "="
+      rhs: 619
+  "DMORDLGA:":
+    Standard:
+      name: "DMORDLGA:"
+      coefficients:
+        - var_name: PORDLGA0
+          coefficient: 1
+        - var_name: PORDLGA1
+          coefficient: 1
+        - var_name: PORDLGA2
+          coefficient: 1
+        - var_name: PORDLGA3
+          coefficient: 1
+        - var_name: RgDMORDLGA
+          coefficient: -1
+      sense: "="
+      rhs: 515
+  "FLAVa1:":
+    Standard:
+      name: "FLAVa1:"
+      coefficients:
+        - var_name: GRDTIMO1
+          coefficient: 1
+        - var_name: GRDTIMN1
+          coefficient: 1
+        - var_name: N1003AC1
+          coefficient: 2.32729
+        - var_name: N1005AC1
+          coefficient: 1000
+        - var_name: N1011AC1
+          coefficient: 25
+        - var_name: N1021AC1
+          coefficient: 1.34295
+        - var_name: N1002AC1
+          coefficient: 1.34295
+        - var_name: N1006AC1
+          coefficient: 3.12813
+      sense: "="
+      rhs: 30
+  "FLAVa2:":
+    Standard:
+      name: "FLAVa2:"
+      coefficients:
+        - var_name: GRDTIMO2
+          coefficient: 1
+        - var_name: GRDTIMN2
+          coefficient: 1
+        - var_name: N1003AC2
+          coefficient: 2.10966
+        - var_name: N1005AC2
+          coefficient: 2000
+        - var_name: N1011AC2
+          coefficient: 25
+        - var_name: N1013AC2
+          coefficient: 2.65943
+        - var_name: N1015AC2
+          coefficient: 1.25093
+        - var_name: N1017AC2
+          coefficient: 1.85313
+        - var_name: N1019AC2
+          coefficient: 2.30477
+        - var_name: N1021AC2
+          coefficient: 1.05384
+        - var_name: N1002AC2
+          coefficient: 1.05384
+        - var_name: N1004AC2
+          coefficient: 1.85313
+        - var_name: N1006AC2
+          coefficient: 2.58202
+        - var_name: N1008AC2
+          coefficient: 2.65943
+        - var_name: N1010AC2
+          coefficient: 3.11107
+        - var_name: N1012AC2
+          coefficient: 1.25093
+        - var_name: N1014AC2
+          coefficient: 2.05723
+        - var_name: N1100AC2
+          coefficient: 5.69309
+        - var_name: N1102AC2
+          coefficient: 5.24145
+        - var_name: N1200AC2
+          coefficient: 0.8063
+        - var_name: N1201AC2
+          coefficient: 0.8063
+      sense: "="
+      rhs: 45
+  "FLAVa3:":
+    Standard:
+      name: "FLAVa3:"
+      coefficients:
+        - var_name: GRDTIMN3
+          coefficient: 1
+        - var_name: N1003AC3
+          coefficient: 2.10966
+        - var_name: N1005AC3
+          coefficient: 3000
+        - var_name: N1011AC3
+          coefficient: 26
+        - var_name: N1021AC3
+          coefficient: 1.05384
+        - var_name: N1002AC3
+          coefficient: 1.05384
+        - var_name: N1006AC3
+          coefficient: 2.58202
+      sense: "="
+      rhs: 0
+  "FLAVa4:":
+    Standard:
+      name: "FLAVa4:"
+      coefficients:
+        - var_name: GRDTIMN4
+          coefficient: 1
+        - var_name: N1003AC4
+          coefficient: 2.10966
+        - var_name: N1005AC4
+          coefficient: 1500
+        - var_name: N1011AC4
+          coefficient: 27
+        - var_name: N1013AC4
+          coefficient: 2.65943
+        - var_name: N1015AC4
+          coefficient: 1.25093
+        - var_name: N1017AC4
+          coefficient: 1.85313
+        - var_name: N1019AC4
+          coefficient: 2.30477
+        - var_name: N1021AC4
+          coefficient: 1.05384
+        - var_name: N1002AC4
+          coefficient: 1.05384
+        - var_name: N1004AC4
+          coefficient: 1.85313
+        - var_name: N1006AC4
+          coefficient: 2.58202
+        - var_name: N1008AC4
+          coefficient: 2.65943
+        - var_name: N1010AC4
+          coefficient: 3.11107
+        - var_name: N1012AC4
+          coefficient: 1.25093
+        - var_name: N1014AC4
+          coefficient: 2.05723
+        - var_name: N1100AC4
+          coefficient: 5.69309
+        - var_name: N1102AC4
+          coefficient: 5.24145
+        - var_name: N1200AC4
+          coefficient: 0.8063
+        - var_name: N1201AC4
+          coefficient: 0.8063
+      sense: "="
+      rhs: 0
+  "FUELAVAL:":
+    Standard:
+      name: "FUELAVAL:"
+      coefficients:
+        - var_name: N1003AC1
+          coefficient: 7.98429
+        - var_name: N1003AC2
+          coefficient: 2.51914
+        - var_name: N1003AC3
+          coefficient: 3.15178
+        - var_name: N1003AC4
+          coefficient: 1.99337
+        - var_name: N1005AC1
+          coefficient: 5.83404
+        - var_name: N1005AC2
+          coefficient: 1.82258
+        - var_name: N1005AC3
+          coefficient: 2.27351
+        - var_name: N1005AC4
+          coefficient: 1.41795
+        - var_name: N1011AC1
+          coefficient: 9.91398
+        - var_name: N1011AC2
+          coefficient: 3.07692
+        - var_name: N1011AC3
+          coefficient: 3.83055
+        - var_name: N1011AC4
+          coefficient: 2.3665
+        - var_name: N1013AC2
+          coefficient: 3.16965
+        - var_name: N1013AC4
+          coefficient: 2.4431
+        - var_name: N1015AC2
+          coefficient: 1.49045
+        - var_name: N1015AC4
+          coefficient: 1.14359
+        - var_name: N1017AC2
+          coefficient: 2.21183
+        - var_name: N1017AC4
+          coefficient: 1.73951
+        - var_name: N1019AC2
+          coefficient: 2.7448
+        - var_name: N1019AC4
+          coefficient: 2.09214
+        - var_name: N1021AC1
+          coefficient: 4.07994
+        - var_name: N1021AC2
+          coefficient: 1.25435
+        - var_name: N1021AC3
+          coefficient: 1.55704
+        - var_name: N1021AC4
+          coefficient: 0.94855
+        - var_name: N1002AC1
+          coefficient: 4.07994
+        - var_name: N1002AC2
+          coefficient: 1.25435
+        - var_name: N1002AC3
+          coefficient: 1.55704
+        - var_name: N1002AC4
+          coefficient: 0.94855
+        - var_name: N1004AC2
+          coefficient: 2.21183
+        - var_name: N1004AC4
+          coefficient: 1.73951
+        - var_name: N1006AC1
+          coefficient: 9.91398
+        - var_name: N1006AC2
+          coefficient: 3.07692
+        - var_name: N1006AC3
+          coefficient: 3.83055
+        - var_name: N1006AC4
+          coefficient: 2.3665
+        - var_name: N1008AC2
+          coefficient: 3.16965
+        - var_name: N1008AC4
+          coefficient: 2.4431
+        - var_name: N1010AC2
+          coefficient: 3.70262
+        - var_name: N1010AC4
+          coefficient: 2.79573
+        - var_name: N1012AC2
+          coefficient: 1.49045
+        - var_name: N1012AC4
+          coefficient: 1.14359
+        - var_name: N1014AC2
+          coefficient: 2.44827
+        - var_name: N1014AC4
+          coefficient: 1.84718
+        - var_name: N1100AC2
+          coefficient: 6.77953
+        - var_name: N1100AC4
+          coefficient: 5.16223
+        - var_name: N1102AC2
+          coefficient: 6.24657
+        - var_name: N1102AC4
+          coefficient: 4.8096
+        - var_name: N1200AC2
+          coefficient: 0.95782
+        - var_name: N1200AC4
+          coefficient: 0.70359
+        - var_name: N1201AC2
+          coefficient: 0.95782
+        - var_name: N1201AC4
+          coefficient: 0.70359
+      sense: "<="
+      rhs: 100000
+  "LF1002B1:":
+    Standard:
+      name: "LF1002B1:"
+      coefficients:
+        - var_name: N1002AC1
+          coefficient: 12
+      sense: ">="
+      rhs: 0
+  "LF1002C1:":
+    Standard:
+      name: "LF1002C1:"
+      coefficients:
+        - var_name: N1002AC3
+          coefficient: 30
+        - var_name: N1002AC4
+          coefficient: 11.25
+      sense: ">="
+      rhs: 0
+  "LF1002S1:":
+    Standard:
+      name: "LF1002S1:"
+      coefficients:
+        - var_name: PORDCLE0
+          coefficient: -1
+        - var_name: N1002AC1
+          coefficient: 305
+        - var_name: N1002AC2
+          coefficient: 98
+      sense: ">="
+      rhs: 0
+  "LF1003B1:":
+    Standard:
+      name: "LF1003B1:"
+      coefficients:
+        - var_name: BBOSORD0
+          coefficient: -1
+        - var_name: N1003AC1
+          coefficient: 12
+      sense: ">="
+      rhs: 0
+  "LF1003C1:":
+    Standard:
+      name: "LF1003C1:"
+      coefficients:
+        - var_name: CBOSORD0
+          coefficient: -1
+        - var_name: N1003AC3
+          coefficient: 30
+        - var_name: N1003AC4
+          coefficient: 11.25
+      sense: ">="
+      rhs: 0
+  "LF1003S1:":
+    Standard:
+      name: "LF1003S1:"
+      coefficients:
+        - var_name: PBOSORD0
+          coefficient: -1
+        - var_name: N1003AC1
+          coefficient: 305
+        - var_name: N1003AC2
+          coefficient: 98
+      sense: ">="
+      rhs: 0
+  "LF1004C1:":
+    Standard:
+      name: "LF1004C1:"
+      coefficients:
+        - var_name: CORDLGA0
+          coefficient: -1
+        - var_name: N1004AC4
+          coefficient: 11.25
+      sense: ">="
+      rhs: 0
+  "LF1004S1:":
+    Standard:
+      name: "LF1004S1:"
+      coefficients:
+        - var_name: PORDLGA0
+          coefficient: -1
+        - var_name: N1004AC2
+          coefficient: 98
+      sense: ">="
+      rhs: 0
+  "LF1005B1:":
+    Standard:
+      name: "LF1005B1:"
+      coefficients:
+        - var_name: BBOSCLE0
+          coefficient: -1
+        - var_name: N1005AC1
+          coefficient: 12
+      sense: ">="
+      rhs: 0
+  "LF1005C1:":
+    Standard:
+      name: "LF1005C1:"
+      coefficients:
+        - var_name: CBOSCLE0
+          coefficient: -1
+        - var_name: N1005AC3
+          coefficient: 30
+        - var_name: N1005AC4
+          coefficient: 11.25
+      sense: ">="
+      rhs: 0
+  "LF1005S1:":
+    Standard:
+      name: "LF1005S1:"
+      coefficients:
+        - var_name: PBOSCLE0
+          coefficient: -1
+        - var_name: N1005AC1
+          coefficient: 305
+        - var_name: N1005AC2
+          coefficient: 98
+      sense: ">="
+      rhs: 0
+  "LF1006B1:":
+    Standard:
+      name: "LF1006B1:"
+      coefficients:
+        - var_name: BORDBOS0
+          coefficient: -1
+        - var_name: N1006AC1
+          coefficient: 12
+      sense: ">="
+      rhs: 0
+  "LF1006B2:":
+    Standard:
+      name: "LF1006B2:"
+      coefficients:
+        - var_name: BORDBOS0
+          coefficient: -1
+        - var_name: N1006AC1
+          coefficient: 12
+      sense: ">="
+      rhs: 0
+  "LF1006C1:":
+    Standard:
+      name: "LF1006C1:"
+      coefficients:
+        - var_name: CORDBOS0
+          coefficient: -1
+        - var_name: N1006AC3
+          coefficient: 30
+        - var_name: N1006AC4
+          coefficient: 11.25
+      sense: ">="
+      rhs: 0
+  "LF1006C2:":
+    Standard:
+      name: "LF1006C2:"
+      coefficients:
+        - var_name: CORDBOS0
+          coefficient: -1
+        - var_name: N1006AC3
+          coefficient: 30
+        - var_name: N1006AC4
+          coefficient: 11.25
+      sense: ">="
+      rhs: 0
+  "LF1006S1:":
+    Standard:
+      name: "LF1006S1:"
+      coefficients:
+        - var_name: PORDBOS0
+          coefficient: -1
+        - var_name: PORDCLE1
+          coefficient: -1
+        - var_name: N1006AC1
+          coefficient: 305
+        - var_name: N1006AC2
+          coefficient: 98
+      sense: ">="
+      rhs: 0
+  "LF1006S2:":
+    Standard:
+      name: "LF1006S2:"
+      coefficients:
+        - var_name: PORDBOS0
+          coefficient: -1
+        - var_name: PCLEBOS0
+          coefficient: -1
+        - var_name: N1006AC1
+          coefficient: 305
+        - var_name: N1006AC2
+          coefficient: 98
+      sense: ">="
+      rhs: 0
+  "LF1008C1:":
+    Standard:
+      name: "LF1008C1:"
+      coefficients:
+        - var_name: CORDBOS1
+          coefficient: -1
+        - var_name: CORDLGA1
+          coefficient: -1
+        - var_name: N1008AC4
+          coefficient: 11.25
+      sense: ">="
+      rhs: 0
+  "LF1008C2:":
+    Standard:
+      name: "LF1008C2:"
+      coefficients:
+        - var_name: CORDBOS1
+          coefficient: -1
+        - var_name: N1008AC4
+          coefficient: 11.25
+      sense: ">="
+      rhs: 0
+  "LF1008S1:":
+    Standard:
+      name: "LF1008S1:"
+      coefficients:
+        - var_name: PORDBOS1
+          coefficient: -1
+        - var_name: PORDLGA1
+          coefficient: -1
+        - var_name: N1008AC2
+          coefficient: 98
+      sense: ">="
+      rhs: 0
+  "LF1008S2:":
+    Standard:
+      name: "LF1008S2:"
+      coefficients:
+        - var_name: PORDBOS1
+          coefficient: -1
+        - var_name: PLGABOS0
+          coefficient: -1
+        - var_name: N1008AC2
+          coefficient: 98
+      sense: ">="
+      rhs: 0
+  "LF1010C1:":
+    Standard:
+      name: "LF1010C1:"
+      coefficients:
+        - var_name: CORDBOS2
+          coefficient: -1
+        - var_name: CORDLGA2
+          coefficient: -1
+        - var_name: N1010AC4
+          coefficient: 11.25
+      sense: ">="
+      rhs: 0
+  "LF1010C2:":
+    Standard:
+      name: "LF1010C2:"
+      coefficients:
+        - var_name: CORDBOS2
+          coefficient: -1
+        - var_name: CORDLGA2
+          coefficient: -1
+        - var_name: CCLELGA0
+          coefficient: -1
+        - var_name: N1010AC4
+          coefficient: 11.25
+      sense: ">="
+      rhs: 0
+  "LF1010C3:":
+    Standard:
+      name: "LF1010C3:"
+      coefficients:
+        - var_name: CORDBOS2
+          coefficient: -1
+        - var_name: N1010AC4
+          coefficient: 11.25
+      sense: ">="
+      rhs: 0
+  "LF1010S1:":
+    Standard:
+      name: "LF1010S1:"
+      coefficients:
+        - var_name: PORDBOS2
+          coefficient: -1
+        - var_name: PORDLGA2
+          coefficient: -1
+        - var_name: PORDCLE2
+          coefficient: -1
+        - var_name: N1010AC2
+          coefficient: 98
+      sense: ">="
+      rhs: 0
+  "LF1010S2:":
+    Standard:
+      name: "LF1010S2:"
+      coefficients:
+        - var_name: PORDBOS2
+          coefficient: -1
+        - var_name: PORDLGA2
+          coefficient: -1
+        - var_name: PCLEBOS1
+          coefficient: -1
+        - var_name: PCLELGA0
+          coefficient: -1
+        - var_name: N1010AC2
+          coefficient: 98
+      sense: ">="
+      rhs: 0
+  "LF1010S3:":
+    Standard:
+      name: "LF1010S3:"
+      coefficients:
+        - var_name: PORDBOS2
+          coefficient: -1
+        - var_name: PLGABOS1
+          coefficient: -1
+        - var_name: PCLEBOS1
+          coefficient: -1
+        - var_name: N1010AC2
+          coefficient: 98
+      sense: ">="
+      rhs: 0
+  "LF1011B1:":
+    Standard:
+      name: "LF1011B1:"
+      coefficients:
+        - var_name: BBOSORD1
+          coefficient: -1
+        - var_name: BBOSCLE1
+          coefficient: -1
+        - var_name: N1011AC1
+          coefficient: 12
+      sense: ">="
+      rhs: 0
+  "LF1011B2:":
+    Standard:
+      name: "LF1011B2:"
+      coefficients:
+        - var_name: BBOSORD1
+          coefficient: -1
+        - var_name: N1011AC1
+          coefficient: 12
+      sense: ">="
+      rhs: 0
+  "LF1011C1:":
+    Standard:
+      name: "LF1011C1:"
+      coefficients:
+        - var_name: CBOSORD1
+          coefficient: -1
+        - var_name: CBOSCLE1
+          coefficient: -1
+        - var_name: N1011AC3
+          coefficient: 30
+        - var_name: N1011AC4
+          coefficient: 11.25
+      sense: ">="
+      rhs: 0
+  "LF1011C2:":
+    Standard:
+      name: "LF1011C2:"
+      coefficients:
+        - var_name: CBOSORD1
+          coefficient: -1
+        - var_name: N1011AC3
+          coefficient: 30
+        - var_name: N1011AC4
+          coefficient: 11.25
+      sense: ">="
+      rhs: 0
+  "LF1011S1:":
+    Standard:
+      name: "LF1011S1:"
+      coefficients:
+        - var_name: PBOSORD1
+          coefficient: -1
+        - var_name: PBOSCLE1
+          coefficient: -1
+        - var_name: N1011AC1
+          coefficient: 305
+        - var_name: N1011AC2
+          coefficient: 98
+      sense: ">="
+      rhs: 0
+  "LF1011S2:":
+    Standard:
+      name: "LF1011S2:"
+      coefficients:
+        - var_name: PBOSORD1
+          coefficient: -1
+        - var_name: PCLEORD0
+          coefficient: -1
+        - var_name: N1011AC1
+          coefficient: 305
+        - var_name: N1011AC2
+          coefficient: 98
+      sense: ">="
+      rhs: 0
+  "LF1012C1:":
+    Standard:
+      name: "LF1012C1:"
+      coefficients:
+        - var_name: CCLELGA1
+          coefficient: -1
+        - var_name: N1012AC4
+          coefficient: 11.25
+      sense: ">="
+      rhs: 0
+  "LF1012S1:":
+    Standard:
+      name: "LF1012S1:"
+      coefficients:
+        - var_name: PCLELGA1
+          coefficient: -1
+        - var_name: N1012AC2
+          coefficient: 98
+      sense: ">="
+      rhs: 0
+  "LF1013C1:":
+    Standard:
+      name: "LF1013C1:"
+      coefficients:
+        - var_name: CBOSORD2
+          coefficient: -1
+        - var_name: N1013AC4
+          coefficient: 11.25
+      sense: ">="
+      rhs: 0
+  "LF1013C2:":
+    Standard:
+      name: "LF1013C2:"
+      coefficients:
+        - var_name: CBOSORD2
+          coefficient: -1
+        - var_name: CLGAORD0
+          coefficient: -1
+        - var_name: N1013AC4
+          coefficient: 11.25
+      sense: ">="
+      rhs: 0
+  "LF1013S1:":
+    Standard:
+      name: "LF1013S1:"
+      coefficients:
+        - var_name: PBOSORD2
+          coefficient: -1
+        - var_name: PBOSLGA0
+          coefficient: -1
+        - var_name: N1013AC2
+          coefficient: 98
+      sense: ">="
+      rhs: 0
+  "LF1013S2:":
+    Standard:
+      name: "LF1013S2:"
+      coefficients:
+        - var_name: PBOSORD2
+          coefficient: -1
+        - var_name: PLGAORD0
+          coefficient: -1
+        - var_name: N1013AC2
+          coefficient: 98
+      sense: ">="
+      rhs: 0
+  "LF1014C1:":
+    Standard:
+      name: "LF1014C1:"
+      coefficients:
+        - var_name: CCLELGA2
+          coefficient: -1
+        - var_name: N1014AC4
+          coefficient: 11.25
+      sense: ">="
+      rhs: 0
+  "LF1014C2:":
+    Standard:
+      name: "LF1014C2:"
+      coefficients:
+        - var_name: N1014AC4
+          coefficient: 11.25
+      sense: ">="
+      rhs: 0
+  "LF1014S1:":
+    Standard:
+      name: "LF1014S1:"
+      coefficients:
+        - var_name: PCLEBOS2
+          coefficient: -1
+        - var_name: PCLELGA2
+          coefficient: -1
+        - var_name: N1014AC2
+          coefficient: 98
+      sense: ">="
+      rhs: 0
+  "LF1014S2:":
+    Standard:
+      name: "LF1014S2:"
+      coefficients:
+        - var_name: PLGABOS2
+          coefficient: -1
+        - var_name: PCLEBOS2
+          coefficient: -1
+        - var_name: N1014AC2
+          coefficient: 98
+      sense: ">="
+      rhs: 0
+  "LF1015C1:":
+    Standard:
+      name: "LF1015C1:"
+      coefficients:
+        - var_name: CLGACLE0
+          coefficient: -1
+        - var_name: N1015AC4
+          coefficient: 11.25
+      sense: ">="
+      rhs: 0
+  "LF1015S1:":
+    Standard:
+      name: "LF1015S1:"
+      coefficients:
+        - var_name: PLGACLE0
+          coefficient: -1
+        - var_name: N1015AC2
+          coefficient: 98
+      sense: ">="
+      rhs: 0
+  "LF1017C1:":
+    Standard:
+      name: "LF1017C1:"
+      coefficients:
+        - var_name: CLGAORD1
+          coefficient: -1
+        - var_name: N1017AC4
+          coefficient: 11.25
+      sense: ">="
+      rhs: 0
+  "LF1017S1:":
+    Standard:
+      name: "LF1017S1:"
+      coefficients:
+        - var_name: PLGAORD1
+          coefficient: -1
+        - var_name: N1017AC2
+          coefficient: 98
+      sense: ">="
+      rhs: 0
+  "LF1019C1:":
+    Standard:
+      name: "LF1019C1:"
+      coefficients:
+        - var_name: CLGAORD2
+          coefficient: -1
+        - var_name: CLGACLE1
+          coefficient: -1
+        - var_name: N1019AC4
+          coefficient: 11.25
+      sense: ">="
+      rhs: 0
+  "LF1019C2:":
+    Standard:
+      name: "LF1019C2:"
+      coefficients:
+        - var_name: CLGAORD2
+          coefficient: -1
+        - var_name: N1019AC4
+          coefficient: 11.25
+      sense: ">="
+      rhs: 0
+  "LF1019S1:":
+    Standard:
+      name: "LF1019S1:"
+      coefficients:
+        - var_name: PLGAORD2
+          coefficient: -1
+        - var_name: PLGACLE1
+          coefficient: -1
+        - var_name: N1019AC2
+          coefficient: 98
+      sense: ">="
+      rhs: 0
+  "LF1019S2:":
+    Standard:
+      name: "LF1019S2:"
+      coefficients:
+        - var_name: PLGAORD2
+          coefficient: -1
+        - var_name: PCLEORD1
+          coefficient: -1
+        - var_name: N1019AC2
+          coefficient: 98
+      sense: ">="
+      rhs: 0
+  "LF1021B1:":
+    Standard:
+      name: "LF1021B1:"
+      coefficients:
+        - var_name: N1021AC1
+          coefficient: 12
+      sense: ">="
+      rhs: 0
+  "LF1021C1:":
+    Standard:
+      name: "LF1021C1:"
+      coefficients:
+        - var_name: N1021AC3
+          coefficient: 30
+        - var_name: N1021AC4
+          coefficient: 11.25
+      sense: ">="
+      rhs: 0
+  "LF1021S1:":
+    Standard:
+      name: "LF1021S1:"
+      coefficients:
+        - var_name: PCLEORD2
+          coefficient: -1
+        - var_name: N1021AC1
+          coefficient: 305
+        - var_name: N1021AC2
+          coefficient: 98
+      sense: ">="
+      rhs: 0
+  "LF1100C1:":
+    Standard:
+      name: "LF1100C1:"
+      coefficients:
+        - var_name: CBOSORD3
+          coefficient: -1
+        - var_name: CBOSCLE2
+          coefficient: -1
+        - var_name: N1100AC4
+          coefficient: 11.25
+      sense: ">="
+      rhs: 0
+  "LF1100C2:":
+    Standard:
+      name: "LF1100C2:"
+      coefficients:
+        - var_name: CBOSORD3
+          coefficient: -1
+        - var_name: CBOSCLE2
+          coefficient: -1
+        - var_name: CLGAORD3
+          coefficient: -1
+        - var_name: CLGACLE2
+          coefficient: -1
+        - var_name: N1100AC4
+          coefficient: 11.25
+      sense: ">="
+      rhs: 0
+  "LF1100C3:":
+    Standard:
+      name: "LF1100C3:"
+      coefficients:
+        - var_name: CBOSORD3
+          coefficient: -1
+        - var_name: CLGAORD3
+          coefficient: -1
+        - var_name: N1100AC4
+          coefficient: 11.25
+      sense: ">="
+      rhs: 0
+  "LF1100C4:":
+    Standard:
+      name: "LF1100C4:"
+      coefficients:
+        - var_name: CORDBOS3
+          coefficient: -1
+        - var_name: N1100AC4
+          coefficient: 11.25
+      sense: ">="
+      rhs: 0
+  "LF1100C5:":
+    Standard:
+      name: "LF1100C5:"
+      coefficients:
+        - var_name: CORDBOS3
+          coefficient: -1
+        - var_name: N1100AC4
+          coefficient: 11.25
+      sense: ">="
+      rhs: 0
+  "LF1100S1:":
+    Standard:
+      name: "LF1100S1:"
+      coefficients:
+        - var_name: PBOSORD3
+          coefficient: -1
+        - var_name: PBOSLGA1
+          coefficient: -1
+        - var_name: PBOSCLE2
+          coefficient: -1
+        - var_name: N1100AC2
+          coefficient: 98
+      sense: ">="
+      rhs: 0
+  "LF1100S2:":
+    Standard:
+      name: "LF1100S2:"
+      coefficients:
+        - var_name: PBOSORD3
+          coefficient: -1
+        - var_name: PBOSCLE2
+          coefficient: -1
+        - var_name: PLGABOS3
+          coefficient: -1
+        - var_name: PLGAORD3
+          coefficient: -1
+        - var_name: PLGACLE2
+          coefficient: -1
+        - var_name: N1100AC2
+          coefficient: 98
+      sense: ">="
+      rhs: 0
+  "LF1100S3:":
+    Standard:
+      name: "LF1100S3:"
+      coefficients:
+        - var_name: PBOSORD3
+          coefficient: -1
+        - var_name: PLGABOS3
+          coefficient: -1
+        - var_name: PLGAORD3
+          coefficient: -1
+        - var_name: PCLEORD3
+          coefficient: -1
+        - var_name: N1100AC2
+          coefficient: 98
+      sense: ">="
+      rhs: 0
+  "LF1100S4:":
+    Standard:
+      name: "LF1100S4:"
+      coefficients:
+        - var_name: PORDBOS3
+          coefficient: -1
+        - var_name: PORDCLE3
+          coefficient: -1
+        - var_name: PLGABOS3
+          coefficient: -1
+        - var_name: N1100AC2
+          coefficient: 98
+      sense: ">="
+      rhs: 0
+  "LF1100S5:":
+    Standard:
+      name: "LF1100S5:"
+      coefficients:
+        - var_name: PORDBOS3
+          coefficient: -1
+        - var_name: PLGABOS3
+          coefficient: -1
+        - var_name: PCLEBOS3
+          coefficient: -1
+        - var_name: N1100AC2
+          coefficient: 98
+      sense: ">="
+      rhs: 0
+  "LF1102C1:":
+    Standard:
+      name: "LF1102C1:"
+      coefficients:
+        - var_name: CBOSORD4
+          coefficient: -1
+        - var_name: CBOSCLE3
+          coefficient: -1
+        - var_name: N1102AC4
+          coefficient: 11.25
+      sense: ">="
+      rhs: 0
+  "LF1102C2:":
+    Standard:
+      name: "LF1102C2:"
+      coefficients:
+        - var_name: CBOSORD4
+          coefficient: -1
+        - var_name: CCLELGA3
+          coefficient: -1
+        - var_name: N1102AC4
+          coefficient: 11.25
+      sense: ">="
+      rhs: 0
+  "LF1102C3:":
+    Standard:
+      name: "LF1102C3:"
+      coefficients:
+        - var_name: CORDBOS4
+          coefficient: -1
+        - var_name: CORDLGA3
+          coefficient: -1
+        - var_name: CCLELGA3
+          coefficient: -1
+        - var_name: N1102AC4
+          coefficient: 11.25
+      sense: ">="
+      rhs: 0
+  "LF1102C4:":
+    Standard:
+      name: "LF1102C4:"
+      coefficients:
+        - var_name: CORDBOS4
+          coefficient: -1
+        - var_name: N1102AC4
+          coefficient: 11.25
+      sense: ">="
+      rhs: 0
+  "LF1102S1:":
+    Standard:
+      name: "LF1102S1:"
+      coefficients:
+        - var_name: PBOSORD4
+          coefficient: -1
+        - var_name: PBOSLGA2
+          coefficient: -1
+        - var_name: PBOSCLE3
+          coefficient: -1
+        - var_name: N1102AC2
+          coefficient: 98
+      sense: ">="
+      rhs: 0
+  "LF1102S2:":
+    Standard:
+      name: "LF1102S2:"
+      coefficients:
+        - var_name: PBOSORD4
+          coefficient: -1
+        - var_name: PBOSLGA2
+          coefficient: -1
+        - var_name: PCLEBOS4
+          coefficient: -1
+        - var_name: PCLEORD4
+          coefficient: -1
+        - var_name: PCLELGA3
+          coefficient: -1
+        - var_name: N1102AC2
+          coefficient: 98
+      sense: ">="
+      rhs: 0
+  "LF1102S3:":
+    Standard:
+      name: "LF1102S3:"
+      coefficients:
+        - var_name: PBOSLGA2
+          coefficient: -1
+        - var_name: PORDBOS4
+          coefficient: -1
+        - var_name: PORDLGA3
+          coefficient: -1
+        - var_name: PCLEBOS4
+          coefficient: -1
+        - var_name: PCLELGA3
+          coefficient: -1
+        - var_name: N1102AC2
+          coefficient: 98
+      sense: ">="
+      rhs: 0
+  "LF1102S4:":
+    Standard:
+      name: "LF1102S4:"
+      coefficients:
+        - var_name: PORDBOS4
+          coefficient: -1
+        - var_name: PLGABOS4
+          coefficient: -1
+        - var_name: PCLEBOS4
+          coefficient: -1
+        - var_name: N1102AC2
+          coefficient: 98
+      sense: ">="
+      rhs: 0
+  "LF1200C1:":
+    Standard:
+      name: "LF1200C1:"
+      coefficients:
+        - var_name: N1200AC4
+          coefficient: 11.25
+      sense: ">="
+      rhs: 0
+  "LF1200S1:":
+    Standard:
+      name: "LF1200S1:"
+      coefficients:
+        - var_name: PBOSLGA3
+          coefficient: -1
+        - var_name: N1200AC2
+          coefficient: 98
+      sense: ">="
+      rhs: 0
+  "LF1201C1:":
+    Standard:
+      name: "LF1201C1:"
+      coefficients:
+        - var_name: N1201AC4
+          coefficient: 11.25
+      sense: ">="
+      rhs: 0
+  "LF1201S1:":
+    Standard:
+      name: "LF1201S1:"
+      coefficients:
+        - var_name: PLGABOS5
+          coefficient: -1
+        - var_name: N1201AC2
+          coefficient: 98
+      sense: ">="
+      rhs: 0
+  "LFRPMASM:":
+    Standard:
+      name: "LFRPMASM:"
+      coefficients:
+        - var_name: PBOSORD0
+          coefficient: -0.86441
+        - var_name: PBOSORD1
+          coefficient: -0.87605
+        - var_name: PBOSORD2
+          coefficient: -0.91637
+        - var_name: PBOSORD3
+          coefficient: -0.91722
+        - var_name: PBOSORD4
+          coefficient: -0.87605
+        - var_name: PBOSLGA0
+          coefficient: -0.18557
+        - var_name: PBOSLGA1
+          coefficient: -0.18557
+        - var_name: PBOSLGA2
+          coefficient: -1.60685
+        - var_name: PBOSLGA3
+          coefficient: -0.18557
+        - var_name: PBOSCLE0
+          coefficient: -0.56156
+        - var_name: PBOSCLE1
+          coefficient: -0.56156
+        - var_name: PBOSCLE2
+          coefficient: -0.60273
+        - var_name: PBOSCLE3
+          coefficient: -0.56156
+        - var_name: PORDBOS0
+          coefficient: -0.87605
+        - var_name: PORDBOS1
+          coefficient: -0.91637
+        - var_name: PORDBOS2
+          coefficient: -0.91722
+        - var_name: PORDBOS3
+          coefficient: -0.87605
+        - var_name: PORDBOS4
+          coefficient: -0.91637
+        - var_name: PORDLGA0
+          coefficient: -0.7308
+        - var_name: PORDLGA1
+          coefficient: -0.7308
+        - var_name: PORDLGA2
+          coefficient: -0.73165
+        - var_name: PORDLGA3
+          coefficient: -0.7308
+        - var_name: PORDCLE0
+          coefficient: -0.3145
+        - var_name: PORDCLE1
+          coefficient: -0.3145
+        - var_name: PORDCLE2
+          coefficient: -0.3145
+        - var_name: PORDCLE3
+          coefficient: -0.3145
+        - var_name: PLGABOS0
+          coefficient: -0.18557
+        - var_name: PLGABOS1
+          coefficient: -0.18557
+        - var_name: PLGABOS2
+          coefficient: -0.18557
+        - var_name: PLGABOS3
+          coefficient: -1.6077
+        - var_name: PLGABOS4
+          coefficient: -0.18557
+        - var_name: PLGABOS5
+          coefficient: -0.18557
+        - var_name: PLGAORD0
+          coefficient: -0.7308
+        - var_name: PLGAORD1
+          coefficient: -0.7308
+        - var_name: PLGAORD2
+          coefficient: -0.73165
+        - var_name: PLGAORD3
+          coefficient: -0.73165
+        - var_name: PLGACLE0
+          coefficient: -0.41715
+        - var_name: PLGACLE1
+          coefficient: -0.41715
+        - var_name: PLGACLE2
+          coefficient: -0.41715
+        - var_name: PCLEBOS0
+          coefficient: -0.56156
+        - var_name: PCLEBOS1
+          coefficient: -0.60273
+        - var_name: PCLEBOS2
+          coefficient: -0.60273
+        - var_name: PCLEBOS3
+          coefficient: -0.56156
+        - var_name: PCLEBOS4
+          coefficient: -1.23087
+        - var_name: PCLEORD0
+          coefficient: -0.3145
+        - var_name: PCLEORD1
+          coefficient: -0.3145
+        - var_name: PCLEORD2
+          coefficient: -0.3145
+        - var_name: PCLEORD3
+          coefficient: -0.3145
+        - var_name: PCLEORD4
+          coefficient: -0.3145
+        - var_name: PCLELGA0
+          coefficient: -0.41715
+        - var_name: PCLELGA1
+          coefficient: -0.41715
+        - var_name: PCLELGA2
+          coefficient: -0.41715
+        - var_name: PCLELGA3
+          coefficient: -1.0453
+        - var_name: N1003AC1
+          coefficient: 211.088376
+        - var_name: N1003AC2
+          coefficient: 67.942458
+        - var_name: N1005AC1
+          coefficient: 137.131794
+        - var_name: N1005AC2
+          coefficient: 44.138244
+        - var_name: N1011AC1
+          coefficient: 213.932226
+        - var_name: N1011AC2
+          coefficient: 68.857794
+        - var_name: N1013AC2
+          coefficient: 72.026694
+        - var_name: N1015AC2
+          coefficient: 32.78823
+        - var_name: N1017AC2
+          coefficient: 57.440664
+        - var_name: N1019AC2
+          coefficient: 57.50778
+        - var_name: N1021AC1
+          coefficient: 76.80045
+        - var_name: N1021AC2
+          coefficient: 24.719556
+        - var_name: N1002AC1
+          coefficient: 76.80045
+        - var_name: N1002AC2
+          coefficient: 24.719556
+        - var_name: N1004AC2
+          coefficient: 57.440664
+        - var_name: N1006AC1
+          coefficient: 213.932226
+        - var_name: N1006AC2
+          coefficient: 68.857794
+        - var_name: N1008AC2
+          coefficient: 72.026694
+        - var_name: N1010AC2
+          coefficient: 72.093822
+        - var_name: N1012AC2
+          coefficient: 32.78823
+        - var_name: N1014AC2
+          coefficient: 47.374236
+        - var_name: N1100AC2
+          coefficient: 140.951622
+        - var_name: N1102AC2
+          coefficient: 140.884536
+        - var_name: N1200AC2
+          coefficient: 14.586042
+        - var_name: N1201AC2
+          coefficient: 14.586042
+      sense: ">="
+      rhs: 0
+  "LFTNMILE:":
+    Standard:
+      name: "LFTNMILE:"
+      coefficients:
+        - var_name: BBOSORD0
+          coefficient: -0.86441
+        - var_name: BBOSORD1
+          coefficient: -0.87605
+        - var_name: BBOSCLE0
+          coefficient: -0.56156
+        - var_name: BBOSCLE1
+          coefficient: -0.56156
+        - var_name: BORDBOS0
+          coefficient: -0.87605
+        - var_name: CBOSORD0
+          coefficient: -0.86441
+        - var_name: CBOSORD1
+          coefficient: -0.87605
+        - var_name: CBOSORD2
+          coefficient: -0.91637
+        - var_name: CBOSORD3
+          coefficient: -0.91722
+        - var_name: CBOSORD4
+          coefficient: -0.87605
+        - var_name: CBOSCLE0
+          coefficient: -0.56156
+        - var_name: CBOSCLE1
+          coefficient: -0.56156
+        - var_name: CBOSCLE2
+          coefficient: -0.60273
+        - var_name: CBOSCLE3
+          coefficient: -0.56156
+        - var_name: CORDBOS0
+          coefficient: -0.87605
+        - var_name: CORDBOS1
+          coefficient: -0.91637
+        - var_name: CORDBOS2
+          coefficient: -0.91722
+        - var_name: CORDBOS3
+          coefficient: -0.87605
+        - var_name: CORDBOS4
+          coefficient: -0.91637
+        - var_name: CORDLGA0
+          coefficient: -0.7308
+        - var_name: CORDLGA1
+          coefficient: -0.7308
+        - var_name: CORDLGA2
+          coefficient: -0.73165
+        - var_name: CORDLGA3
+          coefficient: -0.7308
+        - var_name: CLGAORD0
+          coefficient: -0.7308
+        - var_name: CLGAORD1
+          coefficient: -0.7308
+        - var_name: CLGAORD2
+          coefficient: -0.73165
+        - var_name: CLGAORD3
+          coefficient: -0.73165
+        - var_name: CLGACLE0
+          coefficient: -0.41715
+        - var_name: CLGACLE1
+          coefficient: -0.41715
+        - var_name: CLGACLE2
+          coefficient: -0.41715
+        - var_name: CCLELGA0
+          coefficient: -0.41715
+        - var_name: CCLELGA1
+          coefficient: -0.41715
+        - var_name: CCLELGA2
+          coefficient: -0.41715
+        - var_name: CCLELGA3
+          coefficient: -1.0453
+        - var_name: N1003AC1
+          coefficient: 12.96612
+        - var_name: N1003AC3
+          coefficient: 17.288155
+        - var_name: N1003AC4
+          coefficient: 6.48306
+        - var_name: N1005AC1
+          coefficient: 8.423325
+        - var_name: N1005AC3
+          coefficient: 11.2311
+        - var_name: N1005AC4
+          coefficient: 4.211665
+        - var_name: N1011AC1
+          coefficient: 13.1408
+        - var_name: N1011AC3
+          coefficient: 17.52107
+        - var_name: N1011AC4
+          coefficient: 6.5704
+        - var_name: N1013AC4
+          coefficient: 6.87278
+        - var_name: N1015AC4
+          coefficient: 3.128645
+        - var_name: N1017AC4
+          coefficient: 5.48098
+        - var_name: N1019AC4
+          coefficient: 5.487385
+        - var_name: N1021AC1
+          coefficient: 4.717475
+        - var_name: N1021AC3
+          coefficient: 6.289965
+        - var_name: N1021AC4
+          coefficient: 2.358735
+        - var_name: N1002AC1
+          coefficient: 4.717475
+        - var_name: N1002AC3
+          coefficient: 6.289965
+        - var_name: N1002AC4
+          coefficient: 2.358735
+        - var_name: N1004AC4
+          coefficient: 5.48098
+        - var_name: N1006AC1
+          coefficient: 13.1408
+        - var_name: N1006AC3
+          coefficient: 17.52107
+        - var_name: N1006AC4
+          coefficient: 6.5704
+        - var_name: N1008AC4
+          coefficient: 6.87278
+        - var_name: N1010AC4
+          coefficient: 6.87918
+        - var_name: N1012AC4
+          coefficient: 3.128645
+        - var_name: N1014AC4
+          coefficient: 4.520445
+        - var_name: N1100AC4
+          coefficient: 13.449575
+        - var_name: N1102AC4
+          coefficient: 13.443175
+        - var_name: N1200AC4
+          coefficient: 1.3918
+        - var_name: N1201AC4
+          coefficient: 1.3918
+      sense: ">="
+      rhs: 0
+  "MCLGAORD:":
+    Standard:
+      name: "MCLGAORD:"
+      coefficients:
+        - var_name: N1013AC4
+          coefficient: 1
+        - var_name: N1017AC4
+          coefficient: 1
+        - var_name: N1019AC4
+          coefficient: 1
+        - var_name: N1100AC4
+          coefficient: 1
+      sense: ">="
+      rhs: 2
+  "MCORDBOS:":
+    Standard:
+      name: "MCORDBOS:"
+      coefficients:
+        - var_name: N1006AC3
+          coefficient: 1
+        - var_name: N1006AC4
+          coefficient: 1
+        - var_name: N1008AC4
+          coefficient: 1
+        - var_name: N1010AC4
+          coefficient: 1
+        - var_name: N1100AC4
+          coefficient: 1
+        - var_name: N1102AC4
+          coefficient: 1
+      sense: ">="
+      rhs: 1
+  "MSBOSCLE:":
+    Standard:
+      name: "MSBOSCLE:"
+      coefficients:
+        - var_name: N1005AC1
+          coefficient: 1
+        - var_name: N1005AC2
+          coefficient: 1
+        - var_name: N1011AC1
+          coefficient: 1
+        - var_name: N1011AC2
+          coefficient: 1
+        - var_name: N1100AC2
+          coefficient: 1
+        - var_name: N1102AC2
+          coefficient: 1
+      sense: ">="
+      rhs: 1
+  "MSBOSLGA:":
+    Standard:
+      name: "MSBOSLGA:"
+      coefficients:
+        - var_name: N1013AC2
+          coefficient: 1
+        - var_name: N1100AC2
+          coefficient: 1
+        - var_name: N1102AC2
+          coefficient: 1
+        - var_name: N1200AC2
+          coefficient: 1
+      sense: ">="
+      rhs: 7
+  "MSBOSORD:":
+    Standard:
+      name: "MSBOSORD:"
+      coefficients:
+        - var_name: N1003AC1
+          coefficient: 1
+        - var_name: N1003AC2
+          coefficient: 1
+        - var_name: N1011AC1
+          coefficient: 1
+        - var_name: N1011AC2
+          coefficient: 1
+        - var_name: N1013AC2
+          coefficient: 1
+        - var_name: N1100AC2
+          coefficient: 1
+        - var_name: N1102AC2
+          coefficient: 1
+      sense: ">="
+      rhs: 3
+  "MSCLEBOS:":
+    Standard:
+      name: "MSCLEBOS:"
+      coefficients:
+        - var_name: N1006AC1
+          coefficient: 1
+        - var_name: N1006AC2
+          coefficient: 1
+        - var_name: N1010AC2
+          coefficient: 1
+        - var_name: N1014AC2
+          coefficient: 1
+        - var_name: N1100AC2
+          coefficient: 1
+        - var_name: N1102AC2
+          coefficient: 1
+      sense: ">="
+      rhs: 1
+  "MSCLELGA:":
+    Standard:
+      name: "MSCLELGA:"
+      coefficients:
+        - var_name: N1010AC2
+          coefficient: 1
+        - var_name: N1012AC2
+          coefficient: 1
+        - var_name: N1014AC2
+          coefficient: 1
+        - var_name: N1102AC2
+          coefficient: 1
+      sense: ">="
+      rhs: 3
+  "MSCLEORD:":
+    Standard:
+      name: "MSCLEORD:"
+      coefficients:
+        - var_name: N1011AC1
+          coefficient: 1
+        - var_name: N1011AC2
+          coefficient: 1
+        - var_name: N1019AC2
+          coefficient: 1
+        - var_name: N1021AC1
+          coefficient: 1
+        - var_name: N1021AC2
+          coefficient: 1
+        - var_name: N1100AC2
+          coefficient: 1
+        - var_name: N1102AC2
+          coefficient: 1
+      sense: ">="
+      rhs: 6
+  "MSLGABOS:":
+    Standard:
+      name: "MSLGABOS:"
+      coefficients:
+        - var_name: N1008AC2
+          coefficient: 1
+        - var_name: N1010AC2
+          coefficient: 1
+        - var_name: N1014AC2
+          coefficient: 1
+        - var_name: N1100AC2
+          coefficient: 1
+        - var_name: N1102AC2
+          coefficient: 1
+        - var_name: N1201AC2
+          coefficient: 1
+      sense: ">="
+      rhs: 7
+  "MSLGACLE:":
+    Standard:
+      name: "MSLGACLE:"
+      coefficients:
+        - var_name: N1015AC2
+          coefficient: 1
+        - var_name: N1019AC2
+          coefficient: 1
+        - var_name: N1100AC2
+          coefficient: 1
+      sense: ">="
+      rhs: 4
+  "MSLGAORD:":
+    Standard:
+      name: "MSLGAORD:"
+      coefficients:
+        - var_name: N1013AC2
+          coefficient: 1
+        - var_name: N1017AC2
+          coefficient: 1
+        - var_name: N1019AC2
+          coefficient: 1
+        - var_name: N1100AC2
+          coefficient: 1
+      sense: ">="
+      rhs: 5
+  "MSORDBOS:":
+    Standard:
+      name: "MSORDBOS:"
+      coefficients:
+        - var_name: N1006AC1
+          coefficient: 1
+        - var_name: N1006AC2
+          coefficient: 1
+        - var_name: N1008AC2
+          coefficient: 1
+        - var_name: N1010AC2
+          coefficient: 1
+        - var_name: N1100AC2
+          coefficient: 1
+        - var_name: N1102AC2
+          coefficient: 1
+      sense: ">="
+      rhs: 3
+  "MSORDCLE:":
+    Standard:
+      name: "MSORDCLE:"
+      coefficients:
+        - var_name: N1002AC1
+          coefficient: 1
+        - var_name: N1002AC2
+          coefficient: 1
+        - var_name: N1006AC1
+          coefficient: 1
+        - var_name: N1006AC2
+          coefficient: 1
+        - var_name: N1010AC2
+          coefficient: 1
+        - var_name: N1100AC2
+          coefficient: 1
+      sense: ">="
+      rhs: 5
+  "MSORDLGA:":
+    Standard:
+      name: "MSORDLGA:"
+      coefficients:
+        - var_name: N1004AC2
+          coefficient: 1
+        - var_name: N1008AC2
+          coefficient: 1
+        - var_name: N1010AC2
+          coefficient: 1
+        - var_name: N1102AC2
+          coefficient: 1
+      sense: ">="
+      rhs: 4
+  "NOPTCLE0:":
+    Standard:
+      name: "NOPTCLE0:"
+      coefficients:
+        - var_name: N1005AC1
+          coefficient: 1
+        - var_name: N1005AC2
+          coefficient: 1
+        - var_name: N1005AC3
+          coefficient: 1
+        - var_name: N1005AC4
+          coefficient: 1
+        - var_name: N1011AC1
+          coefficient: 2
+        - var_name: N1011AC2
+          coefficient: 2
+        - var_name: N1011AC3
+          coefficient: 2
+        - var_name: N1011AC4
+          coefficient: 2
+        - var_name: N1015AC2
+          coefficient: 1
+        - var_name: N1015AC4
+          coefficient: 1
+        - var_name: N1019AC2
+          coefficient: 2
+        - var_name: N1019AC4
+          coefficient: 2
+        - var_name: N1021AC1
+          coefficient: 1
+        - var_name: N1021AC2
+          coefficient: 1
+        - var_name: N1021AC3
+          coefficient: 1
+        - var_name: N1021AC4
+          coefficient: 1
+        - var_name: N1002AC1
+          coefficient: 1
+        - var_name: N1002AC2
+          coefficient: 1
+        - var_name: N1002AC3
+          coefficient: 1
+        - var_name: N1002AC4
+          coefficient: 1
+        - var_name: N1006AC1
+          coefficient: 2
+        - var_name: N1006AC2
+          coefficient: 2
+        - var_name: N1006AC3
+          coefficient: 2
+        - var_name: N1006AC4
+          coefficient: 2
+        - var_name: N1010AC2
+          coefficient: 2
+        - var_name: N1010AC4
+          coefficient: 2
+        - var_name: N1012AC2
+          coefficient: 1
+        - var_name: N1012AC4
+          coefficient: 1
+        - var_name: N1014AC2
+          coefficient: 1
+        - var_name: N1014AC4
+          coefficient: 1
+        - var_name: N1100AC2
+          coefficient: 4
+        - var_name: N1100AC4
+          coefficient: 4
+        - var_name: N1102AC2
+          coefficient: 2
+        - var_name: N1102AC4
+          coefficient: 2
+      sense: ">="
+      rhs: 24
+  "PASSNGRS:":
+    Standard:
+      name: "PASSNGRS:"
+      coefficients:
+        - var_name: PBOSORD0
+          coefficient: 1
+        - var_name: PBOSORD1
+          coefficient: 1
+        - var_name: PBOSORD2
+          coefficient: 1
+        - var_name: PBOSORD3
+          coefficient: 1
+        - var_name: PBOSORD4
+          coefficient: 1
+        - var_name: PBOSLGA0
+          coefficient: 1
+        - var_name: PBOSLGA1
+          coefficient: 1
+        - var_name: PBOSLGA2
+          coefficient: 1
+        - var_name: PBOSLGA3
+          coefficient: 1
+        - var_name: PBOSCLE0
+          coefficient: 1
+        - var_name: PBOSCLE1
+          coefficient: 1
+        - var_name: PBOSCLE2
+          coefficient: 1
+        - var_name: PBOSCLE3
+          coefficient: 1
+        - var_name: PORDBOS0
+          coefficient: 1
+        - var_name: PORDBOS1
+          coefficient: 1
+        - var_name: PORDBOS2
+          coefficient: 1
+        - var_name: PORDBOS3
+          coefficient: 1
+        - var_name: PORDBOS4
+          coefficient: 1
+        - var_name: PORDLGA0
+          coefficient: 1
+        - var_name: PORDLGA1
+          coefficient: 1
+        - var_name: PORDLGA2
+          coefficient: 1
+        - var_name: PORDLGA3
+          coefficient: 1
+        - var_name: PORDCLE0
+          coefficient: 1
+        - var_name: PORDCLE1
+          coefficient: 1
+        - var_name: PORDCLE2
+          coefficient: 1
+        - var_name: PORDCLE3
+          coefficient: 1
+        - var_name: PLGABOS0
+          coefficient: 1
+        - var_name: PLGABOS1
+          coefficient: 1
+        - var_name: PLGABOS2
+          coefficient: 1
+        - var_name: PLGABOS3
+          coefficient: 1
+        - var_name: PLGABOS4
+          coefficient: 1
+        - var_name: PLGABOS5
+          coefficient: 1
+        - var_name: PLGAORD0
+          coefficient: 1
+        - var_name: PLGAORD1
+          coefficient: 1
+        - var_name: PLGAORD2
+          coefficient: 1
+        - var_name: PLGAORD3
+          coefficient: 1
+        - var_name: PLGACLE0
+          coefficient: 1
+        - var_name: PLGACLE1
+          coefficient: 1
+        - var_name: PLGACLE2
+          coefficient: 1
+        - var_name: PCLEBOS0
+          coefficient: 1
+        - var_name: PCLEBOS1
+          coefficient: 1
+        - var_name: PCLEBOS2
+          coefficient: 1
+        - var_name: PCLEBOS3
+          coefficient: 1
+        - var_name: PCLEBOS4
+          coefficient: 1
+        - var_name: PCLEORD0
+          coefficient: 1
+        - var_name: PCLEORD1
+          coefficient: 1
+        - var_name: PCLEORD2
+          coefficient: 1
+        - var_name: PCLEORD3
+          coefficient: 1
+        - var_name: PCLEORD4
+          coefficient: 1
+        - var_name: PCLELGA0
+          coefficient: 1
+        - var_name: PCLELGA1
+          coefficient: 1
+        - var_name: PCLELGA2
+          coefficient: 1
+        - var_name: PCLELGA3
+          coefficient: 1
+      sense: ">="
+      rhs: 9431
+  "REVENUES:":
+    Standard:
+      name: "REVENUES:"
+      coefficients:
+        - var_name: PBOSORD0
+          coefficient: 0.075
+        - var_name: PBOSORD1
+          coefficient: 0.075
+        - var_name: PBOSORD2
+          coefficient: 0.075
+        - var_name: PBOSORD3
+          coefficient: 0.075
+        - var_name: PBOSORD4
+          coefficient: 0.075
+        - var_name: PBOSLGA0
+          coefficient: 0.027
+        - var_name: PBOSLGA1
+          coefficient: 0.027
+        - var_name: PBOSLGA2
+          coefficient: 0.027
+        - var_name: PBOSLGA3
+          coefficient: 0.027
+        - var_name: PBOSCLE0
+          coefficient: 0.053
+        - var_name: PBOSCLE1
+          coefficient: 0.053
+        - var_name: PBOSCLE2
+          coefficient: 0.053
+        - var_name: PBOSCLE3
+          coefficient: 0.053
+        - var_name: PORDBOS0
+          coefficient: 0.075
+        - var_name: PORDBOS1
+          coefficient: 0.075
+        - var_name: PORDBOS2
+          coefficient: 0.075
+        - var_name: PORDBOS3
+          coefficient: 0.075
+        - var_name: PORDBOS4
+          coefficient: 0.075
+        - var_name: PORDLGA0
+          coefficient: 0.068
+        - var_name: PORDLGA1
+          coefficient: 0.068
+        - var_name: PORDLGA2
+          coefficient: 0.068
+        - var_name: PORDLGA3
+          coefficient: 0.068
+        - var_name: PORDCLE0
+          coefficient: 0.035
+        - var_name: PORDCLE1
+          coefficient: 0.035
+        - var_name: PORDCLE2
+          coefficient: 0.035
+        - var_name: PORDCLE3
+          coefficient: 0.035
+        - var_name: PLGABOS0
+          coefficient: 0.027
+        - var_name: PLGABOS1
+          coefficient: 0.027
+        - var_name: PLGABOS2
+          coefficient: 0.027
+        - var_name: PLGABOS3
+          coefficient: 0.027
+        - var_name: PLGABOS4
+          coefficient: 0.027
+        - var_name: PLGABOS5
+          coefficient: 0.027
+        - var_name: PLGAORD0
+          coefficient: 0.068
+        - var_name: PLGAORD1
+          coefficient: 0.068
+        - var_name: PLGAORD2
+          coefficient: 0.068
+        - var_name: PLGAORD3
+          coefficient: 0.068
+        - var_name: PLGACLE0
+          coefficient: 0.037
+        - var_name: PLGACLE1
+          coefficient: 0.037
+        - var_name: PLGACLE2
+          coefficient: 0.037
+        - var_name: PCLEBOS0
+          coefficient: 0.053
+        - var_name: PCLEBOS1
+          coefficient: 0.053
+        - var_name: PCLEBOS2
+          coefficient: 0.053
+        - var_name: PCLEBOS3
+          coefficient: 0.053
+        - var_name: PCLEBOS4
+          coefficient: 0.053
+        - var_name: PCLEORD0
+          coefficient: 0.035
+        - var_name: PCLEORD1
+          coefficient: 0.035
+        - var_name: PCLEORD2
+          coefficient: 0.035
+        - var_name: PCLEORD3
+          coefficient: 0.035
+        - var_name: PCLEORD4
+          coefficient: 0.035
+        - var_name: PCLELGA0
+          coefficient: 0.037
+        - var_name: PCLELGA1
+          coefficient: 0.037
+        - var_name: PCLELGA2
+          coefficient: 0.037
+        - var_name: PCLELGA3
+          coefficient: 0.037
+        - var_name: BBOSORD0
+          coefficient: 0.75
+        - var_name: BBOSORD1
+          coefficient: 0.75
+        - var_name: BBOSCLE0
+          coefficient: 0.53
+        - var_name: BBOSCLE1
+          coefficient: 0.53
+        - var_name: BORDBOS0
+          coefficient: 0.75
+        - var_name: CBOSORD0
+          coefficient: 0.75
+        - var_name: CBOSORD1
+          coefficient: 0.75
+        - var_name: CBOSORD2
+          coefficient: 0.75
+        - var_name: CBOSORD3
+          coefficient: 0.75
+        - var_name: CBOSORD4
+          coefficient: 0.75
+        - var_name: CBOSCLE0
+          coefficient: 0.53
+        - var_name: CBOSCLE1
+          coefficient: 0.53
+        - var_name: CBOSCLE2
+          coefficient: 0.53
+        - var_name: CBOSCLE3
+          coefficient: 0.53
+        - var_name: CORDBOS0
+          coefficient: 0.75
+        - var_name: CORDBOS1
+          coefficient: 0.75
+        - var_name: CORDBOS2
+          coefficient: 0.75
+        - var_name: CORDBOS3
+          coefficient: 0.75
+        - var_name: CORDBOS4
+          coefficient: 0.75
+        - var_name: CORDLGA0
+          coefficient: 0.68
+        - var_name: CORDLGA1
+          coefficient: 0.68
+        - var_name: CORDLGA2
+          coefficient: 0.68
+        - var_name: CORDLGA3
+          coefficient: 0.68
+        - var_name: CLGAORD0
+          coefficient: 0.68
+        - var_name: CLGAORD1
+          coefficient: 0.68
+        - var_name: CLGAORD2
+          coefficient: 0.68
+        - var_name: CLGAORD3
+          coefficient: 0.68
+        - var_name: CLGACLE0
+          coefficient: 0.37
+        - var_name: CLGACLE1
+          coefficient: 0.37
+        - var_name: CLGACLE2
+          coefficient: 0.37
+        - var_name: CCLELGA0
+          coefficient: 0.37
+        - var_name: CCLELGA1
+          coefficient: 0.37
+        - var_name: CCLELGA2
+          coefficient: 0.37
+        - var_name: CCLELGA3
+          coefficient: 0.37
+      sense: ">="
+      rhs: 0
+  "RPMILES:":
+    Standard:
+      name: "RPMILES:"
+      coefficients:
+        - var_name: PBOSORD0
+          coefficient: 0.86441
+        - var_name: PBOSORD1
+          coefficient: 0.87605
+        - var_name: PBOSORD2
+          coefficient: 0.91637
+        - var_name: PBOSORD3
+          coefficient: 0.91722
+        - var_name: PBOSORD4
+          coefficient: 0.87605
+        - var_name: PBOSLGA0
+          coefficient: 0.18557
+        - var_name: PBOSLGA1
+          coefficient: 0.18557
+        - var_name: PBOSLGA2
+          coefficient: 1.60685
+        - var_name: PBOSLGA3
+          coefficient: 0.18557
+        - var_name: PBOSCLE0
+          coefficient: 0.56156
+        - var_name: PBOSCLE1
+          coefficient: 0.56156
+        - var_name: PBOSCLE2
+          coefficient: 0.60273
+        - var_name: PBOSCLE3
+          coefficient: 0.56156
+        - var_name: PORDBOS0
+          coefficient: 0.87605
+        - var_name: PORDBOS1
+          coefficient: 0.91637
+        - var_name: PORDBOS2
+          coefficient: 0.91722
+        - var_name: PORDBOS3
+          coefficient: 0.87605
+        - var_name: PORDBOS4
+          coefficient: 0.91637
+        - var_name: PORDLGA0
+          coefficient: 0.7308
+        - var_name: PORDLGA1
+          coefficient: 0.7308
+        - var_name: PORDLGA2
+          coefficient: 0.73165
+        - var_name: PORDLGA3
+          coefficient: 0.7308
+        - var_name: PORDCLE0
+          coefficient: 0.3145
+        - var_name: PORDCLE1
+          coefficient: 0.3145
+        - var_name: PORDCLE2
+          coefficient: 0.3145
+        - var_name: PORDCLE3
+          coefficient: 0.3145
+        - var_name: PLGABOS0
+          coefficient: 0.18557
+        - var_name: PLGABOS1
+          coefficient: 0.18557
+        - var_name: PLGABOS2
+          coefficient: 0.18557
+        - var_name: PLGABOS3
+          coefficient: 1.6077
+        - var_name: PLGABOS4
+          coefficient: 0.18557
+        - var_name: PLGABOS5
+          coefficient: 0.18557
+        - var_name: PLGAORD0
+          coefficient: 0.7308
+        - var_name: PLGAORD1
+          coefficient: 0.7308
+        - var_name: PLGAORD2
+          coefficient: 0.73165
+        - var_name: PLGAORD3
+          coefficient: 0.73165
+        - var_name: PLGACLE0
+          coefficient: 0.41715
+        - var_name: PLGACLE1
+          coefficient: 0.41715
+        - var_name: PLGACLE2
+          coefficient: 0.41715
+        - var_name: PCLEBOS0
+          coefficient: 0.56156
+        - var_name: PCLEBOS1
+          coefficient: 0.60273
+        - var_name: PCLEBOS2
+          coefficient: 0.60273
+        - var_name: PCLEBOS3
+          coefficient: 0.56156
+        - var_name: PCLEBOS4
+          coefficient: 1.23087
+        - var_name: PCLEORD0
+          coefficient: 0.3145
+        - var_name: PCLEORD1
+          coefficient: 0.3145
+        - var_name: PCLEORD2
+          coefficient: 0.3145
+        - var_name: PCLEORD3
+          coefficient: 0.3145
+        - var_name: PCLEORD4
+          coefficient: 0.3145
+        - var_name: PCLELGA0
+          coefficient: 0.41715
+        - var_name: PCLELGA1
+          coefficient: 0.41715
+        - var_name: PCLELGA2
+          coefficient: 0.41715
+        - var_name: PCLELGA3
+          coefficient: 1.0453
+      sense: ">="
+      rhs: 0
+  "RTONMILE:":
+    Standard:
+      name: "RTONMILE:"
+      coefficients:
+        - var_name: BBOSORD0
+          coefficient: 0.86441
+        - var_name: BBOSORD1
+          coefficient: 0.87605
+        - var_name: BBOSCLE0
+          coefficient: 0.56156
+        - var_name: BBOSCLE1
+          coefficient: 0.56156
+        - var_name: BORDBOS0
+          coefficient: 0.87605
+        - var_name: CBOSORD0
+          coefficient: 0.86441
+        - var_name: CBOSORD1
+          coefficient: 0.87605
+        - var_name: CBOSORD2
+          coefficient: 0.91637
+        - var_name: CBOSORD3
+          coefficient: 0.91722
+        - var_name: CBOSORD4
+          coefficient: 0.87605
+        - var_name: CBOSCLE0
+          coefficient: 0.56156
+        - var_name: CBOSCLE1
+          coefficient: 0.56156
+        - var_name: CBOSCLE2
+          coefficient: 0.60273
+        - var_name: CBOSCLE3
+          coefficient: 0.56156
+        - var_name: CORDBOS0
+          coefficient: 0.87605
+        - var_name: CORDBOS1
+          coefficient: 0.91637
+        - var_name: CORDBOS2
+          coefficient: 0.91722
+        - var_name: CORDBOS3
+          coefficient: 0.87605
+        - var_name: CORDBOS4
+          coefficient: 0.91637
+        - var_name: CORDLGA0
+          coefficient: 0.7308
+        - var_name: CORDLGA1
+          coefficient: 0.7308
+        - var_name: CORDLGA2
+          coefficient: 0.73165
+        - var_name: CORDLGA3
+          coefficient: 0.7308
+        - var_name: CLGAORD0
+          coefficient: 0.7308
+        - var_name: CLGAORD1
+          coefficient: 0.7308
+        - var_name: CLGAORD2
+          coefficient: 0.73165
+        - var_name: CLGAORD3
+          coefficient: 0.73165
+        - var_name: CLGACLE0
+          coefficient: 0.41715
+        - var_name: CLGACLE1
+          coefficient: 0.41715
+        - var_name: CLGACLE2
+          coefficient: 0.41715
+        - var_name: CCLELGA0
+          coefficient: 0.41715
+        - var_name: CCLELGA1
+          coefficient: 0.41715
+        - var_name: CCLELGA2
+          coefficient: 0.41715
+        - var_name: CCLELGA3
+          coefficient: 1.0453
+      sense: ">="
+      rhs: 0
+  "SYSTDEPT:":
+    Standard:
+      name: "SYSTDEPT:"
+      coefficients:
+        - var_name: N1003AC1
+          coefficient: 1
+        - var_name: N1003AC2
+          coefficient: 1
+        - var_name: N1003AC3
+          coefficient: 1
+        - var_name: N1003AC4
+          coefficient: 1
+        - var_name: N1005AC1
+          coefficient: 1
+        - var_name: N1005AC2
+          coefficient: 1
+        - var_name: N1005AC3
+          coefficient: 1
+        - var_name: N1005AC4
+          coefficient: 1
+        - var_name: N1011AC1
+          coefficient: 2
+        - var_name: N1011AC2
+          coefficient: 2
+        - var_name: N1011AC3
+          coefficient: 2
+        - var_name: N1011AC4
+          coefficient: 2
+        - var_name: N1013AC2
+          coefficient: 2
+        - var_name: N1013AC4
+          coefficient: 2
+        - var_name: N1015AC2
+          coefficient: 1
+        - var_name: N1015AC4
+          coefficient: 1
+        - var_name: N1017AC2
+          coefficient: 1
+        - var_name: N1017AC4
+          coefficient: 1
+        - var_name: N1019AC2
+          coefficient: 2
+        - var_name: N1019AC4
+          coefficient: 2
+        - var_name: N1021AC1
+          coefficient: 1
+        - var_name: N1021AC2
+          coefficient: 1
+        - var_name: N1021AC3
+          coefficient: 1
+        - var_name: N1021AC4
+          coefficient: 1
+        - var_name: N1002AC1
+          coefficient: 1
+        - var_name: N1002AC2
+          coefficient: 1
+        - var_name: N1002AC3
+          coefficient: 1
+        - var_name: N1002AC4
+          coefficient: 1
+        - var_name: N1004AC2
+          coefficient: 1
+        - var_name: N1004AC4
+          coefficient: 1
+        - var_name: N1006AC1
+          coefficient: 2
+        - var_name: N1006AC2
+          coefficient: 2
+        - var_name: N1006AC3
+          coefficient: 2
+        - var_name: N1006AC4
+          coefficient: 2
+        - var_name: N1008AC2
+          coefficient: 2
+        - var_name: N1008AC4
+          coefficient: 2
+        - var_name: N1010AC2
+          coefficient: 3
+        - var_name: N1010AC4
+          coefficient: 3
+        - var_name: N1012AC2
+          coefficient: 1
+        - var_name: N1012AC4
+          coefficient: 1
+        - var_name: N1014AC2
+          coefficient: 2
+        - var_name: N1014AC4
+          coefficient: 2
+        - var_name: N1100AC2
+          coefficient: 5
+        - var_name: N1100AC4
+          coefficient: 5
+        - var_name: N1102AC2
+          coefficient: 4
+        - var_name: N1102AC4
+          coefficient: 4
+        - var_name: N1200AC2
+          coefficient: 1
+        - var_name: N1200AC4
+          coefficient: 1
+        - var_name: N1201AC2
+          coefficient: 1
+        - var_name: N1201AC4
+          coefficient: 1
+      sense: ">="
+      rhs: 50
+

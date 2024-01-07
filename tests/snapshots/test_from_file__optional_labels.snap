@@ -1,0 +1,30 @@
+---
+source: tests/test_from_file.rs
+expression: result
+---
+problem_name: ""
+problem_sense: Minimize
+variables:
+  a: Binary
+  x: Binary
+  y: Binary
+  z: Binary
+objectives:
+  - name: obj_2024
+    coefficients:
+      - var_name: x
+        coefficient: 1
+      - var_name: y
+        coefficient: 10
+constraints:
+  con_2025:
+    Standard:
+      name: con_2025
+      coefficients:
+        - var_name: x
+          coefficient: -1
+        - var_name: y
+          coefficient: 2
+      sense: ">="
+      rhs: 1
+

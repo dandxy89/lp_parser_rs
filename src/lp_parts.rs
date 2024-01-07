@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use pest::iterators::Pair;
-use tiny_id::ShortCodeGenerator;
+use unique_id::{sequence::SequenceGenerator, Generator};
 
 use crate::{
     common::RuleExt,
@@ -10,26 +10,26 @@ use crate::{
 };
 
 #[allow(clippy::unwrap_used)]
-fn compose_objective(pair: Pair<'_, Rule>, gen: &mut ShortCodeGenerator<char>) -> anyhow::Result<Objective> {
+fn compose_objective(pair: Pair<'_, Rule>, gen: &mut SequenceGenerator) -> anyhow::Result<Objective> {
     let mut parts = pair.into_inner().peekable();
     // Objective name can be omitted in LP files, so we need to handle that case
     let name = if parts.peek().unwrap().as_rule() == Rule::OBJECTIVE_NAME {
         parts.next().unwrap().as_str().to_string()
     } else {
-        format!("obj_{}", gen.next_string())
+        format!("obj_{}", gen.next_id())
     };
     let coefficients: anyhow::Result<Vec<_>> = parts.map(|p| p.into_inner().try_into()).collect();
     Ok(Objective { name, coefficients: coefficients? })
 }
 
 #[allow(clippy::unwrap_used)]
-fn compose_constraint(pair: Pair<'_, Rule>, gen: &mut ShortCodeGenerator<char>) -> anyhow::Result<Constraint> {
+fn compose_constraint(pair: Pair<'_, Rule>, gen: &mut SequenceGenerator) -> anyhow::Result<Constraint> {
     let mut parts = pair.into_inner().peekable();
     // Constraint name can be omitted in LP files, so we need to handle that case
     let name = if parts.peek().unwrap().as_rule() == Rule::CONSTRAINT_NAME {
         parts.next().unwrap().as_str().to_string()
     } else {
-        format!("con_{}", gen.next_string())
+        format!("con_{}", gen.next_id())
     };
     let mut coefficients: Vec<_> = vec![];
     while let Some(p) = parts.peek() {
@@ -96,7 +96,7 @@ fn get_bound(pair: Pair<'_, Rule>) -> Option<(&str, VariableType)> {
 #[allow(clippy::wildcard_enum_match_arm)]
 /// # Errors
 /// Returns an error if the `compose` fails
-pub fn compose(pair: Pair<'_, Rule>, mut parsed: LPProblem, gen: &mut ShortCodeGenerator<char>) -> anyhow::Result<LPProblem> {
+pub fn compose(pair: Pair<'_, Rule>, mut parsed: LPProblem, gen: &mut SequenceGenerator) -> anyhow::Result<LPProblem> {
     match pair.as_rule() {
         // Problem Name
         Rule::PROBLEM_NAME => return Ok(parsed.with_problem_name(pair.as_str())),

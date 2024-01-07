@@ -1,0 +1,106 @@
+---
+source: tests/test_from_file.rs
+expression: result
+---
+problem_name: ""
+problem_sense: Maximize
+variables:
+  V1:
+    Bounded:
+      - -inf
+      - 3
+      - false
+  V2:
+    Bounded:
+      - -inf
+      - 3
+      - false
+  V3:
+    Bounded:
+      - -inf
+      - 3
+      - false
+  V4: General
+  V5:
+    Bounded:
+      - 0
+      - 1
+      - false
+  V6:
+    Bounded:
+      - 0
+      - 1
+      - false
+  V7:
+    Bounded:
+      - 0
+      - 1
+      - false
+  V8: Binary
+objectives:
+  - name: obj
+    coefficients:
+      - var_name: V4
+        coefficient: -1
+      - var_name: V5
+        coefficient: 1
+constraints:
+  "CON1:":
+    Standard:
+      name: "CON1:"
+      coefficients:
+        - var_name: V1
+          coefficient: 1
+      sense: ">="
+      rhs: 0
+  "CON2:":
+    Standard:
+      name: "CON2:"
+      coefficients:
+        - var_name: V2
+          coefficient: 1
+      sense: ">="
+      rhs: 2
+  "CON3:":
+    Standard:
+      name: "CON3:"
+      coefficients:
+        - var_name: V3
+          coefficient: 1
+      sense: "<="
+      rhs: 2.5
+  "CON4:":
+    Standard:
+      name: "CON4:"
+      coefficients:
+        - var_name: V5
+          coefficient: 1
+        - var_name: V6
+          coefficient: 1
+        - var_name: V7
+          coefficient: 1
+      sense: "<="
+      rhs: 1
+  "csos1:":
+    SOS:
+      name: "csos1:"
+      kind: S1
+      coefficients:
+        - var_name: V1
+          coefficient: 1
+        - var_name: V3
+          coefficient: 2
+        - var_name: V5
+          coefficient: 3
+  "csos2:":
+    SOS:
+      name: "csos2:"
+      kind: S2
+      coefficients:
+        - var_name: V2
+          coefficient: 2
+        - var_name: V4
+          coefficient: 1
+        - var_name: V5
+          coefficient: 2.5
+
