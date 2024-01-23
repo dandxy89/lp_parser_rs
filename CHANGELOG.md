@@ -1,5 +1,29 @@
 # Changelog
 
+## [1.0.0](https://github.com/dandxy89/lp_parser_rs/compare/v0.1.7...v1.0.0) (2024-01-23)
+
+
+### Build System
+
+* Adding unique_id ([8419fad](https://github.com/dandxy89/lp_parser_rs/commit/8419fad6834bb70a59d82a4220f920c3233effbe))
+
+
+### Continuous Integration
+
+* Downgrade action to v3 ([1d3e22d](https://github.com/dandxy89/lp_parser_rs/commit/1d3e22d00cc78a81a6cbd323c3530fd7ac1fd2d0))
+* Run tests on main branch ([ca652a8](https://github.com/dandxy89/lp_parser_rs/commit/ca652a866d19fea9b94d737ff60856bbdc446cca))
+* Updating version ([0dc5b97](https://github.com/dandxy89/lp_parser_rs/commit/0dc5b970b02cee162002d72f62b60d61d1d656ea))
+
+
+### Features
+
+* Last remaining todo - use diff-struct for comparing data structures ([3b720fe](https://github.com/dandxy89/lp_parser_rs/commit/3b720feaed2006bf8ee5375e366c3a65e29e1425))
+
+
+### Bug Fixes
+
+* Updating change ([313ab8d](https://github.com/dandxy89/lp_parser_rs/commit/313ab8d55de9d599e02cb68c7542cb5c0b9f166a))
+
 ## [0.1.8](https://github.com/dandxy89/lp_parser_rs/compare/v0.1.7...v0.1.8) (2024-01-07)
 
 
