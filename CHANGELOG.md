@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1](https://github.com/dandxy89/lp_parser_rs/compare/v1.0.0...v1.0.1) (2024-01-23)
+
+
+### Bug Fixes
+
+* Updating derives ([be04033](https://github.com/dandxy89/lp_parser_rs/commit/be04033f7934742f8a117dacd1a31d481d40bc33))
+
 ## [1.0.0](https://github.com/dandxy89/lp_parser_rs/compare/v0.1.7...v1.0.0) (2024-01-23)
 
 
