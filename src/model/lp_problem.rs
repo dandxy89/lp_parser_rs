@@ -4,6 +4,10 @@ use crate::model::{constraint::Constraint, objective::Objective, sense::Sense, v
 
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "diff", derive(diff::Diff))]
+#[diff(attr(
+    #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+))]
 pub struct LPProblem {
     pub problem_name: String,
     pub problem_sense: Sense,

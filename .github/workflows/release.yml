@@ -6,8 +6,9 @@ on:
 name: Release Curation
 
 permissions:
-  pull-requests: write
   contents: write
+  pull-requests: write
+  repository-projects: write
 
 jobs:
   release-please:

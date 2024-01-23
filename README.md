@@ -26,11 +26,7 @@ A Rust LP file parser leveraging [PEST](https://docs.rs/pest/latest/pest/) and a
 ## Features
 
 - `serde`: Adds `Serde` annotations to each of the model Structs and Enums.
-
-## TODOs List
-
-- Extensions:
-  - Compares two LP files
+- `diff`: Adds capability to diff two Structs
 
 ## Acknowledgements
 

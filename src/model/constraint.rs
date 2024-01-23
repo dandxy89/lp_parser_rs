@@ -2,6 +2,10 @@ use crate::model::{coefficient::Coefficient, sos::SOSClass};
 
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "diff", derive(diff::Diff))]
+#[diff(attr(
+    #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+))]
 pub enum Constraint {
     /// Standard LP constraint
     Standard { name: String, coefficients: Vec<Coefficient>, sense: String, rhs: f64 },

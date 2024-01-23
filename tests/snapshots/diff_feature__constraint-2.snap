@@ -1,0 +1,10 @@
+---
+source: tests/diff_feature.rs
+expression: a.diff(&b)
+---
+Standard:
+  name: b
+  coefficients: []
+  sense: ~
+  rhs: 0
+
