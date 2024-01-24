@@ -16,7 +16,7 @@ diff-struct = { version = "0.5", optional = true }
 pest = "2.7"
 pest_derive = "2.7"
 serde = { version = "1", features = ["derive"], optional = true }
-unique_id = "0.1.5"
+unique_id = "0.1"
 
 [dev-dependencies]
 float_eq = "1.0"
