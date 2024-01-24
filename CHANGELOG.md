@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.0.3](https://github.com/dandxy89/lp_parser_rs/compare/v1.0.2...v1.0.3) (2024-01-24)
+
+
+### Build System
+
+* Remove patch version on unique_id dependency ([e5cd444](https://github.com/dandxy89/lp_parser_rs/commit/e5cd4449dfa7967e59e7d9ddbd9014c006162e3c))
+
+
+### Bug Fixes
+
+* Constraint Sense should be an Enum of possible values ([2a93a40](https://github.com/dandxy89/lp_parser_rs/commit/2a93a4022ddfc6650285c5dbeab569c479db84da))
+
 ## [1.0.2](https://github.com/dandxy89/lp_parser_rs/compare/v1.0.1...v1.0.2) (2024-01-24)
 
 
