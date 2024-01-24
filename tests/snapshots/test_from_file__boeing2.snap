@@ -853,7 +853,7 @@ constraints:
           coefficient: 0.18557
         - var_name: N1201AC4
           coefficient: 0.18557
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "ACOCOSTS:":
     Standard:
@@ -971,7 +971,7 @@ constraints:
           coefficient: 0.72047
         - var_name: N1201AC4
           coefficient: 0.5698
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "ASMILES:":
     Standard:
@@ -1027,7 +1027,7 @@ constraints:
           coefficient: 24.31007
         - var_name: N1201AC2
           coefficient: 24.31007
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "ATONMILE:":
     Standard:
@@ -1095,7 +1095,7 @@ constraints:
           coefficient: 2.7836
         - var_name: N1201AC4
           coefficient: 2.7836
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "CONTBOS1:":
     Standard:
@@ -1109,7 +1109,7 @@ constraints:
           coefficient: 1
         - var_name: N1006AC1
           coefficient: -1
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "CONTBOS2:":
     Standard:
@@ -1135,7 +1135,7 @@ constraints:
           coefficient: 1
         - var_name: N1201AC2
           coefficient: -1
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "CONTBOS3:":
     Standard:
@@ -1149,7 +1149,7 @@ constraints:
           coefficient: 1
         - var_name: N1006AC3
           coefficient: -1
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "CONTBOS4:":
     Standard:
@@ -1175,7 +1175,7 @@ constraints:
           coefficient: 1
         - var_name: N1201AC4
           coefficient: -1
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "CONTCLE1:":
     Standard:
@@ -1187,7 +1187,7 @@ constraints:
           coefficient: 1
         - var_name: N1002AC1
           coefficient: -1
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "CONTCLE2:":
     Standard:
@@ -1205,7 +1205,7 @@ constraints:
           coefficient: 1
         - var_name: N1014AC2
           coefficient: 1
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "CONTCLE3:":
     Standard:
@@ -1217,7 +1217,7 @@ constraints:
           coefficient: 1
         - var_name: N1002AC3
           coefficient: -1
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "CONTCLE4:":
     Standard:
@@ -1235,7 +1235,7 @@ constraints:
           coefficient: 1
         - var_name: N1014AC4
           coefficient: 1
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "CONTLGA2:":
     Standard:
@@ -1255,7 +1255,7 @@ constraints:
           coefficient: -1
         - var_name: N1201AC2
           coefficient: 1
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "CONTLGA4:":
     Standard:
@@ -1275,7 +1275,7 @@ constraints:
           coefficient: -1
         - var_name: N1201AC4
           coefficient: 1
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "CONTORD1:":
     Standard:
@@ -1291,7 +1291,7 @@ constraints:
           coefficient: 1
         - var_name: N1006AC1
           coefficient: 1
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "CONTORD2:":
     Standard:
@@ -1319,7 +1319,7 @@ constraints:
           coefficient: 1
         - var_name: N1010AC2
           coefficient: 1
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "CONTORD3:":
     Standard:
@@ -1335,7 +1335,7 @@ constraints:
           coefficient: 1
         - var_name: N1006AC3
           coefficient: 1
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "CONTORD4:":
     Standard:
@@ -1363,7 +1363,7 @@ constraints:
           coefficient: 1
         - var_name: N1010AC4
           coefficient: 1
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "DCBOSCLE:":
     Standard:
@@ -1383,7 +1383,7 @@ constraints:
           coefficient: 1
         - var_name: RgDCBOSCLE
           coefficient: -1
-      sense: "="
+      sense: Equal
       rhs: 16
   "DCBOSORD:":
     Standard:
@@ -1405,7 +1405,7 @@ constraints:
           coefficient: 1
         - var_name: RgDCBOSORD
           coefficient: -1
-      sense: "="
+      sense: Equal
       rhs: 12
   "DCCLELGA:":
     Standard:
@@ -1421,7 +1421,7 @@ constraints:
           coefficient: 1
         - var_name: RgDCCLELGA
           coefficient: -1
-      sense: "="
+      sense: Equal
       rhs: 5
   "DCLGACLE:":
     Standard:
@@ -1435,7 +1435,7 @@ constraints:
           coefficient: 1
         - var_name: RgDCLGACLE
           coefficient: -1
-      sense: "="
+      sense: Equal
       rhs: 16
   "DCLGAORD:":
     Standard:
@@ -1451,7 +1451,7 @@ constraints:
           coefficient: 1
         - var_name: RgDCLGAORD
           coefficient: -1
-      sense: "="
+      sense: Equal
       rhs: 45
   "DCORDBOS:":
     Standard:
@@ -1471,7 +1471,7 @@ constraints:
           coefficient: 1
         - var_name: RgDCORDBOS
           coefficient: -1
-      sense: "="
+      sense: Equal
       rhs: 24
   "DCORDLGA:":
     Standard:
@@ -1487,7 +1487,7 @@ constraints:
           coefficient: 1
         - var_name: RgDCORDLGA
           coefficient: -1
-      sense: "="
+      sense: Equal
       rhs: 13
   "DMBOSCLE:":
     Standard:
@@ -1503,7 +1503,7 @@ constraints:
           coefficient: 1
         - var_name: RgDMBOSCLE
           coefficient: -1
-      sense: "="
+      sense: Equal
       rhs: 142
   "DMBOSLGA:":
     Standard:
@@ -1519,7 +1519,7 @@ constraints:
           coefficient: 1
         - var_name: RgDMBOSLGA
           coefficient: -1
-      sense: "="
+      sense: Equal
       rhs: 2352
   "DMBOSORD:":
     Standard:
@@ -1537,7 +1537,7 @@ constraints:
           coefficient: 1
         - var_name: RgDMBOSORD
           coefficient: -1
-      sense: "="
+      sense: Equal
       rhs: 302
   "DMCLEBOS:":
     Standard:
@@ -1555,7 +1555,7 @@ constraints:
           coefficient: 1
         - var_name: RgDMCLEBOS
           coefficient: -1
-      sense: "="
+      sense: Equal
       rhs: 131
   "DMCLELGA:":
     Standard:
@@ -1571,7 +1571,7 @@ constraints:
           coefficient: 1
         - var_name: RgDMCLELGA
           coefficient: -1
-      sense: "="
+      sense: Equal
       rhs: 409
   "DMCLEORD:":
     Standard:
@@ -1589,7 +1589,7 @@ constraints:
           coefficient: 1
         - var_name: RgDMCLEORD
           coefficient: -1
-      sense: "="
+      sense: Equal
       rhs: 712
   "DMLGABOS:":
     Standard:
@@ -1609,7 +1609,7 @@ constraints:
           coefficient: 1
         - var_name: RgDMLGABOS
           coefficient: -1
-      sense: "="
+      sense: Equal
       rhs: 2743
   "DMLGACLE:":
     Standard:
@@ -1623,7 +1623,7 @@ constraints:
           coefficient: 1
         - var_name: RgDMLGACLE
           coefficient: -1
-      sense: "="
+      sense: Equal
       rhs: 517
   "DMLGAORD:":
     Standard:
@@ -1639,7 +1639,7 @@ constraints:
           coefficient: 1
         - var_name: RgDMLGAORD
           coefficient: -1
-      sense: "="
+      sense: Equal
       rhs: 712
   "DMORDBOS:":
     Standard:
@@ -1657,7 +1657,7 @@ constraints:
           coefficient: 1
         - var_name: RgDMORDBOS
           coefficient: -1
-      sense: "="
+      sense: Equal
       rhs: 302
   "DMORDCLE:":
     Standard:
@@ -1673,7 +1673,7 @@ constraints:
           coefficient: 1
         - var_name: RgDMORDCLE
           coefficient: -1
-      sense: "="
+      sense: Equal
       rhs: 619
   "DMORDLGA:":
     Standard:
@@ -1689,7 +1689,7 @@ constraints:
           coefficient: 1
         - var_name: RgDMORDLGA
           coefficient: -1
-      sense: "="
+      sense: Equal
       rhs: 515
   "FLAVa1:":
     Standard:
@@ -1711,7 +1711,7 @@ constraints:
           coefficient: 1.34295
         - var_name: N1006AC1
           coefficient: 3.12813
-      sense: "="
+      sense: Equal
       rhs: 30
   "FLAVa2:":
     Standard:
@@ -1759,7 +1759,7 @@ constraints:
           coefficient: 0.8063
         - var_name: N1201AC2
           coefficient: 0.8063
-      sense: "="
+      sense: Equal
       rhs: 45
   "FLAVa3:":
     Standard:
@@ -1779,7 +1779,7 @@ constraints:
           coefficient: 1.05384
         - var_name: N1006AC3
           coefficient: 2.58202
-      sense: "="
+      sense: Equal
       rhs: 0
   "FLAVa4:":
     Standard:
@@ -1825,7 +1825,7 @@ constraints:
           coefficient: 0.8063
         - var_name: N1201AC4
           coefficient: 0.8063
-      sense: "="
+      sense: Equal
       rhs: 0
   "FUELAVAL:":
     Standard:
@@ -1931,7 +1931,7 @@ constraints:
           coefficient: 0.95782
         - var_name: N1201AC4
           coefficient: 0.70359
-      sense: "<="
+      sense: LessOrEqual
       rhs: 100000
   "LF1002B1:":
     Standard:
@@ -1939,7 +1939,7 @@ constraints:
       coefficients:
         - var_name: N1002AC1
           coefficient: 12
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1002C1:":
     Standard:
@@ -1949,7 +1949,7 @@ constraints:
           coefficient: 30
         - var_name: N1002AC4
           coefficient: 11.25
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1002S1:":
     Standard:
@@ -1961,7 +1961,7 @@ constraints:
           coefficient: 305
         - var_name: N1002AC2
           coefficient: 98
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1003B1:":
     Standard:
@@ -1971,7 +1971,7 @@ constraints:
           coefficient: -1
         - var_name: N1003AC1
           coefficient: 12
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1003C1:":
     Standard:
@@ -1983,7 +1983,7 @@ constraints:
           coefficient: 30
         - var_name: N1003AC4
           coefficient: 11.25
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1003S1:":
     Standard:
@@ -1995,7 +1995,7 @@ constraints:
           coefficient: 305
         - var_name: N1003AC2
           coefficient: 98
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1004C1:":
     Standard:
@@ -2005,7 +2005,7 @@ constraints:
           coefficient: -1
         - var_name: N1004AC4
           coefficient: 11.25
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1004S1:":
     Standard:
@@ -2015,7 +2015,7 @@ constraints:
           coefficient: -1
         - var_name: N1004AC2
           coefficient: 98
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1005B1:":
     Standard:
@@ -2025,7 +2025,7 @@ constraints:
           coefficient: -1
         - var_name: N1005AC1
           coefficient: 12
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1005C1:":
     Standard:
@@ -2037,7 +2037,7 @@ constraints:
           coefficient: 30
         - var_name: N1005AC4
           coefficient: 11.25
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1005S1:":
     Standard:
@@ -2049,7 +2049,7 @@ constraints:
           coefficient: 305
         - var_name: N1005AC2
           coefficient: 98
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1006B1:":
     Standard:
@@ -2059,7 +2059,7 @@ constraints:
           coefficient: -1
         - var_name: N1006AC1
           coefficient: 12
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1006B2:":
     Standard:
@@ -2069,7 +2069,7 @@ constraints:
           coefficient: -1
         - var_name: N1006AC1
           coefficient: 12
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1006C1:":
     Standard:
@@ -2081,7 +2081,7 @@ constraints:
           coefficient: 30
         - var_name: N1006AC4
           coefficient: 11.25
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1006C2:":
     Standard:
@@ -2093,7 +2093,7 @@ constraints:
           coefficient: 30
         - var_name: N1006AC4
           coefficient: 11.25
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1006S1:":
     Standard:
@@ -2107,7 +2107,7 @@ constraints:
           coefficient: 305
         - var_name: N1006AC2
           coefficient: 98
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1006S2:":
     Standard:
@@ -2121,7 +2121,7 @@ constraints:
           coefficient: 305
         - var_name: N1006AC2
           coefficient: 98
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1008C1:":
     Standard:
@@ -2133,7 +2133,7 @@ constraints:
           coefficient: -1
         - var_name: N1008AC4
           coefficient: 11.25
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1008C2:":
     Standard:
@@ -2143,7 +2143,7 @@ constraints:
           coefficient: -1
         - var_name: N1008AC4
           coefficient: 11.25
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1008S1:":
     Standard:
@@ -2155,7 +2155,7 @@ constraints:
           coefficient: -1
         - var_name: N1008AC2
           coefficient: 98
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1008S2:":
     Standard:
@@ -2167,7 +2167,7 @@ constraints:
           coefficient: -1
         - var_name: N1008AC2
           coefficient: 98
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1010C1:":
     Standard:
@@ -2179,7 +2179,7 @@ constraints:
           coefficient: -1
         - var_name: N1010AC4
           coefficient: 11.25
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1010C2:":
     Standard:
@@ -2193,7 +2193,7 @@ constraints:
           coefficient: -1
         - var_name: N1010AC4
           coefficient: 11.25
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1010C3:":
     Standard:
@@ -2203,7 +2203,7 @@ constraints:
           coefficient: -1
         - var_name: N1010AC4
           coefficient: 11.25
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1010S1:":
     Standard:
@@ -2217,7 +2217,7 @@ constraints:
           coefficient: -1
         - var_name: N1010AC2
           coefficient: 98
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1010S2:":
     Standard:
@@ -2233,7 +2233,7 @@ constraints:
           coefficient: -1
         - var_name: N1010AC2
           coefficient: 98
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1010S3:":
     Standard:
@@ -2247,7 +2247,7 @@ constraints:
           coefficient: -1
         - var_name: N1010AC2
           coefficient: 98
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1011B1:":
     Standard:
@@ -2259,7 +2259,7 @@ constraints:
           coefficient: -1
         - var_name: N1011AC1
           coefficient: 12
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1011B2:":
     Standard:
@@ -2269,7 +2269,7 @@ constraints:
           coefficient: -1
         - var_name: N1011AC1
           coefficient: 12
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1011C1:":
     Standard:
@@ -2283,7 +2283,7 @@ constraints:
           coefficient: 30
         - var_name: N1011AC4
           coefficient: 11.25
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1011C2:":
     Standard:
@@ -2295,7 +2295,7 @@ constraints:
           coefficient: 30
         - var_name: N1011AC4
           coefficient: 11.25
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1011S1:":
     Standard:
@@ -2309,7 +2309,7 @@ constraints:
           coefficient: 305
         - var_name: N1011AC2
           coefficient: 98
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1011S2:":
     Standard:
@@ -2323,7 +2323,7 @@ constraints:
           coefficient: 305
         - var_name: N1011AC2
           coefficient: 98
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1012C1:":
     Standard:
@@ -2333,7 +2333,7 @@ constraints:
           coefficient: -1
         - var_name: N1012AC4
           coefficient: 11.25
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1012S1:":
     Standard:
@@ -2343,7 +2343,7 @@ constraints:
           coefficient: -1
         - var_name: N1012AC2
           coefficient: 98
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1013C1:":
     Standard:
@@ -2353,7 +2353,7 @@ constraints:
           coefficient: -1
         - var_name: N1013AC4
           coefficient: 11.25
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1013C2:":
     Standard:
@@ -2365,7 +2365,7 @@ constraints:
           coefficient: -1
         - var_name: N1013AC4
           coefficient: 11.25
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1013S1:":
     Standard:
@@ -2377,7 +2377,7 @@ constraints:
           coefficient: -1
         - var_name: N1013AC2
           coefficient: 98
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1013S2:":
     Standard:
@@ -2389,7 +2389,7 @@ constraints:
           coefficient: -1
         - var_name: N1013AC2
           coefficient: 98
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1014C1:":
     Standard:
@@ -2399,7 +2399,7 @@ constraints:
           coefficient: -1
         - var_name: N1014AC4
           coefficient: 11.25
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1014C2:":
     Standard:
@@ -2407,7 +2407,7 @@ constraints:
       coefficients:
         - var_name: N1014AC4
           coefficient: 11.25
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1014S1:":
     Standard:
@@ -2419,7 +2419,7 @@ constraints:
           coefficient: -1
         - var_name: N1014AC2
           coefficient: 98
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1014S2:":
     Standard:
@@ -2431,7 +2431,7 @@ constraints:
           coefficient: -1
         - var_name: N1014AC2
           coefficient: 98
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1015C1:":
     Standard:
@@ -2441,7 +2441,7 @@ constraints:
           coefficient: -1
         - var_name: N1015AC4
           coefficient: 11.25
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1015S1:":
     Standard:
@@ -2451,7 +2451,7 @@ constraints:
           coefficient: -1
         - var_name: N1015AC2
           coefficient: 98
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1017C1:":
     Standard:
@@ -2461,7 +2461,7 @@ constraints:
           coefficient: -1
         - var_name: N1017AC4
           coefficient: 11.25
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1017S1:":
     Standard:
@@ -2471,7 +2471,7 @@ constraints:
           coefficient: -1
         - var_name: N1017AC2
           coefficient: 98
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1019C1:":
     Standard:
@@ -2483,7 +2483,7 @@ constraints:
           coefficient: -1
         - var_name: N1019AC4
           coefficient: 11.25
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1019C2:":
     Standard:
@@ -2493,7 +2493,7 @@ constraints:
           coefficient: -1
         - var_name: N1019AC4
           coefficient: 11.25
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1019S1:":
     Standard:
@@ -2505,7 +2505,7 @@ constraints:
           coefficient: -1
         - var_name: N1019AC2
           coefficient: 98
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1019S2:":
     Standard:
@@ -2517,7 +2517,7 @@ constraints:
           coefficient: -1
         - var_name: N1019AC2
           coefficient: 98
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1021B1:":
     Standard:
@@ -2525,7 +2525,7 @@ constraints:
       coefficients:
         - var_name: N1021AC1
           coefficient: 12
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1021C1:":
     Standard:
@@ -2535,7 +2535,7 @@ constraints:
           coefficient: 30
         - var_name: N1021AC4
           coefficient: 11.25
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1021S1:":
     Standard:
@@ -2547,7 +2547,7 @@ constraints:
           coefficient: 305
         - var_name: N1021AC2
           coefficient: 98
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1100C1:":
     Standard:
@@ -2559,7 +2559,7 @@ constraints:
           coefficient: -1
         - var_name: N1100AC4
           coefficient: 11.25
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1100C2:":
     Standard:
@@ -2575,7 +2575,7 @@ constraints:
           coefficient: -1
         - var_name: N1100AC4
           coefficient: 11.25
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1100C3:":
     Standard:
@@ -2587,7 +2587,7 @@ constraints:
           coefficient: -1
         - var_name: N1100AC4
           coefficient: 11.25
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1100C4:":
     Standard:
@@ -2597,7 +2597,7 @@ constraints:
           coefficient: -1
         - var_name: N1100AC4
           coefficient: 11.25
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1100C5:":
     Standard:
@@ -2607,7 +2607,7 @@ constraints:
           coefficient: -1
         - var_name: N1100AC4
           coefficient: 11.25
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1100S1:":
     Standard:
@@ -2621,7 +2621,7 @@ constraints:
           coefficient: -1
         - var_name: N1100AC2
           coefficient: 98
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1100S2:":
     Standard:
@@ -2639,7 +2639,7 @@ constraints:
           coefficient: -1
         - var_name: N1100AC2
           coefficient: 98
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1100S3:":
     Standard:
@@ -2655,7 +2655,7 @@ constraints:
           coefficient: -1
         - var_name: N1100AC2
           coefficient: 98
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1100S4:":
     Standard:
@@ -2669,7 +2669,7 @@ constraints:
           coefficient: -1
         - var_name: N1100AC2
           coefficient: 98
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1100S5:":
     Standard:
@@ -2683,7 +2683,7 @@ constraints:
           coefficient: -1
         - var_name: N1100AC2
           coefficient: 98
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1102C1:":
     Standard:
@@ -2695,7 +2695,7 @@ constraints:
           coefficient: -1
         - var_name: N1102AC4
           coefficient: 11.25
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1102C2:":
     Standard:
@@ -2707,7 +2707,7 @@ constraints:
           coefficient: -1
         - var_name: N1102AC4
           coefficient: 11.25
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1102C3:":
     Standard:
@@ -2721,7 +2721,7 @@ constraints:
           coefficient: -1
         - var_name: N1102AC4
           coefficient: 11.25
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1102C4:":
     Standard:
@@ -2731,7 +2731,7 @@ constraints:
           coefficient: -1
         - var_name: N1102AC4
           coefficient: 11.25
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1102S1:":
     Standard:
@@ -2745,7 +2745,7 @@ constraints:
           coefficient: -1
         - var_name: N1102AC2
           coefficient: 98
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1102S2:":
     Standard:
@@ -2763,7 +2763,7 @@ constraints:
           coefficient: -1
         - var_name: N1102AC2
           coefficient: 98
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1102S3:":
     Standard:
@@ -2781,7 +2781,7 @@ constraints:
           coefficient: -1
         - var_name: N1102AC2
           coefficient: 98
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1102S4:":
     Standard:
@@ -2795,7 +2795,7 @@ constraints:
           coefficient: -1
         - var_name: N1102AC2
           coefficient: 98
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1200C1:":
     Standard:
@@ -2803,7 +2803,7 @@ constraints:
       coefficients:
         - var_name: N1200AC4
           coefficient: 11.25
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1200S1:":
     Standard:
@@ -2813,7 +2813,7 @@ constraints:
           coefficient: -1
         - var_name: N1200AC2
           coefficient: 98
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1201C1:":
     Standard:
@@ -2821,7 +2821,7 @@ constraints:
       coefficients:
         - var_name: N1201AC4
           coefficient: 11.25
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LF1201S1:":
     Standard:
@@ -2831,7 +2831,7 @@ constraints:
           coefficient: -1
         - var_name: N1201AC2
           coefficient: 98
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LFRPMASM:":
     Standard:
@@ -2993,7 +2993,7 @@ constraints:
           coefficient: 14.586042
         - var_name: N1201AC2
           coefficient: 14.586042
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "LFTNMILE:":
     Standard:
@@ -3129,7 +3129,7 @@ constraints:
           coefficient: 1.3918
         - var_name: N1201AC4
           coefficient: 1.3918
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "MCLGAORD:":
     Standard:
@@ -3143,7 +3143,7 @@ constraints:
           coefficient: 1
         - var_name: N1100AC4
           coefficient: 1
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 2
   "MCORDBOS:":
     Standard:
@@ -3161,7 +3161,7 @@ constraints:
           coefficient: 1
         - var_name: N1102AC4
           coefficient: 1
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 1
   "MSBOSCLE:":
     Standard:
@@ -3179,7 +3179,7 @@ constraints:
           coefficient: 1
         - var_name: N1102AC2
           coefficient: 1
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 1
   "MSBOSLGA:":
     Standard:
@@ -3193,7 +3193,7 @@ constraints:
           coefficient: 1
         - var_name: N1200AC2
           coefficient: 1
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 7
   "MSBOSORD:":
     Standard:
@@ -3213,7 +3213,7 @@ constraints:
           coefficient: 1
         - var_name: N1102AC2
           coefficient: 1
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 3
   "MSCLEBOS:":
     Standard:
@@ -3231,7 +3231,7 @@ constraints:
           coefficient: 1
         - var_name: N1102AC2
           coefficient: 1
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 1
   "MSCLELGA:":
     Standard:
@@ -3245,7 +3245,7 @@ constraints:
           coefficient: 1
         - var_name: N1102AC2
           coefficient: 1
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 3
   "MSCLEORD:":
     Standard:
@@ -3265,7 +3265,7 @@ constraints:
           coefficient: 1
         - var_name: N1102AC2
           coefficient: 1
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 6
   "MSLGABOS:":
     Standard:
@@ -3283,7 +3283,7 @@ constraints:
           coefficient: 1
         - var_name: N1201AC2
           coefficient: 1
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 7
   "MSLGACLE:":
     Standard:
@@ -3295,7 +3295,7 @@ constraints:
           coefficient: 1
         - var_name: N1100AC2
           coefficient: 1
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 4
   "MSLGAORD:":
     Standard:
@@ -3309,7 +3309,7 @@ constraints:
           coefficient: 1
         - var_name: N1100AC2
           coefficient: 1
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 5
   "MSORDBOS:":
     Standard:
@@ -3327,7 +3327,7 @@ constraints:
           coefficient: 1
         - var_name: N1102AC2
           coefficient: 1
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 3
   "MSORDCLE:":
     Standard:
@@ -3345,7 +3345,7 @@ constraints:
           coefficient: 1
         - var_name: N1100AC2
           coefficient: 1
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 5
   "MSORDLGA:":
     Standard:
@@ -3359,7 +3359,7 @@ constraints:
           coefficient: 1
         - var_name: N1102AC2
           coefficient: 1
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 4
   "NOPTCLE0:":
     Standard:
@@ -3433,7 +3433,7 @@ constraints:
           coefficient: 2
         - var_name: N1102AC4
           coefficient: 2
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 24
   "PASSNGRS:":
     Standard:
@@ -3545,7 +3545,7 @@ constraints:
           coefficient: 1
         - var_name: PCLELGA3
           coefficient: 1
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 9431
   "REVENUES:":
     Standard:
@@ -3725,7 +3725,7 @@ constraints:
           coefficient: 0.37
         - var_name: CCLELGA3
           coefficient: 0.37
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "RPMILES:":
     Standard:
@@ -3837,7 +3837,7 @@ constraints:
           coefficient: 0.41715
         - var_name: PCLELGA3
           coefficient: 1.0453
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "RTONMILE:":
     Standard:
@@ -3911,7 +3911,7 @@ constraints:
           coefficient: 0.41715
         - var_name: CCLELGA3
           coefficient: 1.0453
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "SYSTDEPT:":
     Standard:
@@ -4017,6 +4017,6 @@ constraints:
           coefficient: 1
         - var_name: N1201AC4
           coefficient: 1
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 50
 

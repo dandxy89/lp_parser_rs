@@ -24,6 +24,6 @@ constraints:
           coefficient: 1
         - var_name: y
           coefficient: 1
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 1
 

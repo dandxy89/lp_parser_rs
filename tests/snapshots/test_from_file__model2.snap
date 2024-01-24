@@ -51,7 +51,7 @@ constraints:
       coefficients:
         - var_name: V1
           coefficient: 1
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "CON2:":
     Standard:
@@ -59,7 +59,7 @@ constraints:
       coefficients:
         - var_name: V2
           coefficient: 1
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 2
   "CON3:":
     Standard:
@@ -67,7 +67,7 @@ constraints:
       coefficients:
         - var_name: V3
           coefficient: 1
-      sense: "<="
+      sense: LessOrEqual
       rhs: 2.5
   "CON4:":
     Standard:
@@ -79,6 +79,6 @@ constraints:
           coefficient: 1
         - var_name: V7
           coefficient: 1
-      sense: "<="
+      sense: LessOrEqual
       rhs: 1
 

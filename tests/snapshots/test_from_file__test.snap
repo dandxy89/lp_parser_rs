@@ -40,7 +40,7 @@ constraints:
       coefficients:
         - var_name: x1
           coefficient: 2
-      sense: "<="
+      sense: LessOrEqual
       rhs: 1
   "c2:":
     Standard:
@@ -50,7 +50,7 @@ constraints:
           coefficient: -3.01
         - var_name: x3
           coefficient: 6
-      sense: "="
+      sense: Equal
       rhs: 1
   "c2b:":
     Standard:
@@ -58,7 +58,7 @@ constraints:
       coefficients:
         - var_name: x2x3x4
           coefficient: -3.0000000002
-      sense: "="
+      sense: Equal
       rhs: 1
   "c3:":
     Standard:
@@ -66,6 +66,6 @@ constraints:
       coefficients:
         - var_name: x2
           coefficient: 1
-      sense: ">"
+      sense: GreaterThan
       rhs: 1
 

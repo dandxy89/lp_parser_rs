@@ -5,7 +5,14 @@ use unique_id::{sequence::SequenceGenerator, Generator};
 
 use crate::{
     common::RuleExt,
-    model::{constraint::Constraint, lp_problem::LPProblem, objective::Objective, sense::Sense, sos::SOSClass, variable::VariableType},
+    model::{
+        constraint::Constraint,
+        lp_problem::LPProblem,
+        objective::Objective,
+        sense::{Cmp, Sense},
+        sos::SOSClass,
+        variable::VariableType,
+    },
     Rule,
 };
 
@@ -40,7 +47,7 @@ fn compose_constraint(pair: Pair<'_, Rule>, gen: &mut SequenceGenerator) -> anyh
     }
     let coefficients: anyhow::Result<Vec<_>> =
         coefficients.into_iter().filter(|p| !matches!(p.as_rule(), Rule::PLUS | Rule::MINUS)).map(|p| p.into_inner().try_into()).collect();
-    let sense = parts.next().unwrap().as_str().to_string();
+    let sense = Cmp::from_str(parts.next().unwrap().as_str())?;
     let rhs = parts.next().unwrap().as_str().parse()?;
     Ok(Constraint::Standard { name, coefficients: coefficients?, sense, rhs })
 }

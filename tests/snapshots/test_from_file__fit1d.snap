@@ -9247,7 +9247,7 @@ constraints:
           coefficient: -1
         - var_name: R0100627
           coefficient: -1
-      sense: "="
+      sense: Equal
       rhs: 0
   "X0000001:":
     Standard:
@@ -11305,7 +11305,7 @@ constraints:
           coefficient: -18
         - var_name: R0100627
           coefficient: -4
-      sense: "<="
+      sense: LessOrEqual
       rhs: 0
   "X0000002:":
     Standard:
@@ -12173,7 +12173,7 @@ constraints:
           coefficient: -1
         - var_name: R0100626
           coefficient: -0.25
-      sense: "<="
+      sense: LessOrEqual
       rhs: 0
   "X0000003:":
     Standard:
@@ -12885,7 +12885,7 @@ constraints:
           coefficient: -0.51
         - var_name: R0100627
           coefficient: -1
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "X0000004:":
     Standard:
@@ -14403,7 +14403,7 @@ constraints:
           coefficient: -215
         - var_name: R0100627
           coefficient: -300
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "X0000005:":
     Standard:
@@ -15227,7 +15227,7 @@ constraints:
           coefficient: -1
         - var_name: R0100627
           coefficient: -4
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "X0000006:":
     Standard:
@@ -16983,7 +16983,7 @@ constraints:
           coefficient: -0.21
         - var_name: R0100627
           coefficient: -0.21
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "X0000007:":
     Standard:
@@ -19041,7 +19041,7 @@ constraints:
           coefficient: -24
         - var_name: R0100627
           coefficient: -26
-      sense: "<="
+      sense: LessOrEqual
       rhs: 0
   "X0000008:":
     Standard:
@@ -21041,7 +21041,7 @@ constraints:
           coefficient: -3
         - var_name: R0100627
           coefficient: -12
-      sense: "<="
+      sense: LessOrEqual
       rhs: 0
   "X0000009:":
     Standard:
@@ -22527,7 +22527,7 @@ constraints:
           coefficient: -1
         - var_name: R0100626
           coefficient: -1
-      sense: "<="
+      sense: LessOrEqual
       rhs: 0
   "X0000010:":
     Standard:
@@ -24301,7 +24301,7 @@ constraints:
           coefficient: -4
         - var_name: R0100627
           coefficient: -10
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "X0000011:":
     Standard:
@@ -26067,7 +26067,7 @@ constraints:
           coefficient: -225
         - var_name: R0100627
           coefficient: -629
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "X0000012:":
     Standard:
@@ -26285,7 +26285,7 @@ constraints:
           coefficient: -7
         - var_name: R0100627
           coefficient: -8
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "X0000013:":
     Standard:
@@ -26697,7 +26697,7 @@ constraints:
           coefficient: -1
         - var_name: R0100622
           coefficient: -1
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "X0000014:":
     Standard:
@@ -28227,7 +28227,7 @@ constraints:
           coefficient: -1
         - var_name: R0100627
           coefficient: -1
-      sense: "<="
+      sense: LessOrEqual
       rhs: 0
   "X0000015:":
     Standard:
@@ -28795,7 +28795,7 @@ constraints:
           coefficient: -1
         - var_name: R0100627
           coefficient: -1
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "X0000016:":
     Standard:
@@ -29403,7 +29403,7 @@ constraints:
           coefficient: -1
         - var_name: R0100621
           coefficient: -1
-      sense: "<="
+      sense: LessOrEqual
       rhs: 0
   "X0000017:":
     Standard:
@@ -30065,7 +30065,7 @@ constraints:
           coefficient: -1
         - var_name: R0100626
           coefficient: -1
-      sense: "<="
+      sense: LessOrEqual
       rhs: 0
   "X0000018:":
     Standard:
@@ -31353,7 +31353,7 @@ constraints:
           coefficient: -1
         - var_name: R0100614
           coefficient: -1
-      sense: "<="
+      sense: LessOrEqual
       rhs: 0
   "X0000019:":
     Standard:
@@ -31931,7 +31931,7 @@ constraints:
           coefficient: -1
         - var_name: R0100627
           coefficient: -1
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "X0000020:":
     Standard:
@@ -32395,7 +32395,7 @@ constraints:
           coefficient: -1
         - var_name: R0100607
           coefficient: -1
-      sense: "<="
+      sense: LessOrEqual
       rhs: 0
   "X0000021:":
     Standard:
@@ -32685,7 +32685,7 @@ constraints:
           coefficient: -1
         - var_name: R0100593
           coefficient: -1
-      sense: "<="
+      sense: LessOrEqual
       rhs: 0
   "X0000022:":
     Standard:
@@ -33499,7 +33499,7 @@ constraints:
           coefficient: -1
         - var_name: R0100627
           coefficient: -1
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
   "X0000023:":
     Standard:
@@ -34141,6 +34141,6 @@ constraints:
           coefficient: -1
         - var_name: R0100621
           coefficient: -1
-      sense: "<="
+      sense: LessOrEqual
       rhs: 0
 

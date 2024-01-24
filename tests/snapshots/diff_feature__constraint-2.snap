@@ -5,6 +5,6 @@ expression: a.diff(&b)
 Standard:
   name: b
   coefficients: []
-  sense: ~
+  sense: NoChange
   rhs: 0
 

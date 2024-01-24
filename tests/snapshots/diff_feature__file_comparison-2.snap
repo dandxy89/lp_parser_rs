@@ -19,7 +19,7 @@ constraints:
               changes:
                 - var_name: ~
                   coefficient: -1
-        sense: ~
+        sense: NoChange
         rhs: 0
   removed: []
 

@@ -77,7 +77,7 @@ constraints:
           coefficient: 1
         - var_name: X03
           coefficient: 1
-      sense: "="
+      sense: Equal
       rhs: 0
   "R10:":
     Standard:
@@ -87,7 +87,7 @@ constraints:
           coefficient: -1.06
         - var_name: X04
           coefficient: 1
-      sense: "="
+      sense: Equal
       rhs: 0
   "R12:":
     Standard:
@@ -105,7 +105,7 @@ constraints:
           coefficient: 1
         - var_name: X15
           coefficient: 1
-      sense: "="
+      sense: Equal
       rhs: 0
   "R13:":
     Standard:
@@ -121,7 +121,7 @@ constraints:
           coefficient: -0.86
         - var_name: X16
           coefficient: 1
-      sense: "="
+      sense: Equal
       rhs: 0
   "R19:":
     Standard:
@@ -135,7 +135,7 @@ constraints:
           coefficient: 1
         - var_name: X25
           coefficient: 1
-      sense: "="
+      sense: Equal
       rhs: 0
   "R20:":
     Standard:
@@ -145,7 +145,7 @@ constraints:
           coefficient: -0.43
         - var_name: X26
           coefficient: 1
-      sense: "="
+      sense: Equal
       rhs: 0
   "R22:":
     Standard:
@@ -161,7 +161,7 @@ constraints:
           coefficient: -0.37
         - var_name: X38
           coefficient: 1
-      sense: "="
+      sense: Equal
       rhs: 0
   "R23:":
     Standard:
@@ -181,7 +181,7 @@ constraints:
           coefficient: 1
         - var_name: X39
           coefficient: 1
-      sense: "="
+      sense: Equal
       rhs: 44
   "X05:":
     Standard:
@@ -189,7 +189,7 @@ constraints:
       coefficients:
         - var_name: X01
           coefficient: 1
-      sense: "<="
+      sense: LessOrEqual
       rhs: 80
   "X17:":
     Standard:
@@ -199,7 +199,7 @@ constraints:
           coefficient: 1
         - var_name: X10
           coefficient: -1
-      sense: "<="
+      sense: LessOrEqual
       rhs: 80
   "X18:":
     Standard:
@@ -209,7 +209,7 @@ constraints:
           coefficient: 1
         - var_name: X11
           coefficient: -1
-      sense: "<="
+      sense: LessOrEqual
       rhs: 0
   "X19:":
     Standard:
@@ -219,7 +219,7 @@ constraints:
           coefficient: 1
         - var_name: X12
           coefficient: -1
-      sense: "<="
+      sense: LessOrEqual
       rhs: 0
   "X20:":
     Standard:
@@ -229,7 +229,7 @@ constraints:
           coefficient: 1
         - var_name: X13
           coefficient: -1
-      sense: "<="
+      sense: LessOrEqual
       rhs: 0
   "X21:":
     Standard:
@@ -239,7 +239,7 @@ constraints:
           coefficient: -1
         - var_name: X14
           coefficient: 1.4
-      sense: "<="
+      sense: LessOrEqual
       rhs: 0
   "X27:":
     Standard:
@@ -247,7 +247,7 @@ constraints:
       coefficients:
         - var_name: X22
           coefficient: 1
-      sense: "<="
+      sense: LessOrEqual
       rhs: 500
   "X40:":
     Standard:
@@ -257,7 +257,7 @@ constraints:
           coefficient: 1
         - var_name: X32
           coefficient: -1
-      sense: "<="
+      sense: LessOrEqual
       rhs: 500
   "X41:":
     Standard:
@@ -267,7 +267,7 @@ constraints:
           coefficient: 1
         - var_name: X33
           coefficient: -1
-      sense: "<="
+      sense: LessOrEqual
       rhs: 0
   "X42:":
     Standard:
@@ -277,7 +277,7 @@ constraints:
           coefficient: 1
         - var_name: X34
           coefficient: -1
-      sense: "<="
+      sense: LessOrEqual
       rhs: 0
   "X43:":
     Standard:
@@ -287,7 +287,7 @@ constraints:
           coefficient: 1
         - var_name: X35
           coefficient: -1
-      sense: "<="
+      sense: LessOrEqual
       rhs: 0
   "X44:":
     Standard:
@@ -297,7 +297,7 @@ constraints:
           coefficient: -1
         - var_name: X36
           coefficient: 1.4
-      sense: "<="
+      sense: LessOrEqual
       rhs: 0
   "X45:":
     Standard:
@@ -321,7 +321,7 @@ constraints:
           coefficient: 2.249
         - var_name: X35
           coefficient: 2.279
-      sense: "<="
+      sense: LessOrEqual
       rhs: 0
   "X46:":
     Standard:
@@ -331,7 +331,7 @@ constraints:
           coefficient: -1
         - var_name: X22
           coefficient: 0.109
-      sense: "<="
+      sense: LessOrEqual
       rhs: 0
   "X47:":
     Standard:
@@ -347,7 +347,7 @@ constraints:
           coefficient: 0.108
         - var_name: X31
           coefficient: 0.107
-      sense: "<="
+      sense: LessOrEqual
       rhs: 0
   "X48:":
     Standard:
@@ -357,7 +357,7 @@ constraints:
           coefficient: 0.301
         - var_name: X24
           coefficient: -1
-      sense: "<="
+      sense: LessOrEqual
       rhs: 0
   "X49:":
     Standard:
@@ -373,7 +373,7 @@ constraints:
           coefficient: 0.326
         - var_name: X37
           coefficient: -1
-      sense: "<="
+      sense: LessOrEqual
       rhs: 0
   "X50:":
     Standard:
@@ -383,7 +383,7 @@ constraints:
           coefficient: 1
         - var_name: X26
           coefficient: 1
-      sense: "<="
+      sense: LessOrEqual
       rhs: 310
   "X51:":
     Standard:
@@ -393,6 +393,6 @@ constraints:
           coefficient: 1
         - var_name: X38
           coefficient: 1
-      sense: "<="
+      sense: LessOrEqual
       rhs: 300
 

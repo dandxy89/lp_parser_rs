@@ -28,7 +28,7 @@ constraints:
           coefficient: -2
         - var_name: b_5829890_x1
           coefficient: 2
-      sense: "<="
+      sense: LessOrEqual
       rhs: -64
   con_2027:
     Standard:
@@ -38,6 +38,6 @@ constraints:
           coefficient: 1
         - var_name: b_5880854_x1
           coefficient: -1
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 32
 

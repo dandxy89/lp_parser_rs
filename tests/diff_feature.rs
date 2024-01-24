@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use lp_parser_rs::{
-    model::{coefficient::Coefficient, constraint::Constraint, lp_problem::LPProblem},
+    model::{coefficient::Coefficient, constraint::Constraint, lp_problem::LPProblem, sense::Cmp},
     parse::{parse_file, parse_lp_file},
 };
 
@@ -24,13 +24,13 @@ fn test_constraint() {
     let a = Constraint::Standard {
         name: "a".to_string(),
         coefficients: vec![Coefficient { var_name: "ca".to_string(), coefficient: 1.0 }],
-        sense: ">".to_string(),
+        sense: Cmp::GreaterThan,
         rhs: 1.0,
     };
     let b = Constraint::Standard {
         name: "b".to_string(),
         coefficients: vec![Coefficient { var_name: "ca".to_string(), coefficient: 1.0 }],
-        sense: ">".to_string(),
+        sense: Cmp::GreaterThan,
         rhs: 1.0,
     };
     insta::assert_yaml_snapshot!(a.diff(&a));

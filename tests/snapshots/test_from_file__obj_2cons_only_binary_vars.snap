@@ -36,7 +36,7 @@ constraints:
           coefficient: 10
         - var_name: z
           coefficient: 1
-      sense: "<="
+      sense: LessOrEqual
       rhs: 0
   "cons2:":
     Standard:
@@ -46,6 +46,6 @@ constraints:
           coefficient: 1
         - var_name: z
           coefficient: 1
-      sense: ">="
+      sense: GreaterOrEqual
       rhs: 0
 
