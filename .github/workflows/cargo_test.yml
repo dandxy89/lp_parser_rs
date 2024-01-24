@@ -15,6 +15,10 @@ env:
   CARGO_TERM_COLOR: always
   CI: true # insta will not write new snapshot files
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: ubuntu-latest
