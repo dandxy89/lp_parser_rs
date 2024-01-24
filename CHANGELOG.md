@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.2](https://github.com/dandxy89/lp_parser_rs/compare/v1.0.1...v1.0.2) (2024-01-24)
+
+
+### Build System
+
+* Updating MSRV to 1.66.1 ([c4fca95](https://github.com/dandxy89/lp_parser_rs/commit/c4fca95741a70dba3913218ef5e761aa4cca92ef))
+
 ## [1.0.1](https://github.com/dandxy89/lp_parser_rs/compare/v1.0.0...v1.0.1) (2024-01-23)
 
 
