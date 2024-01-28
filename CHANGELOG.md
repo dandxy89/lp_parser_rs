@@ -1,5 +1,32 @@
 # Changelog
 
+## [1.1.0](https://github.com/dandxy89/lp_parser_rs/compare/v1.0.2...v1.1.0) (2024-01-28)
+
+
+### doc
+
+* Condense CHANGELOG ([3f5fa46](https://github.com/dandxy89/lp_parser_rs/commit/3f5fa462491e958786c52c5ec52b2d33f8a82c9c))
+
+
+### Build System
+
+* Remove patch version on unique_id dependency ([e5cd444](https://github.com/dandxy89/lp_parser_rs/commit/e5cd4449dfa7967e59e7d9ddbd9014c006162e3c))
+
+
+### Continuous Integration
+
+* Adding concurrency ([ea37bf2](https://github.com/dandxy89/lp_parser_rs/commit/ea37bf2e38443d10d77eb83fec063a35e651c60c))
+
+
+### Bug Fixes
+
+* Constraint Sense should be an Enum of possible values ([2a93a40](https://github.com/dandxy89/lp_parser_rs/commit/2a93a4022ddfc6650285c5dbeab569c479db84da))
+
+
+### Code Refactoring
+
+* Weekend tidy ([7b55028](https://github.com/dandxy89/lp_parser_rs/commit/7b55028dd53d8ce31245a36994de2819a863ef5b))
+
 ## [1.0.3](https://github.com/dandxy89/lp_parser_rs/compare/v1.0.2...v1.0.3) (2024-01-24)
 
 ### Build System
