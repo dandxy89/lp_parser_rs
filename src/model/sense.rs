@@ -20,10 +20,15 @@ pub enum Sense {
 )))]
 pub enum Cmp {
     #[default]
+    #[serde(rename = ">")]
     GreaterThan,
+    #[serde(rename = "<")]
     LessThan,
+    #[serde(rename = "=")]
     Equal,
+    #[serde(rename = ">=")]
     GreaterOrEqual,
+    #[serde(rename = "<=")]
     LessOrEqual,
 }
 
@@ -37,7 +42,7 @@ impl FromStr for Cmp {
             ">" => Ok(Self::GreaterThan),
             "<" => Ok(Self::LessThan),
             "=" => Ok(Self::Equal),
-            _ => Err(anyhow::anyhow!("Unrecognized cmp: {s}")),
+            _ => Err(anyhow::anyhow!("Unrecognized comparison operator: {s}")),
         }
     }
 }

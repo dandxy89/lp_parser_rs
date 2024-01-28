@@ -1,3 +1,5 @@
+use pest::iterators::Pair;
+
 use crate::Rule;
 
 #[derive(Debug, Default, Clone)]
@@ -7,7 +9,7 @@ use crate::Rule;
     #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 )))]
 /// A enum representing the bounds of a variable
-pub enum VariableType {
+pub enum Variable {
     /// Unbounded variable (-Infinity, +Infinity)
     Free,
     // Lower bounded variable
@@ -27,7 +29,7 @@ pub enum VariableType {
     SemiContinuous,
 }
 
-impl From<Rule> for VariableType {
+impl From<Rule> for Variable {
     #[allow(clippy::wildcard_enum_match_arm, clippy::unreachable)]
     fn from(value: Rule) -> Self {
         match value {
@@ -40,7 +42,7 @@ impl From<Rule> for VariableType {
     }
 }
 
-impl PartialEq for VariableType {
+impl PartialEq for Variable {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::LB(l0), Self::LB(r0)) | (Self::UB(l0), Self::UB(r0)) => l0 == r0,
@@ -50,13 +52,48 @@ impl PartialEq for VariableType {
     }
 }
 
-impl Eq for VariableType {}
+impl Eq for Variable {}
 
-impl VariableType {
+impl Variable {
     #[allow(clippy::wildcard_enum_match_arm)]
     pub fn set_semi_continuous(&mut self) {
         if let Self::Bounded(lb, ub, _) = self {
             *self = Self::Bounded(*lb, *ub, true);
         }
+    }
+}
+
+#[allow(clippy::wildcard_enum_match_arm, clippy::unwrap_used)]
+pub(crate) fn get_bound(pair: Pair<'_, Rule>) -> Option<(&str, Variable)> {
+    let mut parts = pair.clone().into_inner();
+    match pair.as_rule() {
+        Rule::LOWER_BOUND => {
+            let name = parts.next().unwrap().as_str();
+            let _ = parts.next();
+            Some((name, Variable::LB(parts.next().unwrap().as_str().parse().unwrap())))
+        }
+        Rule::LOWER_BOUND_REV => {
+            let value = parts.next().unwrap().as_str().parse().unwrap();
+            let _ = parts.next();
+            Some((parts.next().unwrap().as_str(), Variable::LB(value)))
+        }
+        Rule::UPPER_BOUND => {
+            let name = parts.next().unwrap().as_str();
+            let _ = parts.next();
+            Some((name, Variable::UB(parts.next().unwrap().as_str().parse().unwrap())))
+        }
+        Rule::BOUNDED => {
+            let lb = parts.next().unwrap().as_str();
+            let _ = parts.next();
+            let name = parts.next().unwrap().as_str();
+            let _ = parts.next();
+            let ub = parts.next().unwrap().as_str();
+            Some((name, Variable::Bounded(lb.parse().unwrap(), ub.parse().unwrap(), false)))
+        }
+        Rule::FREE => {
+            let name = parts.next().unwrap().as_str();
+            Some((name, Variable::Free))
+        }
+        _ => None,
     }
 }

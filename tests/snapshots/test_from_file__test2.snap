@@ -174,7 +174,7 @@ constraints:
       coefficients:
         - var_name: __dummy
           coefficient: 1
-      sense: LessOrEqual
+      sense: "<="
       rhs: 1
   "c1_0_0_1:":
     Standard:
@@ -276,7 +276,7 @@ constraints:
           coefficient: 1
         - var_name: x_59_6_0
           coefficient: 1
-      sense: LessOrEqual
+      sense: "<="
       rhs: 1
   "c1_9_4_4:":
     Standard:
@@ -306,7 +306,7 @@ constraints:
           coefficient: 1
         - var_name: x_5_6_9
           coefficient: 1
-      sense: LessOrEqual
+      sense: "<="
       rhs: 1
   "c2_0_0:":
     Standard:
@@ -368,7 +368,7 @@ constraints:
           coefficient: 1
         - var_name: x_0_6_9
           coefficient: 1
-      sense: Equal
+      sense: "="
       rhs: 1
   "c2_9_2:":
     Standard:
@@ -462,7 +462,7 @@ constraints:
           coefficient: 1
         - var_name: x_9_6_9
           coefficient: 1
-      sense: Equal
+      sense: "="
       rhs: 1
   "c3_0_10:":
     Standard:
@@ -482,7 +482,7 @@ constraints:
           coefficient: 1
         - var_name: x_0_6_10
           coefficient: 1
-      sense: LessOrEqual
+      sense: "<="
       rhs: 1
   "c3_9_9:":
     Standard:
@@ -502,6 +502,6 @@ constraints:
           coefficient: 1
         - var_name: x_9_6_9
           coefficient: 1
-      sense: LessOrEqual
+      sense: "<="
       rhs: 1
 

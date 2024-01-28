@@ -1,6 +1,21 @@
 use std::collections::{hash_map::Entry, HashMap};
 
-use crate::model::{constraint::Constraint, objective::Objective, sense::Sense, variable::VariableType};
+use pest::iterators::Pair;
+use unique_id::sequence::SequenceGenerator;
+
+use crate::{
+    model::{constraint::Constraint, objective::Objective, sense::Sense, variable::Variable},
+    Rule,
+};
+
+pub trait LPPart
+where
+    Self: Sized,
+{
+    type Output;
+
+    fn try_into(pair: Pair<'_, Rule>, gen: &mut SequenceGenerator) -> anyhow::Result<Self::Output>;
+}
 
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -11,7 +26,7 @@ use crate::model::{constraint::Constraint, objective::Objective, sense::Sense, v
 pub struct LPProblem {
     pub problem_name: String,
     pub problem_sense: Sense,
-    pub variables: HashMap<String, VariableType>,
+    pub variables: HashMap<String, Variable>,
     pub objectives: Vec<Objective>,
     pub constraints: HashMap<String, Constraint>,
 }
@@ -33,10 +48,10 @@ impl LPProblem {
         }
     }
 
-    pub fn set_var_bounds(&mut self, name: &str, kind: VariableType) {
+    pub fn set_variable_bounds(&mut self, name: &str, kind: Variable) {
         if !name.is_empty() {
             match self.variables.entry(name.to_string()) {
-                Entry::Occupied(k) if matches!(kind, VariableType::SemiContinuous) => {
+                Entry::Occupied(k) if matches!(kind, Variable::SemiContinuous) => {
                     k.into_mut().set_semi_continuous();
                 }
                 Entry::Occupied(k) => *k.into_mut() = kind,

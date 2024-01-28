@@ -7,7 +7,10 @@ use std::{
 use pest::Parser;
 use unique_id::{sequence::SequenceGenerator, GeneratorFromSeed};
 
-use crate::{lp_parts::compose, model::lp_problem::LPProblem, LParser, Rule};
+use crate::{
+    model::{lp_problem::LPProblem, parse_model::compose},
+    LParser, Rule,
+};
 
 /// # Errors
 /// Returns an error if the `read_to_string` or `open` fails

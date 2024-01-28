@@ -32,6 +32,6 @@ constraints:
           coefficient: 5.5
         - var_name: z
           coefficient: 6.6
-      sense: LessOrEqual
+      sense: "<="
       rhs: 120
 

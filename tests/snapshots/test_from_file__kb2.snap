@@ -104,7 +104,7 @@ constraints:
           coefficient: -0.29
         - var_name: QVO73EBW
           coefficient: 1
-      sense: Equal
+      sense: "="
       rhs: 0
   "B3E.VOBW:":
     Standard:
@@ -126,7 +126,7 @@ constraints:
           coefficient: 1
         - var_name: QVO73EBW
           coefficient: -1
-      sense: Equal
+      sense: "="
       rhs: 0
   "B3P...BW:":
     Standard:
@@ -136,7 +136,7 @@ constraints:
           coefficient: -0.17
         - var_name: QVO73PBW
           coefficient: 1
-      sense: Equal
+      sense: "="
       rhs: 0
   "B3P.VOBW:":
     Standard:
@@ -158,7 +158,7 @@ constraints:
           coefficient: 1
         - var_name: QVO73PBW
           coefficient: -1
-      sense: Equal
+      sense: "="
       rhs: 0
   "B3R...BW:":
     Standard:
@@ -168,7 +168,7 @@ constraints:
           coefficient: -0.54
         - var_name: QVO73RBW
           coefficient: 1
-      sense: Equal
+      sense: "="
       rhs: 0
   "B3R.VOBW:":
     Standard:
@@ -190,7 +190,7 @@ constraints:
           coefficient: 1
         - var_name: QVO73RBW
           coefficient: -1
-      sense: Equal
+      sense: "="
       rhs: 0
   "B3T...BW:":
     Standard:
@@ -200,7 +200,7 @@ constraints:
           coefficient: -1
         - var_name: M3..3TBW
           coefficient: 1
-      sense: Equal
+      sense: "="
       rhs: 0
   "BAL...BW:":
     Standard:
@@ -214,7 +214,7 @@ constraints:
           coefficient: -1
         - var_name: _EAL...BW
           coefficient: 1
-      sense: Equal
+      sense: "="
       rhs: 0
   "BHC...BW:":
     Standard:
@@ -228,7 +228,7 @@ constraints:
           coefficient: -1
         - var_name: _EHC...BW
           coefficient: 1
-      sense: Equal
+      sense: "="
       rhs: 0
   "BLC...BW:":
     Standard:
@@ -242,7 +242,7 @@ constraints:
           coefficient: -1
         - var_name: _ELC...BW
           coefficient: 1
-      sense: Equal
+      sense: "="
       rhs: 0
   "BLV...BW:":
     Standard:
@@ -256,7 +256,7 @@ constraints:
           coefficient: -1
         - var_name: _ELV...BW
           coefficient: 1
-      sense: Equal
+      sense: "="
       rhs: 0
   "BN4...BW:":
     Standard:
@@ -270,7 +270,7 @@ constraints:
           coefficient: -1
         - var_name: _EN4...BW
           coefficient: 1
-      sense: Equal
+      sense: "="
       rhs: 0
   "BP8...BW:":
     Standard:
@@ -284,7 +284,7 @@ constraints:
           coefficient: -1
         - var_name: _EP8...BW
           coefficient: 1
-      sense: Equal
+      sense: "="
       rhs: 0
   "BTO...BW:":
     Standard:
@@ -298,7 +298,7 @@ constraints:
           coefficient: -1
         - var_name: _ETO...BW
           coefficient: 1
-      sense: Equal
+      sense: "="
       rhs: 0
   "HMH.3EBW:":
     Standard:
@@ -324,7 +324,7 @@ constraints:
           coefficient: -2.10531
         - var_name: WMO73EBW
           coefficient: -1
-      sense: GreaterOrEqual
+      sense: ">="
       rhs: 0
   "HMH.3RBW:":
     Standard:
@@ -350,7 +350,7 @@ constraints:
           coefficient: -2.97548
         - var_name: WMO73RBW
           coefficient: -1
-      sense: GreaterOrEqual
+      sense: ">="
       rhs: 0
   "HML.3EBW:":
     Standard:
@@ -376,7 +376,7 @@ constraints:
           coefficient: -1.37167
         - var_name: WMO73EBW
           coefficient: -1
-      sense: GreaterOrEqual
+      sense: ">="
       rhs: 0
   "HML.3RBW:":
     Standard:
@@ -402,7 +402,7 @@ constraints:
           coefficient: -2.20937
         - var_name: WMO73RBW
           coefficient: -1
-      sense: GreaterOrEqual
+      sense: ">="
       rhs: 0
   "HMM.3EBW:":
     Standard:
@@ -428,7 +428,7 @@ constraints:
           coefficient: -2.02477
         - var_name: WMO73EBW
           coefficient: -1
-      sense: GreaterOrEqual
+      sense: ">="
       rhs: 0
   "HMM.3RBW:":
     Standard:
@@ -454,7 +454,7 @@ constraints:
           coefficient: -2.74531
         - var_name: WMO73RBW
           coefficient: -1
-      sense: GreaterOrEqual
+      sense: ">="
       rhs: 0
   "HRH.3EBW:":
     Standard:
@@ -480,7 +480,7 @@ constraints:
           coefficient: -2.16139
         - var_name: WRO73EBW
           coefficient: -1
-      sense: GreaterOrEqual
+      sense: ">="
       rhs: 0
   "HRH.3RBW:":
     Standard:
@@ -506,7 +506,7 @@ constraints:
           coefficient: -2.79464
         - var_name: WRO73RBW
           coefficient: -1
-      sense: GreaterOrEqual
+      sense: ">="
       rhs: 0
   "HRL.3EBW:":
     Standard:
@@ -532,7 +532,7 @@ constraints:
           coefficient: -1.00857
         - var_name: WRO73EBW
           coefficient: -1
-      sense: GreaterOrEqual
+      sense: ">="
       rhs: 0
   "HRL.3RBW:":
     Standard:
@@ -558,7 +558,7 @@ constraints:
           coefficient: -2.15975
         - var_name: WRO73RBW
           coefficient: -1
-      sense: GreaterOrEqual
+      sense: ">="
       rhs: 0
   "HRM.3EBW:":
     Standard:
@@ -584,7 +584,7 @@ constraints:
           coefficient: -2.0144
         - var_name: WRO73EBW
           coefficient: -1
-      sense: GreaterOrEqual
+      sense: ">="
       rhs: 0
   "HRM.3RBW:":
     Standard:
@@ -610,7 +610,7 @@ constraints:
           coefficient: -2.62696
         - var_name: WRO73RBW
           coefficient: -1
-      sense: GreaterOrEqual
+      sense: ">="
       rhs: 0
   "NOI.3EBW:":
     Standard:
@@ -622,7 +622,7 @@ constraints:
           coefficient: 0.73
         - var_name: WRO73EBW
           coefficient: 0.41
-      sense: GreaterOrEqual
+      sense: ">="
       rhs: 0
   "NOI.3PBW:":
     Standard:
@@ -634,7 +634,7 @@ constraints:
           coefficient: 0.84
         - var_name: WRO73PBW
           coefficient: 0.27
-      sense: GreaterOrEqual
+      sense: ">="
       rhs: 0
   "NOI.3RBW:":
     Standard:
@@ -646,7 +646,7 @@ constraints:
           coefficient: 0.81
         - var_name: WRO73RBW
           coefficient: 0.31
-      sense: GreaterOrEqual
+      sense: ">="
       rhs: 0
   "WMO.3PBW:":
     Standard:
@@ -668,7 +668,7 @@ constraints:
           coefficient: 88.18188
         - var_name: WMO73PBW
           coefficient: -1
-      sense: Equal
+      sense: "="
       rhs: 0
   "WRO.3PBW:":
     Standard:
@@ -690,7 +690,7 @@ constraints:
           coefficient: 105.07558
         - var_name: WRO73PBW
           coefficient: -1
-      sense: Equal
+      sense: "="
       rhs: 0
   "X12.3EBW:":
     Standard:
@@ -712,7 +712,7 @@ constraints:
           coefficient: 5
         - var_name: QVO73EBW
           coefficient: -61
-      sense: LessOrEqual
+      sense: "<="
       rhs: 0
   "X12.3PBW:":
     Standard:
@@ -734,7 +734,7 @@ constraints:
           coefficient: 5
         - var_name: QVO73PBW
           coefficient: -61
-      sense: LessOrEqual
+      sense: "<="
       rhs: 0
   "X12.3RBW:":
     Standard:
@@ -756,7 +756,7 @@ constraints:
           coefficient: 5
         - var_name: QVO73RBW
           coefficient: -61
-      sense: LessOrEqual
+      sense: "<="
       rhs: 0
   "XCV.3EBW:":
     Standard:
@@ -778,7 +778,7 @@ constraints:
           coefficient: -1
         - var_name: QVO73EBW
           coefficient: -16
-      sense: LessOrEqual
+      sense: "<="
       rhs: 0
   "XCV.3PBW:":
     Standard:
@@ -800,7 +800,7 @@ constraints:
           coefficient: -1
         - var_name: QVO73PBW
           coefficient: -16
-      sense: LessOrEqual
+      sense: "<="
       rhs: 0
   "XCV.3RBW:":
     Standard:
@@ -822,7 +822,7 @@ constraints:
           coefficient: -1
         - var_name: QVO73RBW
           coefficient: -16
-      sense: LessOrEqual
+      sense: "<="
       rhs: 0
   "XPB.3ABW:":
     Standard:
@@ -838,7 +838,7 @@ constraints:
           coefficient: 1
         - var_name: QVO73RBW
           coefficient: -1.5
-      sense: LessOrEqual
+      sense: "<="
       rhs: 0
   "XPB.3EBW:":
     Standard:
@@ -848,7 +848,7 @@ constraints:
           coefficient: 1
         - var_name: QVO73EBW
           coefficient: -1.7
-      sense: LessOrEqual
+      sense: "<="
       rhs: 0
   "XPB.3RBW:":
     Standard:
@@ -858,7 +858,7 @@ constraints:
           coefficient: 1
         - var_name: QVO73RBW
           coefficient: -1.7
-      sense: LessOrEqual
+      sense: "<="
       rhs: 0
   "XRV.3EBW:":
     Standard:
@@ -880,7 +880,7 @@ constraints:
           coefficient: 1.2
         - var_name: QVO73EBW
           coefficient: -12
-      sense: LessOrEqual
+      sense: "<="
       rhs: 0
   "XRV.3PBW:":
     Standard:
@@ -902,7 +902,7 @@ constraints:
           coefficient: 1.2
         - var_name: QVO73PBW
           coefficient: -12
-      sense: LessOrEqual
+      sense: "<="
       rhs: 0
   "XRV.3RBW:":
     Standard:
@@ -924,6 +924,6 @@ constraints:
           coefficient: 1.2
         - var_name: QVO73RBW
           coefficient: -12
-      sense: LessOrEqual
+      sense: "<="
       rhs: 0
 

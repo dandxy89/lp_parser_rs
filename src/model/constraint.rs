@@ -1,4 +1,13 @@
-use crate::model::{coefficient::Coefficient, sense::Cmp, sos::SOSClass};
+use std::str::FromStr;
+
+use pest::iterators::Pair;
+use unique_id::sequence::SequenceGenerator;
+
+use crate::{
+    common::RuleExt,
+    model::{coefficient::Coefficient, get_name, lp_problem::LPPart, sense::Cmp, sos::SOSClass},
+    Rule,
+};
 
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -44,5 +53,31 @@ impl Constraint {
         match self {
             Self::Standard { coefficients, .. } | Self::SOS { coefficients, .. } => coefficients,
         }
+    }
+}
+
+#[allow(clippy::unwrap_used)]
+impl LPPart for Constraint {
+    type Output = Constraint;
+
+    fn try_into(pair: Pair<'_, Rule>, gen: &mut SequenceGenerator) -> anyhow::Result<Self> {
+        let mut parts = pair.into_inner().peekable();
+        // Constraint name can be omitted in LP files, so we need to handle that case
+        let name = get_name(&mut parts, gen, Rule::CONSTRAINT_NAME);
+        let mut coefficients: Vec<_> = vec![];
+        while let Some(p) = parts.peek() {
+            if p.as_rule().is_cmp() {
+                break;
+            }
+            coefficients.push(parts.next().unwrap());
+        }
+        let coefficients: anyhow::Result<Vec<_>> = coefficients
+            .into_iter()
+            .filter(|p| !matches!(p.as_rule(), Rule::PLUS | Rule::MINUS))
+            .map(|p| p.into_inner().try_into())
+            .collect();
+        let sense = Cmp::from_str(parts.next().unwrap().as_str())?;
+        let rhs = parts.next().unwrap().as_str().parse()?;
+        Ok(Constraint::Standard { name, coefficients: coefficients?, sense, rhs })
     }
 }

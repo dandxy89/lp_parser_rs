@@ -83,7 +83,7 @@ constraints:
           coefficient: 1
         - var_name: under_9
           coefficient: 1
-      sense: GreaterOrEqual
+      sense: ">="
       rhs: 0
   "_C11:":
     Standard:
@@ -95,7 +95,7 @@ constraints:
           coefficient: 1
         - var_name: over_10
           coefficient: -1
-      sense: LessOrEqual
+      sense: "<="
       rhs: 0
   "_C12:":
     Standard:
@@ -107,7 +107,7 @@ constraints:
           coefficient: 1
         - var_name: under_11
           coefficient: 1
-      sense: GreaterOrEqual
+      sense: ">="
       rhs: 0
   "_C13:":
     Standard:
@@ -119,7 +119,7 @@ constraints:
           coefficient: 1
         - var_name: over_12
           coefficient: -1
-      sense: LessOrEqual
+      sense: "<="
       rhs: 0
   "_C14:":
     Standard:
@@ -131,7 +131,7 @@ constraints:
           coefficient: 1
         - var_name: under_13
           coefficient: 1
-      sense: GreaterOrEqual
+      sense: ">="
       rhs: 0
   "_C15:":
     Standard:
@@ -143,7 +143,7 @@ constraints:
           coefficient: 1
         - var_name: over_14
           coefficient: -1
-      sense: LessOrEqual
+      sense: "<="
       rhs: 0
   "_C16:":
     Standard:
@@ -155,7 +155,7 @@ constraints:
           coefficient: 1
         - var_name: under_15
           coefficient: 1
-      sense: GreaterOrEqual
+      sense: ">="
       rhs: 0
   "_C17:":
     Standard:
@@ -167,7 +167,7 @@ constraints:
           coefficient: -1
         - var_name: over_16
           coefficient: -1
-      sense: LessOrEqual
+      sense: "<="
       rhs: 0
   "_C18:":
     Standard:
@@ -179,7 +179,7 @@ constraints:
           coefficient: -1
         - var_name: under_17
           coefficient: 1
-      sense: GreaterOrEqual
+      sense: ">="
       rhs: 0
   "_C19:":
     Standard:
@@ -191,7 +191,7 @@ constraints:
           coefficient: 1
         - var_name: over_18
           coefficient: -1
-      sense: LessOrEqual
+      sense: "<="
       rhs: 0
   "_C1:":
     Standard:
@@ -203,7 +203,7 @@ constraints:
           coefficient: 1
         - var_name: over_0
           coefficient: -1
-      sense: LessOrEqual
+      sense: "<="
       rhs: 0
   "_C20:":
     Standard:
@@ -215,7 +215,7 @@ constraints:
           coefficient: 1
         - var_name: under_19
           coefficient: 1
-      sense: GreaterOrEqual
+      sense: ">="
       rhs: 0
   "_C21:":
     Standard:
@@ -227,7 +227,7 @@ constraints:
           coefficient: -1
         - var_name: over_20
           coefficient: -1
-      sense: LessOrEqual
+      sense: "<="
       rhs: 0
   "_C22:":
     Standard:
@@ -239,7 +239,7 @@ constraints:
           coefficient: -1
         - var_name: under_21
           coefficient: 1
-      sense: GreaterOrEqual
+      sense: ">="
       rhs: 0
   "_C23:":
     Standard:
@@ -251,7 +251,7 @@ constraints:
           coefficient: -1
         - var_name: over_22
           coefficient: -1
-      sense: LessOrEqual
+      sense: "<="
       rhs: 0
   "_C24:":
     Standard:
@@ -263,7 +263,7 @@ constraints:
           coefficient: -1
         - var_name: under_23
           coefficient: 1
-      sense: GreaterOrEqual
+      sense: ">="
       rhs: 0
   "_C25:":
     Standard:
@@ -275,7 +275,7 @@ constraints:
           coefficient: -1
         - var_name: over_24
           coefficient: -1
-      sense: LessOrEqual
+      sense: "<="
       rhs: 0
   "_C26:":
     Standard:
@@ -287,7 +287,7 @@ constraints:
           coefficient: -1
         - var_name: under_25
           coefficient: 1
-      sense: GreaterOrEqual
+      sense: ">="
       rhs: 0
   "_C27:":
     Standard:
@@ -299,7 +299,7 @@ constraints:
           coefficient: -1
         - var_name: over_26
           coefficient: -1
-      sense: LessOrEqual
+      sense: "<="
       rhs: 0
   "_C28:":
     Standard:
@@ -311,7 +311,7 @@ constraints:
           coefficient: -1
         - var_name: under_27
           coefficient: 1
-      sense: GreaterOrEqual
+      sense: ">="
       rhs: 0
   "_C29:":
     Standard:
@@ -323,7 +323,7 @@ constraints:
           coefficient: 1
         - var_name: over_28
           coefficient: -1
-      sense: LessOrEqual
+      sense: "<="
       rhs: 0
   "_C2:":
     Standard:
@@ -335,7 +335,7 @@ constraints:
           coefficient: 1
         - var_name: under_1
           coefficient: 1
-      sense: GreaterOrEqual
+      sense: ">="
       rhs: 0
   "_C30:":
     Standard:
@@ -347,7 +347,7 @@ constraints:
           coefficient: 1
         - var_name: under_29
           coefficient: 1
-      sense: GreaterOrEqual
+      sense: ">="
       rhs: 0
   "_C31:":
     Standard:
@@ -359,7 +359,7 @@ constraints:
           coefficient: -1
         - var_name: over_30
           coefficient: -1
-      sense: LessOrEqual
+      sense: "<="
       rhs: 0
   "_C32:":
     Standard:
@@ -371,7 +371,7 @@ constraints:
           coefficient: -1
         - var_name: under_31
           coefficient: 1
-      sense: GreaterOrEqual
+      sense: ">="
       rhs: 0
   "_C33:":
     Standard:
@@ -383,7 +383,7 @@ constraints:
           coefficient: 1
         - var_name: over_32
           coefficient: -1
-      sense: LessOrEqual
+      sense: "<="
       rhs: 0
   "_C34:":
     Standard:
@@ -395,7 +395,7 @@ constraints:
           coefficient: 1
         - var_name: under_33
           coefficient: 1
-      sense: GreaterOrEqual
+      sense: ">="
       rhs: 0
   "_C35:":
     Standard:
@@ -407,7 +407,7 @@ constraints:
           coefficient: -1
         - var_name: over_34
           coefficient: -1
-      sense: LessOrEqual
+      sense: "<="
       rhs: 0
   "_C36:":
     Standard:
@@ -419,7 +419,7 @@ constraints:
           coefficient: -1
         - var_name: under_35
           coefficient: 1
-      sense: GreaterOrEqual
+      sense: ">="
       rhs: 0
   "_C37:":
     Standard:
@@ -431,7 +431,7 @@ constraints:
           coefficient: 1
         - var_name: over_36
           coefficient: -1
-      sense: LessOrEqual
+      sense: "<="
       rhs: 0
   "_C38:":
     Standard:
@@ -443,7 +443,7 @@ constraints:
           coefficient: 1
         - var_name: under_37
           coefficient: 1
-      sense: GreaterOrEqual
+      sense: ">="
       rhs: 0
   "_C39:":
     Standard:
@@ -453,7 +453,7 @@ constraints:
           coefficient: 1
         - var_name: over_38
           coefficient: -1
-      sense: LessOrEqual
+      sense: "<="
       rhs: 1.24660824696
   "_C3:":
     Standard:
@@ -465,7 +465,7 @@ constraints:
           coefficient: 1
         - var_name: over_2
           coefficient: -1
-      sense: LessOrEqual
+      sense: "<="
       rhs: 0
   "_C40:":
     Standard:
@@ -475,7 +475,7 @@ constraints:
           coefficient: 1
         - var_name: under_39
           coefficient: 1
-      sense: GreaterOrEqual
+      sense: ">="
       rhs: 1.24660824696
   "_C41:":
     Standard:
@@ -491,7 +491,7 @@ constraints:
           coefficient: 1
         - var_name: over_40
           coefficient: -1
-      sense: LessOrEqual
+      sense: "<="
       rhs: 9.80665154278
   "_C42:":
     Standard:
@@ -507,7 +507,7 @@ constraints:
           coefficient: 1
         - var_name: under_41
           coefficient: 1
-      sense: GreaterOrEqual
+      sense: ">="
       rhs: 9.80665154278
   "_C43:":
     Standard:
@@ -517,7 +517,7 @@ constraints:
           coefficient: 1
         - var_name: over_42
           coefficient: -1
-      sense: LessOrEqual
+      sense: "<="
       rhs: 2.06580795211
   "_C44:":
     Standard:
@@ -527,7 +527,7 @@ constraints:
           coefficient: 1
         - var_name: under_43
           coefficient: 1
-      sense: GreaterOrEqual
+      sense: ">="
       rhs: 2.06580795211
   "_C45:":
     Standard:
@@ -541,7 +541,7 @@ constraints:
           coefficient: 1
         - var_name: over_44
           coefficient: -1
-      sense: LessOrEqual
+      sense: "<="
       rhs: 7.1056670077
   "_C46:":
     Standard:
@@ -555,7 +555,7 @@ constraints:
           coefficient: 1
         - var_name: under_45
           coefficient: 1
-      sense: GreaterOrEqual
+      sense: ">="
       rhs: 7.1056670077
   "_C47:":
     Standard:
@@ -571,7 +571,7 @@ constraints:
           coefficient: 1
         - var_name: over_46
           coefficient: -1
-      sense: LessOrEqual
+      sense: "<="
       rhs: 7.89518556411
   "_C48:":
     Standard:
@@ -587,7 +587,7 @@ constraints:
           coefficient: 1
         - var_name: under_47
           coefficient: 1
-      sense: GreaterOrEqual
+      sense: ">="
       rhs: 7.89518556411
   "_C49:":
     Standard:
@@ -691,7 +691,7 @@ constraints:
           coefficient: 0.5
         - var_name: under_9
           coefficient: 0.5
-      sense: Equal
+      sense: "="
       rhs: 0
   "_C4:":
     Standard:
@@ -703,7 +703,7 @@ constraints:
           coefficient: 1
         - var_name: under_3
           coefficient: 1
-      sense: GreaterOrEqual
+      sense: ">="
       rhs: 0
   "_C5:":
     Standard:
@@ -715,7 +715,7 @@ constraints:
           coefficient: 1
         - var_name: over_4
           coefficient: -1
-      sense: LessOrEqual
+      sense: "<="
       rhs: 0
   "_C6:":
     Standard:
@@ -727,7 +727,7 @@ constraints:
           coefficient: 1
         - var_name: under_5
           coefficient: 1
-      sense: GreaterOrEqual
+      sense: ">="
       rhs: 0
   "_C7:":
     Standard:
@@ -739,7 +739,7 @@ constraints:
           coefficient: 1
         - var_name: over_6
           coefficient: -1
-      sense: LessOrEqual
+      sense: "<="
       rhs: 0
   "_C8:":
     Standard:
@@ -751,7 +751,7 @@ constraints:
           coefficient: 1
         - var_name: under_7
           coefficient: 1
-      sense: GreaterOrEqual
+      sense: ">="
       rhs: 0
   "_C9:":
     Standard:
@@ -763,6 +763,6 @@ constraints:
           coefficient: 1
         - var_name: over_8
           coefficient: -1
-      sense: LessOrEqual
+      sense: "<="
       rhs: 0
 

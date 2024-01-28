@@ -69,7 +69,7 @@ constraints:
           coefficient: 1
         - var_name: COL00003
           coefficient: 1.5
-      sense: LessOrEqual
+      sense: "<="
       rhs: 170
   "ROW00002:":
     Standard:
@@ -81,7 +81,7 @@ constraints:
           coefficient: 2
         - var_name: COL00003
           coefficient: 1.5
-      sense: LessOrEqual
+      sense: "<="
       rhs: 130
   "ROW00004:":
     Standard:
@@ -91,7 +91,7 @@ constraints:
           coefficient: 1
         - var_name: COL00005
           coefficient: -1
-      sense: Equal
+      sense: "="
       rhs: 0
   "ROW00005:":
     Standard:
@@ -101,7 +101,7 @@ constraints:
           coefficient: -1
         - var_name: COL00006
           coefficient: 1
-      sense: Equal
+      sense: "="
       rhs: 0
   "ROW00006:":
     Standard:
@@ -111,7 +111,7 @@ constraints:
           coefficient: -1
         - var_name: COL00007
           coefficient: 1
-      sense: Equal
+      sense: "="
       rhs: 0
   "ROW00007:":
     Standard:
@@ -121,7 +121,7 @@ constraints:
           coefficient: -1
         - var_name: COL00008
           coefficient: 1
-      sense: Equal
+      sense: "="
       rhs: 0
   "ROW00008:":
     Standard:
@@ -131,7 +131,7 @@ constraints:
           coefficient: -1
         - var_name: COL00009
           coefficient: 1
-      sense: LessOrEqual
+      sense: "<="
       rhs: 0
   "ROW00009:":
     Standard:
@@ -141,7 +141,7 @@ constraints:
           coefficient: -1
         - var_name: COL00010
           coefficient: 1
-      sense: LessOrEqual
+      sense: "<="
       rhs: 0
   "ROW00010:":
     Standard:
@@ -151,7 +151,7 @@ constraints:
           coefficient: -1
         - var_name: COL00011
           coefficient: 1
-      sense: LessOrEqual
+      sense: "<="
       rhs: 0
   "ROW00011:":
     Standard:
@@ -165,7 +165,7 @@ constraints:
           coefficient: 1
         - var_name: COL00014
           coefficient: 1.5
-      sense: LessOrEqual
+      sense: "<="
       rhs: 170
   "ROW00012:":
     Standard:
@@ -179,7 +179,7 @@ constraints:
           coefficient: 2
         - var_name: COL00014
           coefficient: 1.5
-      sense: LessOrEqual
+      sense: "<="
       rhs: 130
   "ROW00013:":
     Standard:
@@ -189,7 +189,7 @@ constraints:
           coefficient: 1
         - var_name: COL00011
           coefficient: -1
-      sense: LessOrEqual
+      sense: "<="
       rhs: 0
   "ROW00014:":
     Standard:
@@ -199,7 +199,7 @@ constraints:
           coefficient: 1.1
         - var_name: COL00015
           coefficient: -1
-      sense: Equal
+      sense: "="
       rhs: 0
   "ROW00015:":
     Standard:
@@ -211,7 +211,7 @@ constraints:
           coefficient: 1
         - var_name: COL00016
           coefficient: -1
-      sense: Equal
+      sense: "="
       rhs: 0
   "ROW00016:":
     Standard:
@@ -223,7 +223,7 @@ constraints:
           coefficient: -1
         - var_name: COL00017
           coefficient: 1
-      sense: Equal
+      sense: "="
       rhs: 0
   "ROW00017:":
     Standard:
@@ -235,7 +235,7 @@ constraints:
           coefficient: -1
         - var_name: COL00018
           coefficient: 1
-      sense: Equal
+      sense: "="
       rhs: 0
   "ROW00018:":
     Standard:
@@ -247,7 +247,7 @@ constraints:
           coefficient: -1
         - var_name: COL00019
           coefficient: 1
-      sense: Equal
+      sense: "="
       rhs: 0
   "ROW00019:":
     Standard:
@@ -257,7 +257,7 @@ constraints:
           coefficient: -1
         - var_name: COL00020
           coefficient: 1
-      sense: LessOrEqual
+      sense: "<="
       rhs: 0
   "ROW00020:":
     Standard:
@@ -267,7 +267,7 @@ constraints:
           coefficient: -1
         - var_name: COL00021
           coefficient: 1
-      sense: LessOrEqual
+      sense: "<="
       rhs: 0
   "ROW00021:":
     Standard:
@@ -277,7 +277,7 @@ constraints:
           coefficient: -1
         - var_name: COL00022
           coefficient: 1
-      sense: LessOrEqual
+      sense: "<="
       rhs: 0
   "ROW00022:":
     Standard:
@@ -291,7 +291,7 @@ constraints:
           coefficient: 1
         - var_name: COL00025
           coefficient: 1.5
-      sense: LessOrEqual
+      sense: "<="
       rhs: 170
   "ROW00023:":
     Standard:
@@ -305,7 +305,7 @@ constraints:
           coefficient: 2
         - var_name: COL00025
           coefficient: 1.5
-      sense: LessOrEqual
+      sense: "<="
       rhs: 130
   "ROW00024:":
     Standard:
@@ -315,7 +315,7 @@ constraints:
           coefficient: 1
         - var_name: COL00022
           coefficient: -1
-      sense: LessOrEqual
+      sense: "<="
       rhs: 0
   "ROW00025:":
     Standard:
@@ -325,7 +325,7 @@ constraints:
           coefficient: 1.1
         - var_name: COL00026
           coefficient: -1
-      sense: Equal
+      sense: "="
       rhs: 0
   "ROW00026:":
     Standard:
@@ -337,7 +337,7 @@ constraints:
           coefficient: 1
         - var_name: COL00027
           coefficient: -1
-      sense: Equal
+      sense: "="
       rhs: 0
   "ROW00027:":
     Standard:
@@ -349,7 +349,7 @@ constraints:
           coefficient: -1
         - var_name: COL00028
           coefficient: 1
-      sense: Equal
+      sense: "="
       rhs: 0
   "ROW00028:":
     Standard:
@@ -361,7 +361,7 @@ constraints:
           coefficient: -1
         - var_name: COL00029
           coefficient: 1
-      sense: Equal
+      sense: "="
       rhs: 0
   "ROW00029:":
     Standard:
@@ -373,7 +373,7 @@ constraints:
           coefficient: -1
         - var_name: COL00030
           coefficient: 1
-      sense: Equal
+      sense: "="
       rhs: 0
   "ROW00030:":
     Standard:
@@ -383,7 +383,7 @@ constraints:
           coefficient: -1
         - var_name: COL00031
           coefficient: 1
-      sense: LessOrEqual
+      sense: "<="
       rhs: 0
   "ROW00031:":
     Standard:
@@ -393,7 +393,7 @@ constraints:
           coefficient: -1
         - var_name: COL00032
           coefficient: 1
-      sense: LessOrEqual
+      sense: "<="
       rhs: 0
   "ROW00032:":
     Standard:
@@ -403,7 +403,7 @@ constraints:
           coefficient: -1
         - var_name: COL00033
           coefficient: 1
-      sense: LessOrEqual
+      sense: "<="
       rhs: 0
   "ROW00033:":
     Standard:
@@ -417,7 +417,7 @@ constraints:
           coefficient: 1
         - var_name: COL00036
           coefficient: 1.5
-      sense: LessOrEqual
+      sense: "<="
       rhs: 170
   "ROW00034:":
     Standard:
@@ -431,7 +431,7 @@ constraints:
           coefficient: 2
         - var_name: COL00036
           coefficient: 1.5
-      sense: LessOrEqual
+      sense: "<="
       rhs: 130
   "ROW00035:":
     Standard:
@@ -441,7 +441,7 @@ constraints:
           coefficient: 1
         - var_name: COL00033
           coefficient: -1
-      sense: LessOrEqual
+      sense: "<="
       rhs: 0
   "ROW00036:":
     Standard:
@@ -451,7 +451,7 @@ constraints:
           coefficient: 1.1
         - var_name: COL00037
           coefficient: -1
-      sense: Equal
+      sense: "="
       rhs: 0
   "ROW00037:":
     Standard:
@@ -463,7 +463,7 @@ constraints:
           coefficient: 1
         - var_name: COL00038
           coefficient: -1
-      sense: Equal
+      sense: "="
       rhs: 0
   "ROW00038:":
     Standard:
@@ -475,7 +475,7 @@ constraints:
           coefficient: -1
         - var_name: COL00039
           coefficient: 1
-      sense: Equal
+      sense: "="
       rhs: 0
   "ROW00039:":
     Standard:
@@ -487,7 +487,7 @@ constraints:
           coefficient: -1
         - var_name: COL00040
           coefficient: 1
-      sense: Equal
+      sense: "="
       rhs: 0
   "ROW00040:":
     Standard:
@@ -499,7 +499,7 @@ constraints:
           coefficient: -1
         - var_name: COL00041
           coefficient: 1
-      sense: Equal
+      sense: "="
       rhs: 0
   "ROW00041:":
     Standard:
@@ -509,7 +509,7 @@ constraints:
           coefficient: -1
         - var_name: COL00042
           coefficient: 1
-      sense: LessOrEqual
+      sense: "<="
       rhs: 0
   "ROW00042:":
     Standard:
@@ -519,7 +519,7 @@ constraints:
           coefficient: -1
         - var_name: COL00043
           coefficient: 1
-      sense: LessOrEqual
+      sense: "<="
       rhs: 0
   "ROW00043:":
     Standard:
@@ -529,7 +529,7 @@ constraints:
           coefficient: -1
         - var_name: COL00044
           coefficient: 1
-      sense: LessOrEqual
+      sense: "<="
       rhs: 0
   "ROW00044:":
     Standard:
@@ -543,7 +543,7 @@ constraints:
           coefficient: 1
         - var_name: COL00047
           coefficient: 1.5
-      sense: LessOrEqual
+      sense: "<="
       rhs: 170
   "ROW00045:":
     Standard:
@@ -557,7 +557,7 @@ constraints:
           coefficient: 2
         - var_name: COL00047
           coefficient: 1.5
-      sense: LessOrEqual
+      sense: "<="
       rhs: 130
   "ROW00046:":
     Standard:
@@ -567,7 +567,7 @@ constraints:
           coefficient: 1
         - var_name: COL00044
           coefficient: -1
-      sense: LessOrEqual
+      sense: "<="
       rhs: 0
   "ROW00047:":
     Standard:
@@ -577,7 +577,7 @@ constraints:
           coefficient: 1.1
         - var_name: COL00048
           coefficient: -1
-      sense: Equal
+      sense: "="
       rhs: 0
   "ROW00048:":
     Standard:
@@ -589,7 +589,7 @@ constraints:
           coefficient: 0.1
         - var_name: COL00047
           coefficient: 0.15
-      sense: LessOrEqual
+      sense: "<="
       rhs: 0
   "ROW00049:":
     Standard:
@@ -601,7 +601,7 @@ constraints:
           coefficient: -0.8
         - var_name: COL00047
           coefficient: 0.15
-      sense: LessOrEqual
+      sense: "<="
       rhs: 0
   "ROW00050:":
     Standard:
@@ -611,6 +611,6 @@ constraints:
           coefficient: -1
         - var_name: COL00048
           coefficient: 1
-      sense: LessOrEqual
+      sense: "<="
       rhs: 0
 
