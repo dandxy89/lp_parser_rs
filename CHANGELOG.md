@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.1](https://github.com/dandxy89/lp_parser_rs/compare/v1.1.0...v1.1.1) (2024-01-28)
+
+
+### Bug Fixes
+
+* Put annotation behind feature flag ([a2e584d](https://github.com/dandxy89/lp_parser_rs/commit/a2e584dbb2858262bdd1a14dc725cccfcf5d9ecf))
+
 ## [1.1.0](https://github.com/dandxy89/lp_parser_rs/compare/v1.0.2...v1.1.0) (2024-01-28)
 
 ### doc
