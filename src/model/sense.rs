@@ -20,15 +20,15 @@ pub enum Sense {
 )))]
 pub enum Cmp {
     #[default]
-    #[serde(rename = ">")]
+    #[cfg_attr(feature = "serde", serde(rename = ">"))]
     GreaterThan,
-    #[serde(rename = "<")]
+    #[cfg_attr(feature = "serde", serde(rename = "<"))]
     LessThan,
-    #[serde(rename = "=")]
+    #[cfg_attr(feature = "serde", serde(rename = "="))]
     Equal,
-    #[serde(rename = ">=")]
+    #[cfg_attr(feature = "serde", serde(rename = ">="))]
     GreaterOrEqual,
-    #[serde(rename = "<=")]
+    #[cfg_attr(feature = "serde", serde(rename = "<="))]
     LessOrEqual,
 }
 
