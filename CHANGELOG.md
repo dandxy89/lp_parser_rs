@@ -2,11 +2,9 @@
 
 ## [1.0.3](https://github.com/dandxy89/lp_parser_rs/compare/v1.0.2...v1.0.3) (2024-01-24)
 
-
 ### Build System
 
 * Remove patch version on unique_id dependency ([e5cd444](https://github.com/dandxy89/lp_parser_rs/commit/e5cd4449dfa7967e59e7d9ddbd9014c006162e3c))
-
 
 ### Bug Fixes
 
@@ -14,13 +12,11 @@
 
 ## [1.0.2](https://github.com/dandxy89/lp_parser_rs/compare/v1.0.1...v1.0.2) (2024-01-24)
 
-
 ### Build System
 
 * Updating MSRV to 1.66.1 ([c4fca95](https://github.com/dandxy89/lp_parser_rs/commit/c4fca95741a70dba3913218ef5e761aa4cca92ef))
 
 ## [1.0.1](https://github.com/dandxy89/lp_parser_rs/compare/v1.0.0...v1.0.1) (2024-01-23)
-
 
 ### Bug Fixes
 
@@ -28,11 +24,9 @@
 
 ## [1.0.0](https://github.com/dandxy89/lp_parser_rs/compare/v0.1.7...v1.0.0) (2024-01-23)
 
-
 ### Build System
 
 * Adding unique_id ([8419fad](https://github.com/dandxy89/lp_parser_rs/commit/8419fad6834bb70a59d82a4220f920c3233effbe))
-
 
 ### Continuous Integration
 
@@ -40,11 +34,9 @@
 * Run tests on main branch ([ca652a8](https://github.com/dandxy89/lp_parser_rs/commit/ca652a866d19fea9b94d737ff60856bbdc446cca))
 * Updating version ([0dc5b97](https://github.com/dandxy89/lp_parser_rs/commit/0dc5b970b02cee162002d72f62b60d61d1d656ea))
 
-
 ### Features
 
 * Last remaining todo - use diff-struct for comparing data structures ([3b720fe](https://github.com/dandxy89/lp_parser_rs/commit/3b720feaed2006bf8ee5375e366c3a65e29e1425))
-
 
 ### Bug Fixes
 
@@ -52,11 +44,9 @@
 
 ## [0.1.8](https://github.com/dandxy89/lp_parser_rs/compare/v0.1.7...v0.1.8) (2024-01-07)
 
-
 ### Build System
 
 * Adding unique_id ([8419fad](https://github.com/dandxy89/lp_parser_rs/commit/8419fad6834bb70a59d82a4220f920c3233effbe))
-
 
 ### Continuous Integration
 
@@ -64,13 +54,11 @@
 * Run tests on main branch ([ca652a8](https://github.com/dandxy89/lp_parser_rs/commit/ca652a866d19fea9b94d737ff60856bbdc446cca))
 * Updating version ([0dc5b97](https://github.com/dandxy89/lp_parser_rs/commit/0dc5b970b02cee162002d72f62b60d61d1d656ea))
 
-
 ### Bug Fixes
 
 * Updating change ([313ab8d](https://github.com/dandxy89/lp_parser_rs/commit/313ab8d55de9d599e02cb68c7542cb5c0b9f166a))
 
 ## [0.1.8](https://github.com/dandxy89/lp_parser_rs/compare/v0.1.7...v0.1.8) (2024-01-06)
-
 
 ### Continuous Integration
 
@@ -79,20 +67,17 @@
 
 ## [0.1.7](https://github.com/dandxy89/lp_parser_rs/compare/v0.1.6...v0.1.7) (2024-01-05)
 
-
 ### Bug Fixes
 
 * Adding Clone derive macro to internal model ([#38](https://github.com/dandxy89/lp_parser_rs/issues/38)) ([ee5799e](https://github.com/dandxy89/lp_parser_rs/commit/ee5799ead46f2d8eaf9a607d0a2fb5ae6adb4714))
 
 ## [0.1.6](https://github.com/dandxy89/lp_parser_rs/compare/v0.1.5...v0.1.6) (2024-01-05)
 
-
 ### Bug Fixes
 
 * Another fix for comments inline ([0955e0a](https://github.com/dandxy89/lp_parser_rs/commit/0955e0afbdaaf70e86b80567100e34563df11014))
 
 ## [0.1.5](https://github.com/dandxy89/lp_parser_rs/compare/v0.1.4...v0.1.5) (2024-01-03)
-
 
 ### Bug Fixes
 
@@ -101,7 +86,6 @@
 * Signs were not correctly being assigned ([282bbf8](https://github.com/dandxy89/lp_parser_rs/commit/282bbf8178b345187e9f6407d0789d6102563d55))
 
 ## [0.1.4](https://github.com/dandxy89/lp_parser_rs/compare/v0.1.3...v0.1.4) (2024-01-03)
-
 
 ### Bug Fixes
 
