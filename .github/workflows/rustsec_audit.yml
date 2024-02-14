@@ -1,0 +1,23 @@
+name: Security Audit
+
+# Ignore List
+# - RUSTSEC-2020-0071 => Potential segfault in the time crate
+
+on:
+  pull_request:
+    types: [assigned, opened, synchronize, reopened]
+    paths:
+      - "**/Cargo.toml"
+      - "**/Cargo.lock"
+  schedule:
+    - cron: "0 0 * * 1" # every Monday at 00:00 UTC
+
+jobs:
+  security_audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: rustsec/audit-check@v1.4.1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ignore: RUSTSEC-2020-0071

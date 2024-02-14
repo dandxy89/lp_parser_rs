@@ -1,0 +1,23 @@
+on:
+  pull_request:
+    types: [assigned, opened, synchronize, reopened]
+    paths:
+      - "**.rs"
+
+name: Cargo fmt
+
+jobs:
+  format:
+    name: rustfmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          toolchain: nightly
+          components: rustfmt # ,clippy
+      #   https://github.com/marketplace/actions/rust-rustfmt-check
+      - uses: mbrobbel/rustfmt-check@master
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: Format Rust code using rustfmt"
