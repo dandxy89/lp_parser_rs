@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.1.2](https://github.com/dandxy89/lp_parser_rs/compare/v1.1.1...v1.1.2) (2024-02-19)
+
+
+### Continuous Integration
+
+* Adding codeowners ([#57](https://github.com/dandxy89/lp_parser_rs/issues/57)) ([774112c](https://github.com/dandxy89/lp_parser_rs/commit/774112c6422867ca2cb54f99409880500f6fcfbd))
+* Adding RustSec and CargoFmt jobs ([#55](https://github.com/dandxy89/lp_parser_rs/issues/55)) ([90e557a](https://github.com/dandxy89/lp_parser_rs/commit/90e557af5a891db2875e37087bf24ad975fe3f1c))
+
 ## [1.1.1](https://github.com/dandxy89/lp_parser_rs/compare/v1.1.0...v1.1.1) (2024-01-28)
 
 
