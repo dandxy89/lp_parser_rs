@@ -1,13 +1,8 @@
 on:
   push:
-    branches:
-      - "main"
-  pull_request:
-    types: [assigned, opened, synchronize, reopened]
     paths:
       - "**.rs"
       - "**.pest"
-      - "CHANGELOG.md"
 
 name: Cargo Test
 

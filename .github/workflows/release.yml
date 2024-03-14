@@ -3,34 +3,16 @@ on:
     branches:
       - "main"
 
-name: Release Curation
+name: Release Please Action
 
 permissions:
-  contents: write
   pull-requests: write
-  repository-projects: write
+  contents: write
 
 jobs:
   release-please:
     runs-on: ubuntu-latest
-    if: "${{ !startsWith(github.event.head_commit.message, 'chore(main): release') }}"
     steps:
-      - uses: google-github-actions/release-please-action@v3
+      - uses: google-github-actions/release-please-action@v4
         with:
-          pull-request-header: New Release
-          release-type: rust
-          package-name: release-please-action
-          changelog-types: >
-            [
-              { "type": "build", "section": "Build System", "hidden": false },
-              { "type": "ci", "section": "Continuous Integration", "hidden": false },
-              { "type": "chore", "section": "Miscellaneous Chores", "hidden": true },
-              { "type": "docs", "section": "Documentation", "hidden": false },
-              { "type": "feat", "section": "Features", "hidden": false },
-              { "type": "fix", "section": "Bug Fixes", "hidden": false },
-              { "type": "perf", "section": "Performance Improvements", "hidden": false },
-              { "type": "revert", "section": "Reverts", "hidden": false },
-              { "type": "refactor", "section": "Code Refactoring", "hidden": false },
-              { "type": "style", "section": "Styles", "hidden": true },
-              { "type": "test", "section": "Tests", "hidden": true }
-            ]
+          token: ${{ secrets.GH_PAT }}
