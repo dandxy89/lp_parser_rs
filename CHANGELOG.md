@@ -1,5 +1,130 @@
 # Changelog
 
+## [1.2.0](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v1.1.2...lp_parser_rs-v1.2.0) (2024-03-14)
+
+
+### doc
+
+* Condense CHANGELOG ([3f5fa46](https://github.com/dandxy89/lp_parser_rs/commit/3f5fa462491e958786c52c5ec52b2d33f8a82c9c))
+
+
+### Build System
+
+* Adding unique_id ([8419fad](https://github.com/dandxy89/lp_parser_rs/commit/8419fad6834bb70a59d82a4220f920c3233effbe))
+* Remove patch version on unique_id dependency ([e5cd444](https://github.com/dandxy89/lp_parser_rs/commit/e5cd4449dfa7967e59e7d9ddbd9014c006162e3c))
+* Updating dependencies (ignore patch versions) ([70b2de6](https://github.com/dandxy89/lp_parser_rs/commit/70b2de6bdcbe2eace957004e3ef042f66aef96a1))
+* Updating MSRV to 1.66.1 ([c4fca95](https://github.com/dandxy89/lp_parser_rs/commit/c4fca95741a70dba3913218ef5e761aa4cca92ef))
+
+
+### Continuous Integration
+
+* Adding codeowners ([#57](https://github.com/dandxy89/lp_parser_rs/issues/57)) ([774112c](https://github.com/dandxy89/lp_parser_rs/commit/774112c6422867ca2cb54f99409880500f6fcfbd))
+* Adding concurrency ([ea37bf2](https://github.com/dandxy89/lp_parser_rs/commit/ea37bf2e38443d10d77eb83fec063a35e651c60c))
+* Adding RustSec and CargoFmt jobs ([#55](https://github.com/dandxy89/lp_parser_rs/issues/55)) ([90e557a](https://github.com/dandxy89/lp_parser_rs/commit/90e557af5a891db2875e37087bf24ad975fe3f1c))
+* Downgrade action to v3 ([1d3e22d](https://github.com/dandxy89/lp_parser_rs/commit/1d3e22d00cc78a81a6cbd323c3530fd7ac1fd2d0))
+* Run tests on main branch ([ca652a8](https://github.com/dandxy89/lp_parser_rs/commit/ca652a866d19fea9b94d737ff60856bbdc446cca))
+* Updating CI Action condition ([#3](https://github.com/dandxy89/lp_parser_rs/issues/3)) ([75e3fe0](https://github.com/dandxy89/lp_parser_rs/commit/75e3fe057ce8461e339c4697bf9790aec56ccd84))
+* Updating token name ([c2163e3](https://github.com/dandxy89/lp_parser_rs/commit/c2163e3b1c219236b8af28d3f8b0acfd72118fb8))
+* Updating version ([0dc5b97](https://github.com/dandxy89/lp_parser_rs/commit/0dc5b970b02cee162002d72f62b60d61d1d656ea))
+* Upgrading to use v4 release please ([bf4d783](https://github.com/dandxy89/lp_parser_rs/commit/bf4d78308f100e9ae9296e957e2ecf95271259f4))
+
+
+### Miscellaneous Chores
+
+* **deps:** bump actions/cache from 3 to 4 ([#44](https://github.com/dandxy89/lp_parser_rs/issues/44)) ([e44840a](https://github.com/dandxy89/lp_parser_rs/commit/e44840acfa65f6ecd11b434e16b900d58388b5a3))
+* **deps:** bump anyhow from 1.0.75 to 1.0.76 ([#23](https://github.com/dandxy89/lp_parser_rs/issues/23)) ([e4fcedd](https://github.com/dandxy89/lp_parser_rs/commit/e4fcedda8dff542f0a94afcc0aa54045ff4f1e7d))
+* **deps:** bump anyhow from 1.0.76 to 1.0.78 ([#24](https://github.com/dandxy89/lp_parser_rs/issues/24)) ([7b1a38b](https://github.com/dandxy89/lp_parser_rs/commit/7b1a38bf71eefd325872deda81436e2d58af974b))
+* **deps:** bump anyhow from 1.0.79 to 1.0.80 ([#58](https://github.com/dandxy89/lp_parser_rs/issues/58)) ([85225c1](https://github.com/dandxy89/lp_parser_rs/commit/85225c186472d47f78edea62d5363e72cced3fd7))
+* **deps:** bump google-github-actions/release-please-action ([#22](https://github.com/dandxy89/lp_parser_rs/issues/22)) ([895d66d](https://github.com/dandxy89/lp_parser_rs/commit/895d66d3ef9a8937832f581c5045ec3076677b3d))
+* **deps:** bump insta from 1.34.0 to 1.35.1 ([#60](https://github.com/dandxy89/lp_parser_rs/issues/60)) ([ba83d62](https://github.com/dandxy89/lp_parser_rs/commit/ba83d62c2b897cdaef475fbf47454604fc112d31))
+* **deps:** bump insta from 1.35.1 to 1.36.1 ([#62](https://github.com/dandxy89/lp_parser_rs/issues/62)) ([f385929](https://github.com/dandxy89/lp_parser_rs/commit/f385929f1dcb1d234a5d85adc799efa8893a829f))
+* **deps:** bump pest from 2.7.6 to 2.7.7 ([#53](https://github.com/dandxy89/lp_parser_rs/issues/53)) ([b95eddd](https://github.com/dandxy89/lp_parser_rs/commit/b95eddd1722396995e9df62472265226783bc24d))
+* **deps:** bump pest from 2.7.7 to 2.7.8 ([#61](https://github.com/dandxy89/lp_parser_rs/issues/61)) ([03472a5](https://github.com/dandxy89/lp_parser_rs/commit/03472a5de282f007aa92f9c5d9f10205376fadc6))
+* **deps:** bump pest_derive from 2.7.6 to 2.7.7 ([#54](https://github.com/dandxy89/lp_parser_rs/issues/54)) ([d9f8a82](https://github.com/dandxy89/lp_parser_rs/commit/d9f8a8276e91fcb79332dc1298bcf1602eea62c2))
+* **deps:** bump pest_derive from 2.7.7 to 2.7.8 ([#63](https://github.com/dandxy89/lp_parser_rs/issues/63)) ([66627d2](https://github.com/dandxy89/lp_parser_rs/commit/66627d2d0948b22281b5cad45a03e2f81311fb77))
+* **deps:** bump serde from 1.0.192 to 1.0.193 ([#21](https://github.com/dandxy89/lp_parser_rs/issues/21)) ([fd83ced](https://github.com/dandxy89/lp_parser_rs/commit/fd83ced02c95843dbe8dc274b65bafedf7205d86))
+* **deps:** bump serde from 1.0.195 to 1.0.196 ([#51](https://github.com/dandxy89/lp_parser_rs/issues/51)) ([f7a0130](https://github.com/dandxy89/lp_parser_rs/commit/f7a013027279897766c911696b89d792885c9756))
+* **deps:** bump serde from 1.0.196 to 1.0.197 ([#59](https://github.com/dandxy89/lp_parser_rs/issues/59)) ([eb91937](https://github.com/dandxy89/lp_parser_rs/commit/eb9193735171754341b8d45a17dd8ac38f04b35f))
+* **main:** release 0.1.0 ([cefdeda](https://github.com/dandxy89/lp_parser_rs/commit/cefdedab2c5dbe5fe09a3d9c6beb9a0497f6c66d))
+* **main:** release 0.1.1 ([768cfd3](https://github.com/dandxy89/lp_parser_rs/commit/768cfd31a2d0225f3c8d3f43465d97fc361b4e1b))
+* **main:** release 0.1.2 ([b8c497c](https://github.com/dandxy89/lp_parser_rs/commit/b8c497c191082626e174e41f933368f4bd5e04da))
+* **main:** release 0.1.3 ([#18](https://github.com/dandxy89/lp_parser_rs/issues/18)) ([87bc1c3](https://github.com/dandxy89/lp_parser_rs/commit/87bc1c34c74897ecd25acae0221786a5f04f4ddd))
+* **main:** release 0.1.4 ([#29](https://github.com/dandxy89/lp_parser_rs/issues/29)) ([fe4dea0](https://github.com/dandxy89/lp_parser_rs/commit/fe4dea0fa4baec2b3841e959bdf0d1e574076b2b))
+* **main:** release 0.1.5 ([#33](https://github.com/dandxy89/lp_parser_rs/issues/33)) ([237296b](https://github.com/dandxy89/lp_parser_rs/commit/237296b94650d84e5731f2166343ad007bf377e3))
+* **main:** release 0.1.6 ([#35](https://github.com/dandxy89/lp_parser_rs/issues/35)) ([50fcbdc](https://github.com/dandxy89/lp_parser_rs/commit/50fcbdcec143dbb26f4580414e57521c610b414d))
+* **main:** release 0.1.7 ([#39](https://github.com/dandxy89/lp_parser_rs/issues/39)) ([ece4c64](https://github.com/dandxy89/lp_parser_rs/commit/ece4c64efb5f2bfd25daad7a57c1d9a7e08c2f63))
+* **main:** release 0.1.8 ([#40](https://github.com/dandxy89/lp_parser_rs/issues/40)) ([bd8c1b7](https://github.com/dandxy89/lp_parser_rs/commit/bd8c1b77593e1733817ebfe55f721d3f87e9b800))
+* **main:** release 0.1.8 ([#42](https://github.com/dandxy89/lp_parser_rs/issues/42)) ([7821f39](https://github.com/dandxy89/lp_parser_rs/commit/7821f3954114a1442b8087b967a3e95b1c808935))
+* **main:** release 1.0.0 ([#45](https://github.com/dandxy89/lp_parser_rs/issues/45)) ([fae84c4](https://github.com/dandxy89/lp_parser_rs/commit/fae84c4c68b8bfff5a196b8092dde3cfee607f26))
+* **main:** release 1.0.1 ([#46](https://github.com/dandxy89/lp_parser_rs/issues/46)) ([66f5129](https://github.com/dandxy89/lp_parser_rs/commit/66f512928975f975e6e51d1e4a0262ef17de6b5f))
+* **main:** release 1.0.2 ([#47](https://github.com/dandxy89/lp_parser_rs/issues/47)) ([e0fbc30](https://github.com/dandxy89/lp_parser_rs/commit/e0fbc30a76b7704c34a14c7a30a2abf7c0fc8b7d))
+* **main:** release 1.0.3 ([#48](https://github.com/dandxy89/lp_parser_rs/issues/48)) ([79c9c41](https://github.com/dandxy89/lp_parser_rs/commit/79c9c4130c7f8ff2698e66b54748538f83d909c3))
+* **main:** release 1.1.0 ([#49](https://github.com/dandxy89/lp_parser_rs/issues/49)) ([f2c15eb](https://github.com/dandxy89/lp_parser_rs/commit/f2c15eb851cf6d911d5a86fc44f7cbabbae1679e))
+* **main:** release 1.1.1 ([#50](https://github.com/dandxy89/lp_parser_rs/issues/50)) ([4769558](https://github.com/dandxy89/lp_parser_rs/commit/47695587af2ba7ba1fa96ec981a15397f93eb02c))
+* **main:** release 1.1.2 ([#56](https://github.com/dandxy89/lp_parser_rs/issues/56)) ([781e5f3](https://github.com/dandxy89/lp_parser_rs/commit/781e5f315b27eb46f9cb59277a39a036fc3c0efe))
+* Override release version ([68a74fc](https://github.com/dandxy89/lp_parser_rs/commit/68a74fc2e8709550571aacd945fd06be2695719c))
+* release 0.1.2 ([51d5a2f](https://github.com/dandxy89/lp_parser_rs/commit/51d5a2f8b7450617051099c7e8bb7c724546e8c3))
+* Renaming prefix -&gt; sections ([33153be](https://github.com/dandxy89/lp_parser_rs/commit/33153be00c830bb3d203103ad48c96053d4ada15))
+* The SOS section should follow the Bounds, General, Binaries and Semi-Continuous sections ([7e1f086](https://github.com/dandxy89/lp_parser_rs/commit/7e1f086f26b032a99f4cb7b958d1d2d34034d6b2))
+* Updating MIT License ([a34255e](https://github.com/dandxy89/lp_parser_rs/commit/a34255e89987e5db53fb2accd2af5c21132b7a33))
+
+
+### Features
+
+* Adding implementation for Objectives ([#2](https://github.com/dandxy89/lp_parser_rs/issues/2)) ([9de11e1](https://github.com/dandxy89/lp_parser_rs/commit/9de11e1e721cbd8e2c8831eaf6b72650b6ac0947))
+* Adding LICENSEs and updating Cargo.toml ([e5938b8](https://github.com/dandxy89/lp_parser_rs/commit/e5938b8aa72c12c7ea627d2e14d06f69a71b770b))
+* Adding method to extract constraints ([d7b827d](https://github.com/dandxy89/lp_parser_rs/commit/d7b827d744b96288d350af7ae3689aa337adcfd6))
+* Adding semi-continous ([bad2021](https://github.com/dandxy89/lp_parser_rs/commit/bad2021754793ebdf9980029f0053244d527a87f))
+* Adding serde as an optional dependency ([7e78069](https://github.com/dandxy89/lp_parser_rs/commit/7e78069ad4643a7ba099088b13344546425f0de1))
+* Capture problem name from comments section ([e816dab](https://github.com/dandxy89/lp_parser_rs/commit/e816dabdfe2b0558bac646dcb28a41378bf54728))
+* Extending Float such that failing tests pass ([94ed72b](https://github.com/dandxy89/lp_parser_rs/commit/94ed72bc8a072541af835e9a3fede160b59f2f8a))
+* Gather variables names ([11d926d](https://github.com/dandxy89/lp_parser_rs/commit/11d926dfb12a1807c2990789d34b27a158b2345b))
+* Init the project ([e916cb5](https://github.com/dandxy89/lp_parser_rs/commit/e916cb570bdf789ed7c295febf123db0127390b2))
+* Last remaining todo - use diff-struct for comparing data structures ([3b720fe](https://github.com/dandxy89/lp_parser_rs/commit/3b720feaed2006bf8ee5375e366c3a65e29e1425))
+* Make use of the Atomic operator, remove trim and resolve issue with variables on same line in Bounds sections ([d9db27f](https://github.com/dandxy89/lp_parser_rs/commit/d9db27fdceec2b585b9e34d19993999415f72311))
+* Updating .pest file to better handle Bounds ([73c7499](https://github.com/dandxy89/lp_parser_rs/commit/73c7499f5e72bbe59c7edaa81100f528afc1e05b))
+* Updating .pest grammar to support Special Order Sets ([191a55e](https://github.com/dandxy89/lp_parser_rs/commit/191a55e425c096268148cba8a57bfef44f996ea5))
+* Updating model and compose fn to support SOS constraints ([b955db1](https://github.com/dandxy89/lp_parser_rs/commit/b955db1baa51d3356c4ae6123239480fc480eb73))
+* Updating PartialEq and Eq for all models ([a627902](https://github.com/dandxy89/lp_parser_rs/commit/a6279025132debdc6e3ca8166c8b0545dce284ae))
+
+
+### Bug Fixes
+
+* Adding additional test cases and fixes for .pest ([ea5e188](https://github.com/dandxy89/lp_parser_rs/commit/ea5e1880f23bf6ac5bae891daba4ea7c910ecaef))
+* Adding Clone derive macro to internal model ([#38](https://github.com/dandxy89/lp_parser_rs/issues/38)) ([ee5799e](https://github.com/dandxy89/lp_parser_rs/commit/ee5799ead46f2d8eaf9a607d0a2fb5ae6adb4714))
+* Allow constraints to be commented ([0606b55](https://github.com/dandxy89/lp_parser_rs/commit/0606b553da043e6c7d9e543d1a1d80693918d582))
+* Allow zero or more colons in constraints ([51be6aa](https://github.com/dandxy89/lp_parser_rs/commit/51be6aa9647d9418ae0c6f912e03eea98a8422e0))
+* Another fix for comments inline ([0955e0a](https://github.com/dandxy89/lp_parser_rs/commit/0955e0afbdaaf70e86b80567100e34563df11014))
+* Blank lines aren't ignored ([#30](https://github.com/dandxy89/lp_parser_rs/issues/30)) ([5a58e64](https://github.com/dandxy89/lp_parser_rs/commit/5a58e64638e2aeb618a5291199cd454866b1d058))
+* Constraint Sense should be an Enum of possible values ([2a93a40](https://github.com/dandxy89/lp_parser_rs/commit/2a93a4022ddfc6650285c5dbeab569c479db84da))
+* Empty Bounds sections should be allowed ([#28](https://github.com/dandxy89/lp_parser_rs/issues/28)) ([cd266cd](https://github.com/dandxy89/lp_parser_rs/commit/cd266cd51082ae63d94e9df134b75ddd99dae8ed))
+* Inline comments ([56252e1](https://github.com/dandxy89/lp_parser_rs/commit/56252e194c485304578977d63612e7a1764f20ab))
+* Put annotation behind feature flag ([a2e584d](https://github.com/dandxy89/lp_parser_rs/commit/a2e584dbb2858262bdd1a14dc725cccfcf5d9ecf))
+* Signs were not correctly being assigned ([282bbf8](https://github.com/dandxy89/lp_parser_rs/commit/282bbf8178b345187e9f6407d0789d6102563d55))
+* Updating change ([313ab8d](https://github.com/dandxy89/lp_parser_rs/commit/313ab8d55de9d599e02cb68c7542cb5c0b9f166a))
+* Updating derives ([be04033](https://github.com/dandxy89/lp_parser_rs/commit/be04033f7934742f8a117dacd1a31d481d40bc33))
+* Updating parser such that objective names can be omitted ([#31](https://github.com/dandxy89/lp_parser_rs/issues/31)) ([ab2c7da](https://github.com/dandxy89/lp_parser_rs/commit/ab2c7daf53b591c353057e75d6cefa4d4c17988a))
+
+
+### Code Refactoring
+
+* Breaking out the model.rs file into smaller files ([9470c48](https://github.com/dandxy89/lp_parser_rs/commit/9470c4877f05aabe22b853a816862c78521772e9))
+* Convert constraints to constraints: HashMap&lt;String, Constraint&gt; ([2e73bb8](https://github.com/dandxy89/lp_parser_rs/commit/2e73bb8af34832fbc66425c0b07b46f1e013ddbe))
+* Rename to RuleExt ([0d80542](https://github.com/dandxy89/lp_parser_rs/commit/0d80542af81c133256171f2c7d335bb2244dbdcd))
+* Renaming the project ([edd6617](https://github.com/dandxy89/lp_parser_rs/commit/edd6617cab47868a09f5260de8668dfd15df9220))
+* Weekend tidy ([7b55028](https://github.com/dandxy89/lp_parser_rs/commit/7b55028dd53d8ce31245a36994de2819a863ef5b))
+
+
+### Tests
+
+* Adding insta to improve test assertions ([#41](https://github.com/dandxy89/lp_parser_rs/issues/41)) ([f99cfa6](https://github.com/dandxy89/lp_parser_rs/commit/f99cfa6d54e3bac21a20c5479a1ae59f064159f3))
+* Adding more tests ([#36](https://github.com/dandxy89/lp_parser_rs/issues/36)) ([6f43062](https://github.com/dandxy89/lp_parser_rs/commit/6f4306240441b3f7ae92420a3f348a7ba4cfce13))
+* Adding more Tests to verify .pest spec ([663f295](https://github.com/dandxy89/lp_parser_rs/commit/663f29557871342a4f853950de01e53af5b108ec))
+* Adding test data ([f36ce36](https://github.com/dandxy89/lp_parser_rs/commit/f36ce3681e8050b78b54f8dd3e80fcff7729f476))
+* Reduce accuracy of float assertions ([c85fd50](https://github.com/dandxy89/lp_parser_rs/commit/c85fd50293b9bc6bde14441348484ac191583632))
+* Simplifying tests repitition with a macro ([72dc2e5](https://github.com/dandxy89/lp_parser_rs/commit/72dc2e51106cf51882a43f98afe42f464098967e))
+* Updating test cases with additional assertions ([4dc2e1f](https://github.com/dandxy89/lp_parser_rs/commit/4dc2e1fddd57773b9f3593c288b258580b830ad1))
+
 ## [1.1.2](https://github.com/dandxy89/lp_parser_rs/compare/v1.1.1...v1.1.2) (2024-02-19)
 
 
