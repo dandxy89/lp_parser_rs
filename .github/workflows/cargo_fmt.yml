@@ -15,7 +15,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@nightly
         with:
           toolchain: nightly
-          components: rustfmt # ,clippy
+          components: rustfmt
       #   https://github.com/marketplace/actions/rust-rustfmt-check
       - uses: mbrobbel/rustfmt-check@master
         with:

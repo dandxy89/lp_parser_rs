@@ -4,10 +4,7 @@ use crate::Rule;
 
 #[derive(Debug, Default, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "diff", derive(diff::Diff))]
-#[cfg_attr(feature = "diff", diff(attr(
-    #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
-)))]
+#[cfg_attr(feature = "diff", derive(diff::Diff), diff(attr(#[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)])))]
 /// A enum representing the bounds of a variable
 pub enum Variable {
     /// Unbounded variable (-Infinity, +Infinity)
