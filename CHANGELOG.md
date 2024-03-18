@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.1](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v1.2.0...lp_parser_rs-v1.2.1) (2024-03-17)
+
+
+### Miscellaneous Chores
+
+* Updating the README.md file with an Icon ([f725722](https://github.com/dandxy89/lp_parser_rs/commit/f7257222af20995b5a171dd9d41bd90b707e500a))
+
 ## [1.2.0](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v1.1.2...lp_parser_rs-v1.2.0) (2024-03-14)
 
 
