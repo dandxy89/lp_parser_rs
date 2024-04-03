@@ -34,7 +34,7 @@ impl TryFrom<Pairs<'_, Rule>> for Coefficient {
                     value *= item.as_float()?;
                 }
                 Rule::VARIABLE => {
-                    var_name = item.as_str().to_string();
+                    var_name = item.as_str().to_owned();
                 }
                 _ => unreachable!("Unexpected rule encountered"),
             }

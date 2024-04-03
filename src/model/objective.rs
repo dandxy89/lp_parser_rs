@@ -15,13 +15,13 @@ pub struct Objective {
 }
 
 impl LPPart for Objective {
-    type Output = Objective;
+    type Output = Self;
 
     fn try_into(pair: Pair<'_, Rule>, gen: &mut SequenceGenerator) -> anyhow::Result<Self> {
         let mut parts = pair.into_inner().peekable();
         // Objective name can be omitted in LP files, so we need to handle that case
         let name = get_name(&mut parts, gen, Rule::OBJECTIVE_NAME);
         let coefficients: anyhow::Result<Vec<_>> = parts.map(|p| p.into_inner().try_into()).collect();
-        Ok(Objective { name, coefficients: coefficients? })
+        Ok(Self { name, coefficients: coefficients? })
     }
 }

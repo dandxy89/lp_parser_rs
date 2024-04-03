@@ -31,7 +31,7 @@ pub struct LPProblem {
 impl LPProblem {
     #[must_use]
     pub fn with_problem_name(self, problem_name: &str) -> Self {
-        Self { problem_name: problem_name.to_string(), ..self }
+        Self { problem_name: problem_name.to_owned(), ..self }
     }
 
     #[must_use]
@@ -41,13 +41,13 @@ impl LPProblem {
 
     pub fn add_variable(&mut self, name: &str) {
         if !name.is_empty() {
-            self.variables.entry(name.to_string()).or_default();
+            self.variables.entry(name.to_owned()).or_default();
         }
     }
 
     pub fn set_variable_bounds(&mut self, name: &str, kind: Variable) {
         if !name.is_empty() {
-            match self.variables.entry(name.to_string()) {
+            match self.variables.entry(name.to_owned()) {
                 Entry::Occupied(k) if matches!(kind, Variable::SemiContinuous) => {
                     k.into_mut().set_semi_continuous();
                 }

@@ -55,7 +55,7 @@ impl Constraint {
 
 #[allow(clippy::unwrap_used)]
 impl LPPart for Constraint {
-    type Output = Constraint;
+    type Output = Self;
 
     fn try_into(pair: Pair<'_, Rule>, gen: &mut SequenceGenerator) -> anyhow::Result<Self> {
         let mut parts = pair.into_inner().peekable();
@@ -75,6 +75,6 @@ impl LPPart for Constraint {
             .collect();
         let sense = Cmp::from_str(parts.next().unwrap().as_str())?;
         let rhs = parts.next().unwrap().as_str().parse()?;
-        Ok(Constraint::Standard { name, coefficients: coefficients?, sense, rhs })
+        Ok(Self::Standard { name, coefficients: coefficients?, sense, rhs })
     }
 }

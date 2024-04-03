@@ -42,7 +42,7 @@ pub fn compose(pair: Pair<'_, Rule>, mut parsed: LPProblem, gen: &mut SequenceGe
         // Problem Bounds
         Rule::BOUNDS => {
             for bound_pair in pair.into_inner() {
-                if let Some((name, kind)) = get_bound(bound_pair) {
+                if let Some((name, kind)) = get_bound(&bound_pair) {
                     parsed.set_variable_bounds(name, kind);
                 }
             }

@@ -61,7 +61,7 @@ impl Variable {
 }
 
 #[allow(clippy::wildcard_enum_match_arm, clippy::unwrap_used)]
-pub(crate) fn get_bound(pair: Pair<'_, Rule>) -> Option<(&str, Variable)> {
+pub(crate) fn get_bound<'a>(pair: &'a Pair<'_, Rule>) -> Option<(&'a str, Variable)> {
     let mut parts = pair.clone().into_inner();
     match pair.as_rule() {
         Rule::LOWER_BOUND => {
