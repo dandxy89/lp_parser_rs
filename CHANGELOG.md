@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.2.2](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v1.2.1...lp_parser_rs-v1.2.2) (2024-04-03)
+
+
+### Miscellaneous Chores
+
+* **deps:** bump insta from 1.36.1 to 1.38.0 ([#66](https://github.com/dandxy89/lp_parser_rs/issues/66)) ([537dac6](https://github.com/dandxy89/lp_parser_rs/commit/537dac6fa447c98f7adc3eb7bad38b568a296ffc))
+
+
+### Code Refactoring
+
+* Lots of little tidyups and improvements ([d73c365](https://github.com/dandxy89/lp_parser_rs/commit/d73c36557693e1dcb9e20cd8f38208c86266528e))
+
 ## [1.2.1](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v1.2.0...lp_parser_rs-v1.2.1) (2024-03-17)
 
 
