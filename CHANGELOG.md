@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.3](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v1.2.2...lp_parser_rs-v1.2.3) (2024-04-21)
+
+
+### Build System
+
+* Do not include Cargo.lock file ([18697f4](https://github.com/dandxy89/lp_parser_rs/commit/18697f424dd4f6b66b4f2ed2892df33641e95897))
+
 ## [1.2.2](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v1.2.1...lp_parser_rs-v1.2.2) (2024-04-03)
 
 
