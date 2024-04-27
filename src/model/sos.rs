@@ -12,7 +12,9 @@ use crate::{
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "diff", derive(diff::Diff), diff(attr(#[derive(Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)])))]
 pub enum SOSClass {
+    /// Special Ordered Sets of type 1 (SOS1 or S1)
     S1,
+    /// Special Ordered Sets of type 2 (SOS2 or S2)
     S2,
 }
 
