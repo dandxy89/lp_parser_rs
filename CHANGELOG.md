@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.2.4](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v1.2.3...lp_parser_rs-v1.2.4) (2024-04-29)
+
+
+### Build System
+
+* Remove Cargo.lock ([83c6e03](https://github.com/dandxy89/lp_parser_rs/commit/83c6e0347e5078acb1ebb0c05ef066c51413fc19))
+
+
+### Miscellaneous Chores
+
+* **deps:** bump serde from 1.0.198 to 1.0.199 ([#70](https://github.com/dandxy89/lp_parser_rs/issues/70)) ([34385d5](https://github.com/dandxy89/lp_parser_rs/commit/34385d533c9caa8c11effad7ae75bd21c5f81c10))
+
 ## [1.2.3](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v1.2.2...lp_parser_rs-v1.2.3) (2024-04-21)
 
 
