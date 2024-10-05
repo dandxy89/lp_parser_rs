@@ -19,8 +19,8 @@ serde = { version = "1", features = ["derive"], optional = true }
 unique_id = "0.1"
 
 [dev-dependencies]
-float_eq = "1.0"
-insta = { version = "1.38", features = ["yaml", "redactions"] }
+float_eq = "1.0.0"
+insta = { version = "1.40", features = ["yaml", "redactions"] }
 
 [profile.dev.package]
 insta.opt-level = 3
