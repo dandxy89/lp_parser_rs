@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.2.5](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v1.2.4...lp_parser_rs-v1.2.5) (2024-10-14)
+
+
+### Build System
+
+* Bumping insta and float_eq ([14887af](https://github.com/dandxy89/lp_parser_rs/commit/14887af717272ec9d39c2b309457db452be0ccc5))
+
+
+### Miscellaneous Chores
+
+* **deps:** bump pest_derive from 2.7.13 to 2.7.14 ([#74](https://github.com/dandxy89/lp_parser_rs/issues/74)) ([61bbd99](https://github.com/dandxy89/lp_parser_rs/commit/61bbd995d8e17e5fcd5f04831fb403cc5b45b8b6))
+* **deps:** bump rustsec/audit-check from 1.4.1 to 2.0.0 ([#72](https://github.com/dandxy89/lp_parser_rs/issues/72)) ([75ae2fd](https://github.com/dandxy89/lp_parser_rs/commit/75ae2fd07b925c98c734cb3adf35eb79e95b43fa))
+
 ## [1.2.4](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v1.2.3...lp_parser_rs-v1.2.4) (2024-04-29)
 
 
