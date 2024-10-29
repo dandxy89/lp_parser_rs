@@ -1,6 +1,6 @@
 [package]
 name = "lp_parser_rs"
-version = "1.2.4"
+version = "1.2.5"
 edition = "2021"
 authors = ["Dan Dixey", "Dan Dixey <dan@functorml.co.uk>"]
 rust-version = "1.61.0"
@@ -19,7 +19,7 @@ serde = { version = "1", features = ["derive"], optional = true }
 unique_id = "0.1"
 
 [dev-dependencies]
-float_eq = "1.0.0"
+float_eq = "1.0"
 insta = { version = "1.41", features = ["yaml", "redactions"] }
 
 [profile.dev.package]
