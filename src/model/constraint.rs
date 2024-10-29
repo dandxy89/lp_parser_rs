@@ -1,10 +1,10 @@
-use std::str::FromStr;
+use std::str::FromStr as _;
 
 use pest::iterators::Pair;
 use unique_id::sequence::SequenceGenerator;
 
 use crate::{
-    common::RuleExt,
+    common::RuleExt as _,
     model::{coefficient::Coefficient, get_name, lp_problem::LPPart, sense::Cmp, sos::SOSClass},
     Rule,
 };
@@ -20,6 +20,7 @@ pub enum Constraint {
 }
 
 impl PartialEq for Constraint {
+    #[inline]
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (
@@ -38,6 +39,7 @@ impl PartialEq for Constraint {
 impl Eq for Constraint {}
 
 impl Constraint {
+    #[inline]
     #[must_use]
     pub fn name(&self) -> String {
         match self {
@@ -45,6 +47,7 @@ impl Constraint {
         }
     }
 
+    #[inline]
     #[must_use]
     pub fn coefficients(&self) -> &[Coefficient] {
         match self {
@@ -57,6 +60,7 @@ impl Constraint {
 impl LPPart for Constraint {
     type Output = Self;
 
+    #[inline]
     fn try_into(pair: Pair<'_, Rule>, gen: &mut SequenceGenerator) -> anyhow::Result<Self> {
         let mut parts = pair.into_inner().peekable();
         // Constraint name can be omitted in LP files, so we need to handle that case

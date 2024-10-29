@@ -1,7 +1,7 @@
 use pest::iterators::Pairs;
 
 use crate::{
-    common::{AsFloat, RuleExt},
+    common::{AsFloat as _, RuleExt as _},
     Rule,
 };
 
@@ -15,6 +15,7 @@ pub struct Coefficient {
 }
 
 impl PartialEq for Coefficient {
+    #[inline]
     fn eq(&self, other: &Self) -> bool {
         self.var_name == other.var_name && self.coefficient == other.coefficient
     }
@@ -25,6 +26,7 @@ impl Eq for Coefficient {}
 impl TryFrom<Pairs<'_, Rule>> for Coefficient {
     type Error = anyhow::Error;
 
+    #[inline]
     #[allow(clippy::unreachable, clippy::wildcard_enum_match_arm)]
     fn try_from(values: Pairs<'_, Rule>) -> anyhow::Result<Self> {
         let (mut value, mut var_name) = (1.0, String::new());

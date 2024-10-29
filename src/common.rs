@@ -8,9 +8,12 @@ pub trait RuleExt {
 }
 
 impl RuleExt for Rule {
+    #[inline]
     fn is_numeric(&self) -> bool {
         matches!(self, Self::FLOAT | Self::PLUS | Self::MINUS | Self::POS_INFINITY | Self::NEG_INFINITY)
     }
+
+    #[inline]
     fn is_cmp(&self) -> bool {
         matches!(self, Self::GT | Self::LT | Self::EQ | Self::GTE | Self::LTE | Self::CMP)
     }
@@ -23,6 +26,7 @@ pub trait AsFloat {
 }
 
 impl AsFloat for Pair<'_, Rule> {
+    #[inline]
     #[allow(clippy::unreachable, clippy::wildcard_enum_match_arm)]
     fn as_float(&self) -> anyhow::Result<f64> {
         match self.as_rule() {

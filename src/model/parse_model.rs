@@ -15,6 +15,7 @@ use crate::{
 
 type ResultVec<T> = anyhow::Result<Vec<T>>;
 
+#[inline]
 #[allow(clippy::wildcard_enum_match_arm)]
 /// # Errors
 /// Returns an error if the `compose` fails

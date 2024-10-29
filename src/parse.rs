@@ -1,17 +1,18 @@
 use std::{
     fs::File,
-    io::{BufReader, Read},
+    io::{BufReader, Read as _},
     path::Path,
 };
 
-use pest::Parser;
-use unique_id::{sequence::SequenceGenerator, GeneratorFromSeed};
+use pest::Parser as _;
+use unique_id::{sequence::SequenceGenerator, GeneratorFromSeed as _};
 
 use crate::{
     model::{lp_problem::LPProblem, parse_model::compose},
     LParser, Rule,
 };
 
+#[inline]
 /// # Errors
 /// Returns an error if the `read_to_string` or `open` fails
 pub fn parse_file(path: &Path) -> anyhow::Result<String> {
@@ -25,6 +26,7 @@ pub fn parse_file(path: &Path) -> anyhow::Result<String> {
     Ok(contents)
 }
 
+#[inline]
 /// # Errors
 /// Returns an error if the parse fails
 pub fn parse_lp_file(contents: &str) -> anyhow::Result<LPProblem> {

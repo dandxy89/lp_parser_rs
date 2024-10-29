@@ -27,6 +27,7 @@ pub enum Variable {
 }
 
 impl From<Rule> for Variable {
+    #[inline]
     #[allow(clippy::wildcard_enum_match_arm, clippy::unreachable)]
     fn from(value: Rule) -> Self {
         match value {
@@ -40,6 +41,7 @@ impl From<Rule> for Variable {
 }
 
 impl PartialEq for Variable {
+    #[inline]
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::LB(l0), Self::LB(r0)) | (Self::UB(l0), Self::UB(r0)) => l0 == r0,
@@ -52,6 +54,7 @@ impl PartialEq for Variable {
 impl Eq for Variable {}
 
 impl Variable {
+    #[inline]
     #[allow(clippy::wildcard_enum_match_arm)]
     pub fn set_semi_continuous(&mut self) {
         if let Self::Bounded(lb, ub, _) = self {

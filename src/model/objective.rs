@@ -17,6 +17,7 @@ pub struct Objective {
 impl LPPart for Objective {
     type Output = Self;
 
+    #[inline]
     fn try_into(pair: Pair<'_, Rule>, gen: &mut SequenceGenerator) -> anyhow::Result<Self> {
         let mut parts = pair.into_inner().peekable();
         // Objective name can be omitted in LP files, so we need to handle that case

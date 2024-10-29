@@ -21,6 +21,7 @@ pub enum SOSClass {
 impl FromStr for SOSClass {
     type Err = anyhow::Error;
 
+    #[inline]
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "s1" | "s1::" => Ok(Self::S1),
@@ -33,6 +34,7 @@ impl FromStr for SOSClass {
 impl LPPart for SOSClass {
     type Output = Constraint;
 
+    #[inline]
     fn try_into(pair: Pair<'_, Rule>, _: &mut SequenceGenerator) -> anyhow::Result<Self::Output> {
         let mut parts = pair.into_inner();
         let name = parts.next().unwrap().as_str().to_owned();

@@ -29,22 +29,26 @@ pub struct LPProblem {
 }
 
 impl LPProblem {
+    #[inline]
     #[must_use]
     pub fn with_problem_name(self, problem_name: &str) -> Self {
         Self { problem_name: problem_name.to_owned(), ..self }
     }
 
+    #[inline]
     #[must_use]
     pub fn with_sense(self, problem_sense: Sense) -> Self {
         Self { problem_sense, ..self }
     }
 
+    #[inline]
     pub fn add_variable(&mut self, name: &str) {
         if !name.is_empty() {
             self.variables.entry(name.to_owned()).or_default();
         }
     }
 
+    #[inline]
     pub fn set_variable_bounds(&mut self, name: &str, kind: Variable) {
         if !name.is_empty() {
             match self.variables.entry(name.to_owned()) {
@@ -59,6 +63,7 @@ impl LPProblem {
         }
     }
 
+    #[inline]
     pub fn add_objective(&mut self, objectives: Vec<Objective>) {
         for ob in &objectives {
             ob.coefficients.iter().for_each(|c| {

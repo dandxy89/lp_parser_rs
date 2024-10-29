@@ -5,6 +5,7 @@ pub trait Prefix {
 }
 
 impl Prefix for Rule {
+    #[inline]
     #[allow(clippy::wildcard_enum_match_arm)]
     fn prefix(&self) -> &'static str {
         match self {

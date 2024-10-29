@@ -29,6 +29,7 @@ pub enum Cmp {
 impl FromStr for Cmp {
     type Err = anyhow::Error;
 
+    #[inline]
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             ">=" => Ok(Self::GreaterOrEqual),
