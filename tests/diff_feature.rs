@@ -1,3 +1,6 @@
+#![cfg(feature = "diff")]
+#![cfg(feature = "serde")]
+
 use std::path::PathBuf;
 
 use lp_parser_rs::{
@@ -6,7 +9,6 @@ use lp_parser_rs::{
 };
 
 #[test]
-#[cfg_attr(not(all(feature = "diff", feature = "serde")), ignore)]
 fn test_coefficient() {
     use diff::Diff;
 
@@ -17,7 +19,6 @@ fn test_coefficient() {
 }
 
 #[test]
-#[cfg_attr(not(all(feature = "diff", feature = "serde")), ignore)]
 fn test_constraint() {
     use diff::Diff;
 
@@ -38,7 +39,6 @@ fn test_constraint() {
 }
 
 #[test]
-#[cfg_attr(not(all(feature = "diff", feature = "serde")), ignore)]
 fn test_file_comparison() {
     use diff::Diff;
 

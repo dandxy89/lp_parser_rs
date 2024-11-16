@@ -1,3 +1,5 @@
+#![cfg(feature = "serde")]
+
 use std::path::PathBuf;
 
 use lp_parser_rs::{
