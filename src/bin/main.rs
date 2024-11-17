@@ -18,18 +18,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         println!("Problem name: {name}");
     }
     println!("Sense: {:?}", problem.problem_sense);
-    println!("\nObjectives:");
-    for obj in &problem.objectives {
-        println!("  {}: {:?}", obj.name, obj.coefficients);
-    }
-    println!("\nConstraints:");
-    for (name, constraint) in &problem.constraints {
-        println!("  {name}: {constraint:?}");
-    }
-    println!("\nVariables:");
-    for (name, var_type) in &problem.variables {
-        println!("  {name}: {var_type:?}");
-    }
+    println!("Objectives count={}", problem.objectives.len());
+    println!("Constraint count={}", problem.constraints.len());
+    println!("Variables count={}", problem.variables.len());
 
     Ok(())
 }
