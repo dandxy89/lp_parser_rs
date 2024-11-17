@@ -9,13 +9,13 @@ pub trait RuleExt {
 
 impl RuleExt for Rule {
     #[inline]
-    fn is_numeric(&self) -> bool {
-        matches!(self, Self::FLOAT | Self::PLUS | Self::MINUS | Self::POS_INFINITY | Self::NEG_INFINITY)
+    fn is_cmp(&self) -> bool {
+        matches!(self, Self::GT | Self::LT | Self::EQ | Self::GTE | Self::LTE | Self::CMP)
     }
 
     #[inline]
-    fn is_cmp(&self) -> bool {
-        matches!(self, Self::GT | Self::LT | Self::EQ | Self::GTE | Self::LTE | Self::CMP)
+    fn is_numeric(&self) -> bool {
+        matches!(self, Self::FLOAT | Self::PLUS | Self::MINUS | Self::POS_INFINITY | Self::NEG_INFINITY)
     }
 }
 

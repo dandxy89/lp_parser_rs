@@ -81,7 +81,7 @@ impl LPPart for Constraint {
         let sense = Cmp::from_str(parts.next().unwrap().as_str())?;
 
         let value = parts.next().unwrap().as_str();
-        let rhs = value.parse().map_err(|_| LPParserError::RHSParseError(parts.next().unwrap().as_str().to_string()))?;
+        let rhs = value.parse().map_err(|_| LPParserError::RHSParseError(parts.next().unwrap().as_str().to_owned()))?;
 
         Ok(Self::Standard { name, coefficients: coefficients?, sense, rhs })
     }

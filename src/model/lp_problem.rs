@@ -73,6 +73,7 @@ impl LPProblem {
         self.objectives = objectives;
     }
 
+    #[inline]
     pub fn add_constraints(&mut self, constraints: Vec<Constraint>) {
         for con in constraints {
             let name = if con.name().is_empty() { format!("UnnamedConstraint:{}", self.constraints.len()) } else { con.name() };
