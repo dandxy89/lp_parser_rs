@@ -2,7 +2,7 @@
 source: tests/test_from_file.rs
 expression: result
 ---
-problem_name: ""
+problem_name: ~
 problem_sense: Maximize
 variables:
   V1:
@@ -103,4 +103,3 @@ constraints:
           coefficient: 1
         - var_name: V5
           coefficient: 2.5
-

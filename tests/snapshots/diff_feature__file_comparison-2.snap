@@ -2,7 +2,7 @@
 source: tests/diff_feature.rs
 expression: a.diff(&a_copy)
 ---
-problem_name: ~
+problem_name: NoChange
 problem_sense: NoChange
 variables:
   altered: {}
@@ -22,4 +22,3 @@ constraints:
         sense: NoChange
         rhs: 0
   removed: []
-

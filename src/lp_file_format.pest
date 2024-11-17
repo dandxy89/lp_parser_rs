@@ -22,8 +22,8 @@ NUMBER = ${ ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT+)? }
 
 FLOAT        = ${
     POS_INFINITY | NEG_INFINITY
-  | (PLUS | MINUS)? ~ SCIENTIFIC
-  | (PLUS | MINUS)? ~ NUMBER
+    | (PLUS | MINUS)? ~ SCIENTIFIC
+    | (PLUS | MINUS)? ~ NUMBER
 }
 
 // Variable Names
@@ -31,58 +31,57 @@ FLOAT        = ${
 // alphanumeric (a-z, A-Z, 0-9) or one of these symbols: !"#$%&/,.;?@_`'{}()|~'
 VALID_COMMENT_CHARS = _{
     ASCII_ALPHANUMERIC
-  | "!"
-  | "#"
-  | "$"
-  | "%"
-  | "&"
-  | "("
-  | ")"
-  | ","
-  | "."
-  | ";"
-  | "?"
-  | "@"
-  | "_"
-  | "‘"
-  | "’"
-  | "{"
-  | "}"
-  | "~"
-  | "-"
-  | "+"
-  | ">="
-  | "<="
-  | ">"
-  | "<"
-  | "="
+    | "!"
+    | "#"
+    | "$"
+    | "%"
+    | "&"
+    | "("
+    | ")"
+    | ","
+    | "."
+    | ";"
+    | "?"
+    | "@"
+    | "_"
+    | "‘"
+    | "’"
+    | "{"
+    | "}"
+    | "~"
+    | "-"
+    | "+"
+    | ">="
+    | "<="
+    | ">"
+    | "<"
+    | "="
 }
 VALID_LP_CHARS      = _{
     ASCII_ALPHANUMERIC
-  | "!"
-  | "#"
-  | "$"
-  | "%"
-  | "&"
-  | "("
-  | ")"
-  | "_"
-  | ","
-  | "."
-  | ";"
-  | "?"
-  | "@"
-  | "_"
-  | "‘"
-  | "’"
-  | "{"
-  | "}"
-  | "~"
+    | "!"
+    | "#"
+    | "$"
+    | "%"
+    | "&"
+    | "("
+    | ")"
+    | "_"
+    | ","
+    | "."
+    | ";"
+    | "?"
+    | "@"
+    | "_"
+    | "‘"
+    | "’"
+    | "{"
+    | "}"
+    | "~"
 }
 VARIABLE_SUBSET            = ${
     !(
-        FREE | END | SOS_SECTION | CONSTRAINT_SECTION | BOUND_SECTION
-         | BINARIES_SECTION | SEMI_CONTINUOUS_SECTION
+        FREE | END | SOS_SECTION | CONSTRAINT_SECTION | BOUND_SECTION | BINARIES_SECTION | SEMI_CONTINUOUS_SECTION
     ) ~ VALID_LP_CHARS{1, 255}
 }
 VARIABLE            = ${
@@ -113,8 +112,8 @@ PROBLEM_SENSE = _{ NEWLINE* ~ (MIN_SENSE | MAX_SENSE) }
 // Example: obj:  x1 + 2 x2 + 3.1415
 OBJECTIVE_EXPR = {
     OPERATOR? ~ FLOAT? ~ VARIABLE_SUBSET
-  | OPERATOR? ~ FLOAT
-  | NEWLINE* ~ OPERATOR ~ FLOAT ~ VARIABLE_SUBSET
+    | OPERATOR? ~ FLOAT
+    | NEWLINE* ~ OPERATOR ~ FLOAT ~ VARIABLE_SUBSET
 }
 OBJECTIVE_NAME = { VALID_LP_CHARS{1, 255} }
 OBJECTIVE      = { NEWLINE* ~ (OBJECTIVE_NAME ~ COLON)? ~ OBJECTIVE_EXPR+ }

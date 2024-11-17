@@ -2,7 +2,7 @@
 source: tests/test_from_file.rs
 expression: result
 ---
-problem_name: ""
+problem_name: ~
 problem_sense: Minimize
 variables:
   a: Binary
@@ -27,4 +27,3 @@ constraints:
           coefficient: 2
       sense: ">="
       rhs: 1
-

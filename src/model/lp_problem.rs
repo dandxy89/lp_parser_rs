@@ -21,7 +21,7 @@ where
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "diff", derive(diff::Diff), diff(attr(#[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)])))]
 pub struct LPProblem {
-    pub problem_name: String,
+    pub problem_name: Option<String>,
     pub problem_sense: Sense,
     pub variables: HashMap<String, Variable>,
     pub objectives: Vec<Objective>,
@@ -32,7 +32,7 @@ impl LPProblem {
     #[inline]
     #[must_use]
     pub fn with_problem_name(self, problem_name: &str) -> Self {
-        Self { problem_name: problem_name.to_owned(), ..self }
+        Self { problem_name: Some(problem_name.to_owned()), ..self }
     }
 
     #[inline]

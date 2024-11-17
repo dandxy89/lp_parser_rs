@@ -2,7 +2,7 @@
 source: tests/test_from_file.rs
 expression: result
 ---
-problem_name: ""
+problem_name: ~
 problem_sense: Maximize
 variables:
   x: General
@@ -34,4 +34,3 @@ constraints:
           coefficient: 6.6
       sense: "<="
       rhs: 120
-

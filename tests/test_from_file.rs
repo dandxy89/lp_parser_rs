@@ -55,6 +55,7 @@ generate_test!(infile_comments2, "infile_comments2.lp", 43., 0.);
 generate_test!(missing_signs, "missing_signs.lp", 43., -3.);
 generate_test!(fit2d, "fit2d.lp", 349048.9, -296677.389);
 generate_test!(scientific_notation, "scientific_notation.lp", 238.0324, -43.87680);
+generate_test!(mosek, "mosek.lp", 4.0, 2.0);
 
 #[test]
 fn invalid() {
