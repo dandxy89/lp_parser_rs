@@ -2,6 +2,7 @@ use pest::iterators::Pairs;
 
 use crate::{
     common::{AsFloat as _, RuleExt as _},
+    model::lp_error::LPParserError,
     Rule,
 };
 
@@ -24,11 +25,11 @@ impl PartialEq for Coefficient {
 impl Eq for Coefficient {}
 
 impl TryFrom<Pairs<'_, Rule>> for Coefficient {
-    type Error = anyhow::Error;
+    type Error = LPParserError;
 
     #[inline]
     #[allow(clippy::unreachable, clippy::wildcard_enum_match_arm)]
-    fn try_from(values: Pairs<'_, Rule>) -> anyhow::Result<Self> {
+    fn try_from(values: Pairs<'_, Rule>) -> Result<Self, LPParserError> {
         let (mut value, mut var_name) = (1.0, String::new());
         for item in values {
             match item.as_rule() {

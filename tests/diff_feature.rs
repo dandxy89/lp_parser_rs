@@ -4,7 +4,7 @@
 use std::path::PathBuf;
 
 use lp_parser_rs::{
-    model::{coefficient::Coefficient, constraint::Constraint, lp_problem::LPProblem, sense::Cmp},
+    model::{coefficient::Coefficient, constraint::Constraint, lp_error::LPParserError, lp_problem::LPProblem, sense::Cmp},
     parse::{parse_file, parse_lp_file},
 };
 
@@ -45,6 +45,7 @@ fn test_file_comparison() {
     let a = read_file_from_resources("test.lp").unwrap();
     let a_copy = read_file_from_resources("test_copy.lp").unwrap();
     let b = read_file_from_resources("test2.lp").unwrap();
+
     insta::assert_yaml_snapshot!(a.diff(&a), {
         ".variables.altered" => insta::sorted_redaction(),
         ".variables.removed" => insta::sorted_redaction(),
@@ -53,6 +54,7 @@ fn test_file_comparison() {
         ".constraints.altered" => insta::sorted_redaction(),
         ".constraints.removed" => insta::sorted_redaction(),
     });
+
     insta::assert_yaml_snapshot!(a.diff(&a_copy), {
         ".variables.altered" => insta::sorted_redaction(),
         ".variables.removed" => insta::sorted_redaction(),
@@ -61,6 +63,7 @@ fn test_file_comparison() {
         ".constraints.altered" => insta::sorted_redaction(),
         ".constraints.removed" => insta::sorted_redaction(),
     });
+
     insta::assert_yaml_snapshot!(a.diff(&b), {
         ".variables.altered" => insta::sorted_redaction(),
         ".variables.removed" => insta::sorted_redaction(),
@@ -71,7 +74,7 @@ fn test_file_comparison() {
     });
 }
 
-fn read_file_from_resources(file_name: &str) -> anyhow::Result<LPProblem> {
+fn read_file_from_resources(file_name: &str) -> Result<LPProblem, LPParserError> {
     let mut file_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     file_path.push(format!("resources/{file_name}"));
     let contents = parse_file(&file_path)?;

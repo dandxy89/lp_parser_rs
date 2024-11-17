@@ -4,7 +4,7 @@ use pest::iterators::Pair;
 use unique_id::sequence::SequenceGenerator;
 
 use crate::{
-    model::{constraint::Constraint, objective::Objective, sense::Sense, variable::Variable},
+    model::{constraint::Constraint, lp_error::LPParserError, objective::Objective, sense::Sense, variable::Variable},
     Rule,
 };
 
@@ -14,7 +14,7 @@ where
 {
     type Output;
 
-    fn try_into(pair: Pair<'_, Rule>, gen: &mut SequenceGenerator) -> anyhow::Result<Self::Output>;
+    fn try_into(pair: Pair<'_, Rule>, gen: &mut SequenceGenerator) -> Result<Self::Output, LPParserError>;
 }
 
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
@@ -73,6 +73,7 @@ impl LPProblem {
         self.objectives = objectives;
     }
 
+    #[inline]
     pub fn add_constraints(&mut self, constraints: Vec<Constraint>) {
         for con in constraints {
             let name = if con.name().is_empty() { format!("UnnamedConstraint:{}", self.constraints.len()) } else { con.name() };

@@ -4,7 +4,7 @@ use pest::iterators::Pair;
 use unique_id::sequence::SequenceGenerator;
 
 use crate::{
-    model::{constraint::Constraint, lp_problem::LPPart},
+    model::{coefficient::Coefficient, constraint::Constraint, lp_error::LPParserError, lp_problem::LPPart, ParseResult},
     Rule,
 };
 
@@ -19,14 +19,14 @@ pub enum SOSClass {
 }
 
 impl FromStr for SOSClass {
-    type Err = anyhow::Error;
+    type Err = LPParserError;
 
     #[inline]
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "s1" | "s1::" => Ok(Self::S1),
             "s2" | "s2::" => Ok(Self::S2),
-            _ => Err(anyhow::anyhow!("Invalid SOS class: {s}")),
+            _ => Err(LPParserError::SOSError(s.to_owned())),
         }
     }
 }
@@ -35,11 +35,14 @@ impl LPPart for SOSClass {
     type Output = Constraint;
 
     #[inline]
-    fn try_into(pair: Pair<'_, Rule>, _: &mut SequenceGenerator) -> anyhow::Result<Self::Output> {
+    fn try_into(pair: Pair<'_, Rule>, _: &mut SequenceGenerator) -> Result<Self::Output, LPParserError> {
         let mut parts = pair.into_inner();
         let name = parts.next().unwrap().as_str().to_owned();
+
         let kind = parts.next().unwrap().as_str().to_lowercase();
-        let coefficients: anyhow::Result<Vec<_>> = parts.map(|p| p.into_inner().try_into()).collect();
+
+        let coefficients: ParseResult<Coefficient> = parts.map(|p| p.into_inner().try_into()).collect();
+
         Ok(Constraint::SOS { name, kind: Self::from_str(&kind)?, coefficients: coefficients? })
     }
 }

@@ -4,22 +4,22 @@ use unique_id::sequence::SequenceGenerator;
 use crate::{
     model::{
         constraint::Constraint,
+        lp_error::LPParserError,
         lp_problem::{LPPart, LPProblem},
         objective::Objective,
         sense::Sense,
         sos::SOSClass,
         variable::get_bound,
+        ParseResult,
     },
     Rule,
 };
-
-type ResultVec<T> = anyhow::Result<Vec<T>>;
 
 #[inline]
 #[allow(clippy::wildcard_enum_match_arm)]
 /// # Errors
 /// Returns an error if the `compose` fails
-pub fn compose(pair: Pair<'_, Rule>, mut parsed: LPProblem, gen: &mut SequenceGenerator) -> anyhow::Result<LPProblem> {
+pub fn compose(pair: Pair<'_, Rule>, mut parsed: LPProblem, gen: &mut SequenceGenerator) -> Result<LPProblem, LPParserError> {
     match pair.as_rule() {
         // Problem Name
         Rule::PROBLEM_NAME => return Ok(parsed.with_problem_name(pair.as_str())),
@@ -28,16 +28,16 @@ pub fn compose(pair: Pair<'_, Rule>, mut parsed: LPProblem, gen: &mut SequenceGe
         Rule::MAX_SENSE => return Ok(parsed.with_sense(Sense::Maximize)),
         // Problem Objectives
         Rule::OBJECTIVES => {
-            let parts: ResultVec<_> = pair.into_inner().map(|p| <Objective as LPPart>::try_into(p, gen)).collect();
+            let parts: ParseResult<_> = pair.into_inner().map(|p| <Objective as LPPart>::try_into(p, gen)).collect();
             parsed.add_objective(parts?);
         }
         // Problem Constraints
         Rule::CONSTRAINTS => {
-            let parts: ResultVec<_> = pair.into_inner().map(|p| <Constraint as LPPart>::try_into(p, gen)).collect();
+            let parts: ParseResult<_> = pair.into_inner().map(|p| <Constraint as LPPart>::try_into(p, gen)).collect();
             parsed.add_constraints(parts?);
         }
         Rule::SOS => {
-            let parts: ResultVec<_> = pair.into_inner().map(|p| <SOSClass as LPPart>::try_into(p, gen)).collect();
+            let parts: ParseResult<_> = pair.into_inner().map(|p| <SOSClass as LPPart>::try_into(p, gen)).collect();
             parsed.add_constraints(parts?);
         }
         // Problem Bounds

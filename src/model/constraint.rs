@@ -5,7 +5,7 @@ use unique_id::sequence::SequenceGenerator;
 
 use crate::{
     common::RuleExt as _,
-    model::{coefficient::Coefficient, get_name, lp_problem::LPPart, sense::Cmp, sos::SOSClass},
+    model::{coefficient::Coefficient, get_name, lp_error::LPParserError, lp_problem::LPPart, sense::Cmp, sos::SOSClass, ParseResult},
     Rule,
 };
 
@@ -61,7 +61,7 @@ impl LPPart for Constraint {
     type Output = Self;
 
     #[inline]
-    fn try_into(pair: Pair<'_, Rule>, gen: &mut SequenceGenerator) -> anyhow::Result<Self> {
+    fn try_into(pair: Pair<'_, Rule>, gen: &mut SequenceGenerator) -> Result<Self, LPParserError> {
         let mut parts = pair.into_inner().peekable();
         // Constraint name can be omitted in LP files, so we need to handle that case
         let name = get_name(&mut parts, gen, Rule::CONSTRAINT_NAME);
@@ -72,13 +72,17 @@ impl LPPart for Constraint {
             }
             coefficients.push(parts.next().unwrap());
         }
-        let coefficients: anyhow::Result<Vec<_>> = coefficients
+        let coefficients: ParseResult<Coefficient> = coefficients
             .into_iter()
             .filter(|p| !matches!(p.as_rule(), Rule::PLUS | Rule::MINUS))
             .map(|p| p.into_inner().try_into())
             .collect();
+
         let sense = Cmp::from_str(parts.next().unwrap().as_str())?;
-        let rhs = parts.next().unwrap().as_str().parse()?;
+
+        let value = parts.next().unwrap().as_str();
+        let rhs = value.parse().map_err(|_| LPParserError::RHSParseError(parts.next().unwrap().as_str().to_owned()))?;
+
         Ok(Self::Standard { name, coefficients: coefficients?, sense, rhs })
     }
 }
