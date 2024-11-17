@@ -2,18 +2,12 @@
 // https://www.ibm.com/docs/en/icos/22.1.1?topic=cplex-lp-file-format-algebraic-representation
 // https://www.fico.com/fico-xpress-optimization/docs/dms2020-03/solver/optimizer/HTML/chapter10_sec_section102.html
 // https://www.gurobi.com/documentation/current/refman/lp_format.html
-// 
+//
 
 // Common
 WHITESPACE   = _{ " " }
 POS_INFINITY =  { "+" ~ ^"inf" ~ ^"inity"? }
 NEG_INFINITY =  { "-" ~ ^"inf" ~ ^"inity"? }
-FLOAT        = ${
-    POS_INFINITY
-  | NEG_INFINITY
-  | "-" ~ ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT+)?
-  | ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT+)?
-}
 PLUS         =  { "+" }
 MINUS        =  { "-" }
 OPERATOR     = _{ PLUS | MINUS }
@@ -21,6 +15,17 @@ COLON        = _{ ":" }
 ASTERIX      = _{ "*" }
 FREE         =  { ^"FREE" }
 END          = _{ ^"END" }
+
+// Separate scientific notation handling
+SCIENTIFIC = ${ ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT+)? ~ ("e" | "E") ~ (PLUS | MINUS) ~ ASCII_DIGIT+ }
+NUMBER     = ${ ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT+)? }
+
+FLOAT = ${
+    POS_INFINITY
+  | NEG_INFINITY
+  | (PLUS | MINUS)? ~ SCIENTIFIC
+  | (PLUS | MINUS)? ~ NUMBER
+}
 
 // Variable Names
 // https://www.ibm.com/docs/en/icos/22.1.1?topic=representation-variable-names-in-lp-file-format
@@ -41,7 +46,6 @@ VALID_COMMENT_CHARS = _{
   | "@"
   | "_"
   | "‘"
-  | "’"
   | "{"
   | "}"
   | "~"
@@ -62,6 +66,7 @@ VALID_LP_CHARS      = _{
   | "&"
   | "("
   | ")"
+  | "_"
   | ","
   | "."
   | ";"
@@ -69,10 +74,13 @@ VALID_LP_CHARS      = _{
   | "@"
   | "_"
   | "‘"
-  | "’"
   | "{"
   | "}"
   | "~"
+  | "'"
+}
+VARIABLE_SUBSET     = ${
+    !(FREE | END | SOS_SECTION | CONSTRAINT_SECTION | BOUND_SECTION | BINARIES_SECTION | SEMI_CONTINUOUS_SECTION) ~ VALID_LP_CHARS{1, 255}
 }
 VARIABLE            = ${
     !(FREE | END | SOS_SECTION | CONSTRAINT_SECTION | BOUND_SECTION | GENERALS_SECTION | BINARIES_SECTION | SEMI_CONTINUOUS_SECTION) ~ VALID_LP_CHARS{1, 255}
@@ -98,9 +106,9 @@ PROBLEM_SENSE = _{ NEWLINE* ~ (MIN_SENSE | MAX_SENSE) }
 // https://www.ibm.com/docs/en/icos/22.1.1?topic=representation-objective-in-lp-file-format
 // Example: obj:  x1 + 2 x2 + 3.1415
 OBJECTIVE_EXPR = {
-    OPERATOR? ~ FLOAT? ~ VARIABLE
+    OPERATOR? ~ FLOAT? ~ VARIABLE_SUBSET
   | OPERATOR? ~ FLOAT
-  | NEWLINE* ~ OPERATOR ~ FLOAT ~ VARIABLE
+  | NEWLINE* ~ OPERATOR ~ FLOAT ~ VARIABLE_SUBSET
 }
 OBJECTIVE_NAME = { VALID_LP_CHARS{1, 255} }
 OBJECTIVE      = { NEWLINE* ~ (OBJECTIVE_NAME ~ COLON)? ~ OBJECTIVE_EXPR+ }
@@ -109,7 +117,7 @@ OBJECTIVES     = { OBJECTIVE* }
 // Constraints
 // https://www.ibm.com/docs/en/icos/22.1.1?topic=representation-constraints-in-lp-file-format
 CONSTRAINT_SECTION = _{
-    (^"subject to" | ^"such that" | ^"S.T." | ^"st") ~ COLON? ~ NEWLINE*
+    (^"subject to" | ^"such that" | ^"S.T." | ^"st") ~ COLON? ~ NEWLINE+
 }
 GT                 =  { ">" }
 GTE                =  { ">=" }
@@ -117,7 +125,7 @@ LT                 =  { "<" }
 LTE                =  { "<=" }
 EQ                 =  { "=" }
 CMP                = _{ GTE | GT | LTE | LT | EQ }
-CONSTRAINT_EXPR    =  { NEWLINE* ~ OPERATOR? ~ FLOAT? ~ VARIABLE }
+CONSTRAINT_EXPR    =  { NEWLINE* ~ OPERATOR? ~ FLOAT? ~ VARIABLE_SUBSET }
 CONSTRAINT_EXPRS   = _{ CONSTRAINT_EXPR* }
 CONSTRAINT_NAME    = ${ VALID_LP_CHARS{1, 255} ~ COLON }
 CONSTRAINT         =  {
@@ -128,11 +136,11 @@ CONSTRAINTS        =  { NEWLINE* ~ CONSTRAINT_SECTION ~ (COMMENTS | CONSTRAINT)+
 // Bounds
 // https://www.ibm.com/docs/en/icos/22.1.1?topic=representation-bounds-in-lp-file-format
 BOUND_SECTION   = _{ ^"bound" ~ ^"s"? }
-BOUNDED         =  { FLOAT ~ (LTE | LT) ~ VARIABLE ~ (LTE | LT) ~ FLOAT }
-FREE_VARIABLE   =  { VARIABLE ~ FREE }
-LOWER_BOUND     =  { VARIABLE ~ GTE ~ FLOAT }
-LOWER_BOUND_REV =  { FLOAT ~ GTE ~ VARIABLE }
-UPPER_BOUND     =  { VARIABLE ~ LTE ~ FLOAT }
+BOUNDED         =  { FLOAT ~ (LTE | LT) ~ VARIABLE_SUBSET ~ (LTE | LT) ~ FLOAT }
+FREE_VARIABLE   =  { VARIABLE_SUBSET ~ FREE }
+LOWER_BOUND     =  { VARIABLE_SUBSET ~ GTE ~ FLOAT }
+LOWER_BOUND_REV =  { FLOAT ~ GTE ~ VARIABLE_SUBSET }
+UPPER_BOUND     =  { VARIABLE_SUBSET ~ LTE ~ FLOAT }
 BOUND           = _{
     NEWLINE* ~ (FREE_VARIABLE | BOUNDED | UPPER_BOUND | LOWER_BOUND | LOWER_BOUND_REV)
 }

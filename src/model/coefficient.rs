@@ -31,12 +31,13 @@ impl TryFrom<Pairs<'_, Rule>> for Coefficient {
     #[allow(clippy::unreachable, clippy::wildcard_enum_match_arm)]
     fn try_from(values: Pairs<'_, Rule>) -> Result<Self, LPParserError> {
         let (mut value, mut var_name) = (1.0, String::new());
+
         for item in values {
             match item.as_rule() {
                 r if r.is_numeric() => {
                     value *= item.as_float()?;
                 }
-                Rule::VARIABLE => {
+                Rule::VARIABLE_SUBSET | Rule::VARIABLE => {
                     var_name = item.as_str().to_owned();
                 }
                 _ => unreachable!("Unexpected rule encountered"),

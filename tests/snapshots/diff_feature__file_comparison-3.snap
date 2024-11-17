@@ -2,7 +2,7 @@
 source: tests/diff_feature.rs
 expression: a.diff(&b)
 ---
-problem_name: ~
+problem_name: NoChange
 problem_sense: NoChange
 variables:
   altered:
@@ -554,4 +554,3 @@ constraints:
     - "c2:"
     - "c2b:"
     - "c3:"
-
