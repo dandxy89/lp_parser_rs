@@ -1,5 +1,3 @@
-#![cfg(feature = "serde")]
-
 use std::path::PathBuf;
 
 use lp_parser_rs::{
@@ -13,13 +11,17 @@ macro_rules! generate_test {
         #[test]
         fn $test_name() {
             let result = read_file_from_resources($file).unwrap();
+
+            #[cfg(feature = "serde")]
             insta::assert_yaml_snapshot!(result, {
                 ".variables" => insta::sorted_redaction(),
                 ".objectives" => insta::sorted_redaction(),
                 ".constraints" => insta::sorted_redaction(),
             });
+
             let summation = &result.objectives.iter().map(|o| o.coefficients.iter().map(|c| c.coefficient).sum::<f64>()).sum();
             float_eq::assert_float_eq!($o_sum, *summation, abs <= 1e-2);
+
             let summation = &result.constraints.iter().map(|(_, c)| c.coefficients().iter().map(|c| c.coefficient).sum::<f64>()).sum();
             float_eq::assert_float_eq!($c_sum, *summation, abs <= 1e-2);
         }
