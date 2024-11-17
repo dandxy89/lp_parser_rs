@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use lp_parser_rs::{
-    model::lp_problem::LPProblem,
+    model::{lp_error::LPParserError, lp_problem::LPProblem},
     parse::{parse_file, parse_lp_file},
 };
 
@@ -61,7 +61,7 @@ fn invalid() {
     assert!(result.is_err());
 }
 
-fn read_file_from_resources(file_name: &str) -> anyhow::Result<LPProblem> {
+fn read_file_from_resources(file_name: &str) -> Result<LPProblem, LPParserError> {
     let mut file_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     file_path.push(format!("resources/{file_name}"));
     let contents = parse_file(&file_path)?;

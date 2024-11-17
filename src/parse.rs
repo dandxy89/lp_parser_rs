@@ -1,6 +1,6 @@
 use std::{
     fs::File,
-    io::{BufReader, Read as _},
+    io::{BufReader, ErrorKind, Read as _},
     path::Path,
 };
 
@@ -8,18 +8,17 @@ use pest::Parser as _;
 use unique_id::{sequence::SequenceGenerator, GeneratorFromSeed as _};
 
 use crate::{
-    model::{lp_problem::LPProblem, parse_model::compose},
+    model::{lp_error::LPParserError, lp_problem::LPProblem, parse_model::compose},
     LParser, Rule,
 };
 
 #[inline]
 /// # Errors
 /// Returns an error if the `read_to_string` or `open` fails
-pub fn parse_file(path: &Path) -> anyhow::Result<String> {
-    let Ok(file) = File::open(path) else {
-        anyhow::bail!("Could not open file at {path:?}");
-    };
+pub fn parse_file(path: &Path) -> Result<String, LPParserError> {
+    let file = File::open(path).map_err(LPParserError::IOError)?;
     let mut buf_reader = BufReader::new(file);
+
     let mut contents = String::new();
     buf_reader.read_to_string(&mut contents)?;
 
@@ -29,13 +28,15 @@ pub fn parse_file(path: &Path) -> anyhow::Result<String> {
 #[inline]
 /// # Errors
 /// Returns an error if the parse fails
-pub fn parse_lp_file(contents: &str) -> anyhow::Result<LPProblem> {
-    let mut parsed = LParser::parse(Rule::LP_FILE, contents)?;
+pub fn parse_lp_file(contents: &str) -> Result<LPProblem, LPParserError> {
+    let mut parsed = LParser::parse(Rule::LP_FILE, contents).map_err(|err| LPParserError::FileParseError(err.to_string()))?;
     let Some(pair) = parsed.next() else {
-        anyhow::bail!("Invalid LP file");
+        return Err(LPParserError::IOError(std::io::Error::from(ErrorKind::UnexpectedEof)));
     };
+
     let mut parsed_contents = LPProblem::default();
     let mut code_generator = SequenceGenerator::new(2024);
+
     for pair in pair.clone().into_inner() {
         parsed_contents = compose(pair, parsed_contents, &mut code_generator)?;
     }

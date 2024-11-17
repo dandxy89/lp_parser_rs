@@ -2,7 +2,7 @@ use pest::iterators::Pair;
 use unique_id::sequence::SequenceGenerator;
 
 use crate::{
-    model::{coefficient::Coefficient, get_name, lp_problem::LPPart},
+    model::{coefficient::Coefficient, get_name, lp_error::LPParserError, lp_problem::LPPart, ParseResult},
     Rule,
 };
 
@@ -18,11 +18,12 @@ impl LPPart for Objective {
     type Output = Self;
 
     #[inline]
-    fn try_into(pair: Pair<'_, Rule>, gen: &mut SequenceGenerator) -> anyhow::Result<Self> {
+    fn try_into(pair: Pair<'_, Rule>, gen: &mut SequenceGenerator) -> Result<Self, LPParserError> {
         let mut parts = pair.into_inner().peekable();
         // Objective name can be omitted in LP files, so we need to handle that case
         let name = get_name(&mut parts, gen, Rule::OBJECTIVE_NAME);
-        let coefficients: anyhow::Result<Vec<_>> = parts.map(|p| p.into_inner().try_into()).collect();
+        let coefficients: ParseResult<_> = parts.map(|p| p.into_inner().try_into()).collect();
+
         Ok(Self { name, coefficients: coefficients? })
     }
 }
