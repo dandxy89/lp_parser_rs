@@ -1,5 +1,51 @@
 # Changelog
 
+## [1.3.0](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v1.2.0...lp_parser_rs-v1.3.0) (2024-11-17)
+
+
+### Build System
+
+* Bumping insta and float_eq ([14887af](https://github.com/dandxy89/lp_parser_rs/commit/14887af717272ec9d39c2b309457db452be0ccc5))
+* Do not include Cargo.lock file ([18697f4](https://github.com/dandxy89/lp_parser_rs/commit/18697f424dd4f6b66b4f2ed2892df33641e95897))
+* Remove Cargo.lock ([83c6e03](https://github.com/dandxy89/lp_parser_rs/commit/83c6e0347e5078acb1ebb0c05ef066c51413fc19))
+
+
+### Miscellaneous Chores
+
+* **deps:** bump insta from 1.36.1 to 1.38.0 ([#66](https://github.com/dandxy89/lp_parser_rs/issues/66)) ([537dac6](https://github.com/dandxy89/lp_parser_rs/commit/537dac6fa447c98f7adc3eb7bad38b568a296ffc))
+* **deps:** bump insta from 1.40.0 to 1.41.0 ([#76](https://github.com/dandxy89/lp_parser_rs/issues/76)) ([63bbd57](https://github.com/dandxy89/lp_parser_rs/commit/63bbd5745c87080b65c9740cf7765612f46783d0))
+* **deps:** bump pest from 2.7.13 to 2.7.14 ([#75](https://github.com/dandxy89/lp_parser_rs/issues/75)) ([fb60ba7](https://github.com/dandxy89/lp_parser_rs/commit/fb60ba7b8aded7b7fab2b4d4317ccfdcb02d3f2c))
+* **deps:** bump pest_derive from 2.7.13 to 2.7.14 ([#74](https://github.com/dandxy89/lp_parser_rs/issues/74)) ([61bbd99](https://github.com/dandxy89/lp_parser_rs/commit/61bbd995d8e17e5fcd5f04831fb403cc5b45b8b6))
+* **deps:** bump rustsec/audit-check from 1.4.1 to 2.0.0 ([#72](https://github.com/dandxy89/lp_parser_rs/issues/72)) ([75ae2fd](https://github.com/dandxy89/lp_parser_rs/commit/75ae2fd07b925c98c734cb3adf35eb79e95b43fa))
+* **deps:** bump serde from 1.0.198 to 1.0.199 ([#70](https://github.com/dandxy89/lp_parser_rs/issues/70)) ([34385d5](https://github.com/dandxy89/lp_parser_rs/commit/34385d533c9caa8c11effad7ae75bd21c5f81c10))
+* **deps:** bump serde from 1.0.210 to 1.0.214 ([#77](https://github.com/dandxy89/lp_parser_rs/issues/77)) ([08943bb](https://github.com/dandxy89/lp_parser_rs/commit/08943bb1192214a37ec7a3c637a5da820d1a79f2))
+* **main:** release 1.2.0 ([#79](https://github.com/dandxy89/lp_parser_rs/issues/79)) ([4251941](https://github.com/dandxy89/lp_parser_rs/commit/425194184883f301abb6b4ed4c5b22df062f6b99))
+* **main:** release 1.2.1 ([#65](https://github.com/dandxy89/lp_parser_rs/issues/65)) ([042c103](https://github.com/dandxy89/lp_parser_rs/commit/042c103ee5f0b95d1aa4f85d40a127b9b62bc9a7))
+* **main:** release 1.2.2 ([#67](https://github.com/dandxy89/lp_parser_rs/issues/67)) ([201e38a](https://github.com/dandxy89/lp_parser_rs/commit/201e38a67c29a7f243f2517257b6f291dba01509))
+* **main:** release 1.2.3 ([#69](https://github.com/dandxy89/lp_parser_rs/issues/69)) ([4a7974a](https://github.com/dandxy89/lp_parser_rs/commit/4a7974a7f8cc87349c609f2ec4834d7f48dbc4e1))
+* **main:** release 1.2.4 ([#71](https://github.com/dandxy89/lp_parser_rs/issues/71)) ([3a1afc1](https://github.com/dandxy89/lp_parser_rs/commit/3a1afc1da39d7be120043ba5cac60d50f72da2da))
+* **main:** release 1.2.5 ([#73](https://github.com/dandxy89/lp_parser_rs/issues/73)) ([5269fb7](https://github.com/dandxy89/lp_parser_rs/commit/5269fb7c8f6e52dc1162e65cab0dfd20b195a577))
+* release 1.3.0 ([3af4fcf](https://github.com/dandxy89/lp_parser_rs/commit/3af4fcf18a388140faf324bd5f2459aef65d9f75))
+* Updating the README.md file with an Icon ([f725722](https://github.com/dandxy89/lp_parser_rs/commit/f7257222af20995b5a171dd9d41bd90b707e500a))
+
+
+### Bug Fixes
+
+* Scientific notation && Mosek specific fixes ([#82](https://github.com/dandxy89/lp_parser_rs/issues/82)) ([2faa88d](https://github.com/dandxy89/lp_parser_rs/commit/2faa88de6ac7c19a431496eb89e51b4d506005e6))
+
+
+### Code Refactoring
+
+* Lots of little tidyups and improvements ([d73c365](https://github.com/dandxy89/lp_parser_rs/commit/d73c36557693e1dcb9e20cd8f38208c86266528e))
+* Updating to apply clippy lints ([09c0231](https://github.com/dandxy89/lp_parser_rs/commit/09c02313dafb25f28c0fbf6deac96e5ed5e5db78))
+
+
+### Tests
+
+* Adding Custom LP Parse Error ([#81](https://github.com/dandxy89/lp_parser_rs/issues/81)) ([548f195](https://github.com/dandxy89/lp_parser_rs/commit/548f19592fb7c0c698d6f6d0de4ae2b1c1287202))
+* Fix the config flags in the test repo ([90ad23b](https://github.com/dandxy89/lp_parser_rs/commit/90ad23b7bef898dc3d52f65274dac1ae6f8bedb5))
+* Refinement to where the feature flag was placed ([ef7366c](https://github.com/dandxy89/lp_parser_rs/commit/ef7366c91b4a7c6a77b4cd82155518089b3471c4))
+
 ## [1.2.0](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v1.2.5...lp_parser_rs-v1.2.0) (2024-10-29)
 
 
