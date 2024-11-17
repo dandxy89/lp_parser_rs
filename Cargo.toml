@@ -30,3 +30,6 @@ similar.opt-level = 3
 default = []
 serde = ["dep:serde"]
 diff = ["dep:diff-struct", "serde"]
+
+[package.metadata.cargo-machete]
+ignored = ["diff-struct"]
