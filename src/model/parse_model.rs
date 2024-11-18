@@ -29,12 +29,17 @@ pub fn compose(pair: Pair<'_, Rule>, mut parsed: LPProblem, gen: &mut SequenceGe
         // Problem Objectives
         Rule::OBJECTIVES => {
             let parts: ParseResult<_> = pair.into_inner().map(|p| <Objective as LPPart>::try_into(p, gen)).collect();
-            parsed.add_objective(parts?);
+            parsed.add_objectives(parts?);
         }
         // Problem Constraints
         Rule::CONSTRAINTS => {
-            let parts: ParseResult<_> = pair.into_inner().map(|p| <Constraint as LPPart>::try_into(p, gen)).collect();
-            parsed.add_constraints(parts?);
+            for part in pair.into_inner().map(|p| <Constraint as LPPart>::try_into(p, gen)) {
+                if let Ok(part) = part {
+                    parsed.add_constraint(part);
+                } else {
+                    log::warn!("Failed to parse constraint: {part:?}");
+                }
+            }
         }
         Rule::SOS => {
             let parts: ParseResult<_> = pair.into_inner().map(|p| <SOSClass as LPPart>::try_into(p, gen)).collect();
@@ -45,6 +50,8 @@ pub fn compose(pair: Pair<'_, Rule>, mut parsed: LPProblem, gen: &mut SequenceGe
             for bound_pair in pair.into_inner() {
                 if let Some((name, kind)) = get_bound(&bound_pair) {
                     parsed.set_variable_bounds(name, kind);
+                } else {
+                    log::warn!("Failed to parse bound: {bound_pair:?}");
                 }
             }
         }
@@ -53,11 +60,14 @@ pub fn compose(pair: Pair<'_, Rule>, mut parsed: LPProblem, gen: &mut SequenceGe
             for p in pair.into_inner() {
                 if matches!(p.as_rule(), Rule::VARIABLE) {
                     parsed.set_variable_bounds(p.as_str(), r.into());
+                } else {
+                    log::warn!("Failed to variable bound: {p:?}");
                 }
             }
         }
         // Otherwise, skip!
         _ => (),
     }
+
     Ok(parsed)
 }

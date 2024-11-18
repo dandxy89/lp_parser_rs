@@ -56,6 +56,7 @@ generate_test!(missing_signs, "missing_signs.lp", 43., -3.);
 generate_test!(fit2d, "fit2d.lp", 349048.9, -296677.389);
 generate_test!(scientific_notation, "scientific_notation.lp", 238.0324, -43.87680);
 generate_test!(mosek, "mosek.lp", 2.19999, 61.783048);
+generate_test!(mosek_bounds, "mosek_bounds.lp", 2.19999, 61.783048);
 
 #[test]
 fn invalid() {

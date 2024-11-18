@@ -30,15 +30,33 @@ pub struct LPProblem {
 
 impl LPProblem {
     #[inline]
-    #[must_use]
-    pub fn with_problem_name(self, problem_name: &str) -> Self {
-        Self { problem_name: Some(problem_name.to_owned()), ..self }
+    pub fn add_constraint(&mut self, constraint: Constraint) {
+        let name = if constraint.name().is_empty() { format!("UnnamedConstraint:{}", self.constraints.len()) } else { constraint.name() };
+        constraint.coefficients().iter().for_each(|c| {
+            self.add_variable(&c.var_name);
+        });
+        self.constraints.entry(name).or_insert(constraint);
     }
 
     #[inline]
-    #[must_use]
-    pub fn with_sense(self, problem_sense: Sense) -> Self {
-        Self { problem_sense, ..self }
+    pub fn add_constraints(&mut self, constraints: Vec<Constraint>) {
+        for con in constraints {
+            let name = if con.name().is_empty() { format!("UnnamedConstraint:{}", self.constraints.len()) } else { con.name() };
+            con.coefficients().iter().for_each(|c| {
+                self.add_variable(&c.var_name);
+            });
+            self.constraints.entry(name).or_insert(con);
+        }
+    }
+
+    #[inline]
+    pub fn add_objectives(&mut self, objectives: Vec<Objective>) {
+        for ob in &objectives {
+            ob.coefficients.iter().for_each(|c| {
+                self.add_variable(&c.var_name);
+            });
+        }
+        self.objectives = objectives;
     }
 
     #[inline]
@@ -64,23 +82,14 @@ impl LPProblem {
     }
 
     #[inline]
-    pub fn add_objective(&mut self, objectives: Vec<Objective>) {
-        for ob in &objectives {
-            ob.coefficients.iter().for_each(|c| {
-                self.add_variable(&c.var_name);
-            });
-        }
-        self.objectives = objectives;
+    #[must_use]
+    pub fn with_problem_name(self, problem_name: &str) -> Self {
+        Self { problem_name: Some(problem_name.to_owned()), ..self }
     }
 
     #[inline]
-    pub fn add_constraints(&mut self, constraints: Vec<Constraint>) {
-        for con in constraints {
-            let name = if con.name().is_empty() { format!("UnnamedConstraint:{}", self.constraints.len()) } else { con.name() };
-            con.coefficients().iter().for_each(|c| {
-                self.add_variable(&c.var_name);
-            });
-            self.constraints.entry(name).or_insert(con);
-        }
+    #[must_use]
+    pub fn with_sense(self, problem_sense: Sense) -> Self {
+        Self { problem_sense, ..self }
     }
 }

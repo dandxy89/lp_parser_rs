@@ -82,6 +82,11 @@ pub(crate) fn get_bound<'a>(pair: &'a Pair<'_, Rule>) -> Option<(&'a str, Variab
             let _ = parts.next();
             Some((name, Variable::UB(parts.next().unwrap().as_str().parse().unwrap())))
         }
+        Rule::UPPER_BOUND_REV => {
+            let value = parts.next().unwrap().as_str().parse().unwrap();
+            let _ = parts.next();
+            Some((parts.next().unwrap().as_str(), Variable::UB(value)))
+        }
         Rule::BOUNDED => {
             let lb = parts.next().unwrap().as_str();
             let _ = parts.next();
