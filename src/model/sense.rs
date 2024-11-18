@@ -5,9 +5,11 @@ use crate::model::lp_error::LPParserError;
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "diff", derive(diff::Diff), diff(attr(#[derive(Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)])))]
+/// Problem sense
 pub enum Sense {
     #[default]
     Minimize,
+
     Maximize,
 }
 

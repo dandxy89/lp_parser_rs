@@ -9,19 +9,26 @@ use crate::Rule;
 pub enum Variable {
     /// Unbounded variable (-Infinity, +Infinity)
     Free,
+
     /// Lower bounded variable
     LB(f64),
+
     /// Upper bounded variable
     UB(f64),
+
     /// Bounded variable
     Bounded(f64, f64, bool),
+
     /// Integer variable [0, 1]
     Integer,
+
     /// Binary variable
     Binary,
+
     #[default]
     /// General variable [0, +Infinity]
     General,
+
     /// Semi-continuous
     SemiContinuous,
 }

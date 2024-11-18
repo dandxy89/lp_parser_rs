@@ -30,7 +30,9 @@ pub fn parse_file(path: &Path) -> Result<String, LPParserError> {
 /// Returns an error if the parse fails
 pub fn parse_lp_file(contents: &str) -> Result<LPProblem, LPParserError> {
     let mut parsed = LParser::parse(Rule::LP_FILE, contents).map_err(|err| LPParserError::FileParseError(err.to_string()))?;
+
     let Some(pair) = parsed.next() else {
+        log::warn!("Unexpected EOF in parse_lp_file");
         return Err(LPParserError::IOError(std::io::Error::from(ErrorKind::UnexpectedEof)));
     };
 
@@ -40,5 +42,6 @@ pub fn parse_lp_file(contents: &str) -> Result<LPProblem, LPParserError> {
     for pair in pair.clone().into_inner() {
         parsed_contents = compose(pair, parsed_contents, &mut code_generator)?;
     }
+
     Ok(parsed_contents)
 }

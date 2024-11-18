@@ -40,6 +40,7 @@ impl LPProblem {
 
     #[inline]
     pub fn add_constraints(&mut self, constraints: Vec<Constraint>) {
+        log::debug!("Adding {} constraints", constraints.len());
         for con in constraints {
             let name = if con.name().is_empty() { format!("UnnamedConstraint:{}", self.constraints.len()) } else { con.name() };
             con.coefficients().iter().for_each(|c| {
@@ -51,6 +52,7 @@ impl LPProblem {
 
     #[inline]
     pub fn add_objectives(&mut self, objectives: Vec<Objective>) {
+        log::debug!("Adding {} objectives", objectives.len());
         for ob in &objectives {
             ob.coefficients.iter().for_each(|c| {
                 self.add_variable(&c.var_name);
@@ -84,12 +86,14 @@ impl LPProblem {
     #[inline]
     #[must_use]
     pub fn with_problem_name(self, problem_name: &str) -> Self {
+        log::debug!("Setting Problem Name: {problem_name}");
         Self { problem_name: Some(problem_name.to_owned()), ..self }
     }
 
     #[inline]
     #[must_use]
     pub fn with_sense(self, problem_sense: Sense) -> Self {
+        log::debug!("Setting Problem Sense: {problem_sense:?}");
         Self { problem_sense, ..self }
     }
 }

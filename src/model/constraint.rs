@@ -15,6 +15,7 @@ use crate::{
 pub enum Constraint {
     /// Standard LP constraint
     Standard { name: String, coefficients: Vec<Coefficient>, sense: Cmp, rhs: f64 },
+
     /// Special Order Set (SOS)
     SOS { name: String, kind: SOSClass, coefficients: Vec<Coefficient> },
 }
