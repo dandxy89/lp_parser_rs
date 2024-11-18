@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.3.1](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v1.3.0...lp_parser_rs-v1.3.1) (2024-11-18)
+
+
+### Build System
+
+* Adds log ([a1390fb](https://github.com/dandxy89/lp_parser_rs/commit/a1390fb3bc4da413d591ce31e26a3ed660eea137))
+
+
+### Bug Fixes
+
+* Add UPPER_BOUND_REV grammar ([a1390fb](https://github.com/dandxy89/lp_parser_rs/commit/a1390fb3bc4da413d591ce31e26a3ed660eea137))
+* Updates Constraint Name with extended grammar ([a1390fb](https://github.com/dandxy89/lp_parser_rs/commit/a1390fb3bc4da413d591ce31e26a3ed660eea137))
+
+
+### Code Refactoring
+
+* Reorders lp_problem ([a1390fb](https://github.com/dandxy89/lp_parser_rs/commit/a1390fb3bc4da413d591ce31e26a3ed660eea137))
+
 ## [1.3.0](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v1.2.0...lp_parser_rs-v1.3.0) (2024-11-17)
 
 
