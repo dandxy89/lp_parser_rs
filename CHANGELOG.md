@@ -1,5 +1,60 @@
 # Changelog
 
+## [1.3.1](https://github.com/dandxy89/lp_parser_rs/compare/v1.3.1...v1.3.1) (2024-11-19)
+
+
+### doc
+
+* Condense CHANGELOG ([3f5fa46](https://github.com/dandxy89/lp_parser_rs/commit/3f5fa462491e958786c52c5ec52b2d33f8a82c9c))
+
+
+### Features
+
+* Adding implementation for Objectives ([#2](https://github.com/dandxy89/lp_parser_rs/issues/2)) ([9de11e1](https://github.com/dandxy89/lp_parser_rs/commit/9de11e1e721cbd8e2c8831eaf6b72650b6ac0947))
+* Adding LICENSEs and updating Cargo.toml ([e5938b8](https://github.com/dandxy89/lp_parser_rs/commit/e5938b8aa72c12c7ea627d2e14d06f69a71b770b))
+* Adding method to extract constraints ([d7b827d](https://github.com/dandxy89/lp_parser_rs/commit/d7b827d744b96288d350af7ae3689aa337adcfd6))
+* Adding semi-continous ([bad2021](https://github.com/dandxy89/lp_parser_rs/commit/bad2021754793ebdf9980029f0053244d527a87f))
+* Adding serde as an optional dependency ([7e78069](https://github.com/dandxy89/lp_parser_rs/commit/7e78069ad4643a7ba099088b13344546425f0de1))
+* Capture problem name from comments section ([e816dab](https://github.com/dandxy89/lp_parser_rs/commit/e816dabdfe2b0558bac646dcb28a41378bf54728))
+* Extending Float such that failing tests pass ([94ed72b](https://github.com/dandxy89/lp_parser_rs/commit/94ed72bc8a072541af835e9a3fede160b59f2f8a))
+* Gather variables names ([11d926d](https://github.com/dandxy89/lp_parser_rs/commit/11d926dfb12a1807c2990789d34b27a158b2345b))
+* Init the project ([e916cb5](https://github.com/dandxy89/lp_parser_rs/commit/e916cb570bdf789ed7c295febf123db0127390b2))
+* Last remaining todo - use diff-struct for comparing data structures ([3b720fe](https://github.com/dandxy89/lp_parser_rs/commit/3b720feaed2006bf8ee5375e366c3a65e29e1425))
+* Make use of the Atomic operator, remove trim and resolve issue with variables on same line in Bounds sections ([d9db27f](https://github.com/dandxy89/lp_parser_rs/commit/d9db27fdceec2b585b9e34d19993999415f72311))
+* Updating .pest file to better handle Bounds ([73c7499](https://github.com/dandxy89/lp_parser_rs/commit/73c7499f5e72bbe59c7edaa81100f528afc1e05b))
+* Updating .pest grammar to support Special Order Sets ([191a55e](https://github.com/dandxy89/lp_parser_rs/commit/191a55e425c096268148cba8a57bfef44f996ea5))
+* Updating model and compose fn to support SOS constraints ([b955db1](https://github.com/dandxy89/lp_parser_rs/commit/b955db1baa51d3356c4ae6123239480fc480eb73))
+* Updating PartialEq and Eq for all models ([a627902](https://github.com/dandxy89/lp_parser_rs/commit/a6279025132debdc6e3ca8166c8b0545dce284ae))
+
+
+### Bug Fixes
+
+* Add UPPER_BOUND_REV grammar ([a1390fb](https://github.com/dandxy89/lp_parser_rs/commit/a1390fb3bc4da413d591ce31e26a3ed660eea137))
+* Adding additional test cases and fixes for .pest ([ea5e188](https://github.com/dandxy89/lp_parser_rs/commit/ea5e1880f23bf6ac5bae891daba4ea7c910ecaef))
+* Adding Clone derive macro to internal model ([#38](https://github.com/dandxy89/lp_parser_rs/issues/38)) ([ee5799e](https://github.com/dandxy89/lp_parser_rs/commit/ee5799ead46f2d8eaf9a607d0a2fb5ae6adb4714))
+* Allow constraints to be commented ([0606b55](https://github.com/dandxy89/lp_parser_rs/commit/0606b553da043e6c7d9e543d1a1d80693918d582))
+* Allow zero or more colons in constraints ([51be6aa](https://github.com/dandxy89/lp_parser_rs/commit/51be6aa9647d9418ae0c6f912e03eea98a8422e0))
+* Another fix for comments inline ([0955e0a](https://github.com/dandxy89/lp_parser_rs/commit/0955e0afbdaaf70e86b80567100e34563df11014))
+* Blank lines aren't ignored ([#30](https://github.com/dandxy89/lp_parser_rs/issues/30)) ([5a58e64](https://github.com/dandxy89/lp_parser_rs/commit/5a58e64638e2aeb618a5291199cd454866b1d058))
+* Constraint Sense should be an Enum of possible values ([2a93a40](https://github.com/dandxy89/lp_parser_rs/commit/2a93a4022ddfc6650285c5dbeab569c479db84da))
+* Empty Bounds sections should be allowed ([#28](https://github.com/dandxy89/lp_parser_rs/issues/28)) ([cd266cd](https://github.com/dandxy89/lp_parser_rs/commit/cd266cd51082ae63d94e9df134b75ddd99dae8ed))
+* Inline comments ([56252e1](https://github.com/dandxy89/lp_parser_rs/commit/56252e194c485304578977d63612e7a1764f20ab))
+* Put annotation behind feature flag ([a2e584d](https://github.com/dandxy89/lp_parser_rs/commit/a2e584dbb2858262bdd1a14dc725cccfcf5d9ecf))
+* Scientific notation && Mosek specific fixes ([#82](https://github.com/dandxy89/lp_parser_rs/issues/82)) ([2faa88d](https://github.com/dandxy89/lp_parser_rs/commit/2faa88de6ac7c19a431496eb89e51b4d506005e6))
+* Signs were not correctly being assigned ([282bbf8](https://github.com/dandxy89/lp_parser_rs/commit/282bbf8178b345187e9f6407d0789d6102563d55))
+* Updates Constraint Name with extended grammar ([a1390fb](https://github.com/dandxy89/lp_parser_rs/commit/a1390fb3bc4da413d591ce31e26a3ed660eea137))
+* Updating change ([313ab8d](https://github.com/dandxy89/lp_parser_rs/commit/313ab8d55de9d599e02cb68c7542cb5c0b9f166a))
+* Updating derives ([be04033](https://github.com/dandxy89/lp_parser_rs/commit/be04033f7934742f8a117dacd1a31d481d40bc33))
+* Updating parser such that objective names can be omitted ([#31](https://github.com/dandxy89/lp_parser_rs/issues/31)) ([ab2c7da](https://github.com/dandxy89/lp_parser_rs/commit/ab2c7daf53b591c353057e75d6cefa4d4c17988a))
+
+
+### Miscellaneous Chores
+
+* Override release version ([68a74fc](https://github.com/dandxy89/lp_parser_rs/commit/68a74fc2e8709550571aacd945fd06be2695719c))
+* release 0.1.2 ([51d5a2f](https://github.com/dandxy89/lp_parser_rs/commit/51d5a2f8b7450617051099c7e8bb7c724546e8c3))
+* release 1.3.0 ([3af4fcf](https://github.com/dandxy89/lp_parser_rs/commit/3af4fcf18a388140faf324bd5f2459aef65d9f75))
+* release 1.3.1 ([38f57f6](https://github.com/dandxy89/lp_parser_rs/commit/38f57f6b6aa98b2c1012a903f628718245959ffc))
+
 ## [1.3.0](https://github.com/dandxy89/lp_parser_rs/compare/v1.3.1...v1.3.0) (2024-11-18)
 
 
