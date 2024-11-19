@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.2](https://github.com/dandxy89/lp_parser_rs/compare/v1.3.1...v1.3.2) (2024-11-19)
+
+
+### Miscellaneous Chores
+
+* release 1.3.2 ([a89445a](https://github.com/dandxy89/lp_parser_rs/commit/a89445a747d71cfb0fb67af1b6663e71dd607d3e))
+
 ## [1.3.1](https://github.com/dandxy89/lp_parser_rs/compare/v1.3.1...v1.3.1) (2024-11-19)
 
 
