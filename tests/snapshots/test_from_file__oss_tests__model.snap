@@ -1,0 +1,31 @@
+---
+source: tests/test_from_file.rs
+expression: result
+---
+problem_name: ~
+problem_sense: Minimize
+variables:
+  x: General
+  y:
+    Bounded:
+      - 0.2
+      - 1
+      - true
+objectives:
+  - name: obj
+    coefficients:
+      - var_name: x
+        coefficient: -1
+      - var_name: y
+        coefficient: -1
+constraints:
+  "blah:":
+    Standard:
+      name: "blah:"
+      coefficients:
+        - var_name: x
+          coefficient: 1
+        - var_name: y
+          coefficient: -1
+      sense: "="
+      rhs: 0

@@ -6,6 +6,8 @@ use lp_parser_rs::{
 };
 
 #[macro_export]
+/// Generate a test for a given file asserting the summation of
+/// constraints and objectives contents.
 macro_rules! generate_test {
     ($test_name:ident, $file:expr, $o_sum:expr, $c_sum:expr) => {
         #[test]
@@ -28,21 +30,10 @@ macro_rules! generate_test {
     };
 }
 
-generate_test!(afiro, "afiro.lp", -4.100, 25.369);
-generate_test!(afiro_ext, "afiro_ext.lp", -5.239, 25.369);
-generate_test!(boeing1, "boeing1.lp", 1187.985, 194612.346);
-generate_test!(boeing2, "boeing2.lp", 78.488, 20863.836);
-generate_test!(fit1d, "fit1d.lp", 82457.0, -146871.180);
-generate_test!(kb2, "kb2.lp", 11.675, 10143.724);
 generate_test!(pulp, "pulp.lp", 1., 73.44);
 generate_test!(pulp2, "pulp2.lp", -6.0, 147.);
-generate_test!(sc50a, "sc50a.lp", -1., 30.3);
 generate_test!(model2, "model2.lp", 0., 6.);
 generate_test!(limbo, "limbo.lp", 2., 0.);
-generate_test!(obj3_2cons, "3obj_2cons.lp", 1., -186.);
-generate_test!(obj_2cons_only_binary_vars, "2obj_2cons_only_binary_vars.lp", -7.5, -186.);
-generate_test!(obj_2cons_all_variable_types, "2obj_2cons_all_variable_types.lp", -7.5, -186.);
-generate_test!(obj_1cons_all_variables_with_bounds, "1obj_1cons_all_variables_with_bounds.lp", -1., 16.5);
 generate_test!(semi_continuous, "semi_continuous.lp", 2., 0.);
 generate_test!(sos, "sos.lp", 0., 17.5);
 generate_test!(test, "test.lp", 2., 2.9899);
@@ -54,9 +45,6 @@ generate_test!(infile_comments, "infile_comments.lp", 43., 7.);
 generate_test!(infile_comments2, "infile_comments2.lp", 43., 0.);
 generate_test!(missing_signs, "missing_signs.lp", 43., -3.);
 generate_test!(fit2d, "fit2d.lp", 349048.9, -296677.389);
-generate_test!(scientific_notation, "scientific_notation.lp", 238.0324, -43.87680);
-generate_test!(mosek, "mosek.lp", 2.19999, 61.783048);
-generate_test!(mosek_bounds, "mosek_bounds.lp", 2.19999, 61.783048);
 
 #[test]
 fn invalid() {
@@ -69,4 +57,45 @@ fn read_file_from_resources(file_name: &str) -> Result<LPProblem, LPParserError>
     file_path.push(format!("resources/{file_name}"));
     let contents = parse_file(&file_path)?;
     parse_lp_file(&contents)
+}
+
+/// Test files from various open source projects on Github
+mod oss_tests {
+    use super::*;
+
+    // Mosek: <https://docs.mosek.com/latest/capi/lp-format.html>
+    generate_test!(scientific_notation, "scientific_notation.lp", 238.0324, -43.87680);
+    generate_test!(mosek, "mosek.lp", 2.19999, 61.783048);
+    generate_test!(mosek_bounds, "mosek_bounds.lp", 2.19999, 61.783048);
+    generate_test!(lol, "lol.lp", 10., 18.);
+    generate_test!(milo1, "milo1.lp", 1.64, 82.);
+
+    // From <https://github.com/asbestian/jplex>
+    generate_test!(obj3_2cons, "3obj_2cons.lp", 1., -186.);
+    generate_test!(no_end_section, "no_end_section.lp", 1., -186.);
+    generate_test!(obj_2cons_only_binary_vars, "2obj_2cons_only_binary_vars.lp", -7.5, -186.);
+    generate_test!(obj_2cons_all_variable_types, "2obj_2cons_all_variable_types.lp", -7.5, -186.);
+    generate_test!(obj_1cons_all_variables_with_bounds, "1obj_1cons_all_variables_with_bounds.lp", -1., 16.5);
+    generate_test!(afiro, "afiro.lp", -4.100, 25.369);
+    generate_test!(afiro_ext, "afiro_ext.lp", -5.239, 25.369);
+    generate_test!(boeing1, "boeing1.lp", 1187.985, 194612.346);
+    generate_test!(boeing2, "boeing2.lp", 78.488, 20863.836);
+    generate_test!(fit1d, "fit1d.lp", 82457.0, -146871.180);
+    generate_test!(kb2, "kb2.lp", 11.675, 10143.724);
+    generate_test!(sc50a, "sc50a.lp", -1., 30.3);
+
+    // From <https://github.com/brymck/lp-parse/tree>
+    generate_test!(model, "model.lp", -2., 0.);
+
+    // From <https://github.com/josephcslater/JupyterExamples>
+    generate_test!(sudoku, "sudoku.lp", 1., 2945.);
+
+    // From <https://github.com/afaf-taik/vehicularFL>
+    generate_test!(wbm, "wbm.lp", 88., 4830.);
+
+    // From <https://github.com/IBMDecisionOptimization/cplexrunonwml>
+    generate_test!(diet, "diet.lp", 3.359, 7643.89);
+
+    // From <https://github.com/claudiosa/CCS>
+    generate_test!(output_cplex_2, "output_cplex_2.lp", 1.0, -20008.);
 }

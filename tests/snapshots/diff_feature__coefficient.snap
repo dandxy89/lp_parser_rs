@@ -4,4 +4,3 @@ expression: a.diff(&a)
 ---
 var_name: ~
 coefficient: 0
-
