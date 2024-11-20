@@ -2,6 +2,24 @@
 source: tests/test_from_file.rs
 expression: result
 ---
+constraints:
+  con_2025:
+    Standard:
+      name: con_2025
+      coefficients:
+        - coefficient: -1
+          var_name: x
+        - coefficient: 2
+          var_name: y
+      sense: ">="
+      rhs: 1
+objectives:
+  - coefficients:
+      - coefficient: 1
+        var_name: x
+      - coefficient: 10
+        var_name: y
+    name: obj_2024
 problem_name: ~
 problem_sense: Minimize
 variables:
@@ -9,21 +27,3 @@ variables:
   x: Binary
   y: Binary
   z: Binary
-objectives:
-  - name: obj_2024
-    coefficients:
-      - var_name: x
-        coefficient: 1
-      - var_name: y
-        coefficient: 10
-constraints:
-  con_2025:
-    Standard:
-      name: con_2025
-      coefficients:
-        - var_name: x
-          coefficient: -1
-        - var_name: y
-          coefficient: 2
-      sense: ">="
-      rhs: 1

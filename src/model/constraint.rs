@@ -20,6 +20,8 @@ pub enum Constraint {
     SOS { name: String, kind: SOSClass, coefficients: Vec<Coefficient> },
 }
 
+impl Eq for Constraint {}
+
 impl PartialEq for Constraint {
     #[inline]
     fn eq(&self, other: &Self) -> bool {
@@ -36,8 +38,6 @@ impl PartialEq for Constraint {
         }
     }
 }
-
-impl Eq for Constraint {}
 
 impl Constraint {
     #[inline]
@@ -62,10 +62,10 @@ impl LPPart for Constraint {
     type Output = Self;
 
     #[inline]
-    fn try_into(pair: Pair<'_, Rule>, gen: &mut SequenceGenerator) -> Result<Self, LPParserError> {
+    fn try_into(pair: Pair<'_, Rule>, id_gen: &mut SequenceGenerator) -> Result<Self, LPParserError> {
         let mut parts = pair.into_inner().peekable();
         // Constraint name can be omitted in LP files, so we need to handle that case
-        let name = get_name(&mut parts, gen, Rule::CONSTRAINT_NAME);
+        let name = get_name(&mut parts, id_gen, Rule::CONSTRAINT_NAME);
         let mut coefficients: Vec<_> = vec![];
         while let Some(p) = parts.peek() {
             if p.as_rule().is_cmp() {
@@ -75,14 +75,14 @@ impl LPPart for Constraint {
         }
         let coefficients: ParseResult<Coefficient> = coefficients
             .into_iter()
-            .filter(|p| !matches!(p.as_rule(), Rule::PLUS | Rule::MINUS))
-            .map(|p| p.into_inner().try_into())
+            .filter(|cons_part| !matches!(cons_part.as_rule(), Rule::PLUS | Rule::MINUS))
+            .map(|cons_part| cons_part.into_inner().try_into())
             .collect();
 
         let sense = Cmp::from_str(parts.next().unwrap().as_str())?;
 
         let value = parts.next().unwrap().as_str();
-        let rhs = value.parse().map_err(|_| LPParserError::RHSParseError(parts.next().unwrap().as_str().to_owned()))?;
+        let rhs = value.parse().map_err(|_e| LPParserError::RHSParseError(parts.next().unwrap().as_str().to_owned()))?;
 
         Ok(Self::Standard { name, coefficients: coefficients?, sense, rhs })
     }

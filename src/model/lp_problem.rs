@@ -14,26 +14,28 @@ where
 {
     type Output;
 
-    fn try_into(pair: Pair<'_, Rule>, gen: &mut SequenceGenerator) -> Result<Self::Output, LPParserError>;
+    /// # Errors
+    /// Returns an error if the rule cannot be converted to an `LPProblem`
+    fn try_into(pair: Pair<'_, Rule>, id_gen: &mut SequenceGenerator) -> Result<Self::Output, LPParserError>;
 }
 
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "diff", derive(diff::Diff), diff(attr(#[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)])))]
 pub struct LPProblem {
+    pub constraints: HashMap<String, Constraint>,
+    pub objectives: Vec<Objective>,
     pub problem_name: Option<String>,
     pub problem_sense: Sense,
     pub variables: HashMap<String, Variable>,
-    pub objectives: Vec<Objective>,
-    pub constraints: HashMap<String, Constraint>,
 }
 
 impl LPProblem {
     #[inline]
     pub fn add_constraint(&mut self, constraint: Constraint) {
         let name = if constraint.name().is_empty() { format!("UnnamedConstraint:{}", self.constraints.len()) } else { constraint.name() };
-        constraint.coefficients().iter().for_each(|c| {
-            self.add_variable(&c.var_name);
+        constraint.coefficients().iter().for_each(|coefficient| {
+            self.add_variable(&coefficient.var_name);
         });
         self.constraints.entry(name).or_insert(constraint);
     }
@@ -43,8 +45,8 @@ impl LPProblem {
         log::debug!("Adding {} constraints", constraints.len());
         for con in constraints {
             let name = if con.name().is_empty() { format!("UnnamedConstraint:{}", self.constraints.len()) } else { con.name() };
-            con.coefficients().iter().for_each(|c| {
-                self.add_variable(&c.var_name);
+            con.coefficients().iter().for_each(|coefficient| {
+                self.add_variable(&coefficient.var_name);
             });
             self.constraints.entry(name).or_insert(con);
         }
@@ -54,8 +56,8 @@ impl LPProblem {
     pub fn add_objectives(&mut self, objectives: Vec<Objective>) {
         log::debug!("Adding {} objectives", objectives.len());
         for ob in &objectives {
-            ob.coefficients.iter().for_each(|c| {
-                self.add_variable(&c.var_name);
+            ob.coefficients.iter().for_each(|coefficient| {
+                self.add_variable(&coefficient.var_name);
             });
         }
         self.objectives = objectives;
@@ -72,12 +74,12 @@ impl LPProblem {
     pub fn set_variable_bounds(&mut self, name: &str, kind: Variable) {
         if !name.is_empty() {
             match self.variables.entry(name.to_owned()) {
-                Entry::Occupied(k) if matches!(kind, Variable::SemiContinuous) => {
-                    k.into_mut().set_semi_continuous();
+                Entry::Occupied(entry) if matches!(kind, Variable::SemiContinuous) => {
+                    entry.into_mut().set_semi_continuous();
                 }
-                Entry::Occupied(k) => *k.into_mut() = kind,
-                Entry::Vacant(k) => {
-                    k.insert(kind);
+                Entry::Occupied(entry) => *entry.into_mut() = kind,
+                Entry::Vacant(entry) => {
+                    entry.insert(kind);
                 }
             }
         }

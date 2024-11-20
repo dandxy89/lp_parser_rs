@@ -2,6 +2,170 @@
 source: tests/test_from_file.rs
 expression: result
 ---
+constraints:
+  "Sum_of_Products_into_Stores_Barstow:":
+    Standard:
+      name: "Sum_of_Products_into_Stores_Barstow:"
+      coefficients:
+        - coefficient: 1
+          var_name: Route_Denver_Barstow
+        - coefficient: 1
+          var_name: Route_Los_Angeles_Barstow
+        - coefficient: 1
+          var_name: Route_Phoenix_Barstow
+        - coefficient: 1
+          var_name: Route_San_Francisco_Barstow
+      sense: ">="
+      rhs: 1000
+  "Sum_of_Products_into_Stores_Dallas:":
+    Standard:
+      name: "Sum_of_Products_into_Stores_Dallas:"
+      coefficients:
+        - coefficient: 1
+          var_name: Route_Denver_Dallas
+        - coefficient: 1
+          var_name: Route_Los_Angeles_Dallas
+        - coefficient: 1
+          var_name: Route_Phoenix_Dallas
+        - coefficient: 1
+          var_name: Route_San_Francisco_Dallas
+      sense: ">="
+      rhs: 1200
+  "Sum_of_Products_into_Stores_San_Diego:":
+    Standard:
+      name: "Sum_of_Products_into_Stores_San_Diego:"
+      coefficients:
+        - coefficient: 1
+          var_name: Route_Denver_San_Diego
+        - coefficient: 1
+          var_name: Route_Los_Angeles_San_Diego
+        - coefficient: 1
+          var_name: Route_Phoenix_San_Diego
+        - coefficient: 1
+          var_name: Route_San_Francisco_San_Diego
+      sense: ">="
+      rhs: 1700
+  "Sum_of_Products_into_Stores_Tucson:":
+    Standard:
+      name: "Sum_of_Products_into_Stores_Tucson:"
+      coefficients:
+        - coefficient: 1
+          var_name: Route_Denver_Tucson
+        - coefficient: 1
+          var_name: Route_Los_Angeles_Tucson
+        - coefficient: 1
+          var_name: Route_Phoenix_Tucson
+        - coefficient: 1
+          var_name: Route_San_Francisco_Tucson
+      sense: ">="
+      rhs: 1500
+  "Sum_of_Products_out_of_Plant_Denver:":
+    Standard:
+      name: "Sum_of_Products_out_of_Plant_Denver:"
+      coefficients:
+        - coefficient: -2000
+          var_name: BuildaPlant_Denver
+        - coefficient: 1
+          var_name: Route_Denver_Barstow
+        - coefficient: 1
+          var_name: Route_Denver_Dallas
+        - coefficient: 1
+          var_name: Route_Denver_San_Diego
+        - coefficient: 1
+          var_name: Route_Denver_Tucson
+      sense: "<="
+      rhs: 0
+  "Sum_of_Products_out_of_Plant_Los_Angeles:":
+    Standard:
+      name: "Sum_of_Products_out_of_Plant_Los_Angeles:"
+      coefficients:
+        - coefficient: -2000
+          var_name: BuildaPlant_Los_Angeles
+        - coefficient: 1
+          var_name: Route_Los_Angeles_Barstow
+        - coefficient: 1
+          var_name: Route_Los_Angeles_Dallas
+        - coefficient: 1
+          var_name: Route_Los_Angeles_San_Diego
+        - coefficient: 1
+          var_name: Route_Los_Angeles_Tucson
+      sense: "<="
+      rhs: 0
+  "Sum_of_Products_out_of_Plant_Phoenix:":
+    Standard:
+      name: "Sum_of_Products_out_of_Plant_Phoenix:"
+      coefficients:
+        - coefficient: -1700
+          var_name: BuildaPlant_Phoenix
+        - coefficient: 1
+          var_name: Route_Phoenix_Barstow
+        - coefficient: 1
+          var_name: Route_Phoenix_Dallas
+        - coefficient: 1
+          var_name: Route_Phoenix_San_Diego
+        - coefficient: 1
+          var_name: Route_Phoenix_Tucson
+      sense: "<="
+      rhs: 0
+  "Sum_of_Products_out_of_Plant_San_Francisco:":
+    Standard:
+      name: "Sum_of_Products_out_of_Plant_San_Francisco:"
+      coefficients:
+        - coefficient: -1700
+          var_name: BuildaPlant_San_Francisco
+        - coefficient: 1
+          var_name: Route_San_Francisco_Barstow
+        - coefficient: 1
+          var_name: Route_San_Francisco_Dallas
+        - coefficient: 1
+          var_name: Route_San_Francisco_San_Diego
+        - coefficient: 1
+          var_name: Route_San_Francisco_Tucson
+      sense: "<="
+      rhs: 0
+objectives:
+  - coefficients:
+      - coefficient: 70000
+        var_name: BuildaPlant_Denver
+      - coefficient: 70000
+        var_name: BuildaPlant_Los_Angeles
+      - coefficient: 65000
+        var_name: BuildaPlant_Phoenix
+      - coefficient: 70000
+        var_name: BuildaPlant_San_Francisco
+      - coefficient: 8
+        var_name: Route_Denver_Barstow
+      - coefficient: 5
+        var_name: Route_Denver_Dallas
+      - coefficient: 9
+        var_name: Route_Denver_San_Diego
+      - coefficient: 6
+        var_name: Route_Denver_Tucson
+      - coefficient: 7
+        var_name: Route_Los_Angeles_Barstow
+      - coefficient: 10
+        var_name: Route_Los_Angeles_Dallas
+      - coefficient: 4
+        var_name: Route_Los_Angeles_San_Diego
+      - coefficient: 8
+        var_name: Route_Los_Angeles_Tucson
+      - coefficient: 5
+        var_name: Route_Phoenix_Barstow
+      - coefficient: 8
+        var_name: Route_Phoenix_Dallas
+      - coefficient: 6
+        var_name: Route_Phoenix_San_Diego
+      - coefficient: 3
+        var_name: Route_Phoenix_Tucson
+      - coefficient: 3
+        var_name: Route_San_Francisco_Barstow
+      - coefficient: 6
+        var_name: Route_San_Francisco_Dallas
+      - coefficient: 5
+        var_name: Route_San_Francisco_San_Diego
+      - coefficient: 2
+        var_name: Route_San_Francisco_Tucson
+    name: Total_Costs
 problem_name: ~
 problem_sense: Minimize
 variables:
@@ -25,167 +189,3 @@ variables:
   Route_San_Francisco_Dallas: General
   Route_San_Francisco_San_Diego: General
   Route_San_Francisco_Tucson: General
-objectives:
-  - name: Total_Costs
-    coefficients:
-      - var_name: BuildaPlant_Denver
-        coefficient: 70000
-      - var_name: BuildaPlant_Los_Angeles
-        coefficient: 70000
-      - var_name: BuildaPlant_Phoenix
-        coefficient: 65000
-      - var_name: BuildaPlant_San_Francisco
-        coefficient: 70000
-      - var_name: Route_Denver_Barstow
-        coefficient: 8
-      - var_name: Route_Denver_Dallas
-        coefficient: 5
-      - var_name: Route_Denver_San_Diego
-        coefficient: 9
-      - var_name: Route_Denver_Tucson
-        coefficient: 6
-      - var_name: Route_Los_Angeles_Barstow
-        coefficient: 7
-      - var_name: Route_Los_Angeles_Dallas
-        coefficient: 10
-      - var_name: Route_Los_Angeles_San_Diego
-        coefficient: 4
-      - var_name: Route_Los_Angeles_Tucson
-        coefficient: 8
-      - var_name: Route_Phoenix_Barstow
-        coefficient: 5
-      - var_name: Route_Phoenix_Dallas
-        coefficient: 8
-      - var_name: Route_Phoenix_San_Diego
-        coefficient: 6
-      - var_name: Route_Phoenix_Tucson
-        coefficient: 3
-      - var_name: Route_San_Francisco_Barstow
-        coefficient: 3
-      - var_name: Route_San_Francisco_Dallas
-        coefficient: 6
-      - var_name: Route_San_Francisco_San_Diego
-        coefficient: 5
-      - var_name: Route_San_Francisco_Tucson
-        coefficient: 2
-constraints:
-  "Sum_of_Products_into_Stores_Barstow:":
-    Standard:
-      name: "Sum_of_Products_into_Stores_Barstow:"
-      coefficients:
-        - var_name: Route_Denver_Barstow
-          coefficient: 1
-        - var_name: Route_Los_Angeles_Barstow
-          coefficient: 1
-        - var_name: Route_Phoenix_Barstow
-          coefficient: 1
-        - var_name: Route_San_Francisco_Barstow
-          coefficient: 1
-      sense: ">="
-      rhs: 1000
-  "Sum_of_Products_into_Stores_Dallas:":
-    Standard:
-      name: "Sum_of_Products_into_Stores_Dallas:"
-      coefficients:
-        - var_name: Route_Denver_Dallas
-          coefficient: 1
-        - var_name: Route_Los_Angeles_Dallas
-          coefficient: 1
-        - var_name: Route_Phoenix_Dallas
-          coefficient: 1
-        - var_name: Route_San_Francisco_Dallas
-          coefficient: 1
-      sense: ">="
-      rhs: 1200
-  "Sum_of_Products_into_Stores_San_Diego:":
-    Standard:
-      name: "Sum_of_Products_into_Stores_San_Diego:"
-      coefficients:
-        - var_name: Route_Denver_San_Diego
-          coefficient: 1
-        - var_name: Route_Los_Angeles_San_Diego
-          coefficient: 1
-        - var_name: Route_Phoenix_San_Diego
-          coefficient: 1
-        - var_name: Route_San_Francisco_San_Diego
-          coefficient: 1
-      sense: ">="
-      rhs: 1700
-  "Sum_of_Products_into_Stores_Tucson:":
-    Standard:
-      name: "Sum_of_Products_into_Stores_Tucson:"
-      coefficients:
-        - var_name: Route_Denver_Tucson
-          coefficient: 1
-        - var_name: Route_Los_Angeles_Tucson
-          coefficient: 1
-        - var_name: Route_Phoenix_Tucson
-          coefficient: 1
-        - var_name: Route_San_Francisco_Tucson
-          coefficient: 1
-      sense: ">="
-      rhs: 1500
-  "Sum_of_Products_out_of_Plant_Denver:":
-    Standard:
-      name: "Sum_of_Products_out_of_Plant_Denver:"
-      coefficients:
-        - var_name: BuildaPlant_Denver
-          coefficient: -2000
-        - var_name: Route_Denver_Barstow
-          coefficient: 1
-        - var_name: Route_Denver_Dallas
-          coefficient: 1
-        - var_name: Route_Denver_San_Diego
-          coefficient: 1
-        - var_name: Route_Denver_Tucson
-          coefficient: 1
-      sense: "<="
-      rhs: 0
-  "Sum_of_Products_out_of_Plant_Los_Angeles:":
-    Standard:
-      name: "Sum_of_Products_out_of_Plant_Los_Angeles:"
-      coefficients:
-        - var_name: BuildaPlant_Los_Angeles
-          coefficient: -2000
-        - var_name: Route_Los_Angeles_Barstow
-          coefficient: 1
-        - var_name: Route_Los_Angeles_Dallas
-          coefficient: 1
-        - var_name: Route_Los_Angeles_San_Diego
-          coefficient: 1
-        - var_name: Route_Los_Angeles_Tucson
-          coefficient: 1
-      sense: "<="
-      rhs: 0
-  "Sum_of_Products_out_of_Plant_Phoenix:":
-    Standard:
-      name: "Sum_of_Products_out_of_Plant_Phoenix:"
-      coefficients:
-        - var_name: BuildaPlant_Phoenix
-          coefficient: -1700
-        - var_name: Route_Phoenix_Barstow
-          coefficient: 1
-        - var_name: Route_Phoenix_Dallas
-          coefficient: 1
-        - var_name: Route_Phoenix_San_Diego
-          coefficient: 1
-        - var_name: Route_Phoenix_Tucson
-          coefficient: 1
-      sense: "<="
-      rhs: 0
-  "Sum_of_Products_out_of_Plant_San_Francisco:":
-    Standard:
-      name: "Sum_of_Products_out_of_Plant_San_Francisco:"
-      coefficients:
-        - var_name: BuildaPlant_San_Francisco
-          coefficient: -1700
-        - var_name: Route_San_Francisco_Barstow
-          coefficient: 1
-        - var_name: Route_San_Francisco_Dallas
-          coefficient: 1
-        - var_name: Route_San_Francisco_San_Diego
-          coefficient: 1
-        - var_name: Route_San_Francisco_Tucson
-          coefficient: 1
-      sense: "<="
-      rhs: 0

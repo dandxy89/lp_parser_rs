@@ -20,11 +20,11 @@
 
 #![allow(clippy::module_name_repetitions)]
 
-use pest_derive::Parser;
-
 pub mod common;
 pub mod model;
 pub mod parse;
+
+use pest_derive::Parser;
 
 #[derive(Parser)]
 #[grammar = "lp_file_format.pest"]

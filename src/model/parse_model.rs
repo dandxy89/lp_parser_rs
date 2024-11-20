@@ -19,35 +19,35 @@ use crate::{
 #[allow(clippy::wildcard_enum_match_arm)]
 /// # Errors
 /// Returns an error if the `compose` fails
-pub fn compose(pair: Pair<'_, Rule>, mut parsed: LPProblem, gen: &mut SequenceGenerator) -> Result<LPProblem, LPParserError> {
-    match pair.as_rule() {
+pub fn compose(lp_pair: Pair<'_, Rule>, mut parsed: LPProblem, id_gen: &mut SequenceGenerator) -> Result<LPProblem, LPParserError> {
+    match lp_pair.as_rule() {
         // Problem Name
-        Rule::PROBLEM_NAME => return Ok(parsed.with_problem_name(pair.as_str())),
+        Rule::PROBLEM_NAME => return Ok(parsed.with_problem_name(lp_pair.as_str())),
         // Problem sense
         Rule::MIN_SENSE => return Ok(parsed.with_sense(Sense::Minimize)),
         Rule::MAX_SENSE => return Ok(parsed.with_sense(Sense::Maximize)),
         // Problem Objectives
         Rule::OBJECTIVES => {
-            let parts: ParseResult<_> = pair.into_inner().map(|p| <Objective as LPPart>::try_into(p, gen)).collect();
+            let parts: ParseResult<_> = lp_pair.into_inner().map(|obj_part| <Objective as LPPart>::try_into(obj_part, id_gen)).collect();
             parsed.add_objectives(parts?);
         }
         // Problem Constraints
         Rule::CONSTRAINTS => {
-            for part in pair.into_inner().map(|p| <Constraint as LPPart>::try_into(p, gen)) {
-                if let Ok(part) = part {
-                    parsed.add_constraint(part);
+            for part in lp_pair.into_inner().map(|cons_part| <Constraint as LPPart>::try_into(cons_part, id_gen)) {
+                if let Ok(constraint) = part {
+                    parsed.add_constraint(constraint);
                 } else {
                     log::warn!("Failed to parse constraint: {part:?}");
                 }
             }
         }
         Rule::SOS => {
-            let parts: ParseResult<_> = pair.into_inner().map(|p| <SOSClass as LPPart>::try_into(p, gen)).collect();
+            let parts: ParseResult<_> = lp_pair.into_inner().map(|sos_part| <SOSClass as LPPart>::try_into(sos_part, id_gen)).collect();
             parsed.add_constraints(parts?);
         }
         // Problem Bounds
         Rule::BOUNDS => {
-            for bound_pair in pair.into_inner() {
+            for bound_pair in lp_pair.into_inner() {
                 if let Some((name, kind)) = get_bound(&bound_pair) {
                     parsed.set_variable_bounds(name, kind);
                 } else {
@@ -56,12 +56,12 @@ pub fn compose(pair: Pair<'_, Rule>, mut parsed: LPProblem, gen: &mut SequenceGe
             }
         }
         // Variable Bounds
-        r @ (Rule::INTEGERS | Rule::GENERALS | Rule::BINARIES | Rule::SEMI_CONTINUOUS) => {
-            for p in pair.into_inner() {
-                if matches!(p.as_rule(), Rule::VARIABLE) {
-                    parsed.set_variable_bounds(p.as_str(), r.into());
+        bound @ (Rule::INTEGERS | Rule::GENERALS | Rule::BINARIES | Rule::SEMI_CONTINUOUS) => {
+            for rule in lp_pair.into_inner() {
+                if matches!(rule.as_rule(), Rule::VARIABLE) {
+                    parsed.set_variable_bounds(rule.as_str(), bound.into());
                 } else {
-                    log::warn!("Failed to variable bound: {p:?}");
+                    log::warn!("Failed to variable bound: {rule:?}");
                 }
             }
         }

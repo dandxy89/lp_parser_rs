@@ -2,6 +2,566 @@
 source: tests/test_from_file.rs
 expression: result
 ---
+constraints:
+  "ROW00001:":
+    Standard:
+      name: "ROW00001:"
+      coefficients:
+        - coefficient: 2
+          var_name: COL00001
+        - coefficient: 1
+          var_name: COL00002
+        - coefficient: 1.5
+          var_name: COL00003
+      sense: "<="
+      rhs: 170
+  "ROW00002:":
+    Standard:
+      name: "ROW00002:"
+      coefficients:
+        - coefficient: 1
+          var_name: COL00001
+        - coefficient: 2
+          var_name: COL00002
+        - coefficient: 1.5
+          var_name: COL00003
+      sense: "<="
+      rhs: 130
+  "ROW00004:":
+    Standard:
+      name: "ROW00004:"
+      coefficients:
+        - coefficient: 1
+          var_name: COL00004
+        - coefficient: -1
+          var_name: COL00005
+      sense: "="
+      rhs: 0
+  "ROW00005:":
+    Standard:
+      name: "ROW00005:"
+      coefficients:
+        - coefficient: -1
+          var_name: COL00001
+        - coefficient: 1
+          var_name: COL00006
+      sense: "="
+      rhs: 0
+  "ROW00006:":
+    Standard:
+      name: "ROW00006:"
+      coefficients:
+        - coefficient: -1
+          var_name: COL00002
+        - coefficient: 1
+          var_name: COL00007
+      sense: "="
+      rhs: 0
+  "ROW00007:":
+    Standard:
+      name: "ROW00007:"
+      coefficients:
+        - coefficient: -1
+          var_name: COL00003
+        - coefficient: 1
+          var_name: COL00008
+      sense: "="
+      rhs: 0
+  "ROW00008:":
+    Standard:
+      name: "ROW00008:"
+      coefficients:
+        - coefficient: -1
+          var_name: COL00006
+        - coefficient: 1
+          var_name: COL00009
+      sense: "<="
+      rhs: 0
+  "ROW00009:":
+    Standard:
+      name: "ROW00009:"
+      coefficients:
+        - coefficient: -1
+          var_name: COL00007
+        - coefficient: 1
+          var_name: COL00010
+      sense: "<="
+      rhs: 0
+  "ROW00010:":
+    Standard:
+      name: "ROW00010:"
+      coefficients:
+        - coefficient: -1
+          var_name: COL00008
+        - coefficient: 1
+          var_name: COL00011
+      sense: "<="
+      rhs: 0
+  "ROW00011:":
+    Standard:
+      name: "ROW00011:"
+      coefficients:
+        - coefficient: -1
+          var_name: COL00009
+        - coefficient: 2
+          var_name: COL00012
+        - coefficient: 1
+          var_name: COL00013
+        - coefficient: 1.5
+          var_name: COL00014
+      sense: "<="
+      rhs: 170
+  "ROW00012:":
+    Standard:
+      name: "ROW00012:"
+      coefficients:
+        - coefficient: -1
+          var_name: COL00010
+        - coefficient: 1
+          var_name: COL00012
+        - coefficient: 2
+          var_name: COL00013
+        - coefficient: 1.5
+          var_name: COL00014
+      sense: "<="
+      rhs: 130
+  "ROW00013:":
+    Standard:
+      name: "ROW00013:"
+      coefficients:
+        - coefficient: 1
+          var_name: COL00005
+        - coefficient: -1
+          var_name: COL00011
+      sense: "<="
+      rhs: 0
+  "ROW00014:":
+    Standard:
+      name: "ROW00014:"
+      coefficients:
+        - coefficient: 1.1
+          var_name: COL00004
+        - coefficient: -1
+          var_name: COL00015
+      sense: "="
+      rhs: 0
+  "ROW00015:":
+    Standard:
+      name: "ROW00015:"
+      coefficients:
+        - coefficient: 1
+          var_name: COL00005
+        - coefficient: 1
+          var_name: COL00015
+        - coefficient: -1
+          var_name: COL00016
+      sense: "="
+      rhs: 0
+  "ROW00016:":
+    Standard:
+      name: "ROW00016:"
+      coefficients:
+        - coefficient: -1
+          var_name: COL00006
+        - coefficient: -1
+          var_name: COL00012
+        - coefficient: 1
+          var_name: COL00017
+      sense: "="
+      rhs: 0
+  "ROW00017:":
+    Standard:
+      name: "ROW00017:"
+      coefficients:
+        - coefficient: -1
+          var_name: COL00007
+        - coefficient: -1
+          var_name: COL00013
+        - coefficient: 1
+          var_name: COL00018
+      sense: "="
+      rhs: 0
+  "ROW00018:":
+    Standard:
+      name: "ROW00018:"
+      coefficients:
+        - coefficient: -1
+          var_name: COL00008
+        - coefficient: -1
+          var_name: COL00014
+        - coefficient: 1
+          var_name: COL00019
+      sense: "="
+      rhs: 0
+  "ROW00019:":
+    Standard:
+      name: "ROW00019:"
+      coefficients:
+        - coefficient: -1
+          var_name: COL00017
+        - coefficient: 1
+          var_name: COL00020
+      sense: "<="
+      rhs: 0
+  "ROW00020:":
+    Standard:
+      name: "ROW00020:"
+      coefficients:
+        - coefficient: -1
+          var_name: COL00018
+        - coefficient: 1
+          var_name: COL00021
+      sense: "<="
+      rhs: 0
+  "ROW00021:":
+    Standard:
+      name: "ROW00021:"
+      coefficients:
+        - coefficient: -1
+          var_name: COL00019
+        - coefficient: 1
+          var_name: COL00022
+      sense: "<="
+      rhs: 0
+  "ROW00022:":
+    Standard:
+      name: "ROW00022:"
+      coefficients:
+        - coefficient: -1
+          var_name: COL00020
+        - coefficient: 2
+          var_name: COL00023
+        - coefficient: 1
+          var_name: COL00024
+        - coefficient: 1.5
+          var_name: COL00025
+      sense: "<="
+      rhs: 170
+  "ROW00023:":
+    Standard:
+      name: "ROW00023:"
+      coefficients:
+        - coefficient: -1
+          var_name: COL00021
+        - coefficient: 1
+          var_name: COL00023
+        - coefficient: 2
+          var_name: COL00024
+        - coefficient: 1.5
+          var_name: COL00025
+      sense: "<="
+      rhs: 130
+  "ROW00024:":
+    Standard:
+      name: "ROW00024:"
+      coefficients:
+        - coefficient: 1
+          var_name: COL00016
+        - coefficient: -1
+          var_name: COL00022
+      sense: "<="
+      rhs: 0
+  "ROW00025:":
+    Standard:
+      name: "ROW00025:"
+      coefficients:
+        - coefficient: 1.1
+          var_name: COL00015
+        - coefficient: -1
+          var_name: COL00026
+      sense: "="
+      rhs: 0
+  "ROW00026:":
+    Standard:
+      name: "ROW00026:"
+      coefficients:
+        - coefficient: 1
+          var_name: COL00016
+        - coefficient: 1
+          var_name: COL00026
+        - coefficient: -1
+          var_name: COL00027
+      sense: "="
+      rhs: 0
+  "ROW00027:":
+    Standard:
+      name: "ROW00027:"
+      coefficients:
+        - coefficient: -1
+          var_name: COL00017
+        - coefficient: -1
+          var_name: COL00023
+        - coefficient: 1
+          var_name: COL00028
+      sense: "="
+      rhs: 0
+  "ROW00028:":
+    Standard:
+      name: "ROW00028:"
+      coefficients:
+        - coefficient: -1
+          var_name: COL00018
+        - coefficient: -1
+          var_name: COL00024
+        - coefficient: 1
+          var_name: COL00029
+      sense: "="
+      rhs: 0
+  "ROW00029:":
+    Standard:
+      name: "ROW00029:"
+      coefficients:
+        - coefficient: -1
+          var_name: COL00019
+        - coefficient: -1
+          var_name: COL00025
+        - coefficient: 1
+          var_name: COL00030
+      sense: "="
+      rhs: 0
+  "ROW00030:":
+    Standard:
+      name: "ROW00030:"
+      coefficients:
+        - coefficient: -1
+          var_name: COL00028
+        - coefficient: 1
+          var_name: COL00031
+      sense: "<="
+      rhs: 0
+  "ROW00031:":
+    Standard:
+      name: "ROW00031:"
+      coefficients:
+        - coefficient: -1
+          var_name: COL00029
+        - coefficient: 1
+          var_name: COL00032
+      sense: "<="
+      rhs: 0
+  "ROW00032:":
+    Standard:
+      name: "ROW00032:"
+      coefficients:
+        - coefficient: -1
+          var_name: COL00030
+        - coefficient: 1
+          var_name: COL00033
+      sense: "<="
+      rhs: 0
+  "ROW00033:":
+    Standard:
+      name: "ROW00033:"
+      coefficients:
+        - coefficient: -1
+          var_name: COL00031
+        - coefficient: 2
+          var_name: COL00034
+        - coefficient: 1
+          var_name: COL00035
+        - coefficient: 1.5
+          var_name: COL00036
+      sense: "<="
+      rhs: 170
+  "ROW00034:":
+    Standard:
+      name: "ROW00034:"
+      coefficients:
+        - coefficient: -1
+          var_name: COL00032
+        - coefficient: 1
+          var_name: COL00034
+        - coefficient: 2
+          var_name: COL00035
+        - coefficient: 1.5
+          var_name: COL00036
+      sense: "<="
+      rhs: 130
+  "ROW00035:":
+    Standard:
+      name: "ROW00035:"
+      coefficients:
+        - coefficient: 1
+          var_name: COL00027
+        - coefficient: -1
+          var_name: COL00033
+      sense: "<="
+      rhs: 0
+  "ROW00036:":
+    Standard:
+      name: "ROW00036:"
+      coefficients:
+        - coefficient: 1.1
+          var_name: COL00026
+        - coefficient: -1
+          var_name: COL00037
+      sense: "="
+      rhs: 0
+  "ROW00037:":
+    Standard:
+      name: "ROW00037:"
+      coefficients:
+        - coefficient: 1
+          var_name: COL00027
+        - coefficient: 1
+          var_name: COL00037
+        - coefficient: -1
+          var_name: COL00038
+      sense: "="
+      rhs: 0
+  "ROW00038:":
+    Standard:
+      name: "ROW00038:"
+      coefficients:
+        - coefficient: -1
+          var_name: COL00028
+        - coefficient: -1
+          var_name: COL00034
+        - coefficient: 1
+          var_name: COL00039
+      sense: "="
+      rhs: 0
+  "ROW00039:":
+    Standard:
+      name: "ROW00039:"
+      coefficients:
+        - coefficient: -1
+          var_name: COL00029
+        - coefficient: -1
+          var_name: COL00035
+        - coefficient: 1
+          var_name: COL00040
+      sense: "="
+      rhs: 0
+  "ROW00040:":
+    Standard:
+      name: "ROW00040:"
+      coefficients:
+        - coefficient: -1
+          var_name: COL00030
+        - coefficient: -1
+          var_name: COL00036
+        - coefficient: 1
+          var_name: COL00041
+      sense: "="
+      rhs: 0
+  "ROW00041:":
+    Standard:
+      name: "ROW00041:"
+      coefficients:
+        - coefficient: -1
+          var_name: COL00039
+        - coefficient: 1
+          var_name: COL00042
+      sense: "<="
+      rhs: 0
+  "ROW00042:":
+    Standard:
+      name: "ROW00042:"
+      coefficients:
+        - coefficient: -1
+          var_name: COL00040
+        - coefficient: 1
+          var_name: COL00043
+      sense: "<="
+      rhs: 0
+  "ROW00043:":
+    Standard:
+      name: "ROW00043:"
+      coefficients:
+        - coefficient: -1
+          var_name: COL00041
+        - coefficient: 1
+          var_name: COL00044
+      sense: "<="
+      rhs: 0
+  "ROW00044:":
+    Standard:
+      name: "ROW00044:"
+      coefficients:
+        - coefficient: -1
+          var_name: COL00042
+        - coefficient: 2
+          var_name: COL00045
+        - coefficient: 1
+          var_name: COL00046
+        - coefficient: 1.5
+          var_name: COL00047
+      sense: "<="
+      rhs: 170
+  "ROW00045:":
+    Standard:
+      name: "ROW00045:"
+      coefficients:
+        - coefficient: -1
+          var_name: COL00043
+        - coefficient: 1
+          var_name: COL00045
+        - coefficient: 2
+          var_name: COL00046
+        - coefficient: 1.5
+          var_name: COL00047
+      sense: "<="
+      rhs: 130
+  "ROW00046:":
+    Standard:
+      name: "ROW00046:"
+      coefficients:
+        - coefficient: 1
+          var_name: COL00038
+        - coefficient: -1
+          var_name: COL00044
+      sense: "<="
+      rhs: 0
+  "ROW00047:":
+    Standard:
+      name: "ROW00047:"
+      coefficients:
+        - coefficient: 1.1
+          var_name: COL00037
+        - coefficient: -1
+          var_name: COL00048
+      sense: "="
+      rhs: 0
+  "ROW00048:":
+    Standard:
+      name: "ROW00048:"
+      coefficients:
+        - coefficient: -0.8
+          var_name: COL00045
+        - coefficient: 0.1
+          var_name: COL00046
+        - coefficient: 0.15
+          var_name: COL00047
+      sense: "<="
+      rhs: 0
+  "ROW00049:":
+    Standard:
+      name: "ROW00049:"
+      coefficients:
+        - coefficient: 0.1
+          var_name: COL00045
+        - coefficient: -0.8
+          var_name: COL00046
+        - coefficient: 0.15
+          var_name: COL00047
+      sense: "<="
+      rhs: 0
+  "ROW00050:":
+    Standard:
+      name: "ROW00050:"
+      coefficients:
+        - coefficient: -1
+          var_name: COL00047
+        - coefficient: 1
+          var_name: COL00048
+      sense: "<="
+      rhs: 0
+objectives:
+  - coefficients:
+      - coefficient: -1
+        var_name: COL00004
+    name: MAXIM
 problem_name: sc50a.lp
 problem_sense: Minimize
 variables:
@@ -53,563 +613,3 @@ variables:
   COL00046: General
   COL00047: General
   COL00048: General
-objectives:
-  - name: MAXIM
-    coefficients:
-      - var_name: COL00004
-        coefficient: -1
-constraints:
-  "ROW00001:":
-    Standard:
-      name: "ROW00001:"
-      coefficients:
-        - var_name: COL00001
-          coefficient: 2
-        - var_name: COL00002
-          coefficient: 1
-        - var_name: COL00003
-          coefficient: 1.5
-      sense: "<="
-      rhs: 170
-  "ROW00002:":
-    Standard:
-      name: "ROW00002:"
-      coefficients:
-        - var_name: COL00001
-          coefficient: 1
-        - var_name: COL00002
-          coefficient: 2
-        - var_name: COL00003
-          coefficient: 1.5
-      sense: "<="
-      rhs: 130
-  "ROW00004:":
-    Standard:
-      name: "ROW00004:"
-      coefficients:
-        - var_name: COL00004
-          coefficient: 1
-        - var_name: COL00005
-          coefficient: -1
-      sense: "="
-      rhs: 0
-  "ROW00005:":
-    Standard:
-      name: "ROW00005:"
-      coefficients:
-        - var_name: COL00001
-          coefficient: -1
-        - var_name: COL00006
-          coefficient: 1
-      sense: "="
-      rhs: 0
-  "ROW00006:":
-    Standard:
-      name: "ROW00006:"
-      coefficients:
-        - var_name: COL00002
-          coefficient: -1
-        - var_name: COL00007
-          coefficient: 1
-      sense: "="
-      rhs: 0
-  "ROW00007:":
-    Standard:
-      name: "ROW00007:"
-      coefficients:
-        - var_name: COL00003
-          coefficient: -1
-        - var_name: COL00008
-          coefficient: 1
-      sense: "="
-      rhs: 0
-  "ROW00008:":
-    Standard:
-      name: "ROW00008:"
-      coefficients:
-        - var_name: COL00006
-          coefficient: -1
-        - var_name: COL00009
-          coefficient: 1
-      sense: "<="
-      rhs: 0
-  "ROW00009:":
-    Standard:
-      name: "ROW00009:"
-      coefficients:
-        - var_name: COL00007
-          coefficient: -1
-        - var_name: COL00010
-          coefficient: 1
-      sense: "<="
-      rhs: 0
-  "ROW00010:":
-    Standard:
-      name: "ROW00010:"
-      coefficients:
-        - var_name: COL00008
-          coefficient: -1
-        - var_name: COL00011
-          coefficient: 1
-      sense: "<="
-      rhs: 0
-  "ROW00011:":
-    Standard:
-      name: "ROW00011:"
-      coefficients:
-        - var_name: COL00009
-          coefficient: -1
-        - var_name: COL00012
-          coefficient: 2
-        - var_name: COL00013
-          coefficient: 1
-        - var_name: COL00014
-          coefficient: 1.5
-      sense: "<="
-      rhs: 170
-  "ROW00012:":
-    Standard:
-      name: "ROW00012:"
-      coefficients:
-        - var_name: COL00010
-          coefficient: -1
-        - var_name: COL00012
-          coefficient: 1
-        - var_name: COL00013
-          coefficient: 2
-        - var_name: COL00014
-          coefficient: 1.5
-      sense: "<="
-      rhs: 130
-  "ROW00013:":
-    Standard:
-      name: "ROW00013:"
-      coefficients:
-        - var_name: COL00005
-          coefficient: 1
-        - var_name: COL00011
-          coefficient: -1
-      sense: "<="
-      rhs: 0
-  "ROW00014:":
-    Standard:
-      name: "ROW00014:"
-      coefficients:
-        - var_name: COL00004
-          coefficient: 1.1
-        - var_name: COL00015
-          coefficient: -1
-      sense: "="
-      rhs: 0
-  "ROW00015:":
-    Standard:
-      name: "ROW00015:"
-      coefficients:
-        - var_name: COL00005
-          coefficient: 1
-        - var_name: COL00015
-          coefficient: 1
-        - var_name: COL00016
-          coefficient: -1
-      sense: "="
-      rhs: 0
-  "ROW00016:":
-    Standard:
-      name: "ROW00016:"
-      coefficients:
-        - var_name: COL00006
-          coefficient: -1
-        - var_name: COL00012
-          coefficient: -1
-        - var_name: COL00017
-          coefficient: 1
-      sense: "="
-      rhs: 0
-  "ROW00017:":
-    Standard:
-      name: "ROW00017:"
-      coefficients:
-        - var_name: COL00007
-          coefficient: -1
-        - var_name: COL00013
-          coefficient: -1
-        - var_name: COL00018
-          coefficient: 1
-      sense: "="
-      rhs: 0
-  "ROW00018:":
-    Standard:
-      name: "ROW00018:"
-      coefficients:
-        - var_name: COL00008
-          coefficient: -1
-        - var_name: COL00014
-          coefficient: -1
-        - var_name: COL00019
-          coefficient: 1
-      sense: "="
-      rhs: 0
-  "ROW00019:":
-    Standard:
-      name: "ROW00019:"
-      coefficients:
-        - var_name: COL00017
-          coefficient: -1
-        - var_name: COL00020
-          coefficient: 1
-      sense: "<="
-      rhs: 0
-  "ROW00020:":
-    Standard:
-      name: "ROW00020:"
-      coefficients:
-        - var_name: COL00018
-          coefficient: -1
-        - var_name: COL00021
-          coefficient: 1
-      sense: "<="
-      rhs: 0
-  "ROW00021:":
-    Standard:
-      name: "ROW00021:"
-      coefficients:
-        - var_name: COL00019
-          coefficient: -1
-        - var_name: COL00022
-          coefficient: 1
-      sense: "<="
-      rhs: 0
-  "ROW00022:":
-    Standard:
-      name: "ROW00022:"
-      coefficients:
-        - var_name: COL00020
-          coefficient: -1
-        - var_name: COL00023
-          coefficient: 2
-        - var_name: COL00024
-          coefficient: 1
-        - var_name: COL00025
-          coefficient: 1.5
-      sense: "<="
-      rhs: 170
-  "ROW00023:":
-    Standard:
-      name: "ROW00023:"
-      coefficients:
-        - var_name: COL00021
-          coefficient: -1
-        - var_name: COL00023
-          coefficient: 1
-        - var_name: COL00024
-          coefficient: 2
-        - var_name: COL00025
-          coefficient: 1.5
-      sense: "<="
-      rhs: 130
-  "ROW00024:":
-    Standard:
-      name: "ROW00024:"
-      coefficients:
-        - var_name: COL00016
-          coefficient: 1
-        - var_name: COL00022
-          coefficient: -1
-      sense: "<="
-      rhs: 0
-  "ROW00025:":
-    Standard:
-      name: "ROW00025:"
-      coefficients:
-        - var_name: COL00015
-          coefficient: 1.1
-        - var_name: COL00026
-          coefficient: -1
-      sense: "="
-      rhs: 0
-  "ROW00026:":
-    Standard:
-      name: "ROW00026:"
-      coefficients:
-        - var_name: COL00016
-          coefficient: 1
-        - var_name: COL00026
-          coefficient: 1
-        - var_name: COL00027
-          coefficient: -1
-      sense: "="
-      rhs: 0
-  "ROW00027:":
-    Standard:
-      name: "ROW00027:"
-      coefficients:
-        - var_name: COL00017
-          coefficient: -1
-        - var_name: COL00023
-          coefficient: -1
-        - var_name: COL00028
-          coefficient: 1
-      sense: "="
-      rhs: 0
-  "ROW00028:":
-    Standard:
-      name: "ROW00028:"
-      coefficients:
-        - var_name: COL00018
-          coefficient: -1
-        - var_name: COL00024
-          coefficient: -1
-        - var_name: COL00029
-          coefficient: 1
-      sense: "="
-      rhs: 0
-  "ROW00029:":
-    Standard:
-      name: "ROW00029:"
-      coefficients:
-        - var_name: COL00019
-          coefficient: -1
-        - var_name: COL00025
-          coefficient: -1
-        - var_name: COL00030
-          coefficient: 1
-      sense: "="
-      rhs: 0
-  "ROW00030:":
-    Standard:
-      name: "ROW00030:"
-      coefficients:
-        - var_name: COL00028
-          coefficient: -1
-        - var_name: COL00031
-          coefficient: 1
-      sense: "<="
-      rhs: 0
-  "ROW00031:":
-    Standard:
-      name: "ROW00031:"
-      coefficients:
-        - var_name: COL00029
-          coefficient: -1
-        - var_name: COL00032
-          coefficient: 1
-      sense: "<="
-      rhs: 0
-  "ROW00032:":
-    Standard:
-      name: "ROW00032:"
-      coefficients:
-        - var_name: COL00030
-          coefficient: -1
-        - var_name: COL00033
-          coefficient: 1
-      sense: "<="
-      rhs: 0
-  "ROW00033:":
-    Standard:
-      name: "ROW00033:"
-      coefficients:
-        - var_name: COL00031
-          coefficient: -1
-        - var_name: COL00034
-          coefficient: 2
-        - var_name: COL00035
-          coefficient: 1
-        - var_name: COL00036
-          coefficient: 1.5
-      sense: "<="
-      rhs: 170
-  "ROW00034:":
-    Standard:
-      name: "ROW00034:"
-      coefficients:
-        - var_name: COL00032
-          coefficient: -1
-        - var_name: COL00034
-          coefficient: 1
-        - var_name: COL00035
-          coefficient: 2
-        - var_name: COL00036
-          coefficient: 1.5
-      sense: "<="
-      rhs: 130
-  "ROW00035:":
-    Standard:
-      name: "ROW00035:"
-      coefficients:
-        - var_name: COL00027
-          coefficient: 1
-        - var_name: COL00033
-          coefficient: -1
-      sense: "<="
-      rhs: 0
-  "ROW00036:":
-    Standard:
-      name: "ROW00036:"
-      coefficients:
-        - var_name: COL00026
-          coefficient: 1.1
-        - var_name: COL00037
-          coefficient: -1
-      sense: "="
-      rhs: 0
-  "ROW00037:":
-    Standard:
-      name: "ROW00037:"
-      coefficients:
-        - var_name: COL00027
-          coefficient: 1
-        - var_name: COL00037
-          coefficient: 1
-        - var_name: COL00038
-          coefficient: -1
-      sense: "="
-      rhs: 0
-  "ROW00038:":
-    Standard:
-      name: "ROW00038:"
-      coefficients:
-        - var_name: COL00028
-          coefficient: -1
-        - var_name: COL00034
-          coefficient: -1
-        - var_name: COL00039
-          coefficient: 1
-      sense: "="
-      rhs: 0
-  "ROW00039:":
-    Standard:
-      name: "ROW00039:"
-      coefficients:
-        - var_name: COL00029
-          coefficient: -1
-        - var_name: COL00035
-          coefficient: -1
-        - var_name: COL00040
-          coefficient: 1
-      sense: "="
-      rhs: 0
-  "ROW00040:":
-    Standard:
-      name: "ROW00040:"
-      coefficients:
-        - var_name: COL00030
-          coefficient: -1
-        - var_name: COL00036
-          coefficient: -1
-        - var_name: COL00041
-          coefficient: 1
-      sense: "="
-      rhs: 0
-  "ROW00041:":
-    Standard:
-      name: "ROW00041:"
-      coefficients:
-        - var_name: COL00039
-          coefficient: -1
-        - var_name: COL00042
-          coefficient: 1
-      sense: "<="
-      rhs: 0
-  "ROW00042:":
-    Standard:
-      name: "ROW00042:"
-      coefficients:
-        - var_name: COL00040
-          coefficient: -1
-        - var_name: COL00043
-          coefficient: 1
-      sense: "<="
-      rhs: 0
-  "ROW00043:":
-    Standard:
-      name: "ROW00043:"
-      coefficients:
-        - var_name: COL00041
-          coefficient: -1
-        - var_name: COL00044
-          coefficient: 1
-      sense: "<="
-      rhs: 0
-  "ROW00044:":
-    Standard:
-      name: "ROW00044:"
-      coefficients:
-        - var_name: COL00042
-          coefficient: -1
-        - var_name: COL00045
-          coefficient: 2
-        - var_name: COL00046
-          coefficient: 1
-        - var_name: COL00047
-          coefficient: 1.5
-      sense: "<="
-      rhs: 170
-  "ROW00045:":
-    Standard:
-      name: "ROW00045:"
-      coefficients:
-        - var_name: COL00043
-          coefficient: -1
-        - var_name: COL00045
-          coefficient: 1
-        - var_name: COL00046
-          coefficient: 2
-        - var_name: COL00047
-          coefficient: 1.5
-      sense: "<="
-      rhs: 130
-  "ROW00046:":
-    Standard:
-      name: "ROW00046:"
-      coefficients:
-        - var_name: COL00038
-          coefficient: 1
-        - var_name: COL00044
-          coefficient: -1
-      sense: "<="
-      rhs: 0
-  "ROW00047:":
-    Standard:
-      name: "ROW00047:"
-      coefficients:
-        - var_name: COL00037
-          coefficient: 1.1
-        - var_name: COL00048
-          coefficient: -1
-      sense: "="
-      rhs: 0
-  "ROW00048:":
-    Standard:
-      name: "ROW00048:"
-      coefficients:
-        - var_name: COL00045
-          coefficient: -0.8
-        - var_name: COL00046
-          coefficient: 0.1
-        - var_name: COL00047
-          coefficient: 0.15
-      sense: "<="
-      rhs: 0
-  "ROW00049:":
-    Standard:
-      name: "ROW00049:"
-      coefficients:
-        - var_name: COL00045
-          coefficient: 0.1
-        - var_name: COL00046
-          coefficient: -0.8
-        - var_name: COL00047
-          coefficient: 0.15
-      sense: "<="
-      rhs: 0
-  "ROW00050:":
-    Standard:
-      name: "ROW00050:"
-      coefficients:
-        - var_name: COL00047
-          coefficient: -1
-        - var_name: COL00048
-          coefficient: 1
-      sense: "<="
-      rhs: 0

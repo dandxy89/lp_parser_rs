@@ -20,7 +20,7 @@ thiserror = "2.0"
 unique_id = "0.1"
 
 [dev-dependencies]
-float_eq = "1.0.0"
+float_eq = "1.0.1"
 insta = { version = "1.41", features = ["yaml", "redactions"] }
 
 [profile.dev.package]

@@ -10,11 +10,13 @@ use crate::{
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "diff", derive(diff::Diff), diff(attr(#[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)])))]
 pub struct Coefficient {
-    /// Variable name
-    pub var_name: String,
     /// Coefficient or SOS variable weight
     pub coefficient: f64,
+    /// Variable name
+    pub var_name: String,
 }
+
+impl Eq for Coefficient {}
 
 impl PartialEq for Coefficient {
     #[inline]
@@ -23,19 +25,17 @@ impl PartialEq for Coefficient {
     }
 }
 
-impl Eq for Coefficient {}
-
 impl TryFrom<Pairs<'_, Rule>> for Coefficient {
     type Error = LPParserError;
 
     #[inline]
     #[allow(clippy::unreachable, clippy::wildcard_enum_match_arm)]
     fn try_from(values: Pairs<'_, Rule>) -> Result<Self, LPParserError> {
-        let (mut value, mut var_name) = (1.0, String::new());
+        let (mut value, mut var_name) = (1f64, String::new());
 
         for item in values {
             match item.as_rule() {
-                r if r.is_numeric() => {
+                r_type if r_type.is_numeric() => {
                     value *= item.as_float()?;
                 }
                 Rule::VARIABLE_SUBSET | Rule::VARIABLE => {

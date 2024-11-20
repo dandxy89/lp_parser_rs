@@ -2,12 +2,12 @@
 source: tests/diff_feature.rs
 expression: a.diff(&a)
 ---
-problem_name: NoChange
-problem_sense: NoChange
-variables:
+constraints:
   altered: {}
   removed: []
 objectives: []
-constraints:
+problem_name: NoChange
+problem_sense: NoChange
+variables:
   altered: {}
   removed: []

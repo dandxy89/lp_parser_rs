@@ -2,6 +2,42 @@
 source: tests/test_from_file.rs
 expression: result
 ---
+constraints:
+  "c1:":
+    Standard:
+      name: "c1:"
+      coefficients:
+        - coefficient: 0.2
+          var_name: x1
+        - coefficient: 1.5
+          var_name: x2
+        - coefficient: 0.003
+          var_name: x3
+      sense: "<="
+      rhs: 100
+  "c2:":
+    Standard:
+      name: "c2:"
+      coefficients:
+        - coefficient: 0.0123
+          var_name: x1
+        - coefficient: -45.6
+          var_name: x2
+        - coefficient: 0.00789
+          var_name: x3
+      sense: ">="
+      rhs: 0
+objectives:
+  - coefficients:
+      - coefficient: 0.001
+        var_name: x1
+      - coefficient: 250
+        var_name: x2
+      - coefficient: 0.0314
+        var_name: x3
+      - coefficient: -12
+        var_name: x4
+    name: obj
 problem_name: ~
 problem_sense: Minimize
 variables:
@@ -25,39 +61,3 @@ variables:
       - 0
       - 400
       - false
-objectives:
-  - name: obj
-    coefficients:
-      - var_name: x1
-        coefficient: 0.001
-      - var_name: x2
-        coefficient: 250
-      - var_name: x3
-        coefficient: 0.0314
-      - var_name: x4
-        coefficient: -12
-constraints:
-  "c1:":
-    Standard:
-      name: "c1:"
-      coefficients:
-        - var_name: x1
-          coefficient: 0.2
-        - var_name: x2
-          coefficient: 1.5
-        - var_name: x3
-          coefficient: 0.003
-      sense: "<="
-      rhs: 100
-  "c2:":
-    Standard:
-      name: "c2:"
-      coefficients:
-        - var_name: x1
-          coefficient: 0.0123
-        - var_name: x2
-          coefficient: -45.6
-        - var_name: x3
-          coefficient: 0.00789
-      sense: ">="
-      rhs: 0

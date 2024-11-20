@@ -2,6 +2,148 @@
 source: tests/test_from_file.rs
 expression: result
 ---
+constraints:
+  "Steel_Flow_Conservation_in_Node_Albany:":
+    Standard:
+      name: "Steel_Flow_Conservation_in_Node_Albany:"
+      coefficients:
+        - coefficient: 1
+          var_name: "Route_('Cincinatti',_'Albany')"
+        - coefficient: 1
+          var_name: "Route_('Youngstown',_'Albany')"
+      sense: ">="
+      rhs: 3000
+  "Steel_Flow_Conservation_in_Node_Chicago:":
+    Standard:
+      name: "Steel_Flow_Conservation_in_Node_Chicago:"
+      coefficients:
+        - coefficient: -1
+          var_name: "Route_('Chicago',_'Gary')"
+        - coefficient: -1
+          var_name: "Route_('Chicago',_'Tempe')"
+        - coefficient: 1
+          var_name: "Route_('Pittsburgh',_'Chicago')"
+        - coefficient: 1
+          var_name: "Route_('Youngstown',_'Chicago')"
+      sense: ">="
+      rhs: 0
+  "Steel_Flow_Conservation_in_Node_Cincinatti:":
+    Standard:
+      name: "Steel_Flow_Conservation_in_Node_Cincinatti:"
+      coefficients:
+        - coefficient: -1
+          var_name: "Route_('Cincinatti',_'Albany')"
+        - coefficient: -1
+          var_name: "Route_('Cincinatti',_'Houston')"
+        - coefficient: 1
+          var_name: "Route_('Pittsburgh',_'Cincinatti')"
+        - coefficient: 1
+          var_name: "Route_('Youngstown',_'Cincinatti')"
+      sense: ">="
+      rhs: 0
+  "Steel_Flow_Conservation_in_Node_Gary:":
+    Standard:
+      name: "Steel_Flow_Conservation_in_Node_Gary:"
+      coefficients:
+        - coefficient: 1
+          var_name: "Route_('Chicago',_'Gary')"
+        - coefficient: 1
+          var_name: "Route_('Pittsburgh',_'Gary')"
+      sense: ">="
+      rhs: 6000
+  "Steel_Flow_Conservation_in_Node_Houston:":
+    Standard:
+      name: "Steel_Flow_Conservation_in_Node_Houston:"
+      coefficients:
+        - coefficient: 1
+          var_name: "Route_('Cincinatti',_'Houston')"
+        - coefficient: 1
+          var_name: "Route_('Kansas_City',_'Houston')"
+      sense: ">="
+      rhs: 7000
+  "Steel_Flow_Conservation_in_Node_Kansas_City:":
+    Standard:
+      name: "Steel_Flow_Conservation_in_Node_Kansas_City:"
+      coefficients:
+        - coefficient: -1
+          var_name: "Route_('Kansas_City',_'Houston')"
+        - coefficient: -1
+          var_name: "Route_('Kansas_City',_'Tempe')"
+        - coefficient: 1
+          var_name: "Route_('Pittsburgh',_'Kansas_City')"
+        - coefficient: 1
+          var_name: "Route_('Youngstown',_'Kansas_City')"
+      sense: ">="
+      rhs: 0
+  "Steel_Flow_Conservation_in_Node_Pittsburgh:":
+    Standard:
+      name: "Steel_Flow_Conservation_in_Node_Pittsburgh:"
+      coefficients:
+        - coefficient: -1
+          var_name: "Route_('Pittsburgh',_'Chicago')"
+        - coefficient: -1
+          var_name: "Route_('Pittsburgh',_'Cincinatti')"
+        - coefficient: -1
+          var_name: "Route_('Pittsburgh',_'Gary')"
+        - coefficient: -1
+          var_name: "Route_('Pittsburgh',_'Kansas_City')"
+      sense: ">="
+      rhs: -15000
+  "Steel_Flow_Conservation_in_Node_Tempe:":
+    Standard:
+      name: "Steel_Flow_Conservation_in_Node_Tempe:"
+      coefficients:
+        - coefficient: 1
+          var_name: "Route_('Chicago',_'Tempe')"
+        - coefficient: 1
+          var_name: "Route_('Kansas_City',_'Tempe')"
+      sense: ">="
+      rhs: 4000
+  "Steel_Flow_Conservation_in_Node_Youngstown:":
+    Standard:
+      name: "Steel_Flow_Conservation_in_Node_Youngstown:"
+      coefficients:
+        - coefficient: -1
+          var_name: "Route_('Youngstown',_'Albany')"
+        - coefficient: -1
+          var_name: "Route_('Youngstown',_'Chicago')"
+        - coefficient: -1
+          var_name: "Route_('Youngstown',_'Cincinatti')"
+        - coefficient: -1
+          var_name: "Route_('Youngstown',_'Kansas_City')"
+      sense: ">="
+      rhs: -10000
+objectives:
+  - coefficients:
+      - coefficient: 0.12
+        var_name: "Route_('Chicago',_'Gary')"
+      - coefficient: 0.6
+        var_name: "Route_('Chicago',_'Tempe')"
+      - coefficient: 0.35
+        var_name: "Route_('Cincinatti',_'Albany')"
+      - coefficient: 0.55
+        var_name: "Route_('Cincinatti',_'Houston')"
+      - coefficient: 0.375
+        var_name: "Route_('Kansas_City',_'Houston')"
+      - coefficient: 0.65
+        var_name: "Route_('Kansas_City',_'Tempe')"
+      - coefficient: 0.4
+        var_name: "Route_('Pittsburgh',_'Chicago')"
+      - coefficient: 0.35
+        var_name: "Route_('Pittsburgh',_'Cincinatti')"
+      - coefficient: 0.45
+        var_name: "Route_('Pittsburgh',_'Gary')"
+      - coefficient: 0.45
+        var_name: "Route_('Pittsburgh',_'Kansas_City')"
+      - coefficient: 0.5
+        var_name: "Route_('Youngstown',_'Albany')"
+      - coefficient: 0.375
+        var_name: "Route_('Youngstown',_'Chicago')"
+      - coefficient: 0.35
+        var_name: "Route_('Youngstown',_'Cincinatti')"
+      - coefficient: 0.45
+        var_name: "Route_('Youngstown',_'Kansas_City')"
+    name: Total_Cost_of_Transport
 problem_name: ~
 problem_sense: Minimize
 variables:
@@ -19,145 +161,3 @@ variables:
   "Route_('Youngstown',_'Chicago')": General
   "Route_('Youngstown',_'Cincinatti')": General
   "Route_('Youngstown',_'Kansas_City')": General
-objectives:
-  - name: Total_Cost_of_Transport
-    coefficients:
-      - var_name: "Route_('Chicago',_'Gary')"
-        coefficient: 0.12
-      - var_name: "Route_('Chicago',_'Tempe')"
-        coefficient: 0.6
-      - var_name: "Route_('Cincinatti',_'Albany')"
-        coefficient: 0.35
-      - var_name: "Route_('Cincinatti',_'Houston')"
-        coefficient: 0.55
-      - var_name: "Route_('Kansas_City',_'Houston')"
-        coefficient: 0.375
-      - var_name: "Route_('Kansas_City',_'Tempe')"
-        coefficient: 0.65
-      - var_name: "Route_('Pittsburgh',_'Chicago')"
-        coefficient: 0.4
-      - var_name: "Route_('Pittsburgh',_'Cincinatti')"
-        coefficient: 0.35
-      - var_name: "Route_('Pittsburgh',_'Gary')"
-        coefficient: 0.45
-      - var_name: "Route_('Pittsburgh',_'Kansas_City')"
-        coefficient: 0.45
-      - var_name: "Route_('Youngstown',_'Albany')"
-        coefficient: 0.5
-      - var_name: "Route_('Youngstown',_'Chicago')"
-        coefficient: 0.375
-      - var_name: "Route_('Youngstown',_'Cincinatti')"
-        coefficient: 0.35
-      - var_name: "Route_('Youngstown',_'Kansas_City')"
-        coefficient: 0.45
-constraints:
-  "Steel_Flow_Conservation_in_Node_Albany:":
-    Standard:
-      name: "Steel_Flow_Conservation_in_Node_Albany:"
-      coefficients:
-        - var_name: "Route_('Cincinatti',_'Albany')"
-          coefficient: 1
-        - var_name: "Route_('Youngstown',_'Albany')"
-          coefficient: 1
-      sense: ">="
-      rhs: 3000
-  "Steel_Flow_Conservation_in_Node_Chicago:":
-    Standard:
-      name: "Steel_Flow_Conservation_in_Node_Chicago:"
-      coefficients:
-        - var_name: "Route_('Chicago',_'Gary')"
-          coefficient: -1
-        - var_name: "Route_('Chicago',_'Tempe')"
-          coefficient: -1
-        - var_name: "Route_('Pittsburgh',_'Chicago')"
-          coefficient: 1
-        - var_name: "Route_('Youngstown',_'Chicago')"
-          coefficient: 1
-      sense: ">="
-      rhs: 0
-  "Steel_Flow_Conservation_in_Node_Cincinatti:":
-    Standard:
-      name: "Steel_Flow_Conservation_in_Node_Cincinatti:"
-      coefficients:
-        - var_name: "Route_('Cincinatti',_'Albany')"
-          coefficient: -1
-        - var_name: "Route_('Cincinatti',_'Houston')"
-          coefficient: -1
-        - var_name: "Route_('Pittsburgh',_'Cincinatti')"
-          coefficient: 1
-        - var_name: "Route_('Youngstown',_'Cincinatti')"
-          coefficient: 1
-      sense: ">="
-      rhs: 0
-  "Steel_Flow_Conservation_in_Node_Gary:":
-    Standard:
-      name: "Steel_Flow_Conservation_in_Node_Gary:"
-      coefficients:
-        - var_name: "Route_('Chicago',_'Gary')"
-          coefficient: 1
-        - var_name: "Route_('Pittsburgh',_'Gary')"
-          coefficient: 1
-      sense: ">="
-      rhs: 6000
-  "Steel_Flow_Conservation_in_Node_Houston:":
-    Standard:
-      name: "Steel_Flow_Conservation_in_Node_Houston:"
-      coefficients:
-        - var_name: "Route_('Cincinatti',_'Houston')"
-          coefficient: 1
-        - var_name: "Route_('Kansas_City',_'Houston')"
-          coefficient: 1
-      sense: ">="
-      rhs: 7000
-  "Steel_Flow_Conservation_in_Node_Kansas_City:":
-    Standard:
-      name: "Steel_Flow_Conservation_in_Node_Kansas_City:"
-      coefficients:
-        - var_name: "Route_('Kansas_City',_'Houston')"
-          coefficient: -1
-        - var_name: "Route_('Kansas_City',_'Tempe')"
-          coefficient: -1
-        - var_name: "Route_('Pittsburgh',_'Kansas_City')"
-          coefficient: 1
-        - var_name: "Route_('Youngstown',_'Kansas_City')"
-          coefficient: 1
-      sense: ">="
-      rhs: 0
-  "Steel_Flow_Conservation_in_Node_Pittsburgh:":
-    Standard:
-      name: "Steel_Flow_Conservation_in_Node_Pittsburgh:"
-      coefficients:
-        - var_name: "Route_('Pittsburgh',_'Chicago')"
-          coefficient: -1
-        - var_name: "Route_('Pittsburgh',_'Cincinatti')"
-          coefficient: -1
-        - var_name: "Route_('Pittsburgh',_'Gary')"
-          coefficient: -1
-        - var_name: "Route_('Pittsburgh',_'Kansas_City')"
-          coefficient: -1
-      sense: ">="
-      rhs: -15000
-  "Steel_Flow_Conservation_in_Node_Tempe:":
-    Standard:
-      name: "Steel_Flow_Conservation_in_Node_Tempe:"
-      coefficients:
-        - var_name: "Route_('Chicago',_'Tempe')"
-          coefficient: 1
-        - var_name: "Route_('Kansas_City',_'Tempe')"
-          coefficient: 1
-      sense: ">="
-      rhs: 4000
-  "Steel_Flow_Conservation_in_Node_Youngstown:":
-    Standard:
-      name: "Steel_Flow_Conservation_in_Node_Youngstown:"
-      coefficients:
-        - var_name: "Route_('Youngstown',_'Albany')"
-          coefficient: -1
-        - var_name: "Route_('Youngstown',_'Chicago')"
-          coefficient: -1
-        - var_name: "Route_('Youngstown',_'Cincinatti')"
-          coefficient: -1
-        - var_name: "Route_('Youngstown',_'Kansas_City')"
-          coefficient: -1
-      sense: ">="
-      rhs: -10000

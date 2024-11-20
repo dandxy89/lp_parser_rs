@@ -2,6 +2,102 @@
 source: tests/test_from_file.rs
 expression: result
 ---
+constraints:
+  "FatRequirement:":
+    Standard:
+      name: "FatRequirement:"
+      coefficients:
+        - coefficient: 0.1
+          var_name: Ingr_BEEF
+        - coefficient: 0.08
+          var_name: Ingr_CHICKEN
+        - coefficient: 0.11
+          var_name: Ingr_MUTTON
+        - coefficient: 0.01
+          var_name: Ingr_RICE
+        - coefficient: 0.01
+          var_name: Ingr_WHEAT
+      sense: ">="
+      rhs: 6
+  "FibreRequirement:":
+    Standard:
+      name: "FibreRequirement:"
+      coefficients:
+        - coefficient: 0.005
+          var_name: Ingr_BEEF
+        - coefficient: 0.001
+          var_name: Ingr_CHICKEN
+        - coefficient: 0.003
+          var_name: Ingr_MUTTON
+        - coefficient: 0.1
+          var_name: Ingr_RICE
+        - coefficient: 0.15
+          var_name: Ingr_WHEAT
+      sense: "<="
+      rhs: 2
+  "PercentagesSum:":
+    Standard:
+      name: "PercentagesSum:"
+      coefficients:
+        - coefficient: 1
+          var_name: Ingr_BEEF
+        - coefficient: 1
+          var_name: Ingr_CHICKEN
+        - coefficient: 1
+          var_name: Ingr_GEL
+        - coefficient: 1
+          var_name: Ingr_MUTTON
+        - coefficient: 1
+          var_name: Ingr_RICE
+        - coefficient: 1
+          var_name: Ingr_WHEAT
+      sense: "="
+      rhs: 100
+  "ProteinRequirement:":
+    Standard:
+      name: "ProteinRequirement:"
+      coefficients:
+        - coefficient: 0.2
+          var_name: Ingr_BEEF
+        - coefficient: 0.1
+          var_name: Ingr_CHICKEN
+        - coefficient: 0.15
+          var_name: Ingr_MUTTON
+        - coefficient: 0.04
+          var_name: Ingr_WHEAT
+      sense: ">="
+      rhs: 8
+  "SaltRequirement:":
+    Standard:
+      name: "SaltRequirement:"
+      coefficients:
+        - coefficient: 0.005
+          var_name: Ingr_BEEF
+        - coefficient: 0.002
+          var_name: Ingr_CHICKEN
+        - coefficient: 0.007
+          var_name: Ingr_MUTTON
+        - coefficient: 0.002
+          var_name: Ingr_RICE
+        - coefficient: 0.008
+          var_name: Ingr_WHEAT
+      sense: "<="
+      rhs: 0.4
+objectives:
+  - coefficients:
+      - coefficient: 0.008
+        var_name: Ingr_BEEF
+      - coefficient: 0.013
+        var_name: Ingr_CHICKEN
+      - coefficient: 0.001
+        var_name: Ingr_GEL
+      - coefficient: 0.01
+        var_name: Ingr_MUTTON
+      - coefficient: 0.002
+        var_name: Ingr_RICE
+      - coefficient: 0.005
+        var_name: Ingr_WHEAT
+    name: Total_Cost_of_Ingredients_per_can
 problem_name: ~
 problem_sense: Minimize
 variables:
@@ -11,99 +107,3 @@ variables:
   Ingr_MUTTON: General
   Ingr_RICE: General
   Ingr_WHEAT: General
-objectives:
-  - name: Total_Cost_of_Ingredients_per_can
-    coefficients:
-      - var_name: Ingr_BEEF
-        coefficient: 0.008
-      - var_name: Ingr_CHICKEN
-        coefficient: 0.013
-      - var_name: Ingr_GEL
-        coefficient: 0.001
-      - var_name: Ingr_MUTTON
-        coefficient: 0.01
-      - var_name: Ingr_RICE
-        coefficient: 0.002
-      - var_name: Ingr_WHEAT
-        coefficient: 0.005
-constraints:
-  "FatRequirement:":
-    Standard:
-      name: "FatRequirement:"
-      coefficients:
-        - var_name: Ingr_BEEF
-          coefficient: 0.1
-        - var_name: Ingr_CHICKEN
-          coefficient: 0.08
-        - var_name: Ingr_MUTTON
-          coefficient: 0.11
-        - var_name: Ingr_RICE
-          coefficient: 0.01
-        - var_name: Ingr_WHEAT
-          coefficient: 0.01
-      sense: ">="
-      rhs: 6
-  "FibreRequirement:":
-    Standard:
-      name: "FibreRequirement:"
-      coefficients:
-        - var_name: Ingr_BEEF
-          coefficient: 0.005
-        - var_name: Ingr_CHICKEN
-          coefficient: 0.001
-        - var_name: Ingr_MUTTON
-          coefficient: 0.003
-        - var_name: Ingr_RICE
-          coefficient: 0.1
-        - var_name: Ingr_WHEAT
-          coefficient: 0.15
-      sense: "<="
-      rhs: 2
-  "PercentagesSum:":
-    Standard:
-      name: "PercentagesSum:"
-      coefficients:
-        - var_name: Ingr_BEEF
-          coefficient: 1
-        - var_name: Ingr_CHICKEN
-          coefficient: 1
-        - var_name: Ingr_GEL
-          coefficient: 1
-        - var_name: Ingr_MUTTON
-          coefficient: 1
-        - var_name: Ingr_RICE
-          coefficient: 1
-        - var_name: Ingr_WHEAT
-          coefficient: 1
-      sense: "="
-      rhs: 100
-  "ProteinRequirement:":
-    Standard:
-      name: "ProteinRequirement:"
-      coefficients:
-        - var_name: Ingr_BEEF
-          coefficient: 0.2
-        - var_name: Ingr_CHICKEN
-          coefficient: 0.1
-        - var_name: Ingr_MUTTON
-          coefficient: 0.15
-        - var_name: Ingr_WHEAT
-          coefficient: 0.04
-      sense: ">="
-      rhs: 8
-  "SaltRequirement:":
-    Standard:
-      name: "SaltRequirement:"
-      coefficients:
-        - var_name: Ingr_BEEF
-          coefficient: 0.005
-        - var_name: Ingr_CHICKEN
-          coefficient: 0.002
-        - var_name: Ingr_MUTTON
-          coefficient: 0.007
-        - var_name: Ingr_RICE
-          coefficient: 0.002
-        - var_name: Ingr_WHEAT
-          coefficient: 0.008
-      sense: "<="
-      rhs: 0.4

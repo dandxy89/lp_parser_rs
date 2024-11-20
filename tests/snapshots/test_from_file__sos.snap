@@ -2,6 +2,72 @@
 source: tests/test_from_file.rs
 expression: result
 ---
+constraints:
+  "CON1:":
+    Standard:
+      name: "CON1:"
+      coefficients:
+        - coefficient: 1
+          var_name: V1
+      sense: ">="
+      rhs: 0
+  "CON2:":
+    Standard:
+      name: "CON2:"
+      coefficients:
+        - coefficient: 1
+          var_name: V2
+      sense: ">="
+      rhs: 2
+  "CON3:":
+    Standard:
+      name: "CON3:"
+      coefficients:
+        - coefficient: 1
+          var_name: V3
+      sense: "<="
+      rhs: 2.5
+  "CON4:":
+    Standard:
+      name: "CON4:"
+      coefficients:
+        - coefficient: 1
+          var_name: V5
+        - coefficient: 1
+          var_name: V6
+        - coefficient: 1
+          var_name: V7
+      sense: "<="
+      rhs: 1
+  "csos1:":
+    SOS:
+      name: "csos1:"
+      kind: S1
+      coefficients:
+        - coefficient: 1
+          var_name: V1
+        - coefficient: 2
+          var_name: V3
+        - coefficient: 3
+          var_name: V5
+  "csos2:":
+    SOS:
+      name: "csos2:"
+      kind: S2
+      coefficients:
+        - coefficient: 2
+          var_name: V2
+        - coefficient: 1
+          var_name: V4
+        - coefficient: 2.5
+          var_name: V5
+objectives:
+  - coefficients:
+      - coefficient: -1
+        var_name: V4
+      - coefficient: 1
+        var_name: V5
+    name: obj
 problem_name: ~
 problem_sense: Maximize
 variables:
@@ -37,69 +103,3 @@ variables:
       - 1
       - false
   V8: Binary
-objectives:
-  - name: obj
-    coefficients:
-      - var_name: V4
-        coefficient: -1
-      - var_name: V5
-        coefficient: 1
-constraints:
-  "CON1:":
-    Standard:
-      name: "CON1:"
-      coefficients:
-        - var_name: V1
-          coefficient: 1
-      sense: ">="
-      rhs: 0
-  "CON2:":
-    Standard:
-      name: "CON2:"
-      coefficients:
-        - var_name: V2
-          coefficient: 1
-      sense: ">="
-      rhs: 2
-  "CON3:":
-    Standard:
-      name: "CON3:"
-      coefficients:
-        - var_name: V3
-          coefficient: 1
-      sense: "<="
-      rhs: 2.5
-  "CON4:":
-    Standard:
-      name: "CON4:"
-      coefficients:
-        - var_name: V5
-          coefficient: 1
-        - var_name: V6
-          coefficient: 1
-        - var_name: V7
-          coefficient: 1
-      sense: "<="
-      rhs: 1
-  "csos1:":
-    SOS:
-      name: "csos1:"
-      kind: S1
-      coefficients:
-        - var_name: V1
-          coefficient: 1
-        - var_name: V3
-          coefficient: 2
-        - var_name: V5
-          coefficient: 3
-  "csos2:":
-    SOS:
-      name: "csos2:"
-      kind: S2
-      coefficients:
-        - var_name: V2
-          coefficient: 2
-        - var_name: V4
-          coefficient: 1
-        - var_name: V5
-          coefficient: 2.5

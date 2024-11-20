@@ -2,6 +2,28 @@
 source: tests/test_from_file.rs
 expression: result
 ---
+constraints:
+  "cons:":
+    Standard:
+      name: "cons:"
+      coefficients:
+        - coefficient: 4.4
+          var_name: x
+        - coefficient: 5.5
+          var_name: y
+        - coefficient: 6.6
+          var_name: z
+      sense: "<="
+      rhs: 120
+objectives:
+  - coefficients:
+      - coefficient: -2
+        var_name: x
+      - coefficient: -3
+        var_name: y
+      - coefficient: 4
+        var_name: z
+    name: cost
 problem_name: ~
 problem_sense: Maximize
 variables:
@@ -12,25 +34,3 @@ variables:
       - 12
       - false
   z: Binary
-objectives:
-  - name: cost
-    coefficients:
-      - var_name: x
-        coefficient: -2
-      - var_name: y
-        coefficient: -3
-      - var_name: z
-        coefficient: 4
-constraints:
-  "cons:":
-    Standard:
-      name: "cons:"
-      coefficients:
-        - var_name: x
-          coefficient: 4.4
-        - var_name: y
-          coefficient: 5.5
-        - var_name: z
-          coefficient: 6.6
-      sense: "<="
-      rhs: 120
