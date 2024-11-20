@@ -98,4 +98,10 @@ mod oss_tests {
 
     // From <https://github.com/claudiosa/CCS>
     generate_test!(output_cplex_2, "output_cplex_2.lp", 1.0, -20008.);
+
+    // From <https://github.com/coin-or/pulp>
+    generate_test!(american_steel_problem, "AmericanSteelProblem.lp", 5.97, 0.);
+    generate_test!(beer_distribution_problem, "BeerDistributionProblem.lp", 26.0, 30.);
+    generate_test!(computer_plant_problem, "ComputerPlantProblem.lp", 275_095., -7368.);
+    generate_test!(whiskas_model_2, "WhiskasModel2.lp", 0.038, 7.083);
 }

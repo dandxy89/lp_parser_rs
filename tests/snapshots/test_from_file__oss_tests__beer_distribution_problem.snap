@@ -1,0 +1,154 @@
+---
+source: tests/test_from_file.rs
+expression: result
+---
+problem_name: ~
+problem_sense: Minimize
+variables:
+  Route_A_1: General
+  Route_A_2: General
+  Route_A_3: General
+  Route_A_4: General
+  Route_A_5: General
+  Route_B_1: General
+  Route_B_2: General
+  Route_B_3: General
+  Route_B_4: General
+  Route_B_5: General
+  Route_C_1: General
+  Route_C_2: General
+  Route_C_3: General
+  Route_C_4: General
+  Route_C_5: General
+objectives:
+  - name: Sum_of_Transporting_Costs
+    coefficients:
+      - var_name: Route_A_1
+        coefficient: 2
+      - var_name: Route_A_2
+        coefficient: 4
+      - var_name: Route_A_3
+        coefficient: 5
+      - var_name: Route_A_4
+        coefficient: 2
+      - var_name: Route_A_5
+        coefficient: 1
+      - var_name: Route_B_1
+        coefficient: 3
+      - var_name: Route_B_2
+        coefficient: 1
+      - var_name: Route_B_3
+        coefficient: 3
+      - var_name: Route_B_4
+        coefficient: 2
+      - var_name: Route_B_5
+        coefficient: 3
+constraints:
+  "Sum_of_Products_into_Bar1:":
+    Standard:
+      name: "Sum_of_Products_into_Bar1:"
+      coefficients:
+        - var_name: Route_A_1
+          coefficient: 1
+        - var_name: Route_B_1
+          coefficient: 1
+        - var_name: Route_C_1
+          coefficient: 1
+      sense: ">="
+      rhs: 500
+  "Sum_of_Products_into_Bar2:":
+    Standard:
+      name: "Sum_of_Products_into_Bar2:"
+      coefficients:
+        - var_name: Route_A_2
+          coefficient: 1
+        - var_name: Route_B_2
+          coefficient: 1
+        - var_name: Route_C_2
+          coefficient: 1
+      sense: ">="
+      rhs: 900
+  "Sum_of_Products_into_Bar3:":
+    Standard:
+      name: "Sum_of_Products_into_Bar3:"
+      coefficients:
+        - var_name: Route_A_3
+          coefficient: 1
+        - var_name: Route_B_3
+          coefficient: 1
+        - var_name: Route_C_3
+          coefficient: 1
+      sense: ">="
+      rhs: 1800
+  "Sum_of_Products_into_Bar4:":
+    Standard:
+      name: "Sum_of_Products_into_Bar4:"
+      coefficients:
+        - var_name: Route_A_4
+          coefficient: 1
+        - var_name: Route_B_4
+          coefficient: 1
+        - var_name: Route_C_4
+          coefficient: 1
+      sense: ">="
+      rhs: 200
+  "Sum_of_Products_into_Bar5:":
+    Standard:
+      name: "Sum_of_Products_into_Bar5:"
+      coefficients:
+        - var_name: Route_A_5
+          coefficient: 1
+        - var_name: Route_B_5
+          coefficient: 1
+        - var_name: Route_C_5
+          coefficient: 1
+      sense: ">="
+      rhs: 700
+  "Sum_of_Products_out_of_Warehouse_A:":
+    Standard:
+      name: "Sum_of_Products_out_of_Warehouse_A:"
+      coefficients:
+        - var_name: Route_A_1
+          coefficient: 1
+        - var_name: Route_A_2
+          coefficient: 1
+        - var_name: Route_A_3
+          coefficient: 1
+        - var_name: Route_A_4
+          coefficient: 1
+        - var_name: Route_A_5
+          coefficient: 1
+      sense: "<="
+      rhs: 1000
+  "Sum_of_Products_out_of_Warehouse_B:":
+    Standard:
+      name: "Sum_of_Products_out_of_Warehouse_B:"
+      coefficients:
+        - var_name: Route_B_1
+          coefficient: 1
+        - var_name: Route_B_2
+          coefficient: 1
+        - var_name: Route_B_3
+          coefficient: 1
+        - var_name: Route_B_4
+          coefficient: 1
+        - var_name: Route_B_5
+          coefficient: 1
+      sense: "<="
+      rhs: 4000
+  "Sum_of_Products_out_of_Warehouse_C:":
+    Standard:
+      name: "Sum_of_Products_out_of_Warehouse_C:"
+      coefficients:
+        - var_name: Route_C_1
+          coefficient: 1
+        - var_name: Route_C_2
+          coefficient: 1
+        - var_name: Route_C_3
+          coefficient: 1
+        - var_name: Route_C_4
+          coefficient: 1
+        - var_name: Route_C_5
+          coefficient: 1
+      sense: "<="
+      rhs: 100
