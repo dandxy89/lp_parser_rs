@@ -21,10 +21,11 @@ pub mod variable;
 
 pub type ParseResult<T> = Result<Vec<T>, LPParserError>;
 
-fn get_name(parts: &mut Peekable<Pairs<'_, Rule>>, gen: &SequenceGenerator, rule: Rule) -> String {
-    if parts.peek().unwrap().as_rule() == rule {
+fn get_name(parts: &mut Peekable<Pairs<'_, Rule>>, id_gen: &SequenceGenerator, rule: Rule) -> String {
+    let Some(part) = parts.peek() else { return String::new() };
+    if part.as_rule() == rule {
         parts.next().unwrap().as_str().to_owned()
     } else {
-        format!("{}{}", rule.prefix(), gen.next_id())
+        format!("{}{}", rule.prefix(), id_gen.next_id())
     }
 }

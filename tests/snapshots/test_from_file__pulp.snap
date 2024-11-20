@@ -2,6 +2,704 @@
 source: tests/test_from_file.rs
 expression: result
 ---
+constraints:
+  "_C10:":
+    Standard:
+      name: "_C10:"
+      coefficients:
+        - coefficient: -1
+          var_name: B_3
+        - coefficient: 1
+          var_name: B_7
+        - coefficient: 1
+          var_name: under_9
+      sense: ">="
+      rhs: 0
+  "_C11:":
+    Standard:
+      name: "_C11:"
+      coefficients:
+        - coefficient: -1
+          var_name: D_0
+        - coefficient: 1
+          var_name: D_3
+        - coefficient: -1
+          var_name: over_10
+      sense: "<="
+      rhs: 0
+  "_C12:":
+    Standard:
+      name: "_C12:"
+      coefficients:
+        - coefficient: -1
+          var_name: D_0
+        - coefficient: 1
+          var_name: D_3
+        - coefficient: 1
+          var_name: under_11
+      sense: ">="
+      rhs: 0
+  "_C13:":
+    Standard:
+      name: "_C13:"
+      coefficients:
+        - coefficient: -1
+          var_name: N_0
+        - coefficient: 1
+          var_name: N_3
+        - coefficient: -1
+          var_name: over_12
+      sense: "<="
+      rhs: 0
+  "_C14:":
+    Standard:
+      name: "_C14:"
+      coefficients:
+        - coefficient: -1
+          var_name: N_0
+        - coefficient: 1
+          var_name: N_3
+        - coefficient: 1
+          var_name: under_13
+      sense: ">="
+      rhs: 0
+  "_C15:":
+    Standard:
+      name: "_C15:"
+      coefficients:
+        - coefficient: -1
+          var_name: N_3
+        - coefficient: 1
+          var_name: N_7
+        - coefficient: -1
+          var_name: over_14
+      sense: "<="
+      rhs: 0
+  "_C16:":
+    Standard:
+      name: "_C16:"
+      coefficients:
+        - coefficient: -1
+          var_name: N_3
+        - coefficient: 1
+          var_name: N_7
+        - coefficient: 1
+          var_name: under_15
+      sense: ">="
+      rhs: 0
+  "_C17:":
+    Standard:
+      name: "_C17:"
+      coefficients:
+        - coefficient: 1
+          var_name: A_7
+        - coefficient: -1
+          var_name: B_7
+        - coefficient: -1
+          var_name: over_16
+      sense: "<="
+      rhs: 0
+  "_C18:":
+    Standard:
+      name: "_C18:"
+      coefficients:
+        - coefficient: 1
+          var_name: A_7
+        - coefficient: -1
+          var_name: B_7
+        - coefficient: 1
+          var_name: under_17
+      sense: ">="
+      rhs: 0
+  "_C19:":
+    Standard:
+      name: "_C19:"
+      coefficients:
+        - coefficient: -1
+          var_name: A_7
+        - coefficient: 1
+          var_name: N_7
+        - coefficient: -1
+          var_name: over_18
+      sense: "<="
+      rhs: 0
+  "_C1:":
+    Standard:
+      name: "_C1:"
+      coefficients:
+        - coefficient: -1
+          var_name: A_0
+        - coefficient: 1
+          var_name: A_3
+        - coefficient: -1
+          var_name: over_0
+      sense: "<="
+      rhs: 0
+  "_C20:":
+    Standard:
+      name: "_C20:"
+      coefficients:
+        - coefficient: -1
+          var_name: A_7
+        - coefficient: 1
+          var_name: N_7
+        - coefficient: 1
+          var_name: under_19
+      sense: ">="
+      rhs: 0
+  "_C21:":
+    Standard:
+      name: "_C21:"
+      coefficients:
+        - coefficient: 1
+          var_name: C_7
+        - coefficient: -1
+          var_name: N_7
+        - coefficient: -1
+          var_name: over_20
+      sense: "<="
+      rhs: 0
+  "_C22:":
+    Standard:
+      name: "_C22:"
+      coefficients:
+        - coefficient: 1
+          var_name: C_7
+        - coefficient: -1
+          var_name: N_7
+        - coefficient: 1
+          var_name: under_21
+      sense: ">="
+      rhs: 0
+  "_C23:":
+    Standard:
+      name: "_C23:"
+      coefficients:
+        - coefficient: 1
+          var_name: B_7
+        - coefficient: -1
+          var_name: C_7
+        - coefficient: -1
+          var_name: over_22
+      sense: "<="
+      rhs: 0
+  "_C24:":
+    Standard:
+      name: "_C24:"
+      coefficients:
+        - coefficient: 1
+          var_name: B_7
+        - coefficient: -1
+          var_name: C_7
+        - coefficient: 1
+          var_name: under_23
+      sense: ">="
+      rhs: 0
+  "_C25:":
+    Standard:
+      name: "_C25:"
+      coefficients:
+        - coefficient: 1
+          var_name: B_3
+        - coefficient: -1
+          var_name: N_3
+        - coefficient: -1
+          var_name: over_24
+      sense: "<="
+      rhs: 0
+  "_C26:":
+    Standard:
+      name: "_C26:"
+      coefficients:
+        - coefficient: 1
+          var_name: B_3
+        - coefficient: -1
+          var_name: N_3
+        - coefficient: 1
+          var_name: under_25
+      sense: ">="
+      rhs: 0
+  "_C27:":
+    Standard:
+      name: "_C27:"
+      coefficients:
+        - coefficient: 1
+          var_name: A_3
+        - coefficient: -1
+          var_name: B_3
+        - coefficient: -1
+          var_name: over_26
+      sense: "<="
+      rhs: 0
+  "_C28:":
+    Standard:
+      name: "_C28:"
+      coefficients:
+        - coefficient: 1
+          var_name: A_3
+        - coefficient: -1
+          var_name: B_3
+        - coefficient: 1
+          var_name: under_27
+      sense: ">="
+      rhs: 0
+  "_C29:":
+    Standard:
+      name: "_C29:"
+      coefficients:
+        - coefficient: -1
+          var_name: A_3
+        - coefficient: 1
+          var_name: N_3
+        - coefficient: -1
+          var_name: over_28
+      sense: "<="
+      rhs: 0
+  "_C2:":
+    Standard:
+      name: "_C2:"
+      coefficients:
+        - coefficient: -1
+          var_name: A_0
+        - coefficient: 1
+          var_name: A_3
+        - coefficient: 1
+          var_name: under_1
+      sense: ">="
+      rhs: 0
+  "_C30:":
+    Standard:
+      name: "_C30:"
+      coefficients:
+        - coefficient: -1
+          var_name: A_3
+        - coefficient: 1
+          var_name: N_3
+        - coefficient: 1
+          var_name: under_29
+      sense: ">="
+      rhs: 0
+  "_C31:":
+    Standard:
+      name: "_C31:"
+      coefficients:
+        - coefficient: 1
+          var_name: A_0
+        - coefficient: -1
+          var_name: N_0
+        - coefficient: -1
+          var_name: over_30
+      sense: "<="
+      rhs: 0
+  "_C32:":
+    Standard:
+      name: "_C32:"
+      coefficients:
+        - coefficient: 1
+          var_name: A_0
+        - coefficient: -1
+          var_name: N_0
+        - coefficient: 1
+          var_name: under_31
+      sense: ">="
+      rhs: 0
+  "_C33:":
+    Standard:
+      name: "_C33:"
+      coefficients:
+        - coefficient: -1
+          var_name: A_0
+        - coefficient: 1
+          var_name: D_0
+        - coefficient: -1
+          var_name: over_32
+      sense: "<="
+      rhs: 0
+  "_C34:":
+    Standard:
+      name: "_C34:"
+      coefficients:
+        - coefficient: -1
+          var_name: A_0
+        - coefficient: 1
+          var_name: D_0
+        - coefficient: 1
+          var_name: under_33
+      sense: ">="
+      rhs: 0
+  "_C35:":
+    Standard:
+      name: "_C35:"
+      coefficients:
+        - coefficient: 1
+          var_name: B_0
+        - coefficient: -1
+          var_name: D_0
+        - coefficient: -1
+          var_name: over_34
+      sense: "<="
+      rhs: 0
+  "_C36:":
+    Standard:
+      name: "_C36:"
+      coefficients:
+        - coefficient: 1
+          var_name: B_0
+        - coefficient: -1
+          var_name: D_0
+        - coefficient: 1
+          var_name: under_35
+      sense: ">="
+      rhs: 0
+  "_C37:":
+    Standard:
+      name: "_C37:"
+      coefficients:
+        - coefficient: -1
+          var_name: B_0
+        - coefficient: 1
+          var_name: N_0
+        - coefficient: -1
+          var_name: over_36
+      sense: "<="
+      rhs: 0
+  "_C38:":
+    Standard:
+      name: "_C38:"
+      coefficients:
+        - coefficient: -1
+          var_name: B_0
+        - coefficient: 1
+          var_name: N_0
+        - coefficient: 1
+          var_name: under_37
+      sense: ">="
+      rhs: 0
+  "_C39:":
+    Standard:
+      name: "_C39:"
+      coefficients:
+        - coefficient: 1
+          var_name: D_3
+        - coefficient: -1
+          var_name: over_38
+      sense: "<="
+      rhs: 1.24660824696
+  "_C3:":
+    Standard:
+      name: "_C3:"
+      coefficients:
+        - coefficient: -1
+          var_name: A_3
+        - coefficient: 1
+          var_name: A_7
+        - coefficient: -1
+          var_name: over_2
+      sense: "<="
+      rhs: 0
+  "_C40:":
+    Standard:
+      name: "_C40:"
+      coefficients:
+        - coefficient: 1
+          var_name: D_3
+        - coefficient: 1
+          var_name: under_39
+      sense: ">="
+      rhs: 1.24660824696
+  "_C41:":
+    Standard:
+      name: "_C41:"
+      coefficients:
+        - coefficient: 1
+          var_name: A_7
+        - coefficient: 1
+          var_name: B_7
+        - coefficient: 1
+          var_name: C_7
+        - coefficient: 1
+          var_name: N_7
+        - coefficient: -1
+          var_name: over_40
+      sense: "<="
+      rhs: 9.80665154278
+  "_C42:":
+    Standard:
+      name: "_C42:"
+      coefficients:
+        - coefficient: 1
+          var_name: A_7
+        - coefficient: 1
+          var_name: B_7
+        - coefficient: 1
+          var_name: C_7
+        - coefficient: 1
+          var_name: N_7
+        - coefficient: 1
+          var_name: under_41
+      sense: ">="
+      rhs: 9.80665154278
+  "_C43:":
+    Standard:
+      name: "_C43:"
+      coefficients:
+        - coefficient: 1
+          var_name: C_0
+        - coefficient: -1
+          var_name: over_42
+      sense: "<="
+      rhs: 2.06580795211
+  "_C44:":
+    Standard:
+      name: "_C44:"
+      coefficients:
+        - coefficient: 1
+          var_name: C_0
+        - coefficient: 1
+          var_name: under_43
+      sense: ">="
+      rhs: 2.06580795211
+  "_C45:":
+    Standard:
+      name: "_C45:"
+      coefficients:
+        - coefficient: 1
+          var_name: A_3
+        - coefficient: 1
+          var_name: B_3
+        - coefficient: 1
+          var_name: N_3
+        - coefficient: -1
+          var_name: over_44
+      sense: "<="
+      rhs: 7.1056670077
+  "_C46:":
+    Standard:
+      name: "_C46:"
+      coefficients:
+        - coefficient: 1
+          var_name: A_3
+        - coefficient: 1
+          var_name: B_3
+        - coefficient: 1
+          var_name: N_3
+        - coefficient: 1
+          var_name: under_45
+      sense: ">="
+      rhs: 7.1056670077
+  "_C47:":
+    Standard:
+      name: "_C47:"
+      coefficients:
+        - coefficient: 1
+          var_name: A_0
+        - coefficient: 1
+          var_name: B_0
+        - coefficient: 1
+          var_name: D_0
+        - coefficient: 1
+          var_name: N_0
+        - coefficient: -1
+          var_name: over_46
+      sense: "<="
+      rhs: 7.89518556411
+  "_C48:":
+    Standard:
+      name: "_C48:"
+      coefficients:
+        - coefficient: 1
+          var_name: A_0
+        - coefficient: 1
+          var_name: B_0
+        - coefficient: 1
+          var_name: D_0
+        - coefficient: 1
+          var_name: N_0
+        - coefficient: 1
+          var_name: under_47
+      sense: ">="
+      rhs: 7.89518556411
+  "_C49:":
+    Standard:
+      name: "_C49:"
+      coefficients:
+        - coefficient: -1
+          var_name: PenaltyTree_48
+        - coefficient: 0.5
+          var_name: over_0
+        - coefficient: 0.5
+          var_name: over_10
+        - coefficient: 0.5
+          var_name: over_12
+        - coefficient: 0.5
+          var_name: over_14
+        - coefficient: 0.02
+          var_name: over_16
+        - coefficient: 0.02
+          var_name: over_18
+        - coefficient: 0.5
+          var_name: over_2
+        - coefficient: 0.02
+          var_name: over_20
+        - coefficient: 0.02
+          var_name: over_22
+        - coefficient: 0.02
+          var_name: over_24
+        - coefficient: 0.02
+          var_name: over_26
+        - coefficient: 0.02
+          var_name: over_28
+        - coefficient: 0.02
+          var_name: over_30
+        - coefficient: 0.02
+          var_name: over_32
+        - coefficient: 0.02
+          var_name: over_34
+        - coefficient: 0.02
+          var_name: over_36
+        - coefficient: 4
+          var_name: over_38
+        - coefficient: 0.5
+          var_name: over_4
+        - coefficient: 4
+          var_name: over_40
+        - coefficient: 4
+          var_name: over_42
+        - coefficient: 4
+          var_name: over_44
+        - coefficient: 4
+          var_name: over_46
+        - coefficient: 0.5
+          var_name: over_6
+        - coefficient: 0.5
+          var_name: over_8
+        - coefficient: 0.5
+          var_name: under_1
+        - coefficient: 0.5
+          var_name: under_11
+        - coefficient: 0.5
+          var_name: under_13
+        - coefficient: 0.5
+          var_name: under_15
+        - coefficient: 0.02
+          var_name: under_17
+        - coefficient: 0.02
+          var_name: under_19
+        - coefficient: 0.02
+          var_name: under_21
+        - coefficient: 0.02
+          var_name: under_23
+        - coefficient: 0.02
+          var_name: under_25
+        - coefficient: 0.02
+          var_name: under_27
+        - coefficient: 0.02
+          var_name: under_29
+        - coefficient: 0.5
+          var_name: under_3
+        - coefficient: 0.02
+          var_name: under_31
+        - coefficient: 0.02
+          var_name: under_33
+        - coefficient: 0.02
+          var_name: under_35
+        - coefficient: 0.02
+          var_name: under_37
+        - coefficient: 4
+          var_name: under_39
+        - coefficient: 4
+          var_name: under_41
+        - coefficient: 4
+          var_name: under_43
+        - coefficient: 4
+          var_name: under_45
+        - coefficient: 4
+          var_name: under_47
+        - coefficient: 0.5
+          var_name: under_5
+        - coefficient: 0.5
+          var_name: under_7
+        - coefficient: 0.5
+          var_name: under_9
+      sense: "="
+      rhs: 0
+  "_C4:":
+    Standard:
+      name: "_C4:"
+      coefficients:
+        - coefficient: -1
+          var_name: A_3
+        - coefficient: 1
+          var_name: A_7
+        - coefficient: 1
+          var_name: under_3
+      sense: ">="
+      rhs: 0
+  "_C5:":
+    Standard:
+      name: "_C5:"
+      coefficients:
+        - coefficient: -1
+          var_name: C_0
+        - coefficient: 1
+          var_name: C_7
+        - coefficient: -1
+          var_name: over_4
+      sense: "<="
+      rhs: 0
+  "_C6:":
+    Standard:
+      name: "_C6:"
+      coefficients:
+        - coefficient: -1
+          var_name: C_0
+        - coefficient: 1
+          var_name: C_7
+        - coefficient: 1
+          var_name: under_5
+      sense: ">="
+      rhs: 0
+  "_C7:":
+    Standard:
+      name: "_C7:"
+      coefficients:
+        - coefficient: -1
+          var_name: B_0
+        - coefficient: 1
+          var_name: B_3
+        - coefficient: -1
+          var_name: over_6
+      sense: "<="
+      rhs: 0
+  "_C8:":
+    Standard:
+      name: "_C8:"
+      coefficients:
+        - coefficient: -1
+          var_name: B_0
+        - coefficient: 1
+          var_name: B_3
+        - coefficient: 1
+          var_name: under_7
+      sense: ">="
+      rhs: 0
+  "_C9:":
+    Standard:
+      name: "_C9:"
+      coefficients:
+        - coefficient: -1
+          var_name: B_3
+        - coefficient: 1
+          var_name: B_7
+        - coefficient: -1
+          var_name: over_8
+      sense: "<="
+      rhs: 0
+objectives:
+  - coefficients:
+      - coefficient: 1
+        var_name: PenaltyTree_48
+    name: OBJ
 problem_name: ~
 problem_sense: Minimize
 variables:
@@ -67,701 +765,3 @@ variables:
   under_5: General
   under_7: General
   under_9: General
-objectives:
-  - name: OBJ
-    coefficients:
-      - var_name: PenaltyTree_48
-        coefficient: 1
-constraints:
-  "_C10:":
-    Standard:
-      name: "_C10:"
-      coefficients:
-        - var_name: B_3
-          coefficient: -1
-        - var_name: B_7
-          coefficient: 1
-        - var_name: under_9
-          coefficient: 1
-      sense: ">="
-      rhs: 0
-  "_C11:":
-    Standard:
-      name: "_C11:"
-      coefficients:
-        - var_name: D_0
-          coefficient: -1
-        - var_name: D_3
-          coefficient: 1
-        - var_name: over_10
-          coefficient: -1
-      sense: "<="
-      rhs: 0
-  "_C12:":
-    Standard:
-      name: "_C12:"
-      coefficients:
-        - var_name: D_0
-          coefficient: -1
-        - var_name: D_3
-          coefficient: 1
-        - var_name: under_11
-          coefficient: 1
-      sense: ">="
-      rhs: 0
-  "_C13:":
-    Standard:
-      name: "_C13:"
-      coefficients:
-        - var_name: N_0
-          coefficient: -1
-        - var_name: N_3
-          coefficient: 1
-        - var_name: over_12
-          coefficient: -1
-      sense: "<="
-      rhs: 0
-  "_C14:":
-    Standard:
-      name: "_C14:"
-      coefficients:
-        - var_name: N_0
-          coefficient: -1
-        - var_name: N_3
-          coefficient: 1
-        - var_name: under_13
-          coefficient: 1
-      sense: ">="
-      rhs: 0
-  "_C15:":
-    Standard:
-      name: "_C15:"
-      coefficients:
-        - var_name: N_3
-          coefficient: -1
-        - var_name: N_7
-          coefficient: 1
-        - var_name: over_14
-          coefficient: -1
-      sense: "<="
-      rhs: 0
-  "_C16:":
-    Standard:
-      name: "_C16:"
-      coefficients:
-        - var_name: N_3
-          coefficient: -1
-        - var_name: N_7
-          coefficient: 1
-        - var_name: under_15
-          coefficient: 1
-      sense: ">="
-      rhs: 0
-  "_C17:":
-    Standard:
-      name: "_C17:"
-      coefficients:
-        - var_name: A_7
-          coefficient: 1
-        - var_name: B_7
-          coefficient: -1
-        - var_name: over_16
-          coefficient: -1
-      sense: "<="
-      rhs: 0
-  "_C18:":
-    Standard:
-      name: "_C18:"
-      coefficients:
-        - var_name: A_7
-          coefficient: 1
-        - var_name: B_7
-          coefficient: -1
-        - var_name: under_17
-          coefficient: 1
-      sense: ">="
-      rhs: 0
-  "_C19:":
-    Standard:
-      name: "_C19:"
-      coefficients:
-        - var_name: A_7
-          coefficient: -1
-        - var_name: N_7
-          coefficient: 1
-        - var_name: over_18
-          coefficient: -1
-      sense: "<="
-      rhs: 0
-  "_C1:":
-    Standard:
-      name: "_C1:"
-      coefficients:
-        - var_name: A_0
-          coefficient: -1
-        - var_name: A_3
-          coefficient: 1
-        - var_name: over_0
-          coefficient: -1
-      sense: "<="
-      rhs: 0
-  "_C20:":
-    Standard:
-      name: "_C20:"
-      coefficients:
-        - var_name: A_7
-          coefficient: -1
-        - var_name: N_7
-          coefficient: 1
-        - var_name: under_19
-          coefficient: 1
-      sense: ">="
-      rhs: 0
-  "_C21:":
-    Standard:
-      name: "_C21:"
-      coefficients:
-        - var_name: C_7
-          coefficient: 1
-        - var_name: N_7
-          coefficient: -1
-        - var_name: over_20
-          coefficient: -1
-      sense: "<="
-      rhs: 0
-  "_C22:":
-    Standard:
-      name: "_C22:"
-      coefficients:
-        - var_name: C_7
-          coefficient: 1
-        - var_name: N_7
-          coefficient: -1
-        - var_name: under_21
-          coefficient: 1
-      sense: ">="
-      rhs: 0
-  "_C23:":
-    Standard:
-      name: "_C23:"
-      coefficients:
-        - var_name: B_7
-          coefficient: 1
-        - var_name: C_7
-          coefficient: -1
-        - var_name: over_22
-          coefficient: -1
-      sense: "<="
-      rhs: 0
-  "_C24:":
-    Standard:
-      name: "_C24:"
-      coefficients:
-        - var_name: B_7
-          coefficient: 1
-        - var_name: C_7
-          coefficient: -1
-        - var_name: under_23
-          coefficient: 1
-      sense: ">="
-      rhs: 0
-  "_C25:":
-    Standard:
-      name: "_C25:"
-      coefficients:
-        - var_name: B_3
-          coefficient: 1
-        - var_name: N_3
-          coefficient: -1
-        - var_name: over_24
-          coefficient: -1
-      sense: "<="
-      rhs: 0
-  "_C26:":
-    Standard:
-      name: "_C26:"
-      coefficients:
-        - var_name: B_3
-          coefficient: 1
-        - var_name: N_3
-          coefficient: -1
-        - var_name: under_25
-          coefficient: 1
-      sense: ">="
-      rhs: 0
-  "_C27:":
-    Standard:
-      name: "_C27:"
-      coefficients:
-        - var_name: A_3
-          coefficient: 1
-        - var_name: B_3
-          coefficient: -1
-        - var_name: over_26
-          coefficient: -1
-      sense: "<="
-      rhs: 0
-  "_C28:":
-    Standard:
-      name: "_C28:"
-      coefficients:
-        - var_name: A_3
-          coefficient: 1
-        - var_name: B_3
-          coefficient: -1
-        - var_name: under_27
-          coefficient: 1
-      sense: ">="
-      rhs: 0
-  "_C29:":
-    Standard:
-      name: "_C29:"
-      coefficients:
-        - var_name: A_3
-          coefficient: -1
-        - var_name: N_3
-          coefficient: 1
-        - var_name: over_28
-          coefficient: -1
-      sense: "<="
-      rhs: 0
-  "_C2:":
-    Standard:
-      name: "_C2:"
-      coefficients:
-        - var_name: A_0
-          coefficient: -1
-        - var_name: A_3
-          coefficient: 1
-        - var_name: under_1
-          coefficient: 1
-      sense: ">="
-      rhs: 0
-  "_C30:":
-    Standard:
-      name: "_C30:"
-      coefficients:
-        - var_name: A_3
-          coefficient: -1
-        - var_name: N_3
-          coefficient: 1
-        - var_name: under_29
-          coefficient: 1
-      sense: ">="
-      rhs: 0
-  "_C31:":
-    Standard:
-      name: "_C31:"
-      coefficients:
-        - var_name: A_0
-          coefficient: 1
-        - var_name: N_0
-          coefficient: -1
-        - var_name: over_30
-          coefficient: -1
-      sense: "<="
-      rhs: 0
-  "_C32:":
-    Standard:
-      name: "_C32:"
-      coefficients:
-        - var_name: A_0
-          coefficient: 1
-        - var_name: N_0
-          coefficient: -1
-        - var_name: under_31
-          coefficient: 1
-      sense: ">="
-      rhs: 0
-  "_C33:":
-    Standard:
-      name: "_C33:"
-      coefficients:
-        - var_name: A_0
-          coefficient: -1
-        - var_name: D_0
-          coefficient: 1
-        - var_name: over_32
-          coefficient: -1
-      sense: "<="
-      rhs: 0
-  "_C34:":
-    Standard:
-      name: "_C34:"
-      coefficients:
-        - var_name: A_0
-          coefficient: -1
-        - var_name: D_0
-          coefficient: 1
-        - var_name: under_33
-          coefficient: 1
-      sense: ">="
-      rhs: 0
-  "_C35:":
-    Standard:
-      name: "_C35:"
-      coefficients:
-        - var_name: B_0
-          coefficient: 1
-        - var_name: D_0
-          coefficient: -1
-        - var_name: over_34
-          coefficient: -1
-      sense: "<="
-      rhs: 0
-  "_C36:":
-    Standard:
-      name: "_C36:"
-      coefficients:
-        - var_name: B_0
-          coefficient: 1
-        - var_name: D_0
-          coefficient: -1
-        - var_name: under_35
-          coefficient: 1
-      sense: ">="
-      rhs: 0
-  "_C37:":
-    Standard:
-      name: "_C37:"
-      coefficients:
-        - var_name: B_0
-          coefficient: -1
-        - var_name: N_0
-          coefficient: 1
-        - var_name: over_36
-          coefficient: -1
-      sense: "<="
-      rhs: 0
-  "_C38:":
-    Standard:
-      name: "_C38:"
-      coefficients:
-        - var_name: B_0
-          coefficient: -1
-        - var_name: N_0
-          coefficient: 1
-        - var_name: under_37
-          coefficient: 1
-      sense: ">="
-      rhs: 0
-  "_C39:":
-    Standard:
-      name: "_C39:"
-      coefficients:
-        - var_name: D_3
-          coefficient: 1
-        - var_name: over_38
-          coefficient: -1
-      sense: "<="
-      rhs: 1.24660824696
-  "_C3:":
-    Standard:
-      name: "_C3:"
-      coefficients:
-        - var_name: A_3
-          coefficient: -1
-        - var_name: A_7
-          coefficient: 1
-        - var_name: over_2
-          coefficient: -1
-      sense: "<="
-      rhs: 0
-  "_C40:":
-    Standard:
-      name: "_C40:"
-      coefficients:
-        - var_name: D_3
-          coefficient: 1
-        - var_name: under_39
-          coefficient: 1
-      sense: ">="
-      rhs: 1.24660824696
-  "_C41:":
-    Standard:
-      name: "_C41:"
-      coefficients:
-        - var_name: A_7
-          coefficient: 1
-        - var_name: B_7
-          coefficient: 1
-        - var_name: C_7
-          coefficient: 1
-        - var_name: N_7
-          coefficient: 1
-        - var_name: over_40
-          coefficient: -1
-      sense: "<="
-      rhs: 9.80665154278
-  "_C42:":
-    Standard:
-      name: "_C42:"
-      coefficients:
-        - var_name: A_7
-          coefficient: 1
-        - var_name: B_7
-          coefficient: 1
-        - var_name: C_7
-          coefficient: 1
-        - var_name: N_7
-          coefficient: 1
-        - var_name: under_41
-          coefficient: 1
-      sense: ">="
-      rhs: 9.80665154278
-  "_C43:":
-    Standard:
-      name: "_C43:"
-      coefficients:
-        - var_name: C_0
-          coefficient: 1
-        - var_name: over_42
-          coefficient: -1
-      sense: "<="
-      rhs: 2.06580795211
-  "_C44:":
-    Standard:
-      name: "_C44:"
-      coefficients:
-        - var_name: C_0
-          coefficient: 1
-        - var_name: under_43
-          coefficient: 1
-      sense: ">="
-      rhs: 2.06580795211
-  "_C45:":
-    Standard:
-      name: "_C45:"
-      coefficients:
-        - var_name: A_3
-          coefficient: 1
-        - var_name: B_3
-          coefficient: 1
-        - var_name: N_3
-          coefficient: 1
-        - var_name: over_44
-          coefficient: -1
-      sense: "<="
-      rhs: 7.1056670077
-  "_C46:":
-    Standard:
-      name: "_C46:"
-      coefficients:
-        - var_name: A_3
-          coefficient: 1
-        - var_name: B_3
-          coefficient: 1
-        - var_name: N_3
-          coefficient: 1
-        - var_name: under_45
-          coefficient: 1
-      sense: ">="
-      rhs: 7.1056670077
-  "_C47:":
-    Standard:
-      name: "_C47:"
-      coefficients:
-        - var_name: A_0
-          coefficient: 1
-        - var_name: B_0
-          coefficient: 1
-        - var_name: D_0
-          coefficient: 1
-        - var_name: N_0
-          coefficient: 1
-        - var_name: over_46
-          coefficient: -1
-      sense: "<="
-      rhs: 7.89518556411
-  "_C48:":
-    Standard:
-      name: "_C48:"
-      coefficients:
-        - var_name: A_0
-          coefficient: 1
-        - var_name: B_0
-          coefficient: 1
-        - var_name: D_0
-          coefficient: 1
-        - var_name: N_0
-          coefficient: 1
-        - var_name: under_47
-          coefficient: 1
-      sense: ">="
-      rhs: 7.89518556411
-  "_C49:":
-    Standard:
-      name: "_C49:"
-      coefficients:
-        - var_name: PenaltyTree_48
-          coefficient: -1
-        - var_name: over_0
-          coefficient: 0.5
-        - var_name: over_10
-          coefficient: 0.5
-        - var_name: over_12
-          coefficient: 0.5
-        - var_name: over_14
-          coefficient: 0.5
-        - var_name: over_16
-          coefficient: 0.02
-        - var_name: over_18
-          coefficient: 0.02
-        - var_name: over_2
-          coefficient: 0.5
-        - var_name: over_20
-          coefficient: 0.02
-        - var_name: over_22
-          coefficient: 0.02
-        - var_name: over_24
-          coefficient: 0.02
-        - var_name: over_26
-          coefficient: 0.02
-        - var_name: over_28
-          coefficient: 0.02
-        - var_name: over_30
-          coefficient: 0.02
-        - var_name: over_32
-          coefficient: 0.02
-        - var_name: over_34
-          coefficient: 0.02
-        - var_name: over_36
-          coefficient: 0.02
-        - var_name: over_38
-          coefficient: 4
-        - var_name: over_4
-          coefficient: 0.5
-        - var_name: over_40
-          coefficient: 4
-        - var_name: over_42
-          coefficient: 4
-        - var_name: over_44
-          coefficient: 4
-        - var_name: over_46
-          coefficient: 4
-        - var_name: over_6
-          coefficient: 0.5
-        - var_name: over_8
-          coefficient: 0.5
-        - var_name: under_1
-          coefficient: 0.5
-        - var_name: under_11
-          coefficient: 0.5
-        - var_name: under_13
-          coefficient: 0.5
-        - var_name: under_15
-          coefficient: 0.5
-        - var_name: under_17
-          coefficient: 0.02
-        - var_name: under_19
-          coefficient: 0.02
-        - var_name: under_21
-          coefficient: 0.02
-        - var_name: under_23
-          coefficient: 0.02
-        - var_name: under_25
-          coefficient: 0.02
-        - var_name: under_27
-          coefficient: 0.02
-        - var_name: under_29
-          coefficient: 0.02
-        - var_name: under_3
-          coefficient: 0.5
-        - var_name: under_31
-          coefficient: 0.02
-        - var_name: under_33
-          coefficient: 0.02
-        - var_name: under_35
-          coefficient: 0.02
-        - var_name: under_37
-          coefficient: 0.02
-        - var_name: under_39
-          coefficient: 4
-        - var_name: under_41
-          coefficient: 4
-        - var_name: under_43
-          coefficient: 4
-        - var_name: under_45
-          coefficient: 4
-        - var_name: under_47
-          coefficient: 4
-        - var_name: under_5
-          coefficient: 0.5
-        - var_name: under_7
-          coefficient: 0.5
-        - var_name: under_9
-          coefficient: 0.5
-      sense: "="
-      rhs: 0
-  "_C4:":
-    Standard:
-      name: "_C4:"
-      coefficients:
-        - var_name: A_3
-          coefficient: -1
-        - var_name: A_7
-          coefficient: 1
-        - var_name: under_3
-          coefficient: 1
-      sense: ">="
-      rhs: 0
-  "_C5:":
-    Standard:
-      name: "_C5:"
-      coefficients:
-        - var_name: C_0
-          coefficient: -1
-        - var_name: C_7
-          coefficient: 1
-        - var_name: over_4
-          coefficient: -1
-      sense: "<="
-      rhs: 0
-  "_C6:":
-    Standard:
-      name: "_C6:"
-      coefficients:
-        - var_name: C_0
-          coefficient: -1
-        - var_name: C_7
-          coefficient: 1
-        - var_name: under_5
-          coefficient: 1
-      sense: ">="
-      rhs: 0
-  "_C7:":
-    Standard:
-      name: "_C7:"
-      coefficients:
-        - var_name: B_0
-          coefficient: -1
-        - var_name: B_3
-          coefficient: 1
-        - var_name: over_6
-          coefficient: -1
-      sense: "<="
-      rhs: 0
-  "_C8:":
-    Standard:
-      name: "_C8:"
-      coefficients:
-        - var_name: B_0
-          coefficient: -1
-        - var_name: B_3
-          coefficient: 1
-        - var_name: under_7
-          coefficient: 1
-      sense: ">="
-      rhs: 0
-  "_C9:":
-    Standard:
-      name: "_C9:"
-      coefficients:
-        - var_name: B_3
-          coefficient: -1
-        - var_name: B_7
-          coefficient: 1
-        - var_name: over_8
-          coefficient: -1
-      sense: "<="
-      rhs: 0

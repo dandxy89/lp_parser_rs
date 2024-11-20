@@ -24,11 +24,11 @@ impl FromStr for SOSClass {
     type Err = LPParserError;
 
     #[inline]
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "s1" | "s1::" => Ok(Self::S1),
-            "s2" | "s2::" => Ok(Self::S2),
-            _ => Err(LPParserError::SOSError(s.to_owned())),
+    fn from_str(sos_str: &str) -> Result<Self, Self::Err> {
+        match sos_str {
+            "s1::" | "s1" => Ok(Self::S1),
+            "s2::" | "s2" => Ok(Self::S2),
+            _ => Err(LPParserError::SOSError(sos_str.to_owned())),
         }
     }
 }
@@ -43,7 +43,7 @@ impl LPPart for SOSClass {
 
         let kind = parts.next().unwrap().as_str().to_lowercase();
 
-        let coefficients: ParseResult<Coefficient> = parts.map(|p| p.into_inner().try_into()).collect();
+        let coefficients: ParseResult<Coefficient> = parts.map(|coeff_part| coeff_part.into_inner().try_into()).collect();
 
         Ok(Constraint::SOS { name, kind: Self::from_str(&kind)?, coefficients: coefficients? })
     }

@@ -1,6 +1,6 @@
 use std::{
     fs::File,
-    io::{BufReader, ErrorKind, Read as _},
+    io::{BufReader, Error, ErrorKind, Read as _},
     path::Path,
 };
 
@@ -31,15 +31,15 @@ pub fn parse_file(path: &Path) -> Result<String, LPParserError> {
 pub fn parse_lp_file(contents: &str) -> Result<LPProblem, LPParserError> {
     let mut parsed = LParser::parse(Rule::LP_FILE, contents).map_err(|err| LPParserError::FileParseError(err.to_string()))?;
 
-    let Some(pair) = parsed.next() else {
+    let Some(pairs) = parsed.next() else {
         log::warn!("Unexpected EOF in parse_lp_file");
-        return Err(LPParserError::IOError(std::io::Error::from(ErrorKind::UnexpectedEof)));
+        return Err(LPParserError::IOError(Error::from(ErrorKind::UnexpectedEof)));
     };
 
     let mut parsed_contents = LPProblem::default();
     let mut code_generator = SequenceGenerator::new(2024);
 
-    for pair in pair.clone().into_inner() {
+    for pair in pairs.into_inner() {
         parsed_contents = compose(pair, parsed_contents, &mut code_generator)?;
     }
 

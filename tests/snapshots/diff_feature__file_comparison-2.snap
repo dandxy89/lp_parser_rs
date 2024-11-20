@@ -2,12 +2,6 @@
 source: tests/diff_feature.rs
 expression: a.diff(&a_copy)
 ---
-problem_name: NoChange
-problem_sense: NoChange
-variables:
-  altered: {}
-  removed: []
-objectives: []
 constraints:
   altered:
     "c1:":
@@ -17,8 +11,14 @@ constraints:
           - Altered:
               index: 0
               changes:
-                - var_name: ~
-                  coefficient: -1
+                - coefficient: -1
+                  var_name: ~
         sense: NoChange
         rhs: 0
+  removed: []
+objectives: []
+problem_name: NoChange
+problem_sense: NoChange
+variables:
+  altered: {}
   removed: []

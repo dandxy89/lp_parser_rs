@@ -2,6 +2,24 @@
 source: tests/test_from_file.rs
 expression: result
 ---
+constraints:
+  "blah:":
+    Standard:
+      name: "blah:"
+      coefficients:
+        - coefficient: 1
+          var_name: x
+        - coefficient: -1
+          var_name: y
+      sense: "="
+      rhs: 0
+objectives:
+  - coefficients:
+      - coefficient: -1
+        var_name: x
+      - coefficient: -1
+        var_name: y
+    name: obj
 problem_name: ~
 problem_sense: Minimize
 variables:
@@ -11,21 +29,3 @@ variables:
       - 0.2
       - 1
       - true
-objectives:
-  - name: obj
-    coefficients:
-      - var_name: x
-        coefficient: -1
-      - var_name: y
-        coefficient: -1
-constraints:
-  "blah:":
-    Standard:
-      name: "blah:"
-      coefficients:
-        - var_name: x
-          coefficient: 1
-        - var_name: y
-          coefficient: -1
-      sense: "="
-      rhs: 0

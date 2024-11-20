@@ -2,49 +2,49 @@
 source: tests/test_from_file.rs
 expression: result
 ---
-problem_name: ~
-problem_sense: Minimize
-variables:
-  x: Binary
-  y: General
-  z: General
-objectives:
-  - name: obj1
-    coefficients:
-      - var_name: x
-        coefficient: -0.5
-      - var_name: y
-        coefficient: -2
-      - var_name: z
-        coefficient: -8
-  - name: obj2
-    coefficients:
-      - var_name: y
-        coefficient: 1
-      - var_name: x
-        coefficient: 1
-      - var_name: z
-        coefficient: 1
 constraints:
   "cons1:":
     Standard:
       name: "cons1:"
       coefficients:
-        - var_name: x
-          coefficient: -199
-        - var_name: y
-          coefficient: 10
-        - var_name: z
-          coefficient: 1
+        - coefficient: -199
+          var_name: x
+        - coefficient: 10
+          var_name: y
+        - coefficient: 1
+          var_name: z
       sense: "<="
       rhs: 0
   "cons2:":
     Standard:
       name: "cons2:"
       coefficients:
-        - var_name: y
-          coefficient: 1
-        - var_name: z
-          coefficient: 1
+        - coefficient: 1
+          var_name: y
+        - coefficient: 1
+          var_name: z
       sense: ">="
       rhs: 0
+objectives:
+  - coefficients:
+      - coefficient: -0.5
+        var_name: x
+      - coefficient: -2
+        var_name: y
+      - coefficient: -8
+        var_name: z
+    name: obj1
+  - coefficients:
+      - coefficient: 1
+        var_name: y
+      - coefficient: 1
+        var_name: x
+      - coefficient: 1
+        var_name: z
+    name: obj2
+problem_name: ~
+problem_sense: Minimize
+variables:
+  x: Binary
+  y: General
+  z: General
