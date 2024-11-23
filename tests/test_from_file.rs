@@ -5,6 +5,13 @@ use lp_parser_rs::{
     parse::{parse_file, parse_lp_file},
 };
 
+fn read_file_from_resources(file_name: &str) -> Result<LPProblem, LPParserError> {
+    let mut file_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    file_path.push(format!("resources/{file_name}"));
+    let contents = parse_file(&file_path)?;
+    parse_lp_file(&contents)
+}
+
 #[macro_export]
 /// Generate a test for a given file asserting the summation of
 /// constraints and objectives contents.
@@ -30,6 +37,12 @@ macro_rules! generate_test {
     };
 }
 
+#[test]
+fn invalid() {
+    let result = read_file_from_resources("invalid.lp");
+    assert!(result.is_err());
+}
+
 generate_test!(pulp, "pulp.lp", 1., 73.44);
 generate_test!(pulp2, "pulp2.lp", -6.0, 147.);
 generate_test!(model2, "model2.lp", 0., 6.);
@@ -46,18 +59,11 @@ generate_test!(infile_comments2, "infile_comments2.lp", 43., 0.);
 generate_test!(missing_signs, "missing_signs.lp", 43., -3.);
 generate_test!(fit2d, "fit2d.lp", 349048.9, -296677.389);
 
-#[test]
-fn invalid() {
-    let result = read_file_from_resources("invalid.lp");
-    assert!(result.is_err());
-}
-
-fn read_file_from_resources(file_name: &str) -> Result<LPProblem, LPParserError> {
-    let mut file_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    file_path.push(format!("resources/{file_name}"));
-    let contents = parse_file(&file_path)?;
-    parse_lp_file(&contents)
-}
+generate_test!(output, "output.lp", 21., 21.);
+generate_test!(output2_1, "output2_1.lp", 3006.6, 12.);
+generate_test!(output2_2, "output2_2.lp", 3010.2, 9.);
+generate_test!(output2_3, "output2_3.lp", 3010.2, 17.7);
+generate_test!(output2_4, "output2_4.lp", 6010.2, 8.7);
 
 /// Test files from various open source projects on Github
 mod oss_tests {
