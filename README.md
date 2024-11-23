@@ -8,52 +8,101 @@
 
 ![Logo](resources/Screenshot.png)
 
-A custom Rust LP file parser - this crate leverages the [PEST](https://docs.rs/pest/latest/pest/) crate for parsing LP files. It is designed and adhering to the following specifications:
+A robust Rust parser for Linear Programming (LP) files, built on the [PEST](https://docs.rs/pest/latest/pest/) parsing framework. This crate provides comprehensive support for parsing and analyzing LP files according to major industry specifications.
 
-- [IBM v22.1.1 Specification](https://www.ibm.com/docs/en/icos/22.1.1?topic=cplex-lp-file-format-algebraic-representation)
-- [Fico](https://www.fico.com/fico-xpress-optimization/docs/dms2020-03/solver/optimizer/HTML/chapter10_sec_section102.html)
+### Supported Specifications
+
+- [IBM CPLEX v22.1.1](https://www.ibm.com/docs/en/icos/22.1.1?topic=cplex-lp-file-format-algebraic-representation)
+- [FICO Xpress](https://www.fico.com/fico-xpress-optimization/docs/dms2020-03/solver/optimizer/HTML/chapter10_sec_section102.html)
 - [Gurobi](https://www.gurobi.com/documentation/current/refman/lp_format.html)
+- Mosek
 
-Try it out using the following command line;
+## Features
 
-```bash
-git clone https://github.com/dandxy89/lp_parser_rs.git &&
-    cargo run -- {{PATH_TO_FILE}}
+### Core Functionality
+
+- **Problem Definition**
+  - Problem name and sense specification
+  - Single and multi-objective optimization support
+  - Comprehensive constraint handling
+
+- **Variable Support**
+  - Integer variables
+  - General variables
+  - Bounded variables (lower, upper, or both)
+  - Free variables
+  - Semi-continuous variables
+  - Special Ordered Sets (SOS)
+
+### Advanced Features
+
+- **LP File Comparison (`diff` feature)**
+  - Compare two LP files to identify:
+    - Added elements
+    - Removed elements
+    - Modified components
+  - Useful for model version control and validation
+
+- **Serialization (`serde` feature)**
+  - Full serialization support for all model structures
+  - Compatible with various data formats
+  - Enables integration with other tools and systems
+
+## Quick Start
+
+### Installation
+
+Add to your `Cargo.toml`:
+
+```toml
+[dependencies]
+lp_parser_rs = "x.y.z"
 ```
 
-## Supported LP Specifications
+### Basic Usage
 
-- Problem Name
-- Problem Sense
-- Objectives
-  - Single-Objective Case
-  - Multi-Objective Case
-- Constraints
-- Bounds
-- Variable Types: Integer, Generals, Lower Bounded, Upper Bounded, Free & Upper and Lower Bounded
-- Semi-continuous
-- Special Order Sets (SOS)
-
-## Crate Features
-
-- `serde`: Adds `Serde` annotations to each of the model Structs and Enums.
-- `diff`: Adds capability to diff two Structs
-
-## Acknowledgments
-
-Test data has been copied from other similar or related projects:
-
-- [Sebastian/jplex](https://github.com/asbestian/jplex/blob/main/instances/afiro.lp)
-- [Odow/LPWriter.jl](https://github.com/odow/LPWriter.jl/blob/master/test/model2.lp)
-- [Aphi/Lp-Parser](https://github.com/aphi/Lp-Parser)
-
-### Testers and Contributors
-
-This crate utilized `insta` for snapshot testing.
+Clone and run with a sample file:
 
 ```bash
-cargo insta test --all-features # Run all tests
-cargo insta review # Review any changes to the snapshots
+git clone https://github.com/dandxy89/lp_parser_rs.git
+cargo run --release -- {{ /path/to/your/file.lp }}
 ```
+
+### Enable Optional Features
+
+```toml
+[dependencies]
+lp_parser_rs = { version = "x.y.z", features = ["serde", "diff"] }
+```
+
+## Development
+
+### Testing
+
+The project uses snapshot testing via `insta` for reliable test management:
+
+```bash
+# Run all tests with all features enabled
+cargo insta test --all-features
+
+# Review snapshot changes
+cargo insta review
+```
+
+## Test Data Sources
+
+The test suite includes data from various open-source projects:
+
+- [jplex](https://github.com/asbestian/jplex/blob/main/instances/afiro.lp)
+- [LPWriter.jl](https://github.com/odow/LPWriter.jl/blob/master/test/model2.lp)
+- [Lp-Parser](https://github.com/aphi/Lp-Parser)
+
+## Contributors
+
+Special thanks to our contributors:
 
 - [Ahenshaw](https://github.com/ahenshaw)
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
