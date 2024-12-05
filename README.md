@@ -65,7 +65,10 @@ Clone and run with a sample file:
 
 ```bash
 git clone https://github.com/dandxy89/lp_parser_rs.git
+# Dissemble a single LP file
 cargo run --release -- {{ /path/to/your/file.lp }}
+# Compare two LP files (enabling the 'diff' feature)
+cargo run --release --features diff -- {{ /path/to/your/file.lp }} {{ /path/to/your/other/file.lp }}
 ```
 
 ### Enable Optional Features
@@ -93,7 +96,7 @@ cargo insta review
 
 The test suite includes data from various open-source projects:
 
-- [jplex](https://github.com/asbestian/jplex/blob/main/instances/afiro.lp)
+- [Jplex](https://github.com/asbestian/jplex/blob/main/instances/afiro.lp)
 - [LPWriter.jl](https://github.com/odow/LPWriter.jl/blob/master/test/model2.lp)
 - [Lp-Parser](https://github.com/aphi/Lp-Parser)
 
