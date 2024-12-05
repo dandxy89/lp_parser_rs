@@ -1,0 +1,77 @@
+---
+source: src/nom.rs
+expression: result
+---
+(
+    "",
+    LPProblem {
+        name: Some(
+            "CompleteExample",
+        ),
+        sense: Minimize,
+        objectives: [
+            Objective {
+                name: None,
+                coefficients: [
+                    Coefficient {
+                        var_name: "x1",
+                        coefficient: 1.0,
+                    },
+                    Coefficient {
+                        var_name: "x2",
+                        coefficient: 2.0,
+                    },
+                ],
+            },
+        ],
+        constraints: [
+            Standard {
+                name: Some(
+                    "c1",
+                ),
+                coefficients: [
+                    Coefficient {
+                        var_name: "x1",
+                        coefficient: 1.0,
+                    },
+                    Coefficient {
+                        var_name: "x2",
+                        coefficient: 1.0,
+                    },
+                ],
+                operator: LessOrEqual,
+                rhs: 5.0,
+            },
+            SOS {
+                name: Some(
+                    "csos1",
+                ),
+                sos_type: S1,
+                weights: [
+                    Coefficient {
+                        var_name: "V1",
+                        coefficient: 1.0,
+                    },
+                    Coefficient {
+                        var_name: "V3",
+                        coefficient: 2.0,
+                    },
+                    Coefficient {
+                        var_name: "V5",
+                        coefficient: 3.0,
+                    },
+                ],
+            },
+        ],
+        variables: [
+            Variable {
+                name: "x1",
+                var_type: Integer,
+            },
+            Variable {
+                name: "x2",
+                var_type: Binary,
+            },
+        ],
+    },
+)

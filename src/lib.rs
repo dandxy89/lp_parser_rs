@@ -24,6 +24,8 @@ pub mod common;
 pub mod model;
 pub mod parse;
 
+pub mod nom;
+
 use pest_derive::Parser;
 
 #[derive(Parser)]

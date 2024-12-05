@@ -19,6 +19,8 @@ serde = { version = "1.0", features = ["derive"], optional = true }
 thiserror = "2.0"
 unique_id = "0.1"
 
+nom = "7.1"
+
 [dev-dependencies]
 float_eq = "1.0.1"
 insta = { version = "1.41", features = ["yaml", "redactions"] }

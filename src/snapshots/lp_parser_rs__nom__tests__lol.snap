@@ -1,0 +1,147 @@
+---
+source: src/nom.rs
+expression: result
+---
+(
+    "",
+    LPProblem {
+        name: None,
+        sense: Maximize,
+        objectives: [
+            Objective {
+                name: Some(
+                    "obj",
+                ),
+                coefficients: [
+                    Coefficient {
+                        var_name: "x1",
+                        coefficient: 3.0,
+                    },
+                    Coefficient {
+                        var_name: "x2",
+                        coefficient: 1.0,
+                    },
+                    Coefficient {
+                        var_name: "x3",
+                        coefficient: 5.0,
+                    },
+                    Coefficient {
+                        var_name: "x4",
+                        coefficient: 1.0,
+                    },
+                ],
+            },
+        ],
+        constraints: [
+            Standard {
+                name: Some(
+                    "c1",
+                ),
+                coefficients: [
+                    Coefficient {
+                        var_name: "x1",
+                        coefficient: 3.0,
+                    },
+                    Coefficient {
+                        var_name: "x2",
+                        coefficient: 1.0,
+                    },
+                    Coefficient {
+                        var_name: "x3",
+                        coefficient: 2.0,
+                    },
+                ],
+                operator: Equal,
+                rhs: 30.0,
+            },
+            Standard {
+                name: Some(
+                    "c2",
+                ),
+                coefficients: [
+                    Coefficient {
+                        var_name: "x1",
+                        coefficient: 2.0,
+                    },
+                    Coefficient {
+                        var_name: "x2",
+                        coefficient: 1.0,
+                    },
+                    Coefficient {
+                        var_name: "x3",
+                        coefficient: 3.0,
+                    },
+                    Coefficient {
+                        var_name: "x4",
+                        coefficient: 1.0,
+                    },
+                ],
+                operator: GreaterOrEqual,
+                rhs: 15.0,
+            },
+            Standard {
+                name: Some(
+                    "c3",
+                ),
+                coefficients: [
+                    Coefficient {
+                        var_name: "x2",
+                        coefficient: 2.0,
+                    },
+                    Coefficient {
+                        var_name: "x4",
+                        coefficient: 3.0,
+                    },
+                ],
+                operator: LessOrEqual,
+                rhs: 25.0,
+            },
+        ],
+        variables: [
+            Variable {
+                name: "x1",
+                var_type: General {
+                    lower_bound: Some(
+                        0.0,
+                    ),
+                    upper_bound: Some(
+                        inf,
+                    ),
+                },
+            },
+            Variable {
+                name: "x2",
+                var_type: General {
+                    lower_bound: Some(
+                        0.0,
+                    ),
+                    upper_bound: Some(
+                        10.0,
+                    ),
+                },
+            },
+            Variable {
+                name: "x3",
+                var_type: General {
+                    lower_bound: Some(
+                        0.0,
+                    ),
+                    upper_bound: Some(
+                        inf,
+                    ),
+                },
+            },
+            Variable {
+                name: "x4",
+                var_type: General {
+                    lower_bound: Some(
+                        0.0,
+                    ),
+                    upper_bound: Some(
+                        inf,
+                    ),
+                },
+            },
+        ],
+    },
+)

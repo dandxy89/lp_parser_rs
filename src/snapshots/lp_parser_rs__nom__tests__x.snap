@@ -1,0 +1,185 @@
+---
+source: src/nom.rs
+expression: result
+---
+(
+    "",
+    LPProblem {
+        name: None,
+        sense: Maximize,
+        objectives: [
+            Objective {
+                name: Some(
+                    "obj",
+                ),
+                coefficients: [
+                    Coefficient {
+                        var_name: "V4",
+                        coefficient: -1.0,
+                    },
+                    Coefficient {
+                        var_name: "V5",
+                        coefficient: 1.0,
+                    },
+                ],
+            },
+        ],
+        constraints: [
+            Standard {
+                name: Some(
+                    "CON1",
+                ),
+                coefficients: [
+                    Coefficient {
+                        var_name: "V1",
+                        coefficient: 1.0,
+                    },
+                ],
+                operator: GreaterOrEqual,
+                rhs: 0.0,
+            },
+            Standard {
+                name: Some(
+                    "CON2",
+                ),
+                coefficients: [
+                    Coefficient {
+                        var_name: "V2",
+                        coefficient: 1.0,
+                    },
+                ],
+                operator: GreaterOrEqual,
+                rhs: 2.0,
+            },
+            Standard {
+                name: Some(
+                    "CON3",
+                ),
+                coefficients: [
+                    Coefficient {
+                        var_name: "V3",
+                        coefficient: 1.0,
+                    },
+                ],
+                operator: LessOrEqual,
+                rhs: 2.5,
+            },
+            Standard {
+                name: Some(
+                    "CON4",
+                ),
+                coefficients: [
+                    Coefficient {
+                        var_name: "V5",
+                        coefficient: 1.0,
+                    },
+                    Coefficient {
+                        var_name: "V6",
+                        coefficient: 1.0,
+                    },
+                    Coefficient {
+                        var_name: "V7",
+                        coefficient: 1.0,
+                    },
+                ],
+                operator: LessOrEqual,
+                rhs: 1.0,
+            },
+            SOS {
+                name: Some(
+                    "csos1",
+                ),
+                sos_type: S1,
+                weights: [
+                    Coefficient {
+                        var_name: "V1",
+                        coefficient: 1.0,
+                    },
+                    Coefficient {
+                        var_name: "V3",
+                        coefficient: 2.0,
+                    },
+                    Coefficient {
+                        var_name: "V5",
+                        coefficient: 3.0,
+                    },
+                ],
+            },
+            SOS {
+                name: Some(
+                    "csos2",
+                ),
+                sos_type: S2,
+                weights: [
+                    Coefficient {
+                        var_name: "V2",
+                        coefficient: 2.0,
+                    },
+                    Coefficient {
+                        var_name: "V4",
+                        coefficient: 1.0,
+                    },
+                    Coefficient {
+                        var_name: "V5",
+                        coefficient: 2.5,
+                    },
+                ],
+            },
+        ],
+        variables: [
+            Variable {
+                name: "V1",
+                var_type: General {
+                    lower_bound: Some(
+                        -inf,
+                    ),
+                    upper_bound: Some(
+                        3.0,
+                    ),
+                },
+            },
+            Variable {
+                name: "V2",
+                var_type: General {
+                    lower_bound: Some(
+                        -inf,
+                    ),
+                    upper_bound: Some(
+                        3.0,
+                    ),
+                },
+            },
+            Variable {
+                name: "V3",
+                var_type: General {
+                    lower_bound: Some(
+                        -inf,
+                    ),
+                    upper_bound: Some(
+                        3.0,
+                    ),
+                },
+            },
+            Variable {
+                name: "V4",
+                var_type: Integer,
+            },
+            Variable {
+                name: "V5",
+                var_type: Binary,
+            },
+            Variable {
+                name: "V6",
+                var_type: Binary,
+            },
+            Variable {
+                name: "V7",
+                var_type: Binary,
+            },
+            Variable {
+                name: "V8",
+                var_type: Binary,
+            },
+        ],
+    },
+)

@@ -1,0 +1,658 @@
+---
+source: src/nom.rs
+expression: result
+---
+(
+    "",
+    LPProblem {
+        name: Some(
+            "afiro.mps",
+        ),
+        sense: Minimize,
+        objectives: [
+            Objective {
+                name: Some(
+                    "OBJ1",
+                ),
+                coefficients: [
+                    Coefficient {
+                        var_name: "X02",
+                        coefficient: -0.4,
+                    },
+                    Coefficient {
+                        var_name: "X14",
+                        coefficient: -0.32,
+                    },
+                    Coefficient {
+                        var_name: "X23",
+                        coefficient: -0.6,
+                    },
+                    Coefficient {
+                        var_name: "X36",
+                        coefficient: -0.48,
+                    },
+                    Coefficient {
+                        var_name: "X39",
+                        coefficient: 10.0,
+                    },
+                ],
+            },
+            Objective {
+                name: Some(
+                    "OBJ2",
+                ),
+                coefficients: [
+                    Coefficient {
+                        var_name: "X03",
+                        coefficient: 1.0,
+                    },
+                    Coefficient {
+                        var_name: "X06",
+                        coefficient: 2.5,
+                    },
+                    Coefficient {
+                        var_name: "X08",
+                        coefficient: -5.0,
+                    },
+                ],
+            },
+            Objective {
+                name: Some(
+                    "OBJ3",
+                ),
+                coefficients: [
+                    Coefficient {
+                        var_name: "X03",
+                        coefficient: -10.4,
+                    },
+                    Coefficient {
+                        var_name: "X07",
+                        coefficient: -2.5,
+                    },
+                    Coefficient {
+                        var_name: "X10",
+                        coefficient: 2.1,
+                    },
+                ],
+            },
+        ],
+        constraints: [
+            Standard {
+                name: Some(
+                    "R09",
+                ),
+                coefficients: [
+                    Coefficient {
+                        var_name: "X01",
+                        coefficient: -1.0,
+                    },
+                    Coefficient {
+                        var_name: "X02",
+                        coefficient: 1.0,
+                    },
+                    Coefficient {
+                        var_name: "X03",
+                        coefficient: 1.0,
+                    },
+                ],
+                operator: Equal,
+                rhs: 0.0,
+            },
+            Standard {
+                name: Some(
+                    "R10",
+                ),
+                coefficients: [
+                    Coefficient {
+                        var_name: "X01",
+                        coefficient: -1.06,
+                    },
+                    Coefficient {
+                        var_name: "X04",
+                        coefficient: 1.0,
+                    },
+                ],
+                operator: Equal,
+                rhs: 0.0,
+            },
+            Standard {
+                name: Some(
+                    "X05",
+                ),
+                coefficients: [
+                    Coefficient {
+                        var_name: "X01",
+                        coefficient: 1.0,
+                    },
+                ],
+                operator: LessOrEqual,
+                rhs: 80.0,
+            },
+            Standard {
+                name: Some(
+                    "X21",
+                ),
+                coefficients: [
+                    Coefficient {
+                        var_name: "X02",
+                        coefficient: -1.0,
+                    },
+                    Coefficient {
+                        var_name: "X14",
+                        coefficient: 1.4,
+                    },
+                ],
+                operator: LessOrEqual,
+                rhs: 0.0,
+            },
+            Standard {
+                name: Some(
+                    "R12",
+                ),
+                coefficients: [
+                    Coefficient {
+                        var_name: "X06",
+                        coefficient: -1.0,
+                    },
+                    Coefficient {
+                        var_name: "X07",
+                        coefficient: -1.0,
+                    },
+                    Coefficient {
+                        var_name: "X08",
+                        coefficient: -1.0,
+                    },
+                    Coefficient {
+                        var_name: "X09",
+                        coefficient: -1.0,
+                    },
+                    Coefficient {
+                        var_name: "X14",
+                        coefficient: 1.0,
+                    },
+                    Coefficient {
+                        var_name: "X15",
+                        coefficient: 1.0,
+                    },
+                ],
+                operator: Equal,
+                rhs: 0.0,
+            },
+            Standard {
+                name: Some(
+                    "R13",
+                ),
+                coefficients: [
+                    Coefficient {
+                        var_name: "X06",
+                        coefficient: -1.06,
+                    },
+                    Coefficient {
+                        var_name: "X07",
+                        coefficient: -1.06,
+                    },
+                    Coefficient {
+                        var_name: "X08",
+                        coefficient: -0.96,
+                    },
+                    Coefficient {
+                        var_name: "X09",
+                        coefficient: -0.86,
+                    },
+                    Coefficient {
+                        var_name: "X16",
+                        coefficient: 1.0,
+                    },
+                ],
+                operator: Equal,
+                rhs: 0.0,
+            },
+            Standard {
+                name: Some(
+                    "X17",
+                ),
+                coefficients: [
+                    Coefficient {
+                        var_name: "X06",
+                        coefficient: 1.0,
+                    },
+                    Coefficient {
+                        var_name: "X10",
+                        coefficient: -1.0,
+                    },
+                ],
+                operator: LessOrEqual,
+                rhs: 80.0,
+            },
+            Standard {
+                name: Some(
+                    "X18",
+                ),
+                coefficients: [
+                    Coefficient {
+                        var_name: "X07",
+                        coefficient: 1.0,
+                    },
+                    Coefficient {
+                        var_name: "X11",
+                        coefficient: -1.0,
+                    },
+                ],
+                operator: LessOrEqual,
+                rhs: 0.0,
+            },
+            Standard {
+                name: Some(
+                    "X19",
+                ),
+                coefficients: [
+                    Coefficient {
+                        var_name: "X08",
+                        coefficient: 1.0,
+                    },
+                    Coefficient {
+                        var_name: "X12",
+                        coefficient: -1.0,
+                    },
+                ],
+                operator: LessOrEqual,
+                rhs: 0.0,
+            },
+            Standard {
+                name: Some(
+                    "X20",
+                ),
+                coefficients: [
+                    Coefficient {
+                        var_name: "X09",
+                        coefficient: 1.0,
+                    },
+                    Coefficient {
+                        var_name: "X13",
+                        coefficient: -1.0,
+                    },
+                ],
+                operator: LessOrEqual,
+                rhs: 0.0,
+            },
+            Standard {
+                name: Some(
+                    "R19",
+                ),
+                coefficients: [
+                    Coefficient {
+                        var_name: "X22",
+                        coefficient: -1.0,
+                    },
+                    Coefficient {
+                        var_name: "X23",
+                        coefficient: 1.0,
+                    },
+                    Coefficient {
+                        var_name: "X24",
+                        coefficient: 1.0,
+                    },
+                    Coefficient {
+                        var_name: "X25",
+                        coefficient: 1.0,
+                    },
+                ],
+                operator: Equal,
+                rhs: 0.0,
+            },
+            Standard {
+                name: Some(
+                    "R20",
+                ),
+                coefficients: [
+                    Coefficient {
+                        var_name: "X22",
+                        coefficient: -0.43,
+                    },
+                    Coefficient {
+                        var_name: "X26",
+                        coefficient: 1.0,
+                    },
+                ],
+                operator: Equal,
+                rhs: 0.0,
+            },
+            Standard {
+                name: Some(
+                    "X27",
+                ),
+                coefficients: [
+                    Coefficient {
+                        var_name: "X22",
+                        coefficient: 1.0,
+                    },
+                ],
+                operator: LessOrEqual,
+                rhs: 500.0,
+            },
+            Standard {
+                name: Some(
+                    "X44",
+                ),
+                coefficients: [
+                    Coefficient {
+                        var_name: "X23",
+                        coefficient: -1.0,
+                    },
+                    Coefficient {
+                        var_name: "X36",
+                        coefficient: 1.4,
+                    },
+                ],
+                operator: LessOrEqual,
+                rhs: 0.0,
+            },
+            Standard {
+                name: Some(
+                    "R22",
+                ),
+                coefficients: [
+                    Coefficient {
+                        var_name: "X28",
+                        coefficient: -0.43,
+                    },
+                    Coefficient {
+                        var_name: "X29",
+                        coefficient: -0.43,
+                    },
+                    Coefficient {
+                        var_name: "X30",
+                        coefficient: -0.39,
+                    },
+                    Coefficient {
+                        var_name: "X31",
+                        coefficient: -0.37,
+                    },
+                    Coefficient {
+                        var_name: "X38",
+                        coefficient: 1.0,
+                    },
+                ],
+                operator: Equal,
+                rhs: 0.0,
+            },
+            Standard {
+                name: Some(
+                    "R23",
+                ),
+                coefficients: [
+                    Coefficient {
+                        var_name: "X28",
+                        coefficient: 1.0,
+                    },
+                    Coefficient {
+                        var_name: "X29",
+                        coefficient: 1.0,
+                    },
+                    Coefficient {
+                        var_name: "X30",
+                        coefficient: 1.0,
+                    },
+                    Coefficient {
+                        var_name: "X31",
+                        coefficient: 1.0,
+                    },
+                    Coefficient {
+                        var_name: "X36",
+                        coefficient: -1.0,
+                    },
+                    Coefficient {
+                        var_name: "X37",
+                        coefficient: 1.0,
+                    },
+                    Coefficient {
+                        var_name: "X39",
+                        coefficient: 1.0,
+                    },
+                ],
+                operator: Equal,
+                rhs: 44.0,
+            },
+            Standard {
+                name: Some(
+                    "X40",
+                ),
+                coefficients: [
+                    Coefficient {
+                        var_name: "X28",
+                        coefficient: 1.0,
+                    },
+                    Coefficient {
+                        var_name: "X32",
+                        coefficient: -1.0,
+                    },
+                ],
+                operator: LessOrEqual,
+                rhs: 500.0,
+            },
+            Standard {
+                name: Some(
+                    "X41",
+                ),
+                coefficients: [
+                    Coefficient {
+                        var_name: "X29",
+                        coefficient: 1.0,
+                    },
+                    Coefficient {
+                        var_name: "X33",
+                        coefficient: -1.0,
+                    },
+                ],
+                operator: LessOrEqual,
+                rhs: 0.0,
+            },
+            Standard {
+                name: Some(
+                    "X42",
+                ),
+                coefficients: [
+                    Coefficient {
+                        var_name: "X30",
+                        coefficient: 1.0,
+                    },
+                    Coefficient {
+                        var_name: "X34",
+                        coefficient: -1.0,
+                    },
+                ],
+                operator: LessOrEqual,
+                rhs: 0.0,
+            },
+            Standard {
+                name: Some(
+                    "X43",
+                ),
+                coefficients: [
+                    Coefficient {
+                        var_name: "X31",
+                        coefficient: 1.0,
+                    },
+                    Coefficient {
+                        var_name: "X35",
+                        coefficient: -1.0,
+                    },
+                ],
+                operator: LessOrEqual,
+                rhs: 0.0,
+            },
+            Standard {
+                name: Some(
+                    "X45",
+                ),
+                coefficients: [
+                    Coefficient {
+                        var_name: "X10",
+                        coefficient: 2.364,
+                    },
+                    Coefficient {
+                        var_name: "X11",
+                        coefficient: 2.386,
+                    },
+                    Coefficient {
+                        var_name: "X12",
+                        coefficient: 2.408,
+                    },
+                    Coefficient {
+                        var_name: "X13",
+                        coefficient: 2.429,
+                    },
+                    Coefficient {
+                        var_name: "X25",
+                        coefficient: -1.0,
+                    },
+                    Coefficient {
+                        var_name: "X32",
+                        coefficient: 2.191,
+                    },
+                    Coefficient {
+                        var_name: "X33",
+                        coefficient: 2.219,
+                    },
+                    Coefficient {
+                        var_name: "X34",
+                        coefficient: 2.249,
+                    },
+                    Coefficient {
+                        var_name: "X35",
+                        coefficient: 2.279,
+                    },
+                ],
+                operator: LessOrEqual,
+                rhs: 0.0,
+            },
+            Standard {
+                name: Some(
+                    "X46",
+                ),
+                coefficients: [
+                    Coefficient {
+                        var_name: "X03",
+                        coefficient: -1.0,
+                    },
+                    Coefficient {
+                        var_name: "X22",
+                        coefficient: 0.109,
+                    },
+                ],
+                operator: LessOrEqual,
+                rhs: 0.0,
+            },
+            Standard {
+                name: Some(
+                    "X47",
+                ),
+                coefficients: [
+                    Coefficient {
+                        var_name: "X15",
+                        coefficient: -1.0,
+                    },
+                    Coefficient {
+                        var_name: "X28",
+                        coefficient: 0.109,
+                    },
+                    Coefficient {
+                        var_name: "X29",
+                        coefficient: 0.108,
+                    },
+                    Coefficient {
+                        var_name: "X30",
+                        coefficient: 0.108,
+                    },
+                    Coefficient {
+                        var_name: "X31",
+                        coefficient: 0.107,
+                    },
+                ],
+                operator: LessOrEqual,
+                rhs: 0.0,
+            },
+            Standard {
+                name: Some(
+                    "X48",
+                ),
+                coefficients: [
+                    Coefficient {
+                        var_name: "X01",
+                        coefficient: 0.301,
+                    },
+                    Coefficient {
+                        var_name: "X24",
+                        coefficient: -1.0,
+                    },
+                ],
+                operator: LessOrEqual,
+                rhs: 0.0,
+            },
+            Standard {
+                name: Some(
+                    "X49",
+                ),
+                coefficients: [
+                    Coefficient {
+                        var_name: "X06",
+                        coefficient: 0.301,
+                    },
+                    Coefficient {
+                        var_name: "X07",
+                        coefficient: 0.313,
+                    },
+                    Coefficient {
+                        var_name: "X08",
+                        coefficient: 0.313,
+                    },
+                    Coefficient {
+                        var_name: "X09",
+                        coefficient: 0.326,
+                    },
+                    Coefficient {
+                        var_name: "X37",
+                        coefficient: -1.0,
+                    },
+                ],
+                operator: LessOrEqual,
+                rhs: 0.0,
+            },
+            Standard {
+                name: Some(
+                    "X50",
+                ),
+                coefficients: [
+                    Coefficient {
+                        var_name: "X04",
+                        coefficient: 1.0,
+                    },
+                    Coefficient {
+                        var_name: "X26",
+                        coefficient: 1.0,
+                    },
+                ],
+                operator: LessOrEqual,
+                rhs: 310.0,
+            },
+            Standard {
+                name: Some(
+                    "X51",
+                ),
+                coefficients: [
+                    Coefficient {
+                        var_name: "X16",
+                        coefficient: 1.0,
+                    },
+                    Coefficient {
+                        var_name: "X38",
+                        coefficient: 1.0,
+                    },
+                ],
+                operator: LessOrEqual,
+                rhs: 300.0,
+            },
+        ],
+        variables: [],
+    },
+)
