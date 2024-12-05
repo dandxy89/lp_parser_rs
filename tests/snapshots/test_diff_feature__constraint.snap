@@ -1,0 +1,5 @@
+---
+source: tests/test_diff_feature.rs
+expression: a.diff(&a)
+---
+NoChange

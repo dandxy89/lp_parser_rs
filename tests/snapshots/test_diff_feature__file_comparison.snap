@@ -1,0 +1,13 @@
+---
+source: tests/test_diff_feature.rs
+expression: a.diff(&a)
+---
+constraints:
+  altered: {}
+  removed: []
+objectives: []
+problem_name: NoChange
+problem_sense: NoChange
+variables:
+  altered: {}
+  removed: []

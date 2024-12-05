@@ -1,0 +1,6 @@
+---
+source: tests/test_diff_feature.rs
+expression: a.diff(&b)
+---
+coefficient: 0
+var_name: b
