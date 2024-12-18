@@ -8,7 +8,8 @@ name: Cargo Test
 
 env:
   CARGO_TERM_COLOR: always
-  CI: true # insta will not write new snapshot files
+  # `insta` will not write new snapshot files
+  CI: true
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -18,7 +19,6 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      # Checkout the project
       - uses: actions/checkout@v4
       - uses: actions/cache@v4
         with:
@@ -37,6 +37,5 @@ jobs:
           profile: minimal
           toolchain: stable
           override: true
-      # Run cargo test
       - name: Test
         run: cargo test --all-features
