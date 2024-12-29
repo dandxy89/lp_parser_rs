@@ -1,6 +1,10 @@
+pub mod coefficient;
+pub mod lp_problem;
 pub mod number;
+pub mod objective;
 pub mod problem_name;
 pub mod sense;
+pub mod variable;
 
 pub const VALID_LP_CHARS: [char; 18] = ['!', '#', '$', '%', '&', '(', ')', '_', ',', '.', ';', '?', '@', '\\', '{', '}', '~', '\''];
 pub const SECTION_HEADERS: [&str; 12] =

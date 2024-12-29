@@ -1,15 +1,15 @@
 use nom::{
     branch::alt,
     bytes::complete::tag_no_case,
-    character::complete::{char, digit1, one_of},
+    character::complete::{char, digit1, multispace0, one_of},
     combinator::{all_consuming, complete, map, opt, recognize},
     error::ErrorKind,
-    sequence::{pair, tuple},
+    sequence::{pair, preceded, tuple},
     Err, IResult,
 };
 
 #[inline]
-pub fn infinity(input: &str) -> IResult<&str, f64> {
+fn infinity(input: &str) -> IResult<&str, f64> {
     all_consuming(map(tuple((opt(one_of("+-")), alt((tag_no_case("infinity"), tag_no_case("inf"))))), |(sign, _)| match sign {
         Some('-') => f64::NEG_INFINITY,
         _ => f64::INFINITY,
@@ -17,7 +17,7 @@ pub fn infinity(input: &str) -> IResult<&str, f64> {
 }
 
 #[inline]
-pub fn number(input: &str) -> IResult<&str, &str> {
+fn number(input: &str) -> IResult<&str, &str> {
     let (remainder, matched) = recognize(tuple((
         // Optional sign at the start
         opt(one_of("+-")),
@@ -36,9 +36,22 @@ pub fn number(input: &str) -> IResult<&str, &str> {
     }
 }
 
+#[inline]
+pub fn number_value(input: &str) -> IResult<&str, f64> {
+    preceded(multispace0, alt((infinity, map(number, |v| v.parse::<f64>().unwrap_or_default()))))(input)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::nom::decoder::number::{infinity, number, number_value};
+
+    #[test]
+    fn test_number_value() {
+        assert!(number_value("inf").is_ok());
+        assert!(number_value("123.1").is_ok());
+        assert!(number_value("13e12").is_ok());
+        assert!(number_value("13.12e14").is_ok());
+    }
 
     #[test]
     fn test_infinity() {
@@ -72,8 +85,8 @@ mod tests {
             "123", "+123", "-123", "123.456", "-123.456", "+123.456", "123.", "1.23e4", "1.23E4", "1.23e+4", "1.23e-4", "-1.23e-4",
             "+1.23e+4",
         ];
-        for valid_number in valid_numbers {
-            assert!(number(valid_number).is_ok());
+        for input in valid_numbers {
+            assert!(number(input).is_ok());
         }
 
         assert!(number("abc").is_err());

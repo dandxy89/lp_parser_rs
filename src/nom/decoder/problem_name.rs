@@ -36,13 +36,20 @@ pub fn parse_comments(input: &str) -> IResult<&str, Option<&str>> {
 
 #[cfg(test)]
 mod test {
-    use super::parse_comments;
+    use crate::nom::decoder::problem_name::parse_comments;
 
     #[test]
     fn test_parse_lp_file_comments() {
-        let input = "\\* First comment *\\\n\\ENCODING=ISO-8859-1\n\\* Middle comment *\\\\Problem name: ilog.cplex\n\\* Last comment *\\";
-        let (remainder, x) = parse_comments(input).unwrap();
-        assert_eq!("", remainder);
-        assert!(x.is_some());
+        let valid = [
+            "\\* First comment *\\\n\\ENCODING=ISO-8859-1\n\\* Middle comment *\\\\Problem name: ilog.cplex\n\\* Last comment *\\",
+            "\\Problem name: kb2.mps\n",
+            "\\ File: lo1.lp\n",
+            "\\* WBM_Problem *\\\n",
+        ];
+        for input in valid {
+            let (remainder, x) = parse_comments(input).unwrap();
+            assert_eq!("", remainder);
+            assert!(x.is_some());
+        }
     }
 }
