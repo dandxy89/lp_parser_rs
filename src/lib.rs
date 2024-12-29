@@ -22,6 +22,7 @@
 
 pub mod common;
 pub mod model;
+pub mod nom;
 pub mod parse;
 
 use pest_derive::Parser;
