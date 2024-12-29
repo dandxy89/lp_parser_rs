@@ -22,8 +22,10 @@
 
 pub mod common;
 pub mod model;
-pub mod nom;
 pub mod parse;
+
+#[cfg(feature = "nom")]
+pub mod nom;
 
 use pest_derive::Parser;
 
