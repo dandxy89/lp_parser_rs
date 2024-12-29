@@ -1,7 +1,8 @@
 pub mod number;
+pub mod problem_name;
 
-const VALID_LP_CHARS: [char; 18] = ['!', '#', '$', '%', '&', '(', ')', '_', ',', '.', ';', '?', '@', '\\', '{', '}', '~', '\''];
-const SECTION_HEADERS: [&str; 12] =
+pub const VALID_LP_CHARS: [char; 18] = ['!', '#', '$', '%', '&', '(', ')', '_', ',', '.', ';', '?', '@', '\\', '{', '}', '~', '\''];
+pub const SECTION_HEADERS: [&str; 12] =
     ["integers", "integer", "general", "generals", "gen", "binaries", "binary", "bin", "bounds", "bound", "sos", "end"];
 
 #[inline]

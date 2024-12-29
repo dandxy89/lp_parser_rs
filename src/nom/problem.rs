@@ -9,7 +9,7 @@ pub struct LPProblem<'a> {
     pub variables: Vec<Variable<'a>>,
 }
 
-impl<'a> LPProblem<'a> {
+impl LPProblem<'_> {
     #[inline]
     pub fn name(&self) -> Option<&str> {
         self.name

@@ -9,7 +9,7 @@ use nom::{
 };
 
 #[inline]
-fn infinity(input: &str) -> IResult<&str, f64> {
+pub fn infinity(input: &str) -> IResult<&str, f64> {
     all_consuming(map(tuple((opt(one_of("+-")), alt((tag_no_case("infinity"), tag_no_case("inf"))))), |(sign, _)| match sign {
         Some('-') => f64::NEG_INFINITY,
         _ => f64::INFINITY,
@@ -17,7 +17,7 @@ fn infinity(input: &str) -> IResult<&str, f64> {
 }
 
 #[inline]
-fn number(input: &str) -> IResult<&str, &str> {
+pub fn number(input: &str) -> IResult<&str, &str> {
     let (remainder, matched) = recognize(tuple((
         // Optional sign at the start
         opt(one_of("+-")),
