@@ -1,11 +1,20 @@
 use nom::{
     branch::alt,
+    bytes::complete::tag_no_case,
     character::complete::{char, digit1, one_of},
-    combinator::{complete, opt, recognize},
+    combinator::{all_consuming, complete, map, opt, recognize},
     error::ErrorKind,
     sequence::{pair, tuple},
     Err, IResult,
 };
+
+#[inline]
+fn infinity(input: &str) -> IResult<&str, f64> {
+    all_consuming(map(tuple((opt(one_of("+-")), alt((tag_no_case("infinity"), tag_no_case("inf"))))), |(sign, _)| match sign {
+        Some('-') => f64::NEG_INFINITY,
+        _ => f64::INFINITY,
+    }))(input)
+}
 
 #[inline]
 fn number(input: &str) -> IResult<&str, &str> {
@@ -30,6 +39,32 @@ fn number(input: &str) -> IResult<&str, &str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_infinity() {
+        assert_eq!(infinity("infinity").unwrap().1, f64::INFINITY);
+        assert_eq!(infinity("INFINITY").unwrap().1, f64::INFINITY);
+        assert_eq!(infinity("Infinity").unwrap().1, f64::INFINITY);
+        assert_eq!(infinity("inf").unwrap().1, f64::INFINITY);
+        assert_eq!(infinity("INF").unwrap().1, f64::INFINITY);
+        assert_eq!(infinity("Inf").unwrap().1, f64::INFINITY);
+        assert_eq!(infinity("+infinity").unwrap().1, f64::INFINITY);
+        assert_eq!(infinity("+inf").unwrap().1, f64::INFINITY);
+
+        assert_eq!(infinity("-infinity").unwrap().1, f64::NEG_INFINITY);
+        assert_eq!(infinity("-INFINITY").unwrap().1, f64::NEG_INFINITY);
+        assert_eq!(infinity("-Infinity").unwrap().1, f64::NEG_INFINITY);
+        assert_eq!(infinity("-inf").unwrap().1, f64::NEG_INFINITY);
+        assert_eq!(infinity("-INF").unwrap().1, f64::NEG_INFINITY);
+        assert_eq!(infinity("-Inf").unwrap().1, f64::NEG_INFINITY);
+
+        assert!(infinity("notinfinity").is_err());
+        assert!(dbg!(infinity("infx")).is_err());
+        assert!(infinity("infinit").is_err());
+        assert!(infinity("in").is_err());
+        assert!(infinity("++inf").is_err());
+        assert!(infinity("--inf").is_err());
+    }
 
     #[test]
     fn test_number_parser() {
