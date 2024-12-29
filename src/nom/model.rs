@@ -7,7 +7,7 @@ pub enum ComparisonOp {
     GreaterOrEqual,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Sense {
     Minimize,
     Maximize,
