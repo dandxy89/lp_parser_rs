@@ -1,32 +1,70 @@
-use nom::sequence::tuple;
+use nom::{branch::alt, error::ErrorKind, sequence::tuple, IResult};
 
 use crate::nom::{
-    decoder::{objective::objectives_section, problem_name::parse_comments, sense::parse_problem_sense},
-    model::{Objective, Sense},
+    decoder::{
+        constraint::{constraint_section, parse_constraint_header},
+        objective::objectives_section,
+        problem_name::parse_comments,
+        sense::parse_problem_sense,
+    },
+    model::{Constraint, Objective, Sense},
 };
 
-pub fn parse_lp_file(input: &str) -> Result<(Option<&str>, Sense, Vec<Objective>), nom::Err<nom::error::Error<&str>>> {
-    // Parse the full structure with tuple combinator
-    let (remaining, (comments, sense, objectives)) = tuple((
-        // LP Problem Name
-        parse_comments,
-        // LP Sense
-        parse_problem_sense,
-        // Objective Section
-        objectives_section,
-    ))(input)?;
+fn take_until_no_case<'a>(tag: &'a str) -> impl Fn(&'a str) -> IResult<&'a str, &'a str> {
+    move |input: &str| {
+        let mut index = 0;
+        let tag_lower = tag.to_lowercase();
+        let chars: Vec<char> = input.chars().collect();
 
-    // Make sure we consumed all input (or handle remaining if needed)
-    if !remaining.trim().is_empty() {
-        println!("Warning: Unparsed content remains: {remaining}");
+        while index <= chars.len() - tag.len() {
+            let window: String = chars[index..index + tag.len()].iter().collect();
+            if window.to_lowercase() == tag_lower {
+                return Ok((&input[index..], &input[..index]));
+            }
+            index += 1;
+        }
+
+        Err(nom::Err::Error(nom::error::Error::new(input, ErrorKind::TakeUntil)))
     }
+}
 
-    Ok((comments, sense, objectives))
+pub fn parse_lp_file(
+    input: &str,
+) -> Result<(Option<&str>, Sense, Vec<Objective>, Vec<Constraint<'_>>, &str), nom::Err<nom::error::Error<&str>>> {
+    // First find where the constraint section starts by looking for any valid header
+    let constraint_start =
+        alt((take_until_no_case("subject to"), take_until_no_case("such that"), take_until_no_case("s.t."), take_until_no_case("st:")));
+
+    let (remaining, (comments, sense, obj_section, _)) =
+        tuple((parse_comments, parse_problem_sense, constraint_start, parse_constraint_header))(input)?;
+
+    // Parse objectives from the section before constraints
+    let objectives = match objectives_section(obj_section) {
+        Ok((_, objs)) => objs,
+        Err(_) => Vec::new(),
+    };
+
+    // Parse the constraints
+    let (remaining, constraints) = constraint_section(remaining)?;
+
+    Ok((comments, sense, objectives, constraints, remaining))
 }
 
 #[cfg(test)]
 mod test {
     use crate::nom::{decoder::lp_problem::parse_lp_file, model::Sense};
+
+    // fn read_file_from_resources(file_name: &str) {
+    //     let mut file_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    //     file_path.push(format!("resources/{file_name}"));
+    //     let contents = parse_file(&file_path).unwrap();
+    //     let (comments, sense, objectives, constraints, remaining) = parse_lp_file(&contents).unwrap();
+    //     dbg!(comments);
+    //     dbg!(sense);
+    //     dbg!(objectives);
+    //     dbg!(constraints);
+    //     dbg!(remaining);
+    // }
 
     #[test]
     fn test_sections_so_far() {
@@ -37,13 +75,27 @@ Minimize
  obj1: -0.5 x - 2y - 8z
  obj2: y + x + z
  obj3: 10z - 2.5x
-       + y";
+       + y
+subject to:
+c1:  3 x1 + x2 + 2 x3 = 30
+c2:  2 x1 + x2 + 3 x3 + x4 >= 15
+c3:  2 x2 + 3 x4 <= 25";
         let parsed_result = parse_lp_file(input);
         assert!(parsed_result.is_ok());
 
-        let (comments, sense, objectives) = parsed_result.unwrap();
+        let (comments, sense, objectives, constraints, remaining) = parsed_result.unwrap();
         assert!(comments.is_some());
         assert!(matches!(sense, Sense::Minimize));
         insta::assert_debug_snapshot!(objectives);
+        insta::assert_debug_snapshot!(constraints);
+        assert_eq!("", remaining);
     }
+
+    // #[test]
+    // fn test_file_checks() {
+    //     read_file_from_resources("fit2d.lp");
+    //     read_file_from_resources("output.lp");
+    //     read_file_from_resources("boeing1.lp");
+    //     assert!(false);
+    // }
 }

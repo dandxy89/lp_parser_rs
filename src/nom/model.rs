@@ -1,10 +1,10 @@
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ComparisonOp {
-    LessThan,
-    LessOrEqual,
-    Equal,
-    GreaterThan,
-    GreaterOrEqual,
+    LT,
+    LTE,
+    EQ,
+    GT,
+    GTE,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

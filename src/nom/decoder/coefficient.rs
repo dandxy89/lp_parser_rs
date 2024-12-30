@@ -7,14 +7,18 @@ use nom::{
 };
 
 use crate::nom::{
-    decoder::{number::number_value, variable::parse_variable},
+    decoder::{number::parse_num_value, variable::parse_variable},
     model::Coefficient,
 };
 
 #[inline]
 pub fn parse_coefficient(input: &str) -> IResult<&str, Coefficient> {
     map(
-        tuple((opt(preceded(space0, alt((char('+'), char('-'))))), opt(preceded(space0, number_value)), preceded(space0, parse_variable))),
+        tuple((
+            opt(preceded(space0, alt((char('+'), char('-'))))),
+            opt(preceded(space0, parse_num_value)),
+            preceded(space0, parse_variable),
+        )),
         |(sign, coef, var_name)| Coefficient {
             var_name,
             coefficient: {

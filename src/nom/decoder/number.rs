@@ -1,12 +1,14 @@
 use nom::{
     branch::alt,
-    bytes::complete::tag_no_case,
+    bytes::complete::{tag, tag_no_case},
     character::complete::{char, digit1, multispace0, one_of},
-    combinator::{all_consuming, complete, map, opt, recognize},
+    combinator::{all_consuming, complete, map, opt, recognize, value},
     error::ErrorKind,
     sequence::{pair, preceded, tuple},
     Err, IResult,
 };
+
+use crate::nom::model::ComparisonOp;
 
 #[inline]
 fn infinity(input: &str) -> IResult<&str, f64> {
@@ -37,20 +39,34 @@ fn number(input: &str) -> IResult<&str, &str> {
 }
 
 #[inline]
-pub fn number_value(input: &str) -> IResult<&str, f64> {
+pub fn parse_num_value(input: &str) -> IResult<&str, f64> {
     preceded(multispace0, alt((infinity, map(number, |v| v.parse::<f64>().unwrap_or_default()))))(input)
+}
+
+#[inline]
+pub fn parse_cmp_op(input: &str) -> IResult<&str, ComparisonOp> {
+    preceded(
+        multispace0,
+        alt((
+            value(ComparisonOp::LTE, tag("<=")),
+            value(ComparisonOp::GTE, tag(">=")),
+            value(ComparisonOp::EQ, tag("=")),
+            value(ComparisonOp::LT, tag("<")),
+            value(ComparisonOp::GT, tag(">")),
+        )),
+    )(input)
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::nom::decoder::number::{infinity, number, number_value};
+    use crate::nom::decoder::number::{infinity, number, parse_num_value};
 
     #[test]
     fn test_number_value() {
-        assert!(number_value("inf").is_ok());
-        assert!(number_value("123.1").is_ok());
-        assert!(number_value("13e12").is_ok());
-        assert!(number_value("13.12e14").is_ok());
+        assert!(parse_num_value("inf").is_ok());
+        assert!(parse_num_value("123.1").is_ok());
+        assert!(parse_num_value("13e12").is_ok());
+        assert!(parse_num_value("13.12e14").is_ok());
     }
 
     #[test]
@@ -72,7 +88,7 @@ mod tests {
         assert_eq!(infinity("-Inf").unwrap().1, f64::NEG_INFINITY);
 
         assert!(infinity("notinfinity").is_err());
-        assert!(dbg!(infinity("infx")).is_err());
+        assert!(infinity("infx").is_err());
         assert!(infinity("infinit").is_err());
         assert!(infinity("in").is_err());
         assert!(infinity("++inf").is_err());
@@ -91,6 +107,6 @@ mod tests {
 
         assert!(number("abc").is_err());
         assert!(number(".123").is_err());
-        assert!(dbg!(number("1.23e")).is_err());
+        assert!(number("1.23e").is_err());
     }
 }
