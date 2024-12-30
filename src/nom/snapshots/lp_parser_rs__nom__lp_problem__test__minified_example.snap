@@ -72,43 +72,22 @@ constraints:
 variables:
   x:
     name: x
-    var_type:
-      General:
-        lower_bound: ~
-        upper_bound: ~
+    var_type: Free
   x1:
     name: x1
-    var_type:
-      General:
-        lower_bound: ~
-        upper_bound: ~
+    var_type: Free
   x2:
     name: x2
-    var_type:
-      General:
-        lower_bound: ~
-        upper_bound: ~
+    var_type: Free
   x3:
     name: x3
-    var_type:
-      General:
-        lower_bound: ~
-        upper_bound: ~
+    var_type: Free
   x4:
     name: x4
-    var_type:
-      General:
-        lower_bound: ~
-        upper_bound: ~
+    var_type: Free
   y:
     name: y
-    var_type:
-      General:
-        lower_bound: ~
-        upper_bound: ~
+    var_type: Free
   z:
     name: z
-    var_type:
-      General:
-        lower_bound: ~
-        upper_bound: ~
+    var_type: Free

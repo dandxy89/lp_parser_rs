@@ -87,7 +87,10 @@ impl<'a> TryFrom<&'a str> for LPProblem<'a> {
         let (_remaining, (constraints, constraint_vars)) = parse_constraints(input)?;
         variables.extend(constraint_vars);
 
-        // Parse Variable Bounds (Integer, General, Bounded, Free, Semi-continuous and SOS)
+        // Parse Variable Bounds (Integer, General, Bounded, Free and Semi-continuous)
+        //
+
+        // Parse SOS constraints
         //
 
         Ok(LPProblem { name, sense, objectives: objs, constraints, variables })
@@ -116,6 +119,7 @@ c3:  2 x2 + 3 x4 <= 25";
 
         assert_eq!(problem.objectives.len(), 3);
         assert_eq!(problem.constraints.len(), 3);
+
         insta::assert_yaml_snapshot!(&problem, {
             ".objectives" => insta::sorted_redaction(),
             ".constraints" => insta::sorted_redaction(),
@@ -127,11 +131,9 @@ c3:  2 x2 + 3 x4 <= 25";
     #[test]
     fn test_serialization_lifecycle() {
         let problem = crate::nom::lp_problem::LPProblem::try_from(SMALL_INPUT).expect("test case not to fail");
-
-        // Serialized
+        // Serialised
         let serialized_problem = serde_json::to_string(&problem).expect("test case not to fail");
-
-        // Deserialize
+        // Deserialise
         let _: crate::nom::lp_problem::LPProblem<'_> = serde_json::from_str(&serialized_problem).expect("test case not to fail");
     }
 }

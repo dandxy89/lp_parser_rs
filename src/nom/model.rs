@@ -22,7 +22,7 @@ pub enum Sense {
 
 impl Sense {
     pub fn is_minimization(&self) -> bool {
-        self == &Sense::Minimize
+        matches!(self, Sense::Minimize)
     }
 }
 
@@ -32,16 +32,6 @@ impl Sense {
 pub enum SOSType {
     S1,
     S2,
-}
-
-#[cfg_attr(feature = "diff", derive(diff::Diff), diff(attr(#[derive(Debug, PartialEq)])))]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Debug, PartialEq)]
-pub enum Bound<'a> {
-    Free(&'a str),
-    LowerBound(&'a str, f64),
-    UpperBound(&'a str, f64),
-    DoubleBound(&'a str, f64, f64),
 }
 
 #[cfg_attr(feature = "diff", derive(diff::Diff), diff(attr(#[derive(Debug, PartialEq)])))]
@@ -83,15 +73,20 @@ pub struct Objective<'a> {
 #[derive(Debug, PartialEq)]
 pub enum VariableType {
     Free,
+    LowerBound(f64),       // `x >= lb`
+    UpperBound(f64),       // `x ≤ ub`
+    DoubleBound(f64, f64), // `lb ≤ x ≤ ub`
+
     Binary,
+
     Integer,
-    General { lower_bound: Option<f64>, upper_bound: Option<f64> },
+
     SemiContinuous { lower_bound: Option<f64>, upper_bound: Option<f64> },
 }
 
 impl Default for VariableType {
     fn default() -> Self {
-        Self::General { lower_bound: None, upper_bound: None }
+        Self::Free
     }
 }
 

@@ -8,7 +8,7 @@
 
 ![Logo](resources/Screenshot.png)
 
-A robust Rust parser for Linear Programming (LP) files, built on the [PEST](https://docs.rs/pest/latest/pest/) parsing framework. This crate provides comprehensive support for parsing and analyzing LP files according to major industry specifications.
+A robust Rust parser for Linear Programming (LP) files, built on the [PEST](https://docs.rs/pest/latest/pest/) parsing framework. This crate provides comprehensive support for parsing and analysing LP files according to major industry specifications.
 
 ### Supported Specifications
 
