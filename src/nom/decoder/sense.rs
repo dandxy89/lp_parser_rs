@@ -3,7 +3,7 @@ use nom::{branch::alt, bytes::complete::tag_no_case, character::complete::multis
 use crate::nom::model::Sense;
 
 #[inline]
-pub fn parse_problem_sense(input: &str) -> IResult<&str, Sense> {
+pub fn parse_sense(input: &str) -> IResult<&str, Sense> {
     delimited(
         multispace0,
         alt((
@@ -16,13 +16,13 @@ pub fn parse_problem_sense(input: &str) -> IResult<&str, Sense> {
 
 #[cfg(test)]
 mod test {
-    use crate::nom::decoder::sense::parse_problem_sense;
+    use crate::nom::decoder::sense::parse_sense;
 
     #[test]
     fn test_parse_sense() {
         let valid = ["Minimize", "minimize", "min", "minimum", "Maximize", "maximize", "Max", "maximum"];
         for input in valid {
-            assert!(parse_problem_sense(input).is_ok());
+            assert!(parse_sense(input).is_ok());
         }
     }
 }

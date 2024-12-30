@@ -25,6 +25,7 @@ pub mod model;
 pub mod parse;
 
 #[cfg(feature = "nom")]
+/// Contains the implementation depending `nom` in place of `pest`.
 pub mod nom;
 
 use pest_derive::Parser;

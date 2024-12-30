@@ -18,7 +18,7 @@ use crate::nom::{
 };
 
 #[inline]
-pub fn parse_constraint_header(input: &str) -> IResult<&str, ()> {
+pub fn parse_cons_header(input: &str) -> IResult<&str, ()> {
     value(
         (),
         tuple((
@@ -50,18 +50,18 @@ fn parse_constraint(input: &str) -> IResult<&str, Constraint> {
 }
 
 #[inline]
-pub fn constraint_section(input: &str) -> IResult<&str, Vec<Constraint>> {
+pub fn parse_cons(input: &str) -> IResult<&str, Vec<Constraint>> {
     many1(parse_constraint)(input)
 }
 
 #[cfg(test)]
 mod test {
-    use crate::nom::decoder::constraint::{parse_constraint, parse_constraint_header};
+    use crate::nom::decoder::constraint::{parse_cons_header, parse_constraint};
 
     #[test]
     fn test_constraint_section_header() {
         let input = "subject to:";
-        assert!(parse_constraint_header(input).is_ok());
+        assert!(parse_cons_header(input).is_ok());
     }
 
     #[test]

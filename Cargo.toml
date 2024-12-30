@@ -23,6 +23,7 @@ unique_id = "0.1"
 [dev-dependencies]
 float_eq = "1.0.1"
 insta = { version = "1.41", features = ["yaml", "redactions"] }
+serde_json = "1.0"
 
 [profile.dev.package]
 insta.opt-level = 3

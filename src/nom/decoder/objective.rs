@@ -45,18 +45,18 @@ fn objective(input: &str) -> IResult<&str, Objective> {
 }
 
 #[inline]
-pub fn objectives_section(input: &str) -> IResult<&str, Vec<Objective>> {
+pub fn parse_objectives(input: &str) -> IResult<&str, Vec<Objective>> {
     many1(objective)(input)
 }
 
 #[cfg(test)]
 mod test {
-    use crate::nom::decoder::objective::objectives_section;
+    use crate::nom::decoder::objective::parse_objectives;
 
     #[test]
     fn test_objective_section() {
         let input = " obj1: -0.5 x - 2y - 8z\n obj2: y + x + z\n obj3: 10z - 2.5x\n       + y";
-        let (_, objectives) = objectives_section(input).unwrap();
+        let (_, objectives) = parse_objectives(input).unwrap();
         insta::assert_debug_snapshot!(objectives);
     }
 }

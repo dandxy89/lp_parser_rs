@@ -1,6 +1,5 @@
 pub mod coefficient;
 pub mod constraint;
-pub mod lp_problem;
 pub mod number;
 pub mod objective;
 pub mod problem_name;
