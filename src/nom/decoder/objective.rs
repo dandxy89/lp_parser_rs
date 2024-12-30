@@ -23,6 +23,7 @@ fn line_continuation(input: &str) -> IResult<&str, Vec<Coefficient<'_>>> {
     preceded(tuple((multispace1, not(peek(is_new_objective)))), many1(preceded(space0, parse_coefficient)))(input)
 }
 
+#[allow(clippy::type_complexity)]
 #[inline]
 pub fn parse_objectives(input: &str) -> IResult<&str, (HashMap<&str, Objective<'_>>, HashMap<&str, Variable<'_>>)> {
     let mut objective_vars = HashMap::default();
@@ -38,19 +39,16 @@ pub fn parse_objectives(input: &str) -> IResult<&str, (HashMap<&str, Objective<'
             many0(line_continuation),
         )),
         |(name, first_coefficients, continuation_coefficients)| {
-            // Capture all the Variable Names
-            let mut coefficients = Vec::with_capacity(48);
-
             // Collate variables and coefficients
-            for coeff in first_coefficients.into_iter().chain(continuation_coefficients.into_iter().flatten()) {
-                match objective_vars.entry(coeff.var_name) {
-                    Entry::Occupied(_) => (),
-                    Entry::Vacant(vacant_entry) => {
+            let coefficients = first_coefficients
+                .into_iter()
+                .chain(continuation_coefficients.into_iter().flatten())
+                .inspect(|coeff| {
+                    if let Entry::Vacant(vacant_entry) = objective_vars.entry(coeff.var_name) {
                         vacant_entry.insert(Variable::new(coeff.var_name));
                     }
-                }
-                coefficients.push(coeff);
-            }
+                })
+                .collect();
 
             Objective { name, coefficients }
         },

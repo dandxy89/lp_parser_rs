@@ -23,7 +23,7 @@ use crate::nom::{
 };
 
 #[inline]
-pub fn parse_cons_header(input: &str) -> IResult<&str, ()> {
+pub fn parse_constraint_header(input: &str) -> IResult<&str, ()> {
     value(
         (),
         tuple((
@@ -35,6 +35,7 @@ pub fn parse_cons_header(input: &str) -> IResult<&str, ()> {
     )(input)
 }
 
+#[allow(clippy::type_complexity)]
 #[inline]
 pub fn parse_constraints<'a>(input: &'a str) -> IResult<&'a str, (HashMap<Cow<'a, str>, Constraint<'a>>, HashMap<&'a str, Variable<'a>>)> {
     let mut constraint_vars: HashMap<&'a str, Variable<'a>> = HashMap::default();
@@ -44,10 +45,7 @@ pub fn parse_constraints<'a>(input: &'a str) -> IResult<&'a str, (HashMap<Cow<'a
             // Name part with optional whitespace and newlines
             opt(terminated(preceded(multispace0, parse_variable), delimited(multispace0, opt(char(':')), multispace0))),
             // Coefficients with flexible whitespace and newlines
-            many1(preceded(
-                multispace0, // This will handle spaces, tabs, and newlines
-                parse_coefficient,
-            )),
+            many1(preceded(multispace0, parse_coefficient)),
             // Operator and RHS with flexible whitespace
             preceded(multispace0, parse_cmp_op),
             preceded(multispace0, parse_num_value),
@@ -55,11 +53,8 @@ pub fn parse_constraints<'a>(input: &'a str) -> IResult<&'a str, (HashMap<Cow<'a
         |(name, coefficients, operator, rhs)| {
             // Collate variables and coefficients
             for coeff in &coefficients {
-                match constraint_vars.entry(coeff.var_name) {
-                    Entry::Occupied(_) => (),
-                    Entry::Vacant(vacant_entry) => {
-                        vacant_entry.insert(Variable::new(coeff.var_name));
-                    }
+                if let Entry::Vacant(vacant_entry) = constraint_vars.entry(coeff.var_name) {
+                    vacant_entry.insert(Variable::new(coeff.var_name));
                 }
             }
 

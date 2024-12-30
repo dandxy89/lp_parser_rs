@@ -4,7 +4,7 @@ use nom::{branch::alt, error::ErrorKind, sequence::tuple, IResult};
 
 use crate::nom::{
     decoder::{
-        constraint::{parse_cons_header, parse_constraints},
+        constraint::{parse_constraint_header, parse_constraints},
         objective::parse_objectives,
         problem_name::parse_problem_name,
         sense::parse_sense,
@@ -71,18 +71,17 @@ impl<'a> TryFrom<&'a str> for LPProblem<'a> {
     type Error = nom::Err<nom::error::Error<&'a str>>;
 
     fn try_from(input: &'a str) -> Result<Self, Self::Error> {
-        let (input, (comments, sense, obj_section, _cons_header)) = tuple((
+        // Extract the Sense, problem name and objectives slice
+        let (input, (name, sense, obj_section, _cons_header)) = tuple((
             parse_problem_name,
             parse_sense,
             // First find where the constraint section starts by looking for any valid header
             alt((take_until_no_case("subject to"), take_until_no_case("such that"), take_until_no_case("s.t."), take_until_no_case("st:"))),
-            parse_cons_header,
+            parse_constraint_header,
         ))(input)?;
 
-        // Set the Sense and Name if they exist
-
         // Parse objectives from the section before constraints
-        let (_remainder, (objs, mut variables)) = parse_objectives(obj_section)?;
+        let (_, (objs, mut variables)) = parse_objectives(obj_section)?;
 
         // Parse the constraints
         let (_remaining, (constraints, constraint_vars)) = parse_constraints(input)?;
@@ -91,7 +90,7 @@ impl<'a> TryFrom<&'a str> for LPProblem<'a> {
         // Parse Variable Bounds (Integer, General, Bounded, Free, Semi-continuous and SOS)
         //
 
-        Ok(LPProblem { sense, name: comments, objectives: objs, variables, constraints })
+        Ok(LPProblem { name, sense, objectives: objs, constraints, variables })
     }
 }
 

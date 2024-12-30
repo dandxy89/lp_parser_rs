@@ -115,7 +115,6 @@ impl<'de: 'a, 'a> serde::Deserialize<'de> for Constraint<'a> {
     where
         D: serde::Deserializer<'de>,
     {
-        // Define the fields we expect to see
         #[derive(PartialEq, serde::Deserialize)]
         #[serde(field_identifier, rename_all = "lowercase")]
         enum Field {
