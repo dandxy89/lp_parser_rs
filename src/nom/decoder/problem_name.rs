@@ -28,7 +28,7 @@ fn parse_single_comment(input: &str) -> IResult<&str, &str> {
 }
 
 #[inline]
-pub fn parse_comments(input: &str) -> IResult<&str, Option<&str>> {
+pub fn parse_problem_name(input: &str) -> IResult<&str, Option<&str>> {
     let (remaining, comments) = many0(parse_single_comment)(input)?;
     let last_comment = comments.last().copied();
     Ok((remaining, last_comment))
@@ -36,7 +36,7 @@ pub fn parse_comments(input: &str) -> IResult<&str, Option<&str>> {
 
 #[cfg(test)]
 mod test {
-    use crate::nom::decoder::problem_name::parse_comments;
+    use crate::nom::decoder::problem_name::parse_problem_name;
 
     #[test]
     fn test_parse_lp_file_comments() {
@@ -47,7 +47,7 @@ mod test {
             "\\* WBM_Problem *\\\n",
         ];
         for input in valid {
-            let (remainder, x) = parse_comments(input).unwrap();
+            let (remainder, x) = parse_problem_name(input).unwrap();
             assert_eq!("", remainder);
             assert!(x.is_some());
         }

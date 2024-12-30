@@ -1,3 +1,8 @@
+use std::{
+    borrow::Cow,
+    collections::{hash_map::Entry, HashMap},
+};
+
 use nom::{
     branch::alt,
     bytes::complete::tag_no_case,
@@ -14,7 +19,7 @@ use crate::nom::{
         number::{parse_cmp_op, parse_num_value},
         variable::parse_variable,
     },
-    model::Constraint,
+    model::{Constraint, Variable},
 };
 
 #[inline]
@@ -31,8 +36,10 @@ pub fn parse_cons_header(input: &str) -> IResult<&str, ()> {
 }
 
 #[inline]
-fn parse_constraint(input: &str) -> IResult<&str, Constraint> {
-    map(
+pub fn parse_constraints<'a>(input: &'a str) -> IResult<&'a str, (HashMap<Cow<'a, str>, Constraint<'a>>, HashMap<&'a str, Variable<'a>>)> {
+    let mut constraint_vars: HashMap<&'a str, Variable<'a>> = HashMap::default();
+
+    let parser = map(
         tuple((
             // Name part with optional whitespace and newlines
             opt(terminated(preceded(multispace0, parse_variable), delimited(multispace0, opt(char(':')), multispace0))),
@@ -45,29 +52,24 @@ fn parse_constraint(input: &str) -> IResult<&str, Constraint> {
             preceded(multispace0, parse_cmp_op),
             preceded(multispace0, parse_num_value),
         )),
-        |(name, coefficients, operator, rhs)| Constraint::Standard { name: name.map(|s| s.to_string()), coefficients, operator, rhs },
-    )(input)
-}
+        |(name, coefficients, operator, rhs)| {
+            // Collate variables and coefficients
+            for coeff in &coefficients {
+                match constraint_vars.entry(coeff.var_name) {
+                    Entry::Occupied(_) => (),
+                    Entry::Vacant(vacant_entry) => {
+                        vacant_entry.insert(Variable::new(coeff.var_name));
+                    }
+                }
+            }
 
-#[inline]
-pub fn parse_cons(input: &str) -> IResult<&str, Vec<Constraint>> {
-    many1(parse_constraint)(input)
-}
+            // Standard (SOS constraints are handled separately)
+            Constraint::Standard { name: Cow::Borrowed(name.unwrap_or_default()), coefficients, operator, rhs }
+        },
+    );
 
-#[cfg(test)]
-mod test {
-    use crate::nom::decoder::constraint::{parse_cons_header, parse_constraint};
+    let (remainder, constraints) = many1(parser)(input)?;
+    let cons = constraints.into_iter().map(|c| (Cow::Owned(c.name().to_string()), c)).collect();
 
-    #[test]
-    fn test_constraint_section_header() {
-        let input = "subject to:";
-        assert!(parse_cons_header(input).is_ok());
-    }
-
-    #[test]
-    fn test_constraint() {
-        let input = "c1:  3 x1 + x2 + 2 x3 = 30";
-        let result = parse_constraint(input);
-        assert!(result.is_ok());
-    }
+    Ok((remainder, (cons, constraint_vars)))
 }

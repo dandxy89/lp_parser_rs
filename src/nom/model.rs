@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 #[cfg_attr(feature = "diff", derive(diff::Diff), diff(attr(#[derive(Debug, PartialEq)])))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -11,8 +13,9 @@ pub enum ComparisonOp {
 
 #[cfg_attr(feature = "diff", derive(diff::Diff), diff(attr(#[derive(Debug, PartialEq)])))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub enum Sense {
+    #[default]
     Minimize,
     Maximize,
 }
@@ -54,15 +57,24 @@ pub struct Coefficient<'a> {
 #[cfg_attr(feature = "serde", serde(tag = "type"))]
 #[derive(Debug, PartialEq)]
 pub enum Constraint<'a> {
-    Standard { name: Option<String>, coefficients: Vec<Coefficient<'a>>, operator: ComparisonOp, rhs: f64 },
-    SOS { name: Option<String>, sos_type: SOSType, weights: Vec<Coefficient<'a>> },
+    Standard { name: Cow<'a, str>, coefficients: Vec<Coefficient<'a>>, operator: ComparisonOp, rhs: f64 },
+    SOS { name: Cow<'a, str>, sos_type: SOSType, weights: Vec<Coefficient<'a>> },
+}
+
+impl<'a> Constraint<'a> {
+    pub fn name(&'a self) -> Cow<'a, str> {
+        match self {
+            Constraint::Standard { name, .. } => name.clone(),
+            Constraint::SOS { name, .. } => name.clone(),
+        }
+    }
 }
 
 #[cfg_attr(feature = "diff", derive(diff::Diff), diff(attr(#[derive(Debug, PartialEq)])))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Debug, PartialEq)]
 pub struct Objective<'a> {
-    pub name: Option<String>,
+    pub name: &'a str,
     pub coefficients: Vec<Coefficient<'a>>,
 }
 
@@ -77,12 +89,24 @@ pub enum VariableType {
     SemiContinuous { lower_bound: Option<f64>, upper_bound: Option<f64> },
 }
 
+impl Default for VariableType {
+    fn default() -> Self {
+        Self::General { lower_bound: None, upper_bound: None }
+    }
+}
+
 #[cfg_attr(feature = "diff", derive(diff::Diff), diff(attr(#[derive(Debug, PartialEq)])))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, PartialEq)]
 pub struct Variable<'a> {
     pub name: &'a str,
     pub var_type: VariableType,
+}
+
+impl<'a> Variable<'a> {
+    pub fn new(name: &'a str) -> Self {
+        Self { name, var_type: VariableType::default() }
+    }
 }
 
 #[cfg(feature = "serde")]
@@ -123,14 +147,14 @@ impl<'de: 'a, 'a> serde::Deserialize<'de> for Constraint<'a> {
                 };
                 match constraint_type.as_str() {
                     "Standard" => {
-                        let mut name = None;
+                        let mut name = "";
                         let mut coefficients = None;
                         let mut operator = None;
                         let mut rhs = None;
 
                         while let Some(key) = map.next_key()? {
                             match key {
-                                Field::Name => name = Some(map.next_value()?),
+                                Field::Name => name = map.next_value()?,
                                 Field::Coefficients => coefficients = Some(map.next_value()?),
                                 Field::Operator => operator = Some(map.next_value()?),
                                 Field::Rhs => rhs = Some(map.next_value()?),
@@ -141,20 +165,20 @@ impl<'de: 'a, 'a> serde::Deserialize<'de> for Constraint<'a> {
                         }
 
                         Ok(Constraint::Standard {
-                            name,
+                            name: Cow::Borrowed(name),
                             coefficients: coefficients.ok_or_else(|| serde::de::Error::missing_field("coefficients"))?,
                             operator: operator.ok_or_else(|| serde::de::Error::missing_field("operator"))?,
                             rhs: rhs.ok_or_else(|| serde::de::Error::missing_field("rhs"))?,
                         })
                     }
                     "SOS" => {
-                        let mut name = None;
+                        let mut name = "";
                         let mut sos_type = None;
                         let mut weights = None;
 
                         while let Some(key) = map.next_key()? {
                             match key {
-                                Field::Name => name = Some(map.next_value()?),
+                                Field::Name => name = map.next_value()?,
                                 Field::SosType => sos_type = Some(map.next_value()?),
                                 Field::Weights => weights = Some(map.next_value()?),
                                 _ => {
@@ -164,7 +188,7 @@ impl<'de: 'a, 'a> serde::Deserialize<'de> for Constraint<'a> {
                         }
 
                         Ok(Constraint::SOS {
-                            name,
+                            name: Cow::Borrowed(name),
                             sos_type: sos_type.ok_or_else(|| serde::de::Error::missing_field("sos_type"))?,
                             weights: weights.ok_or_else(|| serde::de::Error::missing_field("weights"))?,
                         })
@@ -205,12 +229,12 @@ impl<'de: 'a, 'a> serde::Deserialize<'de> for Objective<'a> {
             where
                 V: serde::de::MapAccess<'de>,
             {
-                let mut name = None;
+                let mut name = "";
                 let mut coefficients = None;
 
                 while let Some(key) = map.next_key()? {
                     match key {
-                        Field::Name => name = Some(map.next_value()?),
+                        Field::Name => name = map.next_value()?,
                         Field::Coefficients => coefficients = Some(map.next_value()?),
                     }
                 }
