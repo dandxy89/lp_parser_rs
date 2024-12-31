@@ -2,13 +2,7 @@ pub mod decoder;
 pub mod lp_problem;
 pub mod model;
 
-use nom::{
-    branch::alt,
-    bytes::complete::tag_no_case,
-    combinator::{map, rest},
-    error::ErrorKind,
-    IResult,
-};
+use nom::{branch::alt, bytes::complete::tag_no_case, error::ErrorKind, IResult};
 
 pub const CONSTRAINT_HEADERS: [&str; 5] = ["subject to", "such that", "s.t.", "st:", "st"];
 
@@ -75,26 +69,6 @@ pub fn take_until_parser<'a>(tags: &'a [&'a str]) -> impl Fn(&'a str) -> IResult
                 Err(_) => parser(input),
             },
         )
-    }
-}
-
-pub fn take_until_parser_or_end<'a>(tags: &'a [&'a str]) -> impl Fn(&'a str) -> IResult<&'a str, &'a str> + 'a {
-    move |input: &str| {
-        // Create a parser that either matches any of the tags or consumes everything until EOF
-        alt((
-            // Try to match any of the tags
-            |input| {
-                tags.iter().map(|&tag| take_until_cased(tag)).try_fold(
-                    Err(nom::Err::Error(nom::error::Error::new(input, ErrorKind::Alt))),
-                    |acc, parser| match acc {
-                        Ok(ok) => Ok(ok),
-                        Err(_) => parser(input),
-                    },
-                )
-            },
-            // If no tags match, consume everything until EOF
-            map(rest, |remainder| ("", remainder)),
-        ))(input)
     }
 }
 
