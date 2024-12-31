@@ -1,0 +1,42 @@
+---
+source: tests/test_nom_from_file.rs
+expression: parsed
+---
+name: " Comment line"
+sense: Maximize
+objectives:
+  cost:
+    name: cost
+    coefficients:
+      - var_name: x
+        coefficient: -2
+      - var_name: y
+        coefficient: -3
+      - var_name: z
+        coefficient: 4
+constraints:
+  cons:
+    type: Standard
+    name: cons
+    coefficients:
+      - var_name: x
+        coefficient: 4.4
+      - var_name: y
+        coefficient: 5.5
+      - var_name: z
+        coefficient: 6.6
+    operator: LTE
+    rhs: 120
+variables:
+  x:
+    name: x
+    var_type: Free
+  y:
+    name: y
+    var_type:
+      DoubleBound:
+        - 10
+        - 12
+  z:
+    name: z
+    var_type: Free

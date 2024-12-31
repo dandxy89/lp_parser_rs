@@ -1,12 +1,16 @@
-use std::collections::{hash_map::Entry, HashMap};
+use std::{
+    borrow::Cow,
+    collections::{hash_map::Entry, HashMap},
+};
 
 use nom::{
     character::complete::{char, multispace0, multispace1, space0},
-    combinator::{map, not, peek},
+    combinator::{map, not, opt, peek},
     multi::{many0, many1},
     sequence::{delimited, preceded, terminated, tuple},
     IResult,
 };
+use unique_id::{sequence::SequenceGenerator, Generator as _};
 
 use crate::nom::{
     decoder::{coefficient::parse_coefficient, variable::parse_variable},
@@ -24,17 +28,18 @@ fn objective_continuations(input: &str) -> IResult<&str, Vec<Coefficient<'_>>> {
     preceded(tuple((multispace1, not(peek(is_new_objective)))), many1(preceded(space0, parse_coefficient)))(input)
 }
 
-type ParsedObjectives<'a> = IResult<&'a str, (HashMap<&'a str, Objective<'a>>, HashMap<&'a str, Variable<'a>>)>;
+type ParsedObjectives<'a> = IResult<&'a str, (HashMap<Cow<'a, str>, Objective<'a>>, HashMap<&'a str, Variable<'a>>)>;
 
 #[inline]
 pub fn parse_objectives(input: &str) -> ParsedObjectives<'_> {
     let mut objective_vars = HashMap::default();
+    let gen = SequenceGenerator;
 
     // Inline function to extra Objective functions
     let parser = map(
         tuple((
-            // Name part (required)
-            terminated(preceded(multispace0, parse_variable), delimited(multispace0, char(':'), multispace0)),
+            // Name part (optional)
+            opt(terminated(preceded(multispace0, parse_variable), delimited(multispace0, char(':'), multispace0))),
             // Initial coefficients
             many1(preceded(space0, parse_coefficient)),
             // Continuation lines
@@ -51,14 +56,23 @@ pub fn parse_objectives(input: &str) -> ParsedObjectives<'_> {
                 })
                 .collect();
 
-            Objective { name, coefficients }
+            Objective {
+                name: match name {
+                    Some(s) => Cow::Borrowed(s),
+                    None => {
+                        let next = gen.next_id();
+                        Cow::Owned(format!("OBJECTIVE_{next}"))
+                    }
+                },
+                coefficients,
+            }
         },
     );
 
     let (remaining, objectives) = many1(parser)(input)?;
 
     log_remaining("Failed to parse objectives fully", remaining);
-    Ok(("", (objectives.into_iter().map(|ob| (ob.name, ob)).collect(), objective_vars)))
+    Ok(("", (objectives.into_iter().map(|ob| (ob.name.clone(), ob)).collect(), objective_vars)))
 }
 
 #[cfg(test)]

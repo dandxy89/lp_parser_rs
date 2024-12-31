@@ -1,0 +1,68 @@
+---
+source: tests/test_nom_from_file.rs
+expression: parsed
+---
+name: " Test case for scientific notation in coefficients"
+sense: Minimize
+objectives:
+  obj:
+    name: obj
+    coefficients:
+      - var_name: x1
+        coefficient: 0.001
+      - var_name: x2
+        coefficient: 250
+      - var_name: x3
+        coefficient: 0.0314
+      - var_name: x4
+        coefficient: -12
+constraints:
+  c1:
+    type: Standard
+    name: c1
+    coefficients:
+      - var_name: x1
+        coefficient: 0.2
+      - var_name: x2
+        coefficient: 1.5
+      - var_name: x3
+        coefficient: 0.003
+    operator: LTE
+    rhs: 100
+  c2:
+    type: Standard
+    name: c2
+    coefficients:
+      - var_name: x1
+        coefficient: 0.0123
+      - var_name: x2
+        coefficient: -45.6
+      - var_name: x3
+        coefficient: 0.00789
+    operator: GTE
+    rhs: 0
+variables:
+  x1:
+    name: x1
+    var_type:
+      DoubleBound:
+        - 0
+        - 1000
+  x2:
+    name: x2
+    var_type:
+      DoubleBound:
+        - 0
+        - 200
+  x3:
+    name: x3
+    var_type:
+      DoubleBound:
+        - 0
+        - 35
+  x4:
+    name: x4
+    var_type:
+      DoubleBound:
+        - 0
+        - 400

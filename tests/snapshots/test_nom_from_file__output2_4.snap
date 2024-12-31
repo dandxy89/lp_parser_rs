@@ -1,0 +1,243 @@
+---
+source: tests/test_nom_from_file.rs
+expression: parsed
+---
+name: "Problem name: ClpDefaultName"
+sense: Minimize
+objectives:
+  obj:
+    name: obj
+    coefficients:
+      - var_name: x0
+        coefficient: 2.1
+      - var_name: x1
+        coefficient: 1000
+      - var_name: x2
+        coefficient: 2.2
+      - var_name: x3
+        coefficient: 1000
+      - var_name: x4
+        coefficient: 2.3
+      - var_name: x5
+        coefficient: 1000
+      - var_name: x6
+        coefficient: 1.1
+      - var_name: x7
+        coefficient: 1.2
+      - var_name: x8
+        coefficient: 1.3
+      - var_name: x10
+        coefficient: 1000
+      - var_name: x12
+        coefficient: 1000
+      - var_name: x14
+        coefficient: 1000
+constraints:
+  cons0:
+    type: Standard
+    name: cons0
+    coefficients:
+      - var_name: x0
+        coefficient: 1
+      - var_name: x1
+        coefficient: 1
+    operator: LTE
+    rhs: 21.1
+  cons1:
+    type: Standard
+    name: cons1
+    coefficients:
+      - var_name: x2
+        coefficient: 1
+      - var_name: x3
+        coefficient: 1
+    operator: LTE
+    rhs: 22.2
+  cons10:
+    type: Standard
+    name: cons10
+    coefficients:
+      - var_name: x3
+        coefficient: -1
+      - var_name: x13
+        coefficient: 1
+    operator: LTE
+    rhs: 0
+  cons11:
+    type: Standard
+    name: cons11
+    coefficients:
+      - var_name: x5
+        coefficient: -1
+      - var_name: x14
+        coefficient: 1
+    operator: LTE
+    rhs: 0
+  cons12:
+    type: Standard
+    name: cons12
+    coefficients:
+      - var_name: x1
+        coefficient: -1
+      - var_name: x14
+        coefficient: 1
+    operator: LTE
+    rhs: 0
+  cons13:
+    type: Standard
+    name: cons13
+    coefficients:
+      - var_name: x3
+        coefficient: -1
+      - var_name: x14
+        coefficient: 1
+    operator: LTE
+    rhs: 0
+  cons14:
+    type: Standard
+    name: cons14
+    coefficients:
+      - var_name: x5
+        coefficient: -1
+      - var_name: x14
+        coefficient: 1
+    operator: LTE
+    rhs: 0
+  cons2:
+    type: Standard
+    name: cons2
+    coefficients:
+      - var_name: x4
+        coefficient: 1
+      - var_name: x5
+        coefficient: 1
+    operator: LTE
+    rhs: 23.3
+  cons3:
+    type: Standard
+    name: cons3
+    coefficients:
+      - var_name: x6
+        coefficient: 1
+    operator: LTE
+    rhs: 11.1
+  cons4:
+    type: Standard
+    name: cons4
+    coefficients:
+      - var_name: x1
+        coefficient: -1.1
+      - var_name: x7
+        coefficient: 1
+    operator: LTE
+    rhs: 0
+  cons5:
+    type: Standard
+    name: cons5
+    coefficients:
+      - var_name: x8
+        coefficient: 1
+    operator: LTE
+    rhs: 12.2
+  cons6:
+    type: Standard
+    name: cons6
+    coefficients:
+      - var_name: x3
+        coefficient: -1.1
+      - var_name: x9
+        coefficient: 1
+    operator: LTE
+    rhs: 0
+  cons7:
+    type: Standard
+    name: cons7
+    coefficients:
+      - var_name: x10
+        coefficient: 1
+    operator: LTE
+    rhs: 13.3
+  cons8:
+    type: Standard
+    name: cons8
+    coefficients:
+      - var_name: x5
+        coefficient: -1.1
+      - var_name: x11
+        coefficient: 1
+    operator: LTE
+    rhs: 0
+  cons9:
+    type: Standard
+    name: cons9
+    coefficients:
+      - var_name: x1
+        coefficient: -1
+      - var_name: x12
+        coefficient: 1
+    operator: LTE
+    rhs: 0
+variables:
+  x0:
+    name: x0
+    var_type:
+      DoubleBound:
+        - 0
+        - 21.1
+  x1:
+    name: x1
+    var_type: Free
+  x10:
+    name: x10
+    var_type: Free
+  x11:
+    name: x11
+    var_type: Free
+  x12:
+    name: x12
+    var_type: Free
+  x13:
+    name: x13
+    var_type: Free
+  x14:
+    name: x14
+    var_type: Free
+  x2:
+    name: x2
+    var_type:
+      DoubleBound:
+        - 0
+        - 22.2
+  x3:
+    name: x3
+    var_type: Free
+  x4:
+    name: x4
+    var_type:
+      DoubleBound:
+        - 0
+        - 23.3
+  x5:
+    name: x5
+    var_type: Free
+  x6:
+    name: x6
+    var_type:
+      DoubleBound:
+        - 0
+        - 11.1
+  x7:
+    name: x7
+    var_type:
+      DoubleBound:
+        - 0
+        - 12.2
+  x8:
+    name: x8
+    var_type:
+      DoubleBound:
+        - 0
+        - 13.3
+  x9:
+    name: x9
+    var_type: Free

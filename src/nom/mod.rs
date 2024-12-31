@@ -1,18 +1,17 @@
 pub mod decoder;
-pub mod generator;
 pub mod lp_problem;
 pub mod model;
 
-use nom::{error::ErrorKind, IResult};
+use nom::{branch::alt, bytes::complete::tag_no_case, error::ErrorKind, IResult};
 
-pub const CONSTRAINT_HEADERS: [&str; 4] = ["subject to", "such that", "s.t.", "st:"];
+pub const CONSTRAINT_HEADERS: [&str; 5] = ["subject to", "such that", "s.t.", "st:", "st"];
 
-pub const BINARY_HEADERS: [&str; 4] = ["binaries", "binary", "bin", "end"];
-pub const ALL_BOUND_HEADERS: [&str; 13] = [
+pub const ALL_BOUND_HEADERS: [&str; 14] = [
     "bounds",
     "bound",
     "generals",
     "general",
+    "gen",
     "integers",
     "integer",
     "binaries",
@@ -23,7 +22,9 @@ pub const ALL_BOUND_HEADERS: [&str; 13] = [
     "semi",
     "end",
 ];
-pub const GENERAL_HEADERS: [&str; 3] = ["generals", "general", "end"];
+pub const BINARY_HEADERS: [&str; 4] = ["binaries", "binary", "bin", "end"];
+pub const END_HEADER: [&str; 1] = ["end"];
+pub const GENERAL_HEADERS: [&str; 4] = ["generals", "general", "gen", "end"];
 pub const INTEGER_HEADERS: [&str; 3] = ["integers", "integer", "end"];
 pub const SEMI_HEADERS: [&str; 4] = ["semi-continuous", "semis", "semi", "end"];
 pub const SOS_HEADERS: [&str; 2] = ["sos", "end"];
@@ -59,6 +60,7 @@ fn take_until_cased<'a>(tag: &'a str) -> impl Fn(&'a str) -> IResult<&'a str, &'
     }
 }
 
+#[allow(clippy::manual_try_fold)]
 pub fn take_until_parser<'a>(tags: &'a [&'a str]) -> impl Fn(&'a str) -> IResult<&'a str, &'a str> + 'a {
     move |input| {
         tags.iter().map(|&tag| take_until_cased(tag)).fold(
@@ -69,4 +71,34 @@ pub fn take_until_parser<'a>(tags: &'a [&'a str]) -> impl Fn(&'a str) -> IResult
             },
         )
     }
+}
+
+#[inline]
+pub fn is_binary_section(input: &str) -> IResult<&str, &str> {
+    alt((tag_no_case("binaries"), tag_no_case("binary"), tag_no_case("bin")))(input)
+}
+
+#[inline]
+pub fn is_bounds_section(input: &str) -> IResult<&str, &str> {
+    alt((tag_no_case("bounds"), tag_no_case("bound")))(input)
+}
+
+#[inline]
+pub fn is_generals_section(input: &str) -> IResult<&str, &str> {
+    alt((tag_no_case("generals"), tag_no_case("general"), tag_no_case("gen")))(input)
+}
+
+#[inline]
+pub fn is_integers_section(input: &str) -> IResult<&str, &str> {
+    alt((tag_no_case("integers"), tag_no_case("integer")))(input)
+}
+
+#[inline]
+pub fn is_semi_section(input: &str) -> IResult<&str, &str> {
+    alt((tag_no_case("semis"), tag_no_case("semi")))(input)
+}
+
+#[inline]
+pub fn is_sos_section(input: &str) -> IResult<&str, &str> {
+    tag_no_case("sos")(input)
 }

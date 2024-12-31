@@ -13,8 +13,6 @@ fn read_file_from_resources(file_name: &str) -> Result<LPProblem, LPParserError>
 }
 
 #[macro_export]
-/// Generate a test for a given file asserting the summation of
-/// constraints and objectives contents.
 macro_rules! generate_test {
     ($test_name:ident, $file:expr, $o_sum:expr, $c_sum:expr) => {
         #[test]

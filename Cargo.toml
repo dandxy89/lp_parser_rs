@@ -10,6 +10,9 @@ keywords = ["linear-programming", "optimization", "parser", "math", "solver"]
 categories = ["mathematics", "algorithms", "science"]
 repository = "https://github.com/dandxy89/lp_parser_rs"
 
+[lib]
+doctest = false
+
 [dependencies]
 diff-struct = { version = "0.5", optional = true }
 log = "0.4"
@@ -18,7 +21,7 @@ pest = "2.7"
 pest_derive = "2.7"
 serde = { version = "1.0", features = ["derive"], optional = true }
 thiserror = "2.0"
-unique_id = "0.1"
+unique_id = { version = "0.1", features = ["sequence"] }
 
 [dev-dependencies]
 float_eq = "1.0.1"

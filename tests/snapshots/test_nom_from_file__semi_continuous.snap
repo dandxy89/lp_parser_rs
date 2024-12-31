@@ -1,0 +1,54 @@
+---
+source: tests/test_nom_from_file.rs
+expression: parsed
+---
+name: ~
+sense: Minimize
+objectives:
+  OBJECTIVE_6:
+    name: OBJECTIVE_6
+    coefficients:
+      - var_name: b_5829890_x2
+        coefficient: 1
+      - var_name: b_5880854_x2
+        coefficient: 1
+constraints:
+  CONSTRAINT_7:
+    type: Standard
+    name: CONSTRAINT_7
+    coefficients:
+      - var_name: b_5829890_x2
+        coefficient: -2
+      - var_name: b_5829890_x1
+        coefficient: 2
+    operator: LTE
+    rhs: -64
+  b_5880854_x2:
+    type: Standard
+    name: b_5880854_x2
+    coefficients:
+      - var_name: b_5880854_x1
+        coefficient: -1
+    operator: GTE
+    rhs: 32
+variables:
+  b_5829890_x1:
+    name: b_5829890_x1
+    var_type:
+      LowerBound: 10
+  b_5829890_x2:
+    name: b_5829890_x2
+    var_type:
+      DoubleBound:
+        - 1014
+        - 1917
+  b_5880854_x1:
+    name: b_5880854_x1
+    var_type:
+      UpperBound: 10
+  b_5880854_x2:
+    name: b_5880854_x2
+    var_type:
+      DoubleBound:
+        - 1014
+        - 1917

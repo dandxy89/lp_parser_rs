@@ -69,7 +69,7 @@ impl<'a> Constraint<'a> {
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Debug, PartialEq)]
 pub struct Objective<'a> {
-    pub name: &'a str,
+    pub name: Cow<'a, str>,
     pub coefficients: Vec<Coefficient<'a>>,
 }
 
@@ -238,7 +238,10 @@ impl<'de: 'a, 'a> serde::Deserialize<'de> for Objective<'a> {
                     }
                 }
 
-                Ok(Objective { name, coefficients: coefficients.ok_or_else(|| serde::de::Error::missing_field("coefficients"))? })
+                Ok(Objective {
+                    name: Cow::Borrowed(name),
+                    coefficients: coefficients.ok_or_else(|| serde::de::Error::missing_field("coefficients"))?,
+                })
             }
         }
 

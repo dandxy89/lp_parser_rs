@@ -92,10 +92,6 @@ pub fn parse_variable_list(input: &str) -> IResult<&str, Vec<&str>> {
 
 #[inline]
 pub fn parse_generals_section(input: &str) -> IResult<&str, Vec<&str>> {
-    if input.is_empty() || input == "\n" {
-        return Ok(("", Vec::with_capacity(0)));
-    }
-
     let (remaining, section) = preceded(
         tuple((multispace0, alt((tag_no_case("generals"), tag_no_case("general"))), opt(preceded(space0, char(':'))), multispace0)),
         parse_variable_list,
@@ -107,10 +103,6 @@ pub fn parse_generals_section(input: &str) -> IResult<&str, Vec<&str>> {
 
 #[inline]
 pub fn parse_integer_section(input: &str) -> IResult<&str, Vec<&str>> {
-    if input.is_empty() || input == "\n" {
-        return Ok(("", Vec::with_capacity(0)));
-    }
-
     let (remaining, section) = preceded(
         tuple((multispace0, alt((tag_no_case("integers"), tag_no_case("integer"))), opt(preceded(space0, char(':'))), multispace0)),
         parse_variable_list,
@@ -122,10 +114,6 @@ pub fn parse_integer_section(input: &str) -> IResult<&str, Vec<&str>> {
 
 #[inline]
 pub fn parse_binary_section(input: &str) -> IResult<&str, Vec<&str>> {
-    if input.is_empty() || input == "\n" {
-        return Ok(("", Vec::with_capacity(0)));
-    }
-
     let (remaining, section) = preceded(
         tuple((
             multispace0,
@@ -142,10 +130,6 @@ pub fn parse_binary_section(input: &str) -> IResult<&str, Vec<&str>> {
 
 #[inline]
 pub fn parse_semi_section(input: &str) -> IResult<&str, Vec<&str>> {
-    if input.is_empty() || input == "\n" {
-        return Ok(("", Vec::with_capacity(0)));
-    }
-
     let (remaining, section) = preceded(
         tuple((
             multispace0,
