@@ -19,6 +19,7 @@ use crate::nom::{
         number::{parse_cmp_op, parse_num_value},
         variable::parse_variable,
     },
+    log_remaining,
     model::{Constraint, Variable},
 };
 
@@ -35,9 +36,10 @@ pub fn parse_constraint_header(input: &str) -> IResult<&str, ()> {
     )(input)
 }
 
-#[allow(clippy::type_complexity)]
+type ParsedConstraints<'a> = IResult<&'a str, (HashMap<Cow<'a, str>, Constraint<'a>>, HashMap<&'a str, Variable<'a>>)>;
+
 #[inline]
-pub fn parse_constraints<'a>(input: &'a str) -> IResult<&'a str, (HashMap<Cow<'a, str>, Constraint<'a>>, HashMap<&'a str, Variable<'a>>)> {
+pub fn parse_constraints<'a>(input: &'a str) -> ParsedConstraints<'a> {
     let mut constraint_vars: HashMap<&'a str, Variable<'a>> = HashMap::default();
 
     let parser = map(
@@ -63,8 +65,9 @@ pub fn parse_constraints<'a>(input: &'a str) -> IResult<&'a str, (HashMap<Cow<'a
         },
     );
 
-    let (remainder, constraints) = many1(parser)(input)?;
+    let (remaining, constraints) = many1(parser)(input)?;
     let cons = constraints.into_iter().map(|c| (Cow::Owned(c.name().to_string()), c)).collect();
 
-    Ok((remainder, (cons, constraint_vars)))
+    log_remaining("Failed to parse constraints fully", remaining);
+    Ok(("", (cons, constraint_vars)))
 }

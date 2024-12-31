@@ -102,6 +102,10 @@ impl<'a> Variable<'a> {
     pub fn new(name: &'a str) -> Self {
         Self { name, var_type: VariableType::default() }
     }
+
+    pub fn set_vt(&mut self, var_type: VariableType) {
+        self.var_type = var_type;
+    }
 }
 
 #[cfg(feature = "serde")]

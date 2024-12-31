@@ -1,6 +1,9 @@
-use std::{borrow::Cow, collections::HashMap};
+use std::{
+    borrow::Cow,
+    collections::{hash_map::Entry, HashMap},
+};
 
-use nom::{branch::alt, error::ErrorKind, sequence::tuple, IResult};
+use nom::{combinator::opt, sequence::tuple};
 
 use crate::nom::{
     decoder::{
@@ -8,8 +11,11 @@ use crate::nom::{
         objective::parse_objectives,
         problem_name::parse_problem_name,
         sense::parse_sense,
+        variable::{parse_binary_section, parse_bounds_section, parse_generals_section, parse_integer_section, parse_semi_section},
     },
     model::{Constraint, Objective, Sense, Variable},
+    take_until_parser, ALL_VAR_BOUND_HEADERS, BINARY_HEADERS, BOUND_HEADERS, CONSTRAINT_HEADERS, GENERAL_HEADERS, SEMI_HEADERS,
+    SOS_HEADERS,
 };
 
 #[cfg_attr(feature = "diff", derive(diff::Diff), diff(attr(#[derive(Debug, PartialEq)])))]
@@ -47,23 +53,11 @@ impl LPProblem<'_> {
     pub fn objective_count(&self) -> usize {
         self.objectives.len()
     }
-}
 
-fn take_until_no_case<'a>(tag: &'a str) -> impl Fn(&'a str) -> IResult<&'a str, &'a str> {
-    move |input: &str| {
-        let mut index = 0;
-        let tag_lower = tag.to_lowercase();
-        let chars: Vec<char> = input.chars().collect();
-
-        while index <= chars.len() - tag.len() {
-            let window: String = chars[index..index + tag.len()].iter().collect();
-            if window.to_lowercase() == tag_lower {
-                return Ok((&input[index..], &input[..index]));
-            }
-            index += 1;
-        }
-
-        Err(nom::Err::Error(nom::error::Error::new(input, ErrorKind::TakeUntil)))
+    #[inline]
+    /// Returns the number of variables contained within the Problem
+    pub fn variable_count(&self) -> usize {
+        self.variables.len()
     }
 }
 
@@ -71,27 +65,47 @@ impl<'a> TryFrom<&'a str> for LPProblem<'a> {
     type Error = nom::Err<nom::error::Error<&'a str>>;
 
     fn try_from(input: &'a str) -> Result<Self, Self::Error> {
-        // Extract the Sense, problem name and objectives slice
-        let (input, (name, sense, obj_section, _cons_header)) = tuple((
-            parse_problem_name,
-            parse_sense,
-            // First find where the constraint section starts by looking for any valid header
-            alt((take_until_no_case("subject to"), take_until_no_case("such that"), take_until_no_case("s.t."), take_until_no_case("st:"))),
-            parse_constraint_header,
-        ))(input)?;
-
-        // Parse objectives from the section before constraints
+        let (input, (name, sense, obj_section, _cons_header)) =
+            tuple((parse_problem_name, parse_sense, take_until_parser(&CONSTRAINT_HEADERS), parse_constraint_header))(input)?;
         let (_, (objs, mut variables)) = parse_objectives(obj_section)?;
 
-        // Parse the constraints
-        let (_remaining, (constraints, constraint_vars)) = parse_constraints(input)?;
+        let (input, constraint_str) = take_until_parser(&BOUND_HEADERS)(input)?;
+        let (_, (constraints, constraint_vars)) = parse_constraints(constraint_str)?;
         variables.extend(constraint_vars);
 
-        // Parse Variable Bounds (Integer, General, Bounded, Free and Semi-continuous)
-        //
+        let (input, bound_str) = take_until_parser(&ALL_VAR_BOUND_HEADERS)(input)?;
+        let (_, bounds) = parse_bounds_section(bound_str)?;
 
-        // Parse SOS constraints
-        //
+        for (bound_name, var_type) in bounds {
+            match variables.entry(bound_name) {
+                Entry::Occupied(mut occupied_entry) => {
+                    occupied_entry.get_mut().set_vt(var_type);
+                }
+                Entry::Vacant(vacant_entry) => {
+                    vacant_entry.insert(Variable { name: bound_name, var_type });
+                }
+            }
+        }
+
+        let (input, integer_str) = opt(take_until_parser(&GENERAL_HEADERS))(input)?;
+        if let Some(integer_str) = integer_str {
+            let (_, _integer_var) = parse_integer_section(integer_str)?;
+        }
+
+        let (input, generals_str) = opt(take_until_parser(&BINARY_HEADERS))(input)?;
+        if let Some(generals_str) = generals_str {
+            let (_, _general_var) = parse_generals_section(generals_str)?;
+        }
+
+        let (_input, binary_str) = opt(take_until_parser(&SEMI_HEADERS))(input)?;
+        if let Some(binary_str) = binary_str {
+            let (_, _binary_vars) = parse_binary_section(binary_str)?;
+        }
+
+        let (_input, semi_str) = opt(take_until_parser(&SOS_HEADERS))(input)?;
+        if let Some(semi_str) = semi_str {
+            let (_, _semi_continuous_vars) = parse_semi_section(semi_str)?;
+        }
 
         Ok(LPProblem { name, sense, objectives: objs, constraints, variables })
     }
@@ -110,7 +124,16 @@ Minimize
 subject to:
 c1:  3 x1 + x2 + 2 x3 = 30
 c2:  2 x1 + x2 + 3 x3 + x4 >= 15
-c3:  2 x2 + 3 x4 <= 25";
+c3:  2 x2 + 3 x4 <= 25
+bounds
+x1 free
+x2 >= 1
+100 <= x2dfsdf <= -1
+Generals
+Route_A_1
+Route_A_2
+Route_A_3
+End";
 
     #[cfg(feature = "serde")]
     #[test]

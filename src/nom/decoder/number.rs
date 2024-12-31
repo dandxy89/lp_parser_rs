@@ -1,8 +1,8 @@
 use nom::{
     branch::alt,
-    bytes::complete::{tag, tag_no_case},
+    bytes::complete::{tag, tag_no_case, take},
     character::complete::{char, digit1, multispace0, one_of},
-    combinator::{all_consuming, complete, map, opt, recognize, value},
+    combinator::{complete, eof, map, opt, peek, recognize, value, verify},
     error::ErrorKind,
     sequence::{pair, preceded, tuple},
     Err, IResult,
@@ -12,10 +12,17 @@ use crate::nom::model::ComparisonOp;
 
 #[inline]
 fn infinity(input: &str) -> IResult<&str, f64> {
-    all_consuming(map(tuple((opt(one_of("+-")), alt((tag_no_case("infinity"), tag_no_case("inf"))))), |(sign, _)| match sign {
-        Some('-') => f64::NEG_INFINITY,
-        _ => f64::INFINITY,
-    }))(input)
+    map(
+        tuple((
+            opt(one_of("+-")),
+            alt((tag_no_case("infinity"), tag_no_case("inf"))),
+            peek(alt((eof, verify(take(1_usize), |c: &str| !c.chars().next().unwrap().is_alphanumeric())))),
+        )),
+        |(sign, _, _)| match sign {
+            Some('-') => f64::NEG_INFINITY,
+            _ => f64::INFINITY,
+        },
+    )(input)
 }
 
 #[inline]

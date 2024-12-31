@@ -78,7 +78,14 @@ variables:
     var_type: Free
   x2:
     name: x2
-    var_type: Free
+    var_type:
+      LowerBound: 1
+  x2dfsdf:
+    name: x2dfsdf
+    var_type:
+      DoubleBound:
+        - 100
+        - -1
   x3:
     name: x3
     var_type: Free

@@ -10,6 +10,7 @@ use nom::{
 
 use crate::nom::{
     decoder::{coefficient::parse_coefficient, variable::parse_variable},
+    log_remaining,
     model::{Coefficient, Objective, Variable},
 };
 
@@ -19,13 +20,14 @@ fn is_new_objective(input: &str) -> IResult<&str, ()> {
 }
 
 #[inline]
-fn line_continuation(input: &str) -> IResult<&str, Vec<Coefficient<'_>>> {
+fn objective_continuations(input: &str) -> IResult<&str, Vec<Coefficient<'_>>> {
     preceded(tuple((multispace1, not(peek(is_new_objective)))), many1(preceded(space0, parse_coefficient)))(input)
 }
 
-#[allow(clippy::type_complexity)]
+type ParsedObjectives<'a> = IResult<&'a str, (HashMap<&'a str, Objective<'a>>, HashMap<&'a str, Variable<'a>>)>;
+
 #[inline]
-pub fn parse_objectives(input: &str) -> IResult<&str, (HashMap<&str, Objective<'_>>, HashMap<&str, Variable<'_>>)> {
+pub fn parse_objectives(input: &str) -> ParsedObjectives<'_> {
     let mut objective_vars = HashMap::default();
 
     // Inline function to extra Objective functions
@@ -36,11 +38,11 @@ pub fn parse_objectives(input: &str) -> IResult<&str, (HashMap<&str, Objective<'
             // Initial coefficients
             many1(preceded(space0, parse_coefficient)),
             // Continuation lines
-            many0(line_continuation),
+            many0(objective_continuations),
         )),
-        |(name, first_coefficients, continuation_coefficients)| {
+        |(name, coefficients, continuation_coefficients)| {
             // Collate variables and coefficients
-            let coefficients = first_coefficients
+            let coefficients = coefficients
                 .into_iter()
                 .chain(continuation_coefficients.into_iter().flatten())
                 .inspect(|coeff| {
@@ -54,9 +56,10 @@ pub fn parse_objectives(input: &str) -> IResult<&str, (HashMap<&str, Objective<'
         },
     );
 
-    let (remainder, objectives) = many1(parser)(input)?;
+    let (remaining, objectives) = many1(parser)(input)?;
 
-    Ok((remainder, (objectives.into_iter().map(|ob| (ob.name, ob)).collect(), objective_vars)))
+    log_remaining("Failed to parse objectives fully", remaining);
+    Ok(("", (objectives.into_iter().map(|ob| (ob.name, ob)).collect(), objective_vars)))
 }
 
 #[cfg(test)]
