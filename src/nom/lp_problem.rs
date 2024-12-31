@@ -190,8 +190,7 @@ impl<'a> TryFrom<&'a str> for LpProblem<'a> {
         }
 
         if input.len() > 3 {
-            log::warn!("Unused input: {input}");
-            println!("Unused input: {input}"); // Remove once branch is ready
+            log::warn!("Unused input not parsed by `LpProblem`: {input}");
         }
 
         Ok(LpProblem { name, sense, objectives, constraints, variables })

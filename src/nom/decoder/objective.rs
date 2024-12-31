@@ -13,7 +13,7 @@ use nom::{
 use unique_id::{sequence::SequenceGenerator, Generator as _};
 
 use crate::nom::{
-    decoder::{coefficient::parse_coefficient, variable::parse_variable},
+    decoder::{coefficient::parse_coefficient, parser_traits::parse_variable},
     log_remaining,
     model::{Coefficient, Objective, Variable},
 };

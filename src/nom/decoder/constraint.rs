@@ -18,7 +18,7 @@ use crate::nom::{
     decoder::{
         coefficient::parse_coefficient,
         number::{parse_cmp_op, parse_num_value},
-        variable::parse_variable,
+        parser_traits::parse_variable,
     },
     log_remaining,
     model::{Constraint, Variable},

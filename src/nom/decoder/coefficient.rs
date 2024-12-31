@@ -7,7 +7,7 @@ use nom::{
 };
 
 use crate::nom::{
-    decoder::{number::parse_num_value, variable::parse_variable},
+    decoder::{number::parse_num_value, parser_traits::parse_variable},
     model::Coefficient,
 };
 
