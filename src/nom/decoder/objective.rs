@@ -41,7 +41,6 @@ pub fn parse_objectives(input: &str) -> ParsedObjectives<'_> {
             many0(objective_continuations),
         )),
         |(name, coefficients, continuation_coefficients)| {
-            // Collate variables and coefficients
             let coefficients = coefficients
                 .into_iter()
                 .chain(continuation_coefficients.into_iter().flatten())

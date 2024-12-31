@@ -7,7 +7,7 @@ use nom::{error::ErrorKind, IResult};
 
 pub const CONSTRAINT_HEADERS: [&str; 4] = ["subject to", "such that", "s.t.", "st:"];
 
-pub const BINARY_HEADERS: [&str; 3] = ["binaries", "binary", "bin"];
+pub const BINARY_HEADERS: [&str; 4] = ["binaries", "binary", "bin", "end"];
 pub const BOUND_HEADERS: [&str; 2] = ["bounds", "bound"];
 pub const ALL_VAR_BOUND_HEADERS: [&str; 11] =
     ["generals", "general", "integers", "integer", "binaries", "binary", "bin", "semi-continuous", "semis", "semi", "end"];
@@ -29,6 +29,10 @@ fn take_until_cased<'a>(tag: &'a str) -> impl Fn(&'a str) -> IResult<&'a str, &'
         let mut index = 0;
         let tag_lower = tag.to_lowercase();
         let chars: Vec<char> = input.chars().collect();
+
+        if chars.len() < tag.len() {
+            return Err(nom::Err::Error(nom::error::Error::new(input, ErrorKind::TakeUntil)));
+        }
 
         while index <= chars.len() - tag.len() {
             let window: String = chars[index..index + tag.len()].iter().collect();

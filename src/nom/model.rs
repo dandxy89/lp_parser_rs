@@ -4,11 +4,16 @@ use std::borrow::Cow;
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ComparisonOp {
-    LT,
-    LTE,
-    EQ,
+    /// Greater than
     GT,
+    /// Greater than or equal
     GTE,
+    /// Equals
+    EQ,
+    /// Less than
+    LT,
+    /// Less than or equal
+    LTE,
 }
 
 #[cfg_attr(feature = "diff", derive(diff::Diff), diff(attr(#[derive(Debug, PartialEq)])))]
@@ -70,9 +75,15 @@ pub struct Objective<'a> {
 
 #[cfg_attr(feature = "diff", derive(diff::Diff), diff(attr(#[derive(Debug, PartialEq)])))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub enum VariableType {
+    #[default]
+    /// Unbounded variable (-Infinity, +Infinity)
     Free,
+
+    /// General variable [0, +Infinity]
+    General,
+
     LowerBound(f64),       // `x >= lb`
     UpperBound(f64),       // `x ≤ ub`
     DoubleBound(f64, f64), // `lb ≤ x ≤ ub`
@@ -81,13 +92,7 @@ pub enum VariableType {
 
     Integer,
 
-    SemiContinuous { lower_bound: Option<f64>, upper_bound: Option<f64> },
-}
-
-impl Default for VariableType {
-    fn default() -> Self {
-        Self::Free
-    }
+    SemiContinuous,
 }
 
 #[cfg_attr(feature = "diff", derive(diff::Diff), diff(attr(#[derive(Debug, PartialEq)])))]
@@ -103,7 +108,7 @@ impl<'a> Variable<'a> {
         Self { name, var_type: VariableType::default() }
     }
 
-    pub fn set_vt(&mut self, var_type: VariableType) {
+    pub fn set_var_type(&mut self, var_type: VariableType) {
         self.var_type = var_type;
     }
 }

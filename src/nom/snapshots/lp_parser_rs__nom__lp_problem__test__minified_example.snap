@@ -70,6 +70,15 @@ constraints:
     operator: LTE
     rhs: 25
 variables:
+  Route_A_1:
+    name: Route_A_1
+    var_type: General
+  Route_A_2:
+    name: Route_A_2
+    var_type: General
+  Route_A_3:
+    name: Route_A_3
+    var_type: General
   x:
     name: x
     var_type: Free
