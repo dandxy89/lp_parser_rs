@@ -69,62 +69,7 @@ constraints:
         coefficient: 3
     operator: LTE
     rhs: 25
-  csos1:
-    type: SOS
-    name: csos1
-    sos_type: S1
-    weights:
-      - var_name: V1
-        coefficient: 1
-      - var_name: V3
-        coefficient: 2
-      - var_name: V5
-        coefficient: 3
-  csos2:
-    type: SOS
-    name: csos2
-    sos_type: S2
-    weights:
-      - var_name: V2
-        coefficient: 2
-      - var_name: V4
-        coefficient: 1
-      - var_name: V5
-        coefficient: 2.5
 variables:
-  Route_A_1:
-    name: Route_A_1
-    var_type: General
-  Route_A_2:
-    name: Route_A_2
-    var_type: General
-  Route_A_3:
-    name: Route_A_3
-    var_type: General
-  V1:
-    name: V1
-    var_type: SOS
-  V2:
-    name: V2
-    var_type: SOS
-  V3:
-    name: V3
-    var_type: SOS
-  V4:
-    name: V4
-    var_type: SOS
-  V5:
-    name: V5
-    var_type: SOS
-  V8:
-    name: V8
-    var_type: Binary
-  X31:
-    name: X31
-    var_type: Integer
-  X32:
-    name: X32
-    var_type: Integer
   x:
     name: x
     var_type: Free
@@ -149,7 +94,7 @@ variables:
     var_type: Free
   y:
     name: y
-    var_type: SemiContinuous
+    var_type: Free
   z:
     name: z
     var_type: Free

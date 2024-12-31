@@ -53,7 +53,6 @@ pub fn parse_constraints<'a>(input: &'a str) -> ParsedConstraints<'a> {
             preceded(multispace0, parse_num_value),
         )),
         |(name, coefficients, operator, rhs)| {
-            // Collate variables and coefficients
             for coeff in &coefficients {
                 if let Entry::Vacant(vacant_entry) = constraint_vars.entry(coeff.var_name) {
                     vacant_entry.insert(Variable::new(coeff.var_name));

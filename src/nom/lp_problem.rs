@@ -11,11 +11,11 @@ use crate::nom::{
         objective::parse_objectives,
         problem_name::parse_problem_name,
         sense::parse_sense,
+        sos_constraint::parse_sos_section,
         variable::{parse_binary_section, parse_bounds_section, parse_generals_section, parse_integer_section, parse_semi_section},
     },
     model::{Constraint, Objective, Sense, Variable, VariableType},
-    take_until_parser, ALL_VAR_BOUND_HEADERS, BINARY_HEADERS, BOUND_HEADERS, CONSTRAINT_HEADERS, GENERAL_HEADERS, SEMI_HEADERS,
-    SOS_HEADERS,
+    take_until_parser, ALL_BOUND_HEADERS, BINARY_HEADERS, CONSTRAINT_HEADERS, GENERAL_HEADERS, INTEGER_HEADERS, SEMI_HEADERS, SOS_HEADERS,
 };
 
 #[cfg_attr(feature = "diff", derive(diff::Diff), diff(attr(#[derive(Debug, PartialEq)])))]
@@ -29,7 +29,25 @@ pub struct LPProblem<'a> {
     pub variables: HashMap<&'a str, Variable<'a>>,
 }
 
-impl LPProblem<'_> {
+impl<'a> LPProblem<'a> {
+    // TODO:
+    // add_constraint
+    // add_constraints
+    // add_objective
+    // add_variable
+    // set_variable_bound
+    // with_problem_name
+
+    /// Initialise a new `Self`
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Override the problem sense
+    pub fn with_sense(self, sense: Sense) -> Self {
+        Self { sense, ..self }
+    }
+
     #[inline]
     /// Returns the name of the LP Problem
     pub fn name(&self) -> Option<&str> {
@@ -59,8 +77,16 @@ impl LPProblem<'_> {
     pub fn variable_count(&self) -> usize {
         self.variables.len()
     }
+
+    /// Parse a LPProblem from a string slice
+    pub fn parse(input: &'a str) -> Result<Self, nom::Err<nom::error::Error<&'a str>>> {
+        // Ideally, we'd have like to have utilised `FromStr` but the trait does not allow the
+        // specification of lifetimes.
+        TryFrom::try_from(input)
+    }
 }
 
+#[inline]
 fn set_var_types<'a>(variables: &mut HashMap<&'a str, Variable<'a>>, vars: Vec<&'a str>, var_type: VariableType) {
     for name in vars {
         match variables.entry(name) {
@@ -77,16 +103,20 @@ fn set_var_types<'a>(variables: &mut HashMap<&'a str, Variable<'a>>, vars: Vec<&
 impl<'a> TryFrom<&'a str> for LPProblem<'a> {
     type Error = nom::Err<nom::error::Error<&'a str>>;
 
+    #[inline]
     fn try_from(input: &'a str) -> Result<Self, Self::Error> {
+        // Problem name and Sense
         let (input, (name, sense, obj_section, _)) =
             tuple((parse_problem_name, parse_sense, take_until_parser(&CONSTRAINT_HEADERS), parse_constraint_header))(input)?;
         let (_, (objs, mut variables)) = parse_objectives(obj_section)?;
 
-        let (input, constraint_str) = take_until_parser(&BOUND_HEADERS)(input)?;
-        let (_, (constraints, constraint_vars)) = parse_constraints(constraint_str)?;
+        // Constraints
+        let (input, constraint_str) = take_until_parser(&ALL_BOUND_HEADERS)(input)?;
+        let (_, (mut constraints, constraint_vars)) = parse_constraints(constraint_str)?;
         variables.extend(constraint_vars);
 
-        let (mut input, bound_str) = take_until_parser(&ALL_VAR_BOUND_HEADERS)(input)?;
+        // Bound
+        let (mut input, bound_str) = take_until_parser(&INTEGER_HEADERS)(input)?;
         let (_, bounds) = parse_bounds_section(bound_str)?;
 
         for (name, var_type) in bounds {
@@ -100,6 +130,7 @@ impl<'a> TryFrom<&'a str> for LPProblem<'a> {
             }
         }
 
+        // Integer
         if let Ok((rem_input, Some(integer_str))) = opt(take_until_parser(&GENERAL_HEADERS))(input) {
             if let Ok((_, integer_vars)) = parse_integer_section(integer_str) {
                 set_var_types(&mut variables, integer_vars, VariableType::Integer);
@@ -107,6 +138,7 @@ impl<'a> TryFrom<&'a str> for LPProblem<'a> {
             input = rem_input;
         }
 
+        // General
         if let Ok((rem_input, Some(generals_str))) = opt(take_until_parser(&BINARY_HEADERS))(input) {
             if let Ok((_, general_vars)) = parse_generals_section(generals_str) {
                 set_var_types(&mut variables, general_vars, VariableType::General);
@@ -114,6 +146,7 @@ impl<'a> TryFrom<&'a str> for LPProblem<'a> {
             input = rem_input;
         }
 
+        // Binary
         if let Ok((rem_input, Some(binary_str))) = opt(take_until_parser(&SEMI_HEADERS))(input) {
             if let Ok((_, binary_vars)) = parse_binary_section(binary_str) {
                 set_var_types(&mut variables, binary_vars, VariableType::Binary);
@@ -121,6 +154,7 @@ impl<'a> TryFrom<&'a str> for LPProblem<'a> {
             input = rem_input;
         }
 
+        // Semi-continuous
         if let Ok((rem_input, Some(semi_str))) = opt(take_until_parser(&SOS_HEADERS))(input) {
             if let Ok((_, semi_vars)) = parse_semi_section(semi_str) {
                 set_var_types(&mut variables, semi_vars, VariableType::SemiContinuous);
@@ -128,7 +162,22 @@ impl<'a> TryFrom<&'a str> for LPProblem<'a> {
             input = rem_input;
         }
 
-        log::info!("Unused input: {input}");
+        // SOS constraint
+        if let Ok((rem_input, Some(sos_str))) = opt(take_until_parser(&["end"]))(input) {
+            if let Ok((_, Some((sos_constraints, constraint_vars)))) = opt(parse_sos_section)(sos_str) {
+                variables.extend(constraint_vars);
+                for (name, constraint) in sos_constraints {
+                    constraints.insert(name, constraint);
+                }
+            }
+            input = rem_input;
+        }
+
+        if input.len() > 3 {
+            log::info!("Unused input: {input}");
+            println!("Unused input: {input}"); // Remove once branch is ready
+        }
+
         Ok(LPProblem { name, sense, objectives: objs, constraints, variables })
     }
 }
@@ -151,15 +200,43 @@ bounds
 x1 free
 x2 >= 1
 100 <= x2dfsdf <= -1
+End";
+
+    const COMPLETE_INPUT: &str = "\\ This file has been generated by Author
+\\ ENCODING=ISO-8859-1
+\\Problem name: diet
+Minimize
+ obj1: -0.5 x - 2y - 8z
+ obj2: y + x + z
+ obj3: 10z - 2.5x
+       + y
+subject to:
+c1:  3 x1 + x2 + 2 x3 = 30
+c2:  2 x1 + x2 + 3 x3 + x4 >= 15
+c3:  2 x2 + 3 x4 <= 25
+bounds
+x1 free
+x2 >= 1
+100 <= x2dfsdf <= -1
+Integers
+X31
+X32
 Generals
 Route_A_1
 Route_A_2
 Route_A_3
+Binary
+V8
+Semi-Continuous
+ y
+SOS
+csos1: S1:: V1:1 V3:2 V5:3
+csos2: S2:: V2:2 V4:1 V5:2.5
 End";
 
     #[cfg(feature = "serde")]
     #[test]
-    fn test_minified_example() {
+    fn test_small_input() {
         let problem = crate::nom::lp_problem::LPProblem::try_from(SMALL_INPUT).expect("test case not to fail");
 
         assert_eq!(problem.objectives.len(), 3);
@@ -174,8 +251,23 @@ End";
 
     #[cfg(feature = "serde")]
     #[test]
+    fn test_minified_example() {
+        let problem = crate::nom::lp_problem::LPProblem::try_from(COMPLETE_INPUT).expect("test case not to fail");
+
+        assert_eq!(problem.objectives.len(), 3);
+        assert_eq!(problem.constraints.len(), 5);
+
+        insta::assert_yaml_snapshot!(&problem, {
+            ".objectives" => insta::sorted_redaction(),
+            ".constraints" => insta::sorted_redaction(),
+            ".variables" => insta::sorted_redaction()
+        });
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
     fn test_serialization_lifecycle() {
-        let problem = crate::nom::lp_problem::LPProblem::try_from(SMALL_INPUT).expect("test case not to fail");
+        let problem = crate::nom::lp_problem::LPProblem::try_from(COMPLETE_INPUT).expect("test case not to fail");
         // Serialised
         let serialized_problem = serde_json::to_string(&problem).expect("test case not to fail");
         // Deserialise

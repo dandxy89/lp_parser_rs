@@ -9,7 +9,7 @@ use nom::{
     IResult,
 };
 
-use crate::nom::{decoder::number::parse_num_value, log_remaining, model::VariableType, ALL_VAR_BOUND_HEADERS, VALID_LP_CHARS};
+use crate::nom::{decoder::number::parse_num_value, log_remaining, model::VariableType, ALL_BOUND_HEADERS, VALID_LP_CHARS};
 
 #[inline]
 fn is_valid_lp_char(c: char) -> bool {
@@ -73,7 +73,7 @@ pub fn parse_bounds_section(input: &str) -> IResult<&str, Vec<(&str, VariableTyp
 #[inline]
 fn is_section_header(input: &str) -> bool {
     let lower_input = input.trim().to_lowercase();
-    ALL_VAR_BOUND_HEADERS.iter().any(|&header| lower_input.starts_with(header))
+    ALL_BOUND_HEADERS.iter().any(|&header| lower_input.starts_with(header))
 }
 
 #[inline]
@@ -95,6 +95,7 @@ pub fn parse_generals_section(input: &str) -> IResult<&str, Vec<&str>> {
     if input.is_empty() || input == "\n" {
         return Ok(("", Vec::with_capacity(0)));
     }
+
     let (remaining, section) = preceded(
         tuple((multispace0, alt((tag_no_case("generals"), tag_no_case("general"))), opt(preceded(space0, char(':'))), multispace0)),
         parse_variable_list,
@@ -109,6 +110,7 @@ pub fn parse_integer_section(input: &str) -> IResult<&str, Vec<&str>> {
     if input.is_empty() || input == "\n" {
         return Ok(("", Vec::with_capacity(0)));
     }
+
     let (remaining, section) = preceded(
         tuple((multispace0, alt((tag_no_case("integers"), tag_no_case("integer"))), opt(preceded(space0, char(':'))), multispace0)),
         parse_variable_list,
@@ -123,6 +125,7 @@ pub fn parse_binary_section(input: &str) -> IResult<&str, Vec<&str>> {
     if input.is_empty() || input == "\n" {
         return Ok(("", Vec::with_capacity(0)));
     }
+
     let (remaining, section) = preceded(
         tuple((
             multispace0,
@@ -142,6 +145,7 @@ pub fn parse_semi_section(input: &str) -> IResult<&str, Vec<&str>> {
     if input.is_empty() || input == "\n" {
         return Ok(("", Vec::with_capacity(0)));
     }
+
     let (remaining, section) = preceded(
         tuple((
             multispace0,

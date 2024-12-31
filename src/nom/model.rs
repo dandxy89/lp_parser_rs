@@ -93,6 +93,9 @@ pub enum VariableType {
     Integer,
 
     SemiContinuous,
+
+    /// Special Order Set (SOS)
+    SOS,
 }
 
 #[cfg_attr(feature = "diff", derive(diff::Diff), diff(attr(#[derive(Debug, PartialEq)])))]
@@ -108,6 +111,10 @@ impl<'a> Variable<'a> {
         Self { name, var_type: VariableType::default() }
     }
 
+    pub fn with_var_type(self, var_type: VariableType) -> Self {
+        Self { var_type, ..self }
+    }
+
     pub fn set_var_type(&mut self, var_type: VariableType) {
         self.var_type = var_type;
     }
@@ -115,10 +122,7 @@ impl<'a> Variable<'a> {
 
 #[cfg(feature = "serde")]
 impl<'de: 'a, 'a> serde::Deserialize<'de> for Constraint<'a> {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         #[derive(PartialEq, serde::Deserialize)]
         #[serde(field_identifier, rename_all = "lowercase")]
         enum Field {
@@ -128,6 +132,7 @@ impl<'de: 'a, 'a> serde::Deserialize<'de> for Constraint<'a> {
             Weights,
             Operator,
             Rhs,
+            #[serde(alias = "sos_type")]
             SosType,
         }
 
@@ -140,10 +145,7 @@ impl<'de: 'a, 'a> serde::Deserialize<'de> for Constraint<'a> {
                 formatter.write_str("struct Constraint")
             }
 
-            fn visit_map<V>(self, mut map: V) -> Result<Constraint<'a>, V::Error>
-            where
-                V: serde::de::MapAccess<'de>,
-            {
+            fn visit_map<V: serde::de::MapAccess<'de>>(self, mut map: V) -> Result<Constraint<'a>, V::Error> {
                 let constraint_type: String = match map.next_key::<Field>()? {
                     Some(Field::Type) => map.next_value()?,
                     _ => return Err(serde::de::Error::missing_field("type")),
@@ -208,10 +210,7 @@ impl<'de: 'a, 'a> serde::Deserialize<'de> for Constraint<'a> {
 
 #[cfg(feature = "serde")]
 impl<'de: 'a, 'a> serde::Deserialize<'de> for Objective<'a> {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         #[derive(serde::Deserialize)]
         #[serde(field_identifier, rename_all = "lowercase")]
         enum Field {
@@ -228,10 +227,7 @@ impl<'de: 'a, 'a> serde::Deserialize<'de> for Objective<'a> {
                 formatter.write_str("struct Objective")
             }
 
-            fn visit_map<V>(self, mut map: V) -> Result<Objective<'a>, V::Error>
-            where
-                V: serde::de::MapAccess<'de>,
-            {
+            fn visit_map<V: serde::de::MapAccess<'de>>(self, mut map: V) -> Result<Objective<'a>, V::Error> {
                 let mut name = "";
                 let mut coefficients = None;
 

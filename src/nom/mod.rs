@@ -8,12 +8,25 @@ use nom::{error::ErrorKind, IResult};
 pub const CONSTRAINT_HEADERS: [&str; 4] = ["subject to", "such that", "s.t.", "st:"];
 
 pub const BINARY_HEADERS: [&str; 4] = ["binaries", "binary", "bin", "end"];
-pub const BOUND_HEADERS: [&str; 2] = ["bounds", "bound"];
-pub const ALL_VAR_BOUND_HEADERS: [&str; 11] =
-    ["generals", "general", "integers", "integer", "binaries", "binary", "bin", "semi-continuous", "semis", "semi", "end"];
-pub const GENERAL_HEADERS: [&str; 2] = ["generals", "general"];
-pub const SEMI_HEADERS: [&str; 3] = ["semi-continuous", "semis", "semi"];
-pub const SOS_HEADERS: [&str; 1] = ["sos"];
+pub const ALL_BOUND_HEADERS: [&str; 13] = [
+    "bounds",
+    "bound",
+    "generals",
+    "general",
+    "integers",
+    "integer",
+    "binaries",
+    "binary",
+    "bin",
+    "semi-continuous",
+    "semis",
+    "semi",
+    "end",
+];
+pub const GENERAL_HEADERS: [&str; 3] = ["generals", "general", "end"];
+pub const INTEGER_HEADERS: [&str; 3] = ["integers", "integer", "end"];
+pub const SEMI_HEADERS: [&str; 4] = ["semi-continuous", "semis", "semi", "end"];
+pub const SOS_HEADERS: [&str; 2] = ["sos", "end"];
 
 pub const VALID_LP_CHARS: [char; 18] = ['!', '#', '$', '%', '&', '(', ')', '_', ',', '.', ';', '?', '@', '\\', '{', '}', '~', '\''];
 
