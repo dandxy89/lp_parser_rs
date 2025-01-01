@@ -4,6 +4,8 @@
 //! appear in comments at the start of LP files.
 //!
 
+use std::borrow::Cow;
+
 use nom::{
     branch::alt,
     bytes::complete::{tag, take_until},
@@ -59,10 +61,10 @@ fn parse_single_comment(input: &str) -> IResult<&str, &str> {
 /// * `IResult<&str, Option<&str>>` - A result containing the remaining unparsed input and an
 ///   optional string slice of the last comment found. If no comments are found, returns `None`.
 ///
-pub fn parse_problem_name(input: &str) -> IResult<&str, Option<&str>> {
+pub fn parse_problem_name(input: &str) -> IResult<&str, Option<Cow<'_, str>>> {
     let (remaining, comments) = many0(parse_single_comment)(input)?;
-    let last_comment = comments.last().copied();
-    Ok((remaining, last_comment))
+    let problem_name = comments.last().copied().map(Cow::Borrowed);
+    Ok((remaining, problem_name))
 }
 
 #[cfg(test)]

@@ -28,7 +28,7 @@ use crate::{
 };
 
 #[cfg_attr(feature = "diff", derive(diff::Diff), diff(attr(#[derive(Debug, PartialEq)])))]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Debug, Default, PartialEq)]
 /// Represents a Linear Programming (LP) problem.
 ///
@@ -44,7 +44,7 @@ use crate::{
 ///
 pub struct LpProblem<'a> {
     /// An optional reference to a string slice representing the name of the LP problem.
-    pub name: Option<&'a str>,
+    pub name: Option<Cow<'a, str>>,
     /// The optimization sense of the problem, indicating whether it is a minimization or maximization problem.
     pub sense: Sense,
     /// A `HashMap` where the keys are the names of the objectives and the values are `Objective` structs.
@@ -56,19 +56,18 @@ pub struct LpProblem<'a> {
 }
 
 impl<'a> LpProblem<'a> {
-    // TODO:
-    // add_constraint
-    // add_constraints
-    // add_objective
-    // add_variable
-    // set_variable_bound
-    // with_problem_name
-
     #[must_use]
     #[inline]
     /// Initialise a new `Self`
     pub fn new() -> Self {
         Self::default()
+    }
+
+    #[must_use]
+    #[inline]
+    /// Override the problem name
+    pub fn with_problem_name(self, problem_name: Cow<'a, str>) -> Self {
+        Self { name: Some(problem_name), ..self }
     }
 
     #[must_use]
@@ -81,8 +80,8 @@ impl<'a> LpProblem<'a> {
     #[must_use]
     #[inline]
     /// Returns the name of the LP Problem
-    pub const fn name(&self) -> Option<&str> {
-        self.name
+    pub fn name(&self) -> Option<&str> {
+        self.name.as_deref()
     }
 
     #[must_use]
@@ -121,12 +120,61 @@ impl<'a> LpProblem<'a> {
         // specification of lifetimes.
         TryFrom::try_from(input)
     }
+
+    #[inline]
+    /// Add a new variable to the problem.
+    ///
+    /// If a variable with the same name already exists, it will be replaced.
+    pub fn add_variable(&mut self, variable: Variable<'a>) {
+        self.variables.insert(variable.name, variable);
+    }
+
+    #[inline]
+    /// Add a new constraint to the problem.
+    ///
+    /// If a constraint with the same name already exists, it will be replaced.
+    pub fn add_constraint(&mut self, constraint: Constraint<'a>) {
+        let name = constraint.name().as_ref().to_owned();
+
+        if let Constraint::Standard { coefficients, .. } = &constraint {
+            for coeff in coefficients {
+                if !self.variables.contains_key(coeff.var_name) {
+                    self.variables.insert(coeff.var_name, Variable::new(coeff.var_name));
+                }
+            }
+        }
+
+        if let Constraint::SOS { weights, .. } = &constraint {
+            for coeff in weights {
+                if !self.variables.contains_key(coeff.var_name) {
+                    self.variables.insert(coeff.var_name, Variable::new(coeff.var_name).with_var_type(VariableType::SOS));
+                }
+            }
+        }
+
+        self.constraints.insert(Cow::Owned(name), constraint);
+    }
+
+    #[inline]
+    /// Add a new objective to the problem.
+    ///
+    /// If an objective with the same name already exists, it will be replaced.
+    pub fn add_objective(&mut self, objective: Objective<'a>) {
+        for coeff in &objective.coefficients {
+            if !self.variables.contains_key(coeff.var_name) {
+                self.variables.insert(coeff.var_name, Variable::new(coeff.var_name));
+            }
+        }
+
+        let name = objective.name.clone();
+        self.objectives.insert(name, objective);
+    }
 }
 
 impl std::fmt::Display for LpProblem<'_> {
     #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "Problem: {}", self.name.unwrap_or("unnamed LpProblem"))?;
+        writeln!(f, "Problem: {}", self.name.as_ref().unwrap_or(&Cow::Borrowed("unnamed LpProblem")))?;
         writeln!(f, "Sense: {}", self.sense)?;
         writeln!(f, "Objectives: {}", self.objectives.len())?;
         writeln!(f, "Constraints: {}", self.constraints.len())?;
@@ -244,9 +292,98 @@ impl<'a> TryFrom<&'a str> for LpProblem<'a> {
     }
 }
 
+#[cfg(feature = "serde")]
+impl<'de: 'a, 'a> serde::Deserialize<'de> for LpProblem<'a> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        // Define the fields we expect to deserialize
+        #[derive(serde::Deserialize)]
+        #[serde(field_identifier, rename_all = "lowercase")]
+        enum Field {
+            Constraints,
+            Name,
+            Objectives,
+            Sense,
+            Variables,
+        }
+
+        // Create a visitor to handle the deserialization
+        struct LpProblemVisitor<'a>(std::marker::PhantomData<LpProblem<'a>>);
+
+        impl<'de: 'a, 'a> serde::de::Visitor<'de> for LpProblemVisitor<'a> {
+            type Value = LpProblem<'a>;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("struct LpProblem")
+            }
+
+            fn visit_map<V: serde::de::MapAccess<'de>>(self, mut map: V) -> Result<LpProblem<'a>, V::Error> {
+                let mut name: Option<Cow<'_, str>> = None;
+                let mut sense = None;
+                let mut objectives = None;
+                let mut constraints = None;
+                let mut variables = None;
+
+                while let Some(key) = map.next_key()? {
+                    match key {
+                        Field::Name => {
+                            if name.is_some() {
+                                return Err(serde::de::Error::duplicate_field("name"));
+                            }
+                            name = map.next_value()?;
+                        }
+                        Field::Sense => {
+                            if sense.is_some() {
+                                return Err(serde::de::Error::duplicate_field("sense"));
+                            }
+                            sense = Some(map.next_value()?);
+                        }
+                        Field::Objectives => {
+                            if objectives.is_some() {
+                                return Err(serde::de::Error::duplicate_field("objectives"));
+                            }
+                            objectives = Some(map.next_value()?);
+                        }
+                        Field::Constraints => {
+                            if constraints.is_some() {
+                                return Err(serde::de::Error::duplicate_field("constraints"));
+                            }
+                            constraints = Some(map.next_value()?);
+                        }
+                        Field::Variables => {
+                            if variables.is_some() {
+                                return Err(serde::de::Error::duplicate_field("variables"));
+                            }
+                            variables = Some(map.next_value()?);
+                        }
+                    }
+                }
+
+                Ok(LpProblem {
+                    name,
+                    sense: sense.unwrap_or_default(),
+                    objectives: objectives.unwrap_or_default(),
+                    constraints: constraints.unwrap_or_default(),
+                    variables: variables.unwrap_or_default(),
+                })
+            }
+        }
+
+        const FIELDS: &[&str] = &["name", "sense", "objectives", "constraints", "variables"];
+        deserializer.deserialize_struct("LpProblem", FIELDS, LpProblemVisitor(std::marker::PhantomData))
+    }
+}
+
 #[cfg(test)]
 mod test {
-    use crate::problem::LpProblem;
+    use std::borrow::Cow;
+
+    use crate::{
+        model::{Coefficient, ComparisonOp, Constraint, Objective, Sense, Variable, VariableType},
+        problem::LpProblem,
+    };
 
     const COMPLETE_INPUT: &str = "\\ This file has been generated by Author
 \\ ENCODING=ISO-8859-1
@@ -298,7 +435,6 @@ x2 >= 1
 100 <= x2dfsdf <= -1
 End";
 
-    #[cfg(feature = "serde")]
     #[test]
     fn test_small_input() {
         let problem = LpProblem::try_from(SMALL_INPUT).expect("test case not to fail");
@@ -306,6 +442,7 @@ End";
         assert_eq!(problem.objectives.len(), 3);
         assert_eq!(problem.constraints.len(), 3);
 
+        #[cfg(feature = "serde")]
         insta::assert_yaml_snapshot!(&problem, {
             ".objectives" => insta::sorted_redaction(),
             ".constraints" => insta::sorted_redaction(),
@@ -313,7 +450,6 @@ End";
         });
     }
 
-    #[cfg(feature = "serde")]
     #[test]
     fn test_minified_example() {
         let problem = LpProblem::try_from(COMPLETE_INPUT).expect("test case not to fail");
@@ -321,6 +457,7 @@ End";
         assert_eq!(problem.objectives.len(), 3);
         assert_eq!(problem.constraints.len(), 5);
 
+        #[cfg(feature = "serde")]
         insta::assert_yaml_snapshot!(&problem, {
             ".objectives" => insta::sorted_redaction(),
             ".constraints" => insta::sorted_redaction(),
@@ -336,5 +473,43 @@ End";
         let serialized_problem = serde_json::to_string(&problem).expect("test case not to fail");
         // Deserialise
         let _: LpProblem<'_> = serde_json::from_str(&serialized_problem).expect("test case not to fail");
+    }
+
+    #[test]
+    fn test_add_variable() {
+        let mut problem = LpProblem::new();
+        let var = Variable::new("x1").with_var_type(VariableType::Binary);
+
+        problem.add_variable(var);
+        assert_eq!(problem.variable_count(), 1);
+        assert!(problem.variables.contains_key("x1"));
+    }
+
+    #[test]
+    fn test_add_constraint() {
+        let mut problem = LpProblem::new();
+        let constraint = Constraint::Standard {
+            name: Cow::Borrowed("c1"),
+            coefficients: vec![Coefficient { var_name: "x1", coefficient: 1.0 }, Coefficient { var_name: "x2", coefficient: 2.0 }],
+            operator: ComparisonOp::LTE,
+            rhs: 5.0,
+        };
+
+        problem.add_constraint(constraint);
+        assert_eq!(problem.constraint_count(), 1);
+        assert_eq!(problem.variable_count(), 2);
+    }
+
+    #[test]
+    fn test_add_objective() {
+        let mut problem = LpProblem::new().with_sense(Sense::Minimize).with_problem_name(Cow::Borrowed("test"));
+        let objective = Objective {
+            name: Cow::Borrowed("obj1"),
+            coefficients: vec![Coefficient { var_name: "x1", coefficient: 1.0 }, Coefficient { var_name: "x2", coefficient: -1.0 }],
+        };
+
+        problem.add_objective(objective);
+        assert_eq!(problem.objective_count(), 1);
+        assert_eq!(problem.variable_count(), 2);
     }
 }
