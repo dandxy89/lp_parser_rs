@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.0](https://github.com/dandxy89/lp_parser_rs/compare/v2.0.0...v2.1.0) (2025-01-01)
+
+
+### Features
+
+* Adding documentation ([73b5702](https://github.com/dandxy89/lp_parser_rs/commit/73b57022ba93d8fff9ab5ed1567ad23463944327))
+
 ## [2.0.0](https://github.com/dandxy89/lp_parser_rs/compare/v1.4.1...v2.0.0) (2025-01-01)
 
 
