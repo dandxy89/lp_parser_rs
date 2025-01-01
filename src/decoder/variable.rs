@@ -1,3 +1,6 @@
+//! Parser for variable declarations and bounds in LP files.
+//!
+
 use nom::{character::complete::multispace0, error::ErrorKind, multi::many0, IResult};
 
 use crate::{
@@ -8,12 +11,14 @@ use crate::{
 };
 
 #[inline]
+/// Checks if the input string is the start of a section header.
 fn is_section_header(input: &str) -> bool {
     let lower_input = input.trim().to_lowercase();
     ALL_BOUND_HEADERS.iter().any(|&header| lower_input.starts_with(header))
 }
 
 #[inline]
+/// Parses a variable name that is not the start of a section header.
 fn variable_not_header(input: &str) -> IResult<&str, &str> {
     let (input, _) = multispace0(input)?;
     if is_section_header(input) {
@@ -23,11 +28,13 @@ fn variable_not_header(input: &str) -> IResult<&str, &str> {
 }
 
 #[inline]
+/// Parses a list of variables until a section header is encountered.
 pub fn parse_variable_list(input: &str) -> IResult<&str, Vec<&str>> {
     many0(variable_not_header)(input)
 }
 
 #[inline]
+/// Parses a bounds section from the input string.
 pub fn parse_bounds_section(input: &str) -> IResult<&str, Vec<(&str, VariableType)>> {
     let (remaining, section) = BoundsParser::parse_section(input)?;
     log_remaining("Failed to parse bounds fully", remaining);
@@ -35,6 +42,7 @@ pub fn parse_bounds_section(input: &str) -> IResult<&str, Vec<(&str, VariableTyp
 }
 
 #[inline]
+/// Parses a binary variables section.
 pub fn parse_binary_section(input: &str) -> IResult<&str, Vec<&str>> {
     let (remaining, section) = BinaryParser::parse_section(input)?;
     log_remaining("Failed to parse binaries fully", remaining);
@@ -42,6 +50,7 @@ pub fn parse_binary_section(input: &str) -> IResult<&str, Vec<&str>> {
 }
 
 #[inline]
+/// Parses a generals variables section.
 pub fn parse_generals_section(input: &str) -> IResult<&str, Vec<&str>> {
     let (remaining, section) = GeneralParser::parse_section(input)?;
     log_remaining("Failed to parse generals fully", remaining);
@@ -49,6 +58,7 @@ pub fn parse_generals_section(input: &str) -> IResult<&str, Vec<&str>> {
 }
 
 #[inline]
+/// Parses a general integer variables section.
 pub fn parse_integer_section(input: &str) -> IResult<&str, Vec<&str>> {
     let (remaining, section) = IntegerParser::parse_section(input)?;
     log_remaining("Failed to parse integers fully", remaining);
@@ -56,6 +66,7 @@ pub fn parse_integer_section(input: &str) -> IResult<&str, Vec<&str>> {
 }
 
 #[inline]
+/// Parses a semi-continuous variables section.
 pub fn parse_semi_section(input: &str) -> IResult<&str, Vec<&str>> {
     let (remaining, section) = SemiParser::parse_section(input)?;
     log_remaining("Failed to parse semi-continuous fully", remaining);

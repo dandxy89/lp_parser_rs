@@ -1,3 +1,10 @@
+//! Parser for Special Ordered Set (SOS) constraints in LP files.
+//!
+//! This module provides functionality for parsing SOS constraints, which are special
+//! constraints that define relationships between sets of variables. The module supports
+//! both Type 1 (SOS1) and Type 2 (SOS2) constraints with associated weights.
+//!
+
 use std::{
     borrow::Cow,
     collections::{hash_map::Entry, HashMap},
@@ -20,11 +27,13 @@ use crate::{
 };
 
 #[inline]
+/// Parses the SOS constraint type (S1 or S2).
 fn parse_sos_type(input: &str) -> IResult<&str, SOSType> {
     alt((map(tag_no_case("S1"), |_| SOSType::S1), map(tag_no_case("S2"), |_| SOSType::S2)))(input)
 }
 
 #[inline]
+/// Parses a variable-weight pair for an SOS constraint.
 fn parse_sos_weight(input: &str) -> IResult<&str, Coefficient> {
     map(tuple((preceded(multispace0, parse_variable), preceded(char(':'), parse_num_value))), |(var_name, coefficient)| Coefficient {
         var_name,
@@ -32,6 +41,7 @@ fn parse_sos_weight(input: &str) -> IResult<&str, Coefficient> {
     })(input)
 }
 
+/// Type alias for the parsed result of SOS constraints.
 type ParsedConstraints<'a> = IResult<&'a str, (HashMap<Cow<'a, str>, Constraint<'a>>, HashMap<&'a str, Variable<'a>>)>;
 
 #[inline]

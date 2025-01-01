@@ -1,3 +1,7 @@
+//! This module provides a collection of specialized parsers for different elements
+//! of LP files. Each sub module handles a specific aspect of the LP format,
+//! working together to provide comprehensive parsing capabilities.
+
 pub mod coefficient;
 pub mod constraint;
 pub mod number;

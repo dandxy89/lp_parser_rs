@@ -32,6 +32,7 @@ use crate::{
 };
 
 #[inline]
+/// Parses a constraint section header from an LP format input string.
 pub fn parse_constraint_header(input: &str) -> IResult<&str, ()> {
     value(
         (),

@@ -1,3 +1,12 @@
+//! Parsers for numeric values and comparison operators in LP files.
+//!
+//! This module provides parsers for handling various numeric formats including:
+//! - Regular numbers (integer and floating-point)
+//! - Scientific notation
+//! - Infinity values (positive and negative)
+//! - Comparison operators
+//!
+
 use nom::{
     branch::alt,
     bytes::complete::{tag, tag_no_case, take},
@@ -11,6 +20,7 @@ use nom::{
 use crate::model::ComparisonOp;
 
 #[inline]
+/// Parses infinity values from the input string.
 fn parse_infinity(input: &str) -> IResult<&str, f64> {
     map(
         tuple((
@@ -26,6 +36,7 @@ fn parse_infinity(input: &str) -> IResult<&str, f64> {
 }
 
 #[inline]
+/// Parses regular numeric values from the input string.
 fn parse_number(input: &str) -> IResult<&str, &str> {
     let (remainder, matched) = recognize(tuple((
         // Optional sign at the start
@@ -46,11 +57,13 @@ fn parse_number(input: &str) -> IResult<&str, &str> {
 }
 
 #[inline]
+/// Parses a numeric value with optional whitespace, handling both regular numbers and infinity.
 pub fn parse_num_value(input: &str) -> IResult<&str, f64> {
     preceded(multispace0, alt((parse_infinity, map(parse_number, |v| v.parse::<f64>().unwrap_or_default()))))(input)
 }
 
 #[inline]
+/// Parses comparison operators used in constraints.
 pub fn parse_cmp_op(input: &str) -> IResult<&str, ComparisonOp> {
     preceded(
         multispace0,

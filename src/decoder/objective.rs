@@ -1,3 +1,12 @@
+//! Parser for objective functions in LP files.
+//!
+//! This module handles the parsing of objective function definitions, including:
+//! - Single and multiple objective functions
+//! - Named and unnamed objectives
+//! - Coefficient and variable parsing
+//! - Multi-line objective definitions
+//!
+
 use std::{
     borrow::Cow,
     collections::{hash_map::Entry, HashMap},
@@ -19,15 +28,18 @@ use crate::{
 };
 
 #[inline]
+/// Checks if a string starts with a new objective function definition.
 fn is_new_objective(input: &str) -> IResult<&str, ()> {
     map(tuple((multispace0, parse_variable, multispace0, char(':'))), |_| ())(input)
 }
 
 #[inline]
+/// Parses continuation lines of an objective function.
 fn objective_continuations(input: &str) -> IResult<&str, Vec<Coefficient<'_>>> {
     preceded(tuple((multispace1, not(peek(is_new_objective)))), many1(preceded(space0, parse_coefficient)))(input)
 }
 
+/// Type alias for the parsed result of objectives.
 type ParsedObjectives<'a> = IResult<&'a str, (HashMap<Cow<'a, str>, Objective<'a>>, HashMap<&'a str, Variable<'a>>)>;
 
 #[inline]

@@ -1,3 +1,12 @@
+//! Traits and utilities for section-based parsing in LP files.
+//!
+//! This module provides the core trait definition and implementations for parsing
+//! different sections of LP files. It includes:
+//! - The `SectionParser` trait for section-based parsing
+//! - Common parsing utilities for variables and bounds
+//! - Implementations for various section types (Binary, Bounds, General, etc.)
+//!
+
 use nom::{
     branch::alt,
     bytes::complete::{tag, tag_no_case, take_while1},
@@ -34,10 +43,13 @@ use crate::{
 /// - `parse_section`: Parses a section, including its header and content, and returns the parsed content as type `T`.
 ///
 pub trait SectionParser<'a, T> {
+    /// Returns a static list of section headers.
     fn section_headers() -> &'static [&'static str];
+    /// Parses the content of a section and returns the result as a type `T`.
     fn parse_section_content(input: &'a str) -> IResult<&'a str, T>;
 
     #[inline]
+    /// Checks if the input starts with any of the section headers, ignoring case.
     fn is_section_header(input: &str) -> IResult<&str, &str> {
         let headers = Self::section_headers();
         for &header in headers {
@@ -49,6 +61,7 @@ pub trait SectionParser<'a, T> {
     }
 
     #[inline]
+    /// Parses a section, including its header and content, and returns the parsed content as type `T`.
     fn parse_section(input: &'a str) -> IResult<&'a str, T> {
         map(
             tuple((multispace0, Self::is_section_header, opt(preceded(multispace0, char(':'))), multispace0, Self::parse_section_content)),
@@ -58,6 +71,10 @@ pub trait SectionParser<'a, T> {
 }
 
 #[macro_export]
+/// Macro to implement the SectionParser trait.
+///
+/// Provides a convenient way to implement the SectionParser trait
+/// for different section types with minimal boilerplate.
 macro_rules! impl_section_parser {
     ($parser_type:ty, $return_type:ty, $headers:expr, $content_parser:expr) => {
         impl<'a> SectionParser<'a, $return_type> for $parser_type {
@@ -75,11 +92,13 @@ macro_rules! impl_section_parser {
 }
 
 #[inline]
+/// Checks if a character is valid in LP file identifiers.
 fn is_valid_lp_char(c: char) -> bool {
     c.is_alphanumeric() || VALID_LP_FILE_CHARS.contains(&c)
 }
 
 #[inline]
+/// Parses a variable name from the input.
 pub fn parse_variable(input: &str) -> IResult<&str, &str> {
     take_while1(is_valid_lp_char)(input)
 }

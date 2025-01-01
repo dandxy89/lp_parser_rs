@@ -33,6 +33,8 @@
 //! - `lp_problem`: Main problem representation and parsing
 //!
 
+// #![deny(missing_docs)]
+
 pub mod decoder;
 pub mod lp_problem;
 pub mod model;
@@ -40,8 +42,10 @@ pub mod parser;
 
 use nom::{branch::alt, bytes::complete::tag_no_case, error::ErrorKind, IResult};
 
+/// Headers that indicate the beginning of a constraint section in an LP file.
 pub const CONSTRAINT_HEADERS: [&str; 5] = ["subject to", "such that", "s.t.", "st:", "st"];
 
+/// All possible section headers that can appear in an LP file's bounds section.
 pub const ALL_BOUND_HEADERS: [&str; 14] = [
     "bounds",
     "bound",
@@ -58,11 +62,23 @@ pub const ALL_BOUND_HEADERS: [&str; 14] = [
     "semi",
     "end",
 ];
+
+/// Headers that indicate the beginning of a binary variable section.
 pub const BINARY_HEADERS: [&str; 4] = ["binaries", "binary", "bin", "end"];
+
+/// Header marking the end of an LP file or section.
 pub const END_HEADER: [&str; 1] = ["end"];
+
+/// Headers that indicate the beginning of a general integer variable section.
 pub const GENERAL_HEADERS: [&str; 4] = ["generals", "general", "gen", "end"];
+
+/// Headers that indicate the beginning of an integer variable section.
 pub const INTEGER_HEADERS: [&str; 3] = ["integers", "integer", "end"];
+
+/// Headers that indicate the beginning of a semi-continuous variable section.
 pub const SEMI_HEADERS: [&str; 4] = ["semi-continuous", "semis", "semi", "end"];
+
+/// Headers that indicate the beginning of a Special Ordered Set (SOS) constraint section.
 pub const SOS_HEADERS: [&str; 2] = ["sos", "end"];
 
 /// Valid characters that can appear in LP file elements.
@@ -117,7 +133,7 @@ fn take_until_cased<'a>(tag: &'a str) -> impl Fn(&'a str) -> IResult<&'a str, &'
 
 #[allow(clippy::manual_try_fold)]
 #[inline]
-pub fn take_until_parser<'a>(tags: &'a [&'a str]) -> impl Fn(&'a str) -> IResult<&'a str, &'a str> + 'a {
+pub(crate) fn take_until_parser<'a>(tags: &'a [&'a str]) -> impl Fn(&'a str) -> IResult<&'a str, &'a str> + 'a {
     move |input| {
         tags.iter()
             .map(|&tag| take_until_cased(tag))
@@ -126,31 +142,37 @@ pub fn take_until_parser<'a>(tags: &'a [&'a str]) -> impl Fn(&'a str) -> IResult
 }
 
 #[inline]
+/// Checks if the input string starts with a binary section header.
 pub fn is_binary_section(input: &str) -> IResult<&str, &str> {
     alt((tag_no_case("binaries"), tag_no_case("binary"), tag_no_case("bin")))(input)
 }
 
 #[inline]
+/// Checks if the input string starts with a bounds section header.
 pub fn is_bounds_section(input: &str) -> IResult<&str, &str> {
     alt((tag_no_case("bounds"), tag_no_case("bound")))(input)
 }
 
 #[inline]
+/// Checks if the input string starts with a generals section header.
 pub fn is_generals_section(input: &str) -> IResult<&str, &str> {
     alt((tag_no_case("generals"), tag_no_case("general"), tag_no_case("gen")))(input)
 }
 
 #[inline]
+/// Checks if the input string starts with a integers section header.
 pub fn is_integers_section(input: &str) -> IResult<&str, &str> {
     alt((tag_no_case("integers"), tag_no_case("integer")))(input)
 }
 
 #[inline]
+/// Checks if the input string starts with a semi-continuous section header.
 pub fn is_semi_section(input: &str) -> IResult<&str, &str> {
     alt((tag_no_case("semis"), tag_no_case("semi")))(input)
 }
 
 #[inline]
+/// Checks if the input string starts with a SOS constraints section header.
 pub fn is_sos_section(input: &str) -> IResult<&str, &str> {
     tag_no_case("sos")(input)
 }

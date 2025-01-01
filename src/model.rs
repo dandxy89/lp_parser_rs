@@ -82,7 +82,9 @@ impl std::fmt::Display for Sense {
 #[derive(Debug, PartialEq, Eq)]
 /// Represents the type of SOS (System of Systems) with variants `S1` and `S2`.
 pub enum SOSType {
+    /// At most one variable in the set can be non-zero.
     S1,
+    /// At most two adjacent variables (in terms of weights) can be non-zero.
     S2,
 }
 
@@ -298,17 +300,20 @@ pub struct Variable<'a> {
 impl<'a> Variable<'a> {
     #[must_use]
     #[inline]
+    /// Initialise a new `Variable`.
     pub fn new(name: &'a str) -> Self {
         Self { name, var_type: VariableType::default() }
     }
 
     #[inline]
+    /// Setter to override `VariableType`.
     pub fn set_var_type(&mut self, var_type: VariableType) {
         self.var_type = var_type;
     }
 
     #[must_use]
     #[inline]
+    /// Builder method for constructing a `Variable` with a non-default `VariableType`.
     pub const fn with_var_type(self, var_type: VariableType) -> Self {
         Self { var_type, ..self }
     }
