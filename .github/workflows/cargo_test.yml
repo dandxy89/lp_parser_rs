@@ -1,22 +1,14 @@
 on:
   push:
-    branches:
-      - "main"
     paths:
       - "**.rs"
-      - "**/Cargo.toml"
-      - "**/Cargo.lock"
-  pull_request:
-    types: [assigned, opened, synchronize, reopened]
-    paths:
-      - "**.rs"
-      - "**/Cargo.toml"
-      - "**/Cargo.lock"
+      - "**.pest"
 
 name: Cargo Test
 
 env:
   CARGO_TERM_COLOR: always
+  # `insta` will not write new snapshot files
   CI: true
 
 concurrency:
@@ -28,10 +20,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/cache@v4
         with:
-          components: llvm-tools-preview
-      - uses: taiki-e/install-action@cargo-llvm-cov
-      - uses: taiki-e/install-action@nextest
-      - name: Collect coverage data
-        run: cargo llvm-cov nextest --all-features
+          path: ~/.cargo/registry
+          key: "${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: "${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}"
+      - uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+      - name: Test
+        run: cargo test --all-features
