@@ -23,7 +23,6 @@ diff-struct = { version = "0.5", optional = true }
 log = "0.4"
 nom = { version = "7.1" }
 serde = { version = "1.0", features = ["derive"], optional = true }
-thiserror = "2.0"
 unique_id = { version = "0.1", features = ["sequence"] }
 
 [dev-dependencies]
