@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.1](https://github.com/dandxy89/lp_parser_rs/compare/v1.4.0...v1.4.1) (2025-01-01)
+
+
+### Bug Fixes
+
+* Updating imports and removing unwanted lifetime annotations ([8baddda](https://github.com/dandxy89/lp_parser_rs/commit/8badddaf3051a5fb78317da1186aac485803fe0e))
+
 ## [1.4.0](https://github.com/dandxy89/lp_parser_rs/compare/v1.3.2...v1.4.0) (2025-01-01)
 
 
