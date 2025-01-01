@@ -1,0 +1,60 @@
+---
+source: tests/test_nom_from_file.rs
+expression: parsed
+---
+name: ~
+sense: Minimize
+objectives:
+  obj:
+    name: obj
+    coefficients:
+      - var_name: x1
+        coefficient: 3
+      - var_name: x2
+        coefficient: 5
+      - var_name: x3
+        coefficient: 6
+      - var_name: x4
+        coefficient: 9
+      - var_name: x5
+        coefficient: 10
+      - var_name: x6
+        coefficient: 10
+constraints:
+  c003:
+    type: Standard
+    name: c003
+    coefficients:
+      - var_name: x1
+        coefficient: -5
+      - var_name: x2
+        coefficient: -1
+      - var_name: x3
+        coefficient: 4
+      - var_name: x4
+        coefficient: -2
+      - var_name: x5
+        coefficient: 2
+      - var_name: x6
+        coefficient: -1
+    operator: GTE
+    rhs: 3
+variables:
+  x1:
+    name: x1
+    var_type: Binary
+  x2:
+    name: x2
+    var_type: Binary
+  x3:
+    name: x3
+    var_type: Binary
+  x4:
+    name: x4
+    var_type: Binary
+  x5:
+    name: x5
+    var_type: Binary
+  x6:
+    name: x6
+    var_type: Binary

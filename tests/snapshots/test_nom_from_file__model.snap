@@ -1,0 +1,38 @@
+---
+source: tests/test_nom_from_file.rs
+expression: parsed
+---
+name: "Problem name: ilog.cplex"
+sense: Minimize
+objectives:
+  obj:
+    name: obj
+    coefficients:
+      - var_name: x
+        coefficient: -1
+      - var_name: y
+        coefficient: -1
+constraints:
+  blah:
+    type: Standard
+    name: blah
+    coefficients:
+      - var_name: x
+        coefficient: 1
+      - var_name: y
+        coefficient: -1
+    operator: EQ
+    rhs: 0
+variables:
+  x:
+    name: x
+    var_type:
+      DoubleBound:
+        - 0
+        - 1
+  y:
+    name: y
+    var_type:
+      DoubleBound:
+        - 0.2
+        - 1

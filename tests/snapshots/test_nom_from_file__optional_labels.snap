@@ -1,0 +1,38 @@
+---
+source: tests/test_nom_from_file.rs
+expression: parsed
+---
+name: " LP format example"
+sense: Minimize
+objectives:
+  OBJECTIVE_3:
+    name: OBJECTIVE_3
+    coefficients:
+      - var_name: x
+        coefficient: 1
+      - var_name: y
+        coefficient: 10
+constraints:
+  CONSTRAINT_4:
+    type: Standard
+    name: CONSTRAINT_4
+    coefficients:
+      - var_name: x
+        coefficient: -1
+      - var_name: y
+        coefficient: 2
+    operator: GTE
+    rhs: 1
+variables:
+  a:
+    name: a
+    var_type: Binary
+  x:
+    name: x
+    var_type: Binary
+  y:
+    name: y
+    var_type: Binary
+  z:
+    name: z
+    var_type: Binary

@@ -1,0 +1,58 @@
+---
+source: tests/test_nom_from_file.rs
+expression: parsed
+---
+name: " Comment line"
+sense: Minimize
+objectives:
+  obj1:
+    name: obj1
+    coefficients:
+      - var_name: x
+        coefficient: -0.5
+      - var_name: y
+        coefficient: -2
+      - var_name: z
+        coefficient: -8
+  obj2:
+    name: obj2
+    coefficients:
+      - var_name: y
+        coefficient: 1
+      - var_name: x
+        coefficient: 1
+      - var_name: z
+        coefficient: 1
+constraints:
+  cons1:
+    type: Standard
+    name: cons1
+    coefficients:
+      - var_name: x
+        coefficient: -199
+      - var_name: y
+        coefficient: 10
+      - var_name: z
+        coefficient: 1
+    operator: LTE
+    rhs: 0
+  cons2:
+    type: Standard
+    name: cons2
+    coefficients:
+      - var_name: y
+        coefficient: 1
+      - var_name: z
+        coefficient: 1
+    operator: GTE
+    rhs: 0
+variables:
+  x:
+    name: x
+    var_type: Binary
+  y:
+    name: y
+    var_type: Binary
+  z:
+    name: z
+    var_type: Binary

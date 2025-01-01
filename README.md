@@ -8,7 +8,7 @@
 
 ![Logo](resources/Screenshot.png)
 
-A robust Rust parser for Linear Programming (LP) files, built on the [PEST](https://docs.rs/pest/latest/pest/) parsing framework. This crate provides comprehensive support for parsing and analyzing LP files according to major industry specifications.
+A robust Rust parser for Linear Programming (LP) files, built on the [PEST](https://docs.rs/pest/latest/pest/) parsing framework. This crate provides comprehensive support for parsing and analysing LP files according to major industry specifications.
 
 ### Supported Specifications
 
@@ -69,6 +69,16 @@ git clone https://github.com/dandxy89/lp_parser_rs.git
 cargo run --release -- {{ /path/to/your/file.lp }}
 # Compare two LP files (enabling the 'diff' feature)
 cargo run --release --features diff -- {{ /path/to/your/file.lp }} {{ /path/to/your/other/file.lp }}
+```
+
+### Using the Nom-enabled Parser
+
+```bash
+git clone https://github.com/dandxy89/lp_parser_rs.git
+# Dissemble a single LP file
+cargo run --bin nom_lp_parser --release --features nom -- {{ /path/to/your/file.lp }}
+# Compare two LP files (enabling the 'diff' feature)
+cargo run --bin nom_lp_parser --release --features nom,diff -- {{ /path/to/your/file.lp }} {{ /path/to/your/other/file.lp }}
 ```
 
 ### Enable Optional Features
