@@ -116,8 +116,6 @@ impl<'a> LpProblem<'a> {
     /// Parse a `Self` from a string slice
     pub fn parse(input: &'a str) -> Result<Self, nom::Err<nom::error::Error<&'a str>>> {
         log::debug!("Starting to parse LP problem");
-        // Ideally, we'd have like to have utilised `FromStr` but the trait does not allow the
-        // specification of lifetimes.
         TryFrom::try_from(input)
     }
 
