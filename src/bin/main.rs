@@ -1,30 +1,22 @@
 use std::{env, error::Error, path::PathBuf};
 
-use lp_parser_rs::{
-    model::lp_problem::LPProblem,
-    parse::{parse_file, parse_lp_file},
-};
-
-fn parse_lp(path: &str) -> Result<LPProblem, Box<dyn Error>> {
-    let path = PathBuf::from(path);
-    let file = parse_file(&path)?;
-    let problem = parse_lp_file(&file)?;
-    Ok(problem)
-}
+use lp_parser_rs::{lp_problem::LpProblem, parser::parse_file};
 
 fn dissemble_single_file(path: &str) -> Result<(), Box<dyn Error>> {
-    println!("Attempting to parse {path}");
-    let problem = parse_lp(path)?;
+    let path = PathBuf::from(path);
+    let input = parse_file(&path)?;
+
+    let problem = LpProblem::parse(&input).unwrap();
 
     // Print the parsed LP problem
     println!("Parsed LP Problem:");
-    if let Some(name) = problem.problem_name {
+    if let Some(name) = problem.name() {
         println!("Problem name: {name}");
     }
-    println!("Sense: {:?}", problem.problem_sense);
-    println!("Objectives count={}", problem.objectives.len());
-    println!("Constraint count={}", problem.constraints.len());
-    println!("Variables count={}", problem.variables.len());
+    println!("Sense: {:?}", problem.sense);
+    println!("Objectives count={}", problem.objective_count());
+    println!("Constraint count={}", problem.constraint_count());
+    println!("Variables count={}", problem.variable_count());
 
     Ok(())
 }
@@ -33,12 +25,18 @@ fn dissemble_single_file(path: &str) -> Result<(), Box<dyn Error>> {
 fn compare_lp_files(p1: &str, p2: &str) -> Result<(), Box<dyn Error>> {
     println!("Attempting to compare {p1} to {p2}");
     use diff::Diff;
-    use lp_parser_rs::model::lp_problem::LPProblemDiff;
+    use lp_parser_rs::lp_problem::LpProblemDiff;
 
-    let problem1 = parse_lp(p1)?;
-    let problem2 = parse_lp(p2)?;
+    let path = PathBuf::from(p1);
+    let input1 = parse_file(&path)?;
+    let problem1 = LpProblem::parse(&input1).unwrap();
 
-    let difference: LPProblemDiff = problem1.diff(&problem2);
+    let path = PathBuf::from(p2);
+    let input2 = parse_file(&path)?;
+    let problem2 = LpProblem::parse(&input2).unwrap();
+
+    let difference: LpProblemDiff = problem1.diff(&problem2);
+
     // Different variables
     difference.variables.altered.iter().for_each(|(k, v)| {
         println!("Variable {k} changed from {v:?} to {:?}", problem2.variables.get(k).unwrap());
@@ -62,7 +60,7 @@ fn compare_lp_files(p1: &str, p2: &str) -> Result<(), Box<dyn Error>> {
 fn main() -> Result<(), Box<dyn Error>> {
     let mut args = env::args();
     args.next();
-    let path = args.next().ok_or("Usage: lp_parser <PATH_TO_FILE>")?;
+    let path = args.next().ok_or("Usage: nom_lp_parser <PATH_TO_FILE>")?;
 
     match (path, args.next()) {
         (p1, None) => dissemble_single_file(&p1),
