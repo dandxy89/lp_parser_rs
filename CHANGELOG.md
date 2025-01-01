@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.4.0](https://github.com/dandxy89/lp_parser_rs/compare/v1.3.2...v1.4.0) (2025-01-01)
+
+
+### Features
+
+* Adding Nom feature flag ([#88](https://github.com/dandxy89/lp_parser_rs/issues/88)) ([d89b976](https://github.com/dandxy89/lp_parser_rs/commit/d89b976428370b1f62bb92c4d3efb27f947e8ed0))
+
+
+### Miscellaneous Chores
+
+* release 1.4.0 ([cce8326](https://github.com/dandxy89/lp_parser_rs/commit/cce8326881b55e8b070f58665812e2b3e40e1624))
+
 ## [1.3.2](https://github.com/dandxy89/lp_parser_rs/compare/v1.3.1...v1.3.2) (2024-11-19)
 
 
