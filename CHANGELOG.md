@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.1.3](https://github.com/dandxy89/lp_parser_rs/compare/v2.1.2...v2.1.3) (2025-01-01)
+
+
+### Bug Fixes
+
+* Ensure all feature flag docs are also generated ([6e209ca](https://github.com/dandxy89/lp_parser_rs/commit/6e209caaf99e59f8c0be7d3e828decb469afd9d2))
+* Last remaining documentation items ([a717437](https://github.com/dandxy89/lp_parser_rs/commit/a71743741c2291e5b93309ccc7a7136c1ae892ff))
+
 ## [2.1.2](https://github.com/dandxy89/lp_parser_rs/compare/v2.1.1...v2.1.2) (2025-01-01)
 
 
