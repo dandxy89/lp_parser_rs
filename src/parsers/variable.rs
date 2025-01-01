@@ -4,9 +4,9 @@
 use nom::{character::complete::multispace0, error::ErrorKind, multi::many0, IResult};
 
 use crate::{
-    decoder::parser_traits::{parse_variable, BinaryParser, BoundsParser, GeneralParser, IntegerParser, SectionParser as _, SemiParser},
-    log_remaining,
+    log_unparsed_content,
     model::VariableType,
+    parsers::parser_traits::{parse_variable, BinaryParser, BoundsParser, GeneralParser, IntegerParser, SectionParser as _, SemiParser},
     ALL_BOUND_HEADERS,
 };
 
@@ -37,7 +37,7 @@ pub fn parse_variable_list(input: &str) -> IResult<&str, Vec<&str>> {
 /// Parses a bounds section from the input string.
 pub fn parse_bounds_section(input: &str) -> IResult<&str, Vec<(&str, VariableType)>> {
     let (remaining, section) = BoundsParser::parse_section(input)?;
-    log_remaining("Failed to parse bounds fully", remaining);
+    log_unparsed_content("Failed to parse bounds fully", remaining);
     Ok(("", section))
 }
 
@@ -45,7 +45,7 @@ pub fn parse_bounds_section(input: &str) -> IResult<&str, Vec<(&str, VariableTyp
 /// Parses a binary variables section.
 pub fn parse_binary_section(input: &str) -> IResult<&str, Vec<&str>> {
     let (remaining, section) = BinaryParser::parse_section(input)?;
-    log_remaining("Failed to parse binaries fully", remaining);
+    log_unparsed_content("Failed to parse binaries fully", remaining);
     Ok(("", section))
 }
 
@@ -53,7 +53,7 @@ pub fn parse_binary_section(input: &str) -> IResult<&str, Vec<&str>> {
 /// Parses a generals variables section.
 pub fn parse_generals_section(input: &str) -> IResult<&str, Vec<&str>> {
     let (remaining, section) = GeneralParser::parse_section(input)?;
-    log_remaining("Failed to parse generals fully", remaining);
+    log_unparsed_content("Failed to parse generals fully", remaining);
     Ok(("", section))
 }
 
@@ -61,7 +61,7 @@ pub fn parse_generals_section(input: &str) -> IResult<&str, Vec<&str>> {
 /// Parses a general integer variables section.
 pub fn parse_integer_section(input: &str) -> IResult<&str, Vec<&str>> {
     let (remaining, section) = IntegerParser::parse_section(input)?;
-    log_remaining("Failed to parse integers fully", remaining);
+    log_unparsed_content("Failed to parse integers fully", remaining);
     Ok(("", section))
 }
 
@@ -69,13 +69,13 @@ pub fn parse_integer_section(input: &str) -> IResult<&str, Vec<&str>> {
 /// Parses a semi-continuous variables section.
 pub fn parse_semi_section(input: &str) -> IResult<&str, Vec<&str>> {
     let (remaining, section) = SemiParser::parse_section(input)?;
-    log_remaining("Failed to parse semi-continuous fully", remaining);
+    log_unparsed_content("Failed to parse semi-continuous fully", remaining);
     Ok(("", section))
 }
 
 #[cfg(test)]
 mod test {
-    use crate::decoder::variable::{parse_bounds_section, parse_generals_section, parse_integer_section, parse_semi_section};
+    use crate::parsers::variable::{parse_bounds_section, parse_generals_section, parse_integer_section, parse_semi_section};
 
     #[test]
     fn test_bounds() {

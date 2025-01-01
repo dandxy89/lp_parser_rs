@@ -79,7 +79,7 @@ pub fn parse_cmp_op(input: &str) -> IResult<&str, ComparisonOp> {
 
 #[cfg(test)]
 mod tests {
-    use crate::decoder::number::{parse_infinity, parse_num_value, parse_number};
+    use crate::parsers::number::{parse_infinity, parse_num_value, parse_number};
 
     #[test]
     fn test_number_value() {

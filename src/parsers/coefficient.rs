@@ -13,8 +13,8 @@ use nom::{
 };
 
 use crate::{
-    decoder::{number::parse_num_value, parser_traits::parse_variable},
     model::Coefficient,
+    parsers::{number::parse_num_value, parser_traits::parse_variable},
 };
 
 #[inline]

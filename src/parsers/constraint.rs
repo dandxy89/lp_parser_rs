@@ -22,13 +22,13 @@ use nom::{
 use unique_id::{sequence::SequenceGenerator, Generator as _};
 
 use crate::{
-    decoder::{
+    log_unparsed_content,
+    model::{Constraint, Variable},
+    parsers::{
         coefficient::parse_coefficient,
         number::{parse_cmp_op, parse_num_value},
         parser_traits::parse_variable,
     },
-    log_remaining,
-    model::{Constraint, Variable},
 };
 
 #[inline]
@@ -50,7 +50,7 @@ fn parse_comment_marker(input: &str) -> IResult<&str, ()> {
     value((), preceded(multispace0, tag("\\")))(input)
 }
 
-type ParsedConstraints<'a> = IResult<&'a str, (HashMap<Cow<'a, str>, Constraint<'a>>, HashMap<&'a str, Variable<'a>>)>;
+type ConstraintParseResult<'a> = IResult<&'a str, (HashMap<Cow<'a, str>, Constraint<'a>>, HashMap<&'a str, Variable<'a>>)>;
 
 #[inline]
 /// Parses a string input to extract constraints and associated variables.
@@ -70,8 +70,8 @@ type ParsedConstraints<'a> = IResult<&'a str, (HashMap<Cow<'a, str>, Constraint<
 /// * `ParsedConstraints<'a>` - A result containing a tuple of a hashmap of
 ///   constraints and a hashmap of variables, or an error if parsing fails.
 ///
-pub fn parse_constraints<'a>(input: &'a str) -> ParsedConstraints<'a> {
-    let mut constraint_vars: HashMap<&'a str, Variable<'a>> = HashMap::default();
+pub fn parse_constraints<'a>(input: &'a str) -> ConstraintParseResult<'a> {
+    let mut constraint_vars: HashMap<&'a str, Variable<'a>> = HashMap::with_capacity(512);
     let gen = SequenceGenerator;
 
     let parser = map(
@@ -113,6 +113,6 @@ pub fn parse_constraints<'a>(input: &'a str) -> ParsedConstraints<'a> {
     let (remaining, constraints) = many1(parser)(input)?;
     let cons = constraints.into_iter().flatten().map(|c| (Cow::Owned(c.name().to_string()), c)).collect();
 
-    log_remaining("Failed to parse constraints fully", remaining);
+    log_unparsed_content("Failed to parse constraints fully", remaining);
     Ok(("", (cons, constraint_vars)))
 }

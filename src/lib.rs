@@ -29,16 +29,16 @@
 //!
 //! - `model`: Core data structures for LP problems
 //! - `parser`: File parsing utilities
-//! - `decoder`: Component-specific parsers
+//! - `parsers`: Component-specific parsers
 //! - `lp_problem`: Main problem representation and parsing
 //!
 
 // #![deny(missing_docs)]
 
-pub mod decoder;
-pub mod lp_problem;
+pub mod problem;
 pub mod model;
 pub mod parser;
+pub mod parsers;
 
 use nom::{branch::alt, bytes::complete::tag_no_case, error::ErrorKind, IResult};
 
@@ -88,7 +88,7 @@ pub const SOS_HEADERS: [&str; 2] = ["sos", "end"];
 pub const VALID_LP_FILE_CHARS: [char; 18] = ['!', '#', '$', '%', '&', '(', ')', '_', ',', '.', ';', '?', '@', '\\', '{', '}', '~', '\''];
 
 #[inline]
-pub(crate) fn log_remaining(prefix: &str, remaining: &str) {
+pub(crate) fn log_unparsed_content(prefix: &str, remaining: &str) {
     if !remaining.trim().is_empty() {
         log::debug!("{prefix}: {remaining}");
     }

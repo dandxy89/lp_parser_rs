@@ -21,9 +21,9 @@ use nom::{
 };
 
 use crate::{
-    decoder::{number::parse_num_value, parser_traits::parse_variable},
-    log_remaining,
+    log_unparsed_content,
     model::{Coefficient, Constraint, SOSType, Variable, VariableType},
+    parsers::{number::parse_num_value, parser_traits::parse_variable},
 };
 
 #[inline]
@@ -88,7 +88,7 @@ pub fn parse_sos_section<'a>(input: &'a str) -> ParsedConstraints<'a> {
     let (remaining, constraints) = preceded(tuple((multispace0, tag_no_case("SOS"), opt(char(':')), multispace1)), many1(parser))(input)?;
     let constraints = constraints.into_iter().map(|c| (Cow::Owned(c.name().to_string()), c)).collect();
 
-    log_remaining("Failed to parse sos constraints fully", remaining);
+    log_unparsed_content("Failed to parse sos constraints fully", remaining);
     Ok(("", (constraints, constraint_vars)))
 }
 

@@ -1,6 +1,6 @@
 use std::{env, error::Error, path::PathBuf};
 
-use lp_parser_rs::{lp_problem::LpProblem, parser::parse_file};
+use lp_parser_rs::{parser::parse_file, problem::LpProblem};
 
 fn dissemble_single_file(path: &str) -> Result<(), Box<dyn Error>> {
     let path = PathBuf::from(path);
@@ -25,7 +25,7 @@ fn dissemble_single_file(path: &str) -> Result<(), Box<dyn Error>> {
 fn compare_lp_files(p1: &str, p2: &str) -> Result<(), Box<dyn Error>> {
     println!("Attempting to compare {p1} to {p2}");
     use diff::Diff;
-    use lp_parser_rs::lp_problem::LpProblemDiff;
+    use lp_parser_rs::problem::LpProblemDiff;
 
     let path = PathBuf::from(p1);
     let input1 = parse_file(&path)?;

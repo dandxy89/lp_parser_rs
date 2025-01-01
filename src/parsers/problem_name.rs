@@ -67,7 +67,7 @@ pub fn parse_problem_name(input: &str) -> IResult<&str, Option<&str>> {
 
 #[cfg(test)]
 mod test {
-    use crate::decoder::problem_name::parse_problem_name;
+    use crate::parsers::problem_name::parse_problem_name;
 
     #[test]
     fn test_parse_lp_file_comments() {

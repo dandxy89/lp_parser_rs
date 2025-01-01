@@ -6,7 +6,7 @@
 
 use std::{error::Error, path::PathBuf};
 
-use lp_parser_rs::{lp_problem::LpProblem, parser::parse_file};
+use lp_parser_rs::{parser::parse_file, problem::LpProblem};
 
 fn read_file_from_resources(file_name: &str) -> Result<String, Box<dyn Error + 'static>> {
     let mut file_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -95,6 +95,7 @@ generate_test!(milo1, "milo1.lp");
 
 // From <https://github.com/asbestian/jplex>
 generate_test!(obj3_2cons, "3obj_2cons.lp");
+
 // generate_test!(no_end_section, "no_end_section.lp");
 generate_test!(obj_2cons_only_binary_vars, "2obj_2cons_only_binary_vars.lp");
 generate_test!(obj_2cons_all_variable_types, "2obj_2cons_all_variable_types.lp");

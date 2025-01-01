@@ -19,8 +19,8 @@ use nom::{
 };
 
 use crate::{
-    decoder::{number::parse_num_value, variable::parse_variable_list},
     model::VariableType,
+    parsers::{number::parse_num_value, variable::parse_variable_list},
     VALID_LP_FILE_CHARS,
 };
 

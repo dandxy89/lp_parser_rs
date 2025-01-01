@@ -22,9 +22,9 @@ use nom::{
 use unique_id::{sequence::SequenceGenerator, Generator as _};
 
 use crate::{
-    decoder::{coefficient::parse_coefficient, parser_traits::parse_variable},
-    log_remaining,
+    log_unparsed_content,
     model::{Coefficient, Objective, Variable},
+    parsers::{coefficient::parse_coefficient, parser_traits::parse_variable},
 };
 
 #[inline]
@@ -40,7 +40,7 @@ fn objective_continuations(input: &str) -> IResult<&str, Vec<Coefficient<'_>>> {
 }
 
 /// Type alias for the parsed result of objectives.
-type ParsedObjectives<'a> = IResult<&'a str, (HashMap<Cow<'a, str>, Objective<'a>>, HashMap<&'a str, Variable<'a>>)>;
+type ObjectiveParseResult<'a> = IResult<&'a str, (HashMap<Cow<'a, str>, Objective<'a>>, HashMap<&'a str, Variable<'a>>)>;
 
 #[inline]
 /// Parses a string input to extract and construct a collection of `Objective`
@@ -62,8 +62,8 @@ type ParsedObjectives<'a> = IResult<&'a str, (HashMap<Cow<'a, str>, Objective<'a
 /// instances and a map of variable names to `Variable` instances, or an error
 /// if parsing fails.
 ///
-pub fn parse_objectives(input: &str) -> ParsedObjectives<'_> {
-    let mut objective_vars = HashMap::default();
+pub fn parse_objectives(input: &str) -> ObjectiveParseResult<'_> {
+    let mut objective_vars = HashMap::with_capacity(2);
     let gen = SequenceGenerator;
 
     // Inline function to extra Objective functions
@@ -101,13 +101,13 @@ pub fn parse_objectives(input: &str) -> ParsedObjectives<'_> {
 
     let (remaining, objectives) = many1(parser)(input)?;
 
-    log_remaining("Failed to parse objectives fully", remaining);
+    log_unparsed_content("Failed to parse objectives fully", remaining);
     Ok(("", (objectives.into_iter().map(|ob| (ob.name.clone(), ob)).collect(), objective_vars)))
 }
 
 #[cfg(test)]
 mod test {
-    use crate::decoder::objective::parse_objectives;
+    use crate::parsers::objective::parse_objectives;
 
     #[test]
     fn test_objective_section() {

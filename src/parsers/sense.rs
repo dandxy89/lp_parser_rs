@@ -35,7 +35,7 @@ pub fn parse_sense(input: &str) -> IResult<&str, Sense> {
 
 #[cfg(test)]
 mod test {
-    use crate::decoder::sense::parse_sense;
+    use crate::parsers::sense::parse_sense;
 
     #[test]
     fn test_parse_sense() {
