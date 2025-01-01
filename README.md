@@ -63,6 +63,29 @@ cargo run --bin lp_parser --release -- {{ /path/to/your/file.lp }}
 cargo run --bin lp_parser --release --features diff -- {{ /path/to/your/file.lp }} {{ /path/to/your/other/file.lp }}
 ```
 
+Using the library directly:
+
+```rust
+use lp_parser::{parser::parse_file, LpProblem};
+use std::path::Path;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Parse LP file content
+    let content = parse_file(Path::new("problem.lp"))?;
+
+    // Parse into LP problem structure
+    let problem = LpProblem::parse(&content)?;
+
+    // Access problem components
+    println!("Problem name: {:?}", problem.name());
+    println!("Objective count: {}", problem.objective_count());
+    println!("Constraint count: {}", problem.constraint_count());
+    println!("Variable count: {}", problem.variable_count());
+
+    Ok(())
+}
+```
+
 ### Enable Optional Features
 
 ```toml

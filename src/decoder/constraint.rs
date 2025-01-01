@@ -1,3 +1,10 @@
+//! Parser for LP problem constraints.
+//!
+//! This module handles parsing of constraint definitions,
+//! including their names, coefficients, operators, and
+//! right-hand side values.
+//!
+
 use std::{
     borrow::Cow,
     collections::{hash_map::Entry, HashMap},

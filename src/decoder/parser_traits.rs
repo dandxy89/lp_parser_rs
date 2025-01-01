@@ -12,7 +12,7 @@ use nom::{
 use crate::{
     decoder::{number::parse_num_value, variable::parse_variable_list},
     model::VariableType,
-    VALID_LP_CHARS,
+    VALID_LP_FILE_CHARS,
 };
 
 /// A trait for parsing sections within a text input.
@@ -72,7 +72,7 @@ macro_rules! impl_section_parser {
 
 #[inline]
 fn is_valid_lp_char(c: char) -> bool {
-    c.is_alphanumeric() || VALID_LP_CHARS.contains(&c)
+    c.is_alphanumeric() || VALID_LP_FILE_CHARS.contains(&c)
 }
 
 #[inline]
@@ -98,7 +98,7 @@ pub fn parse_variable(input: &str) -> IResult<&str, &str> {
 /// * `IResult<&str, (&str, VariableType)>` - A result containing the remaining input and a tuple
 ///   with the variable name and its `VariableType`.
 ///
-pub fn single_bound(input: &str) -> IResult<&str, (&str, VariableType)> {
+pub fn parse_single_bound(input: &str) -> IResult<&str, (&str, VariableType)> {
     preceded(
         multispace0,
         alt((
@@ -144,7 +144,7 @@ pub struct IntegerParser;
 pub struct SemiParser;
 
 impl_section_parser!(BinaryParser, Vec<&'a str>, &["binaries", "binary", "bin"], parse_variable_list);
-impl_section_parser!(BoundsParser, Vec<(&'a str, VariableType)>, &["bounds", "bound"], |input| many0(single_bound)(input));
+impl_section_parser!(BoundsParser, Vec<(&'a str, VariableType)>, &["bounds", "bound"], |input| many0(parse_single_bound)(input));
 impl_section_parser!(GeneralParser, Vec<&'a str>, &["generals", "general", "gen"], parse_variable_list);
 impl_section_parser!(IntegerParser, Vec<&'a str>, &["integers", "integer"], parse_variable_list);
 impl_section_parser!(SemiParser, Vec<&'a str>, &["semi-continuous", "semis", "semi"], parse_variable_list);

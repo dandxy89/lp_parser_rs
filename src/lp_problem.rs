@@ -1,9 +1,8 @@
-//! This module defines the structures and functions necessary for parsing and managing
-//! Linear Programming (LP) problems.
+//! Main problem representation and parsing logic.
 //!
-//! The module provides functionality to parse LP problem components such as constraints,
-//! objectives, problem names, and variable types. It utilizes various parsers from the
-//! `nom` crate to handle different sections of an LP problem file.
+//! This module defines the `LpProblem` struct and its associated
+//! parsing functionality. It serves as the main entry point for
+//! working with LP problems.
 //!
 
 use std::{
@@ -113,9 +112,21 @@ impl<'a> LpProblem<'a> {
 
     /// Parse a `Self` from a string slice
     pub fn parse(input: &'a str) -> Result<Self, nom::Err<nom::error::Error<&'a str>>> {
+        log::debug!("Starting to parse LP problem");
         // Ideally, we'd have like to have utilised `FromStr` but the trait does not allow the
         // specification of lifetimes.
         TryFrom::try_from(input)
+    }
+}
+
+impl std::fmt::Display for LpProblem<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "Problem: {}", self.name.unwrap_or("unnamed LpProblem"))?;
+        writeln!(f, "Sense: {}", self.sense)?;
+        writeln!(f, "Objectives: {}", self.objectives.len())?;
+        writeln!(f, "Constraints: {}", self.constraints.len())?;
+        writeln!(f, "Variables: {}", self.variables.len())?;
+        Ok(())
     }
 }
 

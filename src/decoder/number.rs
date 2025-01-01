@@ -11,7 +11,7 @@ use nom::{
 use crate::model::ComparisonOp;
 
 #[inline]
-fn infinity(input: &str) -> IResult<&str, f64> {
+fn parse_infinity(input: &str) -> IResult<&str, f64> {
     map(
         tuple((
             opt(one_of("+-")),
@@ -26,7 +26,7 @@ fn infinity(input: &str) -> IResult<&str, f64> {
 }
 
 #[inline]
-fn number(input: &str) -> IResult<&str, &str> {
+fn parse_number(input: &str) -> IResult<&str, &str> {
     let (remainder, matched) = recognize(tuple((
         // Optional sign at the start
         opt(one_of("+-")),
@@ -47,7 +47,7 @@ fn number(input: &str) -> IResult<&str, &str> {
 
 #[inline]
 pub fn parse_num_value(input: &str) -> IResult<&str, f64> {
-    preceded(multispace0, alt((infinity, map(number, |v| v.parse::<f64>().unwrap_or_default()))))(input)
+    preceded(multispace0, alt((parse_infinity, map(parse_number, |v| v.parse::<f64>().unwrap_or_default()))))(input)
 }
 
 #[inline]
@@ -66,7 +66,7 @@ pub fn parse_cmp_op(input: &str) -> IResult<&str, ComparisonOp> {
 
 #[cfg(test)]
 mod tests {
-    use crate::decoder::number::{infinity, number, parse_num_value};
+    use crate::decoder::number::{parse_infinity, parse_num_value, parse_number};
 
     #[test]
     fn test_number_value() {
@@ -78,28 +78,28 @@ mod tests {
 
     #[test]
     fn test_infinity() {
-        assert_eq!(infinity("infinity").unwrap().1, f64::INFINITY);
-        assert_eq!(infinity("INFINITY").unwrap().1, f64::INFINITY);
-        assert_eq!(infinity("Infinity").unwrap().1, f64::INFINITY);
-        assert_eq!(infinity("inf").unwrap().1, f64::INFINITY);
-        assert_eq!(infinity("INF").unwrap().1, f64::INFINITY);
-        assert_eq!(infinity("Inf").unwrap().1, f64::INFINITY);
-        assert_eq!(infinity("+infinity").unwrap().1, f64::INFINITY);
-        assert_eq!(infinity("+inf").unwrap().1, f64::INFINITY);
+        assert_eq!(parse_infinity("infinity").unwrap().1, f64::INFINITY);
+        assert_eq!(parse_infinity("INFINITY").unwrap().1, f64::INFINITY);
+        assert_eq!(parse_infinity("Infinity").unwrap().1, f64::INFINITY);
+        assert_eq!(parse_infinity("inf").unwrap().1, f64::INFINITY);
+        assert_eq!(parse_infinity("INF").unwrap().1, f64::INFINITY);
+        assert_eq!(parse_infinity("Inf").unwrap().1, f64::INFINITY);
+        assert_eq!(parse_infinity("+infinity").unwrap().1, f64::INFINITY);
+        assert_eq!(parse_infinity("+inf").unwrap().1, f64::INFINITY);
 
-        assert_eq!(infinity("-infinity").unwrap().1, f64::NEG_INFINITY);
-        assert_eq!(infinity("-INFINITY").unwrap().1, f64::NEG_INFINITY);
-        assert_eq!(infinity("-Infinity").unwrap().1, f64::NEG_INFINITY);
-        assert_eq!(infinity("-inf").unwrap().1, f64::NEG_INFINITY);
-        assert_eq!(infinity("-INF").unwrap().1, f64::NEG_INFINITY);
-        assert_eq!(infinity("-Inf").unwrap().1, f64::NEG_INFINITY);
+        assert_eq!(parse_infinity("-infinity").unwrap().1, f64::NEG_INFINITY);
+        assert_eq!(parse_infinity("-INFINITY").unwrap().1, f64::NEG_INFINITY);
+        assert_eq!(parse_infinity("-Infinity").unwrap().1, f64::NEG_INFINITY);
+        assert_eq!(parse_infinity("-inf").unwrap().1, f64::NEG_INFINITY);
+        assert_eq!(parse_infinity("-INF").unwrap().1, f64::NEG_INFINITY);
+        assert_eq!(parse_infinity("-Inf").unwrap().1, f64::NEG_INFINITY);
 
-        assert!(infinity("notinfinity").is_err());
-        assert!(infinity("infx").is_err());
-        assert!(infinity("infinit").is_err());
-        assert!(infinity("in").is_err());
-        assert!(infinity("++inf").is_err());
-        assert!(infinity("--inf").is_err());
+        assert!(parse_infinity("notinfinity").is_err());
+        assert!(parse_infinity("infx").is_err());
+        assert!(parse_infinity("infinit").is_err());
+        assert!(parse_infinity("in").is_err());
+        assert!(parse_infinity("++inf").is_err());
+        assert!(parse_infinity("--inf").is_err());
     }
 
     #[test]
@@ -109,11 +109,11 @@ mod tests {
             "+1.23e+4",
         ];
         for input in valid_numbers {
-            assert!(number(input).is_ok());
+            assert!(parse_number(input).is_ok());
         }
 
-        assert!(number("abc").is_err());
-        assert!(number(".123").is_err());
-        assert!(number("1.23e").is_err());
+        assert!(parse_number("abc").is_err());
+        assert!(parse_number(".123").is_err());
+        assert!(parse_number("1.23e").is_err());
     }
 }

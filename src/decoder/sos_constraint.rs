@@ -76,10 +76,10 @@ pub fn parse_sos_section<'a>(input: &'a str) -> ParsedConstraints<'a> {
     );
 
     let (remaining, constraints) = preceded(tuple((multispace0, tag_no_case("SOS"), opt(char(':')), multispace1)), many1(parser))(input)?;
-    let cons = constraints.into_iter().map(|c| (Cow::Owned(c.name().to_string()), c)).collect();
+    let constraints = constraints.into_iter().map(|c| (Cow::Owned(c.name().to_string()), c)).collect();
 
     log_remaining("Failed to parse sos constraints fully", remaining);
-    Ok(("", (cons, constraint_vars)))
+    Ok(("", (constraints, constraint_vars)))
 }
 
 #[cfg(test)]

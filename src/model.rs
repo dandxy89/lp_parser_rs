@@ -1,4 +1,8 @@
-//! This Rust code defines several enums and structs used in optimization models.
+//! Core data structures for representing Linear Programming problems.
+//!
+//! This module contains the fundamental types used to represent various
+//! components of a Linear Programming problem, including variables,
+//! constraints, objectives, and their associated properties.
 //!
 //! - `ComparisonOp`: Enum for comparison operations like greater than, less than, etc.
 //! - `Sense`: Enum for optimization sense, either minimization or maximization.
@@ -30,6 +34,18 @@ pub enum ComparisonOp {
     LTE,
 }
 
+impl std::fmt::Display for ComparisonOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::GT => write!(f, ">"),
+            Self::GTE => write!(f, ">="),
+            Self::EQ => write!(f, "="),
+            Self::LT => write!(f, "<"),
+            Self::LTE => write!(f, "<="),
+        }
+    }
+}
+
 #[cfg_attr(feature = "diff", derive(diff::Diff), diff(attr(#[derive(Debug, PartialEq)])))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
@@ -49,6 +65,15 @@ impl Sense {
     }
 }
 
+impl std::fmt::Display for Sense {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Minimize => write!(f, "Minimize"),
+            Self::Maximize => write!(f, "Maximize"),
+        }
+    }
+}
+
 #[cfg_attr(feature = "diff", derive(diff::Diff), diff(attr(#[derive(Debug, PartialEq)])))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, PartialEq, Eq)]
@@ -56,6 +81,15 @@ impl Sense {
 pub enum SOSType {
     S1,
     S2,
+}
+
+impl std::fmt::Display for SOSType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::S1 => write!(f, "S1"),
+            Self::S2 => write!(f, "S2"),
+        }
+    }
 }
 
 #[cfg_attr(feature = "diff", derive(diff::Diff), diff(attr(#[derive(Debug, PartialEq)])))]
@@ -71,6 +105,18 @@ pub enum SOSType {
 pub struct Coefficient<'a> {
     pub var_name: &'a str,
     pub coefficient: f64,
+}
+
+impl std::fmt::Display for Coefficient<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.coefficient == 1.0 {
+            write!(f, "{}", self.var_name)
+        } else if self.coefficient == -1.0 {
+            write!(f, "-{}", self.var_name)
+        } else {
+            write!(f, "{} {}", self.coefficient, self.var_name)
+        }
+    }
 }
 
 #[cfg_attr(feature = "diff", derive(diff::Diff), diff(attr(#[derive(Debug, PartialEq)])))]
@@ -107,6 +153,33 @@ impl<'a> Constraint<'a> {
         match self {
             Constraint::Standard { name, .. } => name.clone(),
             Constraint::SOS { name, .. } => name.clone(),
+        }
+    }
+}
+
+impl std::fmt::Display for Constraint<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Constraint::Standard { name, coefficients, operator, rhs } => {
+                write!(f, "{name}: ")?;
+                for (i, coef) in coefficients.iter().enumerate() {
+                    if i > 0 && coef.coefficient > 0.0 {
+                        write!(f, "+ ")?;
+                    }
+                    write!(f, "{coef} ")?;
+                }
+                write!(f, "{operator} {rhs}")
+            }
+            Constraint::SOS { name, sos_type, weights } => {
+                write!(f, "{name}: {sos_type}:: ")?;
+                for (i, weight) in weights.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, " ")?;
+                    }
+                    write!(f, "{}:{}", weight.var_name, weight.coefficient)?;
+                }
+                Ok(())
+            }
         }
     }
 }
@@ -167,15 +240,47 @@ pub enum VariableType {
     SOS,
 }
 
+impl std::fmt::Display for VariableType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Free => write!(f, "Free"),
+            Self::General => write!(f, "General"),
+            Self::LowerBound(lb) => write!(f, ">= {}", lb),
+            Self::UpperBound(ub) => write!(f, "<= {}", ub),
+            Self::DoubleBound(lb, ub) => write!(f, "{} <= x <= {}", lb, ub),
+            Self::Binary => write!(f, "Binary"),
+            Self::Integer => write!(f, "Integer"),
+            Self::SemiContinuous => write!(f, "Semi-Continuous"),
+            Self::SOS => write!(f, "SOS"),
+        }
+    }
+}
+
 #[cfg_attr(feature = "diff", derive(diff::Diff), diff(attr(#[derive(Debug, PartialEq)])))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, PartialEq)]
-/// Represents a variable with a name and type.
+/// Represents a variable in a Linear Programming problem.
+///
+/// Variables are the fundamental building blocks of LP problems,
+/// representing the quantities to be optimized.
 ///
 /// # Fields
 ///
 /// * `name` - A string slice that holds the name of the variable.
 /// * `var_type` - The type of the variable, represented by `VariableType`.
+///
+/// # Examples
+///
+/// ```rust
+/// use lp_parser::model::{Variable, VariableType};
+///
+/// // Create a free variable
+/// let x = Variable::new("x");
+///
+/// // Create a binary variable
+/// let y = Variable::new("y")
+///     .with_var_type(VariableType::Binary);
+/// ```
 ///
 pub struct Variable<'a> {
     pub name: &'a str,

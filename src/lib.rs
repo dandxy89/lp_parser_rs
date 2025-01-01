@@ -1,22 +1,36 @@
-//! LP Parser
+//! LP Parser - A Linear Programming File Parser
 //!
-//! A Rust LP file parser leveraging [NOM](https://docs.rs/nom/latest/nom/) and adhering to the following specifications:
+//! This crate provides robust parsing capabilities for Linear Programming (LP)
+//! files using nom parser combinators. It supports multiple industry-standard
+//! LP file formats and offers comprehensive features for optimization problems.
 //!
-//! - [IBM v22.1.1 Specification](https://www.ibm.com/docs/en/icos/22.1.1?topic=cplex-lp-file-format-algebraic-representation)
-//! - [FICO](https://www.fico.com/fico-xpress-optimization/docs/dms2020-03/solver/optimizer/HTML/chapter10_sec_section102.html)
-//! - [Gurobi](https://www.gurobi.com/documentation/current/refman/lp_format.html)
+//! # Features
 //!
-//! It supports the following LP file features:
-//! - Problem Name
-//! - Problem Senses
-//! - Objectives
-//!   - Single-Objective Case
-//!   - Multi-Objective Case
-//! - Constraints
-//! - Bounds
-//! - Variable Types: Integer, Generals, Lower Bounded, Upper Bounded, Free & Upper and Lower Bounded
-//! - Semi-continuous
-//! - Special Order Sets (SOS)
+//! - Zero-copy parsing with lifetime management
+//! - Support for multiple LP file format specifications
+//! - Comprehensive parsing of all standard LP file components
+//! - Optional serialization and diff tracking
+//!
+//! # Quick Start
+//!
+//! ```rust
+//! use lp_parser::{parser::parse_file, LpProblem};
+//! use std::path::Path;
+//!
+//! fn main() -> Result<(), Box<dyn std::error::Error>> {
+//!     let content = parse_file(Path::new("problem.lp"))?;
+//!     let problem = LpProblem::parse(&content)?;
+//!     println!("Problem name: {:?}", problem.name());
+//!     Ok(())
+//! }
+//! ```
+//!
+//! # Module Organization
+//!
+//! - `model`: Core data structures for LP problems
+//! - `parser`: File parsing utilities
+//! - `decoder`: Component-specific parsers
+//! - `lp_problem`: Main problem representation and parsing
 //!
 
 pub mod decoder;
@@ -51,7 +65,11 @@ pub const INTEGER_HEADERS: [&str; 3] = ["integers", "integer", "end"];
 pub const SEMI_HEADERS: [&str; 4] = ["semi-continuous", "semis", "semi", "end"];
 pub const SOS_HEADERS: [&str; 2] = ["sos", "end"];
 
-pub const VALID_LP_CHARS: [char; 18] = ['!', '#', '$', '%', '&', '(', ')', '_', ',', '.', ';', '?', '@', '\\', '{', '}', '~', '\''];
+/// Valid characters that can appear in LP file elements.
+///
+/// These characters are allowed in addition to alphanumeric
+/// characters in names and other elements of LP files.
+pub const VALID_LP_FILE_CHARS: [char; 18] = ['!', '#', '$', '%', '&', '(', ')', '_', ',', '.', ';', '?', '@', '\\', '{', '}', '~', '\''];
 
 #[inline]
 pub(crate) fn log_remaining(prefix: &str, remaining: &str) {

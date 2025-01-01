@@ -1,3 +1,9 @@
+//! Parser for LP problem names and comments.
+//!
+//! This module handles parsing of problem names that typically
+//! appear in comments at the start of LP files.
+//!
+
 use nom::{
     branch::alt,
     bytes::complete::{tag, take_until},
@@ -42,7 +48,7 @@ fn parse_single_comment(input: &str) -> IResult<&str, &str> {
 }
 
 #[inline]
-/// Parses the input string to extract the last comment, if any, from a sequence of comments.
+/// Extracts the last comment (if present) from a sequence of comments in the input string.
 ///
 /// # Arguments
 ///
@@ -72,9 +78,9 @@ mod test {
             "\\* WBM_Problem *\\\n",
         ];
         for input in valid {
-            let (remainder, x) = parse_problem_name(input).unwrap();
+            let (remainder, p_name) = parse_problem_name(input).unwrap();
             assert_eq!("", remainder);
-            assert!(x.is_some());
+            assert!(p_name.is_some());
         }
     }
 }
