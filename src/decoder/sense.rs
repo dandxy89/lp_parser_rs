@@ -1,9 +1,5 @@
 //! Parser for optimization sense in LP files.
 //!
-//! This module provides functionality to parse the optimization sense
-//! (minimize or maximize) from LP format files. The parser handles
-//! various forms of these keywords and is case-insensitive.
-//!
 
 use nom::{branch::alt, bytes::complete::tag_no_case, character::complete::multispace0, combinator::value, sequence::delimited, IResult};
 
