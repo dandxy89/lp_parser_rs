@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.1](https://github.com/dandxy89/lp_parser_rs/compare/v2.1.0...v2.1.1) (2025-01-01)
+
+
+### Bug Fixes
+
+* Updating cargo toml to include only 5 keywords ([c780403](https://github.com/dandxy89/lp_parser_rs/commit/c780403e291403de5e4efebdbffb8830498b30c9))
+
 ## [2.1.0](https://github.com/dandxy89/lp_parser_rs/compare/v2.0.0...v2.1.0) (2025-01-01)
 
 
