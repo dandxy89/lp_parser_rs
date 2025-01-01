@@ -1,8 +1,6 @@
-#![cfg(feature = "nom")]
-
 use std::{error::Error, path::PathBuf};
 
-use lp_parser_rs::{nom::lp_problem::LpProblem, parse::parse_file};
+use lp_parser_rs::{lp_problem::LpProblem, parser::parse_file};
 
 fn read_file_from_resources(file_name: &str) -> Result<String, Box<dyn Error + 'static>> {
     let mut file_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));

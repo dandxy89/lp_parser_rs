@@ -18,18 +18,11 @@ doctest = false
 name = "lp_parser"
 path = "src/bin/main.rs"
 
-[[bin]]
-name = "nom_lp_parser"
-path = "src/bin/nom_main.rs"
-
 [dependencies]
 diff-struct = { version = "0.5", optional = true }
 log = "0.4"
-nom = { version = "7.1", optional = true }
-pest = "2.7"
-pest_derive = "2.7"
+nom = { version = "7.1" }
 serde = { version = "1.0", features = ["derive"], optional = true }
-thiserror = "2.0"
 unique_id = { version = "0.1", features = ["sequence"] }
 
 [dev-dependencies]
@@ -44,7 +37,6 @@ similar.opt-level = 3
 [features]
 default = []
 diff = ["dep:diff-struct", "serde"]
-nom = ["dep:nom"]
 serde = ["dep:serde"]
 
 [package.metadata.cargo-machete]

@@ -1,4 +1,4 @@
-# LP File Parser
+# Rust LP File Parser and Diff tool
 
 [![Cargo Test](https://github.com/dandxy89/congenial-enigma/actions/workflows/cargo_test.yml/badge.svg)](https://github.com/dandxy89/congenial-enigma/actions/workflows/cargo_test.yml)
 [![Crates.io](https://img.shields.io/crates/v/lp_parser_rs.svg)](https://crates.io/crates/lp_parser_rs)
@@ -6,9 +6,9 @@
 
 ## Overview
 
-![Logo](resources/Screenshot.png)
+![Logo](resources/carbon.png)
 
-A robust Rust parser for Linear Programming (LP) files, built on the [PEST](https://docs.rs/pest/latest/pest/) parsing framework. This crate provides comprehensive support for parsing and analysing LP files according to major industry specifications.
+A robust Rust parser for Linear Programming (LP) files, built on the [NOM](https://docs.rs/nom/latest/nom/) parsing framework. This crate provides comprehensive support for parsing and analysing LP files according to major industry specifications.
 
 ### Supported Specifications
 
@@ -66,19 +66,9 @@ Clone and run with a sample file:
 ```bash
 git clone https://github.com/dandxy89/lp_parser_rs.git
 # Dissemble a single LP file
-cargo run --release -- {{ /path/to/your/file.lp }}
+cargo run --bin nom_lp_parser --release -- {{ /path/to/your/file.lp }}
 # Compare two LP files (enabling the 'diff' feature)
-cargo run --release --features diff -- {{ /path/to/your/file.lp }} {{ /path/to/your/other/file.lp }}
-```
-
-### Using the Nom-enabled Parser
-
-```bash
-git clone https://github.com/dandxy89/lp_parser_rs.git
-# Dissemble a single LP file
-cargo run --bin nom_lp_parser --release --features nom -- {{ /path/to/your/file.lp }}
-# Compare two LP files (enabling the 'diff' feature)
-cargo run --bin nom_lp_parser --release --features nom,diff -- {{ /path/to/your/file.lp }} {{ /path/to/your/other/file.lp }}
+cargo run --bin nom_lp_parser --release --features diff -- {{ /path/to/your/file.lp }} {{ /path/to/your/other/file.lp }}
 ```
 
 ### Enable Optional Features
@@ -109,12 +99,6 @@ The test suite includes data from various open-source projects:
 - [Jplex](https://github.com/asbestian/jplex/blob/main/instances/afiro.lp)
 - [LPWriter.jl](https://github.com/odow/LPWriter.jl/blob/master/test/model2.lp)
 - [Lp-Parser](https://github.com/aphi/Lp-Parser)
-
-## Contributors
-
-Special thanks to our contributors:
-
-- [Ahenshaw](https://github.com/ahenshaw)
 
 ## Contributing
 
