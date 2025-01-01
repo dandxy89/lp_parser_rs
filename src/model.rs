@@ -20,7 +20,6 @@ use std::borrow::Cow;
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 /// Represents comparison operations that can be used to compare values.
-///
 pub enum ComparisonOp {
     /// Greater than
     GT,
@@ -51,7 +50,6 @@ impl std::fmt::Display for ComparisonOp {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 /// Represents the optimization sense for an objective function.
-///
 pub enum Sense {
     #[default]
     Minimize,
@@ -61,7 +59,6 @@ pub enum Sense {
 impl Sense {
     #[inline]
     /// Determines if the current optimization sense is minimization.
-    ///
     pub const fn is_minimization(&self) -> bool {
         matches!(self, Sense::Minimize)
     }
@@ -102,14 +99,10 @@ impl std::fmt::Display for SOSType {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, PartialEq)]
 /// Represents a coefficient associated with a variable name.
-///
-/// # Fields
-///
-/// * `var_name` - A string slice representing the name of the variable.
-/// * `coefficient` - A floating-point number representing the coefficient value.
-///
 pub struct Coefficient<'a> {
+    /// A string slice representing the name of the variable.
     pub var_name: &'a str,
+    /// A floating-point number representing the coefficient value.
     pub coefficient: f64,
 }
 
@@ -133,13 +126,6 @@ impl std::fmt::Display for Coefficient<'_> {
 /// Represents a constraint in an optimization problem, which can be either a
 /// standard linear constraint or a special ordered set (SOS) constraint.
 ///
-/// # Variants
-///
-/// * `Standard` - A linear constraint defined by a name, a vector of coefficients,
-///   a comparison operator, and a right-hand side value.
-/// * `SOS` - A special ordered set constraint defined by a name, a type of SOS,
-///   and a vector of weights.
-///
 /// # Attributes
 ///
 /// * `name` - The name of the constraint.
@@ -150,7 +136,9 @@ impl std::fmt::Display for Coefficient<'_> {
 /// * `weights` - A vector of weights for the SOS constraint.
 ///
 pub enum Constraint<'a> {
+    /// A linear constraint defined by a name, a vector of coefficients, a comparison operator, and a right-hand side value.
     Standard { name: Cow<'a, str>, coefficients: Vec<Coefficient<'a>>, operator: ComparisonOp, rhs: f64 },
+    /// A special ordered set constraint defined by a name, a type of SOS and a vector of weights.
     SOS { name: Cow<'a, str>, sos_type: SOSType, weights: Vec<Coefficient<'a>> },
 }
 
@@ -200,14 +188,10 @@ impl std::fmt::Display for Constraint<'_> {
 ///
 /// This struct can optionally derive `Diff` for change tracking and `Serialize`
 /// for serialization, depending on the enabled features.
-///
-/// # Fields
-///
-/// * `name` - A borrowed string representing the name of the objective.
-/// * `coefficients` - A vector of `Coefficient` instances associated with the objective.
-///
 pub struct Objective<'a> {
+    /// A borrowed string representing the name of the objective.
     pub name: Cow<'a, str>,
+    /// A vector of `Coefficient` instances associated with the objective.
     pub coefficients: Vec<Coefficient<'a>>,
 }
 
@@ -215,36 +199,24 @@ pub struct Objective<'a> {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default, PartialEq)]
 /// Represents different types of variables that can be used in optimization models.
-///
-/// This enum supports various configurations such as:
-/// - `Free`: Unbounded variable (-Infinity, +Infinity).
-/// - `General`: General variable [0, +Infinity].
-/// - `LowerBound(f64)`: Variable with a lower bound (`x >= lb`).
-/// - `UpperBound(f64)`: Variable with an upper bound (`x ≤ ub`).
-/// - `DoubleBound(f64, f64)`: Variable with both lower and upper bounds (`lb ≤ x ≤ ub`).
-/// - `Binary`: Binary variable.
-/// - `Integer`: Integer variable.
-/// - `SemiContinuous`: Semi-continuous variable.
-/// - `SOS`: Special Order Set variable.
-///
 pub enum VariableType {
     #[default]
     /// Unbounded variable (-Infinity, +Infinity)
     Free,
-
     /// General variable [0, +Infinity]
     General,
-
-    LowerBound(f64),       // `x >= lb`
-    UpperBound(f64),       // `x ≤ ub`
-    DoubleBound(f64, f64), // `lb ≤ x ≤ ub`
-
+    /// Variable with a lower bound (`x >= lb`).
+    LowerBound(f64),
+    /// Variable with an upper bound (`x ≤ ub`).
+    UpperBound(f64),
+    /// Variable with both lower and upper bounds (`lb ≤ x ≤ ub`).
+    DoubleBound(f64, f64),
+    /// Binary variable.
     Binary,
-
+    /// Integer variable.
     Integer,
-
+    /// Semi-continuous variable.
     SemiContinuous,
-
     /// Special Order Set (SOS)
     SOS,
 }
@@ -274,11 +246,6 @@ impl std::fmt::Display for VariableType {
 /// Variables are the fundamental building blocks of LP problems,
 /// representing the quantities to be optimized.
 ///
-/// # Fields
-///
-/// * `name` - A string slice that holds the name of the variable.
-/// * `var_type` - The type of the variable, represented by `VariableType`.
-///
 /// # Examples
 ///
 /// ```rust
@@ -293,7 +260,9 @@ impl std::fmt::Display for VariableType {
 /// ```
 ///
 pub struct Variable<'a> {
+    /// A string slice that holds the name of the variable.
     pub name: &'a str,
+    /// The type of the variable, represented by `VariableType`.
     pub var_type: VariableType,
 }
 

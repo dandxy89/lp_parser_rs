@@ -35,14 +35,6 @@ use crate::{
 /// The `LpProblem` struct encapsulates the components of an LP problem, including its name,
 /// sense (e.g., minimization or maximization), objectives, constraints, and variables.
 ///
-/// # Fields
-///
-/// * `name`: An optional reference to a string slice representing the name of the LP problem.
-/// * `sense`: The optimization sense of the problem, indicating whether it is a minimization or maximization problem.
-/// * `objectives`: A `HashMap` where the keys are the names of the objectives and the values are `Objective` structs.
-/// * `constraints`: A `HashMap` where the keys are the names of the constraints and the values are `Constraint` structs.
-/// * `variables`: A `HashMap` where the keys are the names of the variables and the values are `Variable` structs.
-///
 /// # Attributes
 ///
 /// * `#[cfg_attr(feature = "diff", derive(diff::Diff), diff(attr(#[derive(Debug, PartialEq)])))]`:
@@ -51,10 +43,15 @@ use crate::{
 ///   Enables serialization and deserialization of `LpProblem` instances when the `serde` feature is active.
 ///
 pub struct LpProblem<'a> {
+    /// An optional reference to a string slice representing the name of the LP problem.
     pub name: Option<&'a str>,
+    /// The optimization sense of the problem, indicating whether it is a minimization or maximization problem.
     pub sense: Sense,
+    /// A `HashMap` where the keys are the names of the objectives and the values are `Objective` structs.
     pub objectives: HashMap<Cow<'a, str>, Objective<'a>>,
+    /// A `HashMap` where the keys are the names of the constraints and the values are `Constraint` structs.
     pub constraints: HashMap<Cow<'a, str>, Constraint<'a>>,
+    /// A `HashMap` where the keys are the names of the variables and the values are `Variable` structs.
     pub variables: HashMap<&'a str, Variable<'a>>,
 }
 
