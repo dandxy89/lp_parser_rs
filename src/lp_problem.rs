@@ -50,7 +50,6 @@ use crate::{
 /// * `#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]`:
 ///   Enables serialization and deserialization of `LpProblem` instances when the `serde` feature is active.
 ///
-/// ```
 pub struct LpProblem<'a> {
     pub name: Option<&'a str>,
     pub sense: Sense,

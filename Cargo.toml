@@ -11,6 +11,9 @@ categories = ["mathematics", "algorithms", "science"]
 repository = "https://github.com/dandxy89/lp_parser_rs"
 default-run = "lp_parser"
 
+[package.metadata.docs.rs]
+all-features = true
+
 [lib]
 doctest = false
 
