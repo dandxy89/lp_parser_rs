@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.2.0](https://github.com/dandxy89/lp_parser_rs/compare/v2.1.3...v2.2.0) (2025-01-01)
+
+
+### Features
+
+* Adds custom de-serialization method for LpProblem ([4b1cd1e](https://github.com/dandxy89/lp_parser_rs/commit/4b1cd1e18bd49316375cb9bc5651d53cadcf407d))
+* implements add_* methods to LpProblem ([4b1cd1e](https://github.com/dandxy89/lp_parser_rs/commit/4b1cd1e18bd49316375cb9bc5651d53cadcf407d))
+
 ## [2.1.3](https://github.com/dandxy89/lp_parser_rs/compare/v2.1.2...v2.1.3) (2025-01-01)
 
 
