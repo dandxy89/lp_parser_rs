@@ -1,12 +1,15 @@
+#![allow(unused_imports)]
+
 use std::{env, error::Error, path::PathBuf};
 
-use lp_parser_rs::{nom::lp_problem::LpProblem, parse::parse_file};
+use lp_parser_rs::parse::parse_file;
 
+#[cfg(feature = "nom")]
 fn dissemble_single_file(path: &str) -> Result<(), Box<dyn Error>> {
     let path = PathBuf::from(path);
     let input = parse_file(&path)?;
 
-    let problem = LpProblem::parse(&input).unwrap();
+    let problem = lp_parser_rs::nom::lp_problem::LpProblem::parse(&input).unwrap();
 
     // Print the parsed LP problem
     println!("Parsed LP Problem:");
@@ -21,6 +24,7 @@ fn dissemble_single_file(path: &str) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+#[cfg(feature = "nom")]
 #[cfg(feature = "diff")]
 fn compare_lp_files(p1: &str, p2: &str) -> Result<(), Box<dyn Error>> {
     println!("Attempting to compare {p1} to {p2}");
@@ -29,11 +33,11 @@ fn compare_lp_files(p1: &str, p2: &str) -> Result<(), Box<dyn Error>> {
 
     let path = PathBuf::from(p1);
     let input1 = parse_file(&path)?;
-    let problem1 = LpProblem::parse(&input1).unwrap();
+    let problem1 = lp_parser_rs::nom::lp_problem::LpProblem::parse(&input1).unwrap();
 
     let path = PathBuf::from(p2);
     let input2 = parse_file(&path)?;
-    let problem2 = LpProblem::parse(&input2).unwrap();
+    let problem2 = lp_parser_rs::nom::lp_problem::LpProblem::parse(&input2).unwrap();
 
     let difference: LpProblemDiff = problem1.diff(&problem2);
 
@@ -57,6 +61,7 @@ fn compare_lp_files(p1: &str, p2: &str) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+#[cfg(feature = "nom")]
 fn main() -> Result<(), Box<dyn Error>> {
     let mut args = env::args();
     args.next();
@@ -69,4 +74,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         #[cfg(not(feature = "diff"))]
         (_, Some(_)) => Err("Diff feature not enabled".into()),
     }
+}
+
+#[cfg(not(feature = "nom"))]
+fn main() {
+    println!("Requires nom feature flag to be enabled");
 }

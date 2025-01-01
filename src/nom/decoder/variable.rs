@@ -28,35 +28,35 @@ pub fn parse_variable_list(input: &str) -> IResult<&str, Vec<&str>> {
 }
 
 #[inline]
-pub fn parse_bounds_section<'a>(input: &'a str) -> IResult<&'a str, Vec<(&'a str, VariableType)>> {
+pub fn parse_bounds_section(input: &str) -> IResult<&str, Vec<(&str, VariableType)>> {
     let (remaining, section) = BoundsParser::parse_section(input)?;
     log_remaining("Failed to parse bounds fully", remaining);
     Ok(("", section))
 }
 
 #[inline]
-pub fn parse_binary_section<'a>(input: &'a str) -> IResult<&'a str, Vec<&'a str>> {
+pub fn parse_binary_section(input: &str) -> IResult<&str, Vec<&str>> {
     let (remaining, section) = BinaryParser::parse_section(input)?;
     log_remaining("Failed to parse binaries fully", remaining);
     Ok(("", section))
 }
 
 #[inline]
-pub fn parse_generals_section<'a>(input: &'a str) -> IResult<&'a str, Vec<&'a str>> {
+pub fn parse_generals_section(input: &str) -> IResult<&str, Vec<&str>> {
     let (remaining, section) = GeneralParser::parse_section(input)?;
     log_remaining("Failed to parse generals fully", remaining);
     Ok(("", section))
 }
 
 #[inline]
-pub fn parse_integer_section<'a>(input: &'a str) -> IResult<&'a str, Vec<&'a str>> {
+pub fn parse_integer_section(input: &str) -> IResult<&str, Vec<&str>> {
     let (remaining, section) = IntegerParser::parse_section(input)?;
     log_remaining("Failed to parse integers fully", remaining);
     Ok(("", section))
 }
 
 #[inline]
-pub fn parse_semi_section<'a>(input: &'a str) -> IResult<&'a str, Vec<&'a str>> {
+pub fn parse_semi_section(input: &str) -> IResult<&str, Vec<&str>> {
     let (remaining, section) = SemiParser::parse_section(input)?;
     log_remaining("Failed to parse semi-continuous fully", remaining);
     Ok(("", section))
