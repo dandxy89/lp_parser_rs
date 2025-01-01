@@ -31,6 +31,25 @@ fn objective_continuations(input: &str) -> IResult<&str, Vec<Coefficient<'_>>> {
 type ParsedObjectives<'a> = IResult<&'a str, (HashMap<Cow<'a, str>, Objective<'a>>, HashMap<&'a str, Variable<'a>>)>;
 
 #[inline]
+/// Parses a string input to extract and construct a collection of `Objective`
+/// instances, each associated with a set of coefficients and optional names.
+///
+/// The function processes the input string to identify and parse variable names,
+/// coefficients, and continuation lines, organizing them into `Objective`
+/// structures. If a name is not provided for an objective, a unique identifier
+/// is generated. The parsed objectives and their associated variables are
+/// returned as a tuple.
+///
+/// # Arguments
+///
+/// * `input` - A string slice containing the objectives to be parsed.
+///
+/// # Returns
+///
+/// A result containing a tuple with a map of objective names to `Objective`
+/// instances and a map of variable names to `Variable` instances, or an error
+/// if parsing fails.
+///
 pub fn parse_objectives(input: &str) -> ParsedObjectives<'_> {
     let mut objective_vars = HashMap::default();
     let gen = SequenceGenerator;

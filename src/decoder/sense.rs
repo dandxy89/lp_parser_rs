@@ -3,6 +3,22 @@ use nom::{branch::alt, bytes::complete::tag_no_case, character::complete::multis
 use crate::model::Sense;
 
 #[inline]
+/// Parses the input string to determine the optimization sense.
+///
+/// This function attempts to match the input string against known
+/// optimization sense keywords, such as "minimize", "maximum", etc.,
+/// and returns the corresponding `Sense` variant. It ignores leading
+/// and trailing whitespace and is case-insensitive.
+///
+/// # Arguments
+///
+/// * `input` - A string slice that holds the input to be parsed.
+///
+/// # Returns
+///
+/// * `IResult<&str, Sense>` - A result containing the remaining input
+///   and the parsed `Sense` variant if successful, or an error if parsing fails.
+///
 pub fn parse_sense(input: &str) -> IResult<&str, Sense> {
     delimited(
         multispace0,

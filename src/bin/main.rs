@@ -57,6 +57,20 @@ fn compare_lp_files(p1: &str, p2: &str) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+/// Parses and prints details of a single LP file or compares two LP files if the "diff" feature is enabled.
+///
+/// # Arguments
+///
+/// * `path` - A string slice that holds the path to the LP file.
+///
+/// # Returns
+///
+/// * `Result<(), Box<dyn Error>>` - Returns an Ok result if successful, or an error if parsing fails.
+///
+/// # Features
+///
+/// * If the "diff" feature is enabled, it can compare two LP files and print the differences in variables and constraints.
+///
 fn main() -> Result<(), Box<dyn Error>> {
     let mut args = env::args();
     args.next();

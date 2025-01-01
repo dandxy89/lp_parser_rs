@@ -35,6 +35,23 @@ fn parse_sos_weight(input: &str) -> IResult<&str, Coefficient> {
 type ParsedConstraints<'a> = IResult<&'a str, (HashMap<Cow<'a, str>, Constraint<'a>>, HashMap<&'a str, Variable<'a>>)>;
 
 #[inline]
+/// Parses a section of SOS constraints from the given input string.
+///
+/// This function processes a string input to extract SOS constraints, which
+/// include a name, SOS type, and associated weights. It constructs a map of
+/// variables and returns a collection of parsed constraints along with any
+/// remaining unparsed input. The function logs a message if parsing is not
+/// fully successful.
+///
+/// # Arguments
+///
+/// * `input` - A string slice containing the SOS constraints to be parsed.
+///
+/// # Returns
+///
+/// A result containing a tuple with the parsed constraints and a map of
+/// variables, or an error if parsing fails.
+///
 pub fn parse_sos_section<'a>(input: &'a str) -> ParsedConstraints<'a> {
     let mut constraint_vars: HashMap<&'a str, Variable<'a>> = HashMap::default();
 

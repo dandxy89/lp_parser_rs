@@ -15,6 +15,24 @@ use crate::{
     VALID_LP_CHARS,
 };
 
+/// A trait for parsing sections within a text input.
+///
+/// This trait defines methods for identifying and parsing sections
+/// based on predefined headers. Implementors must provide the list
+/// of section headers and a method to parse the content of each section.
+///
+/// # Type Parameters
+///
+/// - `'a`: The lifetime of the input string slice.
+/// - `T`: The type of the parsed section content.
+///
+/// # Methods
+///
+/// - `section_headers`: Returns a static list of section headers.
+/// - `parse_section_content`: Parses the content of a section and returns the result as type `T`.
+/// - `is_section_header`: Checks if the input starts with any of the section headers, ignoring case.
+/// - `parse_section`: Parses a section, including its header and content, and returns the parsed content as type `T`.
+///
 pub trait SectionParser<'a, T> {
     fn section_headers() -> &'static [&'static str];
     fn parse_section_content(input: &'a str) -> IResult<&'a str, T>;
@@ -63,6 +81,23 @@ pub fn parse_variable(input: &str) -> IResult<&str, &str> {
 }
 
 #[inline]
+/// Parses a string input to identify and extract a variable with its bound type.
+///
+/// The function recognizes four types of variable bounds:
+/// - Free variable: e.g., `x1 free`
+/// - Double bound: e.g., `0 <= x1 <= 5`
+/// - Lower bound: e.g., `x1 >= 5` or `5 <= x1`
+/// - Upper bound: e.g., `x1 <= 5` or `5 >= x1`
+///
+/// # Arguments
+///
+/// * `input` - A string slice that holds the input to be parsed.
+///
+/// # Returns
+///
+/// * `IResult<&str, (&str, VariableType)>` - A result containing the remaining input and a tuple
+///   with the variable name and its `VariableType`.
+///
 pub fn single_bound(input: &str) -> IResult<&str, (&str, VariableType)> {
     preceded(
         multispace0,

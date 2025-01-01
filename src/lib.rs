@@ -3,7 +3,7 @@
 //! A Rust LP file parser leveraging [NOM](https://docs.rs/nom/latest/nom/) and adhering to the following specifications:
 //!
 //! - [IBM v22.1.1 Specification](https://www.ibm.com/docs/en/icos/22.1.1?topic=cplex-lp-file-format-algebraic-representation)
-//! - [fico](https://www.fico.com/fico-xpress-optimization/docs/dms2020-03/solver/optimizer/HTML/chapter10_sec_section102.html)
+//! - [FICO](https://www.fico.com/fico-xpress-optimization/docs/dms2020-03/solver/optimizer/HTML/chapter10_sec_section102.html)
 //! - [Gurobi](https://www.gurobi.com/documentation/current/refman/lp_format.html)
 //!
 //! It supports the following LP file features:
@@ -53,12 +53,28 @@ pub const SOS_HEADERS: [&str; 2] = ["sos", "end"];
 
 pub const VALID_LP_CHARS: [char; 18] = ['!', '#', '$', '%', '&', '(', ')', '_', ',', '.', ';', '?', '@', '\\', '{', '}', '~', '\''];
 
-pub fn log_remaining(prefix: &str, remaining: &str) {
+#[inline]
+pub(crate) fn log_remaining(prefix: &str, remaining: &str) {
     if !remaining.trim().is_empty() {
         log::debug!("{prefix}: {remaining}");
     }
 }
 
+#[inline]
+/// Returns a closure that takes an input string and searches for the specified
+/// tag, ignoring case. The closure returns a result containing a tuple with the
+/// part of the input after the tag and the part before the tag if the tag is
+/// found. If the tag is not found, it returns an error.
+///
+/// # Arguments
+///
+/// * `tag` - A string slice that represents the tag to search for in the input.
+///
+/// # Returns
+///
+/// A closure that takes a string slice and returns an `IResult` containing a
+/// tuple of string slices or an error if the tag is not found.
+///
 fn take_until_cased<'a>(tag: &'a str) -> impl Fn(&'a str) -> IResult<&'a str, &'a str> {
     move |input: &str| {
         let mut index = 0;
@@ -82,6 +98,7 @@ fn take_until_cased<'a>(tag: &'a str) -> impl Fn(&'a str) -> IResult<&'a str, &'
 }
 
 #[allow(clippy::manual_try_fold)]
+#[inline]
 pub fn take_until_parser<'a>(tags: &'a [&'a str]) -> impl Fn(&'a str) -> IResult<&'a str, &'a str> + 'a {
     move |input| {
         tags.iter().map(|&tag| take_until_cased(tag)).fold(

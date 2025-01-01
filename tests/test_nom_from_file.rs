@@ -1,3 +1,9 @@
+//! This Rust code snippet defines a function to read LP (Linear Programming) files from a resources
+//! directory and parse them using the `lp_parser_rs` library.
+//!
+//! It includes several test functions and a macro to generate tests for various LP files, ensuring they can be parsed correctly.
+//!
+
 use std::{error::Error, path::PathBuf};
 
 use lp_parser_rs::{lp_problem::LpProblem, parser::parse_file};

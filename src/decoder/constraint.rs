@@ -45,6 +45,23 @@ fn parse_comment_marker(input: &str) -> IResult<&str, ()> {
 type ParsedConstraints<'a> = IResult<&'a str, (HashMap<Cow<'a, str>, Constraint<'a>>, HashMap<&'a str, Variable<'a>>)>;
 
 #[inline]
+/// Parses a string input to extract constraints and associated variables.
+///
+/// This function processes the input string to identify and parse constraints,
+/// which may include optional comment markers, variable names, coefficients,
+/// comparison operators, and right-hand side values. It returns a result
+/// containing a tuple of parsed constraints and variables, or an error if
+/// parsing fails. The function also logs any remaining unparsed input.
+///
+/// # Arguments
+///
+/// * `input` - A string slice representing the input to be parsed.
+///
+/// # Returns
+///
+/// * `ParsedConstraints<'a>` - A result containing a tuple of a hashmap of
+///   constraints and a hashmap of variables, or an error if parsing fails.
+///
 pub fn parse_constraints<'a>(input: &'a str) -> ParsedConstraints<'a> {
     let mut constraint_vars: HashMap<&'a str, Variable<'a>> = HashMap::default();
     let gen = SequenceGenerator;

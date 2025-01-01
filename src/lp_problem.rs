@@ -1,3 +1,11 @@
+//! This module defines the structures and functions necessary for parsing and managing
+//! Linear Programming (LP) problems.
+//!
+//! The module provides functionality to parse LP problem components such as constraints,
+//! objectives, problem names, and variable types. It utilizes various parsers from the
+//! `nom` crate to handle different sections of an LP problem file.
+//!
+
 use std::{
     borrow::Cow,
     collections::{hash_map::Entry, HashMap},
@@ -23,6 +31,27 @@ use crate::{
 #[cfg_attr(feature = "diff", derive(diff::Diff), diff(attr(#[derive(Debug, PartialEq)])))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Default, PartialEq)]
+/// Represents a Linear Programming (LP) problem.
+///
+/// The `LpProblem` struct encapsulates the components of an LP problem, including its name,
+/// sense (e.g., minimization or maximization), objectives, constraints, and variables.
+///
+/// # Fields
+///
+/// * `name`: An optional reference to a string slice representing the name of the LP problem.
+/// * `sense`: The optimization sense of the problem, indicating whether it is a minimization or maximization problem.
+/// * `objectives`: A `HashMap` where the keys are the names of the objectives and the values are `Objective` structs.
+/// * `constraints`: A `HashMap` where the keys are the names of the constraints and the values are `Constraint` structs.
+/// * `variables`: A `HashMap` where the keys are the names of the variables and the values are `Variable` structs.
+///
+/// # Attributes
+///
+/// * `#[cfg_attr(feature = "diff", derive(diff::Diff), diff(attr(#[derive(Debug, PartialEq)])))]`:
+///   Enables the `diff` feature for comparing differences between instances of `LpProblem`.
+/// * `#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]`:
+///   Enables serialization and deserialization of `LpProblem` instances when the `serde` feature is active.
+///
+/// ```
 pub struct LpProblem<'a> {
     pub name: Option<&'a str>,
     pub sense: Sense,
@@ -40,11 +69,13 @@ impl<'a> LpProblem<'a> {
     // set_variable_bound
     // with_problem_name
 
+    #[inline]
     /// Initialise a new `Self`
     pub fn new() -> Self {
         Self::default()
     }
 
+    #[inline]
     /// Override the problem sense
     pub fn with_sense(self, sense: Sense) -> Self {
         Self { sense, ..self }

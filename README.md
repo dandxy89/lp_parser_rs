@@ -1,4 +1,4 @@
-# Rust LP File Parser and Diff tool
+# Rust LP File Parser and Diff Tool
 
 [![Cargo Test](https://github.com/dandxy89/congenial-enigma/actions/workflows/cargo_test.yml/badge.svg)](https://github.com/dandxy89/congenial-enigma/actions/workflows/cargo_test.yml)
 [![Crates.io](https://img.shields.io/crates/v/lp_parser_rs.svg)](https://crates.io/crates/lp_parser_rs)
@@ -27,20 +27,12 @@ A robust Rust parser for Linear Programming (LP) files, built on the [NOM](https
   - Comprehensive constraint handling
 
 - **Variable Support**
-  - Integer variables
-  - General variables
-  - Bounded variables (lower, upper, or both)
-  - Free variables
-  - Semi-continuous variables
-  - Special Ordered Sets (SOS)
+  - Integer, general, bounded, free, semi-continuous variables
 
 ### Advanced Features
 
 - **LP File Comparison (`diff` feature)**
-  - Compare two LP files to identify:
-    - Added elements
-    - Removed elements
-    - Modified components
+  - Identify added, removed, and modified elements
   - Useful for model version control and validation
 
 - **Serialization (`serde` feature)**

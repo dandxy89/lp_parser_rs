@@ -1,8 +1,22 @@
+//! This Rust code defines several enums and structs used in optimization models.
+//!
+//! - `ComparisonOp`: Enum for comparison operations like greater than, less than, etc.
+//! - `Sense`: Enum for optimization sense, either minimization or maximization.
+//! - `SOSType`: Enum for types of System of Systems (SOS), with variants `S1` and `S2`.
+//! - `Coefficient`: Struct representing a coefficient associated with a variable name.
+//! - `Constraint`: Enum representing a constraint in an optimization problem, either standard or SOS.
+//! - `Objective`: Struct representing an optimization objective with a name and coefficients.
+//! - `VariableType`: Enum for different types of variables in optimization models.
+//! - `Variable`: Struct representing a variable with a name and type.
+//!
+
 use std::borrow::Cow;
 
 #[cfg_attr(feature = "diff", derive(diff::Diff), diff(attr(#[derive(Debug, PartialEq)])))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq, Eq)]
+/// Represents comparison operations that can be used to compare values.
+///
 pub enum ComparisonOp {
     /// Greater than
     GT,
@@ -19,6 +33,8 @@ pub enum ComparisonOp {
 #[cfg_attr(feature = "diff", derive(diff::Diff), diff(attr(#[derive(Debug, PartialEq)])))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
+/// Represents the optimization sense for an objective function.
+///
 pub enum Sense {
     #[default]
     Minimize,
@@ -26,6 +42,8 @@ pub enum Sense {
 }
 
 impl Sense {
+    /// Determines if the current optimization sense is minimization.
+    ///
     pub fn is_minimization(&self) -> bool {
         matches!(self, Sense::Minimize)
     }
@@ -34,6 +52,7 @@ impl Sense {
 #[cfg_attr(feature = "diff", derive(diff::Diff), diff(attr(#[derive(Debug, PartialEq)])))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, PartialEq, Eq)]
+/// Represents the type of SOS (System of Systems) with variants `S1` and `S2`.
 pub enum SOSType {
     S1,
     S2,
@@ -42,6 +61,13 @@ pub enum SOSType {
 #[cfg_attr(feature = "diff", derive(diff::Diff), diff(attr(#[derive(Debug, PartialEq)])))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, PartialEq)]
+/// Represents a coefficient associated with a variable name.
+///
+/// # Fields
+///
+/// * `var_name` - A string slice representing the name of the variable.
+/// * `coefficient` - A floating-point number representing the coefficient value.
+///
 pub struct Coefficient<'a> {
     pub var_name: &'a str,
     pub coefficient: f64,
@@ -51,12 +77,32 @@ pub struct Coefficient<'a> {
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[cfg_attr(feature = "serde", serde(tag = "type"))]
 #[derive(Debug, PartialEq)]
+/// Represents a constraint in an optimization problem, which can be either a
+/// standard linear constraint or a special ordered set (SOS) constraint.
+///
+/// # Variants
+///
+/// * `Standard` - A linear constraint defined by a name, a vector of coefficients,
+///   a comparison operator, and a right-hand side value.
+/// * `SOS` - A special ordered set constraint defined by a name, a type of SOS,
+///   and a vector of weights.
+///
+/// # Attributes
+///
+/// * `name` - The name of the constraint.
+/// * `coefficients` - A vector of coefficients for the standard constraint.
+/// * `operator` - The comparison operator for the standard constraint.
+/// * `rhs` - The right-hand side value for the standard constraint.
+/// * `sos_type` - The type of SOS for the SOS constraint.
+/// * `weights` - A vector of weights for the SOS constraint.
+///
 pub enum Constraint<'a> {
     Standard { name: Cow<'a, str>, coefficients: Vec<Coefficient<'a>>, operator: ComparisonOp, rhs: f64 },
     SOS { name: Cow<'a, str>, sos_type: SOSType, weights: Vec<Coefficient<'a>> },
 }
 
 impl<'a> Constraint<'a> {
+    /// Returns the name of the constraint as a `Cow<str>`.
     pub fn name(&'a self) -> Cow<'a, str> {
         match self {
             Constraint::Standard { name, .. } => name.clone(),
@@ -68,6 +114,16 @@ impl<'a> Constraint<'a> {
 #[cfg_attr(feature = "diff", derive(diff::Diff), diff(attr(#[derive(Debug, PartialEq)])))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Debug, PartialEq)]
+/// Represents an optimization objective with a name and a list of coefficients.
+///
+/// This struct can optionally derive `Diff` for change tracking and `Serialize`
+/// for serialization, depending on the enabled features.
+///
+/// # Fields
+///
+/// * `name` - A borrowed string representing the name of the objective.
+/// * `coefficients` - A vector of `Coefficient` instances associated with the objective.
+///
 pub struct Objective<'a> {
     pub name: Cow<'a, str>,
     pub coefficients: Vec<Coefficient<'a>>,
@@ -76,6 +132,19 @@ pub struct Objective<'a> {
 #[cfg_attr(feature = "diff", derive(diff::Diff), diff(attr(#[derive(Debug, PartialEq)])))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default, PartialEq)]
+/// Represents different types of variables that can be used in optimization models.
+///
+/// This enum supports various configurations such as:
+/// - `Free`: Unbounded variable (-Infinity, +Infinity).
+/// - `General`: General variable [0, +Infinity].
+/// - `LowerBound(f64)`: Variable with a lower bound (`x >= lb`).
+/// - `UpperBound(f64)`: Variable with an upper bound (`x ≤ ub`).
+/// - `DoubleBound(f64, f64)`: Variable with both lower and upper bounds (`lb ≤ x ≤ ub`).
+/// - `Binary`: Binary variable.
+/// - `Integer`: Integer variable.
+/// - `SemiContinuous`: Semi-continuous variable.
+/// - `SOS`: Special Order Set variable.
+///
 pub enum VariableType {
     #[default]
     /// Unbounded variable (-Infinity, +Infinity)
@@ -101,6 +170,13 @@ pub enum VariableType {
 #[cfg_attr(feature = "diff", derive(diff::Diff), diff(attr(#[derive(Debug, PartialEq)])))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, PartialEq)]
+/// Represents a variable with a name and type.
+///
+/// # Fields
+///
+/// * `name` - A string slice that holds the name of the variable.
+/// * `var_type` - The type of the variable, represented by `VariableType`.
+///
 pub struct Variable<'a> {
     pub name: &'a str,
     pub var_type: VariableType,
