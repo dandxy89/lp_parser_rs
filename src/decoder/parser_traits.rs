@@ -37,6 +37,7 @@ pub trait SectionParser<'a, T> {
     fn section_headers() -> &'static [&'static str];
     fn parse_section_content(input: &'a str) -> IResult<&'a str, T>;
 
+    #[inline]
     fn is_section_header(input: &str) -> IResult<&str, &str> {
         let headers = Self::section_headers();
         for &header in headers {
@@ -47,6 +48,7 @@ pub trait SectionParser<'a, T> {
         Err(nom::Err::Error(nom::error::Error::new(input, ErrorKind::Tag)))
     }
 
+    #[inline]
     fn parse_section(input: &'a str) -> IResult<&'a str, T> {
         map(
             tuple((multispace0, Self::is_section_header, opt(preceded(multispace0, char(':'))), multispace0, Self::parse_section_content)),
@@ -59,10 +61,12 @@ pub trait SectionParser<'a, T> {
 macro_rules! impl_section_parser {
     ($parser_type:ty, $return_type:ty, $headers:expr, $content_parser:expr) => {
         impl<'a> SectionParser<'a, $return_type> for $parser_type {
+            #[inline]
             fn section_headers() -> &'static [&'static str] {
                 $headers
             }
 
+            #[inline]
             fn parse_section_content(input: &'a str) -> IResult<&'a str, $return_type> {
                 $content_parser(input)
             }

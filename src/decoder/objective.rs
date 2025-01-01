@@ -76,12 +76,11 @@ pub fn parse_objectives(input: &str) -> ParsedObjectives<'_> {
                 .collect();
 
             Objective {
-                name: match name {
-                    Some(s) => Cow::Borrowed(s),
-                    None => {
-                        let next = gen.next_id();
-                        Cow::Owned(format!("OBJECTIVE_{next}"))
-                    }
+                name: if let Some(s) = name {
+                    Cow::Borrowed(s)
+                } else {
+                    let next = gen.next_id();
+                    Cow::Owned(format!("OBJECTIVE_{next}"))
                 },
                 coefficients,
             }

@@ -35,6 +35,7 @@ pub enum ComparisonOp {
 }
 
 impl std::fmt::Display for ComparisonOp {
+    #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::GT => write!(f, ">"),
@@ -58,14 +59,16 @@ pub enum Sense {
 }
 
 impl Sense {
+    #[inline]
     /// Determines if the current optimization sense is minimization.
     ///
-    pub fn is_minimization(&self) -> bool {
+    pub const fn is_minimization(&self) -> bool {
         matches!(self, Sense::Minimize)
     }
 }
 
 impl std::fmt::Display for Sense {
+    #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Minimize => write!(f, "Minimize"),
@@ -84,6 +87,7 @@ pub enum SOSType {
 }
 
 impl std::fmt::Display for SOSType {
+    #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::S1 => write!(f, "S1"),
@@ -108,6 +112,7 @@ pub struct Coefficient<'a> {
 }
 
 impl std::fmt::Display for Coefficient<'_> {
+    #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self.coefficient == 1.0 {
             write!(f, "{}", self.var_name)
@@ -148,16 +153,18 @@ pub enum Constraint<'a> {
 }
 
 impl<'a> Constraint<'a> {
+    #[must_use]
+    #[inline]
     /// Returns the name of the constraint as a `Cow<str>`.
     pub fn name(&'a self) -> Cow<'a, str> {
         match self {
-            Constraint::Standard { name, .. } => name.clone(),
-            Constraint::SOS { name, .. } => name.clone(),
+            Constraint::Standard { name, .. } | Constraint::SOS { name, .. } => name.clone(),
         }
     }
 }
 
 impl std::fmt::Display for Constraint<'_> {
+    #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Constraint::Standard { name, coefficients, operator, rhs } => {
@@ -241,13 +248,14 @@ pub enum VariableType {
 }
 
 impl std::fmt::Display for VariableType {
+    #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Free => write!(f, "Free"),
             Self::General => write!(f, "General"),
-            Self::LowerBound(lb) => write!(f, ">= {}", lb),
-            Self::UpperBound(ub) => write!(f, "<= {}", ub),
-            Self::DoubleBound(lb, ub) => write!(f, "{} <= x <= {}", lb, ub),
+            Self::LowerBound(lb) => write!(f, ">= {lb}"),
+            Self::UpperBound(ub) => write!(f, "<= {ub}"),
+            Self::DoubleBound(lb, ub) => write!(f, "{lb} <= x <= {ub}"),
             Self::Binary => write!(f, "Binary"),
             Self::Integer => write!(f, "Integer"),
             Self::SemiContinuous => write!(f, "Semi-Continuous"),
@@ -288,33 +296,39 @@ pub struct Variable<'a> {
 }
 
 impl<'a> Variable<'a> {
+    #[must_use]
+    #[inline]
     pub fn new(name: &'a str) -> Self {
         Self { name, var_type: VariableType::default() }
     }
 
-    pub fn with_var_type(self, var_type: VariableType) -> Self {
-        Self { var_type, ..self }
-    }
-
+    #[inline]
     pub fn set_var_type(&mut self, var_type: VariableType) {
         self.var_type = var_type;
+    }
+
+    #[must_use]
+    #[inline]
+    pub const fn with_var_type(self, var_type: VariableType) -> Self {
+        Self { var_type, ..self }
     }
 }
 
 #[cfg(feature = "serde")]
 impl<'de: 'a, 'a> serde::Deserialize<'de> for Constraint<'a> {
+    #[inline]
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         #[derive(PartialEq, serde::Deserialize)]
         #[serde(field_identifier, rename_all = "lowercase")]
         enum Field {
-            Type,
-            Name,
             Coefficients,
-            Weights,
+            Name,
             Operator,
             Rhs,
             #[serde(alias = "sos_type")]
             SosType,
+            Type,
+            Weights,
         }
 
         struct ConstraintVisitor<'a>(std::marker::PhantomData<Constraint<'a>>);
@@ -344,7 +358,7 @@ impl<'de: 'a, 'a> serde::Deserialize<'de> for Constraint<'a> {
                                 Field::Coefficients => coefficients = Some(map.next_value()?),
                                 Field::Operator => operator = Some(map.next_value()?),
                                 Field::Rhs => rhs = Some(map.next_value()?),
-                                _ => {
+                                Field::Type | Field::Weights | Field::SosType => {
                                     let _ = map.next_value::<serde::de::IgnoredAny>()?;
                                 }
                             }
@@ -367,7 +381,7 @@ impl<'de: 'a, 'a> serde::Deserialize<'de> for Constraint<'a> {
                                 Field::Name => name = map.next_value()?,
                                 Field::SosType => sos_type = Some(map.next_value()?),
                                 Field::Weights => weights = Some(map.next_value()?),
-                                _ => {
+                                Field::Type | Field::Coefficients | Field::Operator | Field::Rhs => {
                                     let _ = map.next_value::<serde::de::IgnoredAny>()?;
                                 }
                             }
@@ -391,12 +405,13 @@ impl<'de: 'a, 'a> serde::Deserialize<'de> for Constraint<'a> {
 
 #[cfg(feature = "serde")]
 impl<'de: 'a, 'a> serde::Deserialize<'de> for Objective<'a> {
+    #[inline]
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         #[derive(serde::Deserialize)]
         #[serde(field_identifier, rename_all = "lowercase")]
         enum Field {
-            Name,
             Coefficients,
+            Name,
         }
 
         struct ObjectiveVisitor<'a>(std::marker::PhantomData<Objective<'a>>);

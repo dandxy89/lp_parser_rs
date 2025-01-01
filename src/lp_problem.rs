@@ -68,48 +68,56 @@ impl<'a> LpProblem<'a> {
     // set_variable_bound
     // with_problem_name
 
+    #[must_use]
     #[inline]
     /// Initialise a new `Self`
     pub fn new() -> Self {
         Self::default()
     }
 
+    #[must_use]
     #[inline]
     /// Override the problem sense
     pub fn with_sense(self, sense: Sense) -> Self {
         Self { sense, ..self }
     }
 
+    #[must_use]
     #[inline]
     /// Returns the name of the LP Problem
-    pub fn name(&self) -> Option<&str> {
+    pub const fn name(&self) -> Option<&str> {
         self.name
     }
 
+    #[must_use]
     #[inline]
     /// Returns `true` if the `Self` a Minimize LP Problem
     pub fn is_minimization(&self) -> bool {
         self.sense.is_minimization()
     }
 
+    #[must_use]
     #[inline]
     /// Returns the number of constraints contained within the Problem
     pub fn constraint_count(&self) -> usize {
         self.constraints.len()
     }
 
+    #[must_use]
     #[inline]
     /// Returns the number of objectives contained within the Problem
     pub fn objective_count(&self) -> usize {
         self.objectives.len()
     }
 
+    #[must_use]
     #[inline]
     /// Returns the number of variables contained within the Problem
     pub fn variable_count(&self) -> usize {
         self.variables.len()
     }
 
+    #[inline]
     /// Parse a `Self` from a string slice
     pub fn parse(input: &'a str) -> Result<Self, nom::Err<nom::error::Error<&'a str>>> {
         log::debug!("Starting to parse LP problem");
@@ -120,6 +128,7 @@ impl<'a> LpProblem<'a> {
 }
 
 impl std::fmt::Display for LpProblem<'_> {
+    #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "Problem: {}", self.name.unwrap_or("unnamed LpProblem"))?;
         writeln!(f, "Sense: {}", self.sense)?;
@@ -150,7 +159,7 @@ impl<'a> TryFrom<&'a str> for LpProblem<'a> {
     #[inline]
     fn try_from(input: &'a str) -> Result<Self, Self::Error> {
         // Problem name and Sense
-        let (input, (name, sense, obj_section, _)) =
+        let (input, (name, sense, obj_section, ())) =
             tuple((parse_problem_name, parse_sense, take_until_parser(&CONSTRAINT_HEADERS), parse_constraint_header))(input)?;
         let (_, (objectives, mut variables)) = parse_objectives(obj_section)?;
 

@@ -95,12 +95,11 @@ pub fn parse_constraints<'a>(input: &'a str) -> ParsedConstraints<'a> {
 
                 // Standard (SOS constraints are handled separately)
                 Constraint::Standard {
-                    name: match name {
-                        Some(s) => Cow::Borrowed(s),
-                        None => {
-                            let next = gen.next_id();
-                            Cow::Owned(format!("CONSTRAINT_{next}"))
-                        }
+                    name: if let Some(s) = name {
+                        Cow::Borrowed(s)
+                    } else {
+                        let next = gen.next_id();
+                        Cow::Owned(format!("CONSTRAINT_{next}"))
                     },
                     coefficients,
                     operator,

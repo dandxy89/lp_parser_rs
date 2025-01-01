@@ -119,13 +119,9 @@ fn take_until_cased<'a>(tag: &'a str) -> impl Fn(&'a str) -> IResult<&'a str, &'
 #[inline]
 pub fn take_until_parser<'a>(tags: &'a [&'a str]) -> impl Fn(&'a str) -> IResult<&'a str, &'a str> + 'a {
     move |input| {
-        tags.iter().map(|&tag| take_until_cased(tag)).fold(
-            Err(nom::Err::Error(nom::error::Error::new(input, nom::error::ErrorKind::Alt))),
-            |acc, parser| match acc {
-                Ok(ok) => Ok(ok),
-                Err(_) => parser(input),
-            },
-        )
+        tags.iter()
+            .map(|&tag| take_until_cased(tag))
+            .fold(Err(nom::Err::Error(nom::error::Error::new(input, ErrorKind::Alt))), |acc, parser| acc.map_or_else(|_| parser(input), Ok))
     }
 }
 
