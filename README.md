@@ -66,9 +66,9 @@ Clone and run with a sample file:
 ```bash
 git clone https://github.com/dandxy89/lp_parser_rs.git
 # Dissemble a single LP file
-cargo run --bin nom_lp_parser --release -- {{ /path/to/your/file.lp }}
+cargo run --bin lp_parser --release -- {{ /path/to/your/file.lp }}
 # Compare two LP files (enabling the 'diff' feature)
-cargo run --bin nom_lp_parser --release --features diff -- {{ /path/to/your/file.lp }} {{ /path/to/your/other/file.lp }}
+cargo run --bin lp_parser --release --features diff -- {{ /path/to/your/file.lp }} {{ /path/to/your/other/file.lp }}
 ```
 
 ### Enable Optional Features
