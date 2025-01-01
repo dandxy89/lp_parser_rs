@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.1.2](https://github.com/dandxy89/lp_parser_rs/compare/v2.1.1...v2.1.2) (2025-01-01)
+
+
+### Bug Fixes
+
+* Adding Display impls and consistent naming conventions ([0c55412](https://github.com/dandxy89/lp_parser_rs/commit/0c55412837b8bee2d215c6b2b4c272180a532746))
+* Addressing extreme clippy lints ([5ba53c9](https://github.com/dandxy89/lp_parser_rs/commit/5ba53c93aa83fb85ddc98acfb21953ea085eaa91))
+
 ## [2.1.1](https://github.com/dandxy89/lp_parser_rs/compare/v2.1.0...v2.1.1) (2025-01-01)
 
 
