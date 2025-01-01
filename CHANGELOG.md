@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.0.0](https://github.com/dandxy89/lp_parser_rs/compare/v1.4.1...v2.0.0) (2025-01-01)
+
+
+### Features
+
+* Version 2.0.0 ([#91](https://github.com/dandxy89/lp_parser_rs/issues/91)) ([bb3e51b](https://github.com/dandxy89/lp_parser_rs/commit/bb3e51b4218a13aff34fe14788d4fdb38a972df8))
+
+
+### Miscellaneous Chores
+
+* release 2.0.0 ([666d968](https://github.com/dandxy89/lp_parser_rs/commit/666d968d1c47d5e7eff2618f702ecb1da74a1295))
+
 ## [1.4.1](https://github.com/dandxy89/lp_parser_rs/compare/v1.4.0...v1.4.1) (2025-01-01)
 
 
