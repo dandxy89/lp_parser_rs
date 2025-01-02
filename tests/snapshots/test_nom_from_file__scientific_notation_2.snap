@@ -1,0 +1,48 @@
+---
+source: tests/test_nom_from_file.rs
+expression: parsed
+---
+name: "\\ Testing scientific notation and special values"
+sense: Minimize
+objectives:
+  obj:
+    name: obj
+    coefficients:
+      - var_name: x1
+        coefficient: 0.015
+      - var_name: x2
+        coefficient: 3200
+constraints:
+  c1:
+    type: Standard
+    name: c1
+    coefficients:
+      - var_name: x1
+        coefficient: 0.21
+      - var_name: x2
+        coefficient: 10
+    operator: LTE
+    rhs: 1000
+  c2:
+    type: Standard
+    name: c2
+    coefficients:
+      - var_name: x1
+        coefficient: 1
+      - var_name: x2
+        coefficient: 1
+    operator: GTE
+    rhs: 0
+variables:
+  x1:
+    name: x1
+    var_type:
+      DoubleBound:
+        - -inf
+        - inf
+  x2:
+    name: x2
+    var_type:
+      DoubleBound:
+        - 0
+        - inf

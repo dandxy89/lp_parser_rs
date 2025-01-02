@@ -1,0 +1,64 @@
+---
+source: tests/test_nom_from_file.rs
+expression: parsed
+---
+name: "\\ Testing complex variable/constraint names and whitespace handling"
+sense: Minimize
+objectives:
+  total_cost_2025:
+    name: total_cost_2025
+    coefficients:
+      - var_name: Production_A_1
+        coefficient: 100
+      - var_name: Production_B_2
+        coefficient: 200
+      - var_name: Transport_X_Y
+        coefficient: 150
+      - var_name: Storage_Facility_1
+        coefficient: 300
+constraints:
+  Capacity_Constraint_1:
+    type: Standard
+    name: Capacity_Constraint_1
+    coefficients:
+      - var_name: Production_A_1
+        coefficient: 1
+      - var_name: Production_B_2
+        coefficient: 1
+    operator: LTE
+    rhs: 500
+  Demand_Region_X:
+    type: Standard
+    name: Demand_Region_X
+    coefficients:
+      - var_name: Transport_X_Y
+        coefficient: 1
+      - var_name: Storage_Facility_1
+        coefficient: 1
+    operator: GTE
+    rhs: 200
+variables:
+  Production_A_1:
+    name: Production_A_1
+    var_type:
+      DoubleBound:
+        - 0
+        - 300
+  Production_B_2:
+    name: Production_B_2
+    var_type:
+      DoubleBound:
+        - 0
+        - 400
+  Storage_Facility_1:
+    name: Storage_Facility_1
+    var_type:
+      DoubleBound:
+        - 0
+        - 1000
+  Transport_X_Y:
+    name: Transport_X_Y
+    var_type:
+      DoubleBound:
+        - 0
+        - inf

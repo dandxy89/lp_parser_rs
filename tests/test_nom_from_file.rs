@@ -64,9 +64,7 @@ macro_rules! generate_test {
 
 generate_test!(pulp, "pulp.lp");
 generate_test!(pulp2, "pulp2.lp");
-generate_test!(model2, "model2.lp");
 generate_test!(limbo, "limbo.lp");
-
 generate_test!(semi_continuous, "semi_continuous.lp");
 generate_test!(sos, "sos.lp");
 generate_test!(test, "test.lp");
@@ -77,12 +75,13 @@ generate_test!(optional_labels, "optional_labels.lp");
 generate_test!(infile_comments, "infile_comments.lp");
 generate_test!(infile_comments2, "infile_comments2.lp");
 generate_test!(missing_signs, "missing_signs.lp");
-
+generate_test!(scientific_notation_2, "scientific_notation_2.lp");
 generate_test!(output, "output.lp");
 generate_test!(output2_1, "output2_1.lp");
 generate_test!(output2_2, "output2_2.lp");
 generate_test!(output2_3, "output2_3.lp");
 generate_test!(output2_4, "output2_4.lp");
+generate_test!(complex_names, "complex_names.lp");
 
 // Test files from various open source projects on Github
 
@@ -107,6 +106,14 @@ generate_test!(boeing2, "boeing2.lp");
 generate_test!(fit1d, "fit1d.lp");
 generate_test!(kb2, "kb2.lp");
 generate_test!(sc50a, "sc50a.lp");
+
+// From <https://github.com/odow/LPWriter.jl>
+generate_test!(model2, "model2.lp");
+#[test]
+fn corrupt() {
+    let input = read_file_from_resources("corrupt.lp").expect("failed to read file from resources");
+    assert!(LpProblem::parse(&input).is_err());
+}
 
 // From <https://github.com/brymck/lp-parse/tree>
 generate_test!(model, "model.lp");
