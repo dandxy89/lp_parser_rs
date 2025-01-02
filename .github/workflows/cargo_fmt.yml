@@ -6,6 +6,9 @@ on:
 
 name: Cargo fmt
 
+permissions:
+  contents: read
+
 jobs:
   format:
     name: rustfmt
