@@ -12,7 +12,7 @@ use nom::{
     bytes::complete::{tag, tag_no_case, take},
     character::complete::{char, digit1, multispace0, one_of},
     combinator::{complete, eof, map, opt, peek, recognize, value, verify},
-    error::ErrorKind,
+    error::{Error, ErrorKind},
     sequence::{pair, preceded, tuple},
     Err, IResult,
 };
@@ -50,7 +50,7 @@ fn parse_number(input: &str) -> IResult<&str, &str> {
     )))(input)?;
 
     if remainder.starts_with('e') || remainder.starts_with('E') {
-        Err(Err::Error(nom::error::Error::new(input, ErrorKind::Verify)))
+        Err(Err::Error(Error::new(input, ErrorKind::Verify)))
     } else {
         Ok((remainder, matched))
     }

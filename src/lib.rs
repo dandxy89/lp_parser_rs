@@ -40,7 +40,12 @@ pub mod model;
 pub mod parser;
 pub mod parsers;
 
-use nom::{branch::alt, bytes::complete::tag_no_case, error::ErrorKind, IResult};
+use nom::{
+    branch::alt,
+    bytes::complete::tag_no_case,
+    error::{Error, ErrorKind},
+    Err, IResult,
+};
 
 /// Headers that indicate the beginning of a constraint section in an LP file.
 pub const CONSTRAINT_HEADERS: [&str; 5] = ["subject to", "such that", "s.t.", "st:", "st"];
@@ -116,7 +121,7 @@ fn take_until_cased<'a>(tag: &'a str) -> impl Fn(&'a str) -> IResult<&'a str, &'
         let chars: Vec<char> = input.chars().collect();
 
         if chars.len() < tag.len() {
-            return Err(nom::Err::Error(nom::error::Error::new(input, ErrorKind::TakeUntil)));
+            return Err(Err::Error(Error::new(input, ErrorKind::TakeUntil)));
         }
 
         while index <= chars.len() - tag.len() {
@@ -127,7 +132,7 @@ fn take_until_cased<'a>(tag: &'a str) -> impl Fn(&'a str) -> IResult<&'a str, &'
             index += 1;
         }
 
-        Err(nom::Err::Error(nom::error::Error::new(input, ErrorKind::TakeUntil)))
+        Err(Err::Error(Error::new(input, ErrorKind::TakeUntil)))
     }
 }
 
@@ -137,7 +142,7 @@ pub(crate) fn take_until_parser<'a>(tags: &'a [&'a str]) -> impl Fn(&'a str) -> 
     move |input| {
         tags.iter()
             .map(|&tag| take_until_cased(tag))
-            .fold(Err(nom::Err::Error(nom::error::Error::new(input, ErrorKind::Alt))), |acc, parser| acc.map_or_else(|_| parser(input), Ok))
+            .fold(Err(Err::Error(Error::new(input, ErrorKind::Alt))), |acc, parser| acc.map_or_else(|_| parser(input), Ok))
     }
 }
 

@@ -30,7 +30,7 @@ unique_id = { version = "0.1", features = ["sequence"] }
 
 [dev-dependencies]
 float_eq = "1.0.1"
-insta = { version = "1.41", features = ["yaml", "redactions"] }
+insta = { version = "1", features = ["yaml", "redactions"] }
 serde_json = "1.0"
 
 [profile.dev.package]

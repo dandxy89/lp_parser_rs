@@ -1,0 +1,74 @@
+---
+source: tests/test_nom_from_file.rs
+expression: parsed
+---
+name: ~
+sense: Maximize
+objectives:
+  obj:
+    name: obj
+    coefficients:
+      - var_name: x1
+        coefficient: 1
+      - var_name: x2
+        coefficient: 2
+      - var_name: x3
+        coefficient: 3
+      - var_name: x4
+        coefficient: 1
+constraints:
+  c1:
+    type: Standard
+    name: c1
+    coefficients:
+      - var_name: x1
+        coefficient: -1
+      - var_name: x2
+        coefficient: 1
+      - var_name: x3
+        coefficient: 1
+      - var_name: x4
+        coefficient: 10
+    operator: LTE
+    rhs: 20
+  c2:
+    type: Standard
+    name: c2
+    coefficients:
+      - var_name: x1
+        coefficient: 1
+      - var_name: x2
+        coefficient: -3
+      - var_name: x3
+        coefficient: 1
+    operator: LTE
+    rhs: 30
+  c3:
+    type: Standard
+    name: c3
+    coefficients:
+      - var_name: x2
+        coefficient: 1
+      - var_name: x4
+        coefficient: -3.5
+    operator: EQ
+    rhs: 0
+variables:
+  x1:
+    name: x1
+    var_type:
+      DoubleBound:
+        - 0
+        - 40
+  x2:
+    name: x2
+    var_type: Free
+  x3:
+    name: x3
+    var_type: Free
+  x4:
+    name: x4
+    var_type:
+      DoubleBound:
+        - 2
+        - 3

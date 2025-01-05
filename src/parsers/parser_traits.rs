@@ -12,10 +12,10 @@ use nom::{
     bytes::complete::{tag, tag_no_case, take_while1},
     character::complete::{char, multispace0, space0},
     combinator::{map, opt},
-    error::ErrorKind,
+    error::{Error, ErrorKind},
     multi::many0,
     sequence::{preceded, tuple},
-    IResult,
+    Err, IResult,
 };
 
 use crate::{
@@ -53,11 +53,11 @@ pub trait SectionParser<'a, T> {
     fn is_section_header(input: &str) -> IResult<&str, &str> {
         let headers = Self::section_headers();
         for &header in headers {
-            if let Ok((rem, matched)) = tag_no_case::<&str, &str, nom::error::Error<_>>(header)(input) {
+            if let Ok((rem, matched)) = tag_no_case::<&str, &str, Error<_>>(header)(input) {
                 return Ok((rem, matched));
             }
         }
-        Err(nom::Err::Error(nom::error::Error::new(input, ErrorKind::Tag)))
+        Err(Err::Error(Error::new(input, ErrorKind::Tag)))
     }
 
     #[inline]

@@ -10,7 +10,7 @@ use std::{
     collections::{hash_map::Entry, HashMap},
 };
 
-use nom::{combinator::opt, sequence::tuple};
+use nom::{combinator::opt, error::Error, sequence::tuple, Err};
 
 use crate::{
     is_binary_section, is_bounds_section, is_generals_section, is_integers_section, is_semi_section, is_sos_section,
@@ -114,7 +114,7 @@ impl<'a> LpProblem<'a> {
 
     #[inline]
     /// Parse a `Self` from a string slice
-    pub fn parse(input: &'a str) -> Result<Self, nom::Err<nom::error::Error<&'a str>>> {
+    pub fn parse(input: &'a str) -> Result<Self, Err<Error<&'a str>>> {
         log::debug!("Starting to parse LP problem");
         TryFrom::try_from(input)
     }
@@ -196,7 +196,7 @@ fn set_var_types<'a>(variables: &mut HashMap<&'a str, Variable<'a>>, vars: Vec<&
 }
 
 impl<'a> TryFrom<&'a str> for LpProblem<'a> {
-    type Error = nom::Err<nom::error::Error<&'a str>>;
+    type Error = Err<Error<&'a str>>;
 
     #[inline]
     fn try_from(input: &'a str) -> Result<Self, Self::Error> {

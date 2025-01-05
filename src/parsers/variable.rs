@@ -1,7 +1,12 @@
 //! Parser for variable declarations and bounds in LP files.
 //!
 
-use nom::{character::complete::multispace0, error::ErrorKind, multi::many0, IResult};
+use nom::{
+    character::complete::multispace0,
+    error::{Error, ErrorKind},
+    multi::many0,
+    Err, IResult,
+};
 
 use crate::{
     log_unparsed_content,
@@ -22,7 +27,7 @@ fn is_section_header(input: &str) -> bool {
 fn variable_not_header(input: &str) -> IResult<&str, &str> {
     let (input, _) = multispace0(input)?;
     if is_section_header(input) {
-        return Err(nom::Err::Error(nom::error::Error::new(input, ErrorKind::Not)));
+        return Err(Err::Error(Error::new(input, ErrorKind::Not)));
     }
     parse_variable(input)
 }

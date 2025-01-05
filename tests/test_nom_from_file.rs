@@ -135,3 +135,6 @@ generate_test!(american_steel_problem, "AmericanSteelProblem.lp");
 generate_test!(beer_distribution_problem, "BeerDistributionProblem.lp");
 generate_test!(computer_plant_problem, "ComputerPlantProblem.lp");
 generate_test!(whiskas_model_2, "WhiskasModel2.lp");
+
+// From <https://lpsolve.sourceforge.net/5.0/CPLEX-format.htm>
+generate_test!(cplex, "cplex.lp");
