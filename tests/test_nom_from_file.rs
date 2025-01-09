@@ -38,7 +38,9 @@ fn nom_fit2d() {
     });
 }
 
+#[ignore]
 #[test]
+/// A test used my contributors for assisting with issues
 fn nom_debug() {
     let input = read_file_from_resources("infile_comments.lp").expect("failed to read file from resources");
     assert!(dbg!(LpProblem::parse(&input)).is_ok());
@@ -48,6 +50,7 @@ fn nom_debug() {
 macro_rules! generate_test {
     ($test_name:ident, $file:expr) => {
         #[test]
+        #[allow(unused_variables)]
         fn $test_name() {
             let input = read_file_from_resources($file).unwrap();
             let parsed = LpProblem::parse(&input).expect("failed to parse LPProblem");

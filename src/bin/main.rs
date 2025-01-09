@@ -37,18 +37,25 @@ fn compare_lp_files(p1: &str, p2: &str) -> Result<(), Box<dyn Error>> {
 
     let difference: LpProblemDiff = problem1.diff(&problem2);
 
-    // Different variables
+    // Variables altered
     difference.variables.altered.iter().for_each(|(k, v)| {
-        println!("Variable {k} changed from {v:?} to {:?}", problem2.variables.get(k).unwrap());
+        if let Some(v_name) = problem2.variables.get(k) {
+            println!("Variable {k} changed from {v:?} to {v_name:?}");
+        }
     });
-    // Remove variables
+
+    // Variables removed
     difference.variables.removed.iter().for_each(|k| {
         println!("Variable {k} removed");
     });
+
     // Constraints altered
     difference.constraints.altered.iter().for_each(|(k, v)| {
-        println!("Constraint {k} changed from {v:?} to {:?}", problem2.constraints.get(k).unwrap());
+        if let Some(c_name) = problem2.constraints.get(k) {
+            println!("Constraint {k} changed from {v:?} to {c_name:?}");
+        }
     });
+
     // Constraints removed
     difference.constraints.removed.iter().for_each(|k| {
         println!("Constraint {k} removed");

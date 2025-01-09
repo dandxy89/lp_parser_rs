@@ -14,8 +14,10 @@
 //! # Quick Start
 //!
 //! ```rust
-//! use lp_parser::{parser::parse_file, LpProblem};
 //! use std::path::Path;
+//!
+//! use lp_parser::{parser::parse_file, LpProblem};
+//!
 //!
 //! fn main() -> Result<(), Box<dyn std::error::Error>> {
 //!     let content = parse_file(Path::new("problem.lp"))?;
