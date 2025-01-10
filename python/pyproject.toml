@@ -1,0 +1,63 @@
+[project]
+name = "parse_lp"
+description = "LpParser"
+readme = "../README.md"
+license = { file = "../LICENSE-APACHE" }
+requires-python = ">=3.9"
+keywords = [
+    "linear-programming",
+    "optimization",
+    "parser",
+    "integer-programming",
+    "math",
+]
+classifiers = [
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+dynamic = ["version"]
+
+[build-system]
+requires = ["maturin>=1,<2"]
+build-backend = "maturin"
+
+[dependency-groups]
+dev = [
+    "mypy>=1.14.1",
+    "pip>=24.3.1",
+    "pytest>=8.3.4",
+    "ruff>=0.9.1",
+    "wheel>=0.45.1",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "RUF"]
+ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["parse_lp"]
+
+[tool.coverage.run]
+branch = true
+source = ["parse_lp"]
+
+[tool.mypy]
+files = "parse_lp/*.py"
+exclude = "^tests"
+mypy_path = "./stubs"
+disallow_any_generics = true
+disallow_subclassing_any = true
+disallow_untyped_calls = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_return_any = false
+implicit_reexport = true
+strict_equality = true
