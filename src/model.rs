@@ -18,9 +18,10 @@ use std::borrow::Cow;
 
 #[cfg_attr(feature = "diff", derive(diff::Diff), diff(attr(#[derive(Debug, PartialEq)])))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 /// Represents comparison operations that can be used to compare values.
 pub enum ComparisonOp {
+    #[default]
     /// Greater than
     GT,
     /// Greater than or equal
