@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.2.1](https://github.com/dandxy89/lp_parser_rs/compare/v2.2.0...v2.2.1) (2025-01-14)
+
+
+### Bug Fixes
+
+* Adds Default to ComparisonOp ([#102](https://github.com/dandxy89/lp_parser_rs/issues/102)) ([b850308](https://github.com/dandxy89/lp_parser_rs/commit/b850308b02b9a719a096b26ffc778081958ac25a))
+
 ## [2.2.0](https://github.com/dandxy89/lp_parser_rs/compare/v2.1.3...v2.2.0) (2025-01-01)
 
 
