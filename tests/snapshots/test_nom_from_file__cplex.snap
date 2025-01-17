@@ -8,49 +8,49 @@ objectives:
   obj:
     name: obj
     coefficients:
-      - var_name: x1
-        coefficient: 1
-      - var_name: x2
-        coefficient: 2
-      - var_name: x3
-        coefficient: 3
-      - var_name: x4
-        coefficient: 1
+      - name: x1
+        value: 1
+      - name: x2
+        value: 2
+      - name: x3
+        value: 3
+      - name: x4
+        value: 1
 constraints:
   c1:
     type: Standard
     name: c1
     coefficients:
-      - var_name: x1
-        coefficient: -1
-      - var_name: x2
-        coefficient: 1
-      - var_name: x3
-        coefficient: 1
-      - var_name: x4
-        coefficient: 10
+      - name: x1
+        value: -1
+      - name: x2
+        value: 1
+      - name: x3
+        value: 1
+      - name: x4
+        value: 10
     operator: LTE
     rhs: 20
   c2:
     type: Standard
     name: c2
     coefficients:
-      - var_name: x1
-        coefficient: 1
-      - var_name: x2
-        coefficient: -3
-      - var_name: x3
-        coefficient: 1
+      - name: x1
+        value: 1
+      - name: x2
+        value: -3
+      - name: x3
+        value: 1
     operator: LTE
     rhs: 30
   c3:
     type: Standard
     name: c3
     coefficients:
-      - var_name: x2
-        coefficient: 1
-      - var_name: x4
-        coefficient: -3.5
+      - name: x2
+        value: 1
+      - name: x4
+        value: -3.5
     operator: EQ
     rhs: 0
 variables:

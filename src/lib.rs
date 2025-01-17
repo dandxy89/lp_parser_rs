@@ -37,6 +37,8 @@
 
 // #![deny(missing_docs)]
 
+#[cfg(feature = "csv")]
+pub mod csv;
 pub mod problem;
 pub mod model;
 pub mod parser;

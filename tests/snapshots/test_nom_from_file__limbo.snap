@@ -8,27 +8,27 @@ objectives:
   OBJECTIVE_1:
     name: OBJECTIVE_1
     coefficients:
-      - var_name: b_5829890_x2
-        coefficient: 1
-      - var_name: b_5880854_x2
-        coefficient: 1
+      - name: b_5829890_x2
+        value: 1
+      - name: b_5880854_x2
+        value: 1
 constraints:
   CONSTRAINT_2:
     type: Standard
     name: CONSTRAINT_2
     coefficients:
-      - var_name: b_5829890_x2
-        coefficient: -2
-      - var_name: b_5829890_x1
-        coefficient: 2
+      - name: b_5829890_x2
+        value: -2
+      - name: b_5829890_x1
+        value: 2
     operator: LTE
     rhs: -64
   b_5880854_x2:
     type: Standard
     name: b_5880854_x2
     coefficients:
-      - var_name: b_5880854_x1
-        coefficient: -1
+      - name: b_5880854_x1
+        value: -1
     operator: GTE
     rhs: 32
 variables:

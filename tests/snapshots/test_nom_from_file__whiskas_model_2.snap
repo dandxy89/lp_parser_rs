@@ -8,97 +8,97 @@ objectives:
   Total_Cost_of_Ingredients_per_can:
     name: Total_Cost_of_Ingredients_per_can
     coefficients:
-      - var_name: Ingr_BEEF
-        coefficient: 0.008
-      - var_name: Ingr_CHICKEN
-        coefficient: 0.013
-      - var_name: Ingr_GEL
-        coefficient: 0.001
-      - var_name: Ingr_MUTTON
-        coefficient: 0.01
-      - var_name: Ingr_RICE
-        coefficient: 0.002
-      - var_name: Ingr_WHEAT
-        coefficient: 0.005
+      - name: Ingr_BEEF
+        value: 0.008
+      - name: Ingr_CHICKEN
+        value: 0.013
+      - name: Ingr_GEL
+        value: 0.001
+      - name: Ingr_MUTTON
+        value: 0.01
+      - name: Ingr_RICE
+        value: 0.002
+      - name: Ingr_WHEAT
+        value: 0.005
 constraints:
   FatRequirement:
     type: Standard
     name: FatRequirement
     coefficients:
-      - var_name: Ingr_BEEF
-        coefficient: 0.1
-      - var_name: Ingr_CHICKEN
-        coefficient: 0.08
-      - var_name: Ingr_MUTTON
-        coefficient: 0.11
-      - var_name: Ingr_RICE
-        coefficient: 0.01
-      - var_name: Ingr_WHEAT
-        coefficient: 0.01
+      - name: Ingr_BEEF
+        value: 0.1
+      - name: Ingr_CHICKEN
+        value: 0.08
+      - name: Ingr_MUTTON
+        value: 0.11
+      - name: Ingr_RICE
+        value: 0.01
+      - name: Ingr_WHEAT
+        value: 0.01
     operator: GTE
     rhs: 6
   FibreRequirement:
     type: Standard
     name: FibreRequirement
     coefficients:
-      - var_name: Ingr_BEEF
-        coefficient: 0.005
-      - var_name: Ingr_CHICKEN
-        coefficient: 0.001
-      - var_name: Ingr_MUTTON
-        coefficient: 0.003
-      - var_name: Ingr_RICE
-        coefficient: 0.1
-      - var_name: Ingr_WHEAT
-        coefficient: 0.15
+      - name: Ingr_BEEF
+        value: 0.005
+      - name: Ingr_CHICKEN
+        value: 0.001
+      - name: Ingr_MUTTON
+        value: 0.003
+      - name: Ingr_RICE
+        value: 0.1
+      - name: Ingr_WHEAT
+        value: 0.15
     operator: LTE
     rhs: 2
   PercentagesSum:
     type: Standard
     name: PercentagesSum
     coefficients:
-      - var_name: Ingr_BEEF
-        coefficient: 1
-      - var_name: Ingr_CHICKEN
-        coefficient: 1
-      - var_name: Ingr_GEL
-        coefficient: 1
-      - var_name: Ingr_MUTTON
-        coefficient: 1
-      - var_name: Ingr_RICE
-        coefficient: 1
-      - var_name: Ingr_WHEAT
-        coefficient: 1
+      - name: Ingr_BEEF
+        value: 1
+      - name: Ingr_CHICKEN
+        value: 1
+      - name: Ingr_GEL
+        value: 1
+      - name: Ingr_MUTTON
+        value: 1
+      - name: Ingr_RICE
+        value: 1
+      - name: Ingr_WHEAT
+        value: 1
     operator: EQ
     rhs: 100
   ProteinRequirement:
     type: Standard
     name: ProteinRequirement
     coefficients:
-      - var_name: Ingr_BEEF
-        coefficient: 0.2
-      - var_name: Ingr_CHICKEN
-        coefficient: 0.1
-      - var_name: Ingr_MUTTON
-        coefficient: 0.15
-      - var_name: Ingr_WHEAT
-        coefficient: 0.04
+      - name: Ingr_BEEF
+        value: 0.2
+      - name: Ingr_CHICKEN
+        value: 0.1
+      - name: Ingr_MUTTON
+        value: 0.15
+      - name: Ingr_WHEAT
+        value: 0.04
     operator: GTE
     rhs: 8
   SaltRequirement:
     type: Standard
     name: SaltRequirement
     coefficients:
-      - var_name: Ingr_BEEF
-        coefficient: 0.005
-      - var_name: Ingr_CHICKEN
-        coefficient: 0.002
-      - var_name: Ingr_MUTTON
-        coefficient: 0.007
-      - var_name: Ingr_RICE
-        coefficient: 0.002
-      - var_name: Ingr_WHEAT
-        coefficient: 0.008
+      - name: Ingr_BEEF
+        value: 0.005
+      - name: Ingr_CHICKEN
+        value: 0.002
+      - name: Ingr_MUTTON
+        value: 0.007
+      - name: Ingr_RICE
+        value: 0.002
+      - name: Ingr_WHEAT
+        value: 0.008
     operator: LTE
     rhs: 0.4
 variables:

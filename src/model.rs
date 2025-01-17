@@ -34,6 +34,18 @@ pub enum ComparisonOp {
     LTE,
 }
 
+impl AsRef<[u8]> for ComparisonOp {
+    fn as_ref(&self) -> &[u8] {
+        match self {
+            Self::GT => b">",
+            Self::GTE => b">=",
+            Self::EQ => b"=",
+            Self::LT => b"<",
+            Self::LTE => b"<=",
+        }
+    }
+}
+
 impl std::fmt::Display for ComparisonOp {
     #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -86,6 +98,15 @@ pub enum SOSType {
     S2,
 }
 
+impl AsRef<[u8]> for SOSType {
+    fn as_ref(&self) -> &[u8] {
+        match self {
+            Self::S1 => b"S1",
+            Self::S2 => b"S2",
+        }
+    }
+}
+
 impl std::fmt::Display for SOSType {
     #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -102,20 +123,20 @@ impl std::fmt::Display for SOSType {
 /// Represents a coefficient associated with a variable name.
 pub struct Coefficient<'a> {
     /// A string slice representing the name of the variable.
-    pub var_name: &'a str,
+    pub name: &'a str,
     /// A floating-point number representing the coefficient value.
-    pub coefficient: f64,
+    pub value: f64,
 }
 
 impl std::fmt::Display for Coefficient<'_> {
     #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if self.coefficient == 1.0 {
-            write!(f, "{}", self.var_name)
-        } else if self.coefficient == -1.0 {
-            write!(f, "-{}", self.var_name)
+        if self.value == 1.0 {
+            write!(f, "{}", self.name)
+        } else if self.value == -1.0 {
+            write!(f, "-{}", self.name)
         } else {
-            write!(f, "{} {}", self.coefficient, self.var_name)
+            write!(f, "{} {}", self.value, self.name)
         }
     }
 }
@@ -161,7 +182,7 @@ impl std::fmt::Display for Constraint<'_> {
             Constraint::Standard { name, coefficients, operator, rhs } => {
                 write!(f, "{name}: ")?;
                 for (i, coef) in coefficients.iter().enumerate() {
-                    if i > 0 && coef.coefficient > 0.0 {
+                    if i > 0 && coef.value > 0.0 {
                         write!(f, "+ ")?;
                     }
                     write!(f, "{coef} ")?;
@@ -174,7 +195,7 @@ impl std::fmt::Display for Constraint<'_> {
                     if i > 0 {
                         write!(f, " ")?;
                     }
-                    write!(f, "{}:{}", weight.var_name, weight.coefficient)?;
+                    write!(f, "{}:{}", weight.name, weight.value)?;
                 }
                 Ok(())
             }
@@ -222,15 +243,31 @@ pub enum VariableType {
     SOS,
 }
 
+impl AsRef<[u8]> for VariableType {
+    fn as_ref(&self) -> &[u8] {
+        match self {
+            VariableType::Free => b"Free",
+            VariableType::General => b"General",
+            VariableType::LowerBound(_) => b"LowerBound",
+            VariableType::UpperBound(_) => b"UpperBound",
+            VariableType::DoubleBound(_, _) => b"DoubleBound",
+            VariableType::Binary => b"Binary",
+            VariableType::Integer => b"Integer",
+            VariableType::SemiContinuous => b"Semi-Continuous",
+            VariableType::SOS => b"SOS",
+        }
+    }
+}
+
 impl std::fmt::Display for VariableType {
     #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Free => write!(f, "Free"),
             Self::General => write!(f, "General"),
-            Self::LowerBound(lb) => write!(f, ">= {lb}"),
-            Self::UpperBound(ub) => write!(f, "<= {ub}"),
-            Self::DoubleBound(lb, ub) => write!(f, "{lb} <= x <= {ub}"),
+            Self::LowerBound(_) => write!(f, "LowerBound"),
+            Self::UpperBound(_) => write!(f, "UpperBound"),
+            Self::DoubleBound(_, _) => write!(f, "DualBounds"),
             Self::Binary => write!(f, "Binary"),
             Self::Integer => write!(f, "Integer"),
             Self::SemiContinuous => write!(f, "Semi-Continuous"),

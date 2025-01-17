@@ -8,33 +8,33 @@ objectives:
   total_cost_2025:
     name: total_cost_2025
     coefficients:
-      - var_name: Production_A_1
-        coefficient: 100
-      - var_name: Production_B_2
-        coefficient: 200
-      - var_name: Transport_X_Y
-        coefficient: 150
-      - var_name: Storage_Facility_1
-        coefficient: 300
+      - name: Production_A_1
+        value: 100
+      - name: Production_B_2
+        value: 200
+      - name: Transport_X_Y
+        value: 150
+      - name: Storage_Facility_1
+        value: 300
 constraints:
   Capacity_Constraint_1:
     type: Standard
     name: Capacity_Constraint_1
     coefficients:
-      - var_name: Production_A_1
-        coefficient: 1
-      - var_name: Production_B_2
-        coefficient: 1
+      - name: Production_A_1
+        value: 1
+      - name: Production_B_2
+        value: 1
     operator: LTE
     rhs: 500
   Demand_Region_X:
     type: Standard
     name: Demand_Region_X
     coefficients:
-      - var_name: Transport_X_Y
-        coefficient: 1
-      - var_name: Storage_Facility_1
-        coefficient: 1
+      - name: Transport_X_Y
+        value: 1
+      - name: Storage_Facility_1
+        value: 1
     operator: GTE
     rhs: 200
 variables:

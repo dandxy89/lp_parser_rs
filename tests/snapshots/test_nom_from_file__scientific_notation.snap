@@ -8,37 +8,37 @@ objectives:
   obj:
     name: obj
     coefficients:
-      - var_name: x1
-        coefficient: 0.001
-      - var_name: x2
-        coefficient: 250
-      - var_name: x3
-        coefficient: 0.0314
-      - var_name: x4
-        coefficient: -12
+      - name: x1
+        value: 0.001
+      - name: x2
+        value: 250
+      - name: x3
+        value: 0.0314
+      - name: x4
+        value: -12
 constraints:
   c1:
     type: Standard
     name: c1
     coefficients:
-      - var_name: x1
-        coefficient: 0.2
-      - var_name: x2
-        coefficient: 1.5
-      - var_name: x3
-        coefficient: 0.003
+      - name: x1
+        value: 0.2
+      - name: x2
+        value: 1.5
+      - name: x3
+        value: 0.003
     operator: LTE
     rhs: 100
   c2:
     type: Standard
     name: c2
     coefficients:
-      - var_name: x1
-        coefficient: 0.0123
-      - var_name: x2
-        coefficient: -45.6
-      - var_name: x3
-        coefficient: 0.00789
+      - name: x1
+        value: 0.0123
+      - name: x2
+        value: -45.6
+      - name: x3
+        value: 0.00789
     operator: GTE
     rhs: 0
 variables:

@@ -8,35 +8,35 @@ objectives:
   obj:
     name: obj
     coefficients:
-      - var_name: x1
-        coefficient: 1
-      - var_name: sdfdf5343
-        coefficient: 1
+      - name: x1
+        value: 1
+      - name: sdfdf5343
+        value: 1
 constraints:
   c1:
     type: Standard
     name: c1
     coefficients:
-      - var_name: x1
-        coefficient: 2
+      - name: x1
+        value: 2
     operator: LTE
     rhs: 1
   c2:
     type: Standard
     name: c2
     coefficients:
-      - var_name: x2
-        coefficient: -3.01
-      - var_name: x3
-        coefficient: 6
+      - name: x2
+        value: -3.01
+      - name: x3
+        value: 6
     operator: EQ
     rhs: 1
   c2b:
     type: Standard
     name: c2b
     coefficients:
-      - var_name: x2x3x4
-        coefficient: -3.0000000002
+      - name: x2x3x4
+        value: -3.0000000002
     operator: EQ
     rhs: 1
 variables:

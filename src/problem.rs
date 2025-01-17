@@ -136,16 +136,16 @@ impl<'a> LpProblem<'a> {
 
         if let Constraint::Standard { coefficients, .. } = &constraint {
             for coeff in coefficients {
-                if !self.variables.contains_key(coeff.var_name) {
-                    self.variables.insert(coeff.var_name, Variable::new(coeff.var_name));
+                if !self.variables.contains_key(coeff.name) {
+                    self.variables.insert(coeff.name, Variable::new(coeff.name));
                 }
             }
         }
 
         if let Constraint::SOS { weights, .. } = &constraint {
             for coeff in weights {
-                if !self.variables.contains_key(coeff.var_name) {
-                    self.variables.insert(coeff.var_name, Variable::new(coeff.var_name).with_var_type(VariableType::SOS));
+                if !self.variables.contains_key(coeff.name) {
+                    self.variables.insert(coeff.name, Variable::new(coeff.name).with_var_type(VariableType::SOS));
                 }
             }
         }
@@ -159,8 +159,8 @@ impl<'a> LpProblem<'a> {
     /// If an objective with the same name already exists, it will be replaced.
     pub fn add_objective(&mut self, objective: Objective<'a>) {
         for coeff in &objective.coefficients {
-            if !self.variables.contains_key(coeff.var_name) {
-                self.variables.insert(coeff.var_name, Variable::new(coeff.var_name));
+            if !self.variables.contains_key(coeff.name) {
+                self.variables.insert(coeff.name, Variable::new(coeff.name));
             }
         }
 
@@ -172,11 +172,14 @@ impl<'a> LpProblem<'a> {
 impl std::fmt::Display for LpProblem<'_> {
     #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "Problem: {}", self.name.as_ref().unwrap_or(&Cow::Borrowed("unnamed LpProblem")))?;
+        if let Some(problem_name) = &self.name {
+            writeln!(f, "Problem name: {problem_name}")?;
+        }
         writeln!(f, "Sense: {}", self.sense)?;
         writeln!(f, "Objectives: {}", self.objectives.len())?;
         writeln!(f, "Constraints: {}", self.constraints.len())?;
         writeln!(f, "Variables: {}", self.variables.len())?;
+
         Ok(())
     }
 }
@@ -488,7 +491,7 @@ End";
         let mut problem = LpProblem::new();
         let constraint = Constraint::Standard {
             name: Cow::Borrowed("c1"),
-            coefficients: vec![Coefficient { var_name: "x1", coefficient: 1.0 }, Coefficient { var_name: "x2", coefficient: 2.0 }],
+            coefficients: vec![Coefficient { name: "x1", value: 1.0 }, Coefficient { name: "x2", value: 2.0 }],
             operator: ComparisonOp::LTE,
             rhs: 5.0,
         };
@@ -503,7 +506,7 @@ End";
         let mut problem = LpProblem::new().with_sense(Sense::Minimize).with_problem_name(Cow::Borrowed("test"));
         let objective = Objective {
             name: Cow::Borrowed("obj1"),
-            coefficients: vec![Coefficient { var_name: "x1", coefficient: 1.0 }, Coefficient { var_name: "x2", coefficient: -1.0 }],
+            coefficients: vec![Coefficient { name: "x1", value: 1.0 }, Coefficient { name: "x2", value: -1.0 }],
         };
 
         problem.add_objective(objective);

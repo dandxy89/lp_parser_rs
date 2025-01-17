@@ -8,15 +8,15 @@ objectives:
   obj:
     name: obj
     coefficients:
-      - var_name: X9
-        coefficient: 1
+      - name: X9
+        value: 1
 constraints:
   CONSTRAINT_5:
     type: Standard
     name: CONSTRAINT_5
     coefficients:
-      - var_name: X0
-        coefficient: -1
+      - name: X0
+        value: -1
     operator: GTE
     rhs: -5
 variables:

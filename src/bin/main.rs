@@ -10,13 +10,15 @@ fn dissemble_single_file(path: &str) -> Result<(), Box<dyn Error>> {
 
     // Print the parsed LP problem
     println!("Parsed LP Problem:");
-    if let Some(name) = problem.name() {
-        println!("Problem name: {name}");
+    println!("{}", problem);
+
+    #[cfg(feature = "csv")]
+    {
+        use lp_parser_rs::csv::LpCsvWriter;
+
+        let current_dir = std::env::current_dir()?;
+        problem.to_csv(current_dir.as_path())?;
     }
-    println!("Sense: {:?}", problem.sense);
-    println!("Objectives count={}", problem.objective_count());
-    println!("Constraint count={}", problem.constraint_count());
-    println!("Variables count={}", problem.variable_count());
 
     Ok(())
 }
