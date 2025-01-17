@@ -8,41 +8,41 @@ objectives:
   system_cost:
     name: system_cost
     coefficients:
-      - var_name: Gen_001d01h01
-        coefficient: 0.2
-      - var_name: Gen_001d01h02
-        coefficient: 0.2
-      - var_name: Gen_001d01h03
-        coefficient: 0.2
-      - var_name: Gen_001d01h04
-        coefficient: 0.2
-      - var_name: Gen_001d01h05
-        coefficient: 0.2
-      - var_name: Gen_001d01h06
-        coefficient: 0.2
-      - var_name: Gen_001d01h07
-        coefficient: 0.2
-      - var_name: Gen_001d01h08
-        coefficient: 0.2
-      - var_name: Gen_001d01h09
-        coefficient: 0.2
-      - var_name: Gen_001d01h10
-        coefficient: 0.2
-      - var_name: Gen_001d01h11
-        coefficient: 0.2
+      - name: Gen_001d01h01
+        value: 0.2
+      - name: Gen_001d01h02
+        value: 0.2
+      - name: Gen_001d01h03
+        value: 0.2
+      - name: Gen_001d01h04
+        value: 0.2
+      - name: Gen_001d01h05
+        value: 0.2
+      - name: Gen_001d01h06
+        value: 0.2
+      - name: Gen_001d01h07
+        value: 0.2
+      - name: Gen_001d01h08
+        value: 0.2
+      - name: Gen_001d01h09
+        value: 0.2
+      - name: Gen_001d01h10
+        value: 0.2
+      - name: Gen_001d01h11
+        value: 0.2
 constraints:
   dummy_constraint:
     type: Standard
     name: dummy_constraint
     coefficients:
-      - var_name: Gen_001d01h01
-        coefficient: 1
-      - var_name: Gen_001d01h02
-        coefficient: 1
-      - var_name: "SO_GB.XYZ's.Dan.(1)"
-        coefficient: 59.983048643
-      - var_name: STU_7_AL.rsuT.Wat.Job.(1)
-        coefficient: -0.2
+      - name: Gen_001d01h01
+        value: 1
+      - name: Gen_001d01h02
+        value: 1
+      - name: "SO_GB.XYZ's.Dan.(1)"
+        value: 59.983048643
+      - name: STU_7_AL.rsuT.Wat.Job.(1)
+        value: -0.2
     operator: LTE
     rhs: 1000
 variables:

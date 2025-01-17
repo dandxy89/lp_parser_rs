@@ -8,23 +8,23 @@ objectives:
   cost:
     name: cost
     coefficients:
-      - var_name: x
-        coefficient: -2
-      - var_name: y
-        coefficient: -3
-      - var_name: z
-        coefficient: 4
+      - name: x
+        value: -2
+      - name: y
+        value: -3
+      - name: z
+        value: 4
 constraints:
   cons:
     type: Standard
     name: cons
     coefficients:
-      - var_name: x
-        coefficient: 4.4
-      - var_name: y
-        coefficient: 5.5
-      - var_name: z
-        coefficient: 6.6
+      - name: x
+        value: 4.4
+      - name: y
+        value: 5.5
+      - name: z
+        value: 6.6
     operator: LTE
     rhs: 120
 variables:

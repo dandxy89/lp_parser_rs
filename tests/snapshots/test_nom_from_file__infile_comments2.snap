@@ -8,18 +8,18 @@ objectives:
   obj:
     name: obj
     coefficients:
-      - var_name: x1
-        coefficient: 3
-      - var_name: x2
-        coefficient: 5
-      - var_name: x3
-        coefficient: 6
-      - var_name: x4
-        coefficient: 9
-      - var_name: x5
-        coefficient: 10
-      - var_name: x6
-        coefficient: 10
+      - name: x1
+        value: 3
+      - name: x2
+        value: 5
+      - name: x3
+        value: 6
+      - name: x4
+        value: 9
+      - name: x5
+        value: 10
+      - name: x6
+        value: 10
 constraints: {}
 variables:
   "\\":

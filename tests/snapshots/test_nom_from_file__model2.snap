@@ -8,45 +8,45 @@ objectives:
   obj:
     name: obj
     coefficients:
-      - var_name: V4
-        coefficient: -1
-      - var_name: V5
-        coefficient: 1
+      - name: V4
+        value: -1
+      - name: V5
+        value: 1
 constraints:
   CON1:
     type: Standard
     name: CON1
     coefficients:
-      - var_name: V1
-        coefficient: 1
+      - name: V1
+        value: 1
     operator: GTE
     rhs: 0
   CON2:
     type: Standard
     name: CON2
     coefficients:
-      - var_name: V2
-        coefficient: 1
+      - name: V2
+        value: 1
     operator: GTE
     rhs: 2
   CON3:
     type: Standard
     name: CON3
     coefficients:
-      - var_name: V3
-        coefficient: 1
+      - name: V3
+        value: 1
     operator: LTE
     rhs: 2.5
   CON4:
     type: Standard
     name: CON4
     coefficients:
-      - var_name: V5
-        coefficient: 1
-      - var_name: V6
-        coefficient: 1
-      - var_name: V7
-        coefficient: 1
+      - name: V5
+        value: 1
+      - name: V6
+        value: 1
+      - name: V7
+        value: 1
     operator: LTE
     rhs: 1
 variables:

@@ -8,51 +8,51 @@ objectives:
   obj1:
     name: obj1
     coefficients:
-      - var_name: x
-        coefficient: -0.5
-      - var_name: y
-        coefficient: -2
-      - var_name: z
-        coefficient: -8
+      - name: x
+        value: -0.5
+      - name: y
+        value: -2
+      - name: z
+        value: -8
   obj2:
     name: obj2
     coefficients:
-      - var_name: y
-        coefficient: 1
-      - var_name: x
-        coefficient: 1
-      - var_name: z
-        coefficient: 1
+      - name: y
+        value: 1
+      - name: x
+        value: 1
+      - name: z
+        value: 1
   obj3:
     name: obj3
     coefficients:
-      - var_name: z
-        coefficient: 10
-      - var_name: x
-        coefficient: -2.5
-      - var_name: y
-        coefficient: 1
+      - name: z
+        value: 10
+      - name: x
+        value: -2.5
+      - name: y
+        value: 1
 constraints:
   cons1:
     type: Standard
     name: cons1
     coefficients:
-      - var_name: x
-        coefficient: -199
-      - var_name: y
-        coefficient: 10
-      - var_name: z
-        coefficient: 1
+      - name: x
+        value: -199
+      - name: y
+        value: 10
+      - name: z
+        value: 1
     operator: LTE
     rhs: 0
   cons2:
     type: Standard
     name: cons2
     coefficients:
-      - var_name: y
-        coefficient: 1
-      - var_name: z
-        coefficient: 1
+      - name: y
+        value: 1
+      - name: z
+        value: 1
     operator: GTE
     rhs: 0
 variables:
