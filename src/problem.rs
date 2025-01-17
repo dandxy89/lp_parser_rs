@@ -167,16 +167,37 @@ impl<'a> LpProblem<'a> {
         let name = objective.name.clone();
         self.objectives.insert(name, objective);
     }
+
+    #[cfg_attr(feature = "serde")]
+    // Writes the problem data to CSV files with normalized structure.
+    /// Creates separate CSV files for objectives, constraints, and variables,
+    /// with coefficients split into individual rows.
+    pub fn to_csv(&self, base_path: &std::path::Path) -> Result<(), Box<dyn Error>> {
+        // Write objectives and their coefficients
+        let mut obj_writer = csv::Writer::from_path(base_path.join("objectives.csv"))?;
+        obj_writer.write_record(&["objective_name", "variable_name", "coefficient"])?;
+        for (name, objective) in &self.objectives {
+            for coef in &objective.coefficients {
+                obj_writer.write_record(&[name.as_ref(), coef.var_name, &coef.coefficient.to_string()])?;
+            }
+        }
+        obj_writer.flush()?;
+
+        todo!()
+    }
 }
 
 impl std::fmt::Display for LpProblem<'_> {
     #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "Problem: {}", self.name.as_ref().unwrap_or(&Cow::Borrowed("unnamed LpProblem")))?;
+        if let Some(problem_name) = &self.name {
+            writeln!(f, "Problem name: {problem_name}")?;
+        }
         writeln!(f, "Sense: {}", self.sense)?;
         writeln!(f, "Objectives: {}", self.objectives.len())?;
         writeln!(f, "Constraints: {}", self.constraints.len())?;
         writeln!(f, "Variables: {}", self.variables.len())?;
+
         Ok(())
     }
 }

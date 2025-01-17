@@ -10,13 +10,7 @@ fn dissemble_single_file(path: &str) -> Result<(), Box<dyn Error>> {
 
     // Print the parsed LP problem
     println!("Parsed LP Problem:");
-    if let Some(name) = problem.name() {
-        println!("Problem name: {name}");
-    }
-    println!("Sense: {:?}", problem.sense);
-    println!("Objectives count={}", problem.objective_count());
-    println!("Constraint count={}", problem.constraint_count());
-    println!("Variables count={}", problem.variable_count());
+    println!("{}", problem);
 
     Ok(())
 }
