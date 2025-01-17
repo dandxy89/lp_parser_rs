@@ -12,6 +12,14 @@ fn dissemble_single_file(path: &str) -> Result<(), Box<dyn Error>> {
     println!("Parsed LP Problem:");
     println!("{}", problem);
 
+    #[cfg(feature = "csv")]
+    {
+        use lp_parser_rs::csv::LpCsvWriter;
+
+        let current_dir = std::env::current_dir()?;
+        problem.to_csv(current_dir.as_path())?;
+    }
+
     Ok(())
 }
 

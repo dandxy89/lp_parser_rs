@@ -81,8 +81,8 @@ pub fn parse_objectives(input: &str) -> ObjectiveParseResult<'_> {
                 .into_iter()
                 .chain(continuation_coefficients.into_iter().flatten())
                 .inspect(|coeff| {
-                    if let Entry::Vacant(vacant_entry) = objective_vars.entry(coeff.var_name) {
-                        vacant_entry.insert(Variable::new(coeff.var_name));
+                    if let Entry::Vacant(vacant_entry) = objective_vars.entry(coeff.name) {
+                        vacant_entry.insert(Variable::new(coeff.name));
                     }
                 })
                 .collect();

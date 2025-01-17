@@ -89,8 +89,8 @@ pub fn parse_constraints<'a>(input: &'a str) -> ConstraintParseResult<'a> {
         |(is_comment, name, coefficients, operator, rhs)| {
             is_comment.is_none().then(|| {
                 for coeff in &coefficients {
-                    if let Entry::Vacant(vacant_entry) = constraint_vars.entry(coeff.var_name) {
-                        vacant_entry.insert(Variable::new(coeff.var_name));
+                    if let Entry::Vacant(vacant_entry) = constraint_vars.entry(coeff.name) {
+                        vacant_entry.insert(Variable::new(coeff.name));
                     }
                 }
 

@@ -37,7 +37,7 @@
 
 // #![deny(missing_docs)]
 
-#[cfg_attr(feature = "serde")]
+#[cfg(feature = "csv")]
 pub mod csv;
 pub mod problem;
 pub mod model;

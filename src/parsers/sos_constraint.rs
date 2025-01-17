@@ -35,9 +35,9 @@ fn parse_sos_type(input: &str) -> IResult<&str, SOSType> {
 #[inline]
 /// Parses a variable-weight pair for an SOS constraint.
 fn parse_sos_weight(input: &str) -> IResult<&str, Coefficient> {
-    map(tuple((preceded(multispace0, parse_variable), preceded(char(':'), parse_num_value))), |(var_name, coefficient)| Coefficient {
-        var_name,
-        coefficient,
+    map(tuple((preceded(multispace0, parse_variable), preceded(char(':'), parse_num_value))), |(var_name, value)| Coefficient {
+        name: var_name,
+        value,
     })(input)
 }
 
@@ -76,8 +76,8 @@ pub fn parse_sos_section<'a>(input: &'a str) -> ParsedConstraints<'a> {
         )),
         |(name, sos_type, weights)| {
             for coeff in &weights {
-                if let Entry::Vacant(vacant_entry) = constraint_vars.entry(coeff.var_name) {
-                    vacant_entry.insert(Variable::new(coeff.var_name).with_var_type(VariableType::SOS));
+                if let Entry::Vacant(vacant_entry) = constraint_vars.entry(coeff.name) {
+                    vacant_entry.insert(Variable::new(coeff.name).with_var_type(VariableType::SOS));
                 }
             }
 

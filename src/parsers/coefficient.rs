@@ -34,8 +34,8 @@ pub fn parse_coefficient(input: &str) -> IResult<&str, Coefficient> {
         )),
         |(sign, coef, var_name)| {
             let base_coef = coef.unwrap_or(1.0);
-            let coefficient = if sign == Some('-') { -base_coef } else { base_coef };
-            Coefficient { var_name, coefficient }
+            let value = if sign == Some('-') { -base_coef } else { base_coef };
+            Coefficient { name: var_name, value }
         },
     )(input)
 }

@@ -136,16 +136,16 @@ impl<'a> LpProblem<'a> {
 
         if let Constraint::Standard { coefficients, .. } = &constraint {
             for coeff in coefficients {
-                if !self.variables.contains_key(coeff.var_name) {
-                    self.variables.insert(coeff.var_name, Variable::new(coeff.var_name));
+                if !self.variables.contains_key(coeff.name) {
+                    self.variables.insert(coeff.name, Variable::new(coeff.name));
                 }
             }
         }
 
         if let Constraint::SOS { weights, .. } = &constraint {
             for coeff in weights {
-                if !self.variables.contains_key(coeff.var_name) {
-                    self.variables.insert(coeff.var_name, Variable::new(coeff.var_name).with_var_type(VariableType::SOS));
+                if !self.variables.contains_key(coeff.name) {
+                    self.variables.insert(coeff.name, Variable::new(coeff.name).with_var_type(VariableType::SOS));
                 }
             }
         }
@@ -159,31 +159,13 @@ impl<'a> LpProblem<'a> {
     /// If an objective with the same name already exists, it will be replaced.
     pub fn add_objective(&mut self, objective: Objective<'a>) {
         for coeff in &objective.coefficients {
-            if !self.variables.contains_key(coeff.var_name) {
-                self.variables.insert(coeff.var_name, Variable::new(coeff.var_name));
+            if !self.variables.contains_key(coeff.name) {
+                self.variables.insert(coeff.name, Variable::new(coeff.name));
             }
         }
 
         let name = objective.name.clone();
         self.objectives.insert(name, objective);
-    }
-
-    #[cfg_attr(feature = "serde")]
-    // Writes the problem data to CSV files with normalized structure.
-    /// Creates separate CSV files for objectives, constraints, and variables,
-    /// with coefficients split into individual rows.
-    pub fn to_csv(&self, base_path: &std::path::Path) -> Result<(), Box<dyn Error>> {
-        // Write objectives and their coefficients
-        let mut obj_writer = csv::Writer::from_path(base_path.join("objectives.csv"))?;
-        obj_writer.write_record(&["objective_name", "variable_name", "coefficient"])?;
-        for (name, objective) in &self.objectives {
-            for coef in &objective.coefficients {
-                obj_writer.write_record(&[name.as_ref(), coef.var_name, &coef.coefficient.to_string()])?;
-            }
-        }
-        obj_writer.flush()?;
-
-        todo!()
     }
 }
 
@@ -509,7 +491,7 @@ End";
         let mut problem = LpProblem::new();
         let constraint = Constraint::Standard {
             name: Cow::Borrowed("c1"),
-            coefficients: vec![Coefficient { var_name: "x1", coefficient: 1.0 }, Coefficient { var_name: "x2", coefficient: 2.0 }],
+            coefficients: vec![Coefficient { name: "x1", value: 1.0 }, Coefficient { name: "x2", value: 2.0 }],
             operator: ComparisonOp::LTE,
             rhs: 5.0,
         };
@@ -524,7 +506,7 @@ End";
         let mut problem = LpProblem::new().with_sense(Sense::Minimize).with_problem_name(Cow::Borrowed("test"));
         let objective = Objective {
             name: Cow::Borrowed("obj1"),
-            coefficients: vec![Coefficient { var_name: "x1", coefficient: 1.0 }, Coefficient { var_name: "x2", coefficient: -1.0 }],
+            coefficients: vec![Coefficient { name: "x1", value: 1.0 }, Coefficient { name: "x2", value: -1.0 }],
         };
 
         problem.add_objective(objective);
