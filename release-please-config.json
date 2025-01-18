@@ -1,9 +1,17 @@
 {
   "bootstrap-sha": "3c94a8cd1312a4a68485121e21e277bb1620f292",
   "packages": {
-    ".": {
+    "rust": {
       "changelog-path": "CHANGELOG.md",
       "release-type": "rust",
+      "bump-minor-pre-major": false,
+      "bump-patch-for-minor-pre-major": false,
+      "draft": false,
+      "prerelease": false
+    },
+    "python": {
+      "changelog-path": "CHANGELOG.md",
+      "release-type": "python",
       "bump-minor-pre-major": false,
       "bump-patch-for-minor-pre-major": false,
       "draft": false,
