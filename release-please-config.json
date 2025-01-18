@@ -4,6 +4,7 @@
     "rust": {
       "changelog-path": "CHANGELOG.md",
       "release-type": "rust",
+      "path": "rust/Cargo.toml",
       "bump-minor-pre-major": false,
       "bump-patch-for-minor-pre-major": false,
       "draft": false,
@@ -13,11 +14,13 @@
     "python": {
       "changelog-path": "CHANGELOG.md",
       "release-type": "python",
+      "path": "python/pyproject.toml",
       "bump-minor-pre-major": false,
       "bump-patch-for-minor-pre-major": false,
       "draft": false,
       "prerelease": false,
-      "release-as": "0.1.0"
+      "release-as": "0.1.0",
+      "package-name": "parse_lp"
     }
   },
   "release-type": "rust",
