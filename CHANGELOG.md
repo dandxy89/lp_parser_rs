@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.3.0](https://github.com/dandxy89/lp_parser_rs/compare/v2.2.1...v2.3.0) (2025-01-18)
+
+
+### Features
+
+* LpCsvWriter ([#104](https://github.com/dandxy89/lp_parser_rs/issues/104)) ([7dd96ba](https://github.com/dandxy89/lp_parser_rs/commit/7dd96ba0c4557b06a8d4f93fffdc68abf48673a9))
+
 ## [2.2.1](https://github.com/dandxy89/lp_parser_rs/compare/v2.2.0...v2.2.1) (2025-01-14)
 
 
