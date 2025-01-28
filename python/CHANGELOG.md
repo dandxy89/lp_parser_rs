@@ -7,6 +7,19 @@
 
 * Upgrading to use nom 0.8.0 ([#112](https://github.com/dandxy89/lp_parser_rs/issues/112)) ([4f8a0e3](https://github.com/dandxy89/lp_parser_rs/commit/4f8a0e326aaad54ad76eb88ebbb2775ea6740454))
 
+
+### Miscellaneous Chores
+
+* release 2.3.0 ([efafbca](https://github.com/dandxy89/lp_parser_rs/commit/efafbcae561ea76e020156e5f3d9fc7c273e4156))
+* release main ([#113](https://github.com/dandxy89/lp_parser_rs/issues/113)) ([8fd7207](https://github.com/dandxy89/lp_parser_rs/commit/8fd72073d046c6efb5a11acc58a9be1b3133faea))
+
+## [0.1.0](https://github.com/dandxy89/lp_parser_rs/compare/parse_lp-v0.1.0...parse_lp-v0.1.0) (2025-01-28)
+
+
+### Build System
+
+* Upgrading to use nom 0.8.0 ([#112](https://github.com/dandxy89/lp_parser_rs/issues/112)) ([4f8a0e3](https://github.com/dandxy89/lp_parser_rs/commit/4f8a0e326aaad54ad76eb88ebbb2775ea6740454))
+
 ## [0.1.0](https://github.com/dandxy89/lp_parser_rs/compare/parse_lp-v0.1.0...parse_lp-v0.1.0) (2025-01-18)
 
 
