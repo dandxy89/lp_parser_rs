@@ -1,7 +1,10 @@
 //! Parser for optimization sense in LP files.
 //!
 
-use nom::{branch::alt, bytes::complete::tag_no_case, character::complete::multispace0, combinator::value, sequence::delimited, IResult};
+use nom::{
+    branch::alt, bytes::complete::tag_no_case, character::complete::multispace0, combinator::value, sequence::delimited, IResult,
+    Parser as _,
+};
 
 use crate::model::Sense;
 
@@ -30,7 +33,8 @@ pub fn parse_sense(input: &str) -> IResult<&str, Sense> {
             value(Sense::Maximize, alt((tag_no_case("maximize"), tag_no_case("maximum"), tag_no_case("max")))),
         )),
         multispace0,
-    )(input)
+    )
+    .parse(input)
 }
 
 #[cfg(test)]

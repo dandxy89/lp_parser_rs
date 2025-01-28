@@ -13,8 +13,8 @@ use nom::{
     character::complete::{char, digit1, multispace0, one_of},
     combinator::{complete, eof, map, opt, peek, recognize, value, verify},
     error::{Error, ErrorKind},
-    sequence::{pair, preceded, tuple},
-    Err, IResult,
+    sequence::{pair, preceded},
+    Err, IResult, Parser as _,
 };
 
 use crate::model::ComparisonOp;
@@ -23,22 +23,23 @@ use crate::model::ComparisonOp;
 /// Parses infinity values from the input string.
 fn parse_infinity(input: &str) -> IResult<&str, f64> {
     map(
-        tuple((
+        (
             opt(one_of("+-")),
             alt((tag_no_case("infinity"), tag_no_case("inf"))),
             peek(alt((eof, verify(take(1_usize), |c: &str| !c.chars().next().unwrap().is_alphanumeric())))),
-        )),
+        ),
         |(sign, _, _)| match sign {
             Some('-') => f64::NEG_INFINITY,
             _ => f64::INFINITY,
         },
-    )(input)
+    )
+    .parse(input)
 }
 
 #[inline]
 /// Parses regular numeric values from the input string.
 fn parse_number(input: &str) -> IResult<&str, &str> {
-    let (remainder, matched) = recognize(tuple((
+    let (remainder, matched) = recognize((
         // Optional sign at the start
         opt(one_of("+-")),
         // Integer part (required)
@@ -46,8 +47,9 @@ fn parse_number(input: &str) -> IResult<&str, &str> {
         // Optional decimal part
         opt(pair(char('.'), opt(digit1))),
         // Optional scientific notation part
-        opt(complete(tuple((alt((char('e'), char('E'))), opt(one_of("+-")), digit1)))),
-    )))(input)?;
+        opt(complete((alt((char('e'), char('E'))), opt(one_of("+-")), digit1))),
+    ))
+    .parse(input)?;
 
     if remainder.starts_with('e') || remainder.starts_with('E') {
         Err(Err::Error(Error::new(input, ErrorKind::Verify)))
@@ -59,7 +61,7 @@ fn parse_number(input: &str) -> IResult<&str, &str> {
 #[inline]
 /// Parses a numeric value with optional whitespace, handling both regular numbers and infinity.
 pub fn parse_num_value(input: &str) -> IResult<&str, f64> {
-    preceded(multispace0, alt((parse_infinity, map(parse_number, |v| v.parse::<f64>().unwrap_or_default()))))(input)
+    preceded(multispace0, alt((parse_infinity, map(parse_number, |v| v.parse::<f64>().unwrap_or_default())))).parse(input)
 }
 
 #[inline]
@@ -74,7 +76,8 @@ pub fn parse_cmp_op(input: &str) -> IResult<&str, ComparisonOp> {
             value(ComparisonOp::LT, tag("<")),
             value(ComparisonOp::GT, tag(">")),
         )),
-    )(input)
+    )
+    .parse(input)
 }
 
 #[cfg(test)]

@@ -37,7 +37,7 @@ impl LpParser {
 
         let input = parse_file(&PathBuf::from(&self.lp_file)).map_err(|_| PyRuntimeError::new_err("Unable to read LpFile."))?;
         let problem = LpProblem::parse(&input).map_err(|_| PyRuntimeError::new_err("Unable to parse LpProblem"))?;
-        problem.to_csv(&Path::new(base_directory)).map_err(|_| PyRuntimeError::new_err("Unable to write to .csv files"))?;
+        problem.to_csv(Path::new(base_directory)).map_err(|_| PyRuntimeError::new_err("Unable to write to .csv files"))?;
 
         Ok(())
     }

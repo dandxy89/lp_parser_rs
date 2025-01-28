@@ -27,9 +27,9 @@ build-backend = "maturin"
 [dependency-groups]
 dev = [
     "mypy>=1.14.1",
-    "pip>=24.3.1",
+    "pip>=25.0",
     "pytest>=8.3.4",
-    "ruff>=0.9.1",
+    "ruff>=0.9.3",
     "wheel>=0.45.1",
 ]
 

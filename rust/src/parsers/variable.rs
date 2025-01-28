@@ -5,7 +5,7 @@ use nom::{
     character::complete::multispace0,
     error::{Error, ErrorKind},
     multi::many0,
-    Err, IResult,
+    Err, IResult, Parser as _,
 };
 
 use crate::{
@@ -35,7 +35,7 @@ fn variable_not_header(input: &str) -> IResult<&str, &str> {
 #[inline]
 /// Parses a list of variables until a section header is encountered.
 pub fn parse_variable_list(input: &str) -> IResult<&str, Vec<&str>> {
-    many0(variable_not_header)(input)
+    many0(variable_not_header).parse(input)
 }
 
 #[inline]
