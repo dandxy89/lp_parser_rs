@@ -8,8 +8,8 @@ use nom::{
     branch::alt,
     character::complete::{char, space0},
     combinator::{map, opt},
-    sequence::{preceded, tuple},
-    IResult,
+    sequence::preceded,
+    IResult, Parser as _,
 };
 
 use crate::{
@@ -27,15 +27,12 @@ use crate::{
 ///
 pub fn parse_coefficient(input: &str) -> IResult<&str, Coefficient> {
     map(
-        tuple((
-            opt(preceded(space0, alt((char('+'), char('-'))))),
-            opt(preceded(space0, parse_num_value)),
-            preceded(space0, parse_variable),
-        )),
+        (opt(preceded(space0, alt((char('+'), char('-'))))), opt(preceded(space0, parse_num_value)), preceded(space0, parse_variable)),
         |(sign, coef, var_name)| {
             let base_coef = coef.unwrap_or(1.0);
             let value = if sign == Some('-') { -base_coef } else { base_coef };
             Coefficient { name: var_name, value }
         },
-    )(input)
+    )
+    .parse(input)
 }

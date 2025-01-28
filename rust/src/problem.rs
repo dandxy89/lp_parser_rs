@@ -10,7 +10,7 @@ use std::{
     collections::{hash_map::Entry, HashMap},
 };
 
-use nom::{combinator::opt, error::Error, sequence::tuple, Err};
+use nom::{combinator::opt, error::Error, Err, Parser as _};
 
 use crate::{
     is_binary_section, is_bounds_section, is_generals_section, is_integers_section, is_semi_section, is_sos_section,
@@ -205,7 +205,7 @@ impl<'a> TryFrom<&'a str> for LpProblem<'a> {
     fn try_from(input: &'a str) -> Result<Self, Self::Error> {
         // Problem name and Sense
         let (input, (name, sense, obj_section, ())) =
-            tuple((parse_problem_name, parse_sense, take_until_parser(&CONSTRAINT_HEADERS), parse_constraint_header))(input)?;
+            (parse_problem_name, parse_sense, take_until_parser(&CONSTRAINT_HEADERS), parse_constraint_header).parse(input)?;
         let (_, (objectives, mut variables)) = parse_objectives(obj_section)?;
 
         // Constraints
@@ -234,7 +234,7 @@ impl<'a> TryFrom<&'a str> for LpProblem<'a> {
 
         // Integer
         if is_integers_section(input).is_ok() {
-            if let Ok((rem_input, Some(integer_str))) = opt(take_until_parser(&GENERAL_HEADERS))(input) {
+            if let Ok((rem_input, Some(integer_str))) = opt(take_until_parser(&GENERAL_HEADERS)).parse(input) {
                 if let Ok((_, integer_vars)) = parse_integer_section(integer_str) {
                     set_var_types(&mut variables, integer_vars, VariableType::Integer);
                 }
@@ -244,7 +244,7 @@ impl<'a> TryFrom<&'a str> for LpProblem<'a> {
 
         // General
         if is_generals_section(input).is_ok() {
-            if let Ok((rem_input, Some(generals_str))) = opt(take_until_parser(&BINARY_HEADERS))(input) {
+            if let Ok((rem_input, Some(generals_str))) = opt(take_until_parser(&BINARY_HEADERS)).parse(input) {
                 if let Ok((_, general_vars)) = parse_generals_section(generals_str) {
                     set_var_types(&mut variables, general_vars, VariableType::General);
                 }
@@ -254,7 +254,7 @@ impl<'a> TryFrom<&'a str> for LpProblem<'a> {
 
         // Binary
         if is_binary_section(input).is_ok() {
-            if let Ok((rem_input, Some(binary_str))) = opt(take_until_parser(&SEMI_HEADERS))(input) {
+            if let Ok((rem_input, Some(binary_str))) = opt(take_until_parser(&SEMI_HEADERS)).parse(input) {
                 if let Ok((_, binary_vars)) = parse_binary_section(binary_str) {
                     set_var_types(&mut variables, binary_vars, VariableType::Binary);
                 }
@@ -264,7 +264,7 @@ impl<'a> TryFrom<&'a str> for LpProblem<'a> {
 
         // Semi-continuous
         if is_semi_section(input).is_ok() {
-            if let Ok((rem_input, Some(semi_str))) = opt(take_until_parser(&SOS_HEADERS))(input) {
+            if let Ok((rem_input, Some(semi_str))) = opt(take_until_parser(&SOS_HEADERS)).parse(input) {
                 if let Ok((_, semi_vars)) = parse_semi_section(semi_str) {
                     set_var_types(&mut variables, semi_vars, VariableType::SemiContinuous);
                 }
@@ -274,8 +274,8 @@ impl<'a> TryFrom<&'a str> for LpProblem<'a> {
 
         // SOS constraint
         if is_sos_section(input).is_ok() {
-            if let Ok((rem_input, Some(sos_str))) = opt(take_until_parser(&END_HEADER))(input) {
-                if let Ok((_, Some((sos_constraints, constraint_vars)))) = opt(parse_sos_section)(sos_str) {
+            if let Ok((rem_input, Some(sos_str))) = opt(take_until_parser(&END_HEADER)).parse(input) {
+                if let Ok((_, Some((sos_constraints, constraint_vars)))) = opt(parse_sos_section).parse(sos_str) {
                     variables.extend(constraint_vars);
                     for (name, constraint) in sos_constraints {
                         constraints.insert(name, constraint);

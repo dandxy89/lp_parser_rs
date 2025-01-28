@@ -16,8 +16,8 @@ use nom::{
     character::complete::{char, multispace0},
     combinator::{map, opt, value},
     multi::many1,
-    sequence::{delimited, preceded, terminated, tuple},
-    IResult,
+    sequence::{delimited, preceded, terminated},
+    IResult, Parser as _,
 };
 use unique_id::{sequence::SequenceGenerator, Generator as _};
 
@@ -36,18 +36,19 @@ use crate::{
 pub fn parse_constraint_header(input: &str) -> IResult<&str, ()> {
     value(
         (),
-        tuple((
+        (
             multispace0,
             alt((tag_no_case("subject to"), tag_no_case("such that"), tag_no_case("s.t."), tag_no_case("st"))),
             opt(char(':')),
             multispace0,
-        )),
-    )(input)
+        ),
+    )
+    .parse(input)
 }
 
 #[inline]
 fn parse_comment_marker(input: &str) -> IResult<&str, ()> {
-    value((), preceded(multispace0, tag("\\")))(input)
+    value((), preceded(multispace0, tag("\\"))).parse(input)
 }
 
 type ConstraintParseResult<'a> = IResult<&'a str, (HashMap<Cow<'a, str>, Constraint<'a>>, HashMap<&'a str, Variable<'a>>)>;
@@ -75,7 +76,7 @@ pub fn parse_constraints<'a>(input: &'a str) -> ConstraintParseResult<'a> {
     let gen = SequenceGenerator;
 
     let parser = map(
-        tuple((
+        (
             // Optional comment marker
             opt(parse_comment_marker),
             // Name part with optional whitespace and newlines
@@ -85,7 +86,7 @@ pub fn parse_constraints<'a>(input: &'a str) -> ConstraintParseResult<'a> {
             // Operator and RHS with flexible whitespace
             preceded(multispace0, parse_cmp_op),
             preceded(multispace0, parse_num_value),
-        )),
+        ),
         |(is_comment, name, coefficients, operator, rhs)| {
             is_comment.is_none().then(|| {
                 for coeff in &coefficients {
@@ -110,7 +111,7 @@ pub fn parse_constraints<'a>(input: &'a str) -> ConstraintParseResult<'a> {
         },
     );
 
-    let (remaining, constraints) = many1(parser)(input)?;
+    let (remaining, constraints) = many1(parser).parse(input)?;
     let cons = constraints.into_iter().flatten().map(|c| (Cow::Owned(c.name().to_string()), c)).collect();
 
     log_unparsed_content("Failed to parse constraints fully", remaining);

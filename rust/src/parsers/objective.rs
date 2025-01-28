@@ -16,8 +16,8 @@ use nom::{
     character::complete::{char, multispace0, multispace1, space0},
     combinator::{map, not, opt, peek},
     multi::{many0, many1},
-    sequence::{delimited, preceded, terminated, tuple},
-    IResult,
+    sequence::{delimited, preceded, terminated},
+    IResult, Parser as _,
 };
 use unique_id::{sequence::SequenceGenerator, Generator as _};
 
@@ -30,13 +30,13 @@ use crate::{
 #[inline]
 /// Checks if a string starts with a new objective function definition.
 fn is_new_objective(input: &str) -> IResult<&str, ()> {
-    map(tuple((multispace0, parse_variable, multispace0, char(':'))), |_| ())(input)
+    map((multispace0, parse_variable, multispace0, char(':')), |_| ()).parse(input)
 }
 
 #[inline]
 /// Parses continuation lines of an objective function.
 fn objective_continuations(input: &str) -> IResult<&str, Vec<Coefficient<'_>>> {
-    preceded(tuple((multispace1, not(peek(is_new_objective)))), many1(preceded(space0, parse_coefficient)))(input)
+    preceded((multispace1, not(peek(is_new_objective))), many1(preceded(space0, parse_coefficient))).parse(input)
 }
 
 /// Type alias for the parsed result of objectives.
@@ -68,14 +68,14 @@ pub fn parse_objectives(input: &str) -> ObjectiveParseResult<'_> {
 
     // Inline function to extra Objective functions
     let parser = map(
-        tuple((
+        (
             // Name part (optional)
             opt(terminated(preceded(multispace0, parse_variable), delimited(multispace0, char(':'), multispace0))),
             // Initial coefficients
             many1(preceded(space0, parse_coefficient)),
             // Continuation lines
             many0(objective_continuations),
-        )),
+        ),
         |(name, coefficients, continuation_coefficients)| {
             let coefficients = coefficients
                 .into_iter()
@@ -99,7 +99,7 @@ pub fn parse_objectives(input: &str) -> ObjectiveParseResult<'_> {
         },
     );
 
-    let (remaining, objectives) = many1(parser)(input)?;
+    let (remaining, objectives) = many1(parser).parse(input)?;
 
     log_unparsed_content("Failed to parse objectives fully", remaining);
     Ok(("", (objectives.into_iter().map(|ob| (ob.name.clone(), ob)).collect(), objective_vars)))

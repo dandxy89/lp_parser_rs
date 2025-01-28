@@ -48,7 +48,7 @@ use nom::{
     branch::alt,
     bytes::complete::tag_no_case,
     error::{Error, ErrorKind},
-    Err, IResult,
+    Err, IResult, Parser as _,
 };
 
 /// Headers that indicate the beginning of a constraint section in an LP file.
@@ -153,35 +153,35 @@ pub(crate) fn take_until_parser<'a>(tags: &'a [&'a str]) -> impl Fn(&'a str) -> 
 #[inline]
 /// Checks if the input string starts with a binary section header.
 pub fn is_binary_section(input: &str) -> IResult<&str, &str> {
-    alt((tag_no_case("binaries"), tag_no_case("binary"), tag_no_case("bin")))(input)
+    alt((tag_no_case("binaries"), tag_no_case("binary"), tag_no_case("bin"))).parse(input)
 }
 
 #[inline]
 /// Checks if the input string starts with a bounds section header.
 pub fn is_bounds_section(input: &str) -> IResult<&str, &str> {
-    alt((tag_no_case("bounds"), tag_no_case("bound")))(input)
+    alt((tag_no_case("bounds"), tag_no_case("bound"))).parse(input)
 }
 
 #[inline]
 /// Checks if the input string starts with a generals section header.
 pub fn is_generals_section(input: &str) -> IResult<&str, &str> {
-    alt((tag_no_case("generals"), tag_no_case("general"), tag_no_case("gen")))(input)
+    alt((tag_no_case("generals"), tag_no_case("general"), tag_no_case("gen"))).parse(input)
 }
 
 #[inline]
 /// Checks if the input string starts with a integers section header.
 pub fn is_integers_section(input: &str) -> IResult<&str, &str> {
-    alt((tag_no_case("integers"), tag_no_case("integer")))(input)
+    alt((tag_no_case("integers"), tag_no_case("integer"))).parse(input)
 }
 
 #[inline]
 /// Checks if the input string starts with a semi-continuous section header.
 pub fn is_semi_section(input: &str) -> IResult<&str, &str> {
-    alt((tag_no_case("semis"), tag_no_case("semi")))(input)
+    alt((tag_no_case("semis"), tag_no_case("semi"))).parse(input)
 }
 
 #[inline]
 /// Checks if the input string starts with a SOS constraints section header.
 pub fn is_sos_section(input: &str) -> IResult<&str, &str> {
-    tag_no_case("sos")(input)
+    tag_no_case("sos").parse(input)
 }
