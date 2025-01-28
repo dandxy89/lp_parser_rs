@@ -1,10 +1,11 @@
 [package]
 name = "lp_parser_rs"
-version = "2.3.1"
+version = "2.3.2"
 edition = "2021"
 authors = ["Dan Dixey", "Dan Dixey <dan@functorml.co.uk>"]
 rust-version = "1.63.0"
 license = "MIT OR Apache-2.0"
+readme = "../README.md"
 description = "A Rust parser for the LP file format."
 keywords = [
     "linear-programming",
