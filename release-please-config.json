@@ -9,7 +9,7 @@
       "bump-patch-for-minor-pre-major": false,
       "draft": false,
       "prerelease": false,
-      "release-as": "2.2.1"
+      "release-as": "2.3.0"
     },
     "python": {
       "changelog-path": "CHANGELOG.md",
@@ -19,7 +19,7 @@
       "bump-patch-for-minor-pre-major": false,
       "draft": false,
       "prerelease": false,
-      "release-as": "0.1.0",
+      "release-as": "0.2.0",
       "package-name": "parse_lp"
     }
   },
