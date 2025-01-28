@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.2.1](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v2.2.1...lp_parser_rs-v2.2.1) (2025-01-28)
+
+
+### Build System
+
+* Upgrading to use nom 0.8.0 ([#112](https://github.com/dandxy89/lp_parser_rs/issues/112)) ([4f8a0e3](https://github.com/dandxy89/lp_parser_rs/commit/4f8a0e326aaad54ad76eb88ebbb2775ea6740454))
+
 ## [2.2.1](https://github.com/dandxy89/lp_parser_rs/compare/v2.2.0...v2.2.1) (2025-01-14)
 
 
