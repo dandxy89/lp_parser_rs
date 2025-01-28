@@ -6,7 +6,7 @@
 
 ## Overview
 
-![Logo](resources/carbon.png)
+![Logo](rust/resources/carbon.png)
 
 A robust Rust parser for Linear Programming (LP) files, built on the [NOM](https://docs.rs/nom/latest/nom/) parsing framework. This crate provides comprehensive support for parsing and analysing LP files according to major industry specifications.
 
