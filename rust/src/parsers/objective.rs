@@ -64,7 +64,7 @@ type ObjectiveParseResult<'a> = IResult<&'a str, (HashMap<Cow<'a, str>, Objectiv
 ///
 pub fn parse_objectives(input: &str) -> ObjectiveParseResult<'_> {
     let mut objective_vars = HashMap::with_capacity(2);
-    let gen = SequenceGenerator;
+    let generals = SequenceGenerator;
 
     // Inline function to extra Objective functions
     let parser = map(
@@ -91,7 +91,7 @@ pub fn parse_objectives(input: &str) -> ObjectiveParseResult<'_> {
                 name: if let Some(s) = name {
                     Cow::Borrowed(s)
                 } else {
-                    let next = gen.next_id();
+                    let next = generals.next_id();
                     Cow::Owned(format!("OBJECTIVE_{next}"))
                 },
                 coefficients,

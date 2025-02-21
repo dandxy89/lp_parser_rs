@@ -73,7 +73,7 @@ type ConstraintParseResult<'a> = IResult<&'a str, (HashMap<Cow<'a, str>, Constra
 ///
 pub fn parse_constraints<'a>(input: &'a str) -> ConstraintParseResult<'a> {
     let mut constraint_vars: HashMap<&'a str, Variable<'a>> = HashMap::with_capacity(512);
-    let gen = SequenceGenerator;
+    let generator = SequenceGenerator;
 
     let parser = map(
         (
@@ -100,7 +100,7 @@ pub fn parse_constraints<'a>(input: &'a str) -> ConstraintParseResult<'a> {
                     name: if let Some(s) = name {
                         Cow::Borrowed(s)
                     } else {
-                        let next = gen.next_id();
+                        let next = generator.next_id();
                         Cow::Owned(format!("CONSTRAINT_{next}"))
                     },
                     coefficients,
