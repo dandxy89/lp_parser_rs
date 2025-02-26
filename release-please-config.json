@@ -59,7 +59,7 @@
     }
   ],
   "packages": {
-    "lp_parser_rs": {
+    "rust": {
       "changelog-path": "rust/CHANGELOG.md",
       "release-type": "rust",
       "path": "rust/Cargo.toml",
@@ -68,7 +68,7 @@
       "draft": false,
       "prerelease": false
     },
-    "parse_lp": {
+    "python": {
       "changelog-path": "python/CHANGELOG.md",
       "release-type": "python",
       "path": "python/pyproject.toml",
