@@ -1,31 +1,6 @@
 {
-  "bootstrap-sha": "3c94a8cd1312a4a68485121e21e277bb1620f292",
-  "packages": {
-    "rust": {
-      "changelog-path": "CHANGELOG.md",
-      "release-type": "rust",
-      "path": "rust/Cargo.toml",
-      "bump-minor-pre-major": false,
-      "bump-patch-for-minor-pre-major": false,
-      "draft": false,
-      "prerelease": false,
-      "release-as": "2.3.2"
-    },
-    "python": {
-      "changelog-path": "CHANGELOG.md",
-      "release-type": "python",
-      "path": "python/pyproject.toml",
-      "bump-minor-pre-major": false,
-      "bump-patch-for-minor-pre-major": false,
-      "draft": false,
-      "prerelease": false,
-      "release-as": "0.2.0",
-      "package-name": "parse_lp"
-    }
-  },
-  "release-type": "rust",
   "pull-request-header": "New Release",
-  "pull-request-title-pattern": "chore(main): release ${version}",
+  "release-type": "rust",
   "changelog-sections": [
     {
       "type": "build",
@@ -83,5 +58,25 @@
       "hidden": false
     }
   ],
+  "packages": {
+    "lp_parser_rs": {
+      "changelog-path": "rust/CHANGELOG.md",
+      "release-type": "rust",
+      "path": "rust/Cargo.toml",
+      "bump-minor-pre-major": false,
+      "bump-patch-for-minor-pre-major": false,
+      "draft": false,
+      "prerelease": false
+    },
+    "parse_lp": {
+      "changelog-path": "python/CHANGELOG.md",
+      "release-type": "python",
+      "path": "python/pyproject.toml",
+      "bump-minor-pre-major": false,
+      "bump-patch-for-minor-pre-major": false,
+      "draft": false,
+      "prerelease": false
+    }
+  },
   "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json"
 }
