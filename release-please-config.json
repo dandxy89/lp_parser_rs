@@ -70,8 +70,8 @@
     },
     "python": {
       "changelog-path": "python/CHANGELOG.md",
-      "release-type": "python",
-      "path": "python/pyproject.toml",
+      "release-type": "rust",
+      "path": "python/Cargo.toml",
       "bump-minor-pre-major": false,
       "bump-patch-for-minor-pre-major": false,
       "draft": false,
