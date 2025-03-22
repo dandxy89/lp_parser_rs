@@ -1,0 +1,39 @@
+name: python_build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+defaults:
+  run:
+    working-directory: ./python
+
+jobs:
+  multi-python-running:
+    name: Running with Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    env:
+      CARGO_INCREMENTAL: 0
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v3
+      - name: Setup Environment
+        uses: ./.github/actions/setup-env
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Build and install parse_lp
+        run: |
+          uv sync
+      - name: Run parse_lp
+        run: |
+          uv run python -c 'import parse_lp'
+      - name: Run check-python
+        run: |
+          make check-python
+      - name: Run unit-test
+        run: |
+          make unit-test

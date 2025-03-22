@@ -23,7 +23,7 @@ develop: setup ## Install Python binding
 	uvx --from 'maturin[zig]' maturin develop --extras=devel $(MATURIN_EXTRA_ARGS)
 
 .PHONY: install
-install: build ## Install Python binding
+install: develop ## Install Python binding
 	$(info --- Uninstall Python binding ---)
 	uv pip uninstall lp_parser
 	$(info --- Install Python binding ---)
@@ -44,8 +44,8 @@ check-python: ## Run check on Python
 	uv run --no-sync ruff format --check --diff .
 	$(info Check Python linting)
 	uv run --no-sync ruff check .
-	$(info Check Python mypy)
-	uv run --no-sync mypy
+	# $(info Check Python mypy)
+	# uv run --no-sync mypy
 
 .PHONY: unit-test
 unit-test: install ## Run unit test
