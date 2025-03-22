@@ -4,6 +4,9 @@ VENV := .venv
 MATURIN_VERSION := $(shell grep 'requires =' pyproject.toml | cut -d= -f2- | tr -d '[ "]')
 PACKAGE_VERSION := $(shell grep version Cargo.toml | head -n 1 | awk '{print $$3}' | tr -d '"' )
 
+# NOTE: make sure to run these in release mode with
+MATURIN_EXTRA_ARGS=--release
+
 .PHONY: setup
 setup: ## Setup the requirements
 	$(info --- Setup dependencies ---)
@@ -45,7 +48,7 @@ check-python: ## Run check on Python
 	uv run --no-sync mypy
 
 .PHONY: unit-test
-unit-test: ## Run unit test
+unit-test: install ## Run unit test
 	$(info --- Run Python unit-test ---)
 	uv run --no-sync pytest --doctest-modules 
 
