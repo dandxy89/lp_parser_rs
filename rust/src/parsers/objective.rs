@@ -7,25 +7,22 @@
 //! - Multi-line objective definitions
 //!
 
-use std::{
-    borrow::Cow,
-    collections::{hash_map::Entry, HashMap},
-};
+use std::borrow::Cow;
+use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 
-use nom::{
-    character::complete::{char, multispace0, multispace1, space0},
-    combinator::{map, not, opt, peek},
-    multi::{many0, many1},
-    sequence::{delimited, preceded, terminated},
-    IResult, Parser as _,
-};
-use unique_id::{sequence::SequenceGenerator, Generator as _};
+use nom::character::complete::{char, multispace0, multispace1, space0};
+use nom::combinator::{map, not, opt, peek};
+use nom::multi::{many0, many1};
+use nom::sequence::{delimited, preceded, terminated};
+use nom::{IResult, Parser as _};
+use unique_id::Generator as _;
+use unique_id::sequence::SequenceGenerator;
 
-use crate::{
-    log_unparsed_content,
-    model::{Coefficient, Objective, Variable},
-    parsers::{coefficient::parse_coefficient, parser_traits::parse_variable},
-};
+use crate::log_unparsed_content;
+use crate::model::{Coefficient, Objective, Variable};
+use crate::parsers::coefficient::parse_coefficient;
+use crate::parsers::parser_traits::parse_variable;
 
 #[inline]
 /// Checks if a string starts with a new objective function definition.

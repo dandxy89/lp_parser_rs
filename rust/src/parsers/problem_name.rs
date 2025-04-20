@@ -6,14 +6,12 @@
 
 use std::borrow::Cow;
 
-use nom::{
-    branch::alt,
-    bytes::complete::{tag, take_until},
-    character::complete::{line_ending, multispace0, not_line_ending},
-    combinator::recognize,
-    multi::many0,
-    IResult, Parser as _,
-};
+use nom::branch::alt;
+use nom::bytes::complete::{tag, take_until};
+use nom::character::complete::{line_ending, multispace0, not_line_ending};
+use nom::combinator::recognize;
+use nom::multi::many0;
+use nom::{IResult, Parser as _};
 
 #[inline]
 /// Parses a single comment from the input string.

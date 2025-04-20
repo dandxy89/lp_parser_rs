@@ -5,31 +5,25 @@
 //! right-hand side values.
 //!
 
-use std::{
-    borrow::Cow,
-    collections::{hash_map::Entry, HashMap},
-};
+use std::borrow::Cow;
+use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 
-use nom::{
-    branch::alt,
-    bytes::complete::{tag, tag_no_case},
-    character::complete::{char, multispace0},
-    combinator::{map, opt, value},
-    multi::many1,
-    sequence::{delimited, preceded, terminated},
-    IResult, Parser as _,
-};
-use unique_id::{sequence::SequenceGenerator, Generator as _};
+use nom::branch::alt;
+use nom::bytes::complete::{tag, tag_no_case};
+use nom::character::complete::{char, multispace0};
+use nom::combinator::{map, opt, value};
+use nom::multi::many1;
+use nom::sequence::{delimited, preceded, terminated};
+use nom::{IResult, Parser as _};
+use unique_id::Generator as _;
+use unique_id::sequence::SequenceGenerator;
 
-use crate::{
-    log_unparsed_content,
-    model::{Constraint, Variable},
-    parsers::{
-        coefficient::parse_coefficient,
-        number::{parse_cmp_op, parse_num_value},
-        parser_traits::parse_variable,
-    },
-};
+use crate::log_unparsed_content;
+use crate::model::{Constraint, Variable};
+use crate::parsers::coefficient::parse_coefficient;
+use crate::parsers::number::{parse_cmp_op, parse_num_value};
+use crate::parsers::parser_traits::parse_variable;
 
 #[inline]
 /// Parses a constraint section header from an LP format input string.

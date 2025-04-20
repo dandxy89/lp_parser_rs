@@ -4,9 +4,11 @@
 //! It includes several test functions and a macro to generate tests for various LP files, ensuring they can be parsed correctly.
 //!
 
-use std::{error::Error, path::PathBuf};
+use std::error::Error;
+use std::path::PathBuf;
 
-use lp_parser_rs::{parser::parse_file, problem::LpProblem};
+use lp_parser_rs::parser::parse_file;
+use lp_parser_rs::problem::LpProblem;
 
 fn read_file_from_resources(file_name: &str) -> Result<String, Box<dyn Error + 'static>> {
     let mut file_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));

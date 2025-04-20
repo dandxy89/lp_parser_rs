@@ -39,17 +39,15 @@
 
 #[cfg(feature = "csv")]
 pub mod csv;
-pub mod problem;
 pub mod model;
 pub mod parser;
 pub mod parsers;
+pub mod problem;
 
-use nom::{
-    branch::alt,
-    bytes::complete::tag_no_case,
-    error::{Error, ErrorKind},
-    Err, IResult, Parser as _,
-};
+use nom::branch::alt;
+use nom::bytes::complete::tag_no_case;
+use nom::error::{Error, ErrorKind};
+use nom::{Err, IResult, Parser as _};
 
 /// Headers that indicate the beginning of a constraint section in an LP file.
 pub const CONSTRAINT_HEADERS: [&str; 5] = ["subject to", "such that", "s.t.", "st:", "st"];

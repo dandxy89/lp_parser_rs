@@ -1,6 +1,9 @@
-use std::{env, error::Error, path::PathBuf};
+use std::env;
+use std::error::Error;
+use std::path::PathBuf;
 
-use lp_parser_rs::{parser::parse_file, problem::LpProblem};
+use lp_parser_rs::parser::parse_file;
+use lp_parser_rs::problem::LpProblem;
 
 fn dissemble_single_file(path: &str) -> Result<(), Box<dyn Error>> {
     let path = PathBuf::from(path);

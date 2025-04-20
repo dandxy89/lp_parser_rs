@@ -1,10 +1,12 @@
 //! Parser for optimization sense in LP files.
 //!
 
-use nom::{
-    branch::alt, bytes::complete::tag_no_case, character::complete::multispace0, combinator::value, sequence::delimited, IResult,
-    Parser as _,
-};
+use nom::branch::alt;
+use nom::bytes::complete::tag_no_case;
+use nom::character::complete::multispace0;
+use nom::combinator::value;
+use nom::sequence::delimited;
+use nom::{IResult, Parser as _};
 
 use crate::model::Sense;
 

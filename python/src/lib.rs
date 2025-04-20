@@ -1,10 +1,10 @@
 use std::path::{Path, PathBuf};
 
-use lp_parser_rs::{csv::LpCsvWriter as _, parser::parse_file, problem::LpProblem};
-use pyo3::{
-    exceptions::{PyFileExistsError, PyNotADirectoryError, PyRuntimeError},
-    prelude::*,
-};
+use lp_parser_rs::csv::LpCsvWriter as _;
+use lp_parser_rs::parser::parse_file;
+use lp_parser_rs::problem::LpProblem;
+use pyo3::exceptions::{PyFileExistsError, PyNotADirectoryError, PyRuntimeError};
+use pyo3::prelude::*;
 
 #[pyclass]
 pub struct LpParser {

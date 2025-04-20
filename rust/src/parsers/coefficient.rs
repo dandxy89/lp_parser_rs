@@ -4,18 +4,15 @@
 //! that appear in objective functions and constraints.
 //!
 
-use nom::{
-    branch::alt,
-    character::complete::{char, space0},
-    combinator::{map, opt},
-    sequence::preceded,
-    IResult, Parser as _,
-};
+use nom::branch::alt;
+use nom::character::complete::{char, space0};
+use nom::combinator::{map, opt};
+use nom::sequence::preceded;
+use nom::{IResult, Parser as _};
 
-use crate::{
-    model::Coefficient,
-    parsers::{number::parse_num_value, parser_traits::parse_variable},
-};
+use crate::model::Coefficient;
+use crate::parsers::number::parse_num_value;
+use crate::parsers::parser_traits::parse_variable;
 
 #[inline]
 /// Parses a coefficient from the given input string.

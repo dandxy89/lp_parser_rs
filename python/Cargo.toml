@@ -22,4 +22,4 @@ crate-type = ["cdylib"]
 
 [dependencies]
 lp_parser_rs = { path = "../rust", features = ["csv"] }
-pyo3 = { version = "0.24.0", features = ["extension-module", "abi3", "abi3-py39"] }
+pyo3 = { version = "0.24.1", features = ["extension-module", "abi3", "abi3-py39"] }

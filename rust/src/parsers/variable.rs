@@ -1,19 +1,16 @@
 //! Parser for variable declarations and bounds in LP files.
 //!
 
-use nom::{
-    character::complete::multispace0,
-    error::{Error, ErrorKind},
-    multi::many0,
-    Err, IResult, Parser as _,
-};
+use nom::character::complete::multispace0;
+use nom::error::{Error, ErrorKind};
+use nom::multi::many0;
+use nom::{Err, IResult, Parser as _};
 
-use crate::{
-    log_unparsed_content,
-    model::VariableType,
-    parsers::parser_traits::{parse_variable, BinaryParser, BoundsParser, GeneralParser, IntegerParser, SectionParser as _, SemiParser},
-    ALL_BOUND_HEADERS,
+use crate::model::VariableType;
+use crate::parsers::parser_traits::{
+    BinaryParser, BoundsParser, GeneralParser, IntegerParser, SectionParser as _, SemiParser, parse_variable,
 };
+use crate::{ALL_BOUND_HEADERS, log_unparsed_content};
 
 #[inline]
 /// Checks if the input string is the start of a section header.

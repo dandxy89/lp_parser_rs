@@ -7,15 +7,13 @@
 //! - Comparison operators
 //!
 
-use nom::{
-    branch::alt,
-    bytes::complete::{tag, tag_no_case, take},
-    character::complete::{char, digit1, multispace0, one_of},
-    combinator::{complete, eof, map, opt, peek, recognize, value, verify},
-    error::{Error, ErrorKind},
-    sequence::{pair, preceded},
-    Err, IResult, Parser as _,
-};
+use nom::branch::alt;
+use nom::bytes::complete::{tag, tag_no_case, take};
+use nom::character::complete::{char, digit1, multispace0, one_of};
+use nom::combinator::{complete, eof, map, opt, peek, recognize, value, verify};
+use nom::error::{Error, ErrorKind};
+use nom::sequence::{pair, preceded};
+use nom::{Err, IResult, Parser as _};
 
 use crate::model::ComparisonOp;
 

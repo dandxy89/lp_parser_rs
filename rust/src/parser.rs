@@ -4,12 +4,10 @@
 //! and preparing their contents for parsing.
 //!
 
-use std::{
-    error::Error,
-    fs::File,
-    io::{BufReader, Read as _},
-    path::Path,
-};
+use std::error::Error;
+use std::fs::File;
+use std::io::{BufReader, Read as _};
+use std::path::Path;
 
 #[inline]
 /// Parses the contents of a file at the given path into a string.

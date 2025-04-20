@@ -1,5 +1,7 @@
-edition = "2024"
-reorder_modules = false
+style_edition = "2024"
+reorder_modules = true
 use_small_heuristics = "Max"
 max_width = 140
-imports_granularity = "Crate"
+
+imports_granularity = "Module"
+group_imports = "StdExternalCrate"

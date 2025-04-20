@@ -5,26 +5,22 @@
 //! both Type 1 (SOS1) and Type 2 (SOS2) constraints with associated weights.
 //!
 
-use std::{
-    borrow::Cow,
-    collections::{hash_map::Entry, HashMap},
-};
+use std::borrow::Cow;
+use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 
-use nom::{
-    branch::alt,
-    bytes::complete::tag_no_case,
-    character::complete::{char, multispace0, multispace1},
-    combinator::{map, opt},
-    multi::many1,
-    sequence::{delimited, preceded, terminated},
-    IResult, Parser as _,
-};
+use nom::branch::alt;
+use nom::bytes::complete::tag_no_case;
+use nom::character::complete::{char, multispace0, multispace1};
+use nom::combinator::{map, opt};
+use nom::multi::many1;
+use nom::sequence::{delimited, preceded, terminated};
+use nom::{IResult, Parser as _};
 
-use crate::{
-    log_unparsed_content,
-    model::{Coefficient, Constraint, SOSType, Variable, VariableType},
-    parsers::{number::parse_num_value, parser_traits::parse_variable},
-};
+use crate::log_unparsed_content;
+use crate::model::{Coefficient, Constraint, SOSType, Variable, VariableType};
+use crate::parsers::number::parse_num_value;
+use crate::parsers::parser_traits::parse_variable;
 
 #[inline]
 /// Parses the SOS constraint type (S1 or S2).

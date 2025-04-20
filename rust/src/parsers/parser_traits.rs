@@ -7,22 +7,19 @@
 //! - Implementations for various section types (Binary, Bounds, General, etc.)
 //!
 
-use nom::{
-    branch::alt,
-    bytes::complete::{tag, tag_no_case, take_while1},
-    character::complete::{char, multispace0, space0},
-    combinator::{map, opt},
-    error::{Error, ErrorKind},
-    multi::many0,
-    sequence::preceded,
-    Err, IResult, Parser as _,
-};
+use nom::branch::alt;
+use nom::bytes::complete::{tag, tag_no_case, take_while1};
+use nom::character::complete::{char, multispace0, space0};
+use nom::combinator::{map, opt};
+use nom::error::{Error, ErrorKind};
+use nom::multi::many0;
+use nom::sequence::preceded;
+use nom::{Err, IResult, Parser as _};
 
-use crate::{
-    model::VariableType,
-    parsers::{number::parse_num_value, variable::parse_variable_list},
-    VALID_LP_FILE_CHARS,
-};
+use crate::VALID_LP_FILE_CHARS;
+use crate::model::VariableType;
+use crate::parsers::number::parse_num_value;
+use crate::parsers::variable::parse_variable_list;
 
 /// A trait for parsing sections within a text input.
 ///

@@ -1,9 +1,8 @@
-use std::{error::Error, path::Path};
+use std::error::Error;
+use std::path::Path;
 
-use crate::{
-    model::{Constraint, VariableType},
-    problem::LpProblem,
-};
+use crate::model::{Constraint, VariableType};
+use crate::problem::LpProblem;
 
 pub trait LpCsvWriter {
     fn write_constraints(&self, base_path: &Path) -> Result<(), Box<dyn Error>>;
