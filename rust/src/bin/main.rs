@@ -13,7 +13,7 @@ fn dissemble_single_file(path: &str) -> Result<(), Box<dyn Error>> {
 
     // Print the parsed LP problem
     println!("Parsed LP Problem:");
-    println!("{}", problem);
+    println!("{problem}");
 
     #[cfg(feature = "csv")]
     {
@@ -48,7 +48,7 @@ fn compare_lp_files(p1: &str, p2: &str) -> Result<(), Box<dyn Error>> {
             println!("Variable {k} changed from {v:?} to {v_name:?}");
         }
     });
-
+ 
     // Variables removed
     difference.variables.removed.iter().for_each(|k| {
         println!("Variable {k} removed");

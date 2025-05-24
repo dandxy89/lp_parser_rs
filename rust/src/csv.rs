@@ -23,7 +23,7 @@ pub trait LpCsvWriter {
 
 #[inline]
 fn f64_to_bytes(value: f64) -> Vec<u8> {
-    format!("{}", value).into_bytes()
+    format!("{value}").into_bytes()
 }
 
 impl LpCsvWriter for LpProblem<'_> {
