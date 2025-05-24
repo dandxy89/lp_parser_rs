@@ -1,4 +1,6 @@
 {
   "lp_parser_rs": "2.3.2",
-  "parse_lp": "0.2.0"
+  "parse_lp": "0.2.0",
+  "rust": "2.3.0",
+  "python": "2.3.0"
 }
