@@ -30,6 +30,7 @@ fn dissemble_single_file(path: &str) -> Result<(), Box<dyn Error>> {
 fn compare_lp_files(p1: &str, p2: &str) -> Result<(), Box<dyn Error>> {
     println!("Attempting to compare {p1} to {p2}");
     use diff::Diff;
+    use lp_parser_rs::model::{ConstraintDiff, VariableTypeDiff};
     use lp_parser_rs::problem::LpProblemDiff;
 
     let path = PathBuf::from(p1);
@@ -43,19 +44,19 @@ fn compare_lp_files(p1: &str, p2: &str) -> Result<(), Box<dyn Error>> {
     let difference: LpProblemDiff = problem1.diff(&problem2);
 
     // Variables altered
-    difference.variables.altered.iter().for_each(|(k, v)| {
+    difference.variables.altered.iter().filter(|(_, v)| !matches!(v.var_type, VariableTypeDiff::NoChange)).for_each(|(k, v)| {
         if let Some(v_name) = problem2.variables.get(k) {
             println!("Variable {k} changed from {v:?} to {v_name:?}");
         }
     });
- 
+
     // Variables removed
     difference.variables.removed.iter().for_each(|k| {
         println!("Variable {k} removed");
     });
 
     // Constraints altered
-    difference.constraints.altered.iter().for_each(|(k, v)| {
+    difference.constraints.altered.iter().filter(|(_, v)| !matches!(v, ConstraintDiff::NoChange)).for_each(|(k, v)| {
         if let Some(c_name) = problem2.constraints.get(k) {
             println!("Constraint {k} changed from {v:?} to {c_name:?}");
         }
@@ -64,6 +65,18 @@ fn compare_lp_files(p1: &str, p2: &str) -> Result<(), Box<dyn Error>> {
     // Constraints removed
     difference.constraints.removed.iter().for_each(|k| {
         println!("Constraint {k} removed");
+    });
+
+    // Objectives altered
+    difference.objectives.altered.iter().for_each(|(k, v)| {
+        if let Some(o_name) = problem2.objectives.get(k) {
+            println!("Objective {k} changed from {v:?} to {o_name:?}");
+        }
+    });
+
+    // Objectives removed
+    difference.objectives.removed.iter().for_each(|k| {
+        println!("Objective {k} removed");
     });
 
     Ok(())
