@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.4.0](https://github.com/dandxy89/lp_parser_rs/compare/parse_lp-v2.3.0...parse_lp-v2.4.0) (2025-05-24)
+
+
+### Miscellaneous Chores
+
+* release 2.4.0 ([63fd277](https://github.com/dandxy89/lp_parser_rs/commit/63fd2773fe2375b2e2f95b603287cdf1683934f6))
+
 ## 2.3.0 (2025-05-24)
 
 

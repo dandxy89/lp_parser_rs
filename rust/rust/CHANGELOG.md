@@ -1,5 +1,39 @@
 # Changelog
 
+## [2.4.0](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v2.3.0...lp_parser_rs-v2.4.0) (2025-05-24)
+
+
+### Build System
+
+* Updating Python project toml and makefile ([afdc2c5](https://github.com/dandxy89/lp_parser_rs/commit/afdc2c58b47c4f657a8724c9da02d5e93c548e33))
+
+
+### Miscellaneous Chores
+
+* release 2.4.0 ([63fd277](https://github.com/dandxy89/lp_parser_rs/commit/63fd2773fe2375b2e2f95b603287cdf1683934f6))
+* release main ([#118](https://github.com/dandxy89/lp_parser_rs/issues/118)) ([dc6c4ce](https://github.com/dandxy89/lp_parser_rs/commit/dc6c4cefc9c49d4658837748602cb68be4d47449))
+
+
+### Bug Fixes
+
+* Adding filtering and different of objective functions ([f06ff91](https://github.com/dandxy89/lp_parser_rs/commit/f06ff9141e09a18b373d30af1f9449e21d0a5aa3))
+* To include README.md in crate.io ([53fa4bc](https://github.com/dandxy89/lp_parser_rs/commit/53fa4bc9027606cd772f3462d515746dd1522b95))
+* Use non-reserved keyword in functions ([d30e3d5](https://github.com/dandxy89/lp_parser_rs/commit/d30e3d5d5110d5f53021c515a611af0260d45209))
+
+
+### Styles
+
+* Updating formatting rules ([1d8f526](https://github.com/dandxy89/lp_parser_rs/commit/1d8f526c174d588a1d49fc19e85a89501d91514d))
+* Updating the formatting rule and applying changes ([3d7e7e6](https://github.com/dandxy89/lp_parser_rs/commit/3d7e7e6e192c1fc97a3171d0c010c6198a4af0cb))
+
+
+### Tests
+
+* Adding snapshots ([9b269b2](https://github.com/dandxy89/lp_parser_rs/commit/9b269b27faae6620b35c4de78f49cd60688908fb))
+* Disable tests on CI ([2ba8ccf](https://github.com/dandxy89/lp_parser_rs/commit/2ba8ccfd5c1394a917dab4d19021c45de8ef6a93))
+* Remove unused insta snapshot files --unreferenced=delete ([f1e5573](https://github.com/dandxy89/lp_parser_rs/commit/f1e557300434016d0f03cc3178055bd4d02296d8))
+* Updating snapshots ([b969f3f](https://github.com/dandxy89/lp_parser_rs/commit/b969f3fc679723f4b2a3f587968d0d52a24a35fc))
+
 ## 2.3.0 (2025-05-24)
 
 
