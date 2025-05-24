@@ -1,21 +1,21 @@
 ---
-source: tests/test_nom_from_file.rs
+source: rust/tests/test_nom_from_file.rs
 expression: parsed
 ---
 name: ~
 sense: Minimize
 objectives:
-  OBJECTIVE_6:
-    name: OBJECTIVE_6
+  OBJECTIVE_1:
+    name: OBJECTIVE_1
     coefficients:
       - name: b_5829890_x2
         value: 1
       - name: b_5880854_x2
         value: 1
 constraints:
-  CONSTRAINT_7:
+  CONSTRAINT_2:
     type: Standard
-    name: CONSTRAINT_7
+    name: CONSTRAINT_2
     coefficients:
       - name: b_5829890_x2
         value: -2

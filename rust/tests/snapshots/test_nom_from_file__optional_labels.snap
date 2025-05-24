@@ -1,21 +1,21 @@
 ---
-source: tests/test_nom_from_file.rs
+source: rust/tests/test_nom_from_file.rs
 expression: parsed
 ---
 name: " LP format example"
 sense: Minimize
 objectives:
-  OBJECTIVE_3:
-    name: OBJECTIVE_3
+  OBJECTIVE_1:
+    name: OBJECTIVE_1
     coefficients:
       - name: x
         value: 1
       - name: y
         value: 10
 constraints:
-  CONSTRAINT_4:
+  CONSTRAINT_2:
     type: Standard
-    name: CONSTRAINT_4
+    name: CONSTRAINT_2
     coefficients:
       - name: x
         value: -1

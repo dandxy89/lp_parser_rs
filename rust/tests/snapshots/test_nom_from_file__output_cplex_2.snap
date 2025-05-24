@@ -1,5 +1,5 @@
 ---
-source: tests/test_nom_from_file.rs
+source: rust/tests/test_nom_from_file.rs
 expression: parsed
 ---
 name: ~
@@ -11,9 +11,9 @@ objectives:
       - name: X9
         value: 1
 constraints:
-  CONSTRAINT_5:
+  CONSTRAINT_1:
     type: Standard
-    name: CONSTRAINT_5
+    name: CONSTRAINT_1
     coefficients:
       - name: X0
         value: -1
