@@ -1,6 +1,6 @@
 //! Main problem representation and parsing logic.
 //!
-//! This module defines the `LpProblem` struct and its associated
+//! This module defines the `LpProblem` struct and it's associated
 //! parsing functionality. It serves as the main entry point for
 //! working with LP problems.
 //!
@@ -9,10 +9,10 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 
+use nom::Parser as _;
 use nom::combinator::opt;
-use nom::error::Error;
-use nom::{Err, Parser as _};
 
+use crate::error::{LpParseError, LpResult};
 use crate::model::{Constraint, Objective, Sense, Variable, VariableType};
 use crate::parsers::constraint::{parse_constraint_header, parse_constraints};
 use crate::parsers::objective::parse_objectives;
@@ -27,13 +27,17 @@ use crate::{
     is_binary_section, is_bounds_section, is_generals_section, is_integers_section, is_semi_section, is_sos_section, take_until_parser,
 };
 
+// Type aliases to reduce complexity
+type ObjectivesParseResult<'a> = (HashMap<Cow<'a, str>, Objective<'a>>, HashMap<&'a str, Variable<'a>>);
+type ConstraintsParseResult<'a> = (&'a str, HashMap<Cow<'a, str>, Constraint<'a>>, HashMap<&'a str, Variable<'a>>);
+
 #[cfg_attr(feature = "diff", derive(diff::Diff), diff(attr(#[derive(Debug, PartialEq)])))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Debug, Default, PartialEq)]
 /// Represents a Linear Programming (LP) problem.
 ///
 /// The `LpProblem` struct encapsulates the components of an LP problem, including its name,
-/// sense (e.g., minimization or maximization), objectives, constraints, and variables.
+/// sense (e.g., minimization, or maximization), objectives, constraints, and variables.
 ///
 /// # Attributes
 ///
@@ -114,9 +118,9 @@ impl<'a> LpProblem<'a> {
 
     #[inline]
     /// Parse a `Self` from a string slice
-    pub fn parse(input: &'a str) -> Result<Self, Err<Error<&'a str>>> {
+    pub fn parse(input: &'a str) -> LpResult<Self> {
         log::debug!("Starting to parse LP problem");
-        TryFrom::try_from(input)
+        Self::try_from(input)
     }
 
     #[inline]
@@ -184,6 +188,139 @@ impl std::fmt::Display for LpProblem<'_> {
     }
 }
 
+impl<'a> LpProblem<'a> {
+    /// Parse the header section (name and sense)
+    fn parse_header_section(input: &'a str) -> LpResult<(&'a str, &'a str, Option<Cow<'a, str>>, Sense)> {
+        let (remaining_input, (name, sense, obj_section, ())) =
+            (parse_problem_name, parse_sense, take_until_parser(&CONSTRAINT_HEADERS), parse_constraint_header)
+                .parse(input)
+                .map_err(|err| LpParseError::parse_error(0, format!("Failed to parse header section: {err:?}")))?;
+
+        Ok((remaining_input, obj_section, name, sense))
+    }
+
+    /// Parse the objectives section
+    fn parse_objectives_section(input: &'a str) -> LpResult<ObjectivesParseResult<'a>> {
+        let (_, (objectives, variables)) =
+            parse_objectives(input).map_err(|err| LpParseError::objective_syntax(0, format!("Failed to parse objectives: {err:?}")))?;
+
+        Ok((objectives, variables))
+    }
+
+    /// Parse the constraints section
+    fn parse_constraints_section(input: &'a str) -> LpResult<ConstraintsParseResult<'a>> {
+        let (input, constraint_str) = take_until_parser(&ALL_BOUND_HEADERS)(input)
+            .map_err(|err| LpParseError::constraint_syntax(0, format!("Failed to find constraints section: {err:?}")))?;
+
+        let (_, (constraints, constraint_vars)) = parse_constraints(constraint_str)
+            .map_err(|err| LpParseError::constraint_syntax(0, format!("Failed to parse constraints: {err:?}")))?;
+
+        Ok((input, constraints, constraint_vars))
+    }
+
+    /// Parse variable bounds section
+    fn parse_bounds_section(input: &'a str, variables: &mut HashMap<&'a str, Variable<'a>>) -> LpResult<&'a str> {
+        if is_bounds_section(input).is_ok() {
+            let (rem_input, bound_str) = take_until_parser(&INTEGER_HEADERS)(input)
+                .map_err(|err| LpParseError::parse_error(0, format!("Failed to parse bounds section: {err:?}")))?;
+
+            let (_, bounds) = parse_bounds_section(bound_str)
+                .map_err(|err| LpParseError::invalid_bounds("unknown", format!("Failed to parse bounds: {err:?}")))?;
+
+            for (name, var_type) in bounds {
+                match variables.entry(name) {
+                    Entry::Occupied(mut occupied_entry) => {
+                        occupied_entry.get_mut().set_var_type(var_type);
+                    }
+                    Entry::Vacant(vacant_entry) => {
+                        vacant_entry.insert(Variable { name, var_type });
+                    }
+                }
+            }
+
+            Ok(rem_input)
+        } else {
+            Ok(input)
+        }
+    }
+
+    /// Parse variable type sections (integers, generals, binaries, semi-continuous)
+    fn parse_variable_type_sections(mut input: &'a str, variables: &mut HashMap<&'a str, Variable<'a>>) -> LpResult<&'a str> {
+        // Integer
+        if is_integers_section(input).is_ok() {
+            if let Ok((rem_input, Some(integer_str))) = opt(take_until_parser(&GENERAL_HEADERS)).parse(input) {
+                if let Ok((_, integer_vars)) = parse_integer_section(integer_str) {
+                    set_var_types(variables, integer_vars, VariableType::Integer);
+                }
+                input = rem_input;
+            }
+        }
+
+        // General
+        if is_generals_section(input).is_ok() {
+            if let Ok((rem_input, Some(generals_str))) = opt(take_until_parser(&BINARY_HEADERS)).parse(input) {
+                if let Ok((_, general_vars)) = parse_generals_section(generals_str) {
+                    set_var_types(variables, general_vars, VariableType::General);
+                }
+                input = rem_input;
+            }
+        }
+
+        // Binary
+        if is_binary_section(input).is_ok() {
+            if let Ok((rem_input, Some(binary_str))) = opt(take_until_parser(&SEMI_HEADERS)).parse(input) {
+                if let Ok((_, binary_vars)) = parse_binary_section(binary_str) {
+                    set_var_types(variables, binary_vars, VariableType::Binary);
+                }
+                input = rem_input;
+            }
+        }
+
+        // Semi-continuous
+        if is_semi_section(input).is_ok() {
+            if let Ok((rem_input, Some(semi_str))) = opt(take_until_parser(&SOS_HEADERS)).parse(input) {
+                if let Ok((_, semi_vars)) = parse_semi_section(semi_str) {
+                    set_var_types(variables, semi_vars, VariableType::SemiContinuous);
+                }
+                input = rem_input;
+            }
+        }
+
+        Ok(input)
+    }
+
+    /// Parse SOS constraints section
+    fn parse_sos_section(
+        input: &'a str,
+        constraints: &mut HashMap<Cow<'a, str>, Constraint<'a>>,
+        variables: &mut HashMap<&'a str, Variable<'a>>,
+    ) -> LpResult<&'a str> {
+        if is_sos_section(input).is_ok() {
+            if let Ok((rem_input, Some(sos_str))) = opt(take_until_parser(&END_HEADER)).parse(input) {
+                if let Ok((_, Some((sos_constraints, constraint_vars)))) = opt(parse_sos_section).parse(sos_str) {
+                    variables.extend(constraint_vars);
+                    for (name, constraint) in sos_constraints {
+                        constraints.insert(name, constraint);
+                    }
+                }
+                Ok(rem_input)
+            } else {
+                Ok(input)
+            }
+        } else {
+            Ok(input)
+        }
+    }
+
+    /// Validate remaining unparsed input
+    fn validate_remaining_input(input: &str) -> LpResult<()> {
+        if input.len() > 3 {
+            log::warn!("Unused input not parsed by `LpProblem`: {input}");
+        }
+        Ok(())
+    }
+}
+
 #[inline]
 fn set_var_types<'a>(variables: &mut HashMap<&'a str, Variable<'a>>, vars: Vec<&'a str>, var_type: VariableType) {
     for name in vars {
@@ -199,95 +336,33 @@ fn set_var_types<'a>(variables: &mut HashMap<&'a str, Variable<'a>>, vars: Vec<&
 }
 
 impl<'a> TryFrom<&'a str> for LpProblem<'a> {
-    type Error = Err<Error<&'a str>>;
+    type Error = LpParseError;
 
     #[inline]
     fn try_from(input: &'a str) -> Result<Self, Self::Error> {
-        // Problem name and Sense
-        let (input, (name, sense, obj_section, ())) =
-            (parse_problem_name, parse_sense, take_until_parser(&CONSTRAINT_HEADERS), parse_constraint_header).parse(input)?;
-        let (_, (objectives, mut variables)) = parse_objectives(obj_section)?;
+        log::debug!("Starting to parse LP problem");
 
-        // Constraints
-        let (mut input, constraint_str) = take_until_parser(&ALL_BOUND_HEADERS)(input)?;
-        let (_, (mut constraints, constraint_vars)) = parse_constraints(constraint_str)?;
+        // Parse header section (name and sense)
+        let (input, obj_section, name, sense) = Self::parse_header_section(input)?;
+
+        // Parse objectives section
+        let (objectives, mut variables) = Self::parse_objectives_section(obj_section)?;
+
+        // Parse constraints section
+        let (mut input, mut constraints, constraint_vars) = Self::parse_constraints_section(input)?;
         variables.extend(constraint_vars);
 
-        // Bound
-        if is_bounds_section(input).is_ok() {
-            let (rem_input, bound_str) = take_until_parser(&INTEGER_HEADERS)(input)?;
-            let (_, bounds) = parse_bounds_section(bound_str)?;
+        // Parse bounds section
+        input = Self::parse_bounds_section(input, &mut variables)?;
 
-            for (name, var_type) in bounds {
-                match variables.entry(name) {
-                    Entry::Occupied(mut occupied_entry) => {
-                        occupied_entry.get_mut().set_var_type(var_type);
-                    }
-                    Entry::Vacant(vacant_entry) => {
-                        vacant_entry.insert(Variable { name, var_type });
-                    }
-                }
-            }
+        // Parse variable type sections
+        input = Self::parse_variable_type_sections(input, &mut variables)?;
 
-            input = rem_input;
-        }
+        // Parse SOS constraints section
+        input = Self::parse_sos_section(input, &mut constraints, &mut variables)?;
 
-        // Integer
-        if is_integers_section(input).is_ok() {
-            if let Ok((rem_input, Some(integer_str))) = opt(take_until_parser(&GENERAL_HEADERS)).parse(input) {
-                if let Ok((_, integer_vars)) = parse_integer_section(integer_str) {
-                    set_var_types(&mut variables, integer_vars, VariableType::Integer);
-                }
-                input = rem_input;
-            }
-        }
-
-        // General
-        if is_generals_section(input).is_ok() {
-            if let Ok((rem_input, Some(generals_str))) = opt(take_until_parser(&BINARY_HEADERS)).parse(input) {
-                if let Ok((_, general_vars)) = parse_generals_section(generals_str) {
-                    set_var_types(&mut variables, general_vars, VariableType::General);
-                }
-                input = rem_input;
-            }
-        }
-
-        // Binary
-        if is_binary_section(input).is_ok() {
-            if let Ok((rem_input, Some(binary_str))) = opt(take_until_parser(&SEMI_HEADERS)).parse(input) {
-                if let Ok((_, binary_vars)) = parse_binary_section(binary_str) {
-                    set_var_types(&mut variables, binary_vars, VariableType::Binary);
-                }
-                input = rem_input;
-            }
-        }
-
-        // Semi-continuous
-        if is_semi_section(input).is_ok() {
-            if let Ok((rem_input, Some(semi_str))) = opt(take_until_parser(&SOS_HEADERS)).parse(input) {
-                if let Ok((_, semi_vars)) = parse_semi_section(semi_str) {
-                    set_var_types(&mut variables, semi_vars, VariableType::SemiContinuous);
-                }
-                input = rem_input;
-            }
-        }
-
-        // SOS constraint
-        if is_sos_section(input).is_ok() {
-            if let Ok((rem_input, Some(sos_str))) = opt(take_until_parser(&END_HEADER)).parse(input) {
-                if let Ok((_, Some((sos_constraints, constraint_vars)))) = opt(parse_sos_section).parse(sos_str) {
-                    variables.extend(constraint_vars);
-                    for (name, constraint) in sos_constraints {
-                        constraints.insert(name, constraint);
-                    }
-                }
-                input = rem_input;
-            }
-        }
-
-        if input.len() > 3 {
-            log::warn!("Unused input not parsed by `LpProblem`: {input}");
-        }
+        // Validate remaining input
+        Self::validate_remaining_input(input)?;
 
         Ok(LpProblem { name, sense, objectives, constraints, variables })
     }
@@ -299,7 +374,6 @@ impl<'de: 'a, 'a> serde::Deserialize<'de> for LpProblem<'a> {
     where
         D: serde::Deserializer<'de>,
     {
-        // Define the fields we expect to deserialize
         #[derive(serde::Deserialize)]
         #[serde(field_identifier, rename_all = "lowercase")]
         enum Field {
@@ -310,7 +384,6 @@ impl<'de: 'a, 'a> serde::Deserialize<'de> for LpProblem<'a> {
             Variables,
         }
 
-        // Create a visitor to handle the deserialization
         struct LpProblemVisitor<'a>(std::marker::PhantomData<LpProblem<'a>>);
 
         impl<'de: 'a, 'a> serde::de::Visitor<'de> for LpProblemVisitor<'a> {
@@ -468,9 +541,7 @@ End";
     #[test]
     fn test_serialization_lifecycle() {
         let problem = LpProblem::try_from(COMPLETE_INPUT).expect("test case not to fail");
-        // Serialized
         let serialized_problem = serde_json::to_string(&problem).expect("test case not to fail");
-        // Deserialise
         let _: LpProblem<'_> = serde_json::from_str(&serialized_problem).expect("test case not to fail");
     }
 

@@ -23,10 +23,12 @@ constraints:
         value: 2
     operator: LTE
     rhs: -64
-  b_5880854_x2:
+  CONSTRAINT_3:
     type: Standard
-    name: b_5880854_x2
+    name: CONSTRAINT_3
     coefficients:
+      - name: b_5880854_x2
+        value: 1
       - name: b_5880854_x1
         value: -1
     operator: GTE

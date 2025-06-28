@@ -24,7 +24,7 @@ use crate::parsers::variable::parse_variable_list;
 /// A trait for parsing sections within a text input.
 ///
 /// This trait defines methods for identifying and parsing sections
-/// based on predefined headers. Implementors must provide the list
+/// based on predefined headers. Implementer must provide the list
 /// of section headers and a method to parse the content of each section.
 ///
 /// # Type Parameters

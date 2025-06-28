@@ -89,7 +89,7 @@ impl std::fmt::Display for Sense {
 
 #[cfg_attr(feature = "diff", derive(diff::Diff), diff(attr(#[derive(Debug, PartialEq)])))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 /// Represents the type of SOS (System of Systems) with variants `S1` and `S2`.
 pub enum SOSType {
     /// At most one variable in the set can be non-zero.
@@ -119,7 +119,7 @@ impl std::fmt::Display for SOSType {
 
 #[cfg_attr(feature = "diff", derive(diff::Diff), diff(attr(#[derive(Debug, PartialEq)])))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 /// Represents a coefficient associated with a variable name.
 pub struct Coefficient<'a> {
     /// A string slice representing the name of the variable.

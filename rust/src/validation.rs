@@ -1,0 +1,418 @@
+//! Validation module for LP problem consistency and correctness.
+//!
+//! This module provides comprehensive validation for parsed LP problems,
+//! checking for logical consistency, reference validity, and mathematical
+//! correctness.
+
+use std::collections::{HashMap, HashSet};
+
+use crate::error::{LpParseError, LpResult};
+use crate::model::{ComparisonOp, Constraint, Objective, Variable, VariableType};
+use crate::problem::LpProblem;
+
+/// Validation context containing problem state and validation results.
+#[derive(Debug, Default)]
+pub struct ValidationContext<'a> {
+    /// Variables referenced in objectives but not declared
+    pub undeclared_objective_vars: HashSet<&'a str>,
+    /// Variables referenced in constraints but not declared
+    pub undeclared_constraint_vars: HashSet<&'a str>,
+    /// Variables declared but never used
+    pub unused_variables: HashSet<&'a str>,
+    /// Constraints with potential feasibility issues
+    pub infeasible_constraints: Vec<String>,
+    /// SOS constraints with invalid weights
+    pub invalid_sos_constraints: Vec<String>,
+    /// Variables with conflicting type declarations
+    pub conflicting_variable_types: Vec<String>,
+    /// Duplicate constraint names
+    pub duplicate_constraints: Vec<String>,
+    /// Duplicate objective names
+    pub duplicate_objectives: Vec<String>,
+    /// Warnings about the problem structure
+    pub warnings: Vec<String>,
+}
+
+impl<'a> ValidationContext<'a> {
+    /// Create a new validation context
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Check if validation found any errors
+    pub fn has_errors(&self) -> bool {
+        !self.undeclared_objective_vars.is_empty()
+            || !self.undeclared_constraint_vars.is_empty()
+            || !self.infeasible_constraints.is_empty()
+            || !self.invalid_sos_constraints.is_empty()
+            || !self.conflicting_variable_types.is_empty()
+            || !self.duplicate_constraints.is_empty()
+            || !self.duplicate_objectives.is_empty()
+    }
+
+    /// Get a summary of all validation issues
+    pub fn summary(&self) -> String {
+        let mut summary = Vec::new();
+
+        if !self.undeclared_objective_vars.is_empty() {
+            summary.push(format!("Undeclared variables in objectives: {:?}", self.undeclared_objective_vars));
+        }
+
+        if !self.undeclared_constraint_vars.is_empty() {
+            summary.push(format!("Undeclared variables in constraints: {:?}", self.undeclared_constraint_vars));
+        }
+
+        if !self.unused_variables.is_empty() {
+            summary.push(format!("Unused variables: {:?}", self.unused_variables));
+        }
+
+        if !self.infeasible_constraints.is_empty() {
+            summary.push(format!("Potentially infeasible constraints: {:?}", self.infeasible_constraints));
+        }
+
+        if !self.invalid_sos_constraints.is_empty() {
+            summary.push(format!("Invalid SOS constraints: {:?}", self.invalid_sos_constraints));
+        }
+
+        if !self.conflicting_variable_types.is_empty() {
+            summary.push(format!("Conflicting variable types: {:?}", self.conflicting_variable_types));
+        }
+
+        if !self.duplicate_constraints.is_empty() {
+            summary.push(format!("Duplicate constraints: {:?}", self.duplicate_constraints));
+        }
+
+        if !self.duplicate_objectives.is_empty() {
+            summary.push(format!("Duplicate objectives: {:?}", self.duplicate_objectives));
+        }
+
+        if !self.warnings.is_empty() {
+            summary.push(format!("Warnings: {:?}", self.warnings));
+        }
+
+        if summary.is_empty() { "No validation issues found".to_string() } else { summary.join("; ") }
+    }
+}
+
+/// Trait for validation of LP components
+pub trait Validate<'a> {
+    /// Validate the component and update the validation context
+    fn validate(&self, context: &mut ValidationContext<'a>) -> LpResult<()>;
+}
+
+/// Comprehensive validator for LP problems
+pub struct LpValidator;
+
+impl LpValidator {
+    /// Validate an entire LP problem
+    pub fn validate<'a>(problem: &'a LpProblem<'a>) -> LpResult<ValidationContext<'a>> {
+        let mut context = ValidationContext::new();
+
+        // Collect all variable references
+        let mut objective_vars = HashSet::new();
+        let mut constraint_vars = HashSet::new();
+
+        // Validate objectives
+        for (name, objective) in &problem.objectives {
+            Self::validate_objective(objective, &mut context, &mut objective_vars)?;
+
+            // Check for duplicate objectives (shouldn't happen with HashMap, but good to validate)
+            if problem.objectives.keys().filter(|&k| k == name).count() > 1 {
+                context.duplicate_objectives.push(name.to_string());
+            }
+        }
+
+        // Validate constraints
+        for (name, constraint) in &problem.constraints {
+            Self::validate_constraint(constraint, &mut context, &mut constraint_vars)?;
+
+            // Check for duplicate constraints
+            if problem.constraints.keys().filter(|&k| k == name).count() > 1 {
+                context.duplicate_constraints.push(name.to_string());
+            }
+        }
+
+        // Check variable references
+        Self::validate_variable_references(&problem.variables, &objective_vars, &constraint_vars, &mut context);
+
+        // Validate variable bounds
+        Self::validate_variable_bounds(&problem.variables, &mut context)?;
+
+        // Add structural warnings
+        Self::add_structural_warnings(problem, &mut context);
+
+        Ok(context)
+    }
+
+    /// Validate a single objective
+    fn validate_objective<'a>(
+        objective: &'a Objective<'a>,
+        context: &mut ValidationContext<'a>,
+        referenced_vars: &mut HashSet<&'a str>,
+    ) -> LpResult<()> {
+        if objective.coefficients.is_empty() {
+            context.warnings.push(format!("Objective '{}' has no coefficients", objective.name));
+        }
+
+        for coeff in &objective.coefficients {
+            referenced_vars.insert(coeff.name);
+
+            // Check for infinite or NaN coefficients
+            if !coeff.value.is_finite() {
+                return Err(LpParseError::validation_error(format!(
+                    "Invalid coefficient {} for variable '{}' in objective '{}'",
+                    coeff.value, coeff.name, objective.name
+                )));
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Validate a single constraint
+    fn validate_constraint<'a>(
+        constraint: &'a Constraint<'a>,
+        context: &mut ValidationContext<'a>,
+        referenced_vars: &mut HashSet<&'a str>,
+    ) -> LpResult<()> {
+        match constraint {
+            Constraint::Standard { name, coefficients, operator, rhs } => {
+                if coefficients.is_empty() {
+                    context.warnings.push(format!("Constraint '{name}' has no coefficients"));
+                }
+
+                // Check for invalid RHS
+                if !rhs.is_finite() {
+                    return Err(LpParseError::validation_error(format!("Invalid RHS {rhs} in constraint '{name}'")));
+                }
+
+                // Check for infeasible constraints (e.g., 0 >= 1)
+                if coefficients.is_empty() && *rhs != 0.0 {
+                    match operator {
+                        ComparisonOp::EQ if *rhs != 0.0 => {
+                            context.infeasible_constraints.push(format!("Constraint '{name}': 0 = {rhs} is infeasible"));
+                        }
+                        ComparisonOp::LTE | ComparisonOp::LT if *rhs < 0.0 => {
+                            context.infeasible_constraints.push(format!("Constraint '{name}': 0 <= {rhs} is infeasible"));
+                        }
+                        ComparisonOp::GTE | ComparisonOp::GT if *rhs > 0.0 => {
+                            context.infeasible_constraints.push(format!("Constraint '{name}': 0 >= {rhs} is infeasible"));
+                        }
+                        _ => {}
+                    }
+                }
+
+                for coeff in coefficients {
+                    referenced_vars.insert(coeff.name);
+
+                    // Check for infinite or NaN coefficients
+                    if !coeff.value.is_finite() {
+                        return Err(LpParseError::validation_error(format!(
+                            "Invalid coefficient {} for variable '{}' in constraint '{}'",
+                            coeff.value, coeff.name, name
+                        )));
+                    }
+                }
+            }
+            Constraint::SOS { name, sos_type: _, weights } => {
+                if weights.is_empty() {
+                    context.invalid_sos_constraints.push(format!("SOS constraint '{name}' has no weights"));
+                }
+
+                // Check for duplicate variables in SOS constraint
+                let mut seen_vars = HashSet::new();
+                for weight in weights {
+                    if !seen_vars.insert(weight.name) {
+                        context.invalid_sos_constraints.push(format!("SOS constraint '{name}' has duplicate variable '{}'", weight.name));
+                    }
+
+                    referenced_vars.insert(weight.name);
+
+                    // Check for invalid weights
+                    if !weight.value.is_finite() || weight.value < 0.0 {
+                        context
+                            .invalid_sos_constraints
+                            .push(format!("SOS constraint '{name}' has invalid weight {} for variable '{}'", weight.value, weight.name));
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Validate variable references and usage
+    fn validate_variable_references<'a>(
+        declared_vars: &HashMap<&'a str, Variable<'a>>,
+        objective_vars: &HashSet<&'a str>,
+        constraint_vars: &HashSet<&'a str>,
+        context: &mut ValidationContext<'a>,
+    ) {
+        let all_referenced: HashSet<&str> = objective_vars.union(constraint_vars).copied().collect();
+
+        // Find undeclared variables
+        for &var in objective_vars {
+            if !declared_vars.contains_key(var) {
+                context.undeclared_objective_vars.insert(var);
+            }
+        }
+
+        for &var in constraint_vars {
+            if !declared_vars.contains_key(var) {
+                context.undeclared_constraint_vars.insert(var);
+            }
+        }
+
+        // Find unused variables
+        for &var_name in declared_vars.keys() {
+            if !all_referenced.contains(var_name) {
+                context.unused_variables.insert(var_name);
+            }
+        }
+    }
+
+    /// Validate variable bounds and types
+    fn validate_variable_bounds<'a>(variables: &HashMap<&'a str, Variable<'a>>, context: &mut ValidationContext<'a>) -> LpResult<()> {
+        for (name, variable) in variables {
+            match &variable.var_type {
+                VariableType::DoubleBound(lower, upper) => {
+                    if !lower.is_finite() || !upper.is_finite() {
+                        return Err(LpParseError::invalid_bounds(*name, format!("Invalid bounds: {lower} <= {name} <= {upper}")));
+                    }
+
+                    if lower > upper {
+                        context
+                            .infeasible_constraints
+                            .push(format!("Variable '{name}' has infeasible bounds: {lower} <= {name} <= {upper}"));
+                    }
+                }
+                VariableType::LowerBound(bound) | VariableType::UpperBound(bound) => {
+                    if !bound.is_finite() {
+                        return Err(LpParseError::invalid_bounds(*name, format!("Invalid bound: {bound}")));
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Add structural warnings about the problem
+    fn add_structural_warnings<'a>(problem: &LpProblem<'a>, context: &mut ValidationContext<'a>) {
+        if problem.objectives.is_empty() {
+            context.warnings.push("Problem has no objectives".to_string());
+        }
+
+        if problem.constraints.is_empty() {
+            context.warnings.push("Problem has no constraints".to_string());
+        }
+
+        if problem.variables.is_empty() {
+            context.warnings.push("Problem has no variables".to_string());
+        }
+
+        if problem.objectives.len() > 1 {
+            context.warnings.push(format!("Problem has {} objectives (multi-objective)", problem.objectives.len()));
+        }
+    }
+}
+
+impl<'a> LpProblem<'a> {
+    /// Validate the LP problem and return validation results
+    pub fn validate(&self) -> LpResult<ValidationContext<'_>> {
+        LpValidator::validate(self)
+    }
+
+    /// Validate the LP problem and return an error if validation fails
+    pub fn validate_strict(&self) -> LpResult<()> {
+        let context = self.validate()?;
+
+        if context.has_errors() {
+            return Err(LpParseError::validation_error(context.summary()));
+        }
+
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::borrow::Cow;
+
+    use super::*;
+    use crate::model::{Coefficient, ComparisonOp, Sense};
+
+    #[test]
+    fn test_valid_problem() {
+        let mut problem = LpProblem::new().with_sense(Sense::Minimize);
+
+        // Add objective
+        problem.add_objective(Objective {
+            name: Cow::Borrowed("obj1"),
+            coefficients: vec![Coefficient { name: "x1", value: 1.0 }, Coefficient { name: "x2", value: 2.0 }],
+        });
+
+        // Add constraint
+        problem.add_constraint(Constraint::Standard {
+            name: Cow::Borrowed("c1"),
+            coefficients: vec![Coefficient { name: "x1", value: 1.0 }, Coefficient { name: "x2", value: 1.0 }],
+            operator: ComparisonOp::LTE,
+            rhs: 10.0,
+        });
+
+        let context = problem.validate().expect("Validation should succeed");
+        assert!(!context.has_errors());
+    }
+
+    #[test]
+    fn test_undeclared_variable() {
+        // Create a problem with direct construction to avoid auto-creation of variables
+        let objectives = {
+            let mut obj_map = HashMap::new();
+            obj_map.insert(
+                Cow::Borrowed("obj1"),
+                Objective { name: Cow::Borrowed("obj1"), coefficients: vec![Coefficient { name: "undeclared_var", value: 1.0 }] },
+            );
+            obj_map
+        };
+
+        let problem = LpProblem {
+            name: None,
+            sense: Sense::Minimize,
+            objectives,
+            constraints: HashMap::new(),
+            variables: HashMap::new(), // No variables declared
+        };
+
+        let context = problem.validate().expect("Validation should succeed");
+        assert!(context.undeclared_objective_vars.contains("undeclared_var"));
+    }
+
+    #[test]
+    fn test_infeasible_constraint() {
+        let mut problem = LpProblem::new();
+
+        // Add infeasible constraint: 0 = 1
+        problem.add_constraint(Constraint::Standard {
+            name: Cow::Borrowed("infeasible"),
+            coefficients: vec![],
+            operator: ComparisonOp::EQ,
+            rhs: 1.0,
+        });
+
+        let context = problem.validate().expect("Validation should succeed");
+        assert!(!context.infeasible_constraints.is_empty());
+    }
+
+    #[test]
+    fn test_invalid_bounds() {
+        let mut problem = LpProblem::new();
+
+        // Add variable with invalid bounds (lower > upper)
+        problem.add_variable(Variable { name: "x1", var_type: VariableType::DoubleBound(10.0, 5.0) });
+
+        let context = problem.validate().expect("Validation should succeed");
+        assert!(!context.infeasible_constraints.is_empty());
+    }
+}

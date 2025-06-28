@@ -49,10 +49,10 @@ constraints:
 variables:
   x:
     name: x
-    var_type: Free
+    var_type: Binary
   y:
     name: y
-    var_type: General
+    var_type: Free
   z:
     name: z
     var_type: Free

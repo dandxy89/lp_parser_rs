@@ -14,7 +14,7 @@ use nom::bytes::complete::{tag, tag_no_case};
 use nom::character::complete::{char, multispace0};
 use nom::combinator::{map, opt, value};
 use nom::multi::many1;
-use nom::sequence::{delimited, preceded, terminated};
+use nom::sequence::preceded;
 use nom::{IResult, Parser as _};
 use unique_id::Generator as _;
 use unique_id::sequence::SequenceGenerator;
@@ -74,7 +74,7 @@ pub fn parse_constraints<'a>(input: &'a str) -> ConstraintParseResult<'a> {
             // Optional comment marker
             opt(parse_comment_marker),
             // Name part with optional whitespace and newlines
-            opt(terminated(preceded(multispace0, parse_variable), delimited(multispace0, opt(char(':')), multispace0))),
+            opt(map((preceded(multispace0, parse_variable), preceded(multispace0, char(':')), multispace0), |(name, _, _)| name)),
             // Coefficients with flexible whitespace and newlines
             many1(preceded(multispace0, parse_coefficient)),
             // Operator and RHS with flexible whitespace
@@ -110,4 +110,49 @@ pub fn parse_constraints<'a>(input: &'a str) -> ConstraintParseResult<'a> {
 
     log_unparsed_content("Failed to parse constraints fully", remaining);
     Ok(("", (cons, constraint_vars)))
+}
+
+#[cfg(test)]
+mod test {
+    use crate::parsers::constraint::parse_constraints;
+
+    #[test]
+    fn test_constraint_with_colon_on_same_line() {
+        let input = " Capacity_Constraint_1:\n    Production_A_1 + Production_B_2 <= 500\n";
+        let result = parse_constraints(input);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_multiple_constraints_with_colons() {
+        let input = " Capacity_Constraint_1:\n    Production_A_1 + Production_B_2 <= 500\n Demand_Region_X:\n    Transport_X_Y + Storage_Facility_1 >= 200\n";
+        let result = parse_constraints(input);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_single_constraint_with_colon_newline() {
+        let input = "Capacity_Constraint_1:\n    Production_A_1 + Production_B_2 <= 500";
+        match parse_constraints(input) {
+            Ok((_remaining, (constraints, _vars))) => {
+                assert_eq!(constraints.len(), 1);
+            }
+            Err(_err) => {
+                panic!("Failed to parse constraint");
+            }
+        }
+    }
+
+    #[test]
+    fn test_constraint_no_name() {
+        let input = "Production_A_1 + Production_B_2 <= 500";
+        match parse_constraints(input) {
+            Ok((_remaining, (constraints, _vars))) => {
+                assert_eq!(constraints.len(), 1);
+            }
+            Err(_err) => {
+                panic!("Failed to parse constraint");
+            }
+        }
+    }
 }

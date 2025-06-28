@@ -1,15 +1,15 @@
 use std::env;
-use std::error::Error;
 use std::path::PathBuf;
 
+use lp_parser_rs::error::LpParseError;
 use lp_parser_rs::parser::parse_file;
 use lp_parser_rs::problem::LpProblem;
 
-fn dissemble_single_file(path: &str) -> Result<(), Box<dyn Error>> {
+fn dissemble_single_file(path: &str) -> Result<(), LpParseError> {
     let path = PathBuf::from(path);
     let input = parse_file(&path)?;
 
-    let problem = LpProblem::parse(&input).unwrap();
+    let problem = LpProblem::parse(&input)?;
 
     // Print the parsed LP problem
     println!("Parsed LP Problem:");
@@ -27,7 +27,7 @@ fn dissemble_single_file(path: &str) -> Result<(), Box<dyn Error>> {
 }
 
 #[cfg(feature = "diff")]
-fn compare_lp_files(p1: &str, p2: &str) -> Result<(), Box<dyn Error>> {
+fn compare_lp_files(p1: &str, p2: &str) -> Result<(), LpParseError> {
     println!("Attempting to compare {p1} to {p2}");
     use diff::Diff;
     use lp_parser_rs::model::{ConstraintDiff, VariableTypeDiff};
@@ -35,11 +35,11 @@ fn compare_lp_files(p1: &str, p2: &str) -> Result<(), Box<dyn Error>> {
 
     let path = PathBuf::from(p1);
     let input1 = parse_file(&path)?;
-    let problem1 = LpProblem::parse(&input1).unwrap();
+    let problem1 = LpProblem::parse(&input1)?;
 
     let path = PathBuf::from(p2);
     let input2 = parse_file(&path)?;
-    let problem2 = LpProblem::parse(&input2).unwrap();
+    let problem2 = LpProblem::parse(&input2)?;
 
     let difference: LpProblemDiff = problem1.diff(&problem2);
 
@@ -96,15 +96,15 @@ fn compare_lp_files(p1: &str, p2: &str) -> Result<(), Box<dyn Error>> {
 ///
 /// * If the "diff" feature is enabled, it can compare two LP files and print the differences in variables and constraints.
 ///
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = env::args();
     args.next();
     let path = args.next().ok_or("Usage: nom_lp_parser <PATH_TO_FILE>")?;
 
     match (path, args.next()) {
-        (p1, None) => dissemble_single_file(&p1),
+        (p1, None) => dissemble_single_file(&p1).map_err(|e| Box::new(e) as Box<dyn std::error::Error>),
         #[cfg(feature = "diff")]
-        (p1, Some(p2)) => compare_lp_files(&p1, &p2),
+        (p1, Some(p2)) => compare_lp_files(&p1, &p2).map_err(|e| Box::new(e) as Box<dyn std::error::Error>),
         #[cfg(not(feature = "diff"))]
         (_, Some(_)) => Err("Diff feature not enabled".into()),
     }
