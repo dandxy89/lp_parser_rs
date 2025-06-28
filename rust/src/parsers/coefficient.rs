@@ -27,7 +27,10 @@ pub fn parse_coefficient(input: &str) -> IResult<&str, Coefficient<'_>> {
         (opt(preceded(space0, alt((char('+'), char('-'))))), opt(preceded(space0, parse_num_value)), preceded(space0, parse_variable)),
         |(sign, coef, var_name)| {
             let base_coef = coef.unwrap_or(1.0);
-            let value = if sign == Some('-') { -base_coef } else { base_coef };
+            let value = match sign {
+                Some('-') => -base_coef,
+                _ => base_coef,
+            };
             Coefficient { name: var_name, value }
         },
     )

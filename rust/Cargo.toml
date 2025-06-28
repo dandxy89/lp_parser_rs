@@ -3,7 +3,7 @@ name = "lp_parser_rs"
 version = "2.4.0"
 edition = "2021"
 authors = ["Dan Dixey", "Dan Dixey <dan@functorml.co.uk>"]
-rust-version = "1.63.0"
+rust-version = "1.66.0"
 license = "MIT OR Apache-2.0"
 readme = "../README.md"
 description = "A Rust parser for the LP file format."
@@ -28,6 +28,10 @@ doctest = false
 name = "lp_parser"
 path = "src/bin/main.rs"
 
+[[bench]]
+name = "parsing_micro"
+harness = false
+
 [dependencies]
 csv = { version = "1.0", optional = true }
 diff-struct = { version = "0.5", optional = true }
@@ -41,6 +45,7 @@ thiserror = "2.0"
 unique_id = { version = "0.1", features = ["sequence"] }
 
 [dev-dependencies]
+divan = "0.1.21"
 float_eq = "1.0.1"
 insta = { version = "1", features = ["yaml", "redactions"] }
 serde_json = "1.0"
