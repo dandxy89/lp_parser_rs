@@ -8,7 +8,7 @@ license = "MIT OR Apache-2.0"
 description = "A Rust parser for the LP file format."
 keywords = [
     "linear-programming",
-    "optimization",
+    "optimisation",
     "parser",
     "integer-programming",
     "math",

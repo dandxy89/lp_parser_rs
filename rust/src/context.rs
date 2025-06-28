@@ -13,7 +13,7 @@ use crate::error::{LpParseError, LpResult};
 pub enum SectionType {
     /// Problem name and comments section
     Header,
-    /// Optimization sense (minimize/maximize)
+    /// Optimisation sense (minimise/maximise)
     Sense,
     /// Objectives section
     Objectives,

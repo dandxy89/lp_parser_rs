@@ -1,6 +1,6 @@
-//! Performance optimizations for LP parsing.
+//! Performance optimisations for LP parsing.
 //!
-//! This module contains optimized implementations of common parsing operations
+//! This module contains optimised implementations of common parsing operations
 //! using efficient algorithms and data structures.
 
 use std::collections::HashMap;
@@ -109,7 +109,7 @@ impl FastStringFinder {
 }
 
 #[inline]
-/// Fast case-insensitive string search using optimized algorithms
+/// Fast case-insensitive string search using optimised algorithms
 pub fn fast_find_case_insensitive(haystack: &str, needle: &str) -> Option<usize> {
     if needle.is_empty() {
         return Some(0);

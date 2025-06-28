@@ -9,7 +9,7 @@ readme = "../README.md"
 description = "A Rust parser for the LP file format."
 keywords = [
     "linear-programming",
-    "optimization",
+    "optimisation",
     "parser",
     "integer-programming",
     "math",

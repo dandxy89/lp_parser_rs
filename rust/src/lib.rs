@@ -2,14 +2,14 @@
 //!
 //! This crate provides robust parsing capabilities for Linear Programming (LP)
 //! files using nom parser combinators. It supports multiple industry-standard
-//! LP file formats and offers comprehensive features for optimization problems.
+//! LP file formats and offers comprehensive features for optimisation problems.
 //!
 //! # Features
 //!
 //! - Zero-copy parsing with lifetime management
 //! - Support for multiple LP file format specifications
 //! - Comprehensive parsing of all standard LP file components
-//! - Optional serialization and diff tracking
+//! - Optional serialisation and diff tracking
 //!
 //! # Quick Start
 //!

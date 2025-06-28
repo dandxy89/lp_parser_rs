@@ -104,7 +104,7 @@ pub fn parse_variable(input: &str) -> IResult<&str, &str> {
 #[inline]
 /// Parses a string input to identify and extract a variable with its bound type.
 ///
-/// The function recognizes four types of variable bounds:
+/// The function recognises four types of variable bounds:
 /// - Free variable: e.g., `x1 free`
 /// - Double bound: e.g., `0 <= x1 <= 5`
 /// - Lower bound: e.g., `x1 >= 5` or `5 <= x1`

@@ -37,19 +37,19 @@ type ConstraintsParseResult<'a> = (&'a str, HashMap<Cow<'a, str>, Constraint<'a>
 /// Represents a Linear Programming (LP) problem.
 ///
 /// The `LpProblem` struct encapsulates the components of an LP problem, including its name,
-/// sense (e.g., minimization, or maximization), objectives, constraints, and variables.
+/// sense (e.g., minimisation, or maximisation), objectives, constraints, and variables.
 ///
 /// # Attributes
 ///
 /// * `#[cfg_attr(feature = "diff", derive(diff::Diff), diff(attr(#[derive(Debug, PartialEq)])))]`:
 ///   Enables the `diff` feature for comparing differences between instances of `LpProblem`.
 /// * `#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]`:
-///   Enables serialization and deserialization of `LpProblem` instances when the `serde` feature is active.
+///   Enables serialisation and deserialisation of `LpProblem` instances when the `serde` feature is active.
 ///
 pub struct LpProblem<'a> {
     /// An optional reference to a string slice representing the name of the LP problem.
     pub name: Option<Cow<'a, str>>,
-    /// The optimization sense of the problem, indicating whether it is a minimization or maximization problem.
+    /// The optimisation sense of the problem, indicating whether it is a minimisation or maximisation problem.
     pub sense: Sense,
     /// A `HashMap` where the keys are the names of the objectives and the values are `Objective` structs.
     pub objectives: HashMap<Cow<'a, str>, Objective<'a>>,
@@ -92,7 +92,7 @@ impl<'a> LpProblem<'a> {
     #[inline]
     /// Returns `true` if the `Self` a Minimize LP Problem
     pub fn is_minimization(&self) -> bool {
-        self.sense.is_minimization()
+        self.sense.is_minimisation()
     }
 
     #[must_use]

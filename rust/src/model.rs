@@ -5,12 +5,12 @@
 //! constraints, objectives, and their associated properties.
 //!
 //! - `ComparisonOp`: Enum for comparison operations like greater than, less than, etc.
-//! - `Sense`: Enum for optimization sense, either minimization or maximization.
+//! - `Sense`: Enum for optimisation sense, either minimisation or maximisation.
 //! - `SOSType`: Enum for types of System of Systems (SOS), with variants `S1` and `S2`.
 //! - `Coefficient`: Struct representing a coefficient associated with a variable name.
-//! - `Constraint`: Enum representing a constraint in an optimization problem, either standard or SOS.
-//! - `Objective`: Struct representing an optimization objective with a name and coefficients.
-//! - `VariableType`: Enum for different types of variables in optimization models.
+//! - `Constraint`: Enum representing a constraint in an optimisation problem, either standard or SOS.
+//! - `Objective`: Struct representing an optimisation objective with a name and coefficients.
+//! - `VariableType`: Enum for different types of variables in optimisation models.
 //! - `Variable`: Struct representing a variable with a name and type.
 //!
 
@@ -62,7 +62,7 @@ impl std::fmt::Display for ComparisonOp {
 #[cfg_attr(feature = "diff", derive(diff::Diff), diff(attr(#[derive(Debug, PartialEq)])))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
-/// Represents the optimization sense for an objective function.
+/// Represents the optimisation sense for an objective function.
 pub enum Sense {
     #[default]
     Minimize,
@@ -71,8 +71,8 @@ pub enum Sense {
 
 impl Sense {
     #[inline]
-    /// Determines if the current optimization sense is minimization.
-    pub const fn is_minimization(&self) -> bool {
+    /// Determines if the current optimisation sense is minimisation.
+    pub const fn is_minimisation(&self) -> bool {
         matches!(self, Sense::Minimize)
     }
 }
@@ -145,7 +145,7 @@ impl std::fmt::Display for Coefficient<'_> {
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[cfg_attr(feature = "serde", serde(tag = "type"))]
 #[derive(Debug, PartialEq)]
-/// Represents a constraint in an optimization problem, which can be either a
+/// Represents a constraint in an optimisation problem, which can be either a
 /// standard linear constraint or a special ordered set (SOS) constraint.
 ///
 /// # Attributes
@@ -206,10 +206,10 @@ impl std::fmt::Display for Constraint<'_> {
 #[cfg_attr(feature = "diff", derive(diff::Diff), diff(attr(#[derive(Debug, PartialEq)])))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Debug, PartialEq)]
-/// Represents an optimization objective with a name and a list of coefficients.
+/// Represents an optimisation objective with a name and a list of coefficients.
 ///
 /// This struct can optionally derive `Diff` for change tracking and `Serialize`
-/// for serialization, depending on the enabled features.
+/// for serialisation, depending on the enabled features.
 pub struct Objective<'a> {
     /// A borrowed string representing the name of the objective.
     pub name: Cow<'a, str>,
@@ -220,7 +220,7 @@ pub struct Objective<'a> {
 #[cfg_attr(feature = "diff", derive(diff::Diff), diff(attr(#[derive(Debug, PartialEq)])))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default, PartialEq)]
-/// Represents different types of variables that can be used in optimization models.
+/// Represents different types of variables that can be used in optimisation models.
 pub enum VariableType {
     #[default]
     /// Unbounded variable (-Infinity, +Infinity)
