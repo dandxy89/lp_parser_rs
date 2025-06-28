@@ -22,7 +22,7 @@ use crate::parsers::parser_traits::parse_variable;
 /// If the numeric value is not provided, it defaults to 1.0. The sign, if present,
 /// will determine the sign of the coefficient.
 ///
-pub fn parse_coefficient(input: &str) -> IResult<&str, Coefficient> {
+pub fn parse_coefficient(input: &str) -> IResult<&str, Coefficient<'_>> {
     map(
         (opt(preceded(space0, alt((char('+'), char('-'))))), opt(preceded(space0, parse_num_value)), preceded(space0, parse_variable)),
         |(sign, coef, var_name)| {

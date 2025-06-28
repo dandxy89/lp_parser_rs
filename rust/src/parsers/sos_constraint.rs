@@ -30,7 +30,7 @@ fn parse_sos_type(input: &str) -> IResult<&str, SOSType> {
 
 #[inline]
 /// Parses a variable-weight pair for an SOS constraint.
-fn parse_sos_weight(input: &str) -> IResult<&str, Coefficient> {
+fn parse_sos_weight(input: &str) -> IResult<&str, Coefficient<'_>> {
     map((preceded(multispace0, parse_variable), preceded(char(':'), parse_num_value)), |(var_name, value)| Coefficient {
         name: var_name,
         value,

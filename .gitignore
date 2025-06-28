@@ -4,3 +4,5 @@ python/target/
 python/.venv/
 **/__pycache__
 **.so
+
+.env
