@@ -25,6 +25,38 @@ use crate::parsers::coefficient::parse_coefficient;
 use crate::parsers::number::{parse_cmp_op, parse_num_value};
 use crate::parsers::parser_traits::parse_variable;
 
+// Pre-allocated constraint names for common cases
+static COMMON_CONSTRAINT_NAMES: &[&str] = &[
+    "CONSTRAINT_1",
+    "CONSTRAINT_2",
+    "CONSTRAINT_3",
+    "CONSTRAINT_4",
+    "CONSTRAINT_5",
+    "CONSTRAINT_6",
+    "CONSTRAINT_7",
+    "CONSTRAINT_8",
+    "CONSTRAINT_9",
+    "CONSTRAINT_10",
+    "CONSTRAINT_11",
+    "CONSTRAINT_12",
+    "CONSTRAINT_13",
+    "CONSTRAINT_14",
+    "CONSTRAINT_15",
+    "CONSTRAINT_16",
+    "CONSTRAINT_17",
+    "CONSTRAINT_18",
+    "CONSTRAINT_19",
+    "CONSTRAINT_20",
+];
+
+fn get_constraint_name(id: i64) -> Cow<'static, str> {
+    if id > 0 && id <= COMMON_CONSTRAINT_NAMES.len() as i64 {
+        Cow::Borrowed(COMMON_CONSTRAINT_NAMES[(id - 1) as usize])
+    } else {
+        Cow::Owned(format!("CONSTRAINT_{id}"))
+    }
+}
+
 #[inline]
 /// Parses a constraint section header from an LP format input string.
 pub fn parse_constraint_header(input: &str) -> IResult<&str, ()> {
@@ -32,7 +64,7 @@ pub fn parse_constraint_header(input: &str) -> IResult<&str, ()> {
         (),
         (
             multispace0,
-            alt((tag_no_case("subject to"), tag_no_case("such that"), tag_no_case("s.t."), tag_no_case("st"))),
+            alt((tag_no_case("s.t."), tag_no_case("st"), tag_no_case("subject to"), tag_no_case("such that"))),
             opt(char(':')),
             multispace0,
         ),
@@ -95,7 +127,7 @@ pub fn parse_constraints<'a>(input: &'a str) -> ConstraintParseResult<'a> {
                         Cow::Borrowed(s)
                     } else {
                         let next = generator.next_id();
-                        Cow::Owned(format!("CONSTRAINT_{next}"))
+                        get_constraint_name(next)
                     },
                     coefficients,
                     operator,

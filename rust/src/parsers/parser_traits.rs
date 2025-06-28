@@ -138,21 +138,25 @@ pub fn parse_single_bound(input: &str) -> IResult<&str, (&str, VariableType)> {
             ),
             // Lower bound: `x1 >= 5` or `5 <= x1`
             alt((
-                map((parse_variable, preceded(space0, tag(">=")), preceded(space0, parse_num_value)), |(var_name, _, bound)| {
-                    (var_name, VariableType::LowerBound(bound))
-                }),
-                map((parse_num_value, preceded(space0, tag("<=")), preceded(space0, parse_variable)), |(bound, _, var_name)| {
-                    (var_name, VariableType::LowerBound(bound))
-                }),
+                map(
+                    preceded(space0, (parse_variable, preceded(space0, tag(">=")), preceded(space0, parse_num_value))),
+                    |(var_name, _, bound)| (var_name, VariableType::LowerBound(bound)),
+                ),
+                map(
+                    preceded(space0, (parse_num_value, preceded(space0, tag("<=")), preceded(space0, parse_variable))),
+                    |(bound, _, var_name)| (var_name, VariableType::LowerBound(bound)),
+                ),
             )),
             // Upper bound: `x1 <= 5` or `5 >= x1`
             alt((
-                map((parse_variable, preceded(space0, tag("<=")), preceded(space0, parse_num_value)), |(var_name, _, bound)| {
-                    (var_name, VariableType::UpperBound(bound))
-                }),
-                map((parse_num_value, preceded(space0, tag(">=")), preceded(space0, parse_variable)), |(bound, _, var_name)| {
-                    (var_name, VariableType::UpperBound(bound))
-                }),
+                map(
+                    preceded(space0, (parse_variable, preceded(space0, tag("<=")), preceded(space0, parse_num_value))),
+                    |(var_name, _, bound)| (var_name, VariableType::UpperBound(bound)),
+                ),
+                map(
+                    preceded(space0, (parse_num_value, preceded(space0, tag(">=")), preceded(space0, parse_variable))),
+                    |(bound, _, var_name)| (var_name, VariableType::UpperBound(bound)),
+                ),
             )),
         )),
     )

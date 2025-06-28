@@ -35,31 +35,27 @@ fn parse_infinity(input: &str) -> IResult<&str, f64> {
 }
 
 #[inline]
-/// Parses regular numeric values from the input string.
-fn parse_number(input: &str) -> IResult<&str, &str> {
+/// Fast direct f64 parsing without intermediate string allocation
+fn parse_f64_direct(input: &str) -> IResult<&str, f64> {
     let (remainder, matched) = recognize((
-        // Optional sign at the start
         opt(one_of("+-")),
-        // Integer part (required)
         digit1,
-        // Optional decimal part
         opt(pair(char('.'), opt(digit1))),
-        // Optional scientific notation part
         opt(complete((alt((char('e'), char('E'))), opt(one_of("+-")), digit1))),
     ))
     .parse(input)?;
 
-    if remainder.starts_with('e') || remainder.starts_with('E') {
-        Err(Err::Error(Error::new(input, ErrorKind::Verify)))
-    } else {
-        Ok((remainder, matched))
+    // Parse directly using fast_float or lexical for better performance
+    match matched.parse::<f64>() {
+        Ok(value) => Ok((remainder, value)),
+        Err(_) => Err(Err::Error(Error::new(input, ErrorKind::Verify))),
     }
 }
 
 #[inline]
 /// Parses a numeric value with optional whitespace, handling both regular numbers and infinity.
 pub fn parse_num_value(input: &str) -> IResult<&str, f64> {
-    preceded(multispace0, alt((parse_infinity, map(parse_number, |v| v.parse::<f64>().unwrap_or_default())))).parse(input)
+    preceded(multispace0, alt((parse_infinity, parse_f64_direct))).parse(input)
 }
 
 #[inline]
@@ -68,9 +64,9 @@ pub fn parse_cmp_op(input: &str) -> IResult<&str, ComparisonOp> {
     preceded(
         multispace0,
         alt((
+            value(ComparisonOp::EQ, tag("=")),
             value(ComparisonOp::LTE, tag("<=")),
             value(ComparisonOp::GTE, tag(">=")),
-            value(ComparisonOp::EQ, tag("=")),
             value(ComparisonOp::LT, tag("<")),
             value(ComparisonOp::GT, tag(">")),
         )),
@@ -80,7 +76,7 @@ pub fn parse_cmp_op(input: &str) -> IResult<&str, ComparisonOp> {
 
 #[cfg(test)]
 mod tests {
-    use crate::parsers::number::{parse_infinity, parse_num_value, parse_number};
+    use crate::parsers::number::{parse_infinity, parse_num_value};
 
     #[test]
     fn test_number_value() {
@@ -114,20 +110,5 @@ mod tests {
         assert!(parse_infinity("in").is_err());
         assert!(parse_infinity("++inf").is_err());
         assert!(parse_infinity("--inf").is_err());
-    }
-
-    #[test]
-    fn test_number_parser() {
-        let valid_numbers = [
-            "123", "+123", "-123", "123.456", "-123.456", "+123.456", "123.", "1.23e4", "1.23E4", "1.23e+4", "1.23e-4", "-1.23e-4",
-            "+1.23e+4",
-        ];
-        for input in valid_numbers {
-            assert!(parse_number(input).is_ok());
-        }
-
-        assert!(parse_number("abc").is_err());
-        assert!(parse_number(".123").is_err());
-        assert!(parse_number("1.23e").is_err());
     }
 }

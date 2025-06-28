@@ -82,11 +82,8 @@ impl FastStringFinder {
 
     /// Find pattern only at word boundaries (start of line or after whitespace)
     fn find_pattern_at_word_boundary(&self, input: &str, pattern: &str) -> Option<usize> {
-        let input_lower = input.to_lowercase();
-        let pattern_lower = pattern.to_lowercase();
-
         let mut start = 0;
-        while let Some(pos) = input_lower[start..].find(&pattern_lower) {
+        while let Some(pos) = self.find_case_insensitive(&input[start..], pattern) {
             let absolute_pos = start + pos;
 
             // Check if this is at a word boundary
@@ -104,6 +101,41 @@ impl FastStringFinder {
             start = absolute_pos + 1;
         }
 
+        None
+    }
+
+    /// Efficient case-insensitive search without string allocations
+    fn find_case_insensitive(&self, haystack: &str, needle: &str) -> Option<usize> {
+        if needle.is_empty() {
+            return Some(0);
+        }
+
+        let haystack_bytes = haystack.as_bytes();
+        let needle_bytes = needle.as_bytes();
+
+        if haystack_bytes.len() < needle_bytes.len() {
+            return None;
+        }
+
+        for i in 0..=(haystack_bytes.len() - needle_bytes.len()) {
+            let mut matches = true;
+            for j in 0..needle_bytes.len() {
+                let h_byte = haystack_bytes[i + j];
+                let n_byte = needle_bytes[j];
+
+                // ASCII case-insensitive comparison
+                let h_lower = if h_byte.is_ascii_uppercase() { h_byte + 32 } else { h_byte };
+                let n_lower = if n_byte.is_ascii_uppercase() { n_byte + 32 } else { n_byte };
+
+                if h_lower != n_lower {
+                    matches = false;
+                    break;
+                }
+            }
+            if matches {
+                return Some(i);
+            }
+        }
         None
     }
 }

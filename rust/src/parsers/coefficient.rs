@@ -24,7 +24,7 @@ use crate::parsers::parser_traits::parse_variable;
 ///
 pub fn parse_coefficient(input: &str) -> IResult<&str, Coefficient<'_>> {
     map(
-        (opt(preceded(space0, alt((char('+'), char('-'))))), opt(preceded(space0, parse_num_value)), preceded(space0, parse_variable)),
+        preceded(space0, (opt(alt((char('+'), char('-')))), opt(parse_num_value), preceded(space0, parse_variable))),
         |(sign, coef, var_name)| {
             let base_coef = coef.unwrap_or(1.0);
             let value = match sign {
