@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.4.1](https://github.com/dandxy89/lp_parser_rs/compare/parse_lp-v2.4.0...parse_lp-v2.4.1) (2025-06-29)
+
+
+### Code Refactoring
+
+* Adding comprehensive test cases and improvements to Nom usage ([#123](https://github.com/dandxy89/lp_parser_rs/issues/123)) ([35afeda](https://github.com/dandxy89/lp_parser_rs/commit/35afedad25cc9539774d7e155cafe218d681b5de))
+
 ## [2.4.0](https://github.com/dandxy89/lp_parser_rs/compare/parse_lp-v2.3.0...parse_lp-v2.4.0) (2025-05-24)
 
 
