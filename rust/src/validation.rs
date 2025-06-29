@@ -341,8 +341,74 @@ mod tests {
     use std::borrow::Cow;
 
     use super::*;
-    use crate::model::{Coefficient, ComparisonOp, Sense};
+    use crate::model::{Coefficient, ComparisonOp, SOSType, Sense};
 
+    // Test ValidationContext functionality
+    #[test]
+    fn test_validation_context_new() {
+        let context = ValidationContext::new();
+        assert!(context.undeclared_objective_vars.is_empty());
+        assert!(context.undeclared_constraint_vars.is_empty());
+        assert!(context.unused_variables.is_empty());
+        assert!(context.infeasible_constraints.is_empty());
+        assert!(context.invalid_sos_constraints.is_empty());
+        assert!(context.conflicting_variable_types.is_empty());
+        assert!(context.duplicate_constraints.is_empty());
+        assert!(context.duplicate_objectives.is_empty());
+        assert!(context.warnings.is_empty());
+        assert!(!context.has_errors());
+    }
+
+    #[test]
+    fn test_validation_context_has_errors() {
+        let mut context = ValidationContext::new();
+        assert!(!context.has_errors());
+
+        // Test each error type
+        context.undeclared_objective_vars.insert("x1");
+        assert!(context.has_errors());
+        context.undeclared_objective_vars.clear();
+
+        context.undeclared_constraint_vars.insert("x2");
+        assert!(context.has_errors());
+        context.undeclared_constraint_vars.clear();
+
+        context.infeasible_constraints.push("infeasible".to_string());
+        assert!(context.has_errors());
+        context.infeasible_constraints.clear();
+
+        context.invalid_sos_constraints.push("invalid_sos".to_string());
+        assert!(context.has_errors());
+        context.invalid_sos_constraints.clear();
+
+        context.conflicting_variable_types.push("conflict".to_string());
+        assert!(context.has_errors());
+        context.conflicting_variable_types.clear();
+
+        context.duplicate_constraints.push("duplicate".to_string());
+        assert!(context.has_errors());
+        context.duplicate_constraints.clear();
+
+        context.duplicate_objectives.push("duplicate".to_string());
+        assert!(context.has_errors());
+        context.duplicate_objectives.clear();
+
+        assert!(!context.has_errors());
+    }
+
+    #[test]
+    fn test_validation_context_summary() {
+        let mut context = ValidationContext::new();
+        assert_eq!(context.summary(), "No validation issues found");
+
+        context.undeclared_objective_vars.insert("x1");
+        context.warnings.push("Warning message".to_string());
+        let summary = context.summary();
+        assert!(summary.contains("Undeclared variables in objectives"));
+        assert!(summary.contains("Warnings"));
+    }
+
+    // Test complete valid problem
     #[test]
     fn test_valid_problem() {
         let mut problem = LpProblem::new().with_sense(Sense::Minimize);
@@ -366,8 +432,43 @@ mod tests {
     }
 
     #[test]
-    fn test_undeclared_variable() {
-        // Create a problem with direct construction to avoid auto-creation of variables
+    fn test_valid_problem_with_bounds() {
+        let mut problem = LpProblem::new().with_sense(Sense::Maximize);
+
+        // Add variables with bounds
+        problem.add_variable(Variable { name: "x1", var_type: VariableType::DoubleBound(0.0, 10.0) });
+        problem.add_variable(Variable { name: "x2", var_type: VariableType::LowerBound(0.0) });
+        problem.add_variable(Variable { name: "x3", var_type: VariableType::UpperBound(100.0) });
+        problem.add_variable(Variable { name: "x4", var_type: VariableType::Free });
+
+        // Add objective using all variables - this will also create default variables
+        problem.add_objective(Objective {
+            name: Cow::Borrowed("maximize_profit"),
+            coefficients: vec![
+                Coefficient { name: "x1", value: 3.0 },
+                Coefficient { name: "x2", value: 2.0 },
+                Coefficient { name: "x3", value: 1.0 },
+                Coefficient { name: "x4", value: 0.5 },
+            ],
+        });
+
+        // Add constraint using some variables - this will also create default variables
+        problem.add_constraint(Constraint::Standard {
+            name: Cow::Borrowed("capacity"),
+            coefficients: vec![Coefficient { name: "x1", value: 2.0 }, Coefficient { name: "x2", value: 1.0 }],
+            operator: ComparisonOp::LTE,
+            rhs: 20.0,
+        });
+
+        let context = problem.validate().expect("Validation should succeed");
+        assert!(!context.has_errors());
+        // All variables are used in the objective, so none should be unused
+        assert_eq!(context.unused_variables.len(), 0);
+    }
+
+    // Test variable reference validation
+    #[test]
+    fn test_undeclared_variable_in_objective() {
         let objectives = {
             let mut obj_map = HashMap::new();
             obj_map.insert(
@@ -377,20 +478,98 @@ mod tests {
             obj_map
         };
 
-        let problem = LpProblem {
-            name: None,
-            sense: Sense::Minimize,
-            objectives,
-            constraints: HashMap::new(),
-            variables: HashMap::new(), // No variables declared
-        };
+        let problem = LpProblem { name: None, sense: Sense::Minimize, objectives, constraints: HashMap::new(), variables: HashMap::new() };
 
         let context = problem.validate().expect("Validation should succeed");
+        assert!(context.has_errors());
         assert!(context.undeclared_objective_vars.contains("undeclared_var"));
+        assert!(context.undeclared_constraint_vars.is_empty());
     }
 
     #[test]
-    fn test_infeasible_constraint() {
+    fn test_undeclared_variable_in_constraint() {
+        let constraints = {
+            let mut constraint_map = HashMap::new();
+            constraint_map.insert(
+                Cow::Borrowed("c1"),
+                Constraint::Standard {
+                    name: Cow::Borrowed("c1"),
+                    coefficients: vec![Coefficient { name: "undeclared_var", value: 1.0 }],
+                    operator: ComparisonOp::LTE,
+                    rhs: 10.0,
+                },
+            );
+            constraint_map
+        };
+
+        let problem = LpProblem { name: None, sense: Sense::Minimize, objectives: HashMap::new(), constraints, variables: HashMap::new() };
+
+        let context = problem.validate().expect("Validation should succeed");
+        assert!(context.has_errors());
+        assert!(context.undeclared_constraint_vars.contains("undeclared_var"));
+        assert!(context.undeclared_objective_vars.is_empty());
+    }
+
+    #[test]
+    fn test_unused_variables() {
+        let mut problem = LpProblem::new();
+
+        // Add variables that are never used
+        problem.add_variable(Variable { name: "unused1", var_type: VariableType::Free });
+        problem.add_variable(Variable { name: "unused2", var_type: VariableType::LowerBound(0.0) });
+
+        let context = problem.validate().expect("Validation should succeed");
+        assert!(!context.has_errors()); // Unused variables are warnings, not errors
+        assert_eq!(context.unused_variables.len(), 2);
+        assert!(context.unused_variables.contains("unused1"));
+        assert!(context.unused_variables.contains("unused2"));
+    }
+
+    #[test]
+    fn test_mixed_declared_undeclared_variables() {
+        // Create problem manually to avoid automatic variable creation
+        let mut variables = HashMap::new();
+        variables.insert("x1", Variable { name: "x1", var_type: VariableType::Free });
+        variables.insert("x2", Variable { name: "x2", var_type: VariableType::Free });
+
+        let mut objectives = HashMap::new();
+        objectives.insert(
+            Cow::Borrowed("obj1"),
+            Objective {
+                name: Cow::Borrowed("obj1"),
+                coefficients: vec![
+                    Coefficient { name: "x1", value: 1.0 }, // declared
+                    Coefficient { name: "x3", value: 2.0 }, // undeclared
+                ],
+            },
+        );
+
+        let mut constraints = HashMap::new();
+        constraints.insert(
+            Cow::Borrowed("c1"),
+            Constraint::Standard {
+                name: Cow::Borrowed("c1"),
+                coefficients: vec![
+                    Coefficient { name: "x2", value: 1.0 }, // declared
+                    Coefficient { name: "x4", value: 1.0 }, // undeclared
+                ],
+                operator: ComparisonOp::LTE,
+                rhs: 10.0,
+            },
+        );
+
+        let problem = LpProblem { name: None, sense: Sense::Minimize, objectives, constraints, variables };
+
+        let context = problem.validate().expect("Validation should succeed");
+        assert!(context.has_errors());
+        assert!(context.undeclared_objective_vars.contains("x3"));
+        assert!(context.undeclared_constraint_vars.contains("x4"));
+        assert!(context.unused_variables.is_empty()); // All declared variables are used
+    }
+
+    // Test constraint feasibility validation
+    #[test]
+    fn test_infeasible_constraint_zero_equals_nonzero() {
         let mut problem = LpProblem::new();
 
         // Add infeasible constraint: 0 = 1
@@ -402,17 +581,512 @@ mod tests {
         });
 
         let context = problem.validate().expect("Validation should succeed");
+        assert!(context.has_errors());
         assert!(!context.infeasible_constraints.is_empty());
+        assert!(context.infeasible_constraints[0].contains("0 = 1"));
     }
 
     #[test]
-    fn test_invalid_bounds() {
+    fn test_infeasible_constraint_zero_lte_negative() {
+        let mut problem = LpProblem::new();
+
+        // Add infeasible constraint: 0 <= -5
+        problem.add_constraint(Constraint::Standard {
+            name: Cow::Borrowed("infeasible"),
+            coefficients: vec![],
+            operator: ComparisonOp::LTE,
+            rhs: -5.0,
+        });
+
+        let context = problem.validate().expect("Validation should succeed");
+        assert!(context.has_errors());
+        assert!(!context.infeasible_constraints.is_empty());
+        assert!(context.infeasible_constraints[0].contains("0 <= -5"));
+    }
+
+    #[test]
+    fn test_infeasible_constraint_zero_gte_positive() {
+        let mut problem = LpProblem::new();
+
+        // Add infeasible constraint: 0 >= 5
+        problem.add_constraint(Constraint::Standard {
+            name: Cow::Borrowed("infeasible"),
+            coefficients: vec![],
+            operator: ComparisonOp::GTE,
+            rhs: 5.0,
+        });
+
+        let context = problem.validate().expect("Validation should succeed");
+        assert!(context.has_errors());
+        assert!(!context.infeasible_constraints.is_empty());
+        assert!(context.infeasible_constraints[0].contains("0 >= 5"));
+    }
+
+    #[test]
+    fn test_feasible_empty_constraints() {
+        let mut problem = LpProblem::new();
+
+        // These should be feasible
+        problem.add_constraint(Constraint::Standard {
+            name: Cow::Borrowed("feasible1"),
+            coefficients: vec![],
+            operator: ComparisonOp::EQ,
+            rhs: 0.0,
+        });
+
+        problem.add_constraint(Constraint::Standard {
+            name: Cow::Borrowed("feasible2"),
+            coefficients: vec![],
+            operator: ComparisonOp::LTE,
+            rhs: 10.0,
+        });
+
+        problem.add_constraint(Constraint::Standard {
+            name: Cow::Borrowed("feasible3"),
+            coefficients: vec![],
+            operator: ComparisonOp::GTE,
+            rhs: -10.0,
+        });
+
+        let context = problem.validate().expect("Validation should succeed");
+        assert!(!context.has_errors());
+        assert!(context.infeasible_constraints.is_empty());
+    }
+
+    #[test]
+    fn test_invalid_bounds_lower_greater_than_upper() {
         let mut problem = LpProblem::new();
 
         // Add variable with invalid bounds (lower > upper)
         problem.add_variable(Variable { name: "x1", var_type: VariableType::DoubleBound(10.0, 5.0) });
 
         let context = problem.validate().expect("Validation should succeed");
+        assert!(context.has_errors());
         assert!(!context.infeasible_constraints.is_empty());
+        assert!(context.infeasible_constraints[0].contains("infeasible bounds"));
+    }
+
+    #[test]
+    fn test_invalid_bounds_infinite_values() {
+        let mut problem = LpProblem::new();
+
+        // Test infinite lower bound in double bound
+        problem.add_variable(Variable { name: "x1", var_type: VariableType::DoubleBound(f64::INFINITY, 10.0) });
+
+        let result = problem.validate();
+        assert!(result.is_err());
+
+        // Test infinite upper bound in double bound
+        let mut problem = LpProblem::new();
+        problem.add_variable(Variable { name: "x2", var_type: VariableType::DoubleBound(0.0, f64::NEG_INFINITY) });
+
+        let result = problem.validate();
+        assert!(result.is_err());
+
+        // Test infinite single bounds
+        let mut problem = LpProblem::new();
+        problem.add_variable(Variable { name: "x3", var_type: VariableType::LowerBound(f64::NAN) });
+
+        let result = problem.validate();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_valid_bounds() {
+        let mut problem = LpProblem::new();
+
+        problem.add_variable(Variable { name: "x1", var_type: VariableType::DoubleBound(0.0, 10.0) });
+        problem.add_variable(Variable { name: "x2", var_type: VariableType::DoubleBound(-5.0, 5.0) });
+        problem.add_variable(Variable { name: "x3", var_type: VariableType::LowerBound(0.0) });
+        problem.add_variable(Variable { name: "x4", var_type: VariableType::UpperBound(100.0) });
+        problem.add_variable(Variable { name: "x5", var_type: VariableType::Free });
+
+        let context = problem.validate().expect("Validation should succeed");
+        assert!(!context.has_errors());
+        assert!(context.infeasible_constraints.is_empty());
+    }
+
+    #[test]
+    fn test_boundary_case_equal_bounds() {
+        let mut problem = LpProblem::new();
+
+        // Equal bounds should be valid (fixed variable)
+        problem.add_variable(Variable { name: "x1", var_type: VariableType::DoubleBound(5.0, 5.0) });
+
+        let context = problem.validate().expect("Validation should succeed");
+        assert!(!context.has_errors());
+        assert!(context.infeasible_constraints.is_empty());
+    }
+
+    #[test]
+    fn test_valid_sos_constraint() {
+        let mut problem = LpProblem::new();
+
+        problem.add_constraint(Constraint::SOS {
+            name: Cow::Borrowed("sos1"),
+            sos_type: SOSType::S1,
+            weights: vec![
+                Coefficient { name: "x1", value: 1.0 },
+                Coefficient { name: "x2", value: 2.0 },
+                Coefficient { name: "x3", value: 3.0 },
+            ],
+        });
+
+        let context = problem.validate().expect("Validation should succeed");
+        assert!(!context.has_errors());
+        assert!(context.invalid_sos_constraints.is_empty());
+    }
+
+    #[test]
+    fn test_empty_sos_constraint() {
+        let mut problem = LpProblem::new();
+
+        problem.add_constraint(Constraint::SOS { name: Cow::Borrowed("empty_sos"), sos_type: SOSType::S2, weights: vec![] });
+
+        let context = problem.validate().expect("Validation should succeed");
+        assert!(context.has_errors());
+        assert!(!context.invalid_sos_constraints.is_empty());
+        assert!(context.invalid_sos_constraints[0].contains("has no weights"));
+    }
+
+    #[test]
+    fn test_sos_constraint_duplicate_variables() {
+        let mut problem = LpProblem::new();
+
+        problem.add_constraint(Constraint::SOS {
+            name: Cow::Borrowed("dup_sos"),
+            sos_type: SOSType::S1,
+            weights: vec![
+                Coefficient { name: "x1", value: 1.0 },
+                Coefficient { name: "x2", value: 2.0 },
+                Coefficient { name: "x1", value: 3.0 }, // Duplicate
+            ],
+        });
+
+        let context = problem.validate().expect("Validation should succeed");
+        assert!(context.has_errors());
+        assert!(!context.invalid_sos_constraints.is_empty());
+        assert!(context.invalid_sos_constraints[0].contains("duplicate variable"));
+    }
+
+    #[test]
+    fn test_sos_constraint_invalid_weights() {
+        let mut problem = LpProblem::new();
+
+        // Test negative weight
+        problem.add_constraint(Constraint::SOS {
+            name: Cow::Borrowed("neg_weight_sos"),
+            sos_type: SOSType::S1,
+            weights: vec![
+                Coefficient { name: "x1", value: 1.0 },
+                Coefficient { name: "x2", value: -2.0 }, // Negative weight
+            ],
+        });
+
+        let context = problem.validate().expect("Validation should succeed");
+        assert!(context.has_errors());
+        assert!(!context.invalid_sos_constraints.is_empty());
+        assert!(context.invalid_sos_constraints[0].contains("invalid weight"));
+
+        // Test infinite weight
+        let mut problem = LpProblem::new();
+        problem.add_constraint(Constraint::SOS {
+            name: Cow::Borrowed("inf_weight_sos"),
+            sos_type: SOSType::S2,
+            weights: vec![
+                Coefficient { name: "x1", value: 1.0 },
+                Coefficient { name: "x2", value: f64::INFINITY }, // Infinite weight
+            ],
+        });
+
+        let context = problem.validate().expect("Validation should succeed");
+        assert!(context.has_errors());
+        assert!(!context.invalid_sos_constraints.is_empty());
+    }
+
+    #[test]
+    fn test_sos_constraint_zero_weight() {
+        let mut problem = LpProblem::new();
+
+        // Zero weight should be valid
+        problem.add_constraint(Constraint::SOS {
+            name: Cow::Borrowed("zero_weight_sos"),
+            sos_type: SOSType::S1,
+            weights: vec![Coefficient { name: "x1", value: 0.0 }, Coefficient { name: "x2", value: 1.0 }],
+        });
+
+        let context = problem.validate().expect("Validation should succeed");
+        assert!(!context.has_errors());
+        assert!(context.invalid_sos_constraints.is_empty());
+    }
+
+    #[test]
+    fn test_empty_objective() {
+        let mut problem = LpProblem::new();
+
+        problem.add_objective(Objective { name: Cow::Borrowed("empty_obj"), coefficients: vec![] });
+
+        let context = problem.validate().expect("Validation should succeed");
+        assert!(!context.has_errors()); // Empty objective is just a warning
+        assert!(!context.warnings.is_empty());
+        assert!(context.warnings[0].contains("has no coefficients"));
+    }
+
+    #[test]
+    fn test_objective_with_infinite_coefficient() {
+        let objectives = {
+            let mut obj_map = HashMap::new();
+            obj_map.insert(
+                Cow::Borrowed("inf_obj"),
+                Objective { name: Cow::Borrowed("inf_obj"), coefficients: vec![Coefficient { name: "x1", value: f64::INFINITY }] },
+            );
+            obj_map
+        };
+
+        let problem = LpProblem { name: None, sense: Sense::Minimize, objectives, constraints: HashMap::new(), variables: HashMap::new() };
+
+        let result = problem.validate();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_objective_with_nan_coefficient() {
+        let objectives = {
+            let mut obj_map = HashMap::new();
+            obj_map.insert(
+                Cow::Borrowed("nan_obj"),
+                Objective { name: Cow::Borrowed("nan_obj"), coefficients: vec![Coefficient { name: "x1", value: f64::NAN }] },
+            );
+            obj_map
+        };
+
+        let problem = LpProblem { name: None, sense: Sense::Minimize, objectives, constraints: HashMap::new(), variables: HashMap::new() };
+
+        let result = problem.validate();
+        assert!(result.is_err());
+    }
+
+    // Test constraint coefficient validation
+    #[test]
+    fn test_constraint_with_infinite_coefficient() {
+        let constraints = {
+            let mut constraint_map = HashMap::new();
+            constraint_map.insert(
+                Cow::Borrowed("inf_constraint"),
+                Constraint::Standard {
+                    name: Cow::Borrowed("inf_constraint"),
+                    coefficients: vec![Coefficient { name: "x1", value: f64::INFINITY }],
+                    operator: ComparisonOp::LTE,
+                    rhs: 10.0,
+                },
+            );
+            constraint_map
+        };
+
+        let problem = LpProblem { name: None, sense: Sense::Minimize, objectives: HashMap::new(), constraints, variables: HashMap::new() };
+
+        let result = problem.validate();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_constraint_with_infinite_rhs() {
+        let constraints = {
+            let mut constraint_map = HashMap::new();
+            constraint_map.insert(
+                Cow::Borrowed("inf_rhs"),
+                Constraint::Standard {
+                    name: Cow::Borrowed("inf_rhs"),
+                    coefficients: vec![Coefficient { name: "x1", value: 1.0 }],
+                    operator: ComparisonOp::LTE,
+                    rhs: f64::INFINITY,
+                },
+            );
+            constraint_map
+        };
+
+        let problem = LpProblem { name: None, sense: Sense::Minimize, objectives: HashMap::new(), constraints, variables: HashMap::new() };
+
+        let result = problem.validate();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_empty_constraint() {
+        let mut problem = LpProblem::new();
+
+        problem.add_constraint(Constraint::Standard {
+            name: Cow::Borrowed("empty_constraint"),
+            coefficients: vec![],
+            operator: ComparisonOp::LTE,
+            rhs: 10.0,
+        });
+
+        let context = problem.validate().expect("Validation should succeed");
+        assert!(!context.has_errors()); // Empty constraint is just a warning
+        assert!(!context.warnings.is_empty());
+        assert!(context.warnings[0].contains("has no coefficients"));
+    }
+
+    // Test structural warnings
+    #[test]
+    fn test_empty_problem_warnings() {
+        let problem = LpProblem::new();
+
+        let context = problem.validate().expect("Validation should succeed");
+        assert!(!context.has_errors());
+        assert_eq!(context.warnings.len(), 3);
+        assert!(context.warnings.iter().any(|w| w.contains("no objectives")));
+        assert!(context.warnings.iter().any(|w| w.contains("no constraints")));
+        assert!(context.warnings.iter().any(|w| w.contains("no variables")));
+    }
+
+    #[test]
+    fn test_multi_objective_warning() {
+        let mut problem = LpProblem::new();
+
+        problem.add_objective(Objective { name: Cow::Borrowed("obj1"), coefficients: vec![Coefficient { name: "x1", value: 1.0 }] });
+
+        problem.add_objective(Objective { name: Cow::Borrowed("obj2"), coefficients: vec![Coefficient { name: "x1", value: 2.0 }] });
+
+        let context = problem.validate().expect("Validation should succeed");
+        assert!(!context.has_errors());
+        assert!(context.warnings.iter().any(|w| w.contains("multi-objective")));
+    }
+
+    #[test]
+    fn test_validate_strict_success() {
+        let mut problem = LpProblem::new();
+
+        problem.add_variable(Variable { name: "x1", var_type: VariableType::Free });
+        problem.add_objective(Objective { name: Cow::Borrowed("obj1"), coefficients: vec![Coefficient { name: "x1", value: 1.0 }] });
+
+        problem.add_constraint(Constraint::Standard {
+            name: Cow::Borrowed("c1"),
+            coefficients: vec![Coefficient { name: "x1", value: 1.0 }],
+            operator: ComparisonOp::LTE,
+            rhs: 10.0,
+        });
+
+        assert!(problem.validate_strict().is_ok());
+    }
+
+    #[test]
+    fn test_validate_strict_failure() {
+        let objectives = {
+            let mut obj_map = HashMap::new();
+            obj_map.insert(
+                Cow::Borrowed("obj1"),
+                Objective { name: Cow::Borrowed("obj1"), coefficients: vec![Coefficient { name: "undeclared", value: 1.0 }] },
+            );
+            obj_map
+        };
+
+        let problem = LpProblem { name: None, sense: Sense::Minimize, objectives, constraints: HashMap::new(), variables: HashMap::new() };
+
+        assert!(problem.validate_strict().is_err());
+    }
+
+    #[test]
+    fn test_complex_problem_with_multiple_issues() {
+        let mut variables = HashMap::new();
+        variables.insert("x1", Variable { name: "x1", var_type: VariableType::DoubleBound(10.0, 5.0) }); // Invalid bounds
+        variables.insert("unused", Variable { name: "unused", var_type: VariableType::Free }); // Unused
+
+        let mut objectives = HashMap::new();
+        objectives.insert(
+            Cow::Borrowed("obj1"),
+            Objective {
+                name: Cow::Borrowed("obj1"),
+                coefficients: vec![Coefficient { name: "x1", value: 1.0 }, Coefficient { name: "undeclared_obj", value: 2.0 }],
+            },
+        );
+
+        let mut constraints = HashMap::new();
+        constraints.insert(
+            Cow::Borrowed("c1"),
+            Constraint::Standard {
+                name: Cow::Borrowed("c1"),
+                coefficients: vec![Coefficient { name: "undeclared_constraint", value: 1.0 }],
+                operator: ComparisonOp::LTE,
+                rhs: 10.0,
+            },
+        );
+        constraints.insert(
+            Cow::Borrowed("c2"),
+            Constraint::Standard {
+                name: Cow::Borrowed("c2"),
+                coefficients: vec![],
+                operator: ComparisonOp::EQ,
+                rhs: 1.0, // Infeasible: 0 = 1
+            },
+        );
+        constraints.insert(
+            Cow::Borrowed("sos1"),
+            Constraint::SOS {
+                name: Cow::Borrowed("sos1"),
+                sos_type: SOSType::S1,
+                weights: vec![
+                    Coefficient { name: "x1", value: 1.0 },
+                    Coefficient { name: "x1", value: 2.0 }, // Duplicate variable
+                ],
+            },
+        );
+
+        let problem =
+            LpProblem { name: Some("complex_problem".to_string().into()), sense: Sense::Minimize, objectives, constraints, variables };
+
+        let context = problem.validate().expect("Validation should succeed");
+        assert!(context.has_errors());
+
+        // Check all the issues are detected
+        assert!(context.undeclared_objective_vars.contains("undeclared_obj"));
+        assert!(context.undeclared_constraint_vars.contains("undeclared_constraint"));
+        assert!(context.unused_variables.contains("unused"));
+        assert!(!context.infeasible_constraints.is_empty());
+        assert!(!context.invalid_sos_constraints.is_empty());
+
+        // Test summary contains all issues
+        let summary = context.summary();
+        assert!(summary.contains("Undeclared variables in objectives"));
+        assert!(summary.contains("Undeclared variables in constraints"));
+        assert!(summary.contains("Unused variables"));
+        assert!(summary.contains("infeasible constraints"));
+        assert!(summary.contains("Invalid SOS constraints"));
+    }
+
+    #[test]
+    fn test_large_problem_performance() {
+        let mut problem = LpProblem::new();
+
+        // Add many variables first
+        for i in 0..1000 {
+            problem.add_variable(Variable { name: Box::leak(format!("x{i}").into_boxed_str()), var_type: VariableType::Free });
+        }
+
+        // Add many constraints - these will overlap with some of our pre-declared variables
+        for i in 0..100 {
+            problem.add_constraint(Constraint::Standard {
+                name: Cow::Owned(format!("c{i}")),
+                coefficients: (0..10)
+                    .map(|j| Coefficient { name: Box::leak(format!("x{}", i * 10 + j).into_boxed_str()), value: 1.0 })
+                    .collect(),
+                operator: ComparisonOp::LTE,
+                rhs: 10.0,
+            });
+        }
+
+        // Add objective - this will also overlap with some variables
+        problem.add_objective(Objective {
+            name: Cow::Borrowed("obj"),
+            coefficients: (0..100).map(|i| Coefficient { name: Box::leak(format!("x{i}").into_boxed_str()), value: 1.0 }).collect(),
+        });
+
+        let context = problem.validate().expect("Validation should succeed");
+        assert!(!context.has_errors());
+        // Variables x0-x999 used in constraints, x0-x99 also used in objective
+        // So unused variables should be x1000 and up (but we only created x0-x999)
+        // All variables x0-x999 are used in either constraints or objective
+        assert_eq!(context.unused_variables.len(), 0); // All variables are actually used
     }
 }

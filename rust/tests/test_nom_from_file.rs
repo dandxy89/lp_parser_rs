@@ -45,7 +45,7 @@ fn nom_fit2d() {
 /// A test used my contributors for assisting with issues
 fn nom_debug() {
     let input = read_file_from_resources("infile_comments.lp").expect("failed to read file from resources");
-    assert!(dbg!(LpProblem::parse(&input)).is_ok());
+    assert!(LpProblem::parse(&input).is_ok());
 }
 
 #[macro_export]
