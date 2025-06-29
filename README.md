@@ -48,7 +48,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-lp_parser_rs = "2.4.0"
+lp_parser_rs = "2.4.1"
 ```
 
 ### Basic Usage
@@ -90,7 +90,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```toml
 [dependencies]
-lp_parser_rs = { version = "2.4.0", features = ["serde", "diff"] }
+lp_parser_rs = { version = "2.4.1", features = ["serde", "diff"] }
 ```
 
 ## Development
