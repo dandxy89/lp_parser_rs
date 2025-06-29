@@ -2,14 +2,14 @@
 //!
 //! This crate provides robust parsing capabilities for Linear Programming (LP)
 //! files using nom parser combinators. It supports multiple industry-standard
-//! LP file formats and offers comprehensive features for optimization problems.
+//! LP file formats and offers comprehensive features for optimisation problems.
 //!
 //! # Features
 //!
 //! - Zero-copy parsing with lifetime management
 //! - Support for multiple LP file format specifications
 //! - Comprehensive parsing of all standard LP file components
-//! - Optional serialization and diff tracking
+//! - Optional serialisation and diff tracking
 //!
 //! # Quick Start
 //!
@@ -37,17 +37,21 @@
 
 // #![deny(missing_docs)]
 
+pub mod builder;
+pub mod context;
 #[cfg(feature = "csv")]
 pub mod csv;
+pub mod error;
 pub mod model;
 pub mod parser;
 pub mod parsers;
+pub mod perf;
 pub mod problem;
+pub mod validation;
 
 use nom::branch::alt;
 use nom::bytes::complete::tag_no_case;
-use nom::error::{Error, ErrorKind};
-use nom::{Err, IResult, Parser as _};
+use nom::{IResult, Parser as _};
 
 /// Headers that indicate the beginning of a constraint section in an LP file.
 pub const CONSTRAINT_HEADERS: [&str; 5] = ["subject to", "such that", "s.t.", "st:", "st"];
@@ -116,36 +120,9 @@ pub(crate) fn log_unparsed_content(prefix: &str, remaining: &str) {
 /// A closure that takes a string slice and returns an `IResult` containing a
 /// tuple of string slices or an error if the tag is not found.
 ///
-fn take_until_cased<'a>(tag: &'a str) -> impl Fn(&'a str) -> IResult<&'a str, &'a str> {
-    move |input: &str| {
-        let mut index = 0;
-        let tag_lower = tag.to_lowercase();
-        let chars: Vec<char> = input.chars().collect();
-
-        if chars.len() < tag.len() {
-            return Err(Err::Error(Error::new(input, ErrorKind::TakeUntil)));
-        }
-
-        while index <= chars.len() - tag.len() {
-            let window: String = chars[index..index + tag.len()].iter().collect();
-            if window.to_lowercase() == tag_lower {
-                return Ok((&input[index..], &input[..index]));
-            }
-            index += 1;
-        }
-
-        Err(Err::Error(Error::new(input, ErrorKind::TakeUntil)))
-    }
-}
-
-#[allow(clippy::manual_try_fold)]
-#[inline]
+/// Optimized case-insensitive string finder (delegates to perf module)
 pub(crate) fn take_until_parser<'a>(tags: &'a [&'a str]) -> impl Fn(&'a str) -> IResult<&'a str, &'a str> + 'a {
-    move |input| {
-        tags.iter()
-            .map(|&tag| take_until_cased(tag))
-            .fold(Err(Err::Error(Error::new(input, ErrorKind::Alt))), |acc, parser| acc.map_or_else(|_| parser(input), Ok))
-    }
+    crate::perf::fast_take_until_parser(tags)
 }
 
 #[inline]

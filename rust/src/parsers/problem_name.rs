@@ -16,7 +16,7 @@ use nom::{IResult, Parser as _};
 #[inline]
 /// Parses a single comment from the input string.
 ///
-/// This function recognizes three types of comment starts: `\\*`, `\*`, and `\`.
+/// This function recognises three types of comment starts: `\\*`, `\*`, and `\`.
 /// For block comments starting with `\\*` or `\*`, it captures content until `*\` is found.
 /// For line comments starting with `\`, it captures content until the end of the line.
 ///

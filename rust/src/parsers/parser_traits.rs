@@ -24,7 +24,7 @@ use crate::parsers::variable::parse_variable_list;
 /// A trait for parsing sections within a text input.
 ///
 /// This trait defines methods for identifying and parsing sections
-/// based on predefined headers. Implementors must provide the list
+/// based on predefined headers. Implementer must provide the list
 /// of section headers and a method to parse the content of each section.
 ///
 /// # Type Parameters
@@ -104,7 +104,7 @@ pub fn parse_variable(input: &str) -> IResult<&str, &str> {
 #[inline]
 /// Parses a string input to identify and extract a variable with its bound type.
 ///
-/// The function recognizes four types of variable bounds:
+/// The function recognises four types of variable bounds:
 /// - Free variable: e.g., `x1 free`
 /// - Double bound: e.g., `0 <= x1 <= 5`
 /// - Lower bound: e.g., `x1 >= 5` or `5 <= x1`
@@ -138,21 +138,25 @@ pub fn parse_single_bound(input: &str) -> IResult<&str, (&str, VariableType)> {
             ),
             // Lower bound: `x1 >= 5` or `5 <= x1`
             alt((
-                map((parse_variable, preceded(space0, tag(">=")), preceded(space0, parse_num_value)), |(var_name, _, bound)| {
-                    (var_name, VariableType::LowerBound(bound))
-                }),
-                map((parse_num_value, preceded(space0, tag("<=")), preceded(space0, parse_variable)), |(bound, _, var_name)| {
-                    (var_name, VariableType::LowerBound(bound))
-                }),
+                map(
+                    preceded(space0, (parse_variable, preceded(space0, tag(">=")), preceded(space0, parse_num_value))),
+                    |(var_name, _, bound)| (var_name, VariableType::LowerBound(bound)),
+                ),
+                map(
+                    preceded(space0, (parse_num_value, preceded(space0, tag("<=")), preceded(space0, parse_variable))),
+                    |(bound, _, var_name)| (var_name, VariableType::LowerBound(bound)),
+                ),
             )),
             // Upper bound: `x1 <= 5` or `5 >= x1`
             alt((
-                map((parse_variable, preceded(space0, tag("<=")), preceded(space0, parse_num_value)), |(var_name, _, bound)| {
-                    (var_name, VariableType::UpperBound(bound))
-                }),
-                map((parse_num_value, preceded(space0, tag(">=")), preceded(space0, parse_variable)), |(bound, _, var_name)| {
-                    (var_name, VariableType::UpperBound(bound))
-                }),
+                map(
+                    preceded(space0, (parse_variable, preceded(space0, tag("<=")), preceded(space0, parse_num_value))),
+                    |(var_name, _, bound)| (var_name, VariableType::UpperBound(bound)),
+                ),
+                map(
+                    preceded(space0, (parse_num_value, preceded(space0, tag(">=")), preceded(space0, parse_variable))),
+                    |(bound, _, var_name)| (var_name, VariableType::UpperBound(bound)),
+                ),
             )),
         )),
     )

@@ -31,8 +31,8 @@ pub fn parse_sense(input: &str) -> IResult<&str, Sense> {
     delimited(
         multispace0,
         alt((
-            value(Sense::Minimize, alt((tag_no_case("minimize"), tag_no_case("minimum"), tag_no_case("min")))),
-            value(Sense::Maximize, alt((tag_no_case("maximize"), tag_no_case("maximum"), tag_no_case("max")))),
+            value(Sense::Minimize, alt((tag_no_case("minimize"), tag_no_case("minimise"), tag_no_case("minimum"), tag_no_case("min")))),
+            value(Sense::Maximize, alt((tag_no_case("maximize"), tag_no_case("maximise"), tag_no_case("maximum"), tag_no_case("max")))),
         )),
         multispace0,
     )
@@ -45,7 +45,7 @@ mod test {
 
     #[test]
     fn test_parse_sense() {
-        let valid = ["Minimize", "minimize", "min", "minimum", "Maximize", "maximize", "Max", "maximum"];
+        let valid = ["Minimize", "minimize", "minimise", "min", "minimum", "Maximize", "maximize", "maximise", "Max", "maximum"];
         for input in valid {
             assert!(parse_sense(input).is_ok());
         }

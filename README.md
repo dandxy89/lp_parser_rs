@@ -23,7 +23,7 @@ A robust Rust parser for Linear Programming (LP) files, built on the [NOM](https
 
 - **Problem Definition**
   - Problem name and sense specification
-  - Single and multi-objective optimization support
+  - Single and multi-objective optimisation support
   - Comprehensive constraint handling
 
 - **Variable Support**
@@ -35,8 +35,8 @@ A robust Rust parser for Linear Programming (LP) files, built on the [NOM](https
   - Identify added, removed, and modified elements
   - Useful for model version control and validation
 
-- **Serialization (`serde` feature)**
-  - Full serialization support for all model structures
+- **Serialisation (`serde` feature)**
+  - Full serialisation support for all model structures
   - Compatible with various data formats
   - Enables integration with other tools and systems
 
@@ -48,7 +48,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-lp_parser_rs = "x.y.z"
+lp_parser_rs = "2.4.0"
 ```
 
 ### Basic Usage
@@ -57,7 +57,7 @@ Clone and run with a sample file:
 
 ```bash
 git clone https://github.com/dandxy89/lp_parser_rs.git
-# Dissemble a single LP file
+# Parse a single LP file
 cargo run --bin lp_parser --release -- {{ /path/to/your/file.lp }}
 # Compare two LP files (enabling the 'diff' feature)
 cargo run --bin lp_parser --release --features diff -- {{ /path/to/your/file.lp }} {{ /path/to/your/other/file.lp }}
@@ -90,7 +90,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```toml
 [dependencies]
-lp_parser_rs = { version = "x.y.z", features = ["serde", "diff"] }
+lp_parser_rs = { version = "2.4.0", features = ["serde", "diff"] }
 ```
 
 ## Development
