@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.4.2](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v2.4.1...lp_parser_rs-v2.4.2) (2025-06-29)
+
+
+### Bug Fixes
+
+* Make methods conts and add must use attributes ([57a9c87](https://github.com/dandxy89/lp_parser_rs/commit/57a9c8761683a9841d225a1b5633fa5859cc06cd))
+
 ## [2.4.1](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v2.4.0...lp_parser_rs-v2.4.1) (2025-06-29)
 
 
