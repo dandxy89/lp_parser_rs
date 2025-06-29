@@ -33,12 +33,14 @@ pub struct ValidationContext<'a> {
     pub warnings: Vec<String>,
 }
 
-impl<'a> ValidationContext<'a> {
+impl ValidationContext<'_> {
+    #[must_use]
     /// Create a new validation context
     pub fn new() -> Self {
         Self::default()
     }
 
+    #[must_use]
     /// Check if validation found any errors
     pub fn has_errors(&self) -> bool {
         !self.undeclared_objective_vars.is_empty()
@@ -50,6 +52,7 @@ impl<'a> ValidationContext<'a> {
             || !self.duplicate_objectives.is_empty()
     }
 
+    #[must_use]
     /// Get a summary of all validation issues
     pub fn summary(&self) -> String {
         let mut summary = Vec::new();
@@ -318,7 +321,7 @@ impl LpValidator {
     }
 }
 
-impl<'a> LpProblem<'a> {
+impl LpProblem<'_> {
     /// Validate the LP problem and return validation results
     pub fn validate(&self) -> LpResult<ValidationContext<'_>> {
         LpValidator::validate(self)

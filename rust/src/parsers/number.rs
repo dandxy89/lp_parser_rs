@@ -46,10 +46,7 @@ fn parse_f64_direct(input: &str) -> IResult<&str, f64> {
     .parse(input)?;
 
     // Parse directly using fast_float or lexical for better performance
-    match matched.parse::<f64>() {
-        Ok(value) => Ok((remainder, value)),
-        Err(_) => Err(Err::Error(Error::new(input, ErrorKind::Verify))),
-    }
+    matched.parse::<f64>().map_or_else(|_| Err(Err::Error(Error::new(input, ErrorKind::Verify))), |value| Ok((remainder, value)))
 }
 
 #[inline]

@@ -44,33 +44,39 @@ pub struct VariableBuilder<'a> {
 }
 
 impl<'a> LpProblemBuilder<'a> {
+    #[must_use]
     /// Create a new LP problem builder
     pub fn new() -> Self {
         Self::default()
     }
 
+    #[must_use]
     /// Set the problem name
     pub fn name(mut self, name: impl Into<Cow<'a, str>>) -> Self {
         self.name = Some(name.into());
         self
     }
 
+    #[must_use]
     /// Set the optimization sense
-    pub fn sense(mut self, sense: Sense) -> Self {
+    pub const fn sense(mut self, sense: Sense) -> Self {
         self.sense = Some(sense);
         self
     }
 
+    #[must_use]
     /// Set the problem to minimize
-    pub fn minimize(self) -> Self {
+    pub const fn minimize(self) -> Self {
         self.sense(Sense::Minimize)
     }
 
+    #[must_use]
     /// Set the problem to maximize
-    pub fn maximize(self) -> Self {
+    pub const fn maximize(self) -> Self {
         self.sense(Sense::Maximize)
     }
 
+    #[must_use]
     /// Add an objective to the problem
     pub fn objective<F>(mut self, name: impl Into<Cow<'a, str>>, f: F) -> Self
     where
@@ -83,6 +89,7 @@ impl<'a> LpProblemBuilder<'a> {
         self
     }
 
+    #[must_use]
     /// Add a constraint to the problem
     pub fn constraint<F>(mut self, name: impl Into<Cow<'a, str>>, f: F) -> Self
     where
@@ -95,6 +102,7 @@ impl<'a> LpProblemBuilder<'a> {
         self
     }
 
+    #[must_use]
     /// Add an SOS constraint to the problem
     pub fn sos_constraint<F>(mut self, name: impl Into<Cow<'a, str>>, sos_type: SOSType, f: F) -> Self
     where
@@ -107,6 +115,7 @@ impl<'a> LpProblemBuilder<'a> {
         self
     }
 
+    #[must_use]
     /// Add a variable to the problem
     pub fn variable<F>(mut self, name: &'a str, f: F) -> Self
     where
@@ -118,8 +127,9 @@ impl<'a> LpProblemBuilder<'a> {
         self
     }
 
+    #[must_use]
     /// Add multiple variables with the same type
-    pub fn variables(mut self, names: &[&'a str], var_type: VariableType) -> Self {
+    pub fn variables(mut self, names: &[&'a str], var_type: &VariableType) -> Self {
         for &name in names {
             let builder = VariableBuilder::new(name).var_type(var_type.clone());
             self.variables.insert(name, builder);
@@ -160,17 +170,20 @@ impl<'a> LpProblemBuilder<'a> {
 }
 
 impl<'a> ObjectiveBuilder<'a> {
+    #[must_use]
     /// Create a new objective builder
-    pub fn new(name: Cow<'a, str>) -> Self {
+    pub const fn new(name: Cow<'a, str>) -> Self {
         Self { name, coefficients: Vec::new() }
     }
 
+    #[must_use]
     /// Add a coefficient to the objective
     pub fn coefficient(mut self, name: &'a str, value: f64) -> Self {
         self.coefficients.push(Coefficient { name, value });
         self
     }
 
+    #[must_use]
     /// Add multiple coefficients at once
     ///
     /// Note: This method requires coefficient names to have the same lifetime as the builder.
@@ -193,16 +206,19 @@ impl<'a> ObjectiveBuilder<'a> {
 }
 
 impl<'a> ConstraintBuilder<'a> {
+    #[must_use]
     /// Create a new standard constraint builder
-    pub fn standard(name: Cow<'a, str>) -> Self {
+    pub const fn standard(name: Cow<'a, str>) -> Self {
         Self::Standard { name, coefficients: Vec::new(), operator: None, rhs: None }
     }
 
+    #[must_use]
     /// Create a new SOS constraint builder
-    pub fn sos(name: Cow<'a, str>, sos_type: SOSType) -> Self {
+    pub const fn sos(name: Cow<'a, str>, sos_type: SOSType) -> Self {
         Self::SOS { name, sos_type, weights: Vec::new() }
     }
 
+    #[must_use]
     /// Add a coefficient to the constraint
     pub fn coefficient(mut self, name: &'a str, value: f64) -> Self {
         match &mut self {
@@ -216,6 +232,7 @@ impl<'a> ConstraintBuilder<'a> {
         self
     }
 
+    #[must_use]
     /// Set the constraint to less than or equal
     pub fn le(mut self, rhs: f64) -> Self {
         if let Self::Standard { operator, rhs: rhs_ref, .. } = &mut self {
@@ -225,6 +242,7 @@ impl<'a> ConstraintBuilder<'a> {
         self
     }
 
+    #[must_use]
     /// Set the constraint to less than
     pub fn lt(mut self, rhs: f64) -> Self {
         if let Self::Standard { operator, rhs: rhs_ref, .. } = &mut self {
@@ -234,6 +252,7 @@ impl<'a> ConstraintBuilder<'a> {
         self
     }
 
+    #[must_use]
     /// Set the constraint to greater than or equal
     pub fn ge(mut self, rhs: f64) -> Self {
         if let Self::Standard { operator, rhs: rhs_ref, .. } = &mut self {
@@ -243,6 +262,7 @@ impl<'a> ConstraintBuilder<'a> {
         self
     }
 
+    #[must_use]
     /// Set the constraint to greater than
     pub fn gt(mut self, rhs: f64) -> Self {
         if let Self::Standard { operator, rhs: rhs_ref, .. } = &mut self {
@@ -252,6 +272,7 @@ impl<'a> ConstraintBuilder<'a> {
         self
     }
 
+    #[must_use]
     /// Set the constraint to equal
     pub fn eq(mut self, rhs: f64) -> Self {
         if let Self::Standard { operator, rhs: rhs_ref, .. } = &mut self {
@@ -288,63 +309,74 @@ impl<'a> ConstraintBuilder<'a> {
 }
 
 impl<'a> VariableBuilder<'a> {
+    #[must_use]
     /// Create a new variable builder
     pub fn new(name: &'a str) -> Self {
         Self { name, var_type: VariableType::default() }
     }
 
+    #[must_use]
     /// Set the variable type
-    pub fn var_type(mut self, var_type: VariableType) -> Self {
+    pub const fn var_type(mut self, var_type: VariableType) -> Self {
         self.var_type = var_type;
         self
     }
 
+    #[must_use]
     /// Set the variable as binary
-    pub fn binary(self) -> Self {
+    pub const fn binary(self) -> Self {
         self.var_type(VariableType::Binary)
     }
 
+    #[must_use]
     /// Set the variable as integer
-    pub fn integer(self) -> Self {
+    pub const fn integer(self) -> Self {
         self.var_type(VariableType::Integer)
     }
 
+    #[must_use]
     /// Set the variable as general (non-negative)
-    pub fn general(self) -> Self {
+    pub const fn general(self) -> Self {
         self.var_type(VariableType::General)
     }
 
+    #[must_use]
     /// Set the variable as free (unbounded)
-    pub fn free(self) -> Self {
+    pub const fn free(self) -> Self {
         self.var_type(VariableType::Free)
     }
 
+    #[must_use]
     /// Set the variable as semi-continuous
-    pub fn semi_continuous(self) -> Self {
+    pub const fn semi_continuous(self) -> Self {
         self.var_type(VariableType::SemiContinuous)
     }
 
+    #[must_use]
     /// Set lower bound for the variable
-    pub fn lower_bound(self, bound: f64) -> Self {
+    pub const fn lower_bound(self, bound: f64) -> Self {
         self.var_type(VariableType::LowerBound(bound))
     }
 
+    #[must_use]
     /// Set upper bound for the variable
-    pub fn upper_bound(self, bound: f64) -> Self {
+    pub const fn upper_bound(self, bound: f64) -> Self {
         self.var_type(VariableType::UpperBound(bound))
     }
 
+    #[must_use]
     /// Set both lower and upper bounds
-    pub fn bounds(self, lower: f64, upper: f64) -> Self {
+    pub const fn bounds(self, lower: f64, upper: f64) -> Self {
         self.var_type(VariableType::DoubleBound(lower, upper))
     }
 
     /// Build the variable
-    pub fn build(self) -> LpResult<Variable<'a>> {
+    pub const fn build(self) -> LpResult<Variable<'a>> {
         Ok(Variable { name: self.name, var_type: self.var_type })
     }
 }
 
+#[must_use]
 /// Convenience function to create a new LP problem builder
 pub fn lp_problem() -> LpProblemBuilder<'static> {
     LpProblemBuilder::new()
@@ -762,7 +794,7 @@ mod tests {
     #[test]
     fn test_variables_bulk_creation() {
         let problem =
-            LpProblemBuilder::new().variables(&["x1", "x2", "x3", "x4"], VariableType::Binary).build().expect("Should build successfully");
+            LpProblemBuilder::new().variables(&["x1", "x2", "x3", "x4"], &VariableType::Binary).build().expect("Should build successfully");
 
         assert_eq!(problem.variables.len(), 4);
         for var_name in &["x1", "x2", "x3", "x4"] {
@@ -773,7 +805,7 @@ mod tests {
 
     #[test]
     fn test_variables_empty_array() {
-        let problem = LpProblemBuilder::new().variables(&[], VariableType::General).build().expect("Should build successfully");
+        let problem = LpProblemBuilder::new().variables(&[], &VariableType::General).build().expect("Should build successfully");
 
         assert!(problem.variables.is_empty());
     }
@@ -975,7 +1007,7 @@ mod tests {
         let problem = LpProblemBuilder::new()
             .minimize()
             .sos_constraint("sos1", SOSType::S1, |c| c.coefficient("x1", 1.0).coefficient("x2", 2.0).coefficient("x3", 3.0))
-            .variables(&["x1", "x2", "x3"], VariableType::Free)
+            .variables(&["x1", "x2", "x3"], &VariableType::Free)
             .build()
             .expect("Should build successfully");
 

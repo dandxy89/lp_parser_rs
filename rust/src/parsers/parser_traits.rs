@@ -69,9 +69,9 @@ pub trait SectionParser<'a, T> {
 }
 
 #[macro_export]
-/// Macro to implement the SectionParser trait.
+/// Macro to implement the `SectionParser` trait.
 ///
-/// Provides a convenient way to implement the SectionParser trait
+/// Provides a convenient way to implement the `SectionParser` trait
 /// for different section types with minimal boilerplate.
 macro_rules! impl_section_parser {
     ($parser_type:ty, $return_type:ty, $headers:expr, $content_parser:expr) => {

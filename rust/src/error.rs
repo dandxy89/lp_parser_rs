@@ -9,7 +9,7 @@ use thiserror::Error;
 ///
 /// This error type provides detailed context about parsing failures,
 /// including location information and specific error conditions.
-#[derive(Error, Debug, Clone, PartialEq)]
+#[derive(Error, Debug, Clone, PartialEq, Eq)]
 pub enum LpParseError {
     /// Invalid or malformed constraint syntax
     #[error("Invalid constraint syntax at position {position}: {context}")]
@@ -168,7 +168,7 @@ pub trait ErrorContext<T> {
 }
 
 impl<T> ErrorContext<T> for Result<T, LpParseError> {
-    fn with_position(self, position: usize) -> LpResult<T> {
+    fn with_position(self, position: usize) -> Self {
         self.map_err(|mut err| {
             if let LpParseError::ParseError { position: ref mut pos, .. } = &mut err {
                 *pos = position;
@@ -177,7 +177,7 @@ impl<T> ErrorContext<T> for Result<T, LpParseError> {
         })
     }
 
-    fn with_context(self, context: &str) -> LpResult<T> {
+    fn with_context(self, context: &str) -> Self {
         self.map_err(|err| match err {
             LpParseError::ParseError { position, message } => LpParseError::parse_error(position, format!("{context}: {message}")),
             other => other,

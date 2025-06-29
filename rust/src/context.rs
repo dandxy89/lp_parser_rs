@@ -38,23 +38,23 @@ pub enum SectionType {
 impl std::fmt::Display for SectionType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            SectionType::Header => write!(f, "Header"),
-            SectionType::Sense => write!(f, "Sense"),
-            SectionType::Objectives => write!(f, "Objectives"),
-            SectionType::Constraints => write!(f, "Constraints"),
-            SectionType::Bounds => write!(f, "Bounds"),
-            SectionType::Integers => write!(f, "Integers"),
-            SectionType::Generals => write!(f, "Generals"),
-            SectionType::Binaries => write!(f, "Binaries"),
-            SectionType::SemiContinuous => write!(f, "SemiContinuous"),
-            SectionType::Sos => write!(f, "SOS"),
-            SectionType::End => write!(f, "End"),
+            Self::Header => write!(f, "Header"),
+            Self::Sense => write!(f, "Sense"),
+            Self::Objectives => write!(f, "Objectives"),
+            Self::Constraints => write!(f, "Constraints"),
+            Self::Bounds => write!(f, "Bounds"),
+            Self::Integers => write!(f, "Integers"),
+            Self::Generals => write!(f, "Generals"),
+            Self::Binaries => write!(f, "Binaries"),
+            Self::SemiContinuous => write!(f, "SemiContinuous"),
+            Self::Sos => write!(f, "SOS"),
+            Self::End => write!(f, "End"),
         }
     }
 }
 
 /// Warning generated during parsing
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParseWarning {
     /// The section where the warning occurred
     pub section: SectionType,
@@ -97,6 +97,7 @@ pub struct ParseMetrics {
 }
 
 impl ParseMetrics {
+    #[must_use]
     /// Create new metrics instance
     pub fn new() -> Self {
         Self::default()
@@ -107,6 +108,8 @@ impl ParseMetrics {
         self.section_times.insert(section, duration_ns);
     }
 
+    #[must_use]
+    #[allow(clippy::cast_precision_loss)]
     /// Get formatted performance summary
     pub fn summary(&self) -> String {
         format!(
@@ -160,11 +163,13 @@ pub struct ParseContext<'a> {
 }
 
 impl<'a> ParseContext<'a> {
+    #[must_use]
     /// Create a new parsing context
     pub fn new(input: &'a str) -> Self {
         Self::with_config(input, ParseConfig::default())
     }
 
+    #[must_use]
     /// Create a new parsing context with specific configuration
     pub fn with_config(input: &'a str, config: ParseConfig) -> Self {
         Self {
@@ -179,43 +184,51 @@ impl<'a> ParseContext<'a> {
         }
     }
 
+    #[must_use]
     /// Get the current input slice from the current position
     pub fn current_input(&self) -> &'a str {
         &self.original_input[self.position..]
     }
 
+    #[must_use]
     /// Get the original input
-    pub fn original_input(&self) -> &'a str {
+    pub const fn original_input(&self) -> &'a str {
         self.original_input
     }
 
+    #[must_use]
     /// Get the current position
-    pub fn position(&self) -> usize {
+    pub const fn position(&self) -> usize {
         self.position
     }
 
+    #[must_use]
     /// Get the current line number
-    pub fn line(&self) -> usize {
+    pub const fn line(&self) -> usize {
         self.line
     }
 
+    #[must_use]
     /// Get the current column number
-    pub fn column(&self) -> usize {
+    pub const fn column(&self) -> usize {
         self.column
     }
 
+    #[must_use]
     /// Get the current section
-    pub fn current_section(&self) -> SectionType {
+    pub const fn current_section(&self) -> SectionType {
         self.current_section
     }
 
+    #[must_use]
     /// Get the collected warnings
     pub fn warnings(&self) -> &[ParseWarning] {
         &self.warnings
     }
 
+    #[must_use]
     /// Get the parsing metrics
-    pub fn metrics(&self) -> &ParseMetrics {
+    pub const fn metrics(&self) -> &ParseMetrics {
         &self.metrics
     }
 
@@ -278,8 +291,9 @@ impl<'a> ParseContext<'a> {
         }
     }
 
+    #[must_use]
     /// Check if we should stop collecting warnings
-    pub fn should_stop_collecting_warnings(&self) -> bool {
+    pub const fn should_stop_collecting_warnings(&self) -> bool {
         self.warnings.len() >= self.config.max_warnings
     }
 
@@ -305,11 +319,13 @@ impl<'a> ParseContext<'a> {
         }
     }
 
+    #[must_use]
     /// Create a positioned error for nom parsers
     pub fn nom_error<'b>(&self, input: &'b str) -> nom::Err<nom::error::Error<&'b str>> {
         nom::Err::Error(nom::error::Error::new(input, nom::error::ErrorKind::Fail))
     }
 
+    #[must_use]
     /// Get summary of the parsing context
     pub fn summary(&self) -> String {
         let mut parts = Vec::new();
@@ -329,7 +345,7 @@ impl<'a> ParseContext<'a> {
     }
 }
 
-/// Extension trait for nom parsers to work with ParseContext
+/// Extension trait for nom parsers to work with `ParseContext`
 pub trait ContextualParser<'a, O> {
     /// Parse with context tracking
     fn parse_with_context(&mut self, context: &mut ParseContext<'a>) -> LpResult<O>;

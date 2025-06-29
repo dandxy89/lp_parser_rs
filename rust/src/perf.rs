@@ -63,13 +63,14 @@ impl FastStringFinder {
         Self { patterns: compiled_patterns }
     }
 
+    #[must_use]
     /// Find the first occurrence of any pattern in the input
     pub fn find_first(&self, input: &str) -> Option<(usize, &str)> {
         let mut earliest_pos = usize::MAX;
         let mut found_pattern = None;
 
         for pattern in &self.patterns {
-            if let Some(pos) = self.find_pattern_at_word_boundary(input, &pattern.pattern) {
+            if let Some(pos) = Self::find_pattern_at_word_boundary(input, &pattern.pattern) {
                 if pos < earliest_pos {
                     earliest_pos = pos;
                     found_pattern = Some(&pattern.pattern);
@@ -81,9 +82,9 @@ impl FastStringFinder {
     }
 
     /// Find pattern only at word boundaries (start of line or after whitespace)
-    fn find_pattern_at_word_boundary(&self, input: &str, pattern: &str) -> Option<usize> {
+    fn find_pattern_at_word_boundary(input: &str, pattern: &str) -> Option<usize> {
         let mut start = 0;
-        while let Some(pos) = self.find_case_insensitive(&input[start..], pattern) {
+        while let Some(pos) = Self::find_case_insensitive(&input[start..], pattern) {
             let absolute_pos = start + pos;
 
             // Check if this is at a word boundary
@@ -105,7 +106,7 @@ impl FastStringFinder {
     }
 
     /// Efficient case-insensitive search without string allocations
-    fn find_case_insensitive(&self, haystack: &str, needle: &str) -> Option<usize> {
+    fn find_case_insensitive(haystack: &str, needle: &str) -> Option<usize> {
         if needle.is_empty() {
             return Some(0);
         }
@@ -141,6 +142,7 @@ impl FastStringFinder {
 }
 
 #[inline]
+#[must_use]
 /// Fast case-insensitive string search using optimised algorithms
 pub fn fast_find_case_insensitive(haystack: &str, needle: &str) -> Option<usize> {
     if needle.is_empty() {
@@ -153,18 +155,15 @@ pub fn fast_find_case_insensitive(haystack: &str, needle: &str) -> Option<usize>
     memmem::find(haystack_lower.as_bytes(), needle_lower.as_bytes())
 }
 
-/// Optimized version of take_until_cased using fast string search
+/// Optimized version of `take_until_cased` using fast string search
 pub fn fast_take_until_cased<'a>(tag: &'a str) -> impl Fn(&'a str) -> IResult<&'a str, &'a str> + 'a {
     move |input: &str| {
-        if let Some(pos) = fast_find_case_insensitive(input, tag) {
-            Ok((&input[pos..], &input[..pos]))
-        } else {
-            Err(Err::Error(Error::new(input, ErrorKind::TakeUntil)))
-        }
+        fast_find_case_insensitive(input, tag)
+            .map_or_else(|| Err(Err::Error(Error::new(input, ErrorKind::TakeUntil))), |pos| Ok((&input[pos..], &input[..pos])))
     }
 }
 
-/// Optimized version of take_until_parser using fast string search
+/// Optimized version of `take_until_parser` using fast string search
 pub fn fast_take_until_parser<'a>(tags: &'a [&'a str]) -> impl Fn(&'a str) -> IResult<&'a str, &'a str> + 'a {
     move |input| {
         let finder = FastStringFinder::new(tags);
@@ -235,6 +234,7 @@ pub struct StringInterner {
 }
 
 impl StringInterner {
+    #[must_use]
     /// Create a new string interner
     pub fn new() -> Self {
         Self { strings: std::sync::RwLock::new(HashMap::new()) }

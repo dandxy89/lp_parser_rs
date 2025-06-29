@@ -123,12 +123,13 @@ pub fn parse_constraints<'a>(input: &'a str) -> ConstraintParseResult<'a> {
 
                 // Standard (SOS constraints are handled separately)
                 Constraint::Standard {
-                    name: if let Some(s) = name {
-                        Cow::Borrowed(s)
-                    } else {
-                        let next = generator.next_id();
-                        get_constraint_name(next)
-                    },
+                    name: name.map_or_else(
+                        || {
+                            let next = generator.next_id();
+                            get_constraint_name(next)
+                        },
+                        Cow::Borrowed,
+                    ),
                     coefficients,
                     operator,
                     rhs,

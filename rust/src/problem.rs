@@ -91,7 +91,7 @@ impl<'a> LpProblem<'a> {
     #[must_use]
     #[inline]
     /// Returns `true` if the `Self` a Minimize LP Problem
-    pub fn is_minimization(&self) -> bool {
+    pub const fn is_minimization(&self) -> bool {
         self.sense.is_minimisation()
     }
 
@@ -250,7 +250,7 @@ impl<'a> LpProblem<'a> {
         if is_integers_section(input).is_ok() {
             if let Ok((rem_input, Some(integer_str))) = opt(take_until_parser(&GENERAL_HEADERS)).parse(input) {
                 if let Ok((_, integer_vars)) = parse_integer_section(integer_str) {
-                    set_var_types(variables, integer_vars, VariableType::Integer);
+                    set_var_types(variables, integer_vars, &VariableType::Integer);
                 }
                 input = rem_input;
             }
@@ -260,7 +260,7 @@ impl<'a> LpProblem<'a> {
         if is_generals_section(input).is_ok() {
             if let Ok((rem_input, Some(generals_str))) = opt(take_until_parser(&BINARY_HEADERS)).parse(input) {
                 if let Ok((_, general_vars)) = parse_generals_section(generals_str) {
-                    set_var_types(variables, general_vars, VariableType::General);
+                    set_var_types(variables, general_vars, &VariableType::General);
                 }
                 input = rem_input;
             }
@@ -270,7 +270,7 @@ impl<'a> LpProblem<'a> {
         if is_binary_section(input).is_ok() {
             if let Ok((rem_input, Some(binary_str))) = opt(take_until_parser(&SEMI_HEADERS)).parse(input) {
                 if let Ok((_, binary_vars)) = parse_binary_section(binary_str) {
-                    set_var_types(variables, binary_vars, VariableType::Binary);
+                    set_var_types(variables, binary_vars, &VariableType::Binary);
                 }
                 input = rem_input;
             }
@@ -280,7 +280,7 @@ impl<'a> LpProblem<'a> {
         if is_semi_section(input).is_ok() {
             if let Ok((rem_input, Some(semi_str))) = opt(take_until_parser(&SOS_HEADERS)).parse(input) {
                 if let Ok((_, semi_vars)) = parse_semi_section(semi_str) {
-                    set_var_types(variables, semi_vars, VariableType::SemiContinuous);
+                    set_var_types(variables, semi_vars, &VariableType::SemiContinuous);
                 }
                 input = rem_input;
             }
@@ -322,7 +322,7 @@ impl<'a> LpProblem<'a> {
 }
 
 #[inline]
-fn set_var_types<'a>(variables: &mut HashMap<&'a str, Variable<'a>>, vars: Vec<&'a str>, var_type: VariableType) {
+fn set_var_types<'a>(variables: &mut HashMap<&'a str, Variable<'a>>, vars: Vec<&'a str>, var_type: &VariableType) {
     for name in vars {
         match variables.entry(name) {
             Entry::Occupied(mut occupied_entry) => {

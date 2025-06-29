@@ -71,9 +71,10 @@ pub enum Sense {
 
 impl Sense {
     #[inline]
+    #[must_use]
     /// Determines if the current optimisation sense is minimisation.
     pub const fn is_minimisation(&self) -> bool {
-        matches!(self, Sense::Minimize)
+        matches!(self, Self::Minimize)
     }
 }
 
@@ -246,15 +247,15 @@ pub enum VariableType {
 impl AsRef<[u8]> for VariableType {
     fn as_ref(&self) -> &[u8] {
         match self {
-            VariableType::Free => b"Free",
-            VariableType::General => b"General",
-            VariableType::LowerBound(_) => b"LowerBound",
-            VariableType::UpperBound(_) => b"UpperBound",
-            VariableType::DoubleBound(_, _) => b"DoubleBound",
-            VariableType::Binary => b"Binary",
-            VariableType::Integer => b"Integer",
-            VariableType::SemiContinuous => b"Semi-Continuous",
-            VariableType::SOS => b"SOS",
+            Self::Free => b"Free",
+            Self::General => b"General",
+            Self::LowerBound(_) => b"LowerBound",
+            Self::UpperBound(_) => b"UpperBound",
+            Self::DoubleBound(_, _) => b"DoubleBound",
+            Self::Binary => b"Binary",
+            Self::Integer => b"Integer",
+            Self::SemiContinuous => b"Semi-Continuous",
+            Self::SOS => b"SOS",
         }
     }
 }

@@ -85,12 +85,13 @@ pub fn parse_objectives(input: &str) -> ObjectiveParseResult<'_> {
                 .collect();
 
             Objective {
-                name: if let Some(s) = name {
-                    Cow::Borrowed(s)
-                } else {
-                    let next = generals.next_id();
-                    Cow::Owned(format!("OBJECTIVE_{next}"))
-                },
+                name: name.map_or_else(
+                    || {
+                        let next = generals.next_id();
+                        Cow::Owned(format!("OBJECTIVE_{next}"))
+                    },
+                    Cow::Borrowed,
+                ),
                 coefficients,
             }
         },
