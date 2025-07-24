@@ -1,6 +1,6 @@
 [project]
 name = "parse_lp"
-description = "A fast LP file format parser for Python, powered by Rust"
+description = "A LP file format parser for Python, powered by Rust"
 license = { file = "LICENSE-APACHE" }
 requires-python = ">=3.9"
 keywords = [
@@ -28,10 +28,10 @@ include = ["README.md", "LICENSE-APACHE"]
 
 [dependency-groups]
 dev = [
-    "mypy>=1.14.1",
-    "pip>=25.0",
-    "pytest>=8.3.4",
-    "ruff>=0.9.3",
+    "mypy>=1.17.0",
+    "pip>=25.1.1",
+    "pytest>=8.4.1",
+    "ruff>=0.12.5",
     "wheel>=0.45.1",
 ]
 
@@ -41,6 +41,13 @@ ignore = ["E501"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["parse_lp"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_classes = "Test*"
+python_functions = "test_*"
+addopts = "-v --color=yes"
 
 [tool.coverage.run]
 branch = true
