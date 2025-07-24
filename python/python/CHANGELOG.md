@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.5.0](https://github.com/dandxy89/lp_parser_rs/compare/parse_lp-v2.4.3...parse_lp-v2.5.0) (2025-07-24)
+
+
+### Features
+
+* Extending Python API, Testing and Typed Files ([#128](https://github.com/dandxy89/lp_parser_rs/issues/128)) ([c457800](https://github.com/dandxy89/lp_parser_rs/commit/c45780087e39799f6901ec46a0b48545b282a3c4))
+
 ## [2.4.3](https://github.com/dandxy89/lp_parser_rs/compare/parse_lp-v2.4.2...parse_lp-v2.4.3) (2025-07-24)
 
 
