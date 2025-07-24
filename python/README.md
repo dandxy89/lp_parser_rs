@@ -1,5 +1,7 @@
 # parse_lp
 
+[![PyPI version](https://badge.fury.io/py/parse-lp.svg)](https://badge.fury.io/py/parse-lp)
+
 A LP file format parser for Python, powered by Rust.
 
 ## Features
