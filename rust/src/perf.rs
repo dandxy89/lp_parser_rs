@@ -88,7 +88,7 @@ impl FastStringFinder {
             let absolute_pos = start + pos;
 
             // Check if this is at a word boundary
-            let is_at_boundary = absolute_pos == 0 || input.chars().nth(absolute_pos - 1).map_or(false, |c| c.is_whitespace() || c == '\n');
+            let is_at_boundary = absolute_pos == 0 || input.chars().nth(absolute_pos - 1).is_some_and(|c| c.is_whitespace() || c == '\n');
 
             // Check if the pattern ends at a word boundary or end of input
             let pattern_end = absolute_pos + pattern.len();
