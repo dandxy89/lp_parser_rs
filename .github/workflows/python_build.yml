@@ -3,8 +3,16 @@ name: python_build
 on:
   push:
     branches: [main]
+    paths:
+      - '**/*.py'
+      - '**/*.toml'
+      - '**/*.rs'
   pull_request:
     branches: [main]
+    paths:
+      - '**/*.py'
+      - '**/*.toml'
+      - '**/*.rs'
 
 defaults:
   run:
