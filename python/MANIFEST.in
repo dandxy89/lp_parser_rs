@@ -1,5 +1,6 @@
-include README.md
 include LICENSE-APACHE
 include Cargo.toml
+include pyproject.toml
 recursive-include src *
 recursive-include parse_lp *.py
+exclude ../README.md
