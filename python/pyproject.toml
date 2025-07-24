@@ -1,8 +1,8 @@
 [project]
 name = "parse_lp"
 description = "LpParser"
-readme = "../README.md"
-license = { file = "../LICENSE-APACHE" }
+readme = "README.md"
+license = { file = "LICENSE-APACHE" }
 requires-python = ">=3.9"
 keywords = [
     "linear-programming",
