@@ -21,7 +21,7 @@ name = "parse_lp"
 crate-type = ["cdylib"]
 
 [dependencies]
-lp_parser_rs = { path = "../rust", features = ["csv"] }
+lp_parser_rs = { path = "../rust", features = ["csv", "diff", "serde"] }
 pyo3 = { version = "0.25.1", features = [
     "extension-module",
     "abi3",
