@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.4.3](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v2.4.2...lp_parser_rs-v2.4.3) (2025-07-24)
+
+
+### Build System
+
+* Raise MSRV to 1.70.0 and remove once_lock ([f80a1bf](https://github.com/dandxy89/lp_parser_rs/commit/f80a1bf26a1c011b014b84f391799211d5f0e960))
+
+
+### Bug Fixes
+
+* Clippy lint warnings ([e103a47](https://github.com/dandxy89/lp_parser_rs/commit/e103a47199dc7f9493fbe61ef21540ccf82dc362))
+
 ## [2.4.2](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v2.4.1...lp_parser_rs-v2.4.2) (2025-06-29)
 
 

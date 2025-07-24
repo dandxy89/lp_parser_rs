@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.4.2](https://github.com/dandxy89/lp_parser_rs/compare/parse_lp-v2.4.1...parse_lp-v2.4.2) (2025-07-24)
+
+
+### Build System
+
+* Raise MSRV to 1.70.0 and remove once_lock ([f80a1bf](https://github.com/dandxy89/lp_parser_rs/commit/f80a1bf26a1c011b014b84f391799211d5f0e960))
+
 ## [2.4.1](https://github.com/dandxy89/lp_parser_rs/compare/parse_lp-v2.4.0...parse_lp-v2.4.1) (2025-06-29)
 
 
