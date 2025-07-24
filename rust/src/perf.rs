@@ -4,15 +4,15 @@
 //! using efficient algorithms and data structures.
 
 use std::collections::HashMap;
+use std::sync::OnceLock;
 
 use memchr::memmem;
 use nom::error::{Error, ErrorKind};
 use nom::{Err, IResult};
-use once_cell::sync::Lazy;
 use smallvec::SmallVec;
 
 /// Cache for compiled search patterns
-static PATTERN_CACHE: Lazy<std::sync::RwLock<HashMap<String, CompiledPattern>>> = Lazy::new(|| std::sync::RwLock::new(HashMap::new()));
+static PATTERN_CACHE: OnceLock<std::sync::RwLock<HashMap<String, CompiledPattern>>> = OnceLock::new();
 
 /// Compiled pattern for efficient searching
 #[derive(Clone)]
@@ -43,7 +43,7 @@ impl FastStringFinder {
             let cache_key = pattern.to_string();
 
             let compiled = {
-                let cache = PATTERN_CACHE.read().unwrap();
+                let cache = PATTERN_CACHE.get_or_init(|| std::sync::RwLock::new(HashMap::new())).read().unwrap();
                 cache.get(&cache_key).cloned()
             };
 
@@ -51,7 +51,7 @@ impl FastStringFinder {
                 let new_pattern = CompiledPattern::new(pattern);
 
                 // Store in cache
-                let mut cache = PATTERN_CACHE.write().unwrap();
+                let mut cache = PATTERN_CACHE.get_or_init(|| std::sync::RwLock::new(HashMap::new())).write().unwrap();
                 cache.insert(cache_key, new_pattern.clone());
 
                 new_pattern
@@ -274,11 +274,11 @@ impl Default for StringInterner {
 }
 
 /// Global string interner for common LP keywords
-static KEYWORD_INTERNER: Lazy<StringInterner> = Lazy::new(StringInterner::new);
+static KEYWORD_INTERNER: OnceLock<StringInterner> = OnceLock::new();
 
 /// Intern common LP keywords for memory efficiency
 pub fn intern_keyword(keyword: &str) -> &'static str {
-    KEYWORD_INTERNER.intern(keyword)
+    KEYWORD_INTERNER.get_or_init(StringInterner::new).intern(keyword)
 }
 
 /// Performance metrics collector
@@ -327,7 +327,7 @@ impl PerfMetrics {
 }
 
 /// Global performance metrics
-pub static PERF_METRICS: Lazy<PerfMetrics> = Lazy::new(PerfMetrics::default);
+pub static PERF_METRICS: OnceLock<PerfMetrics> = OnceLock::new();
 
 #[cfg(test)]
 mod tests {
