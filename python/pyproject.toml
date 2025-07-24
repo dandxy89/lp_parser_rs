@@ -24,6 +24,9 @@ dynamic = ["version"]
 requires = ["maturin>=1,<2"]
 build-backend = "maturin"
 
+[tool.maturin]
+include = ["README.md", "LICENSE-APACHE"]
+
 [dependency-groups]
 dev = [
     "mypy>=1.14.1",
