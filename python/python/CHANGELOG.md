@@ -1,5 +1,19 @@
 # Changelog
 
+## [2.4.3](https://github.com/dandxy89/lp_parser_rs/compare/parse_lp-v2.4.2...parse_lp-v2.4.3) (2025-07-24)
+
+
+### Build System
+
+* Updating pyproject ([c998e5d](https://github.com/dandxy89/lp_parser_rs/commit/c998e5ddd3ad3aa4bf88af90c506659ec5d01436))
+
+
+### Continuous Integration
+
+* Retrying python deploy ([a6aac40](https://github.com/dandxy89/lp_parser_rs/commit/a6aac40e2ac246d84e6050042695a2a6c5c29c76))
+* Updating manifest ([b16dcbc](https://github.com/dandxy89/lp_parser_rs/commit/b16dcbcbbdd052eeae3887c9a58fe7edf3449164))
+* Updating python package ([7757d7f](https://github.com/dandxy89/lp_parser_rs/commit/7757d7fcf6a205bff9d2737beb788a6cddf16726))
+
 ## [2.4.2](https://github.com/dandxy89/lp_parser_rs/compare/parse_lp-v2.4.1...parse_lp-v2.4.2) (2025-07-24)
 
 
