@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.6.0](https://github.com/dandxy89/lp_parser_rs/compare/parse_lp-v2.5.0...parse_lp-v2.6.0) (2025-07-27)
+
+
+### Features
+
+* Adding the functionality to modify and write to a .lp file ([46c69a9](https://github.com/dandxy89/lp_parser_rs/commit/46c69a997263ab3fbb6bb1ccfd4d6b4dee71bc6a))
+
 ## [2.5.0](https://github.com/dandxy89/lp_parser_rs/compare/parse_lp-v2.4.3...parse_lp-v2.5.0) (2025-07-24)
 
 
