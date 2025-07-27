@@ -26,16 +26,6 @@
 //!     Ok(())
 //! }
 //! ```
-//!
-//! # Module Organization
-//!
-//! - `model`: Core data structures for LP problems
-//! - `parser`: File parsing utilities
-//! - `parsers`: Component-specific parsers
-//! - `lp_problem`: Main problem representation and parsing
-//!
-
-// #![deny(missing_docs)]
 
 pub mod builder;
 pub mod context;
@@ -48,6 +38,7 @@ pub mod parsers;
 pub mod perf;
 pub mod problem;
 pub mod validation;
+pub mod writer;
 
 use nom::branch::alt;
 use nom::bytes::complete::tag_no_case;

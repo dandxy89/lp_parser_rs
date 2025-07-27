@@ -132,9 +132,9 @@ pub struct Coefficient<'a> {
 impl std::fmt::Display for Coefficient<'_> {
     #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if self.value == 1.0 {
+        if (self.value - 1.0).abs() < f64::EPSILON {
             write!(f, "{}", self.name)
-        } else if self.value == -1.0 {
+        } else if (self.value - (-1.0)).abs() < f64::EPSILON {
             write!(f, "-{}", self.name)
         } else {
             write!(f, "{} {}", self.value, self.name)

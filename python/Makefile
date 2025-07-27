@@ -44,13 +44,13 @@ check-python: ## Run check on Python
 	uv run --no-sync ruff format --check --diff .
 	$(info Check Python linting)
 	uv run --no-sync ruff check .
-	# $(info Check Python mypy)
-	# uv run --no-sync mypy
+	$(info Check Python mypy)
+	uv run --no-sync mypy
 
 .PHONY: unit-test
 unit-test: install ## Run unit test
 	$(info --- Run Python unit-test ---)
-	uv run --no-sync pytest --doctest-modules 
+	uv run --no-sync pytest --doctest-modules
 
 .PHONY: clean
 clean: ## Run clean

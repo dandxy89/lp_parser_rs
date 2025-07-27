@@ -1,6 +1,7 @@
 import os
 import tempfile
 from pathlib import Path
+from typing import Any, Generator
 
 import pytest
 
@@ -8,8 +9,8 @@ from parse_lp import LpParser
 
 
 @pytest.fixture
-def temp_lp_file():
-    def _create_file(content):
+def temp_lp_file() -> Any:
+    def _create_file(content: str) -> Generator[str, None, None]:
         with tempfile.NamedTemporaryFile(mode="w", suffix=".lp", delete=False) as f:
             f.write(content)
             yield f.name
@@ -19,32 +20,32 @@ def temp_lp_file():
 
 
 @pytest.fixture
-def simple_lp_file():
+def simple_lp_file() -> Path:
     return Path(__file__).parent / "fixtures" / "simple.lp"
 
 
 @pytest.fixture
-def minimize_lp_file():
+def minimize_lp_file() -> Path:
     """Path to minimize.lp fixture file"""
     return Path(__file__).parent / "fixtures" / "minimize.lp"
 
 
 @pytest.fixture
-def afiro_lp_file():
+def afiro_lp_file() -> Path:
     """Path to minimize.lp fixture file"""
     return Path(__file__).parent / "fixtures" / "afiro.lp"
 
 
 class TestLpParserBasic:
-    def test_create_parser(self, simple_lp_file):
+    def test_create_parser(self, simple_lp_file: Path) -> None:
         parser = LpParser(str(simple_lp_file))
         assert parser.lp_file == str(simple_lp_file)
 
-    def test_create_parser_nonexistent_file(self):
+    def test_create_parser_nonexistent_file(self) -> None:
         with pytest.raises(FileExistsError):
             LpParser("nonexistent.lp")
 
-    def test_parse_simple_file(self, simple_lp_file):
+    def test_parse_simple_file(self, simple_lp_file: Path) -> None:
         parser = LpParser(str(simple_lp_file))
         parser.parse()
 
@@ -53,7 +54,7 @@ class TestLpParserBasic:
         assert parser.constraint_count() == 2
         assert parser.objective_count() == 1
 
-    def test_parse_minimize_file(self, minimize_lp_file):
+    def test_parse_minimize_file(self, minimize_lp_file: Path) -> None:
         parser = LpParser(str(minimize_lp_file))
         parser.parse()
 
@@ -64,7 +65,7 @@ class TestLpParserBasic:
 
 
 class TestLpParserComponents:
-    def test_get_objectives(self, simple_lp_file):
+    def test_get_objectives(self, simple_lp_file: Path) -> None:
         parser = LpParser(str(simple_lp_file))
         parser.parse()
 
@@ -79,7 +80,7 @@ class TestLpParserComponents:
         assert coeffs["x1"] == 1.0
         assert coeffs["x2"] == 2.0
 
-    def test_get_constraints(self, simple_lp_file):
+    def test_get_constraints(self, simple_lp_file: Path) -> None:
         parser = LpParser(str(simple_lp_file))
         parser.parse()
 
@@ -100,7 +101,7 @@ class TestLpParserComponents:
         assert coeffs["x1"] == 1.0
         assert coeffs["x2"] == 1.0
 
-    def test_get_variables(self, simple_lp_file):
+    def test_get_variables(self, simple_lp_file: Path) -> None:
         parser = LpParser(str(simple_lp_file))
         parser.parse()
 
@@ -115,7 +116,7 @@ class TestLpParserComponents:
 
 
 class TestLpParserDiff:
-    def test_compare_same_parser(self, simple_lp_file):
+    def test_compare_same_parser(self, simple_lp_file: Path) -> None:
         parser = LpParser(str(simple_lp_file))
         parser.parse()
 
@@ -130,7 +131,9 @@ class TestLpParserDiff:
         assert len(diff["removed_variables"]) == 0
         assert len(diff["modified_variables"]) == 0
 
-    def test_compare_different_parsers(self, simple_lp_file, minimize_lp_file):
+    def test_compare_different_parsers(
+        self, simple_lp_file: Path, minimize_lp_file: Path
+    ) -> None:
         parser1 = LpParser(str(simple_lp_file))
         parser1.parse()
         parser2 = LpParser(str(minimize_lp_file))
@@ -144,21 +147,23 @@ class TestLpParserDiff:
         assert "x3" in diff["added_variables"]
         assert len(diff["removed_variables"]) == 0
 
-    def test_compare_unparsed_parser(self, simple_lp_file, temp_lp_file):
+    def test_compare_unparsed_parser(
+        self, simple_lp_file: Path, temp_lp_file: Any
+    ) -> None:
         parser1 = LpParser(str(simple_lp_file))
         parser1.parse()
 
         content = """Maximize
 OBJ: x1
 End"""
-        for filepath in temp_lp_file(content):
-            parser2 = LpParser(filepath)
+        for filepath in temp_lp_file(content):  # type:ignore
+            parser2 = LpParser(filepath)  # type:ignore
             with pytest.raises(RuntimeError, match="Must call parse\\(\\) first"):
                 parser1.compare(parser2)
 
 
 class TestLpParserCSV:
-    def test_to_csv_creates_files(self, simple_lp_file):
+    def test_to_csv_creates_files(self, simple_lp_file: Path) -> None:
         parser = LpParser(str(simple_lp_file))
         parser.parse()
 
@@ -170,13 +175,13 @@ class TestLpParserCSV:
                 assert file_path.exists(), f"{filename} should be created"
                 assert file_path.stat().st_size > 0, f"{filename} should not be empty"
 
-    def test_to_csv_invalid_directory(self, simple_lp_file):
+    def test_to_csv_invalid_directory(self, simple_lp_file: Path) -> None:
         parser = LpParser(str(simple_lp_file))
         parser.parse()
         with pytest.raises(NotADirectoryError):
             parser.to_csv("/nonexistent/directory")
 
-    def test_to_csv_auto_parse(self, simple_lp_file):
+    def test_to_csv_auto_parse(self, simple_lp_file: Path) -> None:
         parser = LpParser(str(simple_lp_file))
         with tempfile.TemporaryDirectory() as tmpdir:
             parser.to_csv(tmpdir)
@@ -185,32 +190,32 @@ class TestLpParserCSV:
 
 
 class TestLpParserProperties:
-    def test_get_name_when_present(self, afiro_lp_file):
+    def test_get_name_when_present(self, afiro_lp_file: Path) -> None:
         parser = LpParser(str(afiro_lp_file))
         parser.parse()
-        assert parser.name == "Problem name: afiro.mps"
+        assert parser.name == "afiro.mps"
 
-    def test_get_name_when_absent(self, simple_lp_file):
+    def test_get_name_when_absent(self, simple_lp_file: Path) -> None:
         parser = LpParser(str(simple_lp_file))
         parser.parse()
         assert parser.name is None
 
-    def test_get_sense_maximize(self, simple_lp_file):
+    def test_get_sense_maximize(self, simple_lp_file: Path) -> None:
         parser = LpParser(str(simple_lp_file))
         parser.parse()
         assert parser.sense == "maximize"
 
-    def test_get_sense_minimize(self, minimize_lp_file):
+    def test_get_sense_minimize(self, minimize_lp_file: Path) -> None:
         parser = LpParser(str(minimize_lp_file))
         parser.parse()
         assert parser.sense == "minimize"
 
-    def test_counts_unparsed(self, temp_lp_file):
+    def test_counts_unparsed(self, temp_lp_file: Any) -> None:
         content = """Maximize
 OBJ: x1
 End"""
-        for filepath in temp_lp_file(content):
-            parser = LpParser(filepath)
+        for filepath in temp_lp_file(content):  # type:ignore
+            parser = LpParser(filepath)  # type:ignore
             with pytest.raises(RuntimeError, match="Must call parse\\(\\) first"):
                 parser.variable_count()
             with pytest.raises(RuntimeError, match="Must call parse\\(\\) first"):

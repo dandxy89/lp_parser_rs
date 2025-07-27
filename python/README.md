@@ -2,11 +2,13 @@
 
 [![PyPI version](https://badge.fury.io/py/parse-lp.svg)](https://badge.fury.io/py/parse-lp)
 
-A LP file format parser for Python, powered by Rust.
+A LP file format parser, writer, and modifier for Python, powered by Rust.
 
 ## Features
 
 - **Complete LP Support**: Handles all standard LP file format features
+- **Problem Modification**: Programmatically modify objectives, constraints, and variables
+- **LP File Writing**: Generate LP files from modified problems with round-trip compatibility
 - **Easy Data Access**: Direct access to problem components (variables, constraints, objectives)
 - **CSV Export**: Export parsed data to CSV files for further analysis
 - **Problem Comparison**: Compare two LP problems to identify differences
@@ -32,6 +34,15 @@ print(f"Problem: {parser.name}")
 print(f"Sense: {parser.sense}")
 print(f"Variables: {parser.variable_count()}")
 print(f"Constraints: {parser.constraint_count()}")
+
+# Modify the problem
+parser.update_objective_coefficient("OBJ", "x1", 5.0)
+parser.rename_variable("x2", "production")
+parser.update_constraint_rhs("C1", 100.0)
+
+# Write back to LP format
+modified_lp = parser.to_lp_string()
+parser.save_to_file("modified_problem.lp")
 
 # Export to CSV files
 parser.to_csv("output_directory/")
@@ -100,6 +111,42 @@ parser.to_csv("output/")
 # - output/variables.csv
 # - output/constraints.csv
 # - output/objectives.csv
+```
+
+### Problem Modification
+
+```python
+from parse_lp import LpParser
+
+# Parse an existing LP file
+parser = LpParser("optimization_problem.lp")
+parser.parse()
+
+# Modify objectives
+parser.update_objective_coefficient("profit", "x1", 5.0)
+parser.rename_objective("profit", "total_profit")
+
+# Modify constraints
+parser.update_constraint_coefficient("capacity", "x1", 2.0)
+parser.update_constraint_rhs("capacity", 200.0)
+parser.rename_constraint("capacity", "production_limit")
+
+# Modify variables
+parser.rename_variable("x1", "production_a")
+parser.update_variable_type("production_a", "integer")
+
+# Set problem properties
+parser.set_problem_name("Modified Optimization Problem")
+parser.set_sense("minimize")
+
+# Write back to LP format
+modified_lp_content = parser.to_lp_string()
+parser.save_to_file("modified_problem.lp")
+
+# Verify round-trip compatibility
+new_parser = LpParser("modified_problem.lp")
+new_parser.parse()
+print(f"Successfully modified and re-parsed: {new_parser.name}")
 ```
 
 ### Problem Comparison
@@ -176,6 +223,47 @@ print(f"Removed constraints: {diff['removed_constraints']}")
     }
 ]
 ```
+
+## Modification Methods
+
+### Objective Methods
+
+- `update_objective_coefficient(obj_name, var_name, coefficient)` - Update or add coefficient
+- `rename_objective(old_name, new_name)` - Rename an objective
+- `remove_objective(obj_name)` - Remove an objective
+
+### Constraint Methods
+
+- `update_constraint_coefficient(const_name, var_name, coefficient)` - Update or add coefficient
+- `update_constraint_rhs(const_name, new_rhs)` - Update right-hand side value
+- `rename_constraint(old_name, new_name)` - Rename a constraint
+- `remove_constraint(const_name)` - Remove a constraint
+
+### Variable Methods
+
+- `rename_variable(old_name, new_name)` - Rename variable across problem
+- `update_variable_type(var_name, var_type)` - Change variable type
+- `remove_variable(var_name)` - Remove variable from problem
+
+### Problem Methods
+
+- `set_problem_name(name)` - Set problem name
+- `set_sense(sense)` - Set optimization sense ("maximize" or "minimize")
+
+### Writing Methods
+
+- `to_lp_string()` - Generate LP format string
+- `to_lp_string_with_options(**options)` - Generate with custom formatting
+- `save_to_file(filepath)` - Save to LP file
+
+### Variable Types
+
+Supported variable types for `update_variable_type()`:
+- `"binary"` - Binary variables (0 or 1)
+- `"integer"` - General integer variables
+- `"general"` - Continuous variables (default)
+- `"free"` - Free variables (no bounds)
+- `"semicontinuous"` - Semi-continuous variables
 
 ## Supported LP Format Features
 

@@ -23,8 +23,8 @@ use crate::parsers::variable::{
     parse_binary_section, parse_bounds_section, parse_generals_section, parse_integer_section, parse_semi_section,
 };
 use crate::{
-    ALL_BOUND_HEADERS, BINARY_HEADERS, CONSTRAINT_HEADERS, END_HEADER, GENERAL_HEADERS, INTEGER_HEADERS, SEMI_HEADERS, SOS_HEADERS,
-    is_binary_section, is_bounds_section, is_generals_section, is_integers_section, is_semi_section, is_sos_section, take_until_parser,
+    ALL_BOUND_HEADERS, BINARY_HEADERS, CONSTRAINT_HEADERS, END_HEADER, GENERAL_HEADERS, SEMI_HEADERS, SOS_HEADERS, is_binary_section,
+    is_bounds_section, is_generals_section, is_integers_section, is_semi_section, is_sos_section, take_until_parser,
 };
 
 // Type aliases to reduce complexity
@@ -171,6 +171,426 @@ impl<'a> LpProblem<'a> {
         let name = objective.name.clone();
         self.objectives.insert(name, objective);
     }
+
+    // LP Problem Modification Methods
+
+    #[inline]
+    /// Update a variable coefficient in an objective.
+    ///
+    /// If the variable doesn't exist in the objective, it will be added.
+    /// If the coefficient value is 0.0, the variable will be removed from the objective.
+    ///
+    /// # Arguments
+    ///
+    /// * `objective_name` - Name of the objective to modify
+    /// * `variable_name` - Name of the variable to update
+    /// * `new_coefficient` - New coefficient value
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` if successful, or an error if the objective doesn't exist
+    pub fn update_objective_coefficient(&mut self, objective_name: &str, variable_name: &'a str, new_coefficient: f64) -> LpResult<()> {
+        let objective = self
+            .objectives
+            .get_mut(objective_name)
+            .ok_or_else(|| crate::error::LpParseError::validation_error(format!("Objective '{objective_name}' not found")))?;
+
+        // Find existing coefficient
+        if let Some(coeff) = objective.coefficients.iter_mut().find(|c| c.name == variable_name) {
+            if new_coefficient == 0.0 {
+                // Remove coefficient if value is zero
+                objective.coefficients.retain(|c| c.name != variable_name);
+            } else {
+                coeff.value = new_coefficient;
+            }
+        } else if new_coefficient != 0.0 {
+            // Add new coefficient if it doesn't exist and value is non-zero
+            objective.coefficients.push(crate::model::Coefficient { name: variable_name, value: new_coefficient });
+
+            // Ensure variable exists
+            if !self.variables.contains_key(variable_name) {
+                self.variables.insert(variable_name, Variable::new(variable_name));
+            }
+        }
+
+        Ok(())
+    }
+
+    #[inline]
+    /// Update a variable coefficient in a constraint.
+    ///
+    /// If the variable doesn't exist in the constraint, it will be added.
+    /// If the coefficient value is 0.0, the variable will be removed from the constraint.
+    ///
+    /// # Arguments
+    ///
+    /// * `constraint_name` - Name of the constraint to modify
+    /// * `variable_name` - Name of the variable to update
+    /// * `new_coefficient` - New coefficient value
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` if successful, or an error if the constraint doesn't exist or is not a standard constraint
+    pub fn update_constraint_coefficient(&mut self, constraint_name: &str, variable_name: &'a str, new_coefficient: f64) -> LpResult<()> {
+        let constraint = self
+            .constraints
+            .get_mut(constraint_name)
+            .ok_or_else(|| crate::error::LpParseError::validation_error(format!("Constraint '{constraint_name}' not found")))?;
+
+        match constraint {
+            Constraint::Standard { coefficients, .. } => {
+                // Find existing coefficient
+                if let Some(coeff) = coefficients.iter_mut().find(|c| c.name == variable_name) {
+                    if new_coefficient == 0.0 {
+                        // Remove coefficient if value is zero
+                        coefficients.retain(|c| c.name != variable_name);
+                    } else {
+                        coeff.value = new_coefficient;
+                    }
+                } else if new_coefficient != 0.0 {
+                    // Add new coefficient if it doesn't exist and value is non-zero
+                    coefficients.push(crate::model::Coefficient { name: variable_name, value: new_coefficient });
+
+                    // Ensure variable exists
+                    if !self.variables.contains_key(variable_name) {
+                        self.variables.insert(variable_name, Variable::new(variable_name));
+                    }
+                }
+            }
+            Constraint::SOS { .. } => {
+                return Err(crate::error::LpParseError::validation_error(
+                    "Cannot update coefficients in SOS constraints using this method",
+                ));
+            }
+        }
+
+        Ok(())
+    }
+
+    #[inline]
+    /// Update the right-hand side value of a constraint.
+    ///
+    /// # Arguments
+    ///
+    /// * `constraint_name` - Name of the constraint to modify
+    /// * `new_rhs` - New right-hand side value
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` if successful, or an error if the constraint doesn't exist or is not a standard constraint
+    pub fn update_constraint_rhs(&mut self, constraint_name: &str, new_rhs: f64) -> LpResult<()> {
+        let constraint = self
+            .constraints
+            .get_mut(constraint_name)
+            .ok_or_else(|| crate::error::LpParseError::validation_error(format!("Constraint '{constraint_name}' not found")))?;
+
+        match constraint {
+            Constraint::Standard { rhs, .. } => {
+                *rhs = new_rhs;
+                Ok(())
+            }
+            Constraint::SOS { .. } => {
+                Err(crate::error::LpParseError::validation_error("SOS constraints do not have right-hand side values"))
+            }
+        }
+    }
+
+    #[inline]
+    /// Update the operator of a constraint.
+    ///
+    /// # Arguments
+    ///
+    /// * `constraint_name` - Name of the constraint to modify
+    /// * `new_operator` - New comparison operator
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` if successful, or an error if the constraint doesn't exist or is not a standard constraint
+    pub fn update_constraint_operator(&mut self, constraint_name: &str, new_operator: crate::model::ComparisonOp) -> LpResult<()> {
+        let constraint = self
+            .constraints
+            .get_mut(constraint_name)
+            .ok_or_else(|| crate::error::LpParseError::validation_error(format!("Constraint '{constraint_name}' not found")))?;
+
+        match constraint {
+            Constraint::Standard { operator, .. } => {
+                *operator = new_operator;
+                Ok(())
+            }
+            Constraint::SOS { .. } => Err(crate::error::LpParseError::validation_error("SOS constraints do not have comparison operators")),
+        }
+    }
+
+    #[inline]
+    /// Rename a variable throughout the entire problem.
+    ///
+    /// This updates the variable name in all objectives, constraints, and the variables map.
+    ///
+    /// # Arguments
+    ///
+    /// * `old_name` - Current name of the variable
+    /// * `new_name` - New name for the variable
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` if successful, or an error if the variable doesn't exist or the new name already exists
+    pub fn rename_variable(&mut self, old_name: &str, new_name: &'a str) -> LpResult<()> {
+        // Check if old variable exists
+        if !self.variables.contains_key(old_name) {
+            return Err(crate::error::LpParseError::validation_error(format!("Variable '{old_name}' not found")));
+        }
+
+        // Check if new name already exists
+        if self.variables.contains_key(new_name) && old_name != new_name {
+            return Err(crate::error::LpParseError::validation_error(format!("Variable '{new_name}' already exists")));
+        }
+
+        // Update variable in variables map
+        let variable = self.variables.remove(old_name).unwrap();
+        let mut new_variable = Variable::new(new_name);
+        new_variable.var_type = variable.var_type;
+        self.variables.insert(new_name, new_variable);
+
+        // Update variable name in all objectives
+        for objective in self.objectives.values_mut() {
+            for coeff in &mut objective.coefficients {
+                if coeff.name == old_name {
+                    coeff.name = new_name;
+                }
+            }
+        }
+
+        // Update variable name in all constraints
+        for constraint in self.constraints.values_mut() {
+            match constraint {
+                Constraint::Standard { coefficients, .. } => {
+                    for coeff in coefficients {
+                        if coeff.name == old_name {
+                            coeff.name = new_name;
+                        }
+                    }
+                }
+                Constraint::SOS { weights, .. } => {
+                    for weight in weights {
+                        if weight.name == old_name {
+                            weight.name = new_name;
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    #[inline]
+    /// Rename a constraint.
+    ///
+    /// # Arguments
+    ///
+    /// * `old_name` - Current name of the constraint
+    /// * `new_name` - New name for the constraint
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` if successful, or an error if the constraint doesn't exist or the new name already exists
+    pub fn rename_constraint(&mut self, old_name: &str, new_name: &str) -> LpResult<()> {
+        // Check if old constraint exists
+        if !self.constraints.contains_key(old_name) {
+            return Err(crate::error::LpParseError::validation_error(format!("Constraint '{old_name}' not found")));
+        }
+
+        // Check if new name already exists
+        if self.constraints.contains_key(new_name) && old_name != new_name {
+            return Err(crate::error::LpParseError::validation_error(format!("Constraint '{new_name}' already exists")));
+        }
+
+        // Move constraint to new name
+        let mut constraint = self.constraints.remove(old_name).unwrap();
+
+        // Update the constraint's internal name
+        match &mut constraint {
+            Constraint::Standard { name, .. } | Constraint::SOS { name, .. } => {
+                *name = Cow::Owned(new_name.to_string());
+            }
+        }
+
+        self.constraints.insert(Cow::Owned(new_name.to_string()), constraint);
+
+        Ok(())
+    }
+
+    #[inline]
+    /// Rename an objective.
+    ///
+    /// # Arguments
+    ///
+    /// * `old_name` - Current name of the objective
+    /// * `new_name` - New name for the objective
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` if successful, or an error if the objective doesn't exist or the new name already exists
+    pub fn rename_objective(&mut self, old_name: &str, new_name: &str) -> LpResult<()> {
+        // Check if old objective exists
+        if !self.objectives.contains_key(old_name) {
+            return Err(crate::error::LpParseError::validation_error(format!("Objective '{old_name}' not found")));
+        }
+
+        // Check if new name already exists
+        if self.objectives.contains_key(new_name) && old_name != new_name {
+            return Err(crate::error::LpParseError::validation_error(format!("Objective '{new_name}' already exists")));
+        }
+
+        // Move objective to new name
+        let mut objective = self.objectives.remove(old_name).unwrap();
+        objective.name = Cow::Owned(new_name.to_string());
+        self.objectives.insert(Cow::Owned(new_name.to_string()), objective);
+
+        Ok(())
+    }
+
+    #[inline]
+    /// Remove a variable from the entire problem.
+    ///
+    /// This removes the variable from all objectives, constraints, and the variables map.
+    /// Note: This may result in empty objectives or constraints.
+    ///
+    /// # Arguments
+    ///
+    /// * `variable_name` - Name of the variable to remove
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` if successful, or an error if the variable doesn't exist
+    pub fn remove_variable(&mut self, variable_name: &str) -> LpResult<()> {
+        // Check if variable exists
+        if !self.variables.contains_key(variable_name) {
+            return Err(crate::error::LpParseError::validation_error(format!("Variable '{variable_name}' not found")));
+        }
+
+        // Remove from variables map
+        self.variables.remove(variable_name);
+
+        // Remove from all objectives
+        for objective in self.objectives.values_mut() {
+            objective.coefficients.retain(|c| c.name != variable_name);
+        }
+
+        // Remove from all constraints
+        for constraint in self.constraints.values_mut() {
+            match constraint {
+                Constraint::Standard { coefficients, .. } => {
+                    coefficients.retain(|c| c.name != variable_name);
+                }
+                Constraint::SOS { weights, .. } => {
+                    weights.retain(|w| w.name != variable_name);
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    #[inline]
+    /// Remove a constraint from the problem.
+    ///
+    /// # Arguments
+    ///
+    /// * `constraint_name` - Name of the constraint to remove
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` if successful, or an error if the constraint doesn't exist
+    pub fn remove_constraint(&mut self, constraint_name: &str) -> LpResult<()> {
+        if self.constraints.remove(constraint_name).is_none() {
+            return Err(crate::error::LpParseError::validation_error(format!("Constraint '{constraint_name}' not found")));
+        }
+        Ok(())
+    }
+
+    #[inline]
+    /// Remove an objective from the problem.
+    ///
+    /// # Arguments
+    ///
+    /// * `objective_name` - Name of the objective to remove
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` if successful, or an error if the objective doesn't exist
+    pub fn remove_objective(&mut self, objective_name: &str) -> LpResult<()> {
+        if self.objectives.remove(objective_name).is_none() {
+            return Err(crate::error::LpParseError::validation_error(format!("Objective '{objective_name}' not found")));
+        }
+        Ok(())
+    }
+
+    #[inline]
+    /// Update the type of a variable.
+    ///
+    /// # Arguments
+    ///
+    /// * `variable_name` - Name of the variable to modify
+    /// * `new_type` - New variable type
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` if successful, or an error if the variable doesn't exist
+    pub fn update_variable_type(&mut self, variable_name: &str, new_type: VariableType) -> LpResult<()> {
+        let variable = self
+            .variables
+            .get_mut(variable_name)
+            .ok_or_else(|| crate::error::LpParseError::validation_error(format!("Variable '{variable_name}' not found")))?;
+
+        variable.var_type = new_type;
+        Ok(())
+    }
+
+    #[inline]
+    /// Get a list of all variables referenced in the problem.
+    ///
+    /// This includes variables from objectives, constraints, and the variables map.
+    ///
+    /// # Returns
+    ///
+    /// A vector of variable names
+    #[must_use]
+    pub fn get_all_variable_names(&self) -> Vec<&str> {
+        let mut names = std::collections::HashSet::new();
+
+        // Add from variables map
+        for name in self.variables.keys() {
+            names.insert(*name);
+        }
+
+        // Add from objectives
+        for objective in self.objectives.values() {
+            for coeff in &objective.coefficients {
+                names.insert(coeff.name);
+            }
+        }
+
+        // Add from constraints
+        for constraint in self.constraints.values() {
+            match constraint {
+                Constraint::Standard { coefficients, .. } => {
+                    for coeff in coefficients {
+                        names.insert(coeff.name);
+                    }
+                }
+                Constraint::SOS { weights, .. } => {
+                    for weight in weights {
+                        names.insert(weight.name);
+                    }
+                }
+            }
+        }
+
+        let mut result: Vec<&str> = names.into_iter().collect();
+        result.sort_unstable();
+        result
+    }
 }
 
 impl std::fmt::Display for LpProblem<'_> {
@@ -221,6 +641,7 @@ impl<'a> LpProblem<'a> {
     /// Parse variable bounds section
     fn parse_bounds_section(input: &'a str, variables: &mut HashMap<&'a str, Variable<'a>>) -> LpResult<&'a str> {
         if is_bounds_section(input).is_ok() {
+            const INTEGER_HEADERS: [&str; 3] = ["integers", "integer", "end"];
             let (rem_input, bound_str) = take_until_parser(&INTEGER_HEADERS)(input)
                 .map_err(|err| LpParseError::parse_error(0, format!("Failed to parse bounds section: {err:?}")))?;
 
@@ -245,7 +666,7 @@ impl<'a> LpProblem<'a> {
     }
 
     /// Parse variable type sections (integers, generals, binaries, semi-continuous)
-    fn parse_variable_type_sections(mut input: &'a str, variables: &mut HashMap<&'a str, Variable<'a>>) -> LpResult<&'a str> {
+    fn parse_variable_type_sections(mut input: &'a str, variables: &mut HashMap<&'a str, Variable<'a>>) -> &'a str {
         // Integer
         if is_integers_section(input).is_ok() {
             if let Ok((rem_input, Some(integer_str))) = opt(take_until_parser(&GENERAL_HEADERS)).parse(input) {
@@ -286,7 +707,7 @@ impl<'a> LpProblem<'a> {
             }
         }
 
-        Ok(input)
+        input
     }
 
     /// Parse SOS constraints section
@@ -294,7 +715,7 @@ impl<'a> LpProblem<'a> {
         input: &'a str,
         constraints: &mut HashMap<Cow<'a, str>, Constraint<'a>>,
         variables: &mut HashMap<&'a str, Variable<'a>>,
-    ) -> LpResult<&'a str> {
+    ) -> &'a str {
         if is_sos_section(input).is_ok() {
             if let Ok((rem_input, Some(sos_str))) = opt(take_until_parser(&END_HEADER)).parse(input) {
                 if let Ok((_, Some((sos_constraints, constraint_vars)))) = opt(parse_sos_section).parse(sos_str) {
@@ -303,21 +724,20 @@ impl<'a> LpProblem<'a> {
                         constraints.insert(name, constraint);
                     }
                 }
-                Ok(rem_input)
+                rem_input
             } else {
-                Ok(input)
+                input
             }
         } else {
-            Ok(input)
+            input
         }
     }
 
     /// Validate remaining unparsed input
-    fn validate_remaining_input(input: &str) -> LpResult<()> {
+    fn validate_remaining_input(input: &str) {
         if input.len() > 3 {
             log::warn!("Unused input not parsed by `LpProblem`: {input}");
         }
-        Ok(())
     }
 }
 
@@ -356,13 +776,13 @@ impl<'a> TryFrom<&'a str> for LpProblem<'a> {
         input = Self::parse_bounds_section(input, &mut variables)?;
 
         // Parse variable type sections
-        input = Self::parse_variable_type_sections(input, &mut variables)?;
+        input = Self::parse_variable_type_sections(input, &mut variables);
 
         // Parse SOS constraints section
-        input = Self::parse_sos_section(input, &mut constraints, &mut variables)?;
+        input = Self::parse_sos_section(input, &mut constraints, &mut variables);
 
         // Validate remaining input
-        Self::validate_remaining_input(input)?;
+        Self::validate_remaining_input(input);
 
         Ok(LpProblem { name, sense, objectives, constraints, variables })
     }
@@ -1477,5 +1897,327 @@ end
                 assert_eq!(problem.objective_count(), 1);
             }
         }
+    }
+
+    // Tests for LP Problem Modification Methods
+
+    use std::borrow::Cow;
+
+    use crate::model::{Coefficient, ComparisonOp, Constraint, Objective, Sense};
+
+    #[test]
+    fn test_update_objective_coefficient() {
+        let mut problem = create_test_problem();
+
+        // Update existing coefficient
+        problem.update_objective_coefficient("obj1", "x1", 5.0).unwrap();
+
+        {
+            let objective = problem.objectives.get("obj1").unwrap();
+            let x1_coeff = objective.coefficients.iter().find(|c| c.name == "x1").unwrap();
+            assert_eq!(x1_coeff.value, 5.0);
+        }
+
+        // Add new coefficient
+        problem.update_objective_coefficient("obj1", "x3", 1.5).unwrap();
+        {
+            let objective = problem.objectives.get("obj1").unwrap();
+            assert!(objective.coefficients.iter().any(|c| c.name == "x3" && c.value == 1.5));
+        }
+
+        // Remove coefficient by setting to zero
+        problem.update_objective_coefficient("obj1", "x2", 0.0).unwrap();
+        {
+            let objective = problem.objectives.get("obj1").unwrap();
+            assert!(!objective.coefficients.iter().any(|c| c.name == "x2"));
+        }
+    }
+
+    #[test]
+    fn test_update_objective_coefficient_errors() {
+        let mut problem = create_test_problem();
+
+        // Non-existent objective
+        let result = problem.update_objective_coefficient("nonexistent", "x1", 1.0);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("not found"));
+    }
+
+    #[test]
+    fn test_update_constraint_coefficient() {
+        let mut problem = create_test_problem();
+
+        // Update existing coefficient
+        problem.update_constraint_coefficient("c1", "x1", 3.0).unwrap();
+
+        if let Constraint::Standard { coefficients, .. } = problem.constraints.get("c1").unwrap() {
+            let x1_coeff = coefficients.iter().find(|c| c.name == "x1").unwrap();
+            assert_eq!(x1_coeff.value, 3.0);
+        }
+
+        // Add new coefficient
+        problem.update_constraint_coefficient("c1", "x3", 2.5).unwrap();
+        if let Constraint::Standard { coefficients, .. } = problem.constraints.get("c1").unwrap() {
+            assert!(coefficients.iter().any(|c| c.name == "x3" && c.value == 2.5));
+        }
+
+        // Remove coefficient by setting to zero
+        problem.update_constraint_coefficient("c1", "x2", 0.0).unwrap();
+        if let Constraint::Standard { coefficients, .. } = problem.constraints.get("c1").unwrap() {
+            assert!(!coefficients.iter().any(|c| c.name == "x2"));
+        }
+    }
+
+    #[test]
+    fn test_update_constraint_rhs() {
+        let mut problem = create_test_problem();
+
+        problem.update_constraint_rhs("c1", 15.0).unwrap();
+
+        if let Constraint::Standard { rhs, .. } = problem.constraints.get("c1").unwrap() {
+            assert_eq!(*rhs, 15.0);
+        }
+    }
+
+    #[test]
+    fn test_update_constraint_operator() {
+        let mut problem = create_test_problem();
+
+        problem.update_constraint_operator("c1", ComparisonOp::GTE).unwrap();
+
+        if let Constraint::Standard { operator, .. } = problem.constraints.get("c1").unwrap() {
+            assert_eq!(*operator, ComparisonOp::GTE);
+        }
+    }
+
+    #[test]
+    fn test_rename_variable() {
+        let mut problem = create_test_problem();
+
+        problem.rename_variable("x1", "new_x1").unwrap();
+
+        // Check variable was renamed in variables map
+        assert!(!problem.variables.contains_key("x1"));
+        assert!(problem.variables.contains_key("new_x1"));
+
+        // Check variable was renamed in objectives
+        let objective = problem.objectives.get("obj1").unwrap();
+        assert!(objective.coefficients.iter().any(|c| c.name == "new_x1"));
+        assert!(!objective.coefficients.iter().any(|c| c.name == "x1"));
+
+        // Check variable was renamed in constraints
+        if let Constraint::Standard { coefficients, .. } = problem.constraints.get("c1").unwrap() {
+            assert!(coefficients.iter().any(|c| c.name == "new_x1"));
+            assert!(!coefficients.iter().any(|c| c.name == "x1"));
+        }
+    }
+
+    #[test]
+    fn test_rename_variable_errors() {
+        let mut problem = create_test_problem();
+
+        // Non-existent variable
+        let result = problem.rename_variable("nonexistent", "new_name");
+        assert!(result.is_err());
+
+        // Name already exists
+        let result = problem.rename_variable("x1", "x2");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_rename_constraint() {
+        let mut problem = create_test_problem();
+
+        problem.rename_constraint("c1", "new_c1").unwrap();
+
+        assert!(!problem.constraints.contains_key("c1"));
+        assert!(problem.constraints.contains_key("new_c1"));
+
+        // Check internal name was updated
+        if let Constraint::Standard { name, .. } = problem.constraints.get("new_c1").unwrap() {
+            assert_eq!(name.as_ref(), "new_c1");
+        }
+    }
+
+    #[test]
+    fn test_rename_objective() {
+        let mut problem = create_test_problem();
+
+        problem.rename_objective("obj1", "new_obj1").unwrap();
+
+        assert!(!problem.objectives.contains_key("obj1"));
+        assert!(problem.objectives.contains_key("new_obj1"));
+
+        let objective = problem.objectives.get("new_obj1").unwrap();
+        assert_eq!(objective.name.as_ref(), "new_obj1");
+    }
+
+    #[test]
+    fn test_remove_variable() {
+        let mut problem = create_test_problem();
+
+        problem.remove_variable("x2").unwrap();
+
+        // Check variable removed from variables map
+        assert!(!problem.variables.contains_key("x2"));
+
+        // Check variable removed from objectives
+        let objective = problem.objectives.get("obj1").unwrap();
+        assert!(!objective.coefficients.iter().any(|c| c.name == "x2"));
+
+        // Check variable removed from constraints
+        if let Constraint::Standard { coefficients, .. } = problem.constraints.get("c1").unwrap() {
+            assert!(!coefficients.iter().any(|c| c.name == "x2"));
+        }
+    }
+
+    #[test]
+    fn test_remove_constraint() {
+        let mut problem = create_test_problem();
+
+        problem.remove_constraint("c1").unwrap();
+        assert!(!problem.constraints.contains_key("c1"));
+
+        // Error for non-existent constraint
+        let result = problem.remove_constraint("nonexistent");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_remove_objective() {
+        let mut problem = create_test_problem();
+
+        problem.remove_objective("obj1").unwrap();
+        assert!(!problem.objectives.contains_key("obj1"));
+
+        // Error for non-existent objective
+        let result = problem.remove_objective("nonexistent");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_update_variable_type() {
+        let mut problem = create_test_problem();
+
+        problem.update_variable_type("x1", VariableType::Binary).unwrap();
+        assert_eq!(problem.variables["x1"].var_type, VariableType::Binary);
+
+        problem.update_variable_type("x2", VariableType::DoubleBound(0.0, 10.0)).unwrap();
+        assert_eq!(problem.variables["x2"].var_type, VariableType::DoubleBound(0.0, 10.0));
+    }
+
+    #[test]
+    fn test_get_all_variable_names() {
+        let problem = create_test_problem();
+        let names = problem.get_all_variable_names();
+
+        assert!(names.contains(&"x1"));
+        assert!(names.contains(&"x2"));
+        assert_eq!(names.len(), 2);
+    }
+
+    #[test]
+    fn test_modification_with_sos_constraints() {
+        let mut problem = LpProblem::new();
+
+        // Add SOS constraint
+        let sos_constraint = Constraint::SOS {
+            name: Cow::Borrowed("sos1"),
+            sos_type: crate::model::SOSType::S1,
+            weights: vec![Coefficient { name: "x1", value: 1.0 }, Coefficient { name: "x2", value: 2.0 }],
+        };
+        problem.add_constraint(sos_constraint);
+
+        // Test that we can't update coefficients in SOS constraints
+        let result = problem.update_constraint_coefficient("sos1", "x1", 3.0);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("SOS constraints"));
+
+        // Test that we can't update RHS for SOS constraints
+        let result = problem.update_constraint_rhs("sos1", 5.0);
+        assert!(result.is_err());
+
+        // Test that we can't update operator for SOS constraints
+        let result = problem.update_constraint_operator("sos1", ComparisonOp::LTE);
+        assert!(result.is_err());
+
+        // But we can rename and remove SOS constraints
+        problem.rename_constraint("sos1", "new_sos1").unwrap();
+        assert!(problem.constraints.contains_key("new_sos1"));
+
+        problem.remove_constraint("new_sos1").unwrap();
+        assert!(!problem.constraints.contains_key("new_sos1"));
+    }
+
+    #[test]
+    fn test_complex_modification_scenario() {
+        let mut problem = create_test_problem();
+
+        // Scenario: Modify a problem step by step
+
+        // 1. Update objective coefficients
+        problem.update_objective_coefficient("obj1", "x1", 5.0).unwrap();
+        problem.update_objective_coefficient("obj1", "x3", 1.0).unwrap();
+
+        // 2. Add new constraint
+        let new_constraint = Constraint::Standard {
+            name: Cow::Borrowed("c2"),
+            coefficients: vec![Coefficient { name: "x2", value: 1.0 }, Coefficient { name: "x3", value: 1.0 }],
+            operator: ComparisonOp::EQ,
+            rhs: 5.0,
+        };
+        problem.add_constraint(new_constraint);
+
+        // 3. Modify existing constraint
+        problem.update_constraint_coefficient("c1", "x3", 0.5).unwrap();
+        problem.update_constraint_rhs("c1", 12.0).unwrap();
+
+        // 4. Update variable types
+        problem.update_variable_type("x1", VariableType::Binary).unwrap();
+        problem.update_variable_type("x3", VariableType::Integer).unwrap();
+
+        // 5. Rename elements
+        problem.rename_variable("x2", "production_rate").unwrap();
+        problem.rename_constraint("c2", "balance_constraint").unwrap();
+
+        // Verify final state
+        assert_eq!(problem.constraint_count(), 2);
+        assert_eq!(problem.variable_count(), 3);
+
+        // Check that x3 variable was automatically created
+        assert!(problem.variables.contains_key("x3"));
+        assert_eq!(problem.variables["x3"].var_type, VariableType::Integer);
+
+        // Check that production_rate exists and x2 doesn't
+        assert!(problem.variables.contains_key("production_rate"));
+        assert!(!problem.variables.contains_key("x2"));
+
+        // Check constraint was renamed
+        assert!(problem.constraints.contains_key("balance_constraint"));
+        assert!(!problem.constraints.contains_key("c2"));
+    }
+
+    // Helper function for tests
+    fn create_test_problem<'a>() -> LpProblem<'a> {
+        let mut problem = LpProblem::new().with_sense(Sense::Minimize);
+
+        // Add objective
+        let objective = Objective {
+            name: Cow::Borrowed("obj1"),
+            coefficients: vec![Coefficient { name: "x1", value: 2.0 }, Coefficient { name: "x2", value: 3.0 }],
+        };
+        problem.add_objective(objective);
+
+        // Add constraint
+        let constraint = Constraint::Standard {
+            name: Cow::Borrowed("c1"),
+            coefficients: vec![Coefficient { name: "x1", value: 1.0 }, Coefficient { name: "x2", value: 1.0 }],
+            operator: ComparisonOp::LTE,
+            rhs: 10.0,
+        };
+        problem.add_constraint(constraint);
+
+        problem
     }
 }

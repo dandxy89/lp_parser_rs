@@ -318,8 +318,10 @@ impl PerfMetrics {
         let hits = self.cache_hits.load(std::sync::atomic::Ordering::Relaxed);
         let misses = self.cache_misses.load(std::sync::atomic::Ordering::Relaxed);
 
+        #[allow(clippy::cast_precision_loss)]
         let avg_time = if searches > 0 { total_time as f64 / searches as f64 } else { 0.0 };
 
+        #[allow(clippy::cast_precision_loss)]
         let hit_rate = if hits + misses > 0 { hits as f64 / (hits + misses) as f64 * 100.0 } else { 0.0 };
 
         format!("Searches: {searches}, Avg time: {avg_time:.2}ns, Cache hit rate: {hit_rate:.1}%")

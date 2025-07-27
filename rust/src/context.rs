@@ -315,7 +315,7 @@ impl<'a> ParseContext<'a> {
     pub fn end_section(&mut self, section: SectionType, start_time: std::time::Instant) {
         if self.config.collect_metrics {
             let duration = start_time.elapsed();
-            self.metrics.record_section_time(section, duration.as_nanos() as u64);
+            self.metrics.record_section_time(section, u64::try_from(duration.as_nanos()).unwrap_or(u64::MAX));
         }
     }
 

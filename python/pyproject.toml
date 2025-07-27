@@ -28,6 +28,7 @@ include = ["README.md", "LICENSE-APACHE"]
 
 [dependency-groups]
 dev = [
+    "basedpyright>=1.31.0",
     "mypy>=1.17.0",
     "pip>=25.1.1",
     "pytest>=8.4.1",

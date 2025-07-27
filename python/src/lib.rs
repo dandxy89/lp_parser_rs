@@ -1,9 +1,11 @@
+use std::borrow::Cow;
 use std::path::{Path, PathBuf};
 
 use lp_parser_rs::csv::LpCsvWriter as _;
-use lp_parser_rs::model::{Constraint, Sense};
+use lp_parser_rs::model::{Constraint, Sense, VariableType};
 use lp_parser_rs::parser::parse_file;
 use lp_parser_rs::problem::LpProblem;
+use lp_parser_rs::writer::{LpWriterOptions, write_lp_string, write_lp_string_with_options};
 use pyo3::exceptions::{PyFileExistsError, PyNotADirectoryError, PyRuntimeError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
@@ -59,7 +61,15 @@ impl LpParser {
     #[getter]
     fn name(&self) -> PyResult<Option<String>> {
         let problem = self.get_problem()?;
-        Ok(problem.name.map(|n| n.to_string()))
+        Ok(problem.name.map(|n| {
+            // Remove "Problem name: " prefix if present
+            let name_str = n.to_string();
+            if name_str.starts_with("Problem name: ") {
+                name_str.strip_prefix("Problem name: ").unwrap_or(&name_str).to_string()
+            } else {
+                name_str
+            }
+        }))
     }
 
     #[getter]
@@ -236,10 +246,229 @@ impl LpParser {
 
         Ok(dict.into())
     }
+
+    #[allow(clippy::wrong_self_convention)]
+    /// Write the current problem to LP format string
+    #[pyo3(text_signature = "($self)")]
+    fn to_lp_string(&mut self) -> PyResult<String> {
+        let problem = self.get_mutable_problem()?;
+        write_lp_string(&problem).map_err(|err| PyRuntimeError::new_err(format!("Failed to write LP string: {err}")))
+    }
+
+    #[allow(clippy::wrong_self_convention)]
+    /// Write the current problem to LP format string with custom options
+    #[pyo3(signature = (*, include_problem_name=true, max_line_length=80, decimal_precision=6, include_section_spacing=true))]
+    fn to_lp_string_with_options(
+        &mut self,
+        include_problem_name: bool,
+        max_line_length: usize,
+        decimal_precision: usize,
+        include_section_spacing: bool,
+    ) -> PyResult<String> {
+        let problem = self.get_mutable_problem()?;
+        let options = LpWriterOptions { include_problem_name, max_line_length, decimal_precision, include_section_spacing };
+        write_lp_string_with_options(&problem, &options).map_err(|err| PyRuntimeError::new_err(format!("Failed to write LP string: {err}")))
+    }
+
+    /// Save the current problem to an LP file
+    #[pyo3(text_signature = "($self, filepath)")]
+    fn save_to_file(&mut self, filepath: String) -> PyResult<()> {
+        let lp_content = self.to_lp_string()?;
+        std::fs::write(&filepath, lp_content).map_err(|err| PyRuntimeError::new_err(format!("Failed to write file: {err}")))
+    }
+
+    /// Update coefficient in an objective
+    #[pyo3(text_signature = "($self, objective_name, variable_name, coefficient)")]
+    fn update_objective_coefficient(&mut self, objective_name: String, variable_name: String, coefficient: f64) -> PyResult<()> {
+        let mut problem = self.get_mutable_problem()?;
+        problem
+            .update_objective_coefficient(&objective_name, &variable_name, coefficient)
+            .map_err(|err| PyRuntimeError::new_err(format!("Failed to update objective coefficient: {err}")))?;
+
+        // Update the cached content
+        let updated_content =
+            write_lp_string(&problem).map_err(|err| PyRuntimeError::new_err(format!("Failed to serialize updated problem: {err}")))?;
+        self.parsed_content = Some(updated_content);
+        Ok(())
+    }
+
+    /// Rename an objective
+    #[pyo3(text_signature = "($self, old_name, new_name)")]
+    fn rename_objective(&mut self, old_name: String, new_name: String) -> PyResult<()> {
+        let mut problem = self.get_mutable_problem()?;
+        problem
+            .rename_objective(&old_name, &new_name)
+            .map_err(|err| PyRuntimeError::new_err(format!("Failed to rename objective: {err}")))?;
+
+        let updated_content =
+            write_lp_string(&problem).map_err(|err| PyRuntimeError::new_err(format!("Failed to serialize updated problem: {err}")))?;
+        self.parsed_content = Some(updated_content);
+        Ok(())
+    }
+
+    /// Remove an objective
+    #[pyo3(text_signature = "($self, objective_name)")]
+    fn remove_objective(&mut self, objective_name: String) -> PyResult<()> {
+        let mut problem = self.get_mutable_problem()?;
+        problem.remove_objective(&objective_name).map_err(|err| PyRuntimeError::new_err(format!("Failed to remove objective: {err}")))?;
+
+        let updated_content =
+            write_lp_string(&problem).map_err(|err| PyRuntimeError::new_err(format!("Failed to serialize updated problem: {err}")))?;
+        self.parsed_content = Some(updated_content);
+        Ok(())
+    }
+
+    /// Update coefficient in a constraint
+    #[pyo3(text_signature = "($self, constraint_name, variable_name, coefficient)")]
+    fn update_constraint_coefficient(&mut self, constraint_name: String, variable_name: String, coefficient: f64) -> PyResult<()> {
+        let mut problem = self.get_mutable_problem()?;
+        problem
+            .update_constraint_coefficient(&constraint_name, &variable_name, coefficient)
+            .map_err(|err| PyRuntimeError::new_err(format!("Failed to update constraint coefficient: {err}")))?;
+
+        let updated_content =
+            write_lp_string(&problem).map_err(|err| PyRuntimeError::new_err(format!("Failed to serialize updated problem: {err}")))?;
+        self.parsed_content = Some(updated_content);
+        Ok(())
+    }
+
+    /// Update the right-hand side value of a constraint
+    #[pyo3(text_signature = "($self, constraint_name, new_rhs)")]
+    fn update_constraint_rhs(&mut self, constraint_name: String, new_rhs: f64) -> PyResult<()> {
+        let mut problem = self.get_mutable_problem()?;
+        problem
+            .update_constraint_rhs(&constraint_name, new_rhs)
+            .map_err(|err| PyRuntimeError::new_err(format!("Failed to update constraint RHS: {err}")))?;
+
+        let updated_content =
+            write_lp_string(&problem).map_err(|err| PyRuntimeError::new_err(format!("Failed to serialize updated problem: {err}")))?;
+        self.parsed_content = Some(updated_content);
+        Ok(())
+    }
+
+    /// Rename a constraint
+    #[pyo3(text_signature = "($self, old_name, new_name)")]
+    fn rename_constraint(&mut self, old_name: String, new_name: String) -> PyResult<()> {
+        let mut problem = self.get_mutable_problem()?;
+        problem
+            .rename_constraint(&old_name, &new_name)
+            .map_err(|err| PyRuntimeError::new_err(format!("Failed to rename constraint: {err}")))?;
+
+        let updated_content =
+            write_lp_string(&problem).map_err(|err| PyRuntimeError::new_err(format!("Failed to serialize updated problem: {err}")))?;
+        self.parsed_content = Some(updated_content);
+        Ok(())
+    }
+
+    /// Remove a constraint
+    #[pyo3(text_signature = "($self, constraint_name)")]
+    fn remove_constraint(&mut self, constraint_name: String) -> PyResult<()> {
+        let mut problem = self.get_mutable_problem()?;
+        problem
+            .remove_constraint(&constraint_name)
+            .map_err(|err| PyRuntimeError::new_err(format!("Failed to remove constraint: {err}")))?;
+
+        let updated_content =
+            write_lp_string(&problem).map_err(|err| PyRuntimeError::new_err(format!("Failed to serialize updated problem: {err}")))?;
+        self.parsed_content = Some(updated_content);
+        Ok(())
+    }
+
+    /// Rename a variable across all objectives and constraints
+    #[pyo3(text_signature = "($self, old_name, new_name)")]
+    fn rename_variable(&mut self, old_name: String, new_name: String) -> PyResult<()> {
+        let mut problem = self.get_mutable_problem()?;
+        problem
+            .rename_variable(&old_name, &new_name)
+            .map_err(|err| PyRuntimeError::new_err(format!("Failed to rename variable: {err}")))?;
+
+        let updated_content =
+            write_lp_string(&problem).map_err(|err| PyRuntimeError::new_err(format!("Failed to serialize updated problem: {err}")))?;
+        self.parsed_content = Some(updated_content);
+        Ok(())
+    }
+
+    /// Update variable type (e.g., Binary, Integer, etc.)
+    #[pyo3(text_signature = "($self, variable_name, var_type)")]
+    fn update_variable_type(&mut self, variable_name: String, var_type: String) -> PyResult<()> {
+        let mut problem = self.get_mutable_problem()?;
+
+        // Parse the variable type string
+        let variable_type = match var_type.to_lowercase().as_str() {
+            "binary" => VariableType::Binary,
+            "integer" => VariableType::Integer,
+            "general" => VariableType::General,
+            "free" => VariableType::Free,
+            "semicontinuous" | "semi_continuous" => VariableType::SemiContinuous,
+            _ => {
+                return Err(PyRuntimeError::new_err(format!(
+                    "Unknown variable type: {var_type}. Supported types: binary, integer, general, free, semicontinuous",
+                )));
+            }
+        };
+
+        problem
+            .update_variable_type(&variable_name, variable_type)
+            .map_err(|err| PyRuntimeError::new_err(format!("Failed to update variable type: {err}")))?;
+
+        let updated_content =
+            write_lp_string(&problem).map_err(|err| PyRuntimeError::new_err(format!("Failed to serialize updated problem: {err}")))?;
+        self.parsed_content = Some(updated_content);
+        Ok(())
+    }
+
+    /// Remove a variable from all objectives and constraints
+    #[pyo3(text_signature = "($self, variable_name)")]
+    fn remove_variable(&mut self, variable_name: String) -> PyResult<()> {
+        let mut problem = self.get_mutable_problem()?;
+        problem.remove_variable(&variable_name).map_err(|err| PyRuntimeError::new_err(format!("Failed to remove variable: {err}")))?;
+
+        let updated_content =
+            write_lp_string(&problem).map_err(|err| PyRuntimeError::new_err(format!("Failed to serialize updated problem: {err}")))?;
+        self.parsed_content = Some(updated_content);
+        Ok(())
+    }
+
+    /// Set problem name
+    #[pyo3(text_signature = "($self, name)")]
+    fn set_problem_name(&mut self, name: String) -> PyResult<()> {
+        let mut problem = self.get_mutable_problem()?;
+        problem.name = Some(Cow::Owned(name));
+
+        let updated_content =
+            write_lp_string(&problem).map_err(|err| PyRuntimeError::new_err(format!("Failed to serialize updated problem: {err}")))?;
+        self.parsed_content = Some(updated_content);
+        Ok(())
+    }
+
+    /// Set problem sense (maximize or minimize)
+    #[pyo3(text_signature = "($self, sense)")]
+    fn set_sense(&mut self, sense: String) -> PyResult<()> {
+        let mut problem = self.get_mutable_problem()?;
+
+        problem.sense = match sense.to_lowercase().as_str() {
+            "maximize" | "max" => Sense::Maximize,
+            "minimize" | "min" => Sense::Minimize,
+            _ => return Err(PyRuntimeError::new_err(format!("Invalid sense: {sense}. Use 'maximize' or 'minimize'"))),
+        };
+
+        let updated_content =
+            write_lp_string(&problem).map_err(|err| PyRuntimeError::new_err(format!("Failed to serialize updated problem: {err}")))?;
+        self.parsed_content = Some(updated_content);
+        Ok(())
+    }
 }
 
 impl LpParser {
     fn get_problem(&self) -> PyResult<LpProblem<'_>> {
+        if let Some(ref content) = self.parsed_content {
+            LpProblem::parse(content).map_err(|_| PyRuntimeError::new_err("Unable to parse LpProblem"))
+        } else {
+            Err(PyRuntimeError::new_err("Must call parse() first"))
+        }
+    }
+
+    fn get_mutable_problem(&mut self) -> PyResult<LpProblem<'_>> {
         if let Some(ref content) = self.parsed_content {
             LpProblem::parse(content).map_err(|_| PyRuntimeError::new_err("Unable to parse LpProblem"))
         } else {

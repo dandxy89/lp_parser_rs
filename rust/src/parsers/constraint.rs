@@ -50,11 +50,14 @@ static COMMON_CONSTRAINT_NAMES: &[&str] = &[
 ];
 
 fn get_constraint_name(id: i64) -> Cow<'static, str> {
-    if id > 0 && id <= COMMON_CONSTRAINT_NAMES.len() as i64 {
-        Cow::Borrowed(COMMON_CONSTRAINT_NAMES[(id - 1) as usize])
-    } else {
-        Cow::Owned(format!("CONSTRAINT_{id}"))
+    if let Ok(len) = i64::try_from(COMMON_CONSTRAINT_NAMES.len()) {
+        if id > 0 && id <= len {
+            if let Ok(index) = usize::try_from(id - 1) {
+                return Cow::Borrowed(COMMON_CONSTRAINT_NAMES[index]);
+            }
+        }
     }
+    Cow::Owned(format!("CONSTRAINT_{id}"))
 }
 
 #[inline]
