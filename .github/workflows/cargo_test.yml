@@ -22,6 +22,7 @@ name: Cargo Test
 env:
   CARGO_TERM_COLOR: always # Ensure colored output in Cargo
   CI: true # Indicate that this is a CI environment
+  CARGO_INCREMENTAL: 0
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }} # Group by workflow and branch
@@ -34,14 +35,14 @@ permissions:
 jobs:
   format:
     name: Format
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest-arm64
     steps:
       - uses: actions/checkout@v4
       - run: rustup component add rustfmt
       - run: cargo fmt --all -- --check
 
   lint:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest-arm64
     steps:
       - uses: actions/checkout@v4
       - name: Setup Rust
@@ -52,7 +53,7 @@ jobs:
         run: cargo clippy --all-targets --all-features -- -D warnings
 
   test:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest-arm64
     steps:
       # Check out the repository code
       - uses: actions/checkout@v4
@@ -63,4 +64,4 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       # Run all tests with all features enabled
       - name: Run tests
-        run: cargo test --all-features
+        run: cargo test --all-features --locked
