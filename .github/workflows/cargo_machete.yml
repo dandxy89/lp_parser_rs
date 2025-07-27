@@ -7,11 +7,17 @@ on:
 permissions:
   contents: read
 
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest-arm64
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - run: cargo check --locked
+      - run: cargo test --locked
       - name: Machete
         uses: bnjbvr/cargo-machete@main

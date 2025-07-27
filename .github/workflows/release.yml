@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   release-please:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest-arm64
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
@@ -25,7 +25,7 @@ jobs:
   publish-crate:
     needs: release-please
     if: ${{ needs.release-please.outputs.release_created }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest-arm64
     steps:
       - uses: actions/checkout@v4
       - name: Install Rust toolchain
@@ -42,13 +42,13 @@ jobs:
     strategy:
       matrix:
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-latest-arm64
             target: x86_64
-          - os: ubuntu-latest
+          - os: ubuntu-latest-arm64
             target: x86
-          - os: ubuntu-latest
+          - os: ubuntu-latest-arm64
             target: aarch64
-          - os: ubuntu-latest
+          - os: ubuntu-latest-arm64
             target: armv7
           - os: windows-latest
             target: x64
@@ -81,7 +81,7 @@ jobs:
   build-sdist:
     needs: release-please
     if: ${{ needs.release-please.outputs.release_created }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest-arm64
     steps:
       - uses: actions/checkout@v4
       - name: Build sdist
@@ -99,7 +99,7 @@ jobs:
   publish-python:
     needs: [release-please, build-python-wheels, build-sdist]
     if: ${{ needs.release-please.outputs.release_created }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest-arm64
     environment:
       name: pypi
       url: https://pypi.org/p/parse_lp
