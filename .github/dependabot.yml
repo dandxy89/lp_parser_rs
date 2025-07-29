@@ -1,15 +1,95 @@
 version: 2
 updates:
+  # GitHub Actions
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
-  - package-ecosystem: cargo
-    directory: /
-    schedule:
-      interval: weekly
+    commit-message:
+      prefix: "ci"
+      include: "scope"
     ignore:
       - dependency-name: "*"
         update-types:
           - "version-update:semver-patch"
-          - "version-update:semver-minor"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+
+  # Rust/Cargo dependencies - Root
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-patch"
+    groups:
+      cargo-dependencies:
+        patterns:
+          - "*"
+        exclude-patterns:
+          - "maturin"  # Handle separately due to build system importance
+
+  # Rust/Cargo dependencies - Rust subdirectory
+  - package-ecosystem: cargo
+    directory: /rust
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-patch"
+    groups:
+      rust-cargo-dependencies:
+        patterns:
+          - "*"
+
+  # Rust/Cargo dependencies - Python subdirectory
+  - package-ecosystem: cargo
+    directory: /python
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-patch"
+    groups:
+      python-cargo-dependencies:
+        patterns:
+          - "*"
+        exclude-patterns:
+          - "maturin"  # Handle separately due to build system importance
+
+  # Python/pip dependencies
+  - package-ecosystem: pip
+    directory: /python
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-patch"
+    groups:
+      python-dev-dependencies:
+        dependency-type: "development"
+        patterns:
+          - "*"
+      python-dependencies:
+        dependency-type: "production"
+        patterns:
+          - "*"
