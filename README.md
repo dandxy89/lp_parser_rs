@@ -7,8 +7,6 @@
 
 ## Overview
 
-![Logo](rust/resources/carbon.png)
-
 A robust Rust library for parsing, modifying, and writing Linear Programming (LP) files. Built on the [NOM](https://docs.rs/nom/latest/nom/) parsing framework, this crate provides comprehensive support for the LP file format with the ability to parse, programmatically modify, and regenerate LP files according to major industry specifications.
 
 ### Supported Specifications
