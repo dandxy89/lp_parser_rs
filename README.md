@@ -71,7 +71,7 @@ cargo run --bin lp_parser --release --features diff -- {{ /path/to/your/file.lp 
 Using the library directly:
 
 ```rust
-use lp_parser::{parser::parse_file, LpProblem, writer::write_lp_string};
+use lp_parser_rs::{parser::parse_file, problem::LpProblem};
 use std::path::Path;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -94,7 +94,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ### LP File Writing and Modification
 
 ```rust
-use lp_parser::{LpProblem, writer::write_lp_string, model::*};
+use lp_parser_rs::{problem::LpProblem, writer::write_lp_string, model::*};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Parse an existing LP file
