@@ -24,11 +24,9 @@ develop: setup ## Install Python binding
 
 .PHONY: install
 install: develop ## Install Python binding
-	$(info --- Uninstall Python binding ---)
-	uv pip uninstall lp_parser
 	$(info --- Install Python binding ---)
 	$(eval TARGET_WHEEL := $(shell ls ../target/wheels/parse_lp-${PACKAGE_VERSION}-*.whl))
-	uv pip install $(TARGET_WHEEL)
+	uv pip install $(TARGET_WHEEL) -U
 
 .PHONY: format
 format: ## Format the code

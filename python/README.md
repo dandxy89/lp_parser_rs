@@ -259,6 +259,7 @@ print(f"Removed constraints: {diff['removed_constraints']}")
 ### Variable Types
 
 Supported variable types for `update_variable_type()`:
+
 - `"binary"` - Binary variables (0 or 1)
 - `"integer"` - General integer variables
 - `"general"` - Continuous variables (default)
@@ -282,3 +283,9 @@ Licensed under either of Apache License, Version 2.0 or MIT license at your opti
 ## Contributing
 
 Issues and pull requests are welcome at: <https://github.com/dandxy89/lp_parser_rs>
+
+```bash
+make build
+make install
+make unit-test
+```

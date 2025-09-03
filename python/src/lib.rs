@@ -82,7 +82,7 @@ impl LpParser {
     }
 
     #[getter]
-    fn objectives(&self, py: Python) -> PyResult<PyObject> {
+    fn objectives(&self, py: Python) -> PyResult<Py<PyAny>> {
         let problem = self.get_problem()?;
         let list = PyList::empty(py);
 
@@ -105,7 +105,7 @@ impl LpParser {
     }
 
     #[getter]
-    fn constraints(&self, py: Python) -> PyResult<PyObject> {
+    fn constraints(&self, py: Python) -> PyResult<Py<PyAny>> {
         let problem = self.get_problem()?;
         let list = PyList::empty(py);
 
@@ -149,7 +149,7 @@ impl LpParser {
     }
 
     #[getter]
-    fn variables(&self, py: Python) -> PyResult<PyObject> {
+    fn variables(&self, py: Python) -> PyResult<Py<PyAny>> {
         let problem = self.get_problem()?;
         let dict = PyDict::new(py);
 
@@ -179,7 +179,7 @@ impl LpParser {
     }
 
     #[pyo3(text_signature = "($self, other)")]
-    fn compare(&self, other: &LpParser, py: Python) -> PyResult<PyObject> {
+    fn compare(&self, other: &LpParser, py: Python) -> PyResult<Py<PyAny>> {
         let p1 = self.get_problem()?;
         let p2 = other.get_problem()?;
 

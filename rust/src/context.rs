@@ -293,7 +293,7 @@ impl<'a> ParseContext<'a> {
 
     #[must_use]
     /// Check if we should stop collecting warnings
-    pub const fn should_stop_collecting_warnings(&self) -> bool {
+    pub fn should_stop_collecting_warnings(&self) -> bool {
         self.warnings.len() >= self.config.max_warnings
     }
 
