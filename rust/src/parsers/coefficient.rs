@@ -270,8 +270,8 @@ mod tests {
 
         // Starting with underscore (if allowed by parse_variable)
         let result = parse_coefficient("_variable");
-        if result.is_ok() {
-            assert_eq!(result.unwrap().1.name, "_variable");
+        if let Ok((_, c)) = result {
+            assert_eq!(c.name, "_variable");
         }
     }
 
