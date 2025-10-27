@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.5.1](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v2.5.0...lp_parser_rs-v2.5.1) (2025-10-27)
+
+
+### Build System
+
+* Updating py03 ([f947950](https://github.com/dandxy89/lp_parser_rs/commit/f9479506b600c6b711b41e1e0cd0a661db7a3674))
+
+
+### Styles
+
+* Clippy linting ([33ce01e](https://github.com/dandxy89/lp_parser_rs/commit/33ce01e483b43a537c87e7547f9eb1e25728838e))
+
 ## [2.5.0](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v2.4.3...lp_parser_rs-v2.5.0) (2025-07-27)
 
 
