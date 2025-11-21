@@ -201,7 +201,7 @@ fn write_bounds_section(output: &mut String, problem: &LpProblem, options: &LpWr
 }
 
 /// Check if a variable type needs bounds declaration
-fn needs_bounds_declaration(var_type: &VariableType) -> bool {
+const fn needs_bounds_declaration(var_type: &VariableType) -> bool {
     matches!(var_type, VariableType::LowerBound(_) | VariableType::UpperBound(_) | VariableType::DoubleBound(_, _) | VariableType::Free)
 }
 
