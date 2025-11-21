@@ -1,5 +1,19 @@
 # Changelog
 
+## [2.6.1](https://github.com/dandxy89/lp_parser_rs/compare/parse_lp-v2.6.0...parse_lp-v2.6.1) (2025-11-21)
+
+
+### Build System
+
+* Updating py03 ([f947950](https://github.com/dandxy89/lp_parser_rs/commit/f9479506b600c6b711b41e1e0cd0a661db7a3674))
+
+
+### Miscellaneous Chores
+
+* Checking the project runs with the latest version of Python ([d6cf0da](https://github.com/dandxy89/lp_parser_rs/commit/d6cf0da46ad76d4895c7a4ba5f83f1ae50ffea1d))
+* **deps:** update pyo3 requirement ([#140](https://github.com/dandxy89/lp_parser_rs/issues/140)) ([742129b](https://github.com/dandxy89/lp_parser_rs/commit/742129b071a2ee7f4fdf4e8508ad5841ed8bb7da))
+* **deps:** update pyo3 requirement in the cargo-dependencies group ([#139](https://github.com/dandxy89/lp_parser_rs/issues/139)) ([16e732f](https://github.com/dandxy89/lp_parser_rs/commit/16e732f460eeeb1acd9d0564c75c862218a4d5a7))
+
 ## [2.6.0](https://github.com/dandxy89/lp_parser_rs/compare/parse_lp-v2.5.0...parse_lp-v2.6.0) (2025-07-27)
 
 
