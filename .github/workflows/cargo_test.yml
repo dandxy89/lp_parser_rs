@@ -37,14 +37,14 @@ jobs:
     name: Format
     runs-on: ubuntu-24.04-arm
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - run: rustup component add rustfmt
       - run: cargo fmt --all -- --check
 
   lint:
     runs-on: ubuntu-24.04-arm
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Setup Rust
         uses: actions-rs/toolchain@v1
         with:
@@ -56,7 +56,7 @@ jobs:
     runs-on: ubuntu-24.04-arm
     steps:
       # Check out the repository code
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       # Ensure Rust is installed and set up the active toolchain
       - name: Setup Rust
         run: rustup show active-toolchain || rustup toolchain install
