@@ -177,3 +177,196 @@ class LpParser:
             RuntimeError: If either parser hasn't been parsed yet.
         """
         ...
+
+    def to_lp_string(self) -> str:
+        """Write the current problem to LP format string.
+
+        Returns:
+            The LP problem as a formatted string.
+
+        Raises:
+            RuntimeError: If the problem cannot be serialized.
+        """
+        ...
+
+    def to_lp_string_with_options(
+        self,
+        *,
+        include_problem_name: bool = True,
+        max_line_length: int = 80,
+        decimal_precision: int = 6,
+        include_section_spacing: bool = True,
+    ) -> str:
+        """Write the current problem to LP format string with custom options.
+
+        Args:
+            include_problem_name: Whether to include the problem name comment.
+            max_line_length: Maximum line length for output formatting.
+            decimal_precision: Number of decimal places for coefficients.
+            include_section_spacing: Whether to add blank lines between sections.
+
+        Returns:
+            The LP problem as a formatted string.
+
+        Raises:
+            RuntimeError: If the problem cannot be serialized.
+        """
+        ...
+
+    def save_to_file(self, filepath: str) -> None:
+        """Save the current problem to an LP file.
+
+        Args:
+            filepath: Path to the output file.
+
+        Raises:
+            RuntimeError: If the file cannot be written.
+        """
+        ...
+
+    def update_objective_coefficient(
+        self, objective_name: str, variable_name: str, coefficient: float
+    ) -> None:
+        """Update a coefficient in an objective function.
+
+        If the variable doesn't exist in the objective, it will be added.
+
+        Args:
+            objective_name: Name of the objective to modify.
+            variable_name: Name of the variable whose coefficient to update.
+            coefficient: New coefficient value.
+
+        Raises:
+            RuntimeError: If the objective is not found or update fails.
+        """
+        ...
+
+    def rename_objective(self, old_name: str, new_name: str) -> None:
+        """Rename an objective function.
+
+        Args:
+            old_name: Current name of the objective.
+            new_name: New name for the objective.
+
+        Raises:
+            RuntimeError: If the objective is not found.
+        """
+        ...
+
+    def remove_objective(self, objective_name: str) -> None:
+        """Remove an objective function from the problem.
+
+        Args:
+            objective_name: Name of the objective to remove.
+
+        Raises:
+            RuntimeError: If the objective is not found.
+        """
+        ...
+
+    def update_constraint_coefficient(
+        self, constraint_name: str, variable_name: str, coefficient: float
+    ) -> None:
+        """Update a coefficient in a constraint.
+
+        If the variable doesn't exist in the constraint, it will be added.
+
+        Args:
+            constraint_name: Name of the constraint to modify.
+            variable_name: Name of the variable whose coefficient to update.
+            coefficient: New coefficient value.
+
+        Raises:
+            RuntimeError: If the constraint is not found or update fails.
+        """
+        ...
+
+    def update_constraint_rhs(self, constraint_name: str, new_rhs: float) -> None:
+        """Update the right-hand side value of a constraint.
+
+        Args:
+            constraint_name: Name of the constraint to modify.
+            new_rhs: New right-hand side value.
+
+        Raises:
+            RuntimeError: If the constraint is not found.
+        """
+        ...
+
+    def rename_constraint(self, old_name: str, new_name: str) -> None:
+        """Rename a constraint.
+
+        Args:
+            old_name: Current name of the constraint.
+            new_name: New name for the constraint.
+
+        Raises:
+            RuntimeError: If the constraint is not found.
+        """
+        ...
+
+    def remove_constraint(self, constraint_name: str) -> None:
+        """Remove a constraint from the problem.
+
+        Args:
+            constraint_name: Name of the constraint to remove.
+
+        Raises:
+            RuntimeError: If the constraint is not found.
+        """
+        ...
+
+    def rename_variable(self, old_name: str, new_name: str) -> None:
+        """Rename a variable across all objectives and constraints.
+
+        Args:
+            old_name: Current name of the variable.
+            new_name: New name for the variable.
+
+        Raises:
+            RuntimeError: If the variable is not found.
+        """
+        ...
+
+    def update_variable_type(self, variable_name: str, var_type: str) -> None:
+        """Update the type of a variable.
+
+        Args:
+            variable_name: Name of the variable to modify.
+            var_type: New type for the variable. Supported types:
+                'binary', 'integer', 'general', 'free', 'semicontinuous'.
+
+        Raises:
+            RuntimeError: If the variable is not found or type is invalid.
+        """
+        ...
+
+    def remove_variable(self, variable_name: str) -> None:
+        """Remove a variable from all objectives and constraints.
+
+        Args:
+            variable_name: Name of the variable to remove.
+
+        Raises:
+            RuntimeError: If the variable is not found.
+        """
+        ...
+
+    def set_problem_name(self, name: str) -> None:
+        """Set the problem name.
+
+        Args:
+            name: New name for the problem.
+        """
+        ...
+
+    def set_sense(self, sense: str) -> None:
+        """Set the optimization sense.
+
+        Args:
+            sense: 'maximize', 'max', 'minimize', or 'min'.
+
+        Raises:
+            RuntimeError: If the sense value is invalid.
+        """
+        ...

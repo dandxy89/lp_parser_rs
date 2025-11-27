@@ -1,27 +1,10 @@
 import os
 import tempfile
 from pathlib import Path
-from typing import Any, Generator
 
 import pytest
 
 from parse_lp import LpParser
-
-
-@pytest.fixture
-def simple_lp_file() -> Path:
-    return Path(__file__).parent / "fixtures" / "simple.lp"
-
-
-@pytest.fixture
-def temp_lp_file() -> Any:
-    def _create_file(content: str) -> Generator[str, None, None]:
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".lp", delete=False) as f:
-            f.write(content)
-            yield f.name
-        os.unlink(f.name)
-
-    return _create_file
 
 
 class TestLpWriter:
