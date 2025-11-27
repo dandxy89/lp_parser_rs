@@ -1,12 +1,3 @@
-//! Parser for objective functions in LP files.
-//!
-//! This module handles the parsing of objective function definitions, including:
-//! - Single and multiple objective functions
-//! - Named and unnamed objectives
-//! - Coefficient and variable parsing
-//! - Multi-line objective definitions
-//!
-
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;

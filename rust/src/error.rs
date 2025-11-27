@@ -1,12 +1,5 @@
-//! Comprehensive error types for LP parsing operations.
-//!
-//! This module provides a structured error hierarchy with detailed context
-//! information for debugging and error handling in LP file parsing.
-
 use thiserror::Error;
 
-/// Comprehensive error type for LP parsing operations.
-///
 /// This error type provides detailed context about parsing failures,
 /// including location information and specific error conditions.
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
@@ -131,12 +124,18 @@ impl LpParseError {
     }
 }
 
-/// Convert from nom parsing errors to our custom error type
+/// Convert from nom parsing errors to our custom error type.
+///
+/// Note: Position is set to 0 as we don't have access to the original input
+/// to calculate a meaningful offset from the remaining input.
 impl<'a> From<nom::Err<nom::error::Error<&'a str>>> for LpParseError {
     fn from(err: nom::Err<nom::error::Error<&'a str>>) -> Self {
         match err {
             nom::Err::Incomplete(_) => Self::parse_error(0, "Incomplete input"),
-            nom::Err::Error(e) | nom::Err::Failure(e) => Self::parse_error(e.input.as_ptr() as usize, format!("Parse error: {:?}", e.code)),
+            nom::Err::Error(e) | nom::Err::Failure(e) => {
+                // Position is 0 since we can't determine offset without original input
+                Self::parse_error(0, format!("Parse error: {:?}", e.code))
+            }
         }
     }
 }

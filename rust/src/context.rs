@@ -1,9 +1,3 @@
-//! Parser context for stateful parsing operations.
-//!
-//! This module provides parsing context management for tracking parsing state,
-//! collecting warnings, and maintaining position information throughout the
-//! parsing process.
-
 use std::collections::HashMap;
 
 use crate::error::{LpParseError, LpResult};

@@ -1,9 +1,3 @@
-//! Parser for LP problem names and comments.
-//!
-//! This module handles parsing of problem names that typically
-//! appear in comments at the start of LP files.
-//!
-
 use std::borrow::Cow;
 
 use nom::branch::alt;

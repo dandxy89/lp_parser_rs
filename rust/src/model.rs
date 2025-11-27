@@ -90,9 +90,10 @@ impl std::fmt::Display for Sense {
 
 #[cfg_attr(feature = "diff", derive(diff::Diff), diff(attr(#[derive(Debug, PartialEq)])))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 /// Represents the type of SOS (System of Systems) with variants `S1` and `S2`.
 pub enum SOSType {
+    #[default]
     /// At most one variable in the set can be non-zero.
     S1,
     /// At most two adjacent variables (in terms of weights) can be non-zero.
@@ -145,7 +146,7 @@ impl std::fmt::Display for Coefficient<'_> {
 #[cfg_attr(feature = "diff", derive(diff::Diff), diff(attr(#[derive(Debug, PartialEq)])))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[cfg_attr(feature = "serde", serde(tag = "type"))]
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 /// Represents a constraint in an optimisation problem, which can be either a
 /// standard linear constraint or a special ordered set (SOS) constraint.
 ///
@@ -206,7 +207,7 @@ impl std::fmt::Display for Constraint<'_> {
 
 #[cfg_attr(feature = "diff", derive(diff::Diff), diff(attr(#[derive(Debug, PartialEq)])))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 /// Represents an optimisation objective with a name and a list of coefficients.
 ///
 /// This struct can optionally derive `Diff` for change tracking and `Serialize`
@@ -268,7 +269,7 @@ impl std::fmt::Display for VariableType {
             Self::General => write!(f, "General"),
             Self::LowerBound(_) => write!(f, "LowerBound"),
             Self::UpperBound(_) => write!(f, "UpperBound"),
-            Self::DoubleBound(_, _) => write!(f, "DualBounds"),
+            Self::DoubleBound(_, _) => write!(f, "DoubleBound"),
             Self::Binary => write!(f, "Binary"),
             Self::Integer => write!(f, "Integer"),
             Self::SemiContinuous => write!(f, "Semi-Continuous"),
@@ -725,7 +726,7 @@ mod tests {
         assert_eq!(format!("{}", VariableType::General), "General");
         assert_eq!(format!("{}", VariableType::LowerBound(5.0)), "LowerBound");
         assert_eq!(format!("{}", VariableType::UpperBound(10.0)), "UpperBound");
-        assert_eq!(format!("{}", VariableType::DoubleBound(0.0, 10.0)), "DualBounds");
+        assert_eq!(format!("{}", VariableType::DoubleBound(0.0, 10.0)), "DoubleBound");
         assert_eq!(format!("{}", VariableType::Binary), "Binary");
         assert_eq!(format!("{}", VariableType::Integer), "Integer");
         assert_eq!(format!("{}", VariableType::SemiContinuous), "Semi-Continuous");

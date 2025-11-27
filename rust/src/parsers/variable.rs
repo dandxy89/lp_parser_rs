@@ -1,6 +1,3 @@
-//! Parser for variable declarations and bounds in LP files.
-//!
-
 use nom::character::complete::multispace0;
 use nom::error::{Error, ErrorKind};
 use nom::multi::many0;

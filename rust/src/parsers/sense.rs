@@ -1,6 +1,3 @@
-//! Parser for optimization sense in LP files.
-//!
-
 use nom::branch::alt;
 use nom::bytes::complete::tag_no_case;
 use nom::character::complete::multispace0;

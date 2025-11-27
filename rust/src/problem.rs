@@ -1,10 +1,3 @@
-//! Main problem representation and parsing logic.
-//!
-//! This module defines the `LpProblem` struct and it's associated
-//! parsing functionality. It serves as the main entry point for
-//! working with LP problems.
-//!
-
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
@@ -65,6 +58,15 @@ impl<'a> LpProblem<'a> {
     /// Initialise a new `Self`
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Ensure a variable exists in the problem, creating it with the given type if not present.
+    #[inline]
+    fn ensure_variable_exists(&mut self, name: &'a str, var_type: Option<VariableType>) {
+        if let Entry::Vacant(entry) = self.variables.entry(name) {
+            let variable = var_type.map_or_else(|| Variable::new(name), |vt| Variable::new(name).with_var_type(vt));
+            entry.insert(variable);
+        }
     }
 
     #[must_use]
@@ -138,18 +140,15 @@ impl<'a> LpProblem<'a> {
     pub fn add_constraint(&mut self, constraint: Constraint<'a>) {
         let name = constraint.name().as_ref().to_owned();
 
-        if let Constraint::Standard { coefficients, .. } = &constraint {
-            for coeff in coefficients {
-                if !self.variables.contains_key(coeff.name) {
-                    self.variables.insert(coeff.name, Variable::new(coeff.name));
+        match &constraint {
+            Constraint::Standard { coefficients, .. } => {
+                for coeff in coefficients {
+                    self.ensure_variable_exists(coeff.name, None);
                 }
             }
-        }
-
-        if let Constraint::SOS { weights, .. } = &constraint {
-            for coeff in weights {
-                if !self.variables.contains_key(coeff.name) {
-                    self.variables.insert(coeff.name, Variable::new(coeff.name).with_var_type(VariableType::SOS));
+            Constraint::SOS { weights, .. } => {
+                for coeff in weights {
+                    self.ensure_variable_exists(coeff.name, Some(VariableType::SOS));
                 }
             }
         }
@@ -163,9 +162,7 @@ impl<'a> LpProblem<'a> {
     /// If an objective with the same name already exists, it will be replaced.
     pub fn add_objective(&mut self, objective: Objective<'a>) {
         for coeff in &objective.coefficients {
-            if !self.variables.contains_key(coeff.name) {
-                self.variables.insert(coeff.name, Variable::new(coeff.name));
-            }
+            self.ensure_variable_exists(coeff.name, None);
         }
 
         let name = objective.name.clone();
@@ -193,17 +190,17 @@ impl<'a> LpProblem<'a> {
         let objective = self
             .objectives
             .get_mut(objective_name)
-            .ok_or_else(|| crate::error::LpParseError::validation_error(format!("Objective '{objective_name}' not found")))?;
+            .ok_or_else(|| LpParseError::validation_error(format!("Objective '{objective_name}' not found")))?;
 
         // Find existing coefficient
         if let Some(coeff) = objective.coefficients.iter_mut().find(|c| c.name == variable_name) {
-            if new_coefficient == 0.0 {
-                // Remove coefficient if value is zero
+            if new_coefficient.abs() < f64::EPSILON {
+                // Remove coefficient if value is effectively zero
                 objective.coefficients.retain(|c| c.name != variable_name);
             } else {
                 coeff.value = new_coefficient;
             }
-        } else if new_coefficient != 0.0 {
+        } else if new_coefficient.abs() >= f64::EPSILON {
             // Add new coefficient if it doesn't exist and value is non-zero
             objective.coefficients.push(crate::model::Coefficient { name: variable_name, value: new_coefficient });
 
@@ -235,19 +232,19 @@ impl<'a> LpProblem<'a> {
         let constraint = self
             .constraints
             .get_mut(constraint_name)
-            .ok_or_else(|| crate::error::LpParseError::validation_error(format!("Constraint '{constraint_name}' not found")))?;
+            .ok_or_else(|| LpParseError::validation_error(format!("Constraint '{constraint_name}' not found")))?;
 
         match constraint {
             Constraint::Standard { coefficients, .. } => {
                 // Find existing coefficient
                 if let Some(coeff) = coefficients.iter_mut().find(|c| c.name == variable_name) {
-                    if new_coefficient == 0.0 {
-                        // Remove coefficient if value is zero
+                    if new_coefficient.abs() < f64::EPSILON {
+                        // Remove coefficient if value is effectively zero
                         coefficients.retain(|c| c.name != variable_name);
                     } else {
                         coeff.value = new_coefficient;
                     }
-                } else if new_coefficient != 0.0 {
+                } else if new_coefficient.abs() >= f64::EPSILON {
                     // Add new coefficient if it doesn't exist and value is non-zero
                     coefficients.push(crate::model::Coefficient { name: variable_name, value: new_coefficient });
 
@@ -258,9 +255,7 @@ impl<'a> LpProblem<'a> {
                 }
             }
             Constraint::SOS { .. } => {
-                return Err(crate::error::LpParseError::validation_error(
-                    "Cannot update coefficients in SOS constraints using this method",
-                ));
+                return Err(LpParseError::validation_error("Cannot update coefficients in SOS constraints using this method"));
             }
         }
 
@@ -282,16 +277,14 @@ impl<'a> LpProblem<'a> {
         let constraint = self
             .constraints
             .get_mut(constraint_name)
-            .ok_or_else(|| crate::error::LpParseError::validation_error(format!("Constraint '{constraint_name}' not found")))?;
+            .ok_or_else(|| LpParseError::validation_error(format!("Constraint '{constraint_name}' not found")))?;
 
         match constraint {
             Constraint::Standard { rhs, .. } => {
                 *rhs = new_rhs;
                 Ok(())
             }
-            Constraint::SOS { .. } => {
-                Err(crate::error::LpParseError::validation_error("SOS constraints do not have right-hand side values"))
-            }
+            Constraint::SOS { .. } => Err(LpParseError::validation_error("SOS constraints do not have right-hand side values")),
         }
     }
 
@@ -310,14 +303,14 @@ impl<'a> LpProblem<'a> {
         let constraint = self
             .constraints
             .get_mut(constraint_name)
-            .ok_or_else(|| crate::error::LpParseError::validation_error(format!("Constraint '{constraint_name}' not found")))?;
+            .ok_or_else(|| LpParseError::validation_error(format!("Constraint '{constraint_name}' not found")))?;
 
         match constraint {
             Constraint::Standard { operator, .. } => {
                 *operator = new_operator;
                 Ok(())
             }
-            Constraint::SOS { .. } => Err(crate::error::LpParseError::validation_error("SOS constraints do not have comparison operators")),
+            Constraint::SOS { .. } => Err(LpParseError::validation_error("SOS constraints do not have comparison operators")),
         }
     }
 
@@ -337,12 +330,12 @@ impl<'a> LpProblem<'a> {
     pub fn rename_variable(&mut self, old_name: &str, new_name: &'a str) -> LpResult<()> {
         // Check if old variable exists
         if !self.variables.contains_key(old_name) {
-            return Err(crate::error::LpParseError::validation_error(format!("Variable '{old_name}' not found")));
+            return Err(LpParseError::validation_error(format!("Variable '{old_name}' not found")));
         }
 
         // Check if new name already exists
         if self.variables.contains_key(new_name) && old_name != new_name {
-            return Err(crate::error::LpParseError::validation_error(format!("Variable '{new_name}' already exists")));
+            return Err(LpParseError::validation_error(format!("Variable '{new_name}' already exists")));
         }
 
         // Update variable in variables map
@@ -397,12 +390,12 @@ impl<'a> LpProblem<'a> {
     pub fn rename_constraint(&mut self, old_name: &str, new_name: &str) -> LpResult<()> {
         // Check if old constraint exists
         if !self.constraints.contains_key(old_name) {
-            return Err(crate::error::LpParseError::validation_error(format!("Constraint '{old_name}' not found")));
+            return Err(LpParseError::validation_error(format!("Constraint '{old_name}' not found")));
         }
 
         // Check if new name already exists
         if self.constraints.contains_key(new_name) && old_name != new_name {
-            return Err(crate::error::LpParseError::validation_error(format!("Constraint '{new_name}' already exists")));
+            return Err(LpParseError::validation_error(format!("Constraint '{new_name}' already exists")));
         }
 
         // Move constraint to new name
@@ -434,12 +427,12 @@ impl<'a> LpProblem<'a> {
     pub fn rename_objective(&mut self, old_name: &str, new_name: &str) -> LpResult<()> {
         // Check if old objective exists
         if !self.objectives.contains_key(old_name) {
-            return Err(crate::error::LpParseError::validation_error(format!("Objective '{old_name}' not found")));
+            return Err(LpParseError::validation_error(format!("Objective '{old_name}' not found")));
         }
 
         // Check if new name already exists
         if self.objectives.contains_key(new_name) && old_name != new_name {
-            return Err(crate::error::LpParseError::validation_error(format!("Objective '{new_name}' already exists")));
+            return Err(LpParseError::validation_error(format!("Objective '{new_name}' already exists")));
         }
 
         // Move objective to new name
@@ -466,7 +459,7 @@ impl<'a> LpProblem<'a> {
     pub fn remove_variable(&mut self, variable_name: &str) -> LpResult<()> {
         // Check if variable exists
         if !self.variables.contains_key(variable_name) {
-            return Err(crate::error::LpParseError::validation_error(format!("Variable '{variable_name}' not found")));
+            return Err(LpParseError::validation_error(format!("Variable '{variable_name}' not found")));
         }
 
         // Remove from variables map
@@ -504,7 +497,7 @@ impl<'a> LpProblem<'a> {
     /// `Ok(())` if successful, or an error if the constraint doesn't exist
     pub fn remove_constraint(&mut self, constraint_name: &str) -> LpResult<()> {
         if self.constraints.remove(constraint_name).is_none() {
-            return Err(crate::error::LpParseError::validation_error(format!("Constraint '{constraint_name}' not found")));
+            return Err(LpParseError::validation_error(format!("Constraint '{constraint_name}' not found")));
         }
         Ok(())
     }
@@ -521,7 +514,7 @@ impl<'a> LpProblem<'a> {
     /// `Ok(())` if successful, or an error if the objective doesn't exist
     pub fn remove_objective(&mut self, objective_name: &str) -> LpResult<()> {
         if self.objectives.remove(objective_name).is_none() {
-            return Err(crate::error::LpParseError::validation_error(format!("Objective '{objective_name}' not found")));
+            return Err(LpParseError::validation_error(format!("Objective '{objective_name}' not found")));
         }
         Ok(())
     }
@@ -541,7 +534,7 @@ impl<'a> LpProblem<'a> {
         let variable = self
             .variables
             .get_mut(variable_name)
-            .ok_or_else(|| crate::error::LpParseError::validation_error(format!("Variable '{variable_name}' not found")))?;
+            .ok_or_else(|| LpParseError::validation_error(format!("Variable '{variable_name}' not found")))?;
 
         variable.var_type = new_type;
         Ok(())

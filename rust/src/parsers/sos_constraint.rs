@@ -1,10 +1,3 @@
-//! Parser for Special Ordered Set (SOS) constraints in LP files.
-//!
-//! This module provides functionality for parsing SOS constraints, which are special
-//! constraints that define relationships between sets of variables. The module supports
-//! both Type 1 (SOS1) and Type 2 (SOS2) constraints with associated weights.
-//!
-
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;

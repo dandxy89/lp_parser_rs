@@ -1,9 +1,3 @@
-//! Validation module for LP problem consistency and correctness.
-//!
-//! This module provides comprehensive validation for parsed LP problems,
-//! checking for logical consistency, reference validity, and mathematical
-//! correctness.
-
 use std::collections::{HashMap, HashSet};
 
 use crate::error::{LpParseError, LpResult};

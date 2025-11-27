@@ -1,9 +1,3 @@
-//! File I/O and content parsing utilities.
-//!
-//! This module provides functionality for reading LP files from disk
-//! and preparing their contents for parsing.
-//!
-
 use std::fs::File;
 use std::io::{BufReader, Read as _};
 use std::path::Path;

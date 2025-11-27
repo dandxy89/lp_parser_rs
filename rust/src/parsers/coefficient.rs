@@ -1,9 +1,3 @@
-//! Parser for coefficients in LP problems.
-//!
-//! This module provides functionality for parsing coefficients
-//! that appear in objective functions and constraints.
-//!
-
 use nom::branch::alt;
 use nom::character::complete::{char, space0};
 use nom::combinator::{map, opt};

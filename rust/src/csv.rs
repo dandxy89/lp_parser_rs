@@ -10,8 +10,6 @@ pub trait LpCsvWriter {
     fn write_variables(&self, base_path: &Path) -> Result<(), Box<dyn Error>>;
 
     // Writes the problem data to CSV files with normalised structure.
-    /// Creates separate CSV files for objectives, constraints, and variables,
-    /// with coefficients split into individual rows.
     fn to_csv(&self, base_path: &std::path::Path) -> Result<(), Box<dyn std::error::Error>> {
         self.write_objectives(base_path)?;
         self.write_constraints(base_path)?;

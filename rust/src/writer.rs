@@ -7,17 +7,15 @@
 //! # Example
 //!
 //! ```rust
-//! use lp_parser::{LpProblem, writer::write_lp_string};
+//! use lp_parser_rs::{LpProblem, writer::write_lp_string};
 //!
 //! let problem = LpProblem::new()
 //!     .with_problem_name("Example".into())
-//!     .with_sense(lp_parser::model::Sense::Maximize);
+//!     .with_sense(lp_parser_rs::model::Sense::Maximize);
 //!
-//! let lp_content = write_lp_string(&problem)?;
+//! let lp_content = write_lp_string(&problem).expect("failed to write LP");
 //! println!("{}", lp_content);
 //! ```
-
-#![allow(clippy::uninlined_format_args)]
 
 use std::fmt::Write;
 
@@ -326,12 +324,17 @@ fn format_coefficient(coeff: &crate::model::Coefficient, is_first: bool, precisi
 }
 
 /// Format a number with specified precision, removing trailing zeros
+#[allow(clippy::uninlined_format_args)]
 fn format_number(value: f64, precision: usize) -> String {
-    if value.fract() == 0.0 && value.abs() < 1e10 {
-        // Integer value - format as integer
+    // Check if value is a whole number and within safe i64 range for integer formatting
+    let is_whole_number = value.fract() == 0.0;
+    let is_safe_for_i64 = value >= (i64::MIN as f64) && value <= (i64::MAX as f64);
+
+    if is_whole_number && is_safe_for_i64 && value.abs() < 1e10 {
+        // Integer value within safe range - format as integer
         format!("{}", value as i64)
     } else {
-        // Decimal value - format with precision and remove trailing zeros
+        // Decimal value or out of i64 range - format with precision and remove trailing zeros
         let formatted = format!("{:.precision$}", value, precision = precision);
         formatted.trim_end_matches('0').trim_end_matches('.').to_string()
     }

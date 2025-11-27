@@ -1,10 +1,3 @@
-//! Parser for LP problem constraints.
-//!
-//! This module handles parsing of constraint definitions,
-//! including their names, coefficients, operators, and
-//! right-hand side values.
-//!
-
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
@@ -101,7 +94,8 @@ type ConstraintParseResult<'a> = IResult<&'a str, (HashMap<Cow<'a, str>, Constra
 ///   constraints and a hashmap of variables, or an error if parsing fails.
 ///
 pub fn parse_constraints<'a>(input: &'a str) -> ConstraintParseResult<'a> {
-    let mut constraint_vars: HashMap<&'a str, Variable<'a>> = HashMap::with_capacity(512);
+    let mut constraint_vars: HashMap<&'a str, Variable<'a>> = HashMap::with_capacity(32);
+    // Generator creates unique IDs for unnamed constraints within this parse operation
     let generator = SequenceGenerator;
 
     let parser = map(

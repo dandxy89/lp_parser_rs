@@ -1,36 +1,26 @@
-//! Performance optimisations for LP parsing.
-//!
-//! This module contains optimised implementations of common parsing operations
-//! using efficient algorithms and data structures.
-
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
-use memchr::memmem;
 use nom::error::{Error, ErrorKind};
 use nom::{Err, IResult};
 use smallvec::SmallVec;
 
-/// Cache for compiled search patterns
-static PATTERN_CACHE: OnceLock<std::sync::RwLock<HashMap<String, CompiledPattern>>> = OnceLock::new();
+static PATTERN_CACHE: OnceLock<std::sync::RwLock<HashMap<String, CachedPattern>>> = OnceLock::new();
 
-/// Compiled pattern for efficient searching
+/// Cached pattern for string searching.
 #[derive(Clone)]
-struct CompiledPattern {
-    /// Original pattern
+struct CachedPattern {
     pattern: String,
 }
 
-impl CompiledPattern {
-    /// Create a new compiled pattern
+impl CachedPattern {
     fn new(pattern: &str) -> Self {
         Self { pattern: pattern.to_string() }
     }
 }
 
-/// Optimized case-insensitive string finder
 pub struct FastStringFinder {
-    patterns: SmallVec<[CompiledPattern; 8]>,
+    patterns: SmallVec<[CachedPattern; 8]>,
 }
 
 impl FastStringFinder {
@@ -39,19 +29,19 @@ impl FastStringFinder {
         let mut compiled_patterns = SmallVec::new();
 
         for &pattern in patterns {
-            // Check cache first
             let cache_key = pattern.to_string();
 
             let compiled = {
-                let cache = PATTERN_CACHE.get_or_init(|| std::sync::RwLock::new(HashMap::new())).read().unwrap();
+                let cache =
+                    PATTERN_CACHE.get_or_init(|| std::sync::RwLock::new(HashMap::new())).read().expect("pattern cache lock poisoned");
                 cache.get(&cache_key).cloned()
             };
 
             let compiled = compiled.unwrap_or_else(|| {
-                let new_pattern = CompiledPattern::new(pattern);
+                let new_pattern = CachedPattern::new(pattern);
 
-                // Store in cache
-                let mut cache = PATTERN_CACHE.get_or_init(|| std::sync::RwLock::new(HashMap::new())).write().unwrap();
+                let mut cache =
+                    PATTERN_CACHE.get_or_init(|| std::sync::RwLock::new(HashMap::new())).write().expect("pattern cache lock poisoned");
                 cache.insert(cache_key, new_pattern.clone());
 
                 new_pattern
@@ -83,17 +73,23 @@ impl FastStringFinder {
 
     /// Find pattern only at word boundaries (start of line or after whitespace)
     fn find_pattern_at_word_boundary(input: &str, pattern: &str) -> Option<usize> {
+        let input_bytes = input.as_bytes();
         let mut start = 0;
         while let Some(pos) = Self::find_case_insensitive(&input[start..], pattern) {
             let absolute_pos = start + pos;
 
-            // Check if this is at a word boundary
-            let is_at_boundary = absolute_pos == 0 || input.chars().nth(absolute_pos - 1).is_some_and(|c| c.is_whitespace() || c == '\n');
+            // Check if this is at a word boundary (using byte-level check for ASCII)
+            let is_at_boundary = absolute_pos == 0 || {
+                let prev_byte = input_bytes[absolute_pos - 1];
+                prev_byte.is_ascii_whitespace() || prev_byte == b'\n'
+            };
 
             // Check if the pattern ends at a word boundary or end of input
             let pattern_end = absolute_pos + pattern.len();
-            let is_end_boundary =
-                pattern_end >= input.len() || input.chars().nth(pattern_end).map_or(true, |c| c.is_whitespace() || c == '\n' || c == ':');
+            let is_end_boundary = pattern_end >= input_bytes.len() || {
+                let next_byte = input_bytes[pattern_end];
+                next_byte.is_ascii_whitespace() || next_byte == b'\n' || next_byte == b':'
+            };
 
             if is_at_boundary && is_end_boundary {
                 return Some(absolute_pos);
@@ -105,7 +101,6 @@ impl FastStringFinder {
         None
     }
 
-    /// Efficient case-insensitive search without string allocations
     fn find_case_insensitive(haystack: &str, needle: &str) -> Option<usize> {
         if needle.is_empty() {
             return Some(0);
@@ -143,16 +138,64 @@ impl FastStringFinder {
 
 #[inline]
 #[must_use]
-/// Fast case-insensitive string search using optimised algorithms
 pub fn fast_find_case_insensitive(haystack: &str, needle: &str) -> Option<usize> {
     if needle.is_empty() {
         return Some(0);
     }
 
-    let haystack_lower = haystack.to_lowercase();
-    let needle_lower = needle.to_lowercase();
+    let haystack_bytes = haystack.as_bytes();
+    let needle_bytes = needle.as_bytes();
 
-    memmem::find(haystack_lower.as_bytes(), needle_lower.as_bytes())
+    if haystack_bytes.len() < needle_bytes.len() {
+        return None;
+    }
+
+    // Use memchr to find potential starting positions for first byte
+    let first_byte = needle_bytes[0];
+    let first_lower = if first_byte.is_ascii_uppercase() { first_byte + 32 } else { first_byte };
+    let first_upper = if first_byte.is_ascii_lowercase() { first_byte - 32 } else { first_byte };
+
+    let mut pos = 0;
+    while pos <= haystack_bytes.len() - needle_bytes.len() {
+        // Find next potential match position using memchr for speed
+        let search_slice = &haystack_bytes[pos..];
+        let next_pos = if first_lower == first_upper {
+            memchr::memchr(first_lower, search_slice)
+        } else {
+            memchr::memchr2(first_lower, first_upper, search_slice)
+        };
+
+        match next_pos {
+            Some(offset) => {
+                let start = pos + offset;
+                if start + needle_bytes.len() > haystack_bytes.len() {
+                    return None;
+                }
+
+                // Check if full needle matches at this position
+                let mut matches = true;
+                for j in 0..needle_bytes.len() {
+                    let h_byte = haystack_bytes[start + j];
+                    let n_byte = needle_bytes[j];
+
+                    let h_lower = if h_byte.is_ascii_uppercase() { h_byte + 32 } else { h_byte };
+                    let n_lower = if n_byte.is_ascii_uppercase() { n_byte + 32 } else { n_byte };
+
+                    if h_lower != n_lower {
+                        matches = false;
+                        break;
+                    }
+                }
+
+                if matches {
+                    return Some(start);
+                }
+                pos = start + 1;
+            }
+            None => return None,
+        }
+    }
+    None
 }
 
 /// Optimized version of `take_until_cased` using fast string search
@@ -165,9 +208,10 @@ pub fn fast_take_until_cased<'a>(tag: &'a str) -> impl Fn(&'a str) -> IResult<&'
 
 /// Optimized version of `take_until_parser` using fast string search
 pub fn fast_take_until_parser<'a>(tags: &'a [&'a str]) -> impl Fn(&'a str) -> IResult<&'a str, &'a str> + 'a {
-    move |input| {
-        let finder = FastStringFinder::new(tags);
+    // Create finder once outside the closure to avoid recreation on every call
+    let finder = FastStringFinder::new(tags);
 
+    move |input| {
         if let Some((pos, _matched_tag)) = finder.find_first(input) {
             Ok((&input[pos..], &input[..pos]))
         } else {
@@ -191,7 +235,7 @@ impl<T> MemoryPool<T> {
     /// Get an item from the pool or create a new one
     pub fn get(&self) -> PooledItem<'_, T> {
         let item = {
-            let mut pool = self.pool.lock().unwrap();
+            let mut pool = self.pool.lock().expect("memory pool lock poisoned");
             pool.pop().unwrap_or_else(|| (self.factory)())
         };
 
@@ -222,13 +266,28 @@ impl<T> std::ops::DerefMut for PooledItem<'_, T> {
 impl<T> Drop for PooledItem<'_, T> {
     fn drop(&mut self) {
         if let Some(item) = self.item.take() {
-            let mut pool = self.pool.lock().unwrap();
-            pool.push(item);
+            if let Ok(mut pool) = self.pool.lock() {
+                pool.push(item);
+            }
+            // If lock is poisoned, silently drop the item rather than panicking in Drop
         }
     }
 }
 
-/// Zero-copy string interner for reusing common strings
+/// Zero-copy string interner for reusing common strings.
+///
+/// # Memory Warning
+///
+/// This interner uses `Box::leak` to create `'static` string references.
+/// Interned strings are **never deallocated** and will persist for the lifetime
+/// of the program. This is intentional for performance, but be aware:
+///
+/// - Do not use for unbounded or user-controlled input
+/// - Best suited for a fixed set of known keywords
+/// - Memory usage grows monotonically with unique strings interned
+///
+/// For long-running applications with dynamic string sets, consider using
+/// the `lasso` or `string_interner` crates which support garbage collection.
 pub struct StringInterner {
     strings: std::sync::RwLock<HashMap<String, &'static str>>,
 }
@@ -240,25 +299,27 @@ impl StringInterner {
         Self { strings: std::sync::RwLock::new(HashMap::new()) }
     }
 
-    /// Intern a string, returning a static reference
+    /// Intern a string, returning a static reference.
+    ///
+    /// See struct-level documentation for memory implications.
     pub fn intern(&self, s: &str) -> &'static str {
         // First try reading
         {
-            let strings = self.strings.read().unwrap();
+            let strings = self.strings.read().expect("string interner lock poisoned");
             if let Some(&interned) = strings.get(s) {
                 return interned;
             }
         }
 
         // Need to write
-        let mut strings = self.strings.write().unwrap();
+        let mut strings = self.strings.write().expect("string interner lock poisoned");
 
         // Double-check in case another thread added it
         if let Some(&interned) = strings.get(s) {
             return interned;
         }
 
-        // Create a leaked string (this is intentional for the interner)
+        // Create a leaked string (intentional - see struct docs for memory implications)
         let owned = s.to_string();
         let leaked = Box::leak(owned.into_boxed_str());
         strings.insert(s.to_string(), leaked);

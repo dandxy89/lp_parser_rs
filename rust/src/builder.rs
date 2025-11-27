@@ -1,8 +1,3 @@
-//! Builder pattern API for constructing LP problems.
-//!
-//! This module provides a fluent, type-safe API for constructing LP problems
-//! programmatically with method chaining and validation.
-
 use std::borrow::Cow;
 use std::collections::HashMap;
 

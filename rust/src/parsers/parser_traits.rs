@@ -1,12 +1,3 @@
-//! Traits and utilities for section-based parsing in LP files.
-//!
-//! This module provides the core trait definition and implementations for parsing
-//! different sections of LP files. It includes:
-//! - The `SectionParser` trait for section-based parsing
-//! - Common parsing utilities for variables and bounds
-//! - Implementations for various section types (Binary, Bounds, General, etc.)
-//!
-
 use nom::branch::alt;
 use nom::bytes::complete::{tag, tag_no_case, take_while1};
 use nom::character::complete::{char, multispace0, space0};
