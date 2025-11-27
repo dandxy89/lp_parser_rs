@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.5.2](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v2.5.1...lp_parser_rs-v2.5.2) (2025-11-27)
+
+
+### Bug Fixes
+
+* Updating some issues in the Rust code base ([6252c70](https://github.com/dandxy89/lp_parser_rs/commit/6252c70a14d82817b225efaa1d1c7f75a9e33a04))
+
 ## [2.5.1](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v2.5.0...lp_parser_rs-v2.5.1) (2025-11-21)
 
 

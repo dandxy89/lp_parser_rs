@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.6.2](https://github.com/dandxy89/lp_parser_rs/compare/parse_lp-v2.6.1...parse_lp-v2.6.2) (2025-11-27)
+
+
+### Bug Fixes
+
+* Adding missing stubs ([180faa5](https://github.com/dandxy89/lp_parser_rs/commit/180faa514a8f10846318c23e33562175c66b2aa8))
+* Include README in Python pyproject.toml ([0745fd2](https://github.com/dandxy89/lp_parser_rs/commit/0745fd28202823e633f3b7853e85026ed7e98986))
+
 ## [2.6.1](https://github.com/dandxy89/lp_parser_rs/compare/parse_lp-v2.6.0...parse_lp-v2.6.1) (2025-11-21)
 
 
