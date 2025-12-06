@@ -27,21 +27,32 @@ requires = ["maturin>=1,<2"]
 build-backend = "maturin"
 
 [tool.maturin]
-include = ["README.md", "LICENSE-APACHE"]
+include = ["README.md", "LICENSE-APACHE", "parse_lp/py.typed", "parse_lp/*.pyi"]
 
 [dependency-groups]
 dev = [
     "basedpyright>=1.31.3",
     "mypy>=1.17.1",
     "pip>=25.2",
+    "pyrefly>=0.44.2",
     "pytest>=8.4.1",
     "ruff>=0.12.11",
     "wheel>=0.45.1",
 ]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "RUF"]
-ignore = ["E501"]
+select = [
+    "E",      # pycodestyle errors
+    "F",      # pyflakes
+    "I",      # isort
+    "RUF",    # ruff-specific
+    "B",      # flake8-bugbear (catches common bugs)
+    "C4",     # flake8-comprehensions
+    "UP",     # pyupgrade (modernize syntax)
+    "SIM",    # flake8-simplify
+    "PTH",    # flake8-use-pathlib
+]
+ignore = ["E501", "SIM108"]  # line length, ternary operator
 
 [tool.ruff.lint.isort]
 known-first-party = ["parse_lp"]
@@ -74,3 +85,8 @@ warn_unused_ignores = true
 warn_return_any = false
 implicit_reexport = true
 strict_equality = true
+
+[tool.pyrefly]
+project-includes = ["parse_lp/*.py"]
+project-excludes = ["**/tests*"]
+search-path = ["./stubs"]

@@ -44,6 +44,8 @@ check-python: ## Run check on Python
 	uv run --no-sync ruff check .
 	$(info Check Python mypy)
 	uv run --no-sync mypy
+	$(info Check Python pyrefly)
+	uv run pyrefly check
 
 .PHONY: unit-test
 unit-test: install ## Run unit test

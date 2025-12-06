@@ -67,7 +67,11 @@ Modification Methods:
 
 """
 
+# pyrefly: ignore [missing-import]
 from .parse_lp import LpParser
 
+# Type aliases are defined in parse_lp.pyi for static type checking.
+# Users can import them with: from parse_lp.parse_lp import Objective, Constraint, etc.
+
 __version__ = "2.5.0"
-__all__ = ["LpParser"]
+__all__ = ["LpParser", "__version__"]

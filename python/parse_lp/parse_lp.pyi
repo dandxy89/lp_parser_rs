@@ -1,6 +1,88 @@
-"""Type stubs for parse_lp module."""
+from typing import Literal, TypedDict
 
-from typing import Any, Dict, List, Optional
+# Custom exception classes
+class LpParseError(Exception):
+    """Raised when parsing an LP file fails."""
+
+    ...
+
+class LpNotParsedError(Exception):
+    """Raised when accessing data before calling parse()."""
+
+    ...
+
+class LpObjectNotFoundError(Exception):
+    """Raised when a named object (variable, constraint, objective) is not found."""
+
+    ...
+
+class LpInvalidValueError(Exception):
+    """Raised when an invalid value is provided (e.g., invalid sense or variable type)."""
+
+    ...
+
+# Type definitions for structured data
+Sense = Literal["maximize", "minimize"]
+SenseInput = Literal["maximize", "max", "minimize", "min"]
+VariableType = Literal["binary", "integer", "general", "free", "semicontinuous"]
+
+class Coefficient(TypedDict):
+    """A coefficient in an objective or constraint."""
+
+    name: str
+    value: float
+
+class Objective(TypedDict):
+    """An objective function with its coefficients."""
+
+    name: str
+    coefficients: list[Coefficient]
+
+class VariableBounds(TypedDict, total=False):
+    """Bounds for a variable (all fields optional)."""
+
+    lower: float
+    upper: float
+
+class VariableInfo(TypedDict):
+    """Information about a variable."""
+
+    name: str
+    var_type: str
+    bounds: VariableBounds | None
+
+class StandardConstraint(TypedDict):
+    """A standard linear constraint."""
+
+    name: str
+    type: Literal["standard"]
+    coefficients: list[Coefficient]
+    operator: str
+    rhs: float
+
+class SOSConstraint(TypedDict):
+    """A Special Ordered Set (SOS) constraint."""
+
+    name: str
+    type: Literal["sos"]
+    sos_type: str
+    variables: list[str]
+
+Constraint = StandardConstraint | SOSConstraint
+
+class ComparisonResult(TypedDict):
+    """Result of comparing two LP problems."""
+
+    name_changed: bool
+    sense_changed: bool
+    variable_count_diff: int
+    constraint_count_diff: int
+    objective_count_diff: int
+    added_variables: list[str]
+    removed_variables: list[str]
+    modified_variables: list[str]
+    added_constraints: list[str]
+    removed_constraints: list[str]
 
 class LpParser:
     """A fast LP file format parser.
@@ -46,7 +128,7 @@ class LpParser:
         ...
 
     @property
-    def name(self) -> Optional[str]:
+    def name(self) -> str | None:
         """Get the name of the LP problem.
 
         Returns:
@@ -55,7 +137,7 @@ class LpParser:
         ...
 
     @property
-    def sense(self) -> Optional[str]:
+    def sense(self) -> Sense | None:
         """Get the optimization sense of the problem.
 
         Returns:
@@ -64,38 +146,38 @@ class LpParser:
         ...
 
     @property
-    def objectives(self) -> List[Dict[str, Any]]:
+    def objectives(self) -> list[Objective]:
         """Get the list of objective functions.
 
         Returns:
-            List of dictionaries containing objective information:
+            List of Objective TypedDicts containing:
             - name: Name of the objective
-            - coefficients: List of coefficient dictionaries with 'name' and 'value'
+            - coefficients: List of Coefficient dicts with 'name' and 'value'
         """
         ...
 
     @property
-    def constraints(self) -> List[Dict[str, Any]]:
+    def constraints(self) -> list[Constraint]:
         """Get the list of constraints.
 
         Returns:
-            List of dictionaries containing constraint information:
+            List of Constraint TypedDicts (StandardConstraint or SOSConstraint):
             - name: Name of the constraint
             - type: 'standard' or 'sos'
-            - For standard constraints: coefficients, sense, rhs
+            - For standard constraints: coefficients, operator, rhs
             - For SOS constraints: sos_type, variables
         """
         ...
 
     @property
-    def variables(self) -> Dict[str, Dict[str, Any]]:
+    def variables(self) -> dict[str, VariableInfo]:
         """Get the dictionary of variables.
 
         Returns:
-            Dictionary mapping variable names to their properties:
+            Dictionary mapping variable names to VariableInfo TypedDicts:
             - name: Variable name
             - var_type: Type of variable (e.g., 'Continuous', 'Binary', 'Integer')
-            - bounds: Optional dictionary with 'lower' and/or 'upper' bounds
+            - bounds: Optional VariableBounds with 'lower' and/or 'upper'
         """
         ...
 
@@ -152,7 +234,7 @@ class LpParser:
         """
         ...
 
-    def compare(self, other: "LpParser") -> Dict[str, Any]:
+    def compare(self, other: LpParser) -> ComparisonResult:
         """Compare this LP problem with another.
 
         Both parsers must be parsed before comparison.
@@ -161,7 +243,7 @@ class LpParser:
             other: Another LpParser instance to compare with.
 
         Returns:
-            Dictionary containing comparison results:
+            ComparisonResult TypedDict containing:
             - name_changed: Whether problem names differ
             - sense_changed: Whether optimization senses differ
             - variable_count_diff: Difference in variable counts
@@ -174,7 +256,7 @@ class LpParser:
             - removed_constraints: Constraints in 'self' but not in 'other'
 
         Raises:
-            RuntimeError: If either parser hasn't been parsed yet.
+            LpNotParsedError: If either parser hasn't been parsed yet.
         """
         ...
 
@@ -328,7 +410,7 @@ class LpParser:
         """
         ...
 
-    def update_variable_type(self, variable_name: str, var_type: str) -> None:
+    def update_variable_type(self, variable_name: str, var_type: VariableType) -> None:
         """Update the type of a variable.
 
         Args:
@@ -337,7 +419,8 @@ class LpParser:
                 'binary', 'integer', 'general', 'free', 'semicontinuous'.
 
         Raises:
-            RuntimeError: If the variable is not found or type is invalid.
+            LpObjectNotFoundError: If the variable is not found.
+            LpInvalidValueError: If the type is invalid.
         """
         ...
 
@@ -360,13 +443,13 @@ class LpParser:
         """
         ...
 
-    def set_sense(self, sense: str) -> None:
+    def set_sense(self, sense: SenseInput) -> None:
         """Set the optimization sense.
 
         Args:
             sense: 'maximize', 'max', 'minimize', or 'min'.
 
         Raises:
-            RuntimeError: If the sense value is invalid.
+            LpInvalidValueError: If the sense value is invalid.
         """
         ...
