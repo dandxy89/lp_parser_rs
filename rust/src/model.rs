@@ -472,14 +472,6 @@ pub struct CoefficientOwned {
     pub value: f64,
 }
 
-impl CoefficientOwned {
-    /// Create a new owned coefficient.
-    #[must_use]
-    pub fn new(name: impl Into<String>, value: f64) -> Self {
-        Self { name: name.into(), value }
-    }
-}
-
 impl<'a> From<&Coefficient<'a>> for CoefficientOwned {
     fn from(coeff: &Coefficient<'a>) -> Self {
         Self { name: coeff.name.to_string(), value: coeff.value }
@@ -562,7 +554,7 @@ impl ObjectiveOwned {
 
     /// Add a coefficient to the objective.
     pub fn add_coefficient(&mut self, name: impl Into<String>, value: f64) {
-        self.coefficients.push(CoefficientOwned::new(name, value));
+        self.coefficients.push(CoefficientOwned { name: name.into(), value });
     }
 }
 
