@@ -1,0 +1,155 @@
+---
+source: rust/src/problem.rs
+expression: "&LpProblem::try_from(COMPLETE_INPUT).unwrap()"
+---
+name: diet
+sense: Minimize
+objectives:
+  obj1:
+    name: obj1
+    coefficients:
+      - name: x
+        value: -0.5
+      - name: y
+        value: -2
+      - name: z
+        value: -8
+  obj2:
+    name: obj2
+    coefficients:
+      - name: y
+        value: 1
+      - name: x
+        value: 1
+      - name: z
+        value: 1
+  obj3:
+    name: obj3
+    coefficients:
+      - name: z
+        value: 10
+      - name: x
+        value: -2.5
+      - name: y
+        value: 1
+constraints:
+  c1:
+    type: Standard
+    name: c1
+    coefficients:
+      - name: x1
+        value: 3
+      - name: x2
+        value: 1
+      - name: x3
+        value: 2
+    operator: EQ
+    rhs: 30
+  c2:
+    type: Standard
+    name: c2
+    coefficients:
+      - name: x1
+        value: 2
+      - name: x2
+        value: 1
+      - name: x3
+        value: 3
+      - name: x4
+        value: 1
+    operator: GTE
+    rhs: 15
+  c3:
+    type: Standard
+    name: c3
+    coefficients:
+      - name: x2
+        value: 2
+      - name: x4
+        value: 3
+    operator: LTE
+    rhs: 25
+  csos1:
+    type: SOS
+    name: csos1
+    sos_type: S1
+    weights:
+      - name: V1
+        value: 1
+      - name: V3
+        value: 2
+      - name: V5
+        value: 3
+  csos2:
+    type: SOS
+    name: csos2
+    sos_type: S2
+    weights:
+      - name: V2
+        value: 2
+      - name: V4
+        value: 1
+      - name: V5
+        value: 2.5
+variables:
+  Route_A_1:
+    name: Route_A_1
+    var_type: General
+  Route_A_2:
+    name: Route_A_2
+    var_type: General
+  Route_A_3:
+    name: Route_A_3
+    var_type: General
+  V1:
+    name: V1
+    var_type: SOS
+  V2:
+    name: V2
+    var_type: SOS
+  V3:
+    name: V3
+    var_type: SOS
+  V4:
+    name: V4
+    var_type: SOS
+  V5:
+    name: V5
+    var_type: SOS
+  V8:
+    name: V8
+    var_type: Binary
+  X31:
+    name: X31
+    var_type: Integer
+  X32:
+    name: X32
+    var_type: Integer
+  x:
+    name: x
+    var_type: Free
+  x1:
+    name: x1
+    var_type: Free
+  x2:
+    name: x2
+    var_type:
+      LowerBound: 1
+  x2dfsdf:
+    name: x2dfsdf
+    var_type:
+      DoubleBound:
+        - 100
+        - -1
+  x3:
+    name: x3
+    var_type: Free
+  x4:
+    name: x4
+    var_type: Free
+  y:
+    name: y
+    var_type: SemiContinuous
+  z:
+    name: z
+    var_type: Free

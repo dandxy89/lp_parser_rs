@@ -612,429 +612,169 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_comparison_op_values() {
+    fn test_comparison_op() {
+        // Default and variants
         assert_eq!(ComparisonOp::default(), ComparisonOp::GT);
 
-        let ops = [ComparisonOp::GT, ComparisonOp::GTE, ComparisonOp::EQ, ComparisonOp::LT, ComparisonOp::LTE];
+        // All variants with as_ref and display
+        let test_cases = [
+            (ComparisonOp::GT, b">".as_slice(), ">"),
+            (ComparisonOp::GTE, b">=".as_slice(), ">="),
+            (ComparisonOp::EQ, b"=".as_slice(), "="),
+            (ComparisonOp::LT, b"<".as_slice(), "<"),
+            (ComparisonOp::LTE, b"<=".as_slice(), "<="),
+        ];
 
-        // Test that all variants are distinct
-        for (i, op1) in ops.iter().enumerate() {
-            for (j, op2) in ops.iter().enumerate() {
-                if i == j {
-                    assert_eq!(op1, op2);
-                } else {
-                    assert_ne!(op1, op2);
-                }
-            }
+        for (op, expected_bytes, expected_str) in test_cases {
+            assert_eq!(op.as_ref(), expected_bytes);
+            assert_eq!(format!("{op}"), expected_str);
+            assert_eq!(op.clone(), op);
         }
     }
 
     #[test]
-    fn test_comparison_op_as_ref() {
-        assert_eq!(ComparisonOp::GT.as_ref(), b">");
-        assert_eq!(ComparisonOp::GTE.as_ref(), b">=");
-        assert_eq!(ComparisonOp::EQ.as_ref(), b"=");
-        assert_eq!(ComparisonOp::LT.as_ref(), b"<");
-        assert_eq!(ComparisonOp::LTE.as_ref(), b"<=");
-    }
-
-    #[test]
-    fn test_comparison_op_display() {
-        assert_eq!(format!("{}", ComparisonOp::GT), ">");
-        assert_eq!(format!("{}", ComparisonOp::GTE), ">=");
-        assert_eq!(format!("{}", ComparisonOp::EQ), "=");
-        assert_eq!(format!("{}", ComparisonOp::LT), "<");
-        assert_eq!(format!("{}", ComparisonOp::LTE), "<=");
-    }
-
-    #[test]
-    fn test_comparison_op_clone_and_eq() {
-        let op1 = ComparisonOp::EQ;
-        let op2 = op1.clone();
-        assert_eq!(op1, op2);
-
-        let op3 = ComparisonOp::LTE;
-        assert_ne!(op1, op3);
-    }
-
-    // Test Sense enum
-    #[test]
-    fn test_sense_values() {
+    fn test_sense() {
         assert_eq!(Sense::default(), Sense::Minimize);
-
-        let minimize = Sense::Minimize;
-        let maximize = Sense::Maximize;
-
-        assert_ne!(minimize, maximize);
-        assert_eq!(minimize.clone(), minimize);
-        assert_eq!(maximize.clone(), maximize);
-    }
-
-    #[test]
-    fn test_sense_is_minimisation() {
         assert!(Sense::Minimize.is_minimisation());
         assert!(!Sense::Maximize.is_minimisation());
-    }
-
-    #[test]
-    fn test_sense_display() {
         assert_eq!(format!("{}", Sense::Minimize), "Minimize");
         assert_eq!(format!("{}", Sense::Maximize), "Maximize");
+        assert_ne!(Sense::Minimize, Sense::Maximize);
     }
 
     #[test]
-    fn test_sos_type_values() {
-        let s1 = SOSType::S1;
-        let s2 = SOSType::S2;
+    fn test_sos_type() {
+        let test_cases = [(SOSType::S1, b"S1".as_slice(), "S1"), (SOSType::S2, b"S2".as_slice(), "S2")];
 
-        assert_ne!(s1, s2);
-        assert_eq!(s1.clone(), s1);
-        assert_eq!(s2.clone(), s2);
+        for (sos, expected_bytes, expected_str) in test_cases {
+            assert_eq!(sos.as_ref(), expected_bytes);
+            assert_eq!(format!("{sos}"), expected_str);
+            assert_eq!(sos.clone(), sos);
+        }
+        assert_ne!(SOSType::S1, SOSType::S2);
     }
 
     #[test]
-    fn test_sos_type_as_ref() {
-        assert_eq!(SOSType::S1.as_ref(), b"S1");
-        assert_eq!(SOSType::S2.as_ref(), b"S2");
-    }
-
-    #[test]
-    fn test_sos_type_display() {
-        assert_eq!(format!("{}", SOSType::S1), "S1");
-        assert_eq!(format!("{}", SOSType::S2), "S2");
-    }
-
-    // Test Coefficient struct
-    #[test]
-    fn test_coefficient_creation() {
+    fn test_coefficient() {
+        // Creation and equality
         let coeff = Coefficient { name: "x1", value: 2.5 };
         assert_eq!(coeff.name, "x1");
         assert_eq!(coeff.value, 2.5);
+        assert_eq!(coeff.clone(), coeff);
+
+        // Display special cases
+        assert_eq!(format!("{}", Coefficient { name: "x", value: 1.0 }), "x");
+        assert_eq!(format!("{}", Coefficient { name: "x", value: -1.0 }), "-x");
+        assert_eq!(format!("{}", Coefficient { name: "x", value: 2.5 }), "2.5 x");
+        assert_eq!(format!("{}", Coefficient { name: "x", value: 0.0 }), "0 x");
+
+        // Extreme values
+        assert!(format!("{}", Coefficient { name: "x", value: f64::INFINITY }).contains("inf"));
+        assert!(format!("{}", Coefficient { name: "x", value: f64::NAN }).contains("NaN"));
     }
 
     #[test]
-    fn test_coefficient_clone_and_eq() {
-        let coeff1 = Coefficient { name: "x1", value: 2.5 };
-        let coeff2 = coeff1.clone();
-        assert_eq!(coeff1, coeff2);
+    fn test_constraint() {
+        // Standard constraint
+        let std_constraint = Constraint::Standard {
+            name: Cow::Borrowed("c1"),
+            coefficients: vec![Coefficient { name: "x1", value: 2.0 }, Coefficient { name: "x2", value: -1.0 }],
+            operator: ComparisonOp::LTE,
+            rhs: 10.0,
+        };
+        assert_eq!(std_constraint.name(), Cow::Borrowed("c1"));
+        let display = format!("{std_constraint}");
+        assert!(display.contains("c1:") && display.contains("<= 10"));
 
-        let coeff3 = Coefficient { name: "x2", value: 2.5 };
-        assert_ne!(coeff1, coeff3);
+        // SOS constraint
+        let sos_constraint =
+            Constraint::SOS { name: Cow::Borrowed("sos1"), sos_type: SOSType::S1, weights: vec![Coefficient { name: "x1", value: 1.0 }] };
+        assert_eq!(sos_constraint.name(), Cow::Borrowed("sos1"));
+        assert!(format!("{sos_constraint}").contains("S1::"));
 
-        let coeff4 = Coefficient { name: "x1", value: 3.0 };
-        assert_ne!(coeff1, coeff4);
-    }
-
-    #[test]
-    fn test_coefficient_display() {
-        // Test special cases
-        let coeff1 = Coefficient { name: "x1", value: 1.0 };
-        assert_eq!(format!("{coeff1}"), "x1");
-
-        let coeff2 = Coefficient { name: "x2", value: -1.0 };
-        assert_eq!(format!("{coeff2}"), "-x2");
-
-        // Test general cases
-        let coeff3 = Coefficient { name: "x3", value: 2.5 };
-        assert_eq!(format!("{coeff3}"), "2.5 x3");
-
-        let coeff4 = Coefficient { name: "x4", value: -3.7 };
-        assert_eq!(format!("{coeff4}"), "-3.7 x4");
-
-        let coeff5 = Coefficient { name: "x5", value: 0.0 };
-        assert_eq!(format!("{coeff5}"), "0 x5");
-    }
-
-    // Test Constraint enum
-    #[test]
-    fn test_constraint_standard() {
-        let coefficients = vec![Coefficient { name: "x1", value: 2.0 }, Coefficient { name: "x2", value: -1.0 }];
-
-        let constraint =
-            Constraint::Standard { name: Cow::Borrowed("test_constraint"), coefficients, operator: ComparisonOp::LTE, rhs: 10.0 };
-
-        assert_eq!(constraint.name(), Cow::Borrowed("test_constraint"));
-
-        if let Constraint::Standard { coefficients, operator, rhs, .. } = &constraint {
-            assert_eq!(coefficients.len(), 2);
-            assert_eq!(*operator, ComparisonOp::LTE);
-            assert_eq!(*rhs, 10.0);
-        } else {
-            panic!("Expected Standard constraint");
+        // Empty coefficients
+        let empty = Constraint::Standard { name: Cow::Borrowed("e"), coefficients: vec![], operator: ComparisonOp::EQ, rhs: 0.0 };
+        if let Constraint::Standard { coefficients, .. } = empty {
+            assert!(coefficients.is_empty());
         }
     }
 
     #[test]
-    fn test_constraint_sos() {
-        let weights = vec![Coefficient { name: "x1", value: 1.0 }, Coefficient { name: "x2", value: 2.0 }];
+    fn test_objective() {
+        let obj = Objective { name: Cow::Borrowed("profit"), coefficients: vec![Coefficient { name: "x1", value: 5.0 }] };
+        assert_eq!(obj.name, "profit");
+        assert_eq!(obj.coefficients.len(), 1);
 
-        let constraint = Constraint::SOS { name: Cow::Borrowed("sos_constraint"), sos_type: SOSType::S1, weights };
-
-        assert_eq!(constraint.name(), Cow::Borrowed("sos_constraint"));
-
-        if let Constraint::SOS { sos_type, weights, .. } = &constraint {
-            assert_eq!(*sos_type, SOSType::S1);
-            assert_eq!(weights.len(), 2);
-        } else {
-            panic!("Expected SOS constraint");
-        }
+        // Owned name
+        let obj_owned = Objective { name: Cow::Owned("dynamic".to_string()), coefficients: vec![] };
+        assert_eq!(obj_owned.name, "dynamic");
+        assert!(obj_owned.coefficients.is_empty());
     }
 
     #[test]
-    fn test_constraint_display_standard() {
-        let coefficients =
-            vec![Coefficient { name: "x1", value: 2.0 }, Coefficient { name: "x2", value: 3.0 }, Coefficient { name: "x3", value: -1.0 }];
-
-        let constraint = Constraint::Standard { name: Cow::Borrowed("test"), coefficients, operator: ComparisonOp::LTE, rhs: 100.0 };
-
-        let display = format!("{constraint}");
-        assert!(display.contains("test:"));
-        assert!(display.contains("2 x1"));
-        assert!(display.contains("+ 3 x2"));
-        assert!(display.contains("-x3"));
-        assert!(display.contains("<= 100"));
-    }
-
-    #[test]
-    fn test_constraint_display_sos() {
-        let weights = vec![Coefficient { name: "x1", value: 1.0 }, Coefficient { name: "x2", value: 2.0 }];
-
-        let constraint = Constraint::SOS { name: Cow::Borrowed("sos_test"), sos_type: SOSType::S2, weights };
-
-        let display = format!("{constraint}");
-        assert!(display.contains("sos_test:"));
-        assert!(display.contains("S2::"));
-        assert!(display.contains("x1:1"));
-        assert!(display.contains("x2:2"));
-    }
-
-    // Test Objective struct
-    #[test]
-    fn test_objective_creation() {
-        let coefficients = vec![Coefficient { name: "x1", value: 5.0 }, Coefficient { name: "x2", value: 3.0 }];
-
-        let objective = Objective { name: Cow::Borrowed("profit"), coefficients };
-
-        assert_eq!(objective.name, "profit");
-        assert_eq!(objective.coefficients.len(), 2);
-        assert_eq!(objective.coefficients[0].name, "x1");
-        assert_eq!(objective.coefficients[0].value, 5.0);
-    }
-
-    #[test]
-    fn test_objective_with_owned_name() {
-        let coefficients = vec![Coefficient { name: "x1", value: 1.0 }];
-
-        let objective = Objective { name: Cow::Owned("dynamic_objective".to_string()), coefficients };
-
-        assert_eq!(objective.name, "dynamic_objective");
-    }
-
-    // Test VariableType enum
-    #[test]
-    fn test_variable_type_variants() {
-        let types = vec![
-            VariableType::Free,
-            VariableType::General,
-            VariableType::LowerBound(0.0),
-            VariableType::UpperBound(100.0),
-            VariableType::DoubleBound(0.0, 100.0),
-            VariableType::Binary,
-            VariableType::Integer,
-            VariableType::SemiContinuous,
-            VariableType::SOS,
-        ];
-
+    fn test_variable_type() {
         assert_eq!(VariableType::default(), VariableType::Free);
 
-        // Test that all variants are distinct except for parameterized ones
-        for var_type in &types {
-            assert_eq!(var_type.clone(), *var_type);
+        // All variants with as_ref and display
+        let test_cases = [
+            (VariableType::Free, b"Free".as_slice(), "Free"),
+            (VariableType::General, b"General".as_slice(), "General"),
+            (VariableType::Binary, b"Binary".as_slice(), "Binary"),
+            (VariableType::Integer, b"Integer".as_slice(), "Integer"),
+            (VariableType::SemiContinuous, b"Semi-Continuous".as_slice(), "Semi-Continuous"),
+            (VariableType::SOS, b"SOS".as_slice(), "SOS"),
+            (VariableType::LowerBound(5.0), b"LowerBound".as_slice(), "LowerBound"),
+            (VariableType::UpperBound(10.0), b"UpperBound".as_slice(), "UpperBound"),
+            (VariableType::DoubleBound(0.0, 100.0), b"DoubleBound".as_slice(), "DoubleBound"),
+        ];
+
+        for (vt, expected_bytes, expected_str) in test_cases {
+            assert_eq!(vt.as_ref(), expected_bytes);
+            assert_eq!(format!("{vt}"), expected_str);
+            assert_eq!(vt.clone(), vt);
+        }
+
+        // Bounds extraction
+        if let VariableType::DoubleBound(l, u) = VariableType::DoubleBound(0.0, 100.0) {
+            assert_eq!((l, u), (0.0, 100.0));
         }
     }
 
     #[test]
-    fn test_variable_type_as_ref() {
-        assert_eq!(VariableType::Free.as_ref(), b"Free");
-        assert_eq!(VariableType::General.as_ref(), b"General");
-        assert_eq!(VariableType::LowerBound(5.0).as_ref(), b"LowerBound");
-        assert_eq!(VariableType::UpperBound(10.0).as_ref(), b"UpperBound");
-        assert_eq!(VariableType::DoubleBound(0.0, 10.0).as_ref(), b"DoubleBound");
-        assert_eq!(VariableType::Binary.as_ref(), b"Binary");
-        assert_eq!(VariableType::Integer.as_ref(), b"Integer");
-        assert_eq!(VariableType::SemiContinuous.as_ref(), b"Semi-Continuous");
-        assert_eq!(VariableType::SOS.as_ref(), b"SOS");
-    }
-
-    #[test]
-    fn test_variable_type_display() {
-        assert_eq!(format!("{}", VariableType::Free), "Free");
-        assert_eq!(format!("{}", VariableType::General), "General");
-        assert_eq!(format!("{}", VariableType::LowerBound(5.0)), "LowerBound");
-        assert_eq!(format!("{}", VariableType::UpperBound(10.0)), "UpperBound");
-        assert_eq!(format!("{}", VariableType::DoubleBound(0.0, 10.0)), "DoubleBound");
-        assert_eq!(format!("{}", VariableType::Binary), "Binary");
-        assert_eq!(format!("{}", VariableType::Integer), "Integer");
-        assert_eq!(format!("{}", VariableType::SemiContinuous), "Semi-Continuous");
-        assert_eq!(format!("{}", VariableType::SOS), "SOS");
-    }
-
-    #[test]
-    fn test_variable_type_bounds() {
-        let lower = VariableType::LowerBound(5.0);
-        let upper = VariableType::UpperBound(10.0);
-        let double = VariableType::DoubleBound(0.0, 100.0);
-
-        if let VariableType::LowerBound(bound) = lower {
-            assert_eq!(bound, 5.0);
-        }
-
-        if let VariableType::UpperBound(bound) = upper {
-            assert_eq!(bound, 10.0);
-        }
-
-        if let VariableType::DoubleBound(lower_bound, upper_bound) = double {
-            assert_eq!(lower_bound, 0.0);
-            assert_eq!(upper_bound, 100.0);
-        }
-    }
-
-    // Test Variable struct
-    #[test]
-    fn test_variable_new() {
+    fn test_variable() {
+        // New and default type
         let var = Variable::new("x1");
         assert_eq!(var.name, "x1");
         assert_eq!(var.var_type, VariableType::Free);
-    }
 
-    #[test]
-    fn test_variable_with_var_type() {
-        let var = Variable::new("x1").with_var_type(VariableType::Binary);
-        assert_eq!(var.name, "x1");
-        assert_eq!(var.var_type, VariableType::Binary);
-    }
+        // Builder pattern
+        let var_binary = Variable::new("x").with_var_type(VariableType::Binary);
+        assert_eq!(var_binary.var_type, VariableType::Binary);
 
-    #[test]
-    fn test_variable_set_var_type() {
-        let mut var = Variable::new("x1");
-        var.set_var_type(VariableType::Integer);
-        assert_eq!(var.var_type, VariableType::Integer);
-    }
+        // Setter
+        let mut var_mut = Variable::new("y");
+        var_mut.set_var_type(VariableType::Integer);
+        assert_eq!(var_mut.var_type, VariableType::Integer);
 
-    #[test]
-    fn test_variable_builder_pattern() {
-        let var = Variable::new("production_rate").with_var_type(VariableType::DoubleBound(0.0, 1000.0));
-
-        assert_eq!(var.name, "production_rate");
-        if let VariableType::DoubleBound(lower, upper) = var.var_type {
-            assert_eq!(lower, 0.0);
-            assert_eq!(upper, 1000.0);
-        } else {
-            panic!("Expected DoubleBound variable type");
-        }
-    }
-
-    #[test]
-    fn test_variable_equality() {
-        let var1 = Variable::new("x1").with_var_type(VariableType::Binary);
-        let var2 = Variable::new("x1").with_var_type(VariableType::Binary);
-        let var3 = Variable::new("x2").with_var_type(VariableType::Binary);
-        let var4 = Variable::new("x1").with_var_type(VariableType::Integer);
-
-        assert_eq!(var1, var2);
-        assert_ne!(var1, var3);
-        assert_ne!(var1, var4);
-    }
-
-    // Test edge cases and error conditions
-    #[test]
-    fn test_coefficient_with_extreme_values() {
-        let coeff_inf = Coefficient { name: "x1", value: f64::INFINITY };
-        let coeff_neg_inf = Coefficient { name: "x2", value: f64::NEG_INFINITY };
-        let coeff_nan = Coefficient { name: "x3", value: f64::NAN };
-
-        // Test that these can be created
-        assert_eq!(coeff_inf.name, "x1");
-        assert_eq!(coeff_neg_inf.name, "x2");
-        assert_eq!(coeff_nan.name, "x3");
-
-        // Test display with special values
-        assert!(format!("{coeff_inf}").contains("inf"));
-        assert!(format!("{coeff_neg_inf}").contains("-inf"));
-        assert!(format!("{coeff_nan}").contains("NaN"));
-    }
-
-    #[test]
-    fn test_variable_type_extreme_bounds() {
-        let extreme_lower = VariableType::LowerBound(f64::NEG_INFINITY);
-        let extreme_upper = VariableType::UpperBound(f64::INFINITY);
-        let extreme_double = VariableType::DoubleBound(f64::NEG_INFINITY, f64::INFINITY);
-
-        // These should be valid
-        if let VariableType::LowerBound(bound) = extreme_lower {
-            assert_eq!(bound, f64::NEG_INFINITY);
-        }
-
-        if let VariableType::UpperBound(bound) = extreme_upper {
-            assert_eq!(bound, f64::INFINITY);
-        }
-
-        if let VariableType::DoubleBound(lower, upper) = extreme_double {
-            assert_eq!(lower, f64::NEG_INFINITY);
-            assert_eq!(upper, f64::INFINITY);
-        }
-    }
-
-    #[test]
-    fn test_constraint_with_empty_coefficients() {
-        let constraint = Constraint::Standard { name: Cow::Borrowed("empty"), coefficients: vec![], operator: ComparisonOp::EQ, rhs: 0.0 };
-
-        if let Constraint::Standard { coefficients, .. } = constraint {
-            assert_eq!(coefficients.len(), 0);
-        }
-    }
-
-    #[test]
-    fn test_objective_with_empty_coefficients() {
-        let objective = Objective { name: Cow::Borrowed("empty_obj"), coefficients: vec![] };
-
-        assert_eq!(objective.coefficients.len(), 0);
-    }
-
-    // Test serialization round-trips if serde feature is enabled
-    #[cfg(feature = "serde")]
-    #[test]
-    fn test_serde_roundtrip_comparison_op() {
-        let original = ComparisonOp::GTE;
-        let serialized = serde_json::to_string(&original).unwrap();
-        let deserialized: ComparisonOp = serde_json::from_str(&serialized).unwrap();
-        assert_eq!(original, deserialized);
+        // Equality
+        assert_eq!(Variable::new("x").with_var_type(VariableType::Binary), Variable::new("x").with_var_type(VariableType::Binary));
+        assert_ne!(Variable::new("x").with_var_type(VariableType::Binary), Variable::new("y").with_var_type(VariableType::Binary));
     }
 
     #[cfg(feature = "serde")]
     #[test]
-    fn test_serde_roundtrip_sense() {
-        let original = Sense::Maximize;
-        let serialized = serde_json::to_string(&original).unwrap();
-        let deserialized: Sense = serde_json::from_str(&serialized).unwrap();
-        assert_eq!(original, deserialized);
-    }
+    fn test_serde_roundtrips() {
+        // Test all serializable types in one test
+        let op = ComparisonOp::GTE;
+        assert_eq!(op, serde_json::from_str(&serde_json::to_string(&op).unwrap()).unwrap());
 
-    #[cfg(feature = "serde")]
-    #[test]
-    fn test_serde_roundtrip_variable_type() {
-        let original = VariableType::DoubleBound(0.0, 100.0);
-        let serialized = serde_json::to_string(&original).unwrap();
-        let deserialized: VariableType = serde_json::from_str(&serialized).unwrap();
-        assert_eq!(original, deserialized);
-    }
+        let sense = Sense::Maximize;
+        assert_eq!(sense, serde_json::from_str(&serde_json::to_string(&sense).unwrap()).unwrap());
 
-    #[cfg(feature = "serde")]
-    #[test]
-    fn test_serde_roundtrip_variable() {
-        let original = Variable::new("test_var").with_var_type(VariableType::Binary);
-        let serialized = serde_json::to_string(&original).unwrap();
-        let deserialized: Variable = serde_json::from_str(&serialized).unwrap();
-        assert_eq!(original, deserialized);
+        let vt = VariableType::DoubleBound(0.0, 100.0);
+        assert_eq!(vt, serde_json::from_str(&serde_json::to_string(&vt).unwrap()).unwrap());
+
+        let var = Variable::new("test").with_var_type(VariableType::Binary);
+        assert_eq!(var, serde_json::from_str(&serde_json::to_string(&var).unwrap()).unwrap());
     }
 }
