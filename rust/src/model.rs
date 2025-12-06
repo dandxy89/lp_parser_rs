@@ -459,6 +459,152 @@ impl<'de: 'a, 'a> serde::Deserialize<'de> for Objective<'a> {
     }
 }
 
+/// Owned coefficient with no lifetime constraints.
+///
+/// Unlike [`Coefficient`], this type owns its variable name string,
+/// making it suitable for long-lived data structures and mutation.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, PartialEq)]
+pub struct CoefficientOwned {
+    /// The name of the variable (owned).
+    pub name: String,
+    /// The coefficient value.
+    pub value: f64,
+}
+
+impl CoefficientOwned {
+    /// Create a new owned coefficient.
+    #[must_use]
+    pub fn new(name: impl Into<String>, value: f64) -> Self {
+        Self { name: name.into(), value }
+    }
+}
+
+impl<'a> From<&Coefficient<'a>> for CoefficientOwned {
+    fn from(coeff: &Coefficient<'a>) -> Self {
+        Self { name: coeff.name.to_string(), value: coeff.value }
+    }
+}
+
+impl std::fmt::Display for CoefficientOwned {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if (self.value - 1.0).abs() < f64::EPSILON {
+            write!(f, "{}", self.name)
+        } else if (self.value - (-1.0)).abs() < f64::EPSILON {
+            write!(f, "-{}", self.name)
+        } else {
+            write!(f, "{} {}", self.value, self.name)
+        }
+    }
+}
+
+/// Owned constraint with no lifetime constraints.
+///
+/// Unlike [`Constraint`], this type owns all its strings,
+/// making it suitable for long-lived data structures and mutation.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(tag = "type"))]
+#[derive(Debug, Clone, PartialEq)]
+pub enum ConstraintOwned {
+    /// A standard linear constraint with owned strings.
+    Standard { name: String, coefficients: Vec<CoefficientOwned>, operator: ComparisonOp, rhs: f64 },
+    /// An SOS constraint with owned strings.
+    SOS { name: String, sos_type: SOSType, weights: Vec<CoefficientOwned> },
+}
+
+impl ConstraintOwned {
+    /// Returns the name of the constraint.
+    #[must_use]
+    pub fn name(&self) -> &str {
+        match self {
+            Self::Standard { name, .. } | Self::SOS { name, .. } => name,
+        }
+    }
+}
+
+impl<'a> From<&Constraint<'a>> for ConstraintOwned {
+    fn from(constraint: &Constraint<'a>) -> Self {
+        match constraint {
+            Constraint::Standard { name, coefficients, operator, rhs } => Self::Standard {
+                name: name.to_string(),
+                coefficients: coefficients.iter().map(CoefficientOwned::from).collect(),
+                operator: operator.clone(),
+                rhs: *rhs,
+            },
+            Constraint::SOS { name, sos_type, weights } => Self::SOS {
+                name: name.to_string(),
+                sos_type: sos_type.clone(),
+                weights: weights.iter().map(CoefficientOwned::from).collect(),
+            },
+        }
+    }
+}
+
+/// Owned objective with no lifetime constraints.
+///
+/// Unlike [`Objective`], this type owns all its strings,
+/// making it suitable for long-lived data structures and mutation.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, PartialEq)]
+pub struct ObjectiveOwned {
+    /// The name of the objective (owned).
+    pub name: String,
+    /// The coefficients of the objective.
+    pub coefficients: Vec<CoefficientOwned>,
+}
+
+impl ObjectiveOwned {
+    /// Create a new owned objective.
+    #[must_use]
+    pub fn new(name: impl Into<String>) -> Self {
+        Self { name: name.into(), coefficients: Vec::new() }
+    }
+
+    /// Add a coefficient to the objective.
+    pub fn add_coefficient(&mut self, name: impl Into<String>, value: f64) {
+        self.coefficients.push(CoefficientOwned::new(name, value));
+    }
+}
+
+impl<'a> From<&Objective<'a>> for ObjectiveOwned {
+    fn from(objective: &Objective<'a>) -> Self {
+        Self { name: objective.name.to_string(), coefficients: objective.coefficients.iter().map(CoefficientOwned::from).collect() }
+    }
+}
+
+/// Owned variable with no lifetime constraints.
+///
+/// Unlike [`Variable`], this type owns its name string,
+/// making it suitable for long-lived data structures and mutation.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, PartialEq)]
+pub struct VariableOwned {
+    /// The name of the variable (owned).
+    pub name: String,
+    /// The type of the variable.
+    pub var_type: VariableType,
+}
+
+impl VariableOwned {
+    /// Create a new owned variable with default (Free) type.
+    #[must_use]
+    pub fn new(name: impl Into<String>) -> Self {
+        Self { name: name.into(), var_type: VariableType::default() }
+    }
+
+    /// Builder method to set the variable type.
+    #[must_use]
+    pub fn with_var_type(self, var_type: VariableType) -> Self {
+        Self { var_type, ..self }
+    }
+}
+
+impl<'a> From<&Variable<'a>> for VariableOwned {
+    fn from(variable: &Variable<'a>) -> Self {
+        Self { name: variable.name.to_string(), var_type: variable.var_type.clone() }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::borrow::Cow;

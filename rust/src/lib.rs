@@ -37,7 +37,6 @@ pub mod model;
 pub mod parser;
 pub mod perf;
 pub mod problem;
-pub mod validation;
 pub mod writer;
 
 // LALRPOP generated grammar module

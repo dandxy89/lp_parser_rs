@@ -10,6 +10,36 @@ use crate::lexer::Lexer;
 use crate::lp::LpProblemParser;
 use crate::model::{Constraint, Objective, Sense, Variable, VariableType};
 
+/// Check if a floating-point value is effectively zero using both absolute
+/// and relative epsilon comparisons.
+///
+/// This handles edge cases better than simple `value.abs() < f64::EPSILON`:
+/// - For small values near zero, uses absolute epsilon (f64::EPSILON)
+/// - For larger values, uses relative epsilon based on the reference magnitude
+///
+/// # Arguments
+/// * `value` - The value to check
+/// * `reference` - A reference magnitude for relative comparison (e.g., existing coefficient)
+#[inline]
+fn is_effectively_zero(value: f64, reference: f64) -> bool {
+    let abs_value = value.abs();
+    let abs_reference = reference.abs();
+
+    // Absolute check for values near zero
+    if abs_value < f64::EPSILON {
+        return true;
+    }
+
+    // Relative check: value is negligible compared to reference
+    if abs_reference > f64::EPSILON {
+        // Use a reasonable relative tolerance (1e-10 is typical for numerical algorithms)
+        const RELATIVE_EPSILON: f64 = 1e-10;
+        return abs_value < abs_reference * RELATIVE_EPSILON;
+    }
+
+    false
+}
+
 #[cfg_attr(feature = "diff", derive(diff::Diff), diff(attr(#[derive(Debug, PartialEq)])))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Debug, Default, PartialEq)]
@@ -180,20 +210,19 @@ impl<'a> LpProblem<'a> {
 
         // Find existing coefficient
         if let Some(coeff) = objective.coefficients.iter_mut().find(|c| c.name == variable_name) {
-            if new_coefficient.abs() < f64::EPSILON {
+            let reference_value = coeff.value;
+            if is_effectively_zero(new_coefficient, reference_value) {
                 // Remove coefficient if value is effectively zero
                 objective.coefficients.retain(|c| c.name != variable_name);
             } else {
                 coeff.value = new_coefficient;
             }
-        } else if new_coefficient.abs() >= f64::EPSILON {
+        } else if !is_effectively_zero(new_coefficient, 1.0) {
             // Add new coefficient if it doesn't exist and value is non-zero
             objective.coefficients.push(crate::model::Coefficient { name: variable_name, value: new_coefficient });
 
-            // Ensure variable exists
-            if !self.variables.contains_key(variable_name) {
-                self.variables.insert(variable_name, Variable::new(variable_name));
-            }
+            // Ensure variable exists using Entry API
+            self.variables.entry(variable_name).or_insert_with(|| Variable::new(variable_name));
         }
 
         Ok(())
@@ -224,20 +253,19 @@ impl<'a> LpProblem<'a> {
             Constraint::Standard { coefficients, .. } => {
                 // Find existing coefficient
                 if let Some(coeff) = coefficients.iter_mut().find(|c| c.name == variable_name) {
-                    if new_coefficient.abs() < f64::EPSILON {
+                    let reference_value = coeff.value;
+                    if is_effectively_zero(new_coefficient, reference_value) {
                         // Remove coefficient if value is effectively zero
                         coefficients.retain(|c| c.name != variable_name);
                     } else {
                         coeff.value = new_coefficient;
                     }
-                } else if new_coefficient.abs() >= f64::EPSILON {
+                } else if !is_effectively_zero(new_coefficient, 1.0) {
                     // Add new coefficient if it doesn't exist and value is non-zero
                     coefficients.push(crate::model::Coefficient { name: variable_name, value: new_coefficient });
 
-                    // Ensure variable exists
-                    if !self.variables.contains_key(variable_name) {
-                        self.variables.insert(variable_name, Variable::new(variable_name));
-                    }
+                    // Ensure variable exists using Entry API
+                    self.variables.entry(variable_name).or_insert_with(|| Variable::new(variable_name));
                 }
             }
             Constraint::SOS { .. } => {
@@ -587,6 +615,154 @@ impl std::fmt::Display for LpProblem<'_> {
     }
 }
 
+// ============================================================================
+// Owned LpProblem Variant
+// ============================================================================
+
+use crate::model::{ConstraintOwned, ObjectiveOwned, VariableOwned};
+
+/// Owned variant of [`LpProblem`] with no lifetime constraints.
+///
+/// This struct owns all its data, making it suitable for:
+/// - Long-lived data structures that outlive the input string
+/// - Mutation-heavy use cases where you need to modify names
+/// - Serialization/deserialization without lifetime management
+/// - Storing in collections or passing between threads
+///
+/// # Example
+///
+/// ```rust
+/// use lp_parser::problem::{LpProblem, LpProblemOwned};
+///
+/// fn process_problem(input: &str) -> LpProblemOwned {
+///     let problem = LpProblem::parse(input).unwrap();
+///     problem.to_owned() // Convert to owned, input can be dropped
+/// }
+/// ```
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, PartialEq)]
+pub struct LpProblemOwned {
+    /// The name of the problem (owned).
+    pub name: Option<String>,
+    /// The optimization sense (minimize/maximize).
+    pub sense: Sense,
+    /// The objectives, keyed by name.
+    pub objectives: HashMap<String, ObjectiveOwned>,
+    /// The constraints, keyed by name.
+    pub constraints: HashMap<String, ConstraintOwned>,
+    /// The variables, keyed by name.
+    pub variables: HashMap<String, VariableOwned>,
+}
+
+impl LpProblemOwned {
+    /// Create a new empty owned problem with default sense (Minimize).
+    #[must_use]
+    pub fn new() -> Self {
+        Self { name: None, sense: Sense::default(), objectives: HashMap::new(), constraints: HashMap::new(), variables: HashMap::new() }
+    }
+
+    /// Set the problem name.
+    #[must_use]
+    pub fn with_name(self, name: impl Into<String>) -> Self {
+        Self { name: Some(name.into()), ..self }
+    }
+
+    /// Set the optimization sense.
+    #[must_use]
+    pub fn with_sense(self, sense: Sense) -> Self {
+        Self { sense, ..self }
+    }
+
+    /// Returns the name of the problem.
+    #[must_use]
+    pub fn name(&self) -> Option<&str> {
+        self.name.as_deref()
+    }
+
+    /// Returns true if this is a minimization problem.
+    #[must_use]
+    pub const fn is_minimization(&self) -> bool {
+        self.sense.is_minimisation()
+    }
+
+    /// Returns the number of objectives.
+    #[must_use]
+    pub fn objective_count(&self) -> usize {
+        self.objectives.len()
+    }
+
+    /// Returns the number of constraints.
+    #[must_use]
+    pub fn constraint_count(&self) -> usize {
+        self.constraints.len()
+    }
+
+    /// Returns the number of variables.
+    #[must_use]
+    pub fn variable_count(&self) -> usize {
+        self.variables.len()
+    }
+
+    /// Add a variable to the problem.
+    pub fn add_variable(&mut self, variable: VariableOwned) {
+        self.variables.insert(variable.name.clone(), variable);
+    }
+
+    /// Add an objective to the problem.
+    pub fn add_objective(&mut self, objective: ObjectiveOwned) {
+        self.objectives.insert(objective.name.clone(), objective);
+    }
+
+    /// Add a constraint to the problem.
+    pub fn add_constraint(&mut self, constraint: ConstraintOwned) {
+        let name = constraint.name().to_string();
+        self.constraints.insert(name, constraint);
+    }
+}
+
+impl Default for LpProblemOwned {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<'a> From<&LpProblem<'a>> for LpProblemOwned {
+    fn from(problem: &LpProblem<'a>) -> Self {
+        Self {
+            name: problem.name.as_ref().map(|n| n.to_string()),
+            sense: problem.sense.clone(),
+            objectives: problem.objectives.iter().map(|(k, v)| (k.to_string(), ObjectiveOwned::from(v))).collect(),
+            constraints: problem.constraints.iter().map(|(k, v)| (k.to_string(), ConstraintOwned::from(v))).collect(),
+            variables: problem.variables.iter().map(|(k, v)| (k.to_string(), VariableOwned::from(v))).collect(),
+        }
+    }
+}
+
+impl std::fmt::Display for LpProblemOwned {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(problem_name) = &self.name {
+            writeln!(f, "Problem name: {problem_name}")?;
+        }
+        writeln!(f, "Sense: {}", self.sense)?;
+        writeln!(f, "Objectives: {}", self.objectives.len())?;
+        writeln!(f, "Constraints: {}", self.constraints.len())?;
+        writeln!(f, "Variables: {}", self.variables.len())?;
+
+        Ok(())
+    }
+}
+
+impl<'a> LpProblem<'a> {
+    /// Convert to an owned variant with no lifetime constraints.
+    ///
+    /// This is useful when you need to store the problem in a collection,
+    /// pass it between threads, or keep it longer than the input string.
+    #[must_use]
+    pub fn to_owned(&self) -> LpProblemOwned {
+        LpProblemOwned::from(self)
+    }
+}
+
 impl<'a> TryFrom<&'a str> for LpProblem<'a> {
     type Error = LpParseError;
 
@@ -648,11 +824,9 @@ impl<'a> TryFrom<&'a str> for LpProblem<'a> {
                 obj.name = Cow::Owned(format!("OBJ{}", obj_gen.next_id()));
             }
 
-            // Extract variables from coefficients
+            // Extract variables from coefficients using Entry API
             for coeff in &obj.coefficients {
-                if !variables.contains_key(coeff.name) {
-                    variables.insert(coeff.name, Variable::new(coeff.name));
-                }
+                variables.entry(coeff.name).or_insert_with(|| Variable::new(coeff.name));
             }
 
             objectives.insert(obj.name.clone(), obj);
@@ -669,22 +843,18 @@ impl<'a> TryFrom<&'a str> for LpProblem<'a> {
 
             let final_name = if name.is_empty() { Cow::Owned(format!("C{}", constraint_gen.next_id())) } else { name };
 
-            // Update constraint with final name and extract variables
+            // Update constraint with final name and extract variables using Entry API
             match &mut con {
                 Constraint::Standard { name, coefficients, .. } => {
                     *name = final_name.clone();
                     for coeff in coefficients.iter() {
-                        if !variables.contains_key(coeff.name) {
-                            variables.insert(coeff.name, Variable::new(coeff.name));
-                        }
+                        variables.entry(coeff.name).or_insert_with(|| Variable::new(coeff.name));
                     }
                 }
                 Constraint::SOS { name, weights, .. } => {
                     *name = final_name.clone();
                     for coeff in weights.iter() {
-                        if !variables.contains_key(coeff.name) {
-                            variables.insert(coeff.name, Variable::new(coeff.name).with_var_type(VariableType::SOS));
-                        }
+                        variables.entry(coeff.name).or_insert_with(|| Variable::new(coeff.name).with_var_type(VariableType::SOS));
                     }
                 }
             }
@@ -776,9 +946,7 @@ impl<'a> TryFrom<&'a str> for LpProblem<'a> {
             if let Constraint::SOS { name, weights, .. } = &mut sos {
                 *name = final_name.clone();
                 for coeff in weights.iter() {
-                    if !variables.contains_key(coeff.name) {
-                        variables.insert(coeff.name, Variable::new(coeff.name).with_var_type(VariableType::SOS));
-                    }
+                    variables.entry(coeff.name).or_insert_with(|| Variable::new(coeff.name).with_var_type(VariableType::SOS));
                 }
             }
 
