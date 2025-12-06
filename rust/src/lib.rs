@@ -1,7 +1,7 @@
 //! LP Parser - A Linear Programming File Parser
 //!
 //! This crate provides robust parsing capabilities for Linear Programming (LP)
-//! files using nom parser combinators. It supports multiple industry-standard
+//! files using LALRPOP parser generator. It supports multiple industry-standard
 //! LP file formats and offers comprehensive features for optimisation problems.
 //!
 //! # Features
@@ -32,17 +32,22 @@ pub mod context;
 #[cfg(feature = "csv")]
 pub mod csv;
 pub mod error;
+pub mod lexer;
 pub mod model;
 pub mod parser;
-pub mod parsers;
 pub mod perf;
 pub mod problem;
 pub mod validation;
 pub mod writer;
 
-use nom::branch::alt;
-use nom::bytes::complete::tag_no_case;
-use nom::{IResult, Parser as _};
+// LALRPOP generated grammar module
+use lalrpop_util::lalrpop_mod;
+#[allow(clippy::redundant_field_names, clippy::type_complexity, clippy::missing_const_for_fn)]
+mod lp_grammar {
+    use super::*;
+    lalrpop_mod!(pub lp);
+}
+pub use lp_grammar::lp;
 
 /// Headers that indicate the beginning of a constraint section in an LP file.
 pub const CONSTRAINT_HEADERS: [&str; 5] = ["subject to", "such that", "s.t.", "st:", "st"];
@@ -88,66 +93,3 @@ pub const SOS_HEADERS: [&str; 2] = ["sos", "end"];
 /// These characters are allowed in addition to alphanumeric
 /// characters in names and other elements of LP files.
 pub const VALID_LP_FILE_CHARS: [char; 18] = ['!', '#', '$', '%', '&', '(', ')', '_', ',', '.', ';', '?', '@', '\\', '{', '}', '~', '\''];
-
-#[inline]
-pub(crate) fn log_unparsed_content(prefix: &str, remaining: &str) {
-    if !remaining.trim().is_empty() {
-        log::debug!("{prefix}: {remaining}");
-    }
-}
-
-#[inline]
-/// Returns a closure that takes an input string and searches for the specified
-/// tag, ignoring case. The closure returns a result containing a tuple with the
-/// part of the input after the tag and the part before the tag if the tag is
-/// found. If the tag is not found, it returns an error.
-///
-/// # Arguments
-///
-/// * `tag` - A string slice that represents the tag to search for in the input.
-///
-/// # Returns
-///
-/// A closure that takes a string slice and returns an `IResult` containing a
-/// tuple of string slices or an error if the tag is not found.
-///
-/// Optimized case-insensitive string finder (delegates to perf module)
-pub(crate) fn take_until_parser<'a>(tags: &'a [&'a str]) -> impl Fn(&'a str) -> IResult<&'a str, &'a str> + 'a {
-    crate::perf::fast_take_until_parser(tags)
-}
-
-#[inline]
-/// Checks if the input string starts with a binary section header.
-pub fn is_binary_section(input: &str) -> IResult<&str, &str> {
-    alt((tag_no_case("binaries"), tag_no_case("binary"), tag_no_case("bin"))).parse(input)
-}
-
-#[inline]
-/// Checks if the input string starts with a bounds section header.
-pub fn is_bounds_section(input: &str) -> IResult<&str, &str> {
-    alt((tag_no_case("bounds"), tag_no_case("bound"))).parse(input)
-}
-
-#[inline]
-/// Checks if the input string starts with a generals section header.
-pub fn is_generals_section(input: &str) -> IResult<&str, &str> {
-    alt((tag_no_case("generals"), tag_no_case("general"), tag_no_case("gen"))).parse(input)
-}
-
-#[inline]
-/// Checks if the input string starts with a integers section header.
-pub fn is_integers_section(input: &str) -> IResult<&str, &str> {
-    alt((tag_no_case("integers"), tag_no_case("integer"))).parse(input)
-}
-
-#[inline]
-/// Checks if the input string starts with a semi-continuous section header.
-pub fn is_semi_section(input: &str) -> IResult<&str, &str> {
-    alt((tag_no_case("semis"), tag_no_case("semi"))).parse(input)
-}
-
-#[inline]
-/// Checks if the input string starts with a SOS constraints section header.
-pub fn is_sos_section(input: &str) -> IResult<&str, &str> {
-    tag_no_case("sos").parse(input)
-}

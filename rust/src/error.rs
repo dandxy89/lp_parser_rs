@@ -124,18 +124,21 @@ impl LpParseError {
     }
 }
 
-/// Convert from nom parsing errors to our custom error type.
-///
-/// Note: Position is set to 0 as we don't have access to the original input
-/// to calculate a meaningful offset from the remaining input.
-impl<'a> From<nom::Err<nom::error::Error<&'a str>>> for LpParseError {
-    fn from(err: nom::Err<nom::error::Error<&'a str>>) -> Self {
+/// Convert from LALRPOP parsing errors to our custom error type.
+impl<'input> From<lalrpop_util::ParseError<usize, crate::lexer::Token<'input>, crate::lexer::LexerError>> for LpParseError {
+    fn from(err: lalrpop_util::ParseError<usize, crate::lexer::Token<'input>, crate::lexer::LexerError>) -> Self {
         match err {
-            nom::Err::Incomplete(_) => Self::parse_error(0, "Incomplete input"),
-            nom::Err::Error(e) | nom::Err::Failure(e) => {
-                // Position is 0 since we can't determine offset without original input
-                Self::parse_error(0, format!("Parse error: {:?}", e.code))
+            lalrpop_util::ParseError::InvalidToken { location } => Self::parse_error(location, "Invalid token"),
+            lalrpop_util::ParseError::UnrecognizedEof { location, expected } => {
+                let expected_str = if expected.is_empty() { String::new() } else { format!(", expected one of: {}", expected.join(", ")) };
+                Self::parse_error(location, format!("Unexpected end of input{}", expected_str))
             }
+            lalrpop_util::ParseError::UnrecognizedToken { token: (start, tok, _), expected } => {
+                let expected_str = if expected.is_empty() { String::new() } else { format!(", expected one of: {}", expected.join(", ")) };
+                Self::parse_error(start, format!("Unexpected token {:?}{}", tok, expected_str))
+            }
+            lalrpop_util::ParseError::ExtraToken { token: (start, tok, _) } => Self::parse_error(start, format!("Extra token {:?}", tok)),
+            lalrpop_util::ParseError::User { error } => Self::parse_error(0, format!("Lexer error: {:?}", error)),
         }
     }
 }

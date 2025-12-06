@@ -2,7 +2,7 @@
 source: rust/tests/test_nom_from_file.rs
 expression: parsed
 ---
-name: " Comment line"
+name: ~
 sense: Maximize
 objectives:
   cost:
@@ -39,4 +39,4 @@ variables:
         - 12
   z:
     name: z
-    var_type: Free
+    var_type: Binary

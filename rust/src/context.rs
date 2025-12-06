@@ -314,12 +314,6 @@ impl<'a> ParseContext<'a> {
     }
 
     #[must_use]
-    /// Create a positioned error for nom parsers
-    pub fn nom_error<'b>(&self, input: &'b str) -> nom::Err<nom::error::Error<&'b str>> {
-        nom::Err::Error(nom::error::Error::new(input, nom::error::ErrorKind::Fail))
-    }
-
-    #[must_use]
     /// Get summary of the parsing context
     pub fn summary(&self) -> String {
         let mut parts = Vec::new();
@@ -337,12 +331,6 @@ impl<'a> ParseContext<'a> {
 
         parts.join(", ")
     }
-}
-
-/// Extension trait for nom parsers to work with `ParseContext`
-pub trait ContextualParser<'a, O> {
-    /// Parse with context tracking
-    fn parse_with_context(&mut self, context: &mut ParseContext<'a>) -> LpResult<O>;
 }
 
 #[cfg(test)]

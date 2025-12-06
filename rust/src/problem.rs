@@ -2,27 +2,13 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 
-use nom::Parser as _;
-use nom::combinator::opt;
+use unique_id::Generator;
+use unique_id::sequence::SequenceGenerator;
 
 use crate::error::{LpParseError, LpResult};
+use crate::lexer::Lexer;
+use crate::lp::LpProblemParser;
 use crate::model::{Constraint, Objective, Sense, Variable, VariableType};
-use crate::parsers::constraint::{parse_constraint_header, parse_constraints};
-use crate::parsers::objective::parse_objectives;
-use crate::parsers::problem_name::parse_problem_name;
-use crate::parsers::sense::parse_sense;
-use crate::parsers::sos_constraint::parse_sos_section;
-use crate::parsers::variable::{
-    parse_binary_section, parse_bounds_section, parse_generals_section, parse_integer_section, parse_semi_section,
-};
-use crate::{
-    ALL_BOUND_HEADERS, BINARY_HEADERS, CONSTRAINT_HEADERS, END_HEADER, GENERAL_HEADERS, SEMI_HEADERS, SOS_HEADERS, is_binary_section,
-    is_bounds_section, is_generals_section, is_integers_section, is_semi_section, is_sos_section, take_until_parser,
-};
-
-// Type aliases to reduce complexity
-type ObjectivesParseResult<'a> = (HashMap<Cow<'a, str>, Objective<'a>>, HashMap<&'a str, Variable<'a>>);
-type ConstraintsParseResult<'a> = (&'a str, HashMap<Cow<'a, str>, Constraint<'a>>, HashMap<&'a str, Variable<'a>>);
 
 #[cfg_attr(feature = "diff", derive(diff::Diff), diff(attr(#[derive(Debug, PartialEq)])))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
@@ -601,183 +587,205 @@ impl std::fmt::Display for LpProblem<'_> {
     }
 }
 
-impl<'a> LpProblem<'a> {
-    /// Parse the header section (name and sense)
-    fn parse_header_section(input: &'a str) -> LpResult<(&'a str, &'a str, Option<Cow<'a, str>>, Sense)> {
-        let (remaining_input, (name, sense, obj_section, ())) =
-            (parse_problem_name, parse_sense, take_until_parser(&CONSTRAINT_HEADERS), parse_constraint_header)
-                .parse(input)
-                .map_err(|err| LpParseError::parse_error(0, format!("Failed to parse header section: {err:?}")))?;
-
-        Ok((remaining_input, obj_section, name, sense))
-    }
-
-    /// Parse the objectives section
-    fn parse_objectives_section(input: &'a str) -> LpResult<ObjectivesParseResult<'a>> {
-        let (_, (objectives, variables)) =
-            parse_objectives(input).map_err(|err| LpParseError::objective_syntax(0, format!("Failed to parse objectives: {err:?}")))?;
-
-        Ok((objectives, variables))
-    }
-
-    /// Parse the constraints section
-    fn parse_constraints_section(input: &'a str) -> LpResult<ConstraintsParseResult<'a>> {
-        let (input, constraint_str) = take_until_parser(&ALL_BOUND_HEADERS)(input)
-            .map_err(|err| LpParseError::constraint_syntax(0, format!("Failed to find constraints section: {err:?}")))?;
-
-        let (_, (constraints, constraint_vars)) = parse_constraints(constraint_str)
-            .map_err(|err| LpParseError::constraint_syntax(0, format!("Failed to parse constraints: {err:?}")))?;
-
-        Ok((input, constraints, constraint_vars))
-    }
-
-    /// Parse variable bounds section
-    fn parse_bounds_section(input: &'a str, variables: &mut HashMap<&'a str, Variable<'a>>) -> LpResult<&'a str> {
-        if is_bounds_section(input).is_ok() {
-            const INTEGER_HEADERS: [&str; 3] = ["integers", "integer", "end"];
-            let (rem_input, bound_str) = take_until_parser(&INTEGER_HEADERS)(input)
-                .map_err(|err| LpParseError::parse_error(0, format!("Failed to parse bounds section: {err:?}")))?;
-
-            let (_, bounds) = parse_bounds_section(bound_str)
-                .map_err(|err| LpParseError::invalid_bounds("unknown", format!("Failed to parse bounds: {err:?}")))?;
-
-            for (name, var_type) in bounds {
-                match variables.entry(name) {
-                    Entry::Occupied(mut occupied_entry) => {
-                        occupied_entry.get_mut().set_var_type(var_type);
-                    }
-                    Entry::Vacant(vacant_entry) => {
-                        vacant_entry.insert(Variable { name, var_type });
-                    }
-                }
-            }
-
-            Ok(rem_input)
-        } else {
-            Ok(input)
-        }
-    }
-
-    /// Parse variable type sections (integers, generals, binaries, semi-continuous)
-    fn parse_variable_type_sections(mut input: &'a str, variables: &mut HashMap<&'a str, Variable<'a>>) -> &'a str {
-        // Integer
-        if is_integers_section(input).is_ok() {
-            if let Ok((rem_input, Some(integer_str))) = opt(take_until_parser(&GENERAL_HEADERS)).parse(input) {
-                if let Ok((_, integer_vars)) = parse_integer_section(integer_str) {
-                    set_var_types(variables, integer_vars, &VariableType::Integer);
-                }
-                input = rem_input;
-            }
-        }
-
-        // General
-        if is_generals_section(input).is_ok() {
-            if let Ok((rem_input, Some(generals_str))) = opt(take_until_parser(&BINARY_HEADERS)).parse(input) {
-                if let Ok((_, general_vars)) = parse_generals_section(generals_str) {
-                    set_var_types(variables, general_vars, &VariableType::General);
-                }
-                input = rem_input;
-            }
-        }
-
-        // Binary
-        if is_binary_section(input).is_ok() {
-            if let Ok((rem_input, Some(binary_str))) = opt(take_until_parser(&SEMI_HEADERS)).parse(input) {
-                if let Ok((_, binary_vars)) = parse_binary_section(binary_str) {
-                    set_var_types(variables, binary_vars, &VariableType::Binary);
-                }
-                input = rem_input;
-            }
-        }
-
-        // Semi-continuous
-        if is_semi_section(input).is_ok() {
-            if let Ok((rem_input, Some(semi_str))) = opt(take_until_parser(&SOS_HEADERS)).parse(input) {
-                if let Ok((_, semi_vars)) = parse_semi_section(semi_str) {
-                    set_var_types(variables, semi_vars, &VariableType::SemiContinuous);
-                }
-                input = rem_input;
-            }
-        }
-
-        input
-    }
-
-    /// Parse SOS constraints section
-    fn parse_sos_section(
-        input: &'a str,
-        constraints: &mut HashMap<Cow<'a, str>, Constraint<'a>>,
-        variables: &mut HashMap<&'a str, Variable<'a>>,
-    ) -> &'a str {
-        if is_sos_section(input).is_ok() {
-            if let Ok((rem_input, Some(sos_str))) = opt(take_until_parser(&END_HEADER)).parse(input) {
-                if let Ok((_, Some((sos_constraints, constraint_vars)))) = opt(parse_sos_section).parse(sos_str) {
-                    variables.extend(constraint_vars);
-                    for (name, constraint) in sos_constraints {
-                        constraints.insert(name, constraint);
-                    }
-                }
-                rem_input
-            } else {
-                input
-            }
-        } else {
-            input
-        }
-    }
-
-    /// Validate remaining unparsed input
-    fn validate_remaining_input(input: &str) {
-        if input.len() > 3 {
-            log::warn!("Unused input not parsed by `LpProblem`: {input}");
-        }
-    }
-}
-
-#[inline]
-fn set_var_types<'a>(variables: &mut HashMap<&'a str, Variable<'a>>, vars: Vec<&'a str>, var_type: &VariableType) {
-    for name in vars {
-        match variables.entry(name) {
-            Entry::Occupied(mut occupied_entry) => {
-                occupied_entry.get_mut().set_var_type(var_type.clone());
-            }
-            Entry::Vacant(vacant_entry) => {
-                vacant_entry.insert(Variable { name, var_type: var_type.clone() });
-            }
-        }
-    }
-}
-
 impl<'a> TryFrom<&'a str> for LpProblem<'a> {
     type Error = LpParseError;
 
     #[inline]
     fn try_from(input: &'a str) -> Result<Self, Self::Error> {
-        log::debug!("Starting to parse LP problem");
+        log::debug!("Starting to parse LP problem with LALRPOP parser");
 
-        // Parse header section (name and sense)
-        let (input, obj_section, name, sense) = Self::parse_header_section(input)?;
+        // Extract problem name from comments before parsing
+        // Supports multiple formats:
+        // 1. "\Problem name: my_problem" or "\\Problem name: my_problem"
+        // 2. "\* my_problem *\" (CPLEX block comment style)
+        let problem_name: Option<Cow<'a, str>> = input.lines().find_map(|line| {
+            let trimmed = line.trim();
 
-        // Parse objectives section
-        let (objectives, mut variables) = Self::parse_objectives_section(obj_section)?;
+            // Handle block comment format: \* name *\
+            if trimmed.starts_with("\\*") && trimmed.ends_with("*\\") {
+                let inner = trimmed.strip_prefix("\\*").unwrap().strip_suffix("*\\").unwrap();
+                let name = inner.trim();
+                if !name.is_empty() {
+                    return Some(Cow::Borrowed(name));
+                }
+            }
 
-        // Parse constraints section
-        let (mut input, mut constraints, constraint_vars) = Self::parse_constraints_section(input)?;
-        variables.extend(constraint_vars);
+            // Handle single/double backslash prefix
+            let content = if trimmed.starts_with("\\\\") {
+                trimmed.strip_prefix("\\\\")
+            } else if trimmed.starts_with('\\') {
+                trimmed.strip_prefix('\\')
+            } else {
+                None
+            };
 
-        // Parse bounds section
-        input = Self::parse_bounds_section(input, &mut variables)?;
+            content.and_then(|c| {
+                let c = c.trim();
+                // Case-insensitive "Problem name:" match
+                if c.to_lowercase().starts_with("problem name:") { Some(Cow::Borrowed(c["problem name:".len()..].trim())) } else { None }
+            })
+        });
 
-        // Parse variable type sections
-        input = Self::parse_variable_type_sections(input, &mut variables);
+        // Create lexer and parser
+        let lexer = Lexer::new(input);
+        let parser = LpProblemParser::new();
 
-        // Parse SOS constraints section
-        input = Self::parse_sos_section(input, &mut constraints, &mut variables);
+        // Parse the LP problem
+        let (sense, objectives_vec, constraints_vec, bounds, generals, integers, binaries, semis, sos_constraints) =
+            parser.parse(lexer).map_err(LpParseError::from)?;
 
-        // Validate remaining input
-        Self::validate_remaining_input(input);
+        // ID generators for unnamed objectives and constraints
+        let obj_gen = SequenceGenerator;
+        let constraint_gen = SequenceGenerator;
 
-        Ok(LpProblem { name, sense, objectives, constraints, variables })
+        // Build objectives HashMap and collect variables
+        let mut variables: HashMap<&'a str, Variable<'a>> = HashMap::new();
+        let mut objectives: HashMap<Cow<'a, str>, Objective<'a>> = HashMap::new();
+
+        for mut obj in objectives_vec {
+            // Generate name if empty
+            if obj.name.is_empty() {
+                obj.name = Cow::Owned(format!("OBJ{}", obj_gen.next_id()));
+            }
+
+            // Extract variables from coefficients
+            for coeff in &obj.coefficients {
+                if !variables.contains_key(coeff.name) {
+                    variables.insert(coeff.name, Variable::new(coeff.name));
+                }
+            }
+
+            objectives.insert(obj.name.clone(), obj);
+        }
+
+        // Build constraints HashMap and collect variables
+        let mut constraints: HashMap<Cow<'a, str>, Constraint<'a>> = HashMap::new();
+
+        for mut con in constraints_vec {
+            // Generate name if empty
+            let name = match &con {
+                Constraint::Standard { name, .. } | Constraint::SOS { name, .. } => name.clone(),
+            };
+
+            let final_name = if name.is_empty() { Cow::Owned(format!("C{}", constraint_gen.next_id())) } else { name };
+
+            // Update constraint with final name and extract variables
+            match &mut con {
+                Constraint::Standard { name, coefficients, .. } => {
+                    *name = final_name.clone();
+                    for coeff in coefficients.iter() {
+                        if !variables.contains_key(coeff.name) {
+                            variables.insert(coeff.name, Variable::new(coeff.name));
+                        }
+                    }
+                }
+                Constraint::SOS { name, weights, .. } => {
+                    *name = final_name.clone();
+                    for coeff in weights.iter() {
+                        if !variables.contains_key(coeff.name) {
+                            variables.insert(coeff.name, Variable::new(coeff.name).with_var_type(VariableType::SOS));
+                        }
+                    }
+                }
+            }
+
+            constraints.insert(final_name, con);
+        }
+
+        // Process bounds
+        for (var_name, var_type) in bounds {
+            match variables.entry(var_name) {
+                Entry::Occupied(mut entry) => {
+                    entry.get_mut().set_var_type(var_type);
+                }
+                Entry::Vacant(entry) => {
+                    entry.insert(Variable::new(var_name).with_var_type(var_type));
+                }
+            }
+        }
+
+        // Process generals - only set type if variable doesn't already have explicit bounds
+        for var_name in generals {
+            match variables.entry(var_name) {
+                Entry::Occupied(mut entry) => {
+                    // Preserve existing bounds (DoubleBound, LowerBound, UpperBound)
+                    if matches!(entry.get().var_type, VariableType::Free) {
+                        entry.get_mut().set_var_type(VariableType::General);
+                    }
+                }
+                Entry::Vacant(entry) => {
+                    entry.insert(Variable::new(var_name).with_var_type(VariableType::General));
+                }
+            }
+        }
+
+        // Process integers - only set type if variable doesn't already have explicit bounds
+        for var_name in integers {
+            match variables.entry(var_name) {
+                Entry::Occupied(mut entry) => {
+                    // Preserve existing bounds (DoubleBound, LowerBound, UpperBound)
+                    if matches!(entry.get().var_type, VariableType::Free) {
+                        entry.get_mut().set_var_type(VariableType::Integer);
+                    }
+                }
+                Entry::Vacant(entry) => {
+                    entry.insert(Variable::new(var_name).with_var_type(VariableType::Integer));
+                }
+            }
+        }
+
+        // Process binaries - only set type if variable doesn't already have explicit bounds
+        for var_name in binaries {
+            match variables.entry(var_name) {
+                Entry::Occupied(mut entry) => {
+                    // Preserve existing bounds (DoubleBound, LowerBound, UpperBound)
+                    if matches!(entry.get().var_type, VariableType::Free) {
+                        entry.get_mut().set_var_type(VariableType::Binary);
+                    }
+                }
+                Entry::Vacant(entry) => {
+                    entry.insert(Variable::new(var_name).with_var_type(VariableType::Binary));
+                }
+            }
+        }
+
+        // Process semi-continuous - only set type if variable doesn't already have explicit bounds
+        for var_name in semis {
+            match variables.entry(var_name) {
+                Entry::Occupied(mut entry) => {
+                    // Preserve existing bounds (DoubleBound, LowerBound, UpperBound)
+                    if matches!(entry.get().var_type, VariableType::Free) {
+                        entry.get_mut().set_var_type(VariableType::SemiContinuous);
+                    }
+                }
+                Entry::Vacant(entry) => {
+                    entry.insert(Variable::new(var_name).with_var_type(VariableType::SemiContinuous));
+                }
+            }
+        }
+
+        // Process SOS constraints
+        for mut sos in sos_constraints {
+            let name = match &sos {
+                Constraint::SOS { name, .. } => name.clone(),
+                _ => continue,
+            };
+
+            let final_name = if name.is_empty() { Cow::Owned(format!("SOS{}", constraint_gen.next_id())) } else { name };
+
+            if let Constraint::SOS { name, weights, .. } = &mut sos {
+                *name = final_name.clone();
+                for coeff in weights.iter() {
+                    if !variables.contains_key(coeff.name) {
+                        variables.insert(coeff.name, Variable::new(coeff.name).with_var_type(VariableType::SOS));
+                    }
+                }
+            }
+
+            constraints.insert(final_name, sos);
+        }
+
+        Ok(LpProblem { name: problem_name, sense, objectives, constraints, variables })
     }
 }
 
@@ -1423,9 +1431,12 @@ end"#;
 
     #[test]
     fn test_parse_empty_constraints() {
-        let input = "minimize\nx1\nsubject to\nend"; // Empty constraints section
+        // Empty constraints sections are valid in LP format
+        let input = "minimize\nx1\nsubject to\nend";
         let result = LpProblem::parse(input);
-        assert!(result.is_err());
+        assert!(result.is_ok(), "Empty constraints section should be valid in LP format");
+        let problem = result.unwrap();
+        assert_eq!(problem.constraint_count(), 0);
     }
 
     #[test]
@@ -1591,19 +1602,24 @@ mod edge_case_tests {
 
     #[test]
     fn test_malformed_input_incomplete_sections() {
+        // These inputs are genuinely malformed and should fail
         let malformed_inputs = vec![
-            "minimize",                                      // No objective
-            "maximize\nx1",                                  // No constraints section
-            "minimize\nx1\nsubject to",                      // Empty constraints
+            "minimize",                                      // No objective expression
+            "maximize\nx1",                                  // No constraints section (required by grammar)
             "minimize\nx1\nsubject",                         // Incomplete constraints header
-            "minimize\nx1\nsubject to\nx1 <=",               // Incomplete constraint
-            "minimize\nx1\nsubject to\nx1 <= 1\nbounds\nx1", // Incomplete bounds
+            "minimize\nx1\nsubject to\nx1 <=",               // Incomplete constraint (no RHS)
+            "minimize\nx1\nsubject to\nx1 <= 1\nbounds\nx1", // Incomplete bounds (no type/bound)
         ];
 
         for input in malformed_inputs {
             let result = LpProblem::parse(input);
             assert!(result.is_err(), "Should fail for malformed input: {input}");
         }
+
+        // This is valid LP - empty constraints section is allowed
+        let valid_input = "minimize\nx1\nsubject to";
+        let result = LpProblem::parse(valid_input);
+        assert!(result.is_ok(), "Empty constraints section should be valid");
     }
 
     #[test]

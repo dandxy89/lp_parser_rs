@@ -2,7 +2,7 @@
 source: rust/tests/test_nom_from_file.rs
 expression: parsed
 ---
-name: " Test case for scientific notation in coefficients"
+name: ~
 sense: Minimize
 objectives:
   obj:

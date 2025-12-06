@@ -2,7 +2,7 @@
 source: rust/tests/test_nom_from_file.rs
 expression: parsed
 ---
-name: " Beer_Distribution_Problem "
+name: Beer_Distribution_Problem
 sense: Minimize
 objectives:
   Sum_of_Transporting_Costs:

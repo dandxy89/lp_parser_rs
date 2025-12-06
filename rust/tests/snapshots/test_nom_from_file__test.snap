@@ -2,7 +2,7 @@
 source: rust/tests/test_nom_from_file.rs
 expression: parsed
 ---
-name: " classroomAssignmentSP "
+name: classroomAssignmentSP
 sense: Maximize
 objectives:
   obj:
@@ -39,6 +39,14 @@ constraints:
         value: -3.0000000002
     operator: EQ
     rhs: 1
+  c3:
+    type: Standard
+    name: c3
+    coefficients:
+      - name: x2
+        value: 1
+    operator: GT
+    rhs: 1
 variables:
   qwer:
     name: qwer
@@ -49,6 +57,15 @@ variables:
   sdfdf5343:
     name: sdfdf5343
     var_type: Free
+  sdfdfdf:
+    name: sdfdfdf
+    var_type: General
+  that:
+    name: that
+    var_type: Binary
+  this:
+    name: this
+    var_type: Binary
   x1:
     name: x1
     var_type: Free
@@ -68,3 +85,9 @@ variables:
   x3:
     name: x3
     var_type: Free
+  x4:
+    name: x4
+    var_type: General
+  x6:
+    name: x6
+    var_type: General

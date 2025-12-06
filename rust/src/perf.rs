@@ -1,8 +1,6 @@
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
-use nom::error::{Error, ErrorKind};
-use nom::{Err, IResult};
 use smallvec::SmallVec;
 
 static PATTERN_CACHE: OnceLock<std::sync::RwLock<HashMap<String, CachedPattern>>> = OnceLock::new();
@@ -196,28 +194,6 @@ pub fn fast_find_case_insensitive(haystack: &str, needle: &str) -> Option<usize>
         }
     }
     None
-}
-
-/// Optimized version of `take_until_cased` using fast string search
-pub fn fast_take_until_cased<'a>(tag: &'a str) -> impl Fn(&'a str) -> IResult<&'a str, &'a str> + 'a {
-    move |input: &str| {
-        fast_find_case_insensitive(input, tag)
-            .map_or_else(|| Err(Err::Error(Error::new(input, ErrorKind::TakeUntil))), |pos| Ok((&input[pos..], &input[..pos])))
-    }
-}
-
-/// Optimized version of `take_until_parser` using fast string search
-pub fn fast_take_until_parser<'a>(tags: &'a [&'a str]) -> impl Fn(&'a str) -> IResult<&'a str, &'a str> + 'a {
-    // Create finder once outside the closure to avoid recreation on every call
-    let finder = FastStringFinder::new(tags);
-
-    move |input| {
-        if let Some((pos, _matched_tag)) = finder.find_first(input) {
-            Ok((&input[pos..], &input[..pos]))
-        } else {
-            Err(Err::Error(Error::new(input, ErrorKind::Alt)))
-        }
-    }
 }
 
 /// Memory pool for reusing allocations

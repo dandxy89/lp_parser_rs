@@ -2,7 +2,7 @@
 source: rust/tests/test_nom_from_file.rs
 expression: parsed
 ---
-name: " Created by MOSEK version 8.0.0.94"
+name: ~
 sense: Minimize
 objectives:
   system_cost:

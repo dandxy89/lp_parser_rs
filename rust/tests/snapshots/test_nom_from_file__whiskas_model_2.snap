@@ -2,7 +2,7 @@
 source: rust/tests/test_nom_from_file.rs
 expression: parsed
 ---
-name: " The_Whiskas_Problem "
+name: The_Whiskas_Problem
 sense: Minimize
 objectives:
   Total_Cost_of_Ingredients_per_can:

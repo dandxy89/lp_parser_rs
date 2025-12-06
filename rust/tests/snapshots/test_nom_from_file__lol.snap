@@ -2,7 +2,7 @@
 source: rust/tests/test_nom_from_file.rs
 expression: parsed
 ---
-name: " File: lo1.lp"
+name: ~
 sense: Maximize
 objectives:
   obj:

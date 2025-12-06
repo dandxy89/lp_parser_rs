@@ -40,9 +40,6 @@ constraints:
     operator: GTE
     rhs: 3
 variables:
-  "\\":
-    name: "\\"
-    var_type: Binary
   x1:
     name: x1
     var_type: Binary

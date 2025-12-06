@@ -2,7 +2,7 @@
 source: rust/src/problem.rs
 expression: "&problem"
 ---
-name: "Problem name: diet"
+name: diet
 sense: Minimize
 objectives:
   obj1:

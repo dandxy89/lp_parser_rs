@@ -2,7 +2,7 @@
 source: rust/tests/test_nom_from_file.rs
 expression: parsed
 ---
-name: " Comment line"
+name: ~
 sense: Minimize
 objectives:
   obj1:

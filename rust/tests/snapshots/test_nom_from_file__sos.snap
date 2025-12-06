@@ -49,6 +49,28 @@ constraints:
         value: 1
     operator: LTE
     rhs: 1
+  csos1:
+    type: SOS
+    name: csos1
+    sos_type: S1
+    weights:
+      - name: V1
+        value: 1
+      - name: V3
+        value: 2
+      - name: V5
+        value: 3
+  csos2:
+    type: SOS
+    name: csos2
+    sos_type: S2
+    weights:
+      - name: V2
+        value: 2
+      - name: V4
+        value: 1
+      - name: V5
+        value: 2.5
 variables:
   V1:
     name: V1

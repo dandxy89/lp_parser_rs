@@ -2,7 +2,7 @@
 source: rust/tests/test_nom_from_file.rs
 expression: parsed
 ---
-name: " copynumber "
+name: copynumber
 sense: Minimize
 objectives:
   OBJ:

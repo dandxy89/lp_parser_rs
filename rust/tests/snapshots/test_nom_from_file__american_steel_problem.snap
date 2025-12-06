@@ -2,7 +2,7 @@
 source: rust/tests/test_nom_from_file.rs
 expression: parsed
 ---
-name: " American_Steel_Problem "
+name: American_Steel_Problem
 sense: Minimize
 objectives:
   Total_Cost_of_Transport:

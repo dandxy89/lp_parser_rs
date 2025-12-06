@@ -2,7 +2,7 @@
 source: rust/tests/test_nom_from_file.rs
 expression: parsed
 ---
-name: "Problem name: diet"
+name: diet
 sense: Minimize
 objectives:
   obj:
@@ -129,6 +129,74 @@ constraints:
         value: -1
     operator: EQ
     rhs: 50000
+  c5:
+    type: Standard
+    name: c5
+    coefficients:
+      - name: Spaghetti_W__Sauce
+        value: 11.6
+      - name: "Tomato,Red,Ripe,Raw"
+        value: 1.4
+      - name: "Apple,Raw,W_Skin"
+        value: 3.7
+      - name: Grapes
+        value: 0.2
+      - name: Raisin_Brn
+        value: 4
+      - name: Rgc5
+        value: -1
+    operator: EQ
+    rhs: 100
+  c6:
+    type: Standard
+    name: c6
+    coefficients:
+      - name: Spaghetti_W__Sauce
+        value: 58.3
+      - name: "Tomato,Red,Ripe,Raw"
+        value: 5.7
+      - name: "Apple,Raw,W_Skin"
+        value: 21
+      - name: Grapes
+        value: 4.1
+      - name: Chocolate_Chip_Cookies
+        value: 9.3
+      - name: Lowfat_Milk
+        value: 11.7
+      - name: Raisin_Brn
+        value: 27.9
+      - name: Hotdog
+        value: 18
+      - name: Rgc6
+        value: -1
+    operator: EQ
+    rhs: 300
+  c7:
+    type: Standard
+    name: c7
+    coefficients:
+      - name: Roasted_Chicken
+        value: 42.2
+      - name: Spaghetti_W__Sauce
+        value: 8.2
+      - name: "Tomato,Red,Ripe,Raw"
+        value: 1
+      - name: "Apple,Raw,W_Skin"
+        value: 0.3
+      - name: Grapes
+        value: 0.2
+      - name: Chocolate_Chip_Cookies
+        value: 0.9
+      - name: Lowfat_Milk
+        value: 8.1
+      - name: Raisin_Brn
+        value: 4
+      - name: Hotdog
+        value: 10.4
+      - name: Rgc7
+        value: -1
+    operator: EQ
+    rhs: 100
 variables:
   "Apple,Raw,W_Skin":
     name: "Apple,Raw,W_Skin"
