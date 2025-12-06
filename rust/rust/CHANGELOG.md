@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.0.0](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v2.5.2...lp_parser_rs-v3.0.0) (2025-12-06)
+
+
+### Miscellaneous Chores
+
+* release 3.0.0 ([91c5c59](https://github.com/dandxy89/lp_parser_rs/commit/91c5c592ed015cecbf573b900ddd3db2980c1aab))
+
+
+### Code Refactoring
+
+* Use https://github.com/lalrpop/lalrpop ([#144](https://github.com/dandxy89/lp_parser_rs/issues/144)) ([35a001d](https://github.com/dandxy89/lp_parser_rs/commit/35a001dc019013b93ca7df7839f698190278cb2e))
+
 ## [2.5.2](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v2.5.1...lp_parser_rs-v2.5.2) (2025-11-27)
 
 
