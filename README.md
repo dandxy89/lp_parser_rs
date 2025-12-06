@@ -8,7 +8,7 @@
 
 ## Overview
 
-A robust Rust library for parsing, modifying, and writing Linear Programming (LP) files. Built on the [NOM](https://docs.rs/nom/latest/nom/) parsing framework, this crate provides comprehensive support for the LP file format with the ability to parse, programmatically modify, and regenerate LP files according to major industry specifications.
+A robust Rust library for parsing, modifying, and writing Linear Programming (LP) files. Built on the [LALRPOP](https://github.com/lalrpop/lalrpop) parser generator, this crate provides comprehensive support for the LP file format with the ability to parse, programmatically modify, and regenerate LP files according to major industry specifications.
 
 ### Supported Specifications
 
@@ -54,7 +54,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-lp_parser_rs = "2.4.1"
+lp_parser_rs = "2.5.2" # x-release-please-version
 ```
 
 ### Basic Usage
@@ -127,7 +127,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```toml
 [dependencies]
-lp_parser_rs = { version = "2.4.1", features = ["serde", "diff"] }
+lp_parser_rs = { version = "2.5.2", features = ["serde", "diff"] } # x-release-please-version
 ```
 
 ## API Reference
@@ -155,7 +155,7 @@ The `LpProblem` struct provides comprehensive methods for modifying LP problems:
 ### Writing LP Files
 
 ```rust
-use lp_parser::writer::{write_lp_string, write_lp_string_with_options, LpWriterOptions};
+use lp_parser_rs::writer::{write_lp_string, write_lp_string_with_options, LpWriterOptions};
 
 // Write with default options
 let lp_content = write_lp_string(&problem)?;

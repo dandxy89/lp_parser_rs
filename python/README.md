@@ -91,7 +91,7 @@ for constraint in parser.constraints:
     print(f"Constraint {constraint['name']}:")
     print(f"  Type: {constraint['type']}")
     if constraint['type'] == 'standard':
-        print(f"  Sense: {constraint['sense']}")
+        print(f"  Operator: {constraint['operator']}")
         print(f"  RHS: {constraint['rhs']}")
         print(f"  Coefficients: {len(constraint['coefficients'])}")
 ```
@@ -218,8 +218,11 @@ print(f"Removed constraints: {diff['removed_constraints']}")
     {
         "name": "sos_constraint",
         "type": "sos",
-        "sos_type": "SOS1",  # or "SOS2"
-        "variables": ["var1", "var2", "var3"]
+        "sos_type": "S1",  # or "S2"
+        "weights": [
+            {"name": "var1", "value": 1.0},
+            {"name": "var2", "value": 2.0}
+        ]
     }
 ]
 ```
