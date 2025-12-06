@@ -2,7 +2,7 @@
 source: rust/tests/test_nom_from_file.rs
 expression: parsed
 ---
-name: "Problem name: kb2.mps"
+name: kb2.mps
 sense: Minimize
 objectives:
   FAT7..J.:

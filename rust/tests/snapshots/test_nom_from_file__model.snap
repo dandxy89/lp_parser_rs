@@ -2,7 +2,7 @@
 source: rust/tests/test_nom_from_file.rs
 expression: parsed
 ---
-name: "Problem name: ilog.cplex"
+name: ilog.cplex
 sense: Minimize
 objectives:
   obj:

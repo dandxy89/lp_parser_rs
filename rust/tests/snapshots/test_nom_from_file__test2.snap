@@ -2,7 +2,7 @@
 source: rust/tests/test_nom_from_file.rs
 expression: parsed
 ---
-name: " classroomAssignmentSP "
+name: classroomAssignmentSP
 sense: Maximize
 objectives:
   OBJ:

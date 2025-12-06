@@ -1,0 +1,399 @@
+use std::borrow::Cow;
+
+use crate::lexer::{Token, LexerError, SosEntryKind, ConstraintCont, OptionalSection};
+use crate::model::{
+    Coefficient, ComparisonOp, Constraint, Objective,
+    Sense, SOSType, VariableType,
+};
+
+grammar<'input>;
+
+extern {
+    type Location = usize;
+    type Error = LexerError;
+
+    enum Token<'input> {
+        // Keywords
+        "sense" => Token::SenseKw(<Sense>),
+        "subject to" => Token::SubjectTo,
+        "bounds" => Token::Bounds,
+        "generals" => Token::Generals,
+        "integers" => Token::Integers,
+        "binaries" => Token::Binaries,
+        "semi-continuous" => Token::SemiContinuous,
+        "sos" => Token::Sos,
+        "end" => Token::End,
+        "free" => Token::Free,
+        "sos_type" => Token::SosType(<SOSType>),
+
+        // Values
+        "infinity" => Token::Infinity(<f64>),
+        "number" => Token::Number(<f64>),
+        "identifier" => Token::Identifier(<&'input str>),
+
+        // Operators
+        "<=" => Token::Lte,
+        ">=" => Token::Gte,
+        "<" => Token::Lt,
+        ">" => Token::Gt,
+        "=" => Token::Eq,
+        "+" => Token::Plus,
+        "-" => Token::Minus,
+        ":" => Token::Colon,
+        "::" => Token::DoubleColon,
+    }
+}
+
+// ============================================================================
+// Top-level: LpProblem
+// ============================================================================
+
+pub LpProblem: (Sense, Vec<Objective<'input>>, Vec<Constraint<'input>>, Vec<(&'input str, VariableType)>, Vec<&'input str>, Vec<&'input str>, Vec<&'input str>, Vec<&'input str>, Vec<Constraint<'input>>) = {
+    <sense:"sense">
+    <objectives:ObjectivesSection>
+    <constraints:ConstraintsSection>
+    <sections:AnySection*>
+    "end"?
+    => {
+        // Extract each section type from the flexible order list
+        let mut bounds: Vec<(&'input str, VariableType)> = Vec::new();
+        let mut generals: Vec<&'input str> = Vec::new();
+        let mut integers: Vec<&'input str> = Vec::new();
+        let mut binaries: Vec<&'input str> = Vec::new();
+        let mut semis: Vec<&'input str> = Vec::new();
+        let mut sos: Vec<Constraint<'input>> = Vec::new();
+
+        for section in sections {
+            match section {
+                OptionalSection::Bounds(b) => bounds.extend(b),
+                OptionalSection::Generals(g) => generals.extend(g),
+                OptionalSection::Integers(i) => integers.extend(i),
+                OptionalSection::Binaries(b) => binaries.extend(b),
+                OptionalSection::SemiContinuous(s) => semis.extend(s),
+                OptionalSection::SOS(s) => sos.extend(s),
+            }
+        }
+
+        (sense, objectives, constraints, bounds, generals, integers, binaries, semis, sos)
+    }
+};
+
+// Any optional section in any order
+AnySection: OptionalSection<'input> = {
+    <b:BoundsSection> => OptionalSection::Bounds(b),
+    <g:GeneralsSection> => OptionalSection::Generals(g),
+    <i:IntegersSection> => OptionalSection::Integers(i),
+    <b:BinariesSection> => OptionalSection::Binaries(b),
+    <s:SemiSection> => OptionalSection::SemiContinuous(s),
+    <s:SosSection> => OptionalSection::SOS(s),
+};
+
+// ============================================================================
+// Objectives Section
+// Supports:
+// - One unnamed objective: "x + 2y"
+// - One or more named objectives: "obj1: x + y" "obj2: 2x - z"
+// Uses left-factoring to handle the common identifier prefix
+// ============================================================================
+
+ObjectivesSection: Vec<Objective<'input>> = {
+    // Starts with sign: definitely unnamed objective
+    <sign:OptSign> <first:UnsignedCoeff> <rest:CoeffTail*> => {
+        let mut coeffs = vec![Coefficient { name: first.name, value: sign * first.value }];
+        for (s, c) in rest {
+            coeffs.push(Coefficient { name: c.name, value: s * c.value });
+        }
+        vec![Objective { name: Cow::Borrowed("__obj__"), coefficients: coeffs }]
+    },
+    // Starts with number: definitely unnamed objective
+    <num:"number"> <var:"identifier"> <rest:CoeffTail*> => {
+        let mut coeffs = vec![Coefficient { name: var, value: num }];
+        for (s, c) in rest {
+            coeffs.push(Coefficient { name: c.name, value: s * c.value });
+        }
+        vec![Objective { name: Cow::Borrowed("__obj__"), coefficients: coeffs }]
+    },
+    // Starts with infinity: definitely unnamed objective (includes sign in token)
+    <inf:"infinity"> <var:"identifier"> <rest:CoeffTail*> => {
+        let mut coeffs = vec![Coefficient { name: var, value: inf }];
+        for (s, c) in rest {
+            coeffs.push(Coefficient { name: c.name, value: s * c.value });
+        }
+        vec![Objective { name: Cow::Borrowed("__obj__"), coefficients: coeffs }]
+    },
+    // Starts with bare identifier: parse first, then decide
+    <first_obj:FirstObjective> <more:NamedObjective*> => {
+        let mut objs = vec![first_obj];
+        objs.extend(more);
+        objs
+    },
+};
+
+// First objective starting with identifier - uses left-factoring
+FirstObjective: Objective<'input> = {
+    // identifier followed by ":" means named objective
+    <name:"identifier"> ":" <coeffs:CoeffList> => {
+        Objective { name: Cow::Borrowed(name), coefficients: coeffs }
+    },
+    // identifier followed by +/- or end of section means unnamed objective
+    <var:"identifier"> <rest:CoeffTail*> => {
+        let mut coeffs = vec![Coefficient { name: var, value: 1.0 }];
+        for (s, c) in rest {
+            coeffs.push(Coefficient { name: c.name, value: s * c.value });
+        }
+        Objective { name: Cow::Borrowed("__obj__"), coefficients: coeffs }
+    },
+};
+
+NamedObjective: Objective<'input> = {
+    <name:"identifier"> ":" <coeffs:CoeffList> => {
+        Objective { name: Cow::Borrowed(name), coefficients: coeffs }
+    },
+};
+
+// Tail of coefficient list
+CoeffTail: (f64, Coefficient<'input>) = {
+    "+" <c:UnsignedCoeff> => (1.0, c),
+    "-" <c:UnsignedCoeff> => (-1.0, c),
+};
+
+// Optional sign
+OptSign: f64 = {
+    "+" => 1.0,
+    "-" => -1.0,
+};
+
+// ============================================================================
+// Constraints Section
+// Supports both named (c1: x <= 10) and unnamed (x <= 10) constraints
+// ============================================================================
+
+ConstraintsSection: Vec<Constraint<'input>> = {
+    "subject to" <constraints:ConstraintEntry*> => constraints,
+};
+
+// A constraint entry can be named or unnamed
+ConstraintEntry: Constraint<'input> = {
+    // Starts with sign: definitely unnamed constraint
+    <sign:OptSign> <first:UnsignedCoeff> <rest:CoeffTail*> <op:CompOp> <rhs:NumericValue> => {
+        let mut coeffs = vec![Coefficient { name: first.name, value: sign * first.value }];
+        for (s, c) in rest {
+            coeffs.push(Coefficient { name: c.name, value: s * c.value });
+        }
+        Constraint::Standard {
+            name: Cow::Borrowed("__c__"),
+            coefficients: coeffs,
+            operator: op,
+            rhs: rhs,
+        }
+    },
+    // Starts with number: definitely unnamed constraint
+    <num:"number"> <var:"identifier"> <rest:CoeffTail*> <op:CompOp> <rhs:NumericValue> => {
+        let mut coeffs = vec![Coefficient { name: var, value: num }];
+        for (s, c) in rest {
+            coeffs.push(Coefficient { name: c.name, value: s * c.value });
+        }
+        Constraint::Standard {
+            name: Cow::Borrowed("__c__"),
+            coefficients: coeffs,
+            operator: op,
+            rhs: rhs,
+        }
+    },
+    // Starts with infinity: definitely unnamed constraint (includes sign in token)
+    <inf:"infinity"> <var:"identifier"> <rest:CoeffTail*> <op:CompOp> <rhs:NumericValue> => {
+        let mut coeffs = vec![Coefficient { name: var, value: inf }];
+        for (s, c) in rest {
+            coeffs.push(Coefficient { name: c.name, value: s * c.value });
+        }
+        Constraint::Standard {
+            name: Cow::Borrowed("__c__"),
+            coefficients: coeffs,
+            operator: op,
+            rhs: rhs,
+        }
+    },
+    // Starts with identifier: could be named or unnamed - use left-factoring
+    <id:"identifier"> <cont:ConstraintContinuation> => cont.into_constraint(id),
+};
+
+// Constraint continuation after initial identifier
+ConstraintContinuation: ConstraintCont<'input> = {
+    // Named constraint: saw ":" or "::" after identifier
+    ":" <coeffs:CoeffList> <op:CompOp> <rhs:NumericValue> => ConstraintCont::Named(coeffs, op, rhs),
+    "::" <coeffs:CoeffList> <op:CompOp> <rhs:NumericValue> => ConstraintCont::Named(coeffs, op, rhs),
+    // Unnamed constraint: identifier was a variable, continue with more coefficients
+    <rest:CoeffTail*> <op:CompOp> <rhs:NumericValue> => ConstraintCont::Unnamed(rest, op, rhs),
+};
+
+// ============================================================================
+// Coefficient List - Left-recursive to avoid ambiguity
+// ============================================================================
+
+CoeffList: Vec<Coefficient<'input>> = {
+    <c:Coeff> => vec![c],
+    <mut list:CoeffList> "+" <c:UnsignedCoeff> => {
+        list.push(c);
+        list
+    },
+    <mut list:CoeffList> "-" <c:UnsignedCoeff> => {
+        list.push(Coefficient { name: c.name, value: -c.value });
+        list
+    },
+};
+
+// Single coefficient (optionally signed at the start)
+Coeff: Coefficient<'input> = {
+    <c:UnsignedCoeff> => c,
+    "+" <c:UnsignedCoeff> => c,
+    "-" <c:UnsignedCoeff> => Coefficient { name: c.name, value: -c.value },
+};
+
+// Unsigned coefficient
+UnsignedCoeff: Coefficient<'input> = {
+    <var:"identifier"> => Coefficient { name: var, value: 1.0 },
+    <num:"number"> <var:"identifier"> => Coefficient { name: var, value: num },
+    <inf:"infinity"> <var:"identifier"> => Coefficient { name: var, value: inf },
+};
+
+// ============================================================================
+// Bounds Section
+// ============================================================================
+
+BoundsSection: Vec<(&'input str, VariableType)> = {
+    "bounds" <bounds:BoundSpec*> => bounds,
+};
+
+BoundSpec: (&'input str, VariableType) = {
+    // Free variable: "x1 free"
+    <var:"identifier"> "free" => (var, VariableType::Free),
+
+    // Double bound: "0 <= x1 <= 5"
+    <lb:NumericValue> "<=" <var:"identifier"> "<=" <ub:NumericValue> => {
+        (var, VariableType::DoubleBound(lb, ub))
+    },
+    <lb:NumericValue> "<" <var:"identifier"> "<" <ub:NumericValue> => {
+        (var, VariableType::DoubleBound(lb, ub))
+    },
+    <lb:NumericValue> "<=" <var:"identifier"> "<" <ub:NumericValue> => {
+        (var, VariableType::DoubleBound(lb, ub))
+    },
+    <lb:NumericValue> "<" <var:"identifier"> "<=" <ub:NumericValue> => {
+        (var, VariableType::DoubleBound(lb, ub))
+    },
+
+    // Lower bound: "x1 >= 5" or "5 <= x1"
+    <var:"identifier"> ">=" <bound:NumericValue> => (var, VariableType::LowerBound(bound)),
+    <bound:NumericValue> "<=" <var:"identifier"> => (var, VariableType::LowerBound(bound)),
+
+    // Upper bound: "x1 <= 5" or "5 >= x1"
+    <var:"identifier"> "<=" <bound:NumericValue> => (var, VariableType::UpperBound(bound)),
+    <bound:NumericValue> ">=" <var:"identifier"> => (var, VariableType::UpperBound(bound)),
+
+    // Fixed value (equality bound): "x1 = 5" means x1 is fixed at 5
+    <var:"identifier"> "=" <bound:NumericValue> => (var, VariableType::DoubleBound(bound, bound)),
+    <bound:NumericValue> "=" <var:"identifier"> => (var, VariableType::DoubleBound(bound, bound)),
+};
+
+// ============================================================================
+// Variable Type Sections
+// ============================================================================
+
+GeneralsSection: Vec<&'input str> = {
+    "generals" <vars:"identifier"*> => vars,
+};
+
+IntegersSection: Vec<&'input str> = {
+    "integers" <vars:"identifier"*> => vars,
+};
+
+BinariesSection: Vec<&'input str> = {
+    "binaries" <vars:"identifier"*> => vars,
+};
+
+SemiSection: Vec<&'input str> = {
+    "semi-continuous" <vars:"identifier"*> => vars,
+};
+
+// ============================================================================
+// SOS Section
+// Parse flat list of SOS entries, each entry is either a header or a weight
+// ============================================================================
+
+SosSection: Vec<Constraint<'input>> = {
+    "sos" <entries:SosEntry*> => {
+        // Group entries into constraints
+        let mut constraints = Vec::new();
+        let mut current_name: Option<&'input str> = None;
+        let mut current_type: Option<SOSType> = None;
+        let mut current_weights: Vec<Coefficient<'input>> = Vec::new();
+
+        for entry in entries {
+            match entry {
+                SosEntryKind::Header(name, sos_type) => {
+                    // Save previous constraint if exists
+                    if let (Some(n), Some(t)) = (current_name.take(), current_type.take()) {
+                        if !current_weights.is_empty() {
+                            constraints.push(Constraint::SOS {
+                                name: Cow::Borrowed(n),
+                                sos_type: t,
+                                weights: std::mem::take(&mut current_weights),
+                            });
+                        }
+                    }
+                    current_name = Some(name);
+                    current_type = Some(sos_type);
+                }
+                SosEntryKind::Weight(coeff) => {
+                    current_weights.push(coeff);
+                }
+            }
+        }
+
+        // Save last constraint
+        if let (Some(n), Some(t)) = (current_name, current_type) {
+            if !current_weights.is_empty() {
+                constraints.push(Constraint::SOS {
+                    name: Cow::Borrowed(n),
+                    sos_type: t,
+                    weights: current_weights,
+                });
+            }
+        }
+
+        constraints
+    },
+};
+
+// Entry in SOS section - either a constraint header or a weight
+SosEntry: SosEntryKind<'input> = {
+    // Header: "name: S1::" or "name: S2::"
+    <name:"identifier"> ":" <sos_type:"sos_type"> "::" => SosEntryKind::Header(name, sos_type),
+    // Weight: "var:value"
+    <var:"identifier"> ":" <weight:NumericValue> => SosEntryKind::Weight(Coefficient { name: var, value: weight }),
+};
+
+// ============================================================================
+// Comparison Operators
+// ============================================================================
+
+CompOp: ComparisonOp = {
+    "<=" => ComparisonOp::LTE,
+    ">=" => ComparisonOp::GTE,
+    "<" => ComparisonOp::LT,
+    ">" => ComparisonOp::GT,
+    "=" => ComparisonOp::EQ,
+};
+
+// ============================================================================
+// Numeric Values
+// ============================================================================
+
+NumericValue: f64 = {
+    <n:"number"> => n,
+    <n:"infinity"> => n,
+    "+" <n:"number"> => n,
+    "+" <n:"infinity"> => n,
+    "-" <n:"number"> => -n,
+    "-" <n:"infinity"> => -n,
+};

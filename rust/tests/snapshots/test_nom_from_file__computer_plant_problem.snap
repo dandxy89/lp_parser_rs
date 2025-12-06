@@ -2,7 +2,7 @@
 source: rust/tests/test_nom_from_file.rs
 expression: parsed
 ---
-name: " Computer_Plant_Problem "
+name: Computer_Plant_Problem
 sense: Minimize
 objectives:
   Total_Costs:
@@ -172,16 +172,16 @@ constraints:
 variables:
   BuildaPlant_Denver:
     name: BuildaPlant_Denver
-    var_type: Free
+    var_type: Binary
   BuildaPlant_Los_Angeles:
     name: BuildaPlant_Los_Angeles
-    var_type: Free
+    var_type: Binary
   BuildaPlant_Phoenix:
     name: BuildaPlant_Phoenix
-    var_type: Free
+    var_type: Binary
   BuildaPlant_San_Francisco:
     name: BuildaPlant_San_Francisco
-    var_type: Free
+    var_type: Binary
   Route_Denver_Barstow:
     name: Route_Denver_Barstow
     var_type:

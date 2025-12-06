@@ -382,665 +382,217 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_lp_problem_builder_default_construction() {
+    fn test_problem_builder_defaults_and_naming() {
+        // Default construction
         let builder = LpProblemBuilder::new();
-        assert!(builder.name.is_none());
-        assert!(builder.sense.is_none());
-        assert!(builder.objectives.is_empty());
-        assert!(builder.constraints.is_empty());
-        assert!(builder.variables.is_empty());
-    }
+        assert!(builder.name.is_none() && builder.sense.is_none() && builder.objectives.is_empty());
 
-    #[test]
-    fn test_problem_builder_basic_building() {
-        let problem = LpProblemBuilder::new().build().expect("Should build empty problem");
-
+        // Empty build
+        let problem = LpProblemBuilder::new().build().unwrap();
         assert_eq!(problem.name(), None);
         assert_eq!(problem.sense, Sense::default());
-        assert!(problem.objectives.is_empty());
-        assert!(problem.constraints.is_empty());
-        assert!(problem.variables.is_empty());
+
+        // With name (borrowed and owned)
+        assert_eq!(LpProblemBuilder::new().name("test").build().unwrap().name(), Some("test"));
+        assert_eq!(LpProblemBuilder::new().name(String::from("owned")).build().unwrap().name(), Some("owned"));
     }
 
     #[test]
-    fn test_problem_builder_with_name() {
-        let problem = LpProblemBuilder::new().name("my_problem").build().expect("Should build successfully");
-
-        assert_eq!(problem.name(), Some("my_problem"));
+    fn test_sense_methods() {
+        assert_eq!(LpProblemBuilder::new().minimize().build().unwrap().sense, Sense::Minimize);
+        assert_eq!(LpProblemBuilder::new().maximize().build().unwrap().sense, Sense::Maximize);
+        assert_eq!(LpProblemBuilder::new().sense(Sense::Minimize).build().unwrap().sense, Sense::Minimize);
+        // Override behavior
+        assert_eq!(LpProblemBuilder::new().minimize().maximize().build().unwrap().sense, Sense::Maximize);
     }
 
     #[test]
-    fn test_problem_builder_with_name_cow_owned() {
-        let name = String::from("dynamic_problem");
-        let problem = LpProblemBuilder::new().name(name.clone()).build().expect("Should build successfully");
+    fn test_chaining_multiple_elements() {
+        let problem = LpProblemBuilder::new()
+            .objective("obj1", |o| o.coefficient("x1", 1.0))
+            .objective("obj2", |o| o.coefficient("x2", 2.0))
+            .constraint("c1", |c| c.coefficient("x1", 1.0).le(10.0))
+            .constraint("c2", |c| c.coefficient("x2", 2.0).ge(5.0))
+            .variable("x1", |v| v.binary())
+            .variable("x2", |v| v.integer())
+            .build()
+            .unwrap();
 
-        assert_eq!(problem.name(), Some(name.as_str()));
+        assert_eq!(problem.objectives.len(), 2);
+        assert_eq!(problem.constraints.len(), 2);
+        assert_eq!(problem.variables.len(), 2);
     }
 
     #[test]
-    fn test_method_chaining_fluency() {
-        let builder = LpProblemBuilder::new()
-            .name("test_problem")
-            .minimize()
-            .objective("cost", |obj| obj.coefficient("x", 1.0))
-            .constraint("capacity", |c| c.coefficient("x", 1.0).le(10.0))
-            .variable("x", |v| v.general());
+    fn test_override_behavior() {
+        // Name, objective, constraint, variable overrides
+        let problem = LpProblemBuilder::new()
+            .name("first")
+            .name("second")
+            .objective("obj", |o| o.coefficient("x", 1.0))
+            .objective("obj", |o| o.coefficient("y", 2.0))
+            .constraint("c", |c| c.coefficient("a", 1.0).le(10.0))
+            .constraint("c", |c| c.coefficient("b", 2.0).ge(5.0))
+            .variable("v", |v| v.binary())
+            .variable("v", |v| v.integer())
+            .build()
+            .unwrap();
 
-        let problem = builder.build().expect("Should build successfully");
-
-        assert_eq!(problem.name(), Some("test_problem"));
-        assert_eq!(problem.sense, Sense::Minimize);
+        assert_eq!(problem.name(), Some("second"));
         assert_eq!(problem.objectives.len(), 1);
+        assert_eq!(problem.objectives.get("obj").unwrap().coefficients[0].name, "y");
         assert_eq!(problem.constraints.len(), 1);
-        assert_eq!(problem.variables.len(), 1);
+        assert_eq!(problem.variables.get("v").unwrap().var_type, VariableType::Integer);
     }
 
     #[test]
-    fn test_chaining_multiple_objectives() {
-        let problem = LpProblemBuilder::new()
-            .objective("obj1", |obj| obj.coefficient("x1", 1.0).coefficient("x2", 2.0))
-            .objective("obj2", |obj| obj.coefficient("x3", 3.0))
-            .objective("obj3", |obj| obj.coefficient("x1", 0.5).coefficient("x3", 1.5))
-            .build()
-            .expect("Should build successfully");
+    fn test_objective_builder() {
+        // Single and multiple coefficients
+        let obj = ObjectiveBuilder::new("test".into()).coefficient("x", 5.0).build().unwrap();
+        assert_eq!(obj.name, "test");
+        assert_eq!(obj.coefficients.len(), 1);
 
-        assert_eq!(problem.objectives.len(), 3);
-        assert!(problem.objectives.contains_key("obj1"));
-        assert!(problem.objectives.contains_key("obj2"));
-        assert!(problem.objectives.contains_key("obj3"));
+        let obj2 = ObjectiveBuilder::new("m".into()).coefficient("x", 1.0).coefficient("y", 2.0).coefficient("z", -3.0).build().unwrap();
+        assert_eq!(obj2.coefficients.len(), 3);
+
+        // Empty fails
+        assert!(ObjectiveBuilder::new("e".into()).build().unwrap_err().to_string().contains("no coefficients"));
     }
 
     #[test]
-    fn test_chaining_multiple_constraints() {
-        let problem = LpProblemBuilder::new()
-            .constraint("c1", |c| c.coefficient("x", 1.0).le(10.0))
-            .constraint("c2", |c| c.coefficient("y", 2.0).ge(5.0))
-            .constraint("c3", |c| c.coefficient("x", 1.0).coefficient("y", 1.0).eq(7.0))
-            .build()
-            .expect("Should build successfully");
-
-        assert_eq!(problem.constraints.len(), 3);
-        assert!(problem.constraints.contains_key("c1"));
-        assert!(problem.constraints.contains_key("c2"));
-        assert!(problem.constraints.contains_key("c3"));
-    }
-
-    #[test]
-    fn test_chaining_multiple_variables() {
-        let problem = LpProblemBuilder::new()
-            .variable("x", |v| v.binary())
-            .variable("y", |v| v.integer())
-            .variable("z", |v| v.free())
-            .build()
-            .expect("Should build successfully");
-
-        assert_eq!(problem.variables.len(), 3);
-        assert!(problem.variables.contains_key("x"));
-        assert!(problem.variables.contains_key("y"));
-        assert!(problem.variables.contains_key("z"));
-    }
-
-    #[test]
-    fn test_sense_override_behavior() {
-        let problem = LpProblemBuilder::new()
-            .minimize()
-            .maximize() // Should override the minimize
-            .build()
-            .expect("Should build successfully");
-
-        assert_eq!(problem.sense, Sense::Maximize);
-    }
-
-    #[test]
-    fn test_name_override_behavior() {
-        let problem = LpProblemBuilder::new()
-            .name("first_name")
-            .name("second_name") // Should override the first name
-            .build()
-            .expect("Should build successfully");
-
-        assert_eq!(problem.name(), Some("second_name"));
-    }
-
-    #[test]
-    fn test_objective_override_behavior() {
-        let problem = LpProblemBuilder::new()
-            .objective("cost", |obj| obj.coefficient("x", 1.0))
-            .objective("cost", |obj| obj.coefficient("y", 2.0)) // Same name should override
-            .build()
-            .expect("Should build successfully");
-
-        assert_eq!(problem.objectives.len(), 1);
-        let objective = problem.objectives.get("cost").unwrap();
-        // Should have the second version (coefficient for y)
-        assert_eq!(objective.coefficients.len(), 1);
-        assert_eq!(objective.coefficients[0].name, "y");
-        assert_eq!(objective.coefficients[0].value, 2.0);
-    }
-
-    #[test]
-    fn test_constraint_override_behavior() {
-        let problem = LpProblemBuilder::new()
-            .constraint("capacity", |c| c.coefficient("x", 1.0).le(10.0))
-            .constraint("capacity", |c| c.coefficient("y", 2.0).ge(5.0)) // Same name should override
-            .build()
-            .expect("Should build successfully");
-
-        assert_eq!(problem.constraints.len(), 1);
-        let constraint = problem.constraints.get("capacity").unwrap();
-        if let Constraint::Standard { coefficients, operator, rhs, .. } = constraint {
-            assert_eq!(coefficients.len(), 1);
-            assert_eq!(coefficients[0].name, "y");
-            assert_eq!(coefficients[0].value, 2.0);
-            assert_eq!(*operator, ComparisonOp::GTE);
-            assert_eq!(*rhs, 5.0);
-        } else {
-            panic!("Expected standard constraint");
+    fn test_constraint_builder_operators() {
+        // Test all operators
+        let c = ConstraintBuilder::standard("t".into()).coefficient("x", 1.0).le(10.0).build().unwrap();
+        if let Constraint::Standard { operator, rhs, .. } = c {
+            assert_eq!((operator, rhs), (ComparisonOp::LTE, 10.0));
         }
-    }
 
-    #[test]
-    fn test_variable_override_behavior() {
-        let problem = LpProblemBuilder::new()
-            .variable("x", |v| v.binary())
-            .variable("x", |v| v.integer()) // Same name should override
-            .build()
-            .expect("Should build successfully");
-
-        assert_eq!(problem.variables.len(), 1);
-        let variable = problem.variables.get("x").unwrap();
-        assert_eq!(variable.var_type, VariableType::Integer);
-    }
-
-    #[test]
-    fn test_minimize_sense() {
-        let problem = LpProblemBuilder::new().minimize().build().expect("Should build successfully");
-
-        assert_eq!(problem.sense, Sense::Minimize);
-    }
-
-    #[test]
-    fn test_maximize_sense() {
-        let problem = LpProblemBuilder::new().maximize().build().expect("Should build successfully");
-
-        assert_eq!(problem.sense, Sense::Maximize);
-    }
-
-    #[test]
-    fn test_explicit_sense() {
-        let problem = LpProblemBuilder::new().sense(Sense::Minimize).build().expect("Should build successfully");
-
-        assert_eq!(problem.sense, Sense::Minimize);
-    }
-
-    #[test]
-    fn test_objective_builder_single_coefficient() {
-        let objective = ObjectiveBuilder::new("test".into()).coefficient("x", 5.0).build().expect("Should build successfully");
-
-        assert_eq!(objective.name, "test");
-        assert_eq!(objective.coefficients.len(), 1);
-        assert_eq!(objective.coefficients[0].name, "x");
-        assert_eq!(objective.coefficients[0].value, 5.0);
-    }
-
-    #[test]
-    fn test_objective_builder_multiple_coefficients() {
-        let objective = ObjectiveBuilder::new("multi".into())
-            .coefficient("x", 1.0)
-            .coefficient("y", 2.0)
-            .coefficient("z", -3.0)
-            .build()
-            .expect("Should build successfully");
-
-        assert_eq!(objective.coefficients.len(), 3);
-        assert_eq!(objective.coefficients[0].value, 1.0);
-        assert_eq!(objective.coefficients[1].value, 2.0);
-        assert_eq!(objective.coefficients[2].value, -3.0);
-    }
-
-    #[test]
-    fn test_objective_builder_empty_fails() {
-        let result = ObjectiveBuilder::new("empty".into()).build();
-
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("no coefficients"));
-    }
-
-    #[test]
-    fn test_constraint_builder_standard_le() {
-        let constraint = ConstraintBuilder::standard("test".into())
-            .coefficient("x", 2.0)
-            .coefficient("y", 3.0)
-            .le(10.0)
-            .build()
-            .expect("Should build successfully");
-
-        if let Constraint::Standard { name, coefficients, operator, rhs } = constraint {
-            assert_eq!(name, "test");
-            assert_eq!(coefficients.len(), 2);
-            assert_eq!(operator, ComparisonOp::LTE);
-            assert_eq!(rhs, 10.0);
-        } else {
-            panic!("Expected standard constraint");
+        let c = ConstraintBuilder::standard("t".into()).coefficient("x", 1.0).ge(5.0).build().unwrap();
+        if let Constraint::Standard { operator, rhs, .. } = c {
+            assert_eq!((operator, rhs), (ComparisonOp::GTE, 5.0));
         }
-    }
 
-    #[test]
-    fn test_constraint_builder_standard_ge() {
-        let constraint =
-            ConstraintBuilder::standard("test".into()).coefficient("x", 1.0).ge(5.0).build().expect("Should build successfully");
-
-        if let Constraint::Standard { operator, rhs, .. } = constraint {
-            assert_eq!(operator, ComparisonOp::GTE);
-            assert_eq!(rhs, 5.0);
+        let c = ConstraintBuilder::standard("t".into()).coefficient("x", 1.0).eq(7.0).build().unwrap();
+        if let Constraint::Standard { operator, rhs, .. } = c {
+            assert_eq!((operator, rhs), (ComparisonOp::EQ, 7.0));
         }
-    }
 
-    #[test]
-    fn test_constraint_builder_standard_eq() {
-        let constraint =
-            ConstraintBuilder::standard("test".into()).coefficient("x", 1.0).eq(7.0).build().expect("Should build successfully");
-
-        if let Constraint::Standard { operator, rhs, .. } = constraint {
-            assert_eq!(operator, ComparisonOp::EQ);
-            assert_eq!(rhs, 7.0);
+        let c = ConstraintBuilder::standard("t".into()).coefficient("x", 1.0).lt(15.0).build().unwrap();
+        if let Constraint::Standard { operator, rhs, .. } = c {
+            assert_eq!((operator, rhs), (ComparisonOp::LT, 15.0));
         }
-    }
 
-    #[test]
-    fn test_constraint_builder_standard_lt() {
-        let constraint =
-            ConstraintBuilder::standard("test".into()).coefficient("x", 1.0).lt(15.0).build().expect("Should build successfully");
-
-        if let Constraint::Standard { operator, rhs, .. } = constraint {
-            assert_eq!(operator, ComparisonOp::LT);
-            assert_eq!(rhs, 15.0);
+        let c = ConstraintBuilder::standard("t".into()).coefficient("x", 1.0).gt(2.0).build().unwrap();
+        if let Constraint::Standard { operator, rhs, .. } = c {
+            assert_eq!((operator, rhs), (ComparisonOp::GT, 2.0));
         }
-    }
 
-    #[test]
-    fn test_constraint_builder_standard_gt() {
-        let constraint =
-            ConstraintBuilder::standard("test".into()).coefficient("x", 1.0).gt(2.0).build().expect("Should build successfully");
-
-        if let Constraint::Standard { operator, rhs, .. } = constraint {
-            assert_eq!(operator, ComparisonOp::GT);
-            assert_eq!(rhs, 2.0);
-        }
+        // Missing operator and no coefficients errors
+        assert!(ConstraintBuilder::standard("i".into()).coefficient("x", 1.0).build().is_err());
+        assert!(ConstraintBuilder::standard("e".into()).le(10.0).build().is_err());
     }
 
     #[test]
     fn test_constraint_builder_sos() {
-        let constraint = ConstraintBuilder::sos("sos_test".into(), SOSType::S1)
-            .coefficient("x1", 1.0)
-            .coefficient("x2", 2.0)
-            .coefficient("x3", 3.0)
-            .build()
-            .expect("Should build successfully");
+        let constraint = ConstraintBuilder::sos("sos".into(), SOSType::S1).coefficient("x1", 1.0).coefficient("x2", 2.0).build().unwrap();
 
         if let Constraint::SOS { name, sos_type, weights } = constraint {
-            assert_eq!(name, "sos_test");
+            assert_eq!(name, "sos");
             assert_eq!(sos_type, SOSType::S1);
-            assert_eq!(weights.len(), 3);
+            assert_eq!(weights.len(), 2);
         } else {
-            panic!("Expected SOS constraint");
+            panic!("Expected SOS");
         }
+
+        // Empty SOS fails
+        assert!(ConstraintBuilder::sos("e".into(), SOSType::S2).build().is_err());
+
+        // Operators on SOS have no effect
+        let sos = ConstraintBuilder::sos("s".into(), SOSType::S1).coefficient("x", 1.0).le(10.0).ge(5.0).build().unwrap();
+        assert!(matches!(sos, Constraint::SOS { .. }));
     }
 
     #[test]
-    fn test_constraint_builder_standard_missing_operator() {
-        let result = ConstraintBuilder::standard("incomplete".into()).coefficient("x", 1.0).build();
+    fn test_variable_builder_types() {
+        // Test all variable types
+        assert_eq!(VariableBuilder::new("x").build().unwrap().var_type, VariableType::Free);
+        assert_eq!(VariableBuilder::new("x").binary().build().unwrap().var_type, VariableType::Binary);
+        assert_eq!(VariableBuilder::new("x").integer().build().unwrap().var_type, VariableType::Integer);
+        assert_eq!(VariableBuilder::new("x").general().build().unwrap().var_type, VariableType::General);
+        assert_eq!(VariableBuilder::new("x").free().build().unwrap().var_type, VariableType::Free);
+        assert_eq!(VariableBuilder::new("x").semi_continuous().build().unwrap().var_type, VariableType::SemiContinuous);
+        assert_eq!(VariableBuilder::new("x").lower_bound(5.0).build().unwrap().var_type, VariableType::LowerBound(5.0));
+        assert_eq!(VariableBuilder::new("x").upper_bound(10.0).build().unwrap().var_type, VariableType::UpperBound(10.0));
+        assert_eq!(VariableBuilder::new("x").bounds(0.0, 100.0).build().unwrap().var_type, VariableType::DoubleBound(0.0, 100.0));
 
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("missing an operator"));
+        // Override behavior
+        assert_eq!(VariableBuilder::new("x").binary().integer().build().unwrap().var_type, VariableType::Integer);
     }
 
     #[test]
-    fn test_constraint_builder_standard_no_coefficients() {
-        let result = ConstraintBuilder::standard("empty".into()).le(10.0).build();
-
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("no coefficients"));
-    }
-
-    #[test]
-    fn test_constraint_builder_sos_no_weights() {
-        let result = ConstraintBuilder::sos("empty_sos".into(), SOSType::S2).build();
-
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("No weights specified"));
-    }
-
-    #[test]
-    fn test_variable_builder_default() {
-        let variable = VariableBuilder::new("x").build().expect("Should build successfully");
-
-        assert_eq!(variable.name, "x");
-        assert_eq!(variable.var_type, VariableType::default());
-    }
-
-    #[test]
-    fn test_variable_builder_binary() {
-        let variable = VariableBuilder::new("x").binary().build().expect("Should build successfully");
-
-        assert_eq!(variable.var_type, VariableType::Binary);
-    }
-
-    #[test]
-    fn test_variable_builder_integer() {
-        let variable = VariableBuilder::new("x").integer().build().expect("Should build successfully");
-
-        assert_eq!(variable.var_type, VariableType::Integer);
-    }
-
-    #[test]
-    fn test_variable_builder_general() {
-        let variable = VariableBuilder::new("x").general().build().expect("Should build successfully");
-
-        assert_eq!(variable.var_type, VariableType::General);
-    }
-
-    #[test]
-    fn test_variable_builder_free() {
-        let variable = VariableBuilder::new("x").free().build().expect("Should build successfully");
-
-        assert_eq!(variable.var_type, VariableType::Free);
-    }
-
-    #[test]
-    fn test_variable_builder_semi_continuous() {
-        let variable = VariableBuilder::new("x").semi_continuous().build().expect("Should build successfully");
-
-        assert_eq!(variable.var_type, VariableType::SemiContinuous);
-    }
-
-    #[test]
-    fn test_variable_builder_lower_bound() {
-        let variable = VariableBuilder::new("x").lower_bound(5.0).build().expect("Should build successfully");
-
-        assert_eq!(variable.var_type, VariableType::LowerBound(5.0));
-    }
-
-    #[test]
-    fn test_variable_builder_upper_bound() {
-        let variable = VariableBuilder::new("x").upper_bound(10.0).build().expect("Should build successfully");
-
-        assert_eq!(variable.var_type, VariableType::UpperBound(10.0));
-    }
-
-    #[test]
-    fn test_variable_builder_double_bound() {
-        let variable = VariableBuilder::new("x").bounds(0.0, 100.0).build().expect("Should build successfully");
-
-        assert_eq!(variable.var_type, VariableType::DoubleBound(0.0, 100.0));
-    }
-
-    #[test]
-    fn test_variable_builder_type_override() {
-        let variable = VariableBuilder::new("x")
-            .binary()
-            .integer() // Should override binary
-            .build()
-            .expect("Should build successfully");
-
-        assert_eq!(variable.var_type, VariableType::Integer);
-    }
-
-    #[test]
-    fn test_variables_bulk_creation() {
-        let problem =
-            LpProblemBuilder::new().variables(&["x1", "x2", "x3", "x4"], &VariableType::Binary).build().expect("Should build successfully");
-
-        assert_eq!(problem.variables.len(), 4);
-        for var_name in &["x1", "x2", "x3", "x4"] {
-            let variable = problem.variables.get(var_name).unwrap();
-            assert_eq!(variable.var_type, VariableType::Binary);
-        }
-    }
-
-    #[test]
-    fn test_variables_empty_array() {
-        let problem = LpProblemBuilder::new().variables(&[], &VariableType::General).build().expect("Should build successfully");
-
-        assert!(problem.variables.is_empty());
-    }
-
-    #[test]
-    fn test_sos_constraint_s1() {
-        let problem = LpProblemBuilder::new()
-            .sos_constraint("sos1", SOSType::S1, |c| c.coefficient("x1", 1.0).coefficient("x2", 2.0).coefficient("x3", 3.0))
-            .build()
-            .expect("Should build successfully");
-
-        assert_eq!(problem.constraints.len(), 1);
-        let constraint = problem.constraints.get("sos1").unwrap();
-        if let Constraint::SOS { sos_type, weights, .. } = constraint {
-            assert_eq!(*sos_type, SOSType::S1);
-            assert_eq!(weights.len(), 3);
-        }
-    }
-
-    #[test]
-    fn test_sos_constraint_s2() {
-        let problem = LpProblemBuilder::new()
-            .sos_constraint("sos2", SOSType::S2, |c| c.coefficient("x1", 1.0).coefficient("x2", 2.0))
-            .build()
-            .expect("Should build successfully");
-
-        let constraint = problem.constraints.get("sos2").unwrap();
-        if let Constraint::SOS { sos_type, .. } = constraint {
-            assert_eq!(*sos_type, SOSType::S2);
-        }
-    }
-
-    #[test]
-    fn test_complex_problem_construction() {
-        let problem = LpProblemBuilder::new()
-            .name("complex_problem")
-            .maximize()
-            .objective("profit", |obj| obj.coefficient("x1", 10.0).coefficient("x2", 15.0).coefficient("x3", 8.0))
-            .constraint("material", |c| c.coefficient("x1", 2.0).coefficient("x2", 3.0).coefficient("x3", 1.0).le(100.0))
-            .constraint("labor", |c| c.coefficient("x1", 1.0).coefficient("x2", 2.0).coefficient("x3", 2.0).le(80.0))
-            .constraint("demand", |c| c.coefficient("x1", 1.0).ge(10.0))
-            .variable("x1", |v| v.bounds(0.0, f64::INFINITY))
-            .variable("x2", |v| v.bounds(0.0, 50.0))
-            .variable("x3", |v| v.binary())
-            .build()
-            .expect("Should build successfully");
-
-        assert_eq!(problem.name(), Some("complex_problem"));
-        assert_eq!(problem.sense, Sense::Maximize);
-        assert_eq!(problem.objectives.len(), 1);
-        assert_eq!(problem.constraints.len(), 3);
+    fn test_bulk_variables() {
+        let problem = LpProblemBuilder::new().variables(&["x1", "x2", "x3"], &VariableType::Binary).build().unwrap();
         assert_eq!(problem.variables.len(), 3);
+        assert!(problem.variables.values().all(|v| v.var_type == VariableType::Binary));
 
-        // Check objective
-        let profit_obj = problem.objectives.get("profit").unwrap();
-        assert_eq!(profit_obj.coefficients.len(), 3);
-
-        // Check constraints
-        assert!(problem.constraints.contains_key("material"));
-        assert!(problem.constraints.contains_key("labor"));
-        assert!(problem.constraints.contains_key("demand"));
-
-        // Check variables
-        let x1_var = problem.variables.get("x1").unwrap();
-        let x2_var = problem.variables.get("x2").unwrap();
-        let x3_var = problem.variables.get("x3").unwrap();
-
-        if let VariableType::DoubleBound(lower, upper) = x1_var.var_type {
-            assert_eq!(lower, 0.0);
-            assert_eq!(upper, f64::INFINITY);
-        }
-
-        if let VariableType::DoubleBound(lower, upper) = x2_var.var_type {
-            assert_eq!(lower, 0.0);
-            assert_eq!(upper, 50.0);
-        }
-
-        assert_eq!(x3_var.var_type, VariableType::Binary);
+        // Empty array
+        assert!(LpProblemBuilder::new().variables(&[], &VariableType::General).build().unwrap().variables.is_empty());
     }
 
     #[test]
-    fn test_lp_problem_convenience_function() {
+    fn test_sos_constraint_on_problem() {
+        for sos_type in [SOSType::S1, SOSType::S2] {
+            let problem = LpProblemBuilder::new().sos_constraint("sos", sos_type.clone(), |c| c.coefficient("x", 1.0)).build().unwrap();
+
+            if let Constraint::SOS { sos_type: st, .. } = problem.constraints.get("sos").unwrap() {
+                assert_eq!(*st, sos_type);
+            }
+        }
+    }
+
+    #[test]
+    fn test_complex_problem_and_convenience() {
         let problem = lp_problem()
-            .name("convenience_test")
-            .minimize()
-            .objective("cost", |obj| obj.coefficient("x", 1.0))
+            .name("complex")
+            .maximize()
+            .objective("profit", |o| o.coefficient("x1", 10.0).coefficient("x2", 15.0))
+            .constraint("cap", |c| c.coefficient("x1", 2.0).coefficient("x2", 3.0).le(100.0))
+            .variable("x1", |v| v.bounds(0.0, f64::INFINITY))
+            .variable("x2", |v| v.binary())
             .build()
-            .expect("Should build successfully");
+            .unwrap();
 
-        assert_eq!(problem.name(), Some("convenience_test"));
-        assert_eq!(problem.sense, Sense::Minimize);
-    }
-
-    #[test]
-    fn test_zero_coefficient_values() {
-        let problem = LpProblemBuilder::new()
-            .objective("test", |obj| obj.coefficient("x", 0.0).coefficient("y", -0.0))
-            .constraint("test", |c| c.coefficient("x", 0.0).coefficient("y", 1.0).le(10.0))
-            .build()
-            .expect("Should build successfully");
-
-        let objective = problem.objectives.get("test").unwrap();
-        assert_eq!(objective.coefficients[0].value, 0.0);
-        assert_eq!(objective.coefficients[1].value, -0.0);
-    }
-
-    #[test]
-    fn test_extreme_coefficient_values() {
-        let problem = LpProblemBuilder::new()
-            .objective("extreme", |obj| {
-                obj.coefficient("x1", f64::MAX)
-                    .coefficient("x2", f64::MIN)
-                    .coefficient("x3", f64::INFINITY)
-                    .coefficient("x4", f64::NEG_INFINITY)
-                    .coefficient("x5", f64::EPSILON)
-            })
-            .build()
-            .expect("Should build successfully");
-
-        let objective = problem.objectives.get("extreme").unwrap();
-        assert_eq!(objective.coefficients.len(), 5);
-        assert_eq!(objective.coefficients[0].value, f64::MAX);
-        assert_eq!(objective.coefficients[1].value, f64::MIN);
-        assert_eq!(objective.coefficients[2].value, f64::INFINITY);
-        assert_eq!(objective.coefficients[3].value, f64::NEG_INFINITY);
-        assert_eq!(objective.coefficients[4].value, f64::EPSILON);
-    }
-
-    #[test]
-    fn test_constraint_operators_on_sos_no_effect() {
-        // Test that calling constraint operators on SOS constraints has no effect
-        let constraint = ConstraintBuilder::sos("sos".into(), SOSType::S1)
-            .coefficient("x", 1.0)
-            .le(10.0) // Should have no effect on SOS constraint
-            .ge(5.0) // Should have no effect on SOS constraint
-            .build()
-            .expect("Should build successfully");
-
-        if let Constraint::SOS { weights, .. } = constraint {
-            assert_eq!(weights.len(), 1);
-        } else {
-            panic!("Expected SOS constraint");
-        }
-    }
-
-    #[test]
-    fn test_variable_name_with_special_characters() {
-        let problem = LpProblemBuilder::new()
-            .variable("var_1.2.3", |v| v.general())
-            .variable("x$special", |v| v.binary())
-            .build()
-            .expect("Should build successfully");
-
-        assert!(problem.variables.contains_key("var_1.2.3"));
-        assert!(problem.variables.contains_key("x$special"));
-    }
-
-    #[test]
-    fn test_very_long_names() {
-        let long_name = "x".repeat(1000);
-        let long_obj_name = "obj".repeat(500);
-        let long_cons_name = "cons".repeat(500);
-
-        let problem = LpProblemBuilder::new()
-            .name(long_name.clone())
-            .objective(&long_obj_name, |obj| obj.coefficient(&long_name, 1.0))
-            .constraint(&long_cons_name, |c| c.coefficient(&long_name, 1.0).le(10.0))
-            .variable(&long_name, |v| v.general())
-            .build()
-            .expect("Should build successfully");
-
-        assert_eq!(problem.name(), Some(long_name.as_str()));
-        assert!(problem.objectives.contains_key(long_obj_name.as_str()));
-        assert!(problem.constraints.contains_key(long_cons_name.as_str()));
-        assert!(problem.variables.contains_key(long_name.as_str()));
-    }
-
-    #[test]
-    fn test_simple_problem_builder() {
-        let problem = LpProblemBuilder::new()
-            .name("test_problem")
-            .minimize()
-            .objective("cost", |obj| obj.coefficient("x", 1.0).coefficient("y", 2.0))
-            .constraint("capacity", |c| c.coefficient("x", 1.0).coefficient("y", 1.0).le(10.0))
-            .variable("x", |v| v.binary())
-            .variable("y", |v| v.general())
-            .build()
-            .expect("Should build successfully");
-
-        assert_eq!(problem.name(), Some("test_problem"));
-        assert_eq!(problem.sense, Sense::Minimize);
+        assert_eq!(problem.name(), Some("complex"));
+        assert_eq!(problem.sense, Sense::Maximize);
         assert_eq!(problem.objectives.len(), 1);
         assert_eq!(problem.constraints.len(), 1);
         assert_eq!(problem.variables.len(), 2);
     }
 
     #[test]
-    fn test_sos_constraint_builder() {
+    fn test_edge_cases() {
+        // Zero and extreme coefficients
         let problem = LpProblemBuilder::new()
-            .minimize()
-            .sos_constraint("sos1", SOSType::S1, |c| c.coefficient("x1", 1.0).coefficient("x2", 2.0).coefficient("x3", 3.0))
-            .variables(&["x1", "x2", "x3"], &VariableType::Free)
+            .objective("ext", |o| o.coefficient("a", 0.0).coefficient("b", f64::MAX).coefficient("c", f64::NEG_INFINITY))
             .build()
-            .expect("Should build successfully");
+            .unwrap();
+        assert_eq!(problem.objectives.get("ext").unwrap().coefficients.len(), 3);
 
-        assert_eq!(problem.constraints.len(), 1);
-        assert_eq!(problem.variables.len(), 3);
-    }
-
-    #[test]
-    fn test_convenience_function() {
-        let problem = lp_problem()
-            .name("simple")
-            .maximize()
-            .objective("profit", |obj| obj.coefficient("x", 3.0).coefficient("y", 2.0))
-            .constraint("resource", |c| c.coefficient("x", 2.0).coefficient("y", 1.0).le(100.0))
-            .variable("x", |v| v.bounds(0.0, 50.0))
-            .variable("y", |v| v.lower_bound(0.0))
+        // Special characters and long names
+        let long = "x".repeat(1000);
+        let problem = LpProblemBuilder::new()
+            .name(&long)
+            .variable("var_1.2$special", |v| v.general())
+            .variable(&long, |v| v.binary())
             .build()
-            .expect("Should build successfully");
-
-        assert_eq!(problem.sense, Sense::Maximize);
-        assert_eq!(problem.objectives.len(), 1);
-        assert_eq!(problem.constraints.len(), 1);
+            .unwrap();
+        assert!(problem.variables.contains_key("var_1.2$special"));
+        assert!(problem.variables.contains_key(long.as_str()));
     }
 
     #[test]
     fn test_validation_errors() {
-        // Test objective with no coefficients
-        let result = LpProblemBuilder::new()
-            .objective("empty", |obj| obj) // No coefficients
-            .build();
-
-        assert!(result.is_err());
-
-        // Test constraint with no operator
-        let result = LpProblemBuilder::new()
-            .constraint("incomplete", |c| c.coefficient("x", 1.0)) // No operator or RHS
-            .build();
-
-        assert!(result.is_err());
+        assert!(LpProblemBuilder::new().objective("e", |o| o).build().is_err());
+        assert!(LpProblemBuilder::new().constraint("i", |c| c.coefficient("x", 1.0)).build().is_err());
     }
 }

@@ -2,7 +2,7 @@
 source: rust/tests/test_nom_from_file.rs
 expression: parsed
 ---
-name: " LP format example"
+name: ~
 sense: Minimize
 objectives:
   obj:
@@ -26,7 +26,7 @@ constraints:
 variables:
   x:
     name: x
-    var_type: Free
+    var_type: Binary
   y:
     name: y
-    var_type: Free
+    var_type: Binary

@@ -1,8 +1,6 @@
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
-use nom::error::{Error, ErrorKind};
-use nom::{Err, IResult};
 use smallvec::SmallVec;
 
 static PATTERN_CACHE: OnceLock<std::sync::RwLock<HashMap<String, CachedPattern>>> = OnceLock::new();
@@ -198,96 +196,37 @@ pub fn fast_find_case_insensitive(haystack: &str, needle: &str) -> Option<usize>
     None
 }
 
-/// Optimized version of `take_until_cased` using fast string search
-pub fn fast_take_until_cased<'a>(tag: &'a str) -> impl Fn(&'a str) -> IResult<&'a str, &'a str> + 'a {
-    move |input: &str| {
-        fast_find_case_insensitive(input, tag)
-            .map_or_else(|| Err(Err::Error(Error::new(input, ErrorKind::TakeUntil))), |pos| Ok((&input[pos..], &input[..pos])))
-    }
-}
-
-/// Optimized version of `take_until_parser` using fast string search
-pub fn fast_take_until_parser<'a>(tags: &'a [&'a str]) -> impl Fn(&'a str) -> IResult<&'a str, &'a str> + 'a {
-    // Create finder once outside the closure to avoid recreation on every call
-    let finder = FastStringFinder::new(tags);
-
-    move |input| {
-        if let Some((pos, _matched_tag)) = finder.find_first(input) {
-            Ok((&input[pos..], &input[..pos]))
-        } else {
-            Err(Err::Error(Error::new(input, ErrorKind::Alt)))
-        }
-    }
-}
-
-/// Memory pool for reusing allocations
-pub struct MemoryPool<T> {
-    pool: std::sync::Mutex<Vec<T>>,
-    factory: fn() -> T,
-}
-
-impl<T> MemoryPool<T> {
-    /// Create a new memory pool
-    pub fn new(factory: fn() -> T) -> Self {
-        Self { pool: std::sync::Mutex::new(Vec::new()), factory }
-    }
-
-    /// Get an item from the pool or create a new one
-    pub fn get(&self) -> PooledItem<'_, T> {
-        let item = {
-            let mut pool = self.pool.lock().expect("memory pool lock poisoned");
-            pool.pop().unwrap_or_else(|| (self.factory)())
-        };
-
-        PooledItem { item: Some(item), pool: &self.pool }
-    }
-}
-
-/// RAII wrapper for pooled items
-pub struct PooledItem<'a, T> {
-    item: Option<T>,
-    pool: &'a std::sync::Mutex<Vec<T>>,
-}
-
-impl<T> std::ops::Deref for PooledItem<'_, T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        self.item.as_ref().unwrap()
-    }
-}
-
-impl<T> std::ops::DerefMut for PooledItem<'_, T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        self.item.as_mut().unwrap()
-    }
-}
-
-impl<T> Drop for PooledItem<'_, T> {
-    fn drop(&mut self) {
-        if let Some(item) = self.item.take() {
-            if let Ok(mut pool) = self.pool.lock() {
-                pool.push(item);
-            }
-            // If lock is poisoned, silently drop the item rather than panicking in Drop
-        }
-    }
-}
-
 /// Zero-copy string interner for reusing common strings.
 ///
-/// # Memory Warning
+/// # Safety & Memory Warning
+///
+/// **CAUTION: This is a leaky abstraction by design.**
 ///
 /// This interner uses `Box::leak` to create `'static` string references.
 /// Interned strings are **never deallocated** and will persist for the lifetime
 /// of the program. This is intentional for performance, but be aware:
 ///
-/// - Do not use for unbounded or user-controlled input
-/// - Best suited for a fixed set of known keywords
-/// - Memory usage grows monotonically with unique strings interned
+/// ## When to use
+/// - Fixed, bounded sets of keywords (e.g., LP file section headers)
+/// - Strings known at compile-time or configuration-time
+/// - Short-lived CLI tools where process termination reclaims memory
 ///
-/// For long-running applications with dynamic string sets, consider using
-/// the `lasso` or `string_interner` crates which support garbage collection.
+/// ## When NOT to use
+/// - **User-controlled input** - attackers could exhaust memory
+/// - **Unbounded/dynamic string sets** - memory grows without limit
+/// - **Long-running services** - memory leak becomes problematic over time
+/// - **Large strings** - each unique string permanently allocates heap memory
+///
+/// ## Memory characteristics
+/// - Each unique string allocates `size_of::<String>() + string.len()` bytes permanently
+/// - HashMap overhead for the lookup table (also never deallocated)
+/// - No way to clear or reset interned strings
+///
+/// ## Alternatives for production use
+/// For long-running applications or dynamic string sets, consider:
+/// - [`lasso`](https://crates.io/crates/lasso) - Thread-safe interner with GC support
+/// - [`string_interner`](https://crates.io/crates/string_interner) - Fast, memory-efficient
+/// - [`ustr`](https://crates.io/crates/ustr) - Global interning with deduplication
 pub struct StringInterner {
     strings: std::sync::RwLock<HashMap<String, &'static str>>,
 }
@@ -410,24 +349,6 @@ mod tests {
         assert_eq!(finder.find_first("This is subject to constraints"), Some((8, "subject")));
         assert_eq!(finder.find_first("BOUNDS section here"), Some((0, "bounds")));
         assert_eq!(finder.find_first("no matches here"), None);
-    }
-
-    #[test]
-    fn test_memory_pool() {
-        let pool = MemoryPool::new(Vec::<i32>::new);
-
-        {
-            let mut item1 = pool.get();
-            item1.push(42);
-            assert_eq!(item1[0], 42);
-        }
-
-        // Item should be returned to pool
-        let mut item2 = pool.get();
-        // The returned item might still have the old data
-        item2.clear(); // Clear it for reuse
-        item2.push(100);
-        assert_eq!(item2[0], 100);
     }
 
     #[test]

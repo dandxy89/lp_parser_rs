@@ -22,9 +22,6 @@ objectives:
         value: 10
 constraints: {}
 variables:
-  "\\":
-    name: "\\"
-    var_type: Binary
   x1:
     name: x1
     var_type: Binary

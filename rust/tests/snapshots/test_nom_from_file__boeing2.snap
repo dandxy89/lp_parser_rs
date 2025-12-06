@@ -2,7 +2,7 @@
 source: rust/tests/test_nom_from_file.rs
 expression: parsed
 ---
-name: "Problem name: boeing2.mps"
+name: boeing2.mps
 sense: Minimize
 objectives:
   OBJECTIV:

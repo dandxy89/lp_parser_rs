@@ -2,7 +2,7 @@
 source: rust/tests/test_nom_from_file.rs
 expression: parsed
 ---
-name: "Problem name: afiro_ext.mps"
+name: afiro_ext.mps
 sense: Minimize
 objectives:
   OBJ1:

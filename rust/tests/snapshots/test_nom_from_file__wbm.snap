@@ -2,7 +2,7 @@
 source: rust/tests/test_nom_from_file.rs
 expression: parsed
 ---
-name: " WBM_Problem "
+name: WBM_Problem
 sense: Maximize
 objectives:
   Total_weights_of_selected_edges:
