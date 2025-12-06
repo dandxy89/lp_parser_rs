@@ -12,12 +12,24 @@ class TestLpWriter:
 
         # Basic string generation
         lp_string: str = parser.to_lp_string()
-        for expected in ["Maximize", "OBJ:", "x1", "x2", "Subject To", "C1:", "C2:", "End"]:
+        for expected in [
+            "Maximize",
+            "OBJ:",
+            "x1",
+            "x2",
+            "Subject To",
+            "C1:",
+            "C2:",
+            "End",
+        ]:
             assert expected in lp_string
 
         # With options
         lp_string = parser.to_lp_string_with_options(
-            include_problem_name=False, max_line_length=80, decimal_precision=2, include_section_spacing=False
+            include_problem_name=False,
+            max_line_length=80,
+            decimal_precision=2,
+            include_section_spacing=False,
         )
         assert "Maximize" in lp_string and "\\Problem name:" not in lp_string
 
@@ -156,7 +168,9 @@ class TestLpModificationErrors:
             ("rename_variable", ("nonexistent", "new_name")),
         ],
     )
-    def test_nonexistent_elements(self, simple_lp_file: Path, method: str, args: tuple) -> None:
+    def test_nonexistent_elements(
+        self, simple_lp_file: Path, method: str, args: tuple
+    ) -> None:
         parser = LpParser(str(simple_lp_file))
         parser.parse()
         with pytest.raises(RuntimeError, match="not found"):
