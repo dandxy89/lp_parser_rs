@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.1](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v3.0.0...lp_parser_rs-v3.0.1) (2025-12-07)
+
+
+### Miscellaneous Chores
+
+* Remove unused consts ([74a363e](https://github.com/dandxy89/lp_parser_rs/commit/74a363eb2eb96eee2e516e0ce0dfff6cd69d76d8))
+
 ## [3.0.0](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v2.5.2...lp_parser_rs-v3.0.0) (2025-12-06)
 
 
