@@ -179,7 +179,7 @@ pub enum Token<'input> {
     BlockComment,
 
     /// Line comment: \ ...
-    #[regex(r"\\[^\n*][^\n]*")]
+    #[regex(r"\\[^\n*][^\n]*", allow_greedy = true)]
     LineComment,
 
     // === Identifiers ===
