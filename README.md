@@ -10,6 +10,8 @@
 
 A robust Rust library for parsing, modifying, and writing Linear Programming (LP) files. Built on the [LALRPOP](https://github.com/lalrpop/lalrpop) parser generator, this crate provides comprehensive support for the LP file format with the ability to parse, programmatically modify, and regenerate LP files according to major industry specifications.
 
+The Grammar is defined with the [lp.lalrpop](/rust/src/lp.lalrpop) file - should you be curious...
+
 ### Supported Specifications
 
 - [IBM CPLEX v22.1.1](https://www.ibm.com/docs/en/icos/22.1.1?topic=cplex-lp-file-format-algebraic-representation)
@@ -54,7 +56,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-lp_parser_rs = "2.5.2" # x-release-please-version
+lp_parser_rs = "3.0.0" # x-release-please-version
 ```
 
 ### Basic Usage
@@ -127,7 +129,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```toml
 [dependencies]
-lp_parser_rs = { version = "2.5.2", features = ["serde", "diff"] } # x-release-please-version
+lp_parser_rs = { version = "3.0.0", features = ["serde", "diff"] } # x-release-please-version
 ```
 
 ## API Reference
