@@ -35,9 +35,7 @@ lalrpop-util = "0.22.2"
 lp-solvers = { version = "1.1", optional = true }
 log = "0.4.29"
 logos = "0.15.1"
-memchr = "2.7.6"
 serde = { version = "1.0.228", features = ["derive"], optional = true }
-smallvec = "1.15.1"
 thiserror = "2.0.17"
 unique_id = { version = "0.1.7", features = ["sequence"] }
 
