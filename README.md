@@ -132,6 +132,52 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 lp_parser_rs = { version = "3.0.0", features = ["serde", "diff"] } # x-release-please-version
 ```
 
+### Solving with External Solvers (`lp-solvers` feature)
+
+Enable the `lp-solvers` feature to solve parsed LP problems using external solvers like CBC, Gurobi, CPLEX, or GLPK via the [lp-solvers](https://crates.io/crates/lp-solvers) crate:
+
+```toml
+[dependencies]
+lp_parser_rs = { version = "3.0.0", features = ["lp-solvers"] } # x-release-please-version
+lp-solvers = "1.1"
+```
+
+```rust
+use lp_parser_rs::{problem::LpProblem, ToLpSolvers};
+use lp_solvers::solvers::{CbcSolver, SolverTrait};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let lp_content = r"
+Minimize
+ obj: 2 x + 3 y
+Subject To
+ c1: x + y <= 10
+ c2: x >= 2
+Bounds
+ x >= 0
+ y >= 0
+End
+";
+
+    let problem = LpProblem::parse(lp_content)?;
+    let compat = problem.to_lp_solvers()?;
+
+    // Check for any compatibility warnings
+    for warning in compat.warnings() {
+        eprintln!("Warning: {}", warning);
+    }
+
+    // Solve using CBC solver (must be installed on your system)
+    let solver = CbcSolver::new();
+    let solution = solver.run(&compat)?;
+    println!("Solution status: {:?}", solution.status);
+
+    Ok(())
+}
+```
+
+**Limitations:** The lp-solvers compatibility layer does not support multiple objectives (returns an error), strict inequalities (`<`, `>`), or SOS constraints (ignored with a warning).
+
 ## API Reference
 
 ### Problem Modification Methods

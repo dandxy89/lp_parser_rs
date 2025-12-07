@@ -49,6 +49,8 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
+      # Cache Rust dependencies to speed up builds
+      - uses: Swatinem/rust-cache@v2
       - name: Run Clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
 
@@ -60,8 +62,11 @@ jobs:
       # Ensure Rust is installed and set up the active toolchain
       - name: Setup Rust
         run: rustup show active-toolchain || rustup toolchain install
+      # Install CBC solver for lp-solvers integration tests
+      - name: Install CBC solver
+        run: sudo apt-get update && sudo apt-get install -y coinor-cbc
       # Cache Rust dependencies to speed up builds
       - uses: Swatinem/rust-cache@v2
-      # Run all tests with all features enabled
+      # Run all tests with all features enabled (including CBC solver test via test-cbc feature)
       - name: Run tests
         run: cargo test --all-features

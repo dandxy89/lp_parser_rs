@@ -28,6 +28,7 @@
 //! ```
 
 pub mod builder;
+pub mod compat;
 pub mod context;
 #[cfg(feature = "csv")]
 pub mod csv;
@@ -40,6 +41,7 @@ pub mod writer;
 
 // LALRPOP generated grammar module
 use lalrpop_util::lalrpop_mod;
+
 #[allow(clippy::redundant_field_names, clippy::type_complexity, clippy::missing_const_for_fn)]
 mod lp_grammar {
     use super::*;
