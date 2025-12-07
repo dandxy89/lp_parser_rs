@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.2](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v3.0.1...lp_parser_rs-v3.0.2) (2025-12-07)
+
+
+### Miscellaneous Chores
+
+* release 3.0.2 ([e6771bd](https://github.com/dandxy89/lp_parser_rs/commit/e6771bd29fda5fdb7fa4c424b7892b8fbd9678ea))
+
 ## [3.0.1](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v3.0.0...lp_parser_rs-v3.0.1) (2025-12-07)
 
 
