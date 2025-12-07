@@ -1,0 +1,931 @@
+---
+source: rust/tests/test_from_file.rs
+expression: parsed
+---
+name: copynumber
+sense: Minimize
+objectives:
+  OBJ:
+    name: OBJ
+    coefficients:
+      - name: PenaltyTree_48
+        value: 1
+constraints:
+  _C1:
+    type: Standard
+    name: _C1
+    coefficients:
+      - name: A_0
+        value: -1
+      - name: A_3
+        value: 1
+      - name: over_0
+        value: -1
+    operator: LTE
+    rhs: 0
+  _C10:
+    type: Standard
+    name: _C10
+    coefficients:
+      - name: B_3
+        value: -1
+      - name: B_7
+        value: 1
+      - name: under_9
+        value: 1
+    operator: GTE
+    rhs: 0
+  _C11:
+    type: Standard
+    name: _C11
+    coefficients:
+      - name: D_0
+        value: -1
+      - name: D_3
+        value: 1
+      - name: over_10
+        value: -1
+    operator: LTE
+    rhs: 0
+  _C12:
+    type: Standard
+    name: _C12
+    coefficients:
+      - name: D_0
+        value: -1
+      - name: D_3
+        value: 1
+      - name: under_11
+        value: 1
+    operator: GTE
+    rhs: 0
+  _C13:
+    type: Standard
+    name: _C13
+    coefficients:
+      - name: N_0
+        value: -1
+      - name: N_3
+        value: 1
+      - name: over_12
+        value: -1
+    operator: LTE
+    rhs: 0
+  _C14:
+    type: Standard
+    name: _C14
+    coefficients:
+      - name: N_0
+        value: -1
+      - name: N_3
+        value: 1
+      - name: under_13
+        value: 1
+    operator: GTE
+    rhs: 0
+  _C15:
+    type: Standard
+    name: _C15
+    coefficients:
+      - name: N_3
+        value: -1
+      - name: N_7
+        value: 1
+      - name: over_14
+        value: -1
+    operator: LTE
+    rhs: 0
+  _C16:
+    type: Standard
+    name: _C16
+    coefficients:
+      - name: N_3
+        value: -1
+      - name: N_7
+        value: 1
+      - name: under_15
+        value: 1
+    operator: GTE
+    rhs: 0
+  _C17:
+    type: Standard
+    name: _C17
+    coefficients:
+      - name: A_7
+        value: 1
+      - name: B_7
+        value: -1
+      - name: over_16
+        value: -1
+    operator: LTE
+    rhs: 0
+  _C18:
+    type: Standard
+    name: _C18
+    coefficients:
+      - name: A_7
+        value: 1
+      - name: B_7
+        value: -1
+      - name: under_17
+        value: 1
+    operator: GTE
+    rhs: 0
+  _C19:
+    type: Standard
+    name: _C19
+    coefficients:
+      - name: A_7
+        value: -1
+      - name: N_7
+        value: 1
+      - name: over_18
+        value: -1
+    operator: LTE
+    rhs: 0
+  _C2:
+    type: Standard
+    name: _C2
+    coefficients:
+      - name: A_0
+        value: -1
+      - name: A_3
+        value: 1
+      - name: under_1
+        value: 1
+    operator: GTE
+    rhs: 0
+  _C20:
+    type: Standard
+    name: _C20
+    coefficients:
+      - name: A_7
+        value: -1
+      - name: N_7
+        value: 1
+      - name: under_19
+        value: 1
+    operator: GTE
+    rhs: 0
+  _C21:
+    type: Standard
+    name: _C21
+    coefficients:
+      - name: C_7
+        value: 1
+      - name: N_7
+        value: -1
+      - name: over_20
+        value: -1
+    operator: LTE
+    rhs: 0
+  _C22:
+    type: Standard
+    name: _C22
+    coefficients:
+      - name: C_7
+        value: 1
+      - name: N_7
+        value: -1
+      - name: under_21
+        value: 1
+    operator: GTE
+    rhs: 0
+  _C23:
+    type: Standard
+    name: _C23
+    coefficients:
+      - name: B_7
+        value: 1
+      - name: C_7
+        value: -1
+      - name: over_22
+        value: -1
+    operator: LTE
+    rhs: 0
+  _C24:
+    type: Standard
+    name: _C24
+    coefficients:
+      - name: B_7
+        value: 1
+      - name: C_7
+        value: -1
+      - name: under_23
+        value: 1
+    operator: GTE
+    rhs: 0
+  _C25:
+    type: Standard
+    name: _C25
+    coefficients:
+      - name: B_3
+        value: 1
+      - name: N_3
+        value: -1
+      - name: over_24
+        value: -1
+    operator: LTE
+    rhs: 0
+  _C26:
+    type: Standard
+    name: _C26
+    coefficients:
+      - name: B_3
+        value: 1
+      - name: N_3
+        value: -1
+      - name: under_25
+        value: 1
+    operator: GTE
+    rhs: 0
+  _C27:
+    type: Standard
+    name: _C27
+    coefficients:
+      - name: A_3
+        value: 1
+      - name: B_3
+        value: -1
+      - name: over_26
+        value: -1
+    operator: LTE
+    rhs: 0
+  _C28:
+    type: Standard
+    name: _C28
+    coefficients:
+      - name: A_3
+        value: 1
+      - name: B_3
+        value: -1
+      - name: under_27
+        value: 1
+    operator: GTE
+    rhs: 0
+  _C29:
+    type: Standard
+    name: _C29
+    coefficients:
+      - name: A_3
+        value: -1
+      - name: N_3
+        value: 1
+      - name: over_28
+        value: -1
+    operator: LTE
+    rhs: 0
+  _C3:
+    type: Standard
+    name: _C3
+    coefficients:
+      - name: A_3
+        value: -1
+      - name: A_7
+        value: 1
+      - name: over_2
+        value: -1
+    operator: LTE
+    rhs: 0
+  _C30:
+    type: Standard
+    name: _C30
+    coefficients:
+      - name: A_3
+        value: -1
+      - name: N_3
+        value: 1
+      - name: under_29
+        value: 1
+    operator: GTE
+    rhs: 0
+  _C31:
+    type: Standard
+    name: _C31
+    coefficients:
+      - name: A_0
+        value: 1
+      - name: N_0
+        value: -1
+      - name: over_30
+        value: -1
+    operator: LTE
+    rhs: 0
+  _C32:
+    type: Standard
+    name: _C32
+    coefficients:
+      - name: A_0
+        value: 1
+      - name: N_0
+        value: -1
+      - name: under_31
+        value: 1
+    operator: GTE
+    rhs: 0
+  _C33:
+    type: Standard
+    name: _C33
+    coefficients:
+      - name: A_0
+        value: -1
+      - name: D_0
+        value: 1
+      - name: over_32
+        value: -1
+    operator: LTE
+    rhs: 0
+  _C34:
+    type: Standard
+    name: _C34
+    coefficients:
+      - name: A_0
+        value: -1
+      - name: D_0
+        value: 1
+      - name: under_33
+        value: 1
+    operator: GTE
+    rhs: 0
+  _C35:
+    type: Standard
+    name: _C35
+    coefficients:
+      - name: B_0
+        value: 1
+      - name: D_0
+        value: -1
+      - name: over_34
+        value: -1
+    operator: LTE
+    rhs: 0
+  _C36:
+    type: Standard
+    name: _C36
+    coefficients:
+      - name: B_0
+        value: 1
+      - name: D_0
+        value: -1
+      - name: under_35
+        value: 1
+    operator: GTE
+    rhs: 0
+  _C37:
+    type: Standard
+    name: _C37
+    coefficients:
+      - name: B_0
+        value: -1
+      - name: N_0
+        value: 1
+      - name: over_36
+        value: -1
+    operator: LTE
+    rhs: 0
+  _C38:
+    type: Standard
+    name: _C38
+    coefficients:
+      - name: B_0
+        value: -1
+      - name: N_0
+        value: 1
+      - name: under_37
+        value: 1
+    operator: GTE
+    rhs: 0
+  _C39:
+    type: Standard
+    name: _C39
+    coefficients:
+      - name: D_3
+        value: 1
+      - name: over_38
+        value: -1
+    operator: LTE
+    rhs: 1.24660824696
+  _C4:
+    type: Standard
+    name: _C4
+    coefficients:
+      - name: A_3
+        value: -1
+      - name: A_7
+        value: 1
+      - name: under_3
+        value: 1
+    operator: GTE
+    rhs: 0
+  _C40:
+    type: Standard
+    name: _C40
+    coefficients:
+      - name: D_3
+        value: 1
+      - name: under_39
+        value: 1
+    operator: GTE
+    rhs: 1.24660824696
+  _C41:
+    type: Standard
+    name: _C41
+    coefficients:
+      - name: A_7
+        value: 1
+      - name: B_7
+        value: 1
+      - name: C_7
+        value: 1
+      - name: N_7
+        value: 1
+      - name: over_40
+        value: -1
+    operator: LTE
+    rhs: 9.80665154278
+  _C42:
+    type: Standard
+    name: _C42
+    coefficients:
+      - name: A_7
+        value: 1
+      - name: B_7
+        value: 1
+      - name: C_7
+        value: 1
+      - name: N_7
+        value: 1
+      - name: under_41
+        value: 1
+    operator: GTE
+    rhs: 9.80665154278
+  _C43:
+    type: Standard
+    name: _C43
+    coefficients:
+      - name: C_0
+        value: 1
+      - name: over_42
+        value: -1
+    operator: LTE
+    rhs: 2.06580795211
+  _C44:
+    type: Standard
+    name: _C44
+    coefficients:
+      - name: C_0
+        value: 1
+      - name: under_43
+        value: 1
+    operator: GTE
+    rhs: 2.06580795211
+  _C45:
+    type: Standard
+    name: _C45
+    coefficients:
+      - name: A_3
+        value: 1
+      - name: B_3
+        value: 1
+      - name: N_3
+        value: 1
+      - name: over_44
+        value: -1
+    operator: LTE
+    rhs: 7.1056670077
+  _C46:
+    type: Standard
+    name: _C46
+    coefficients:
+      - name: A_3
+        value: 1
+      - name: B_3
+        value: 1
+      - name: N_3
+        value: 1
+      - name: under_45
+        value: 1
+    operator: GTE
+    rhs: 7.1056670077
+  _C47:
+    type: Standard
+    name: _C47
+    coefficients:
+      - name: A_0
+        value: 1
+      - name: B_0
+        value: 1
+      - name: D_0
+        value: 1
+      - name: N_0
+        value: 1
+      - name: over_46
+        value: -1
+    operator: LTE
+    rhs: 7.89518556411
+  _C48:
+    type: Standard
+    name: _C48
+    coefficients:
+      - name: A_0
+        value: 1
+      - name: B_0
+        value: 1
+      - name: D_0
+        value: 1
+      - name: N_0
+        value: 1
+      - name: under_47
+        value: 1
+    operator: GTE
+    rhs: 7.89518556411
+  _C49:
+    type: Standard
+    name: _C49
+    coefficients:
+      - name: PenaltyTree_48
+        value: -1
+      - name: over_0
+        value: 0.5
+      - name: over_10
+        value: 0.5
+      - name: over_12
+        value: 0.5
+      - name: over_14
+        value: 0.5
+      - name: over_16
+        value: 0.02
+      - name: over_18
+        value: 0.02
+      - name: over_2
+        value: 0.5
+      - name: over_20
+        value: 0.02
+      - name: over_22
+        value: 0.02
+      - name: over_24
+        value: 0.02
+      - name: over_26
+        value: 0.02
+      - name: over_28
+        value: 0.02
+      - name: over_30
+        value: 0.02
+      - name: over_32
+        value: 0.02
+      - name: over_34
+        value: 0.02
+      - name: over_36
+        value: 0.02
+      - name: over_38
+        value: 4
+      - name: over_4
+        value: 0.5
+      - name: over_40
+        value: 4
+      - name: over_42
+        value: 4
+      - name: over_44
+        value: 4
+      - name: over_46
+        value: 4
+      - name: over_6
+        value: 0.5
+      - name: over_8
+        value: 0.5
+      - name: under_1
+        value: 0.5
+      - name: under_11
+        value: 0.5
+      - name: under_13
+        value: 0.5
+      - name: under_15
+        value: 0.5
+      - name: under_17
+        value: 0.02
+      - name: under_19
+        value: 0.02
+      - name: under_21
+        value: 0.02
+      - name: under_23
+        value: 0.02
+      - name: under_25
+        value: 0.02
+      - name: under_27
+        value: 0.02
+      - name: under_29
+        value: 0.02
+      - name: under_3
+        value: 0.5
+      - name: under_31
+        value: 0.02
+      - name: under_33
+        value: 0.02
+      - name: under_35
+        value: 0.02
+      - name: under_37
+        value: 0.02
+      - name: under_39
+        value: 4
+      - name: under_41
+        value: 4
+      - name: under_43
+        value: 4
+      - name: under_45
+        value: 4
+      - name: under_47
+        value: 4
+      - name: under_5
+        value: 0.5
+      - name: under_7
+        value: 0.5
+      - name: under_9
+        value: 0.5
+    operator: EQ
+    rhs: 0
+  _C5:
+    type: Standard
+    name: _C5
+    coefficients:
+      - name: C_0
+        value: -1
+      - name: C_7
+        value: 1
+      - name: over_4
+        value: -1
+    operator: LTE
+    rhs: 0
+  _C6:
+    type: Standard
+    name: _C6
+    coefficients:
+      - name: C_0
+        value: -1
+      - name: C_7
+        value: 1
+      - name: under_5
+        value: 1
+    operator: GTE
+    rhs: 0
+  _C7:
+    type: Standard
+    name: _C7
+    coefficients:
+      - name: B_0
+        value: -1
+      - name: B_3
+        value: 1
+      - name: over_6
+        value: -1
+    operator: LTE
+    rhs: 0
+  _C8:
+    type: Standard
+    name: _C8
+    coefficients:
+      - name: B_0
+        value: -1
+      - name: B_3
+        value: 1
+      - name: under_7
+        value: 1
+    operator: GTE
+    rhs: 0
+  _C9:
+    type: Standard
+    name: _C9
+    coefficients:
+      - name: B_3
+        value: -1
+      - name: B_7
+        value: 1
+      - name: over_8
+        value: -1
+    operator: LTE
+    rhs: 0
+variables:
+  A_0:
+    name: A_0
+    var_type:
+      DoubleBound:
+        - 0
+        - 4
+  A_3:
+    name: A_3
+    var_type:
+      DoubleBound:
+        - 0
+        - 4
+  A_7:
+    name: A_7
+    var_type:
+      DoubleBound:
+        - 0
+        - 4
+  B_0:
+    name: B_0
+    var_type:
+      DoubleBound:
+        - 0
+        - 4
+  B_3:
+    name: B_3
+    var_type:
+      DoubleBound:
+        - 0
+        - 4
+  B_7:
+    name: B_7
+    var_type:
+      DoubleBound:
+        - 0
+        - 4
+  C_0:
+    name: C_0
+    var_type:
+      DoubleBound:
+        - 0
+        - 4
+  C_7:
+    name: C_7
+    var_type:
+      DoubleBound:
+        - 0
+        - 4
+  D_0:
+    name: D_0
+    var_type:
+      DoubleBound:
+        - 0
+        - 4
+  D_3:
+    name: D_3
+    var_type:
+      DoubleBound:
+        - 0
+        - 4
+  N_0:
+    name: N_0
+    var_type:
+      DoubleBound:
+        - 0
+        - 4
+  N_3:
+    name: N_3
+    var_type:
+      DoubleBound:
+        - 0
+        - 4
+  N_7:
+    name: N_7
+    var_type:
+      DoubleBound:
+        - 0
+        - 4
+  PenaltyTree_48:
+    name: PenaltyTree_48
+    var_type: Free
+  over_0:
+    name: over_0
+    var_type: Free
+  over_10:
+    name: over_10
+    var_type: Free
+  over_12:
+    name: over_12
+    var_type: Free
+  over_14:
+    name: over_14
+    var_type: Free
+  over_16:
+    name: over_16
+    var_type: Free
+  over_18:
+    name: over_18
+    var_type: Free
+  over_2:
+    name: over_2
+    var_type: Free
+  over_20:
+    name: over_20
+    var_type: Free
+  over_22:
+    name: over_22
+    var_type: Free
+  over_24:
+    name: over_24
+    var_type: Free
+  over_26:
+    name: over_26
+    var_type: Free
+  over_28:
+    name: over_28
+    var_type: Free
+  over_30:
+    name: over_30
+    var_type: Free
+  over_32:
+    name: over_32
+    var_type: Free
+  over_34:
+    name: over_34
+    var_type: Free
+  over_36:
+    name: over_36
+    var_type: Free
+  over_38:
+    name: over_38
+    var_type: Free
+  over_4:
+    name: over_4
+    var_type: Free
+  over_40:
+    name: over_40
+    var_type: Free
+  over_42:
+    name: over_42
+    var_type: Free
+  over_44:
+    name: over_44
+    var_type: Free
+  over_46:
+    name: over_46
+    var_type: Free
+  over_6:
+    name: over_6
+    var_type: Free
+  over_8:
+    name: over_8
+    var_type: Free
+  under_1:
+    name: under_1
+    var_type: Free
+  under_11:
+    name: under_11
+    var_type: Free
+  under_13:
+    name: under_13
+    var_type: Free
+  under_15:
+    name: under_15
+    var_type: Free
+  under_17:
+    name: under_17
+    var_type: Free
+  under_19:
+    name: under_19
+    var_type: Free
+  under_21:
+    name: under_21
+    var_type: Free
+  under_23:
+    name: under_23
+    var_type: Free
+  under_25:
+    name: under_25
+    var_type: Free
+  under_27:
+    name: under_27
+    var_type: Free
+  under_29:
+    name: under_29
+    var_type: Free
+  under_3:
+    name: under_3
+    var_type: Free
+  under_31:
+    name: under_31
+    var_type: Free
+  under_33:
+    name: under_33
+    var_type: Free
+  under_35:
+    name: under_35
+    var_type: Free
+  under_37:
+    name: under_37
+    var_type: Free
+  under_39:
+    name: under_39
+    var_type: Free
+  under_41:
+    name: under_41
+    var_type: Free
+  under_43:
+    name: under_43
+    var_type: Free
+  under_45:
+    name: under_45
+    var_type: Free
+  under_47:
+    name: under_47
+    var_type: Free
+  under_5:
+    name: under_5
+    var_type: Free
+  under_7:
+    name: under_7
+    var_type: Free
+  under_9:
+    name: under_9
+    var_type: Free

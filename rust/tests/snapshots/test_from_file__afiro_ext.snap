@@ -1,0 +1,548 @@
+---
+source: rust/tests/test_from_file.rs
+expression: parsed
+---
+name: afiro_ext.mps
+sense: Minimize
+objectives:
+  OBJ1:
+    name: OBJ1
+    coefficients:
+      - name: X02
+        value: -0.4
+      - name: X14
+        value: -0.32
+      - name: X23
+        value: -0.6
+      - name: X36
+        value: -0.48
+      - name: X39
+        value: 10
+  OBJ2:
+    name: OBJ2
+    coefficients:
+      - name: X03
+        value: 1
+      - name: X06
+        value: 2.5
+      - name: X08
+        value: -5
+  OBJ3:
+    name: OBJ3
+    coefficients:
+      - name: X03
+        value: -10.4
+      - name: X07
+        value: -2.5
+      - name: X10
+        value: 2.1
+  OBJECTIV:
+    name: OBJECTIV
+    coefficients:
+      - name: PBOSHNL0
+        value: -0.23519
+      - name: PBOSHNL1
+        value: -0.23519
+      - name: PBOSHNL7
+        value: 0.02469
+      - name: PBOSHNL8
+        value: 0.02665
+      - name: PBOSLAX0
+        value: -0.13092
+      - name: PBOSLAX1
+        value: -0.13092
+      - name: PBOSLAX7
+        value: 0.03462
+      - name: PBOSSEA0
+        value: -0.12596
+      - name: PBOSSEA1
+        value: -0.12596
+      - name: PBOSSEA2
+        value: -0.12596
+      - name: PBOSSFO0
+        value: -0.13481
+      - name: PBOSSFO1
+        value: -0.13481
+      - name: PBOSTPE1
+        value: 0.05629
+      - name: PBOSTPE2
+        value: 0.0528
+      - name: PBOSTYO1
+        value: 0.04525
+constraints:
+  R09:
+    type: Standard
+    name: R09
+    coefficients:
+      - name: X01
+        value: -1
+      - name: X02
+        value: 1
+      - name: X03
+        value: 1
+    operator: EQ
+    rhs: 0
+  R10:
+    type: Standard
+    name: R10
+    coefficients:
+      - name: X01
+        value: -1.06
+      - name: X04
+        value: 1
+    operator: EQ
+    rhs: 0
+  R12:
+    type: Standard
+    name: R12
+    coefficients:
+      - name: X06
+        value: -1
+      - name: X07
+        value: -1
+      - name: X08
+        value: -1
+      - name: X09
+        value: -1
+      - name: X14
+        value: 1
+      - name: X15
+        value: 1
+    operator: EQ
+    rhs: 0
+  R13:
+    type: Standard
+    name: R13
+    coefficients:
+      - name: X06
+        value: -1.06
+      - name: X07
+        value: -1.06
+      - name: X08
+        value: -0.96
+      - name: X09
+        value: -0.86
+      - name: X16
+        value: 1
+    operator: EQ
+    rhs: 0
+  R19:
+    type: Standard
+    name: R19
+    coefficients:
+      - name: X22
+        value: -1
+      - name: X23
+        value: 1
+      - name: X24
+        value: 1
+      - name: X25
+        value: 1
+    operator: EQ
+    rhs: 0
+  R20:
+    type: Standard
+    name: R20
+    coefficients:
+      - name: X22
+        value: -0.43
+      - name: X26
+        value: 1
+    operator: EQ
+    rhs: 0
+  R22:
+    type: Standard
+    name: R22
+    coefficients:
+      - name: X28
+        value: -0.43
+      - name: X29
+        value: -0.43
+      - name: X30
+        value: -0.39
+      - name: X31
+        value: -0.37
+      - name: X38
+        value: 1
+    operator: EQ
+    rhs: 0
+  R23:
+    type: Standard
+    name: R23
+    coefficients:
+      - name: X28
+        value: 1
+      - name: X29
+        value: 1
+      - name: X30
+        value: 1
+      - name: X31
+        value: 1
+      - name: X36
+        value: -1
+      - name: X37
+        value: 1
+      - name: X39
+        value: 1
+    operator: EQ
+    rhs: 44
+  X05:
+    type: Standard
+    name: X05
+    coefficients:
+      - name: X01
+        value: 1
+    operator: LTE
+    rhs: 80
+  X17:
+    type: Standard
+    name: X17
+    coefficients:
+      - name: X06
+        value: 1
+      - name: X10
+        value: -1
+    operator: LTE
+    rhs: 80
+  X18:
+    type: Standard
+    name: X18
+    coefficients:
+      - name: X07
+        value: 1
+      - name: X11
+        value: -1
+    operator: LTE
+    rhs: 0
+  X19:
+    type: Standard
+    name: X19
+    coefficients:
+      - name: X08
+        value: 1
+      - name: X12
+        value: -1
+    operator: LTE
+    rhs: 0
+  X20:
+    type: Standard
+    name: X20
+    coefficients:
+      - name: X09
+        value: 1
+      - name: X13
+        value: -1
+    operator: LTE
+    rhs: 0
+  X21:
+    type: Standard
+    name: X21
+    coefficients:
+      - name: X02
+        value: -1
+      - name: X14
+        value: 1.4
+    operator: LTE
+    rhs: 0
+  X27:
+    type: Standard
+    name: X27
+    coefficients:
+      - name: X22
+        value: 1
+    operator: LTE
+    rhs: 500
+  X40:
+    type: Standard
+    name: X40
+    coefficients:
+      - name: X28
+        value: 1
+      - name: X32
+        value: -1
+    operator: LTE
+    rhs: 500
+  X41:
+    type: Standard
+    name: X41
+    coefficients:
+      - name: X29
+        value: 1
+      - name: X33
+        value: -1
+    operator: LTE
+    rhs: 0
+  X42:
+    type: Standard
+    name: X42
+    coefficients:
+      - name: X30
+        value: 1
+      - name: X34
+        value: -1
+    operator: LTE
+    rhs: 0
+  X43:
+    type: Standard
+    name: X43
+    coefficients:
+      - name: X31
+        value: 1
+      - name: X35
+        value: -1
+    operator: LTE
+    rhs: 0
+  X44:
+    type: Standard
+    name: X44
+    coefficients:
+      - name: X23
+        value: -1
+      - name: X36
+        value: 1.4
+    operator: LTE
+    rhs: 0
+  X45:
+    type: Standard
+    name: X45
+    coefficients:
+      - name: X10
+        value: 2.364
+      - name: X11
+        value: 2.386
+      - name: X12
+        value: 2.408
+      - name: X13
+        value: 2.429
+      - name: X25
+        value: -1
+      - name: X32
+        value: 2.191
+      - name: X33
+        value: 2.219
+      - name: X34
+        value: 2.249
+      - name: X35
+        value: 2.279
+    operator: LTE
+    rhs: 0
+  X46:
+    type: Standard
+    name: X46
+    coefficients:
+      - name: X03
+        value: -1
+      - name: X22
+        value: 0.109
+    operator: LTE
+    rhs: 0
+  X47:
+    type: Standard
+    name: X47
+    coefficients:
+      - name: X15
+        value: -1
+      - name: X28
+        value: 0.109
+      - name: X29
+        value: 0.108
+      - name: X30
+        value: 0.108
+      - name: X31
+        value: 0.107
+    operator: LTE
+    rhs: 0
+  X48:
+    type: Standard
+    name: X48
+    coefficients:
+      - name: X01
+        value: 0.301
+      - name: X24
+        value: -1
+    operator: LTE
+    rhs: 0
+  X49:
+    type: Standard
+    name: X49
+    coefficients:
+      - name: X06
+        value: 0.301
+      - name: X07
+        value: 0.313
+      - name: X08
+        value: 0.313
+      - name: X09
+        value: 0.326
+      - name: X37
+        value: -1
+    operator: LTE
+    rhs: 0
+  X50:
+    type: Standard
+    name: X50
+    coefficients:
+      - name: X04
+        value: 1
+      - name: X26
+        value: 1
+    operator: LTE
+    rhs: 310
+  X51:
+    type: Standard
+    name: X51
+    coefficients:
+      - name: X16
+        value: 1
+      - name: X38
+        value: 1
+    operator: LTE
+    rhs: 1300
+variables:
+  PBOSHNL0:
+    name: PBOSHNL0
+    var_type: Free
+  PBOSHNL1:
+    name: PBOSHNL1
+    var_type: Free
+  PBOSHNL7:
+    name: PBOSHNL7
+    var_type: Free
+  PBOSHNL8:
+    name: PBOSHNL8
+    var_type: Free
+  PBOSLAX0:
+    name: PBOSLAX0
+    var_type: Free
+  PBOSLAX1:
+    name: PBOSLAX1
+    var_type: Free
+  PBOSLAX7:
+    name: PBOSLAX7
+    var_type: Free
+  PBOSSEA0:
+    name: PBOSSEA0
+    var_type: Free
+  PBOSSEA1:
+    name: PBOSSEA1
+    var_type: Free
+  PBOSSEA2:
+    name: PBOSSEA2
+    var_type: Free
+  PBOSSFO0:
+    name: PBOSSFO0
+    var_type: Free
+  PBOSSFO1:
+    name: PBOSSFO1
+    var_type: Free
+  PBOSTPE1:
+    name: PBOSTPE1
+    var_type: Free
+  PBOSTPE2:
+    name: PBOSTPE2
+    var_type: Free
+  PBOSTYO1:
+    name: PBOSTYO1
+    var_type: Free
+  X01:
+    name: X01
+    var_type:
+      DoubleBound:
+        - 0
+        - 1
+  X02:
+    name: X02
+    var_type:
+      UpperBound: 1.2
+  X03:
+    name: X03
+    var_type: Free
+  X04:
+    name: X04
+    var_type: Free
+  X06:
+    name: X06
+    var_type:
+      LowerBound: 3
+  X07:
+    name: X07
+    var_type: Free
+  X08:
+    name: X08
+    var_type: Free
+  X09:
+    name: X09
+    var_type:
+      LowerBound: -inf
+  X10:
+    name: X10
+    var_type: Free
+  X11:
+    name: X11
+    var_type: Free
+  X12:
+    name: X12
+    var_type: Free
+  X13:
+    name: X13
+    var_type: Free
+  X14:
+    name: X14
+    var_type: Free
+  X15:
+    name: X15
+    var_type: Free
+  X16:
+    name: X16
+    var_type: General
+  X22:
+    name: X22
+    var_type: Free
+  X23:
+    name: X23
+    var_type: Free
+  X24:
+    name: X24
+    var_type: Free
+  X25:
+    name: X25
+    var_type: Free
+  X26:
+    name: X26
+    var_type: Free
+  X28:
+    name: X28
+    var_type: Free
+  X29:
+    name: X29
+    var_type: Free
+  X30:
+    name: X30
+    var_type: Free
+  X31:
+    name: X31
+    var_type: Integer
+  X32:
+    name: X32
+    var_type: Integer
+  X33:
+    name: X33
+    var_type: Free
+  X34:
+    name: X34
+    var_type: Free
+  X35:
+    name: X35
+    var_type: Free
+  X36:
+    name: X36
+    var_type: Free
+  X37:
+    name: X37
+    var_type: Free
+  X38:
+    name: X38
+    var_type: Binary
+  X39:
+    name: X39
+    var_type: Free

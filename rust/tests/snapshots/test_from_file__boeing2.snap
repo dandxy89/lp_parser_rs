@@ -1,0 +1,4273 @@
+---
+source: rust/tests/test_from_file.rs
+expression: parsed
+---
+name: boeing2.mps
+sense: Minimize
+objectives:
+  OBJECTIV:
+    name: OBJECTIV
+    coefficients:
+      - name: PBOSORD0
+        value: -0.075
+      - name: PBOSORD1
+        value: -0.075
+      - name: PBOSORD2
+        value: -0.075
+      - name: PBOSORD3
+        value: -0.075
+      - name: PBOSORD4
+        value: -0.075
+      - name: PBOSLGA0
+        value: -0.027
+      - name: PBOSLGA1
+        value: -0.027
+      - name: PBOSLGA2
+        value: -0.027
+      - name: PBOSLGA3
+        value: -0.027
+      - name: PBOSCLE0
+        value: -0.053
+      - name: PBOSCLE1
+        value: -0.053
+      - name: PBOSCLE2
+        value: -0.053
+      - name: PBOSCLE3
+        value: -0.053
+      - name: PORDBOS0
+        value: -0.075
+      - name: PORDBOS1
+        value: -0.075
+      - name: PORDBOS2
+        value: -0.075
+      - name: PORDBOS3
+        value: -0.075
+      - name: PORDBOS4
+        value: -0.075
+      - name: PORDLGA0
+        value: -0.068
+      - name: PORDLGA1
+        value: -0.068
+      - name: PORDLGA2
+        value: -0.068
+      - name: PORDLGA3
+        value: -0.068
+      - name: PORDCLE0
+        value: -0.035
+      - name: PORDCLE1
+        value: -0.035
+      - name: PORDCLE2
+        value: -0.035
+      - name: PORDCLE3
+        value: -0.035
+      - name: PLGABOS0
+        value: -0.027
+      - name: PLGABOS1
+        value: -0.027
+      - name: PLGABOS2
+        value: -0.027
+      - name: PLGABOS3
+        value: -0.027
+      - name: PLGABOS4
+        value: -0.027
+      - name: PLGABOS5
+        value: -0.027
+      - name: PLGAORD0
+        value: -0.068
+      - name: PLGAORD1
+        value: -0.068
+      - name: PLGAORD2
+        value: -0.068
+      - name: PLGAORD3
+        value: -0.068
+      - name: PLGACLE0
+        value: -0.037
+      - name: PLGACLE1
+        value: -0.037
+      - name: PLGACLE2
+        value: -0.037
+      - name: PCLEBOS0
+        value: -0.053
+      - name: PCLEBOS1
+        value: -0.053
+      - name: PCLEBOS2
+        value: -0.053
+      - name: PCLEBOS3
+        value: -0.053
+      - name: PCLEBOS4
+        value: -0.053
+      - name: PCLEORD0
+        value: -0.035
+      - name: PCLEORD1
+        value: -0.035
+      - name: PCLEORD2
+        value: -0.035
+      - name: PCLEORD3
+        value: -0.035
+      - name: PCLEORD4
+        value: -0.035
+      - name: PCLELGA0
+        value: -0.037
+      - name: PCLELGA1
+        value: -0.037
+      - name: PCLELGA2
+        value: -0.037
+      - name: PCLELGA3
+        value: -0.037
+      - name: BBOSORD0
+        value: -0.75
+      - name: BBOSORD1
+        value: -0.75
+      - name: BBOSCLE0
+        value: -0.53
+      - name: BBOSCLE1
+        value: -0.53
+      - name: BORDBOS0
+        value: -0.75
+      - name: CBOSORD0
+        value: -0.75
+      - name: CBOSORD1
+        value: -0.75
+      - name: CBOSORD2
+        value: -0.75
+      - name: CBOSORD3
+        value: -0.75
+      - name: CBOSORD4
+        value: -0.75
+      - name: CBOSCLE0
+        value: -0.53
+      - name: CBOSCLE1
+        value: -0.53
+      - name: CBOSCLE2
+        value: -0.53
+      - name: CBOSCLE3
+        value: -0.53
+      - name: CORDBOS0
+        value: -0.75
+      - name: CORDBOS1
+        value: -0.75
+      - name: CORDBOS2
+        value: -0.75
+      - name: CORDBOS3
+        value: -0.75
+      - name: CORDBOS4
+        value: -0.75
+      - name: CORDLGA0
+        value: -0.68
+      - name: CORDLGA1
+        value: -0.68
+      - name: CORDLGA2
+        value: -0.68
+      - name: CORDLGA3
+        value: -0.68
+      - name: CLGAORD0
+        value: -0.68
+      - name: CLGAORD1
+        value: -0.68
+      - name: CLGAORD2
+        value: -0.68
+      - name: CLGAORD3
+        value: -0.68
+      - name: CLGACLE0
+        value: -0.37
+      - name: CLGACLE1
+        value: -0.37
+      - name: CLGACLE2
+        value: -0.37
+      - name: CCLELGA0
+        value: -0.37
+      - name: CCLELGA1
+        value: -0.37
+      - name: CCLELGA2
+        value: -0.37
+      - name: CCLELGA3
+        value: -0.37
+      - name: GRDTIMO1
+        value: 0.65
+      - name: GRDTIMN1
+        value: -0.05
+      - name: GRDTIMO2
+        value: 0.275
+      - name: GRDTIMN2
+        value: -0.02889
+      - name: GRDTIMN3
+        value: -0.03611
+      - name: GRDTIMN4
+        value: -0.01333
+      - name: N1003AC1
+        value: 0.01
+      - name: N1003AC2
+        value: 0.02
+      - name: N1003AC3
+        value: 0.03
+      - name: N1003AC4
+        value: 0.04
+      - name: N1005AC1
+        value: 4.04337
+      - name: N1005AC2
+        value: 1.60964
+      - name: N1005AC3
+        value: 1.93119
+      - name: N1005AC4
+        value: 1.34618
+      - name: N1011AC1
+        value: 1.1
+      - name: N1011AC2
+        value: 1.2
+      - name: N1011AC3
+        value: 1.3
+      - name: N1011AC4
+        value: 2.34647
+      - name: N1013AC2
+        value: 2.36783
+      - name: N1013AC4
+        value: 1.90292
+      - name: N1015AC2
+        value: 1.36416
+      - name: N1015AC4
+        value: 1.14401
+      - name: N1017AC2
+        value: 1.64736
+      - name: N1017AC4
+        value: 1.33312
+      - name: N1019AC2
+        value: 2.55381
+      - name: N1019AC4
+        value: 2.14431
+      - name: N1021AC1
+        value: 3.12679
+      - name: N1021AC2
+        value: 1.18965
+      - name: N1021AC3
+        value: 1.42472
+      - name: N1021AC4
+        value: 1.0003
+      - name: N1002AC1
+        value: 3.12679
+      - name: N1002AC2
+        value: 1.18965
+      - name: N1002AC3
+        value: 1.42472
+      - name: N1002AC4
+        value: 1.0003
+      - name: N1004AC2
+        value: 1.64736
+      - name: N1004AC4
+        value: 1.33312
+      - name: N1006AC1
+        value: 7.17016
+      - name: N1006AC2
+        value: 2.79929
+      - name: N1006AC3
+        value: 3.35591
+      - name: N1006AC4
+        value: 2.34647
+      - name: N1008AC2
+        value: 2.36783
+      - name: N1008AC4
+        value: 1.90292
+      - name: N1010AC2
+        value: 3.27428
+      - name: N1010AC4
+        value: 2.71411
+      - name: N1012AC2
+        value: 1.36416
+      - name: N1012AC4
+        value: 1.14401
+      - name: N1014AC2
+        value: 2.08463
+      - name: N1014AC4
+        value: 1.71382
+      - name: N1100AC2
+        value: 6.07357
+      - name: N1100AC4
+        value: 5.06059
+      - name: N1102AC2
+        value: 5.16712
+      - name: N1102AC4
+        value: 4.24939
+      - name: N1200AC2
+        value: 0.72047
+      - name: N1200AC4
+        value: 0.5698
+      - name: N1201AC2
+        value: 0.72047
+      - name: N1201AC4
+        value: 0.5698
+constraints:
+  ACMILES:
+    type: Standard
+    name: ACMILES
+    coefficients:
+      - name: N1003AC1
+        value: 0.86441
+      - name: N1003AC2
+        value: 0.86441
+      - name: N1003AC3
+        value: 0.86441
+      - name: N1003AC4
+        value: 0.86441
+      - name: N1005AC1
+        value: 0.56156
+      - name: N1005AC2
+        value: 0.56156
+      - name: N1005AC3
+        value: 0.56156
+      - name: N1005AC4
+        value: 0.56156
+      - name: N1011AC1
+        value: 0.87605
+      - name: N1011AC2
+        value: 0.87605
+      - name: N1011AC3
+        value: 0.87605
+      - name: N1011AC4
+        value: 0.87605
+      - name: N1013AC2
+        value: 0.91637
+      - name: N1013AC4
+        value: 0.91637
+      - name: N1015AC2
+        value: 0.41715
+      - name: N1015AC4
+        value: 0.41715
+      - name: N1017AC2
+        value: 0.7308
+      - name: N1017AC4
+        value: 0.7308
+      - name: N1019AC2
+        value: 0.73165
+      - name: N1019AC4
+        value: 0.73165
+      - name: N1021AC1
+        value: 0.3145
+      - name: N1021AC2
+        value: 0.3145
+      - name: N1021AC3
+        value: 0.3145
+      - name: N1021AC4
+        value: 0.3145
+      - name: N1002AC1
+        value: 0.3145
+      - name: N1002AC2
+        value: 0.3145
+      - name: N1002AC3
+        value: 0.3145
+      - name: N1002AC4
+        value: 0.3145
+      - name: N1004AC2
+        value: 0.7308
+      - name: N1004AC4
+        value: 0.7308
+      - name: N1006AC1
+        value: 0.87605
+      - name: N1006AC2
+        value: 0.87605
+      - name: N1006AC3
+        value: 0.87605
+      - name: N1006AC4
+        value: 0.87605
+      - name: N1008AC2
+        value: 0.91637
+      - name: N1008AC4
+        value: 0.91637
+      - name: N1010AC2
+        value: 0.91722
+      - name: N1010AC4
+        value: 0.91722
+      - name: N1012AC2
+        value: 0.41715
+      - name: N1012AC4
+        value: 0.41715
+      - name: N1014AC2
+        value: 0.60273
+      - name: N1014AC4
+        value: 0.60273
+      - name: N1100AC2
+        value: 1.79328
+      - name: N1100AC4
+        value: 1.79328
+      - name: N1102AC2
+        value: 1.79242
+      - name: N1102AC4
+        value: 1.79242
+      - name: N1200AC2
+        value: 0.18557
+      - name: N1200AC4
+        value: 0.18557
+      - name: N1201AC2
+        value: 0.18557
+      - name: N1201AC4
+        value: 0.18557
+    operator: GTE
+    rhs: 0
+  ACOCOSTS:
+    type: Standard
+    name: ACOCOSTS
+    coefficients:
+      - name: GRDTIMO1
+        value: 0.65
+      - name: GRDTIMN1
+        value: -0.05
+      - name: GRDTIMO2
+        value: 0.275
+      - name: GRDTIMN2
+        value: -0.02889
+      - name: GRDTIMN3
+        value: -0.03611
+      - name: GRDTIMN4
+        value: -0.01333
+      - name: N1003AC1
+        value: 0.01
+      - name: N1003AC2
+        value: 0.02
+      - name: N1003AC3
+        value: 0.03
+      - name: N1003AC4
+        value: 0.04
+      - name: N1005AC1
+        value: 4.04337
+      - name: N1005AC2
+        value: 1.60964
+      - name: N1005AC3
+        value: 1.93119
+      - name: N1005AC4
+        value: 1.34618
+      - name: N1011AC1
+        value: 1.1
+      - name: N1011AC2
+        value: 1.2
+      - name: N1011AC3
+        value: 1.3
+      - name: N1011AC4
+        value: 2.34647
+      - name: N1013AC2
+        value: 2.36783
+      - name: N1013AC4
+        value: 1.90292
+      - name: N1015AC2
+        value: 1.36416
+      - name: N1015AC4
+        value: 1.14401
+      - name: N1017AC2
+        value: 1.64736
+      - name: N1017AC4
+        value: 1.33312
+      - name: N1019AC2
+        value: 2.55381
+      - name: N1019AC4
+        value: 2.14431
+      - name: N1021AC1
+        value: 3.12679
+      - name: N1021AC2
+        value: 1.18965
+      - name: N1021AC3
+        value: 1.42472
+      - name: N1021AC4
+        value: 1.0003
+      - name: N1002AC1
+        value: 3.12679
+      - name: N1002AC2
+        value: 1.18965
+      - name: N1002AC3
+        value: 1.42472
+      - name: N1002AC4
+        value: 1.0003
+      - name: N1004AC2
+        value: 1.64736
+      - name: N1004AC4
+        value: 1.33312
+      - name: N1006AC1
+        value: 7.17016
+      - name: N1006AC2
+        value: 2.79929
+      - name: N1006AC3
+        value: 3.35591
+      - name: N1006AC4
+        value: 2.34647
+      - name: N1008AC2
+        value: 2.36783
+      - name: N1008AC4
+        value: 1.90292
+      - name: N1010AC2
+        value: 3.27428
+      - name: N1010AC4
+        value: 2.71411
+      - name: N1012AC2
+        value: 1.36416
+      - name: N1012AC4
+        value: 1.14401
+      - name: N1014AC2
+        value: 2.08463
+      - name: N1014AC4
+        value: 1.71382
+      - name: N1100AC2
+        value: 6.07357
+      - name: N1100AC4
+        value: 5.06059
+      - name: N1102AC2
+        value: 5.16712
+      - name: N1102AC4
+        value: 4.24939
+      - name: N1200AC2
+        value: 0.72047
+      - name: N1200AC4
+        value: 0.5698
+      - name: N1201AC2
+        value: 0.72047
+      - name: N1201AC4
+        value: 0.5698
+    operator: GTE
+    rhs: 0
+  ASMILES:
+    type: Standard
+    name: ASMILES
+    coefficients:
+      - name: N1003AC1
+        value: 351.81396
+      - name: N1003AC2
+        value: 113.23743
+      - name: N1005AC1
+        value: 228.55299
+      - name: N1005AC2
+        value: 73.56374
+      - name: N1011AC1
+        value: 356.55371
+      - name: N1011AC2
+        value: 114.76299
+      - name: N1013AC2
+        value: 120.04449
+      - name: N1015AC2
+        value: 54.64705
+      - name: N1017AC2
+        value: 95.73444
+      - name: N1019AC2
+        value: 95.8463
+      - name: N1021AC1
+        value: 128.00075
+      - name: N1021AC2
+        value: 41.19926
+      - name: N1002AC1
+        value: 128.00075
+      - name: N1002AC2
+        value: 41.19926
+      - name: N1004AC2
+        value: 95.73444
+      - name: N1006AC1
+        value: 356.55371
+      - name: N1006AC2
+        value: 114.76299
+      - name: N1008AC2
+        value: 120.04449
+      - name: N1010AC2
+        value: 120.15637
+      - name: N1012AC2
+        value: 54.64705
+      - name: N1014AC2
+        value: 78.95706
+      - name: N1100AC2
+        value: 234.91937
+      - name: N1102AC2
+        value: 234.80756
+      - name: N1200AC2
+        value: 24.31007
+      - name: N1201AC2
+        value: 24.31007
+    operator: GTE
+    rhs: 0
+  ATONMILE:
+    type: Standard
+    name: ATONMILE
+    coefficients:
+      - name: N1003AC1
+        value: 25.93224
+      - name: N1003AC3
+        value: 34.57631
+      - name: N1003AC4
+        value: 12.96612
+      - name: N1005AC1
+        value: 16.84665
+      - name: N1005AC3
+        value: 22.4622
+      - name: N1005AC4
+        value: 8.42333
+      - name: N1011AC1
+        value: 26.2816
+      - name: N1011AC3
+        value: 35.04214
+      - name: N1011AC4
+        value: 13.1408
+      - name: N1013AC4
+        value: 13.74556
+      - name: N1015AC4
+        value: 6.25729
+      - name: N1017AC4
+        value: 10.96196
+      - name: N1019AC4
+        value: 10.97477
+      - name: N1021AC1
+        value: 9.43495
+      - name: N1021AC3
+        value: 12.57993
+      - name: N1021AC4
+        value: 4.71747
+      - name: N1002AC1
+        value: 9.43495
+      - name: N1002AC3
+        value: 12.57993
+      - name: N1002AC4
+        value: 4.71747
+      - name: N1004AC4
+        value: 10.96196
+      - name: N1006AC1
+        value: 26.2816
+      - name: N1006AC3
+        value: 35.04214
+      - name: N1006AC4
+        value: 13.1408
+      - name: N1008AC4
+        value: 13.74556
+      - name: N1010AC4
+        value: 13.75836
+      - name: N1012AC4
+        value: 6.25729
+      - name: N1014AC4
+        value: 9.04089
+      - name: N1100AC4
+        value: 26.89915
+      - name: N1102AC4
+        value: 26.88635
+      - name: N1200AC4
+        value: 2.7836
+      - name: N1201AC4
+        value: 2.7836
+    operator: GTE
+    rhs: 0
+  CONTBOS1:
+    type: Standard
+    name: CONTBOS1
+    coefficients:
+      - name: N1003AC1
+        value: 1
+      - name: N1005AC1
+        value: 1
+      - name: N1011AC1
+        value: 1
+      - name: N1006AC1
+        value: -1
+    operator: GTE
+    rhs: 0
+  CONTBOS2:
+    type: Standard
+    name: CONTBOS2
+    coefficients:
+      - name: N1003AC2
+        value: 1
+      - name: N1005AC2
+        value: 1
+      - name: N1011AC2
+        value: 1
+      - name: N1013AC2
+        value: 1
+      - name: N1006AC2
+        value: -1
+      - name: N1008AC2
+        value: -1
+      - name: N1010AC2
+        value: -1
+      - name: N1014AC2
+        value: -1
+      - name: N1200AC2
+        value: 1
+      - name: N1201AC2
+        value: -1
+    operator: GTE
+    rhs: 0
+  CONTBOS3:
+    type: Standard
+    name: CONTBOS3
+    coefficients:
+      - name: N1003AC3
+        value: 1
+      - name: N1005AC3
+        value: 1
+      - name: N1011AC3
+        value: 1
+      - name: N1006AC3
+        value: -1
+    operator: GTE
+    rhs: 0
+  CONTBOS4:
+    type: Standard
+    name: CONTBOS4
+    coefficients:
+      - name: N1003AC4
+        value: 1
+      - name: N1005AC4
+        value: 1
+      - name: N1011AC4
+        value: 1
+      - name: N1013AC4
+        value: 1
+      - name: N1006AC4
+        value: -1
+      - name: N1008AC4
+        value: -1
+      - name: N1010AC4
+        value: -1
+      - name: N1014AC4
+        value: -1
+      - name: N1200AC4
+        value: 1
+      - name: N1201AC4
+        value: -1
+    operator: GTE
+    rhs: 0
+  CONTCLE1:
+    type: Standard
+    name: CONTCLE1
+    coefficients:
+      - name: N1005AC1
+        value: -1
+      - name: N1021AC1
+        value: 1
+      - name: N1002AC1
+        value: -1
+    operator: GTE
+    rhs: 0
+  CONTCLE2:
+    type: Standard
+    name: CONTCLE2
+    coefficients:
+      - name: N1005AC2
+        value: -1
+      - name: N1015AC2
+        value: -1
+      - name: N1021AC2
+        value: 1
+      - name: N1002AC2
+        value: -1
+      - name: N1012AC2
+        value: 1
+      - name: N1014AC2
+        value: 1
+    operator: GTE
+    rhs: 0
+  CONTCLE3:
+    type: Standard
+    name: CONTCLE3
+    coefficients:
+      - name: N1005AC3
+        value: -1
+      - name: N1021AC3
+        value: 1
+      - name: N1002AC3
+        value: -1
+    operator: GTE
+    rhs: 0
+  CONTCLE4:
+    type: Standard
+    name: CONTCLE4
+    coefficients:
+      - name: N1005AC4
+        value: -1
+      - name: N1015AC4
+        value: -1
+      - name: N1021AC4
+        value: 1
+      - name: N1002AC4
+        value: -1
+      - name: N1012AC4
+        value: 1
+      - name: N1014AC4
+        value: 1
+    operator: GTE
+    rhs: 0
+  CONTLGA2:
+    type: Standard
+    name: CONTLGA2
+    coefficients:
+      - name: N1015AC2
+        value: 1
+      - name: N1017AC2
+        value: 1
+      - name: N1019AC2
+        value: 1
+      - name: N1004AC2
+        value: -1
+      - name: N1012AC2
+        value: -1
+      - name: N1200AC2
+        value: -1
+      - name: N1201AC2
+        value: 1
+    operator: GTE
+    rhs: 0
+  CONTLGA4:
+    type: Standard
+    name: CONTLGA4
+    coefficients:
+      - name: N1015AC4
+        value: 1
+      - name: N1017AC4
+        value: 1
+      - name: N1019AC4
+        value: 1
+      - name: N1004AC4
+        value: -1
+      - name: N1012AC4
+        value: -1
+      - name: N1200AC4
+        value: -1
+      - name: N1201AC4
+        value: 1
+    operator: GTE
+    rhs: 0
+  CONTORD1:
+    type: Standard
+    name: CONTORD1
+    coefficients:
+      - name: N1003AC1
+        value: -1
+      - name: N1011AC1
+        value: -1
+      - name: N1021AC1
+        value: -1
+      - name: N1002AC1
+        value: 1
+      - name: N1006AC1
+        value: 1
+    operator: GTE
+    rhs: 0
+  CONTORD2:
+    type: Standard
+    name: CONTORD2
+    coefficients:
+      - name: N1003AC2
+        value: -1
+      - name: N1011AC2
+        value: -1
+      - name: N1013AC2
+        value: -1
+      - name: N1017AC2
+        value: -1
+      - name: N1019AC2
+        value: -1
+      - name: N1021AC2
+        value: -1
+      - name: N1002AC2
+        value: 1
+      - name: N1004AC2
+        value: 1
+      - name: N1006AC2
+        value: 1
+      - name: N1008AC2
+        value: 1
+      - name: N1010AC2
+        value: 1
+    operator: GTE
+    rhs: 0
+  CONTORD3:
+    type: Standard
+    name: CONTORD3
+    coefficients:
+      - name: N1003AC3
+        value: -1
+      - name: N1011AC3
+        value: -1
+      - name: N1021AC3
+        value: -1
+      - name: N1002AC3
+        value: 1
+      - name: N1006AC3
+        value: 1
+    operator: GTE
+    rhs: 0
+  CONTORD4:
+    type: Standard
+    name: CONTORD4
+    coefficients:
+      - name: N1003AC4
+        value: -1
+      - name: N1011AC4
+        value: -1
+      - name: N1013AC4
+        value: -1
+      - name: N1017AC4
+        value: -1
+      - name: N1019AC4
+        value: -1
+      - name: N1021AC4
+        value: -1
+      - name: N1002AC4
+        value: 1
+      - name: N1004AC4
+        value: 1
+      - name: N1006AC4
+        value: 1
+      - name: N1008AC4
+        value: 1
+      - name: N1010AC4
+        value: 1
+    operator: GTE
+    rhs: 0
+  DCBOSCLE:
+    type: Standard
+    name: DCBOSCLE
+    coefficients:
+      - name: BBOSCLE0
+        value: 1
+      - name: BBOSCLE1
+        value: 1
+      - name: CBOSCLE0
+        value: 1
+      - name: CBOSCLE1
+        value: 1
+      - name: CBOSCLE2
+        value: 1
+      - name: CBOSCLE3
+        value: 1
+      - name: RgDCBOSCLE
+        value: -1
+    operator: EQ
+    rhs: 16
+  DCBOSORD:
+    type: Standard
+    name: DCBOSORD
+    coefficients:
+      - name: BBOSORD0
+        value: 1
+      - name: BBOSORD1
+        value: 1
+      - name: CBOSORD0
+        value: 1
+      - name: CBOSORD1
+        value: 1
+      - name: CBOSORD2
+        value: 1
+      - name: CBOSORD3
+        value: 1
+      - name: CBOSORD4
+        value: 1
+      - name: RgDCBOSORD
+        value: -1
+    operator: EQ
+    rhs: 12
+  DCCLELGA:
+    type: Standard
+    name: DCCLELGA
+    coefficients:
+      - name: CCLELGA0
+        value: 1
+      - name: CCLELGA1
+        value: 1
+      - name: CCLELGA2
+        value: 1
+      - name: CCLELGA3
+        value: 1
+      - name: RgDCCLELGA
+        value: -1
+    operator: EQ
+    rhs: 5
+  DCLGACLE:
+    type: Standard
+    name: DCLGACLE
+    coefficients:
+      - name: CLGACLE0
+        value: 1
+      - name: CLGACLE1
+        value: 1
+      - name: CLGACLE2
+        value: 1
+      - name: RgDCLGACLE
+        value: -1
+    operator: EQ
+    rhs: 16
+  DCLGAORD:
+    type: Standard
+    name: DCLGAORD
+    coefficients:
+      - name: CLGAORD0
+        value: 1
+      - name: CLGAORD1
+        value: 1
+      - name: CLGAORD2
+        value: 1
+      - name: CLGAORD3
+        value: 1
+      - name: RgDCLGAORD
+        value: -1
+    operator: EQ
+    rhs: 45
+  DCORDBOS:
+    type: Standard
+    name: DCORDBOS
+    coefficients:
+      - name: BORDBOS0
+        value: 1
+      - name: CORDBOS0
+        value: 1
+      - name: CORDBOS1
+        value: 1
+      - name: CORDBOS2
+        value: 1
+      - name: CORDBOS3
+        value: 1
+      - name: CORDBOS4
+        value: 1
+      - name: RgDCORDBOS
+        value: -1
+    operator: EQ
+    rhs: 24
+  DCORDLGA:
+    type: Standard
+    name: DCORDLGA
+    coefficients:
+      - name: CORDLGA0
+        value: 1
+      - name: CORDLGA1
+        value: 1
+      - name: CORDLGA2
+        value: 1
+      - name: CORDLGA3
+        value: 1
+      - name: RgDCORDLGA
+        value: -1
+    operator: EQ
+    rhs: 13
+  DMBOSCLE:
+    type: Standard
+    name: DMBOSCLE
+    coefficients:
+      - name: PBOSCLE0
+        value: 1
+      - name: PBOSCLE1
+        value: 1
+      - name: PBOSCLE2
+        value: 1
+      - name: PBOSCLE3
+        value: 1
+      - name: RgDMBOSCLE
+        value: -1
+    operator: EQ
+    rhs: 142
+  DMBOSLGA:
+    type: Standard
+    name: DMBOSLGA
+    coefficients:
+      - name: PBOSLGA0
+        value: 1
+      - name: PBOSLGA1
+        value: 1
+      - name: PBOSLGA2
+        value: 1
+      - name: PBOSLGA3
+        value: 1
+      - name: RgDMBOSLGA
+        value: -1
+    operator: EQ
+    rhs: 2352
+  DMBOSORD:
+    type: Standard
+    name: DMBOSORD
+    coefficients:
+      - name: PBOSORD0
+        value: 1
+      - name: PBOSORD1
+        value: 1
+      - name: PBOSORD2
+        value: 1
+      - name: PBOSORD3
+        value: 1
+      - name: PBOSORD4
+        value: 1
+      - name: RgDMBOSORD
+        value: -1
+    operator: EQ
+    rhs: 302
+  DMCLEBOS:
+    type: Standard
+    name: DMCLEBOS
+    coefficients:
+      - name: PCLEBOS0
+        value: 1
+      - name: PCLEBOS1
+        value: 1
+      - name: PCLEBOS2
+        value: 1
+      - name: PCLEBOS3
+        value: 1
+      - name: PCLEBOS4
+        value: 1
+      - name: RgDMCLEBOS
+        value: -1
+    operator: EQ
+    rhs: 131
+  DMCLELGA:
+    type: Standard
+    name: DMCLELGA
+    coefficients:
+      - name: PCLELGA0
+        value: 1
+      - name: PCLELGA1
+        value: 1
+      - name: PCLELGA2
+        value: 1
+      - name: PCLELGA3
+        value: 1
+      - name: RgDMCLELGA
+        value: -1
+    operator: EQ
+    rhs: 409
+  DMCLEORD:
+    type: Standard
+    name: DMCLEORD
+    coefficients:
+      - name: PCLEORD0
+        value: 1
+      - name: PCLEORD1
+        value: 1
+      - name: PCLEORD2
+        value: 1
+      - name: PCLEORD3
+        value: 1
+      - name: PCLEORD4
+        value: 1
+      - name: RgDMCLEORD
+        value: -1
+    operator: EQ
+    rhs: 712
+  DMLGABOS:
+    type: Standard
+    name: DMLGABOS
+    coefficients:
+      - name: PLGABOS0
+        value: 1
+      - name: PLGABOS1
+        value: 1
+      - name: PLGABOS2
+        value: 1
+      - name: PLGABOS3
+        value: 1
+      - name: PLGABOS4
+        value: 1
+      - name: PLGABOS5
+        value: 1
+      - name: RgDMLGABOS
+        value: -1
+    operator: EQ
+    rhs: 2743
+  DMLGACLE:
+    type: Standard
+    name: DMLGACLE
+    coefficients:
+      - name: PLGACLE0
+        value: 1
+      - name: PLGACLE1
+        value: 1
+      - name: PLGACLE2
+        value: 1
+      - name: RgDMLGACLE
+        value: -1
+    operator: EQ
+    rhs: 517
+  DMLGAORD:
+    type: Standard
+    name: DMLGAORD
+    coefficients:
+      - name: PLGAORD0
+        value: 1
+      - name: PLGAORD1
+        value: 1
+      - name: PLGAORD2
+        value: 1
+      - name: PLGAORD3
+        value: 1
+      - name: RgDMLGAORD
+        value: -1
+    operator: EQ
+    rhs: 712
+  DMORDBOS:
+    type: Standard
+    name: DMORDBOS
+    coefficients:
+      - name: PORDBOS0
+        value: 1
+      - name: PORDBOS1
+        value: 1
+      - name: PORDBOS2
+        value: 1
+      - name: PORDBOS3
+        value: 1
+      - name: PORDBOS4
+        value: 1
+      - name: RgDMORDBOS
+        value: -1
+    operator: EQ
+    rhs: 302
+  DMORDCLE:
+    type: Standard
+    name: DMORDCLE
+    coefficients:
+      - name: PORDCLE0
+        value: 1
+      - name: PORDCLE1
+        value: 1
+      - name: PORDCLE2
+        value: 1
+      - name: PORDCLE3
+        value: 1
+      - name: RgDMORDCLE
+        value: -1
+    operator: EQ
+    rhs: 619
+  DMORDLGA:
+    type: Standard
+    name: DMORDLGA
+    coefficients:
+      - name: PORDLGA0
+        value: 1
+      - name: PORDLGA1
+        value: 1
+      - name: PORDLGA2
+        value: 1
+      - name: PORDLGA3
+        value: 1
+      - name: RgDMORDLGA
+        value: -1
+    operator: EQ
+    rhs: 515
+  FLAVa1:
+    type: Standard
+    name: FLAVa1
+    coefficients:
+      - name: GRDTIMO1
+        value: 1
+      - name: GRDTIMN1
+        value: 1
+      - name: N1003AC1
+        value: 2.32729
+      - name: N1005AC1
+        value: 1000
+      - name: N1011AC1
+        value: 25
+      - name: N1021AC1
+        value: 1.34295
+      - name: N1002AC1
+        value: 1.34295
+      - name: N1006AC1
+        value: 3.12813
+    operator: EQ
+    rhs: 30
+  FLAVa2:
+    type: Standard
+    name: FLAVa2
+    coefficients:
+      - name: GRDTIMO2
+        value: 1
+      - name: GRDTIMN2
+        value: 1
+      - name: N1003AC2
+        value: 2.10966
+      - name: N1005AC2
+        value: 2000
+      - name: N1011AC2
+        value: 25
+      - name: N1013AC2
+        value: 2.65943
+      - name: N1015AC2
+        value: 1.25093
+      - name: N1017AC2
+        value: 1.85313
+      - name: N1019AC2
+        value: 2.30477
+      - name: N1021AC2
+        value: 1.05384
+      - name: N1002AC2
+        value: 1.05384
+      - name: N1004AC2
+        value: 1.85313
+      - name: N1006AC2
+        value: 2.58202
+      - name: N1008AC2
+        value: 2.65943
+      - name: N1010AC2
+        value: 3.11107
+      - name: N1012AC2
+        value: 1.25093
+      - name: N1014AC2
+        value: 2.05723
+      - name: N1100AC2
+        value: 5.69309
+      - name: N1102AC2
+        value: 5.24145
+      - name: N1200AC2
+        value: 0.8063
+      - name: N1201AC2
+        value: 0.8063
+    operator: EQ
+    rhs: 45
+  FLAVa3:
+    type: Standard
+    name: FLAVa3
+    coefficients:
+      - name: GRDTIMN3
+        value: 1
+      - name: N1003AC3
+        value: 2.10966
+      - name: N1005AC3
+        value: 3000
+      - name: N1011AC3
+        value: 26
+      - name: N1021AC3
+        value: 1.05384
+      - name: N1002AC3
+        value: 1.05384
+      - name: N1006AC3
+        value: 2.58202
+    operator: EQ
+    rhs: 0
+  FLAVa4:
+    type: Standard
+    name: FLAVa4
+    coefficients:
+      - name: GRDTIMN4
+        value: 1
+      - name: N1003AC4
+        value: 2.10966
+      - name: N1005AC4
+        value: 1500
+      - name: N1011AC4
+        value: 27
+      - name: N1013AC4
+        value: 2.65943
+      - name: N1015AC4
+        value: 1.25093
+      - name: N1017AC4
+        value: 1.85313
+      - name: N1019AC4
+        value: 2.30477
+      - name: N1021AC4
+        value: 1.05384
+      - name: N1002AC4
+        value: 1.05384
+      - name: N1004AC4
+        value: 1.85313
+      - name: N1006AC4
+        value: 2.58202
+      - name: N1008AC4
+        value: 2.65943
+      - name: N1010AC4
+        value: 3.11107
+      - name: N1012AC4
+        value: 1.25093
+      - name: N1014AC4
+        value: 2.05723
+      - name: N1100AC4
+        value: 5.69309
+      - name: N1102AC4
+        value: 5.24145
+      - name: N1200AC4
+        value: 0.8063
+      - name: N1201AC4
+        value: 0.8063
+    operator: EQ
+    rhs: 0
+  FUELAVAL:
+    type: Standard
+    name: FUELAVAL
+    coefficients:
+      - name: N1003AC1
+        value: 7.98429
+      - name: N1003AC2
+        value: 2.51914
+      - name: N1003AC3
+        value: 3.15178
+      - name: N1003AC4
+        value: 1.99337
+      - name: N1005AC1
+        value: 5.83404
+      - name: N1005AC2
+        value: 1.82258
+      - name: N1005AC3
+        value: 2.27351
+      - name: N1005AC4
+        value: 1.41795
+      - name: N1011AC1
+        value: 9.91398
+      - name: N1011AC2
+        value: 3.07692
+      - name: N1011AC3
+        value: 3.83055
+      - name: N1011AC4
+        value: 2.3665
+      - name: N1013AC2
+        value: 3.16965
+      - name: N1013AC4
+        value: 2.4431
+      - name: N1015AC2
+        value: 1.49045
+      - name: N1015AC4
+        value: 1.14359
+      - name: N1017AC2
+        value: 2.21183
+      - name: N1017AC4
+        value: 1.73951
+      - name: N1019AC2
+        value: 2.7448
+      - name: N1019AC4
+        value: 2.09214
+      - name: N1021AC1
+        value: 4.07994
+      - name: N1021AC2
+        value: 1.25435
+      - name: N1021AC3
+        value: 1.55704
+      - name: N1021AC4
+        value: 0.94855
+      - name: N1002AC1
+        value: 4.07994
+      - name: N1002AC2
+        value: 1.25435
+      - name: N1002AC3
+        value: 1.55704
+      - name: N1002AC4
+        value: 0.94855
+      - name: N1004AC2
+        value: 2.21183
+      - name: N1004AC4
+        value: 1.73951
+      - name: N1006AC1
+        value: 9.91398
+      - name: N1006AC2
+        value: 3.07692
+      - name: N1006AC3
+        value: 3.83055
+      - name: N1006AC4
+        value: 2.3665
+      - name: N1008AC2
+        value: 3.16965
+      - name: N1008AC4
+        value: 2.4431
+      - name: N1010AC2
+        value: 3.70262
+      - name: N1010AC4
+        value: 2.79573
+      - name: N1012AC2
+        value: 1.49045
+      - name: N1012AC4
+        value: 1.14359
+      - name: N1014AC2
+        value: 2.44827
+      - name: N1014AC4
+        value: 1.84718
+      - name: N1100AC2
+        value: 6.77953
+      - name: N1100AC4
+        value: 5.16223
+      - name: N1102AC2
+        value: 6.24657
+      - name: N1102AC4
+        value: 4.8096
+      - name: N1200AC2
+        value: 0.95782
+      - name: N1200AC4
+        value: 0.70359
+      - name: N1201AC2
+        value: 0.95782
+      - name: N1201AC4
+        value: 0.70359
+    operator: LTE
+    rhs: 100000
+  LF1002B1:
+    type: Standard
+    name: LF1002B1
+    coefficients:
+      - name: N1002AC1
+        value: 12
+    operator: GTE
+    rhs: 0
+  LF1002C1:
+    type: Standard
+    name: LF1002C1
+    coefficients:
+      - name: N1002AC3
+        value: 30
+      - name: N1002AC4
+        value: 11.25
+    operator: GTE
+    rhs: 0
+  LF1002S1:
+    type: Standard
+    name: LF1002S1
+    coefficients:
+      - name: PORDCLE0
+        value: -1
+      - name: N1002AC1
+        value: 305
+      - name: N1002AC2
+        value: 98
+    operator: GTE
+    rhs: 0
+  LF1003B1:
+    type: Standard
+    name: LF1003B1
+    coefficients:
+      - name: BBOSORD0
+        value: -1
+      - name: N1003AC1
+        value: 12
+    operator: GTE
+    rhs: 0
+  LF1003C1:
+    type: Standard
+    name: LF1003C1
+    coefficients:
+      - name: CBOSORD0
+        value: -1
+      - name: N1003AC3
+        value: 30
+      - name: N1003AC4
+        value: 11.25
+    operator: GTE
+    rhs: 0
+  LF1003S1:
+    type: Standard
+    name: LF1003S1
+    coefficients:
+      - name: PBOSORD0
+        value: -1
+      - name: N1003AC1
+        value: 305
+      - name: N1003AC2
+        value: 98
+    operator: GTE
+    rhs: 0
+  LF1004C1:
+    type: Standard
+    name: LF1004C1
+    coefficients:
+      - name: CORDLGA0
+        value: -1
+      - name: N1004AC4
+        value: 11.25
+    operator: GTE
+    rhs: 0
+  LF1004S1:
+    type: Standard
+    name: LF1004S1
+    coefficients:
+      - name: PORDLGA0
+        value: -1
+      - name: N1004AC2
+        value: 98
+    operator: GTE
+    rhs: 0
+  LF1005B1:
+    type: Standard
+    name: LF1005B1
+    coefficients:
+      - name: BBOSCLE0
+        value: -1
+      - name: N1005AC1
+        value: 12
+    operator: GTE
+    rhs: 0
+  LF1005C1:
+    type: Standard
+    name: LF1005C1
+    coefficients:
+      - name: CBOSCLE0
+        value: -1
+      - name: N1005AC3
+        value: 30
+      - name: N1005AC4
+        value: 11.25
+    operator: GTE
+    rhs: 0
+  LF1005S1:
+    type: Standard
+    name: LF1005S1
+    coefficients:
+      - name: PBOSCLE0
+        value: -1
+      - name: N1005AC1
+        value: 305
+      - name: N1005AC2
+        value: 98
+    operator: GTE
+    rhs: 0
+  LF1006B1:
+    type: Standard
+    name: LF1006B1
+    coefficients:
+      - name: BORDBOS0
+        value: -1
+      - name: N1006AC1
+        value: 12
+    operator: GTE
+    rhs: 0
+  LF1006B2:
+    type: Standard
+    name: LF1006B2
+    coefficients:
+      - name: BORDBOS0
+        value: -1
+      - name: N1006AC1
+        value: 12
+    operator: GTE
+    rhs: 0
+  LF1006C1:
+    type: Standard
+    name: LF1006C1
+    coefficients:
+      - name: CORDBOS0
+        value: -1
+      - name: N1006AC3
+        value: 30
+      - name: N1006AC4
+        value: 11.25
+    operator: GTE
+    rhs: 0
+  LF1006C2:
+    type: Standard
+    name: LF1006C2
+    coefficients:
+      - name: CORDBOS0
+        value: -1
+      - name: N1006AC3
+        value: 30
+      - name: N1006AC4
+        value: 11.25
+    operator: GTE
+    rhs: 0
+  LF1006S1:
+    type: Standard
+    name: LF1006S1
+    coefficients:
+      - name: PORDBOS0
+        value: -1
+      - name: PORDCLE1
+        value: -1
+      - name: N1006AC1
+        value: 305
+      - name: N1006AC2
+        value: 98
+    operator: GTE
+    rhs: 0
+  LF1006S2:
+    type: Standard
+    name: LF1006S2
+    coefficients:
+      - name: PORDBOS0
+        value: -1
+      - name: PCLEBOS0
+        value: -1
+      - name: N1006AC1
+        value: 305
+      - name: N1006AC2
+        value: 98
+    operator: GTE
+    rhs: 0
+  LF1008C1:
+    type: Standard
+    name: LF1008C1
+    coefficients:
+      - name: CORDBOS1
+        value: -1
+      - name: CORDLGA1
+        value: -1
+      - name: N1008AC4
+        value: 11.25
+    operator: GTE
+    rhs: 0
+  LF1008C2:
+    type: Standard
+    name: LF1008C2
+    coefficients:
+      - name: CORDBOS1
+        value: -1
+      - name: N1008AC4
+        value: 11.25
+    operator: GTE
+    rhs: 0
+  LF1008S1:
+    type: Standard
+    name: LF1008S1
+    coefficients:
+      - name: PORDBOS1
+        value: -1
+      - name: PORDLGA1
+        value: -1
+      - name: N1008AC2
+        value: 98
+    operator: GTE
+    rhs: 0
+  LF1008S2:
+    type: Standard
+    name: LF1008S2
+    coefficients:
+      - name: PORDBOS1
+        value: -1
+      - name: PLGABOS0
+        value: -1
+      - name: N1008AC2
+        value: 98
+    operator: GTE
+    rhs: 0
+  LF1010C1:
+    type: Standard
+    name: LF1010C1
+    coefficients:
+      - name: CORDBOS2
+        value: -1
+      - name: CORDLGA2
+        value: -1
+      - name: N1010AC4
+        value: 11.25
+    operator: GTE
+    rhs: 0
+  LF1010C2:
+    type: Standard
+    name: LF1010C2
+    coefficients:
+      - name: CORDBOS2
+        value: -1
+      - name: CORDLGA2
+        value: -1
+      - name: CCLELGA0
+        value: -1
+      - name: N1010AC4
+        value: 11.25
+    operator: GTE
+    rhs: 0
+  LF1010C3:
+    type: Standard
+    name: LF1010C3
+    coefficients:
+      - name: CORDBOS2
+        value: -1
+      - name: N1010AC4
+        value: 11.25
+    operator: GTE
+    rhs: 0
+  LF1010S1:
+    type: Standard
+    name: LF1010S1
+    coefficients:
+      - name: PORDBOS2
+        value: -1
+      - name: PORDLGA2
+        value: -1
+      - name: PORDCLE2
+        value: -1
+      - name: N1010AC2
+        value: 98
+    operator: GTE
+    rhs: 0
+  LF1010S2:
+    type: Standard
+    name: LF1010S2
+    coefficients:
+      - name: PORDBOS2
+        value: -1
+      - name: PORDLGA2
+        value: -1
+      - name: PCLEBOS1
+        value: -1
+      - name: PCLELGA0
+        value: -1
+      - name: N1010AC2
+        value: 98
+    operator: GTE
+    rhs: 0
+  LF1010S3:
+    type: Standard
+    name: LF1010S3
+    coefficients:
+      - name: PORDBOS2
+        value: -1
+      - name: PLGABOS1
+        value: -1
+      - name: PCLEBOS1
+        value: -1
+      - name: N1010AC2
+        value: 98
+    operator: GTE
+    rhs: 0
+  LF1011B1:
+    type: Standard
+    name: LF1011B1
+    coefficients:
+      - name: BBOSORD1
+        value: -1
+      - name: BBOSCLE1
+        value: -1
+      - name: N1011AC1
+        value: 12
+    operator: GTE
+    rhs: 0
+  LF1011B2:
+    type: Standard
+    name: LF1011B2
+    coefficients:
+      - name: BBOSORD1
+        value: -1
+      - name: N1011AC1
+        value: 12
+    operator: GTE
+    rhs: 0
+  LF1011C1:
+    type: Standard
+    name: LF1011C1
+    coefficients:
+      - name: CBOSORD1
+        value: -1
+      - name: CBOSCLE1
+        value: -1
+      - name: N1011AC3
+        value: 30
+      - name: N1011AC4
+        value: 11.25
+    operator: GTE
+    rhs: 0
+  LF1011C2:
+    type: Standard
+    name: LF1011C2
+    coefficients:
+      - name: CBOSORD1
+        value: -1
+      - name: N1011AC3
+        value: 30
+      - name: N1011AC4
+        value: 11.25
+    operator: GTE
+    rhs: 0
+  LF1011S1:
+    type: Standard
+    name: LF1011S1
+    coefficients:
+      - name: PBOSORD1
+        value: -1
+      - name: PBOSCLE1
+        value: -1
+      - name: N1011AC1
+        value: 305
+      - name: N1011AC2
+        value: 98
+    operator: GTE
+    rhs: 0
+  LF1011S2:
+    type: Standard
+    name: LF1011S2
+    coefficients:
+      - name: PBOSORD1
+        value: -1
+      - name: PCLEORD0
+        value: -1
+      - name: N1011AC1
+        value: 305
+      - name: N1011AC2
+        value: 98
+    operator: GTE
+    rhs: 0
+  LF1012C1:
+    type: Standard
+    name: LF1012C1
+    coefficients:
+      - name: CCLELGA1
+        value: -1
+      - name: N1012AC4
+        value: 11.25
+    operator: GTE
+    rhs: 0
+  LF1012S1:
+    type: Standard
+    name: LF1012S1
+    coefficients:
+      - name: PCLELGA1
+        value: -1
+      - name: N1012AC2
+        value: 98
+    operator: GTE
+    rhs: 0
+  LF1013C1:
+    type: Standard
+    name: LF1013C1
+    coefficients:
+      - name: CBOSORD2
+        value: -1
+      - name: N1013AC4
+        value: 11.25
+    operator: GTE
+    rhs: 0
+  LF1013C2:
+    type: Standard
+    name: LF1013C2
+    coefficients:
+      - name: CBOSORD2
+        value: -1
+      - name: CLGAORD0
+        value: -1
+      - name: N1013AC4
+        value: 11.25
+    operator: GTE
+    rhs: 0
+  LF1013S1:
+    type: Standard
+    name: LF1013S1
+    coefficients:
+      - name: PBOSORD2
+        value: -1
+      - name: PBOSLGA0
+        value: -1
+      - name: N1013AC2
+        value: 98
+    operator: GTE
+    rhs: 0
+  LF1013S2:
+    type: Standard
+    name: LF1013S2
+    coefficients:
+      - name: PBOSORD2
+        value: -1
+      - name: PLGAORD0
+        value: -1
+      - name: N1013AC2
+        value: 98
+    operator: GTE
+    rhs: 0
+  LF1014C1:
+    type: Standard
+    name: LF1014C1
+    coefficients:
+      - name: CCLELGA2
+        value: -1
+      - name: N1014AC4
+        value: 11.25
+    operator: GTE
+    rhs: 0
+  LF1014C2:
+    type: Standard
+    name: LF1014C2
+    coefficients:
+      - name: N1014AC4
+        value: 11.25
+    operator: GTE
+    rhs: 0
+  LF1014S1:
+    type: Standard
+    name: LF1014S1
+    coefficients:
+      - name: PCLEBOS2
+        value: -1
+      - name: PCLELGA2
+        value: -1
+      - name: N1014AC2
+        value: 98
+    operator: GTE
+    rhs: 0
+  LF1014S2:
+    type: Standard
+    name: LF1014S2
+    coefficients:
+      - name: PLGABOS2
+        value: -1
+      - name: PCLEBOS2
+        value: -1
+      - name: N1014AC2
+        value: 98
+    operator: GTE
+    rhs: 0
+  LF1015C1:
+    type: Standard
+    name: LF1015C1
+    coefficients:
+      - name: CLGACLE0
+        value: -1
+      - name: N1015AC4
+        value: 11.25
+    operator: GTE
+    rhs: 0
+  LF1015S1:
+    type: Standard
+    name: LF1015S1
+    coefficients:
+      - name: PLGACLE0
+        value: -1
+      - name: N1015AC2
+        value: 98
+    operator: GTE
+    rhs: 0
+  LF1017C1:
+    type: Standard
+    name: LF1017C1
+    coefficients:
+      - name: CLGAORD1
+        value: -1
+      - name: N1017AC4
+        value: 11.25
+    operator: GTE
+    rhs: 0
+  LF1017S1:
+    type: Standard
+    name: LF1017S1
+    coefficients:
+      - name: PLGAORD1
+        value: -1
+      - name: N1017AC2
+        value: 98
+    operator: GTE
+    rhs: 0
+  LF1019C1:
+    type: Standard
+    name: LF1019C1
+    coefficients:
+      - name: CLGAORD2
+        value: -1
+      - name: CLGACLE1
+        value: -1
+      - name: N1019AC4
+        value: 11.25
+    operator: GTE
+    rhs: 0
+  LF1019C2:
+    type: Standard
+    name: LF1019C2
+    coefficients:
+      - name: CLGAORD2
+        value: -1
+      - name: N1019AC4
+        value: 11.25
+    operator: GTE
+    rhs: 0
+  LF1019S1:
+    type: Standard
+    name: LF1019S1
+    coefficients:
+      - name: PLGAORD2
+        value: -1
+      - name: PLGACLE1
+        value: -1
+      - name: N1019AC2
+        value: 98
+    operator: GTE
+    rhs: 0
+  LF1019S2:
+    type: Standard
+    name: LF1019S2
+    coefficients:
+      - name: PLGAORD2
+        value: -1
+      - name: PCLEORD1
+        value: -1
+      - name: N1019AC2
+        value: 98
+    operator: GTE
+    rhs: 0
+  LF1021B1:
+    type: Standard
+    name: LF1021B1
+    coefficients:
+      - name: N1021AC1
+        value: 12
+    operator: GTE
+    rhs: 0
+  LF1021C1:
+    type: Standard
+    name: LF1021C1
+    coefficients:
+      - name: N1021AC3
+        value: 30
+      - name: N1021AC4
+        value: 11.25
+    operator: GTE
+    rhs: 0
+  LF1021S1:
+    type: Standard
+    name: LF1021S1
+    coefficients:
+      - name: PCLEORD2
+        value: -1
+      - name: N1021AC1
+        value: 305
+      - name: N1021AC2
+        value: 98
+    operator: GTE
+    rhs: 0
+  LF1100C1:
+    type: Standard
+    name: LF1100C1
+    coefficients:
+      - name: CBOSORD3
+        value: -1
+      - name: CBOSCLE2
+        value: -1
+      - name: N1100AC4
+        value: 11.25
+    operator: GTE
+    rhs: 0
+  LF1100C2:
+    type: Standard
+    name: LF1100C2
+    coefficients:
+      - name: CBOSORD3
+        value: -1
+      - name: CBOSCLE2
+        value: -1
+      - name: CLGAORD3
+        value: -1
+      - name: CLGACLE2
+        value: -1
+      - name: N1100AC4
+        value: 11.25
+    operator: GTE
+    rhs: 0
+  LF1100C3:
+    type: Standard
+    name: LF1100C3
+    coefficients:
+      - name: CBOSORD3
+        value: -1
+      - name: CLGAORD3
+        value: -1
+      - name: N1100AC4
+        value: 11.25
+    operator: GTE
+    rhs: 0
+  LF1100C4:
+    type: Standard
+    name: LF1100C4
+    coefficients:
+      - name: CORDBOS3
+        value: -1
+      - name: N1100AC4
+        value: 11.25
+    operator: GTE
+    rhs: 0
+  LF1100C5:
+    type: Standard
+    name: LF1100C5
+    coefficients:
+      - name: CORDBOS3
+        value: -1
+      - name: N1100AC4
+        value: 11.25
+    operator: GTE
+    rhs: 0
+  LF1100S1:
+    type: Standard
+    name: LF1100S1
+    coefficients:
+      - name: PBOSORD3
+        value: -1
+      - name: PBOSLGA1
+        value: -1
+      - name: PBOSCLE2
+        value: -1
+      - name: N1100AC2
+        value: 98
+    operator: GTE
+    rhs: 0
+  LF1100S2:
+    type: Standard
+    name: LF1100S2
+    coefficients:
+      - name: PBOSORD3
+        value: -1
+      - name: PBOSCLE2
+        value: -1
+      - name: PLGABOS3
+        value: -1
+      - name: PLGAORD3
+        value: -1
+      - name: PLGACLE2
+        value: -1
+      - name: N1100AC2
+        value: 98
+    operator: GTE
+    rhs: 0
+  LF1100S3:
+    type: Standard
+    name: LF1100S3
+    coefficients:
+      - name: PBOSORD3
+        value: -1
+      - name: PLGABOS3
+        value: -1
+      - name: PLGAORD3
+        value: -1
+      - name: PCLEORD3
+        value: -1
+      - name: N1100AC2
+        value: 98
+    operator: GTE
+    rhs: 0
+  LF1100S4:
+    type: Standard
+    name: LF1100S4
+    coefficients:
+      - name: PORDBOS3
+        value: -1
+      - name: PORDCLE3
+        value: -1
+      - name: PLGABOS3
+        value: -1
+      - name: N1100AC2
+        value: 98
+    operator: GTE
+    rhs: 0
+  LF1100S5:
+    type: Standard
+    name: LF1100S5
+    coefficients:
+      - name: PORDBOS3
+        value: -1
+      - name: PLGABOS3
+        value: -1
+      - name: PCLEBOS3
+        value: -1
+      - name: N1100AC2
+        value: 98
+    operator: GTE
+    rhs: 0
+  LF1102C1:
+    type: Standard
+    name: LF1102C1
+    coefficients:
+      - name: CBOSORD4
+        value: -1
+      - name: CBOSCLE3
+        value: -1
+      - name: N1102AC4
+        value: 11.25
+    operator: GTE
+    rhs: 0
+  LF1102C2:
+    type: Standard
+    name: LF1102C2
+    coefficients:
+      - name: CBOSORD4
+        value: -1
+      - name: CCLELGA3
+        value: -1
+      - name: N1102AC4
+        value: 11.25
+    operator: GTE
+    rhs: 0
+  LF1102C3:
+    type: Standard
+    name: LF1102C3
+    coefficients:
+      - name: CORDBOS4
+        value: -1
+      - name: CORDLGA3
+        value: -1
+      - name: CCLELGA3
+        value: -1
+      - name: N1102AC4
+        value: 11.25
+    operator: GTE
+    rhs: 0
+  LF1102C4:
+    type: Standard
+    name: LF1102C4
+    coefficients:
+      - name: CORDBOS4
+        value: -1
+      - name: N1102AC4
+        value: 11.25
+    operator: GTE
+    rhs: 0
+  LF1102S1:
+    type: Standard
+    name: LF1102S1
+    coefficients:
+      - name: PBOSORD4
+        value: -1
+      - name: PBOSLGA2
+        value: -1
+      - name: PBOSCLE3
+        value: -1
+      - name: N1102AC2
+        value: 98
+    operator: GTE
+    rhs: 0
+  LF1102S2:
+    type: Standard
+    name: LF1102S2
+    coefficients:
+      - name: PBOSORD4
+        value: -1
+      - name: PBOSLGA2
+        value: -1
+      - name: PCLEBOS4
+        value: -1
+      - name: PCLEORD4
+        value: -1
+      - name: PCLELGA3
+        value: -1
+      - name: N1102AC2
+        value: 98
+    operator: GTE
+    rhs: 0
+  LF1102S3:
+    type: Standard
+    name: LF1102S3
+    coefficients:
+      - name: PBOSLGA2
+        value: -1
+      - name: PORDBOS4
+        value: -1
+      - name: PORDLGA3
+        value: -1
+      - name: PCLEBOS4
+        value: -1
+      - name: PCLELGA3
+        value: -1
+      - name: N1102AC2
+        value: 98
+    operator: GTE
+    rhs: 0
+  LF1102S4:
+    type: Standard
+    name: LF1102S4
+    coefficients:
+      - name: PORDBOS4
+        value: -1
+      - name: PLGABOS4
+        value: -1
+      - name: PCLEBOS4
+        value: -1
+      - name: N1102AC2
+        value: 98
+    operator: GTE
+    rhs: 0
+  LF1200C1:
+    type: Standard
+    name: LF1200C1
+    coefficients:
+      - name: N1200AC4
+        value: 11.25
+    operator: GTE
+    rhs: 0
+  LF1200S1:
+    type: Standard
+    name: LF1200S1
+    coefficients:
+      - name: PBOSLGA3
+        value: -1
+      - name: N1200AC2
+        value: 98
+    operator: GTE
+    rhs: 0
+  LF1201C1:
+    type: Standard
+    name: LF1201C1
+    coefficients:
+      - name: N1201AC4
+        value: 11.25
+    operator: GTE
+    rhs: 0
+  LF1201S1:
+    type: Standard
+    name: LF1201S1
+    coefficients:
+      - name: PLGABOS5
+        value: -1
+      - name: N1201AC2
+        value: 98
+    operator: GTE
+    rhs: 0
+  LFRPMASM:
+    type: Standard
+    name: LFRPMASM
+    coefficients:
+      - name: PBOSORD0
+        value: -0.86441
+      - name: PBOSORD1
+        value: -0.87605
+      - name: PBOSORD2
+        value: -0.91637
+      - name: PBOSORD3
+        value: -0.91722
+      - name: PBOSORD4
+        value: -0.87605
+      - name: PBOSLGA0
+        value: -0.18557
+      - name: PBOSLGA1
+        value: -0.18557
+      - name: PBOSLGA2
+        value: -1.60685
+      - name: PBOSLGA3
+        value: -0.18557
+      - name: PBOSCLE0
+        value: -0.56156
+      - name: PBOSCLE1
+        value: -0.56156
+      - name: PBOSCLE2
+        value: -0.60273
+      - name: PBOSCLE3
+        value: -0.56156
+      - name: PORDBOS0
+        value: -0.87605
+      - name: PORDBOS1
+        value: -0.91637
+      - name: PORDBOS2
+        value: -0.91722
+      - name: PORDBOS3
+        value: -0.87605
+      - name: PORDBOS4
+        value: -0.91637
+      - name: PORDLGA0
+        value: -0.7308
+      - name: PORDLGA1
+        value: -0.7308
+      - name: PORDLGA2
+        value: -0.73165
+      - name: PORDLGA3
+        value: -0.7308
+      - name: PORDCLE0
+        value: -0.3145
+      - name: PORDCLE1
+        value: -0.3145
+      - name: PORDCLE2
+        value: -0.3145
+      - name: PORDCLE3
+        value: -0.3145
+      - name: PLGABOS0
+        value: -0.18557
+      - name: PLGABOS1
+        value: -0.18557
+      - name: PLGABOS2
+        value: -0.18557
+      - name: PLGABOS3
+        value: -1.6077
+      - name: PLGABOS4
+        value: -0.18557
+      - name: PLGABOS5
+        value: -0.18557
+      - name: PLGAORD0
+        value: -0.7308
+      - name: PLGAORD1
+        value: -0.7308
+      - name: PLGAORD2
+        value: -0.73165
+      - name: PLGAORD3
+        value: -0.73165
+      - name: PLGACLE0
+        value: -0.41715
+      - name: PLGACLE1
+        value: -0.41715
+      - name: PLGACLE2
+        value: -0.41715
+      - name: PCLEBOS0
+        value: -0.56156
+      - name: PCLEBOS1
+        value: -0.60273
+      - name: PCLEBOS2
+        value: -0.60273
+      - name: PCLEBOS3
+        value: -0.56156
+      - name: PCLEBOS4
+        value: -1.23087
+      - name: PCLEORD0
+        value: -0.3145
+      - name: PCLEORD1
+        value: -0.3145
+      - name: PCLEORD2
+        value: -0.3145
+      - name: PCLEORD3
+        value: -0.3145
+      - name: PCLEORD4
+        value: -0.3145
+      - name: PCLELGA0
+        value: -0.41715
+      - name: PCLELGA1
+        value: -0.41715
+      - name: PCLELGA2
+        value: -0.41715
+      - name: PCLELGA3
+        value: -1.0453
+      - name: N1003AC1
+        value: 211.088376
+      - name: N1003AC2
+        value: 67.942458
+      - name: N1005AC1
+        value: 137.131794
+      - name: N1005AC2
+        value: 44.138244
+      - name: N1011AC1
+        value: 213.932226
+      - name: N1011AC2
+        value: 68.857794
+      - name: N1013AC2
+        value: 72.026694
+      - name: N1015AC2
+        value: 32.78823
+      - name: N1017AC2
+        value: 57.440664
+      - name: N1019AC2
+        value: 57.50778
+      - name: N1021AC1
+        value: 76.80045
+      - name: N1021AC2
+        value: 24.719556
+      - name: N1002AC1
+        value: 76.80045
+      - name: N1002AC2
+        value: 24.719556
+      - name: N1004AC2
+        value: 57.440664
+      - name: N1006AC1
+        value: 213.932226
+      - name: N1006AC2
+        value: 68.857794
+      - name: N1008AC2
+        value: 72.026694
+      - name: N1010AC2
+        value: 72.093822
+      - name: N1012AC2
+        value: 32.78823
+      - name: N1014AC2
+        value: 47.374236
+      - name: N1100AC2
+        value: 140.951622
+      - name: N1102AC2
+        value: 140.884536
+      - name: N1200AC2
+        value: 14.586042
+      - name: N1201AC2
+        value: 14.586042
+    operator: GTE
+    rhs: 0
+  LFTNMILE:
+    type: Standard
+    name: LFTNMILE
+    coefficients:
+      - name: BBOSORD0
+        value: -0.86441
+      - name: BBOSORD1
+        value: -0.87605
+      - name: BBOSCLE0
+        value: -0.56156
+      - name: BBOSCLE1
+        value: -0.56156
+      - name: BORDBOS0
+        value: -0.87605
+      - name: CBOSORD0
+        value: -0.86441
+      - name: CBOSORD1
+        value: -0.87605
+      - name: CBOSORD2
+        value: -0.91637
+      - name: CBOSORD3
+        value: -0.91722
+      - name: CBOSORD4
+        value: -0.87605
+      - name: CBOSCLE0
+        value: -0.56156
+      - name: CBOSCLE1
+        value: -0.56156
+      - name: CBOSCLE2
+        value: -0.60273
+      - name: CBOSCLE3
+        value: -0.56156
+      - name: CORDBOS0
+        value: -0.87605
+      - name: CORDBOS1
+        value: -0.91637
+      - name: CORDBOS2
+        value: -0.91722
+      - name: CORDBOS3
+        value: -0.87605
+      - name: CORDBOS4
+        value: -0.91637
+      - name: CORDLGA0
+        value: -0.7308
+      - name: CORDLGA1
+        value: -0.7308
+      - name: CORDLGA2
+        value: -0.73165
+      - name: CORDLGA3
+        value: -0.7308
+      - name: CLGAORD0
+        value: -0.7308
+      - name: CLGAORD1
+        value: -0.7308
+      - name: CLGAORD2
+        value: -0.73165
+      - name: CLGAORD3
+        value: -0.73165
+      - name: CLGACLE0
+        value: -0.41715
+      - name: CLGACLE1
+        value: -0.41715
+      - name: CLGACLE2
+        value: -0.41715
+      - name: CCLELGA0
+        value: -0.41715
+      - name: CCLELGA1
+        value: -0.41715
+      - name: CCLELGA2
+        value: -0.41715
+      - name: CCLELGA3
+        value: -1.0453
+      - name: N1003AC1
+        value: 12.96612
+      - name: N1003AC3
+        value: 17.288155
+      - name: N1003AC4
+        value: 6.48306
+      - name: N1005AC1
+        value: 8.423325
+      - name: N1005AC3
+        value: 11.2311
+      - name: N1005AC4
+        value: 4.211665
+      - name: N1011AC1
+        value: 13.1408
+      - name: N1011AC3
+        value: 17.52107
+      - name: N1011AC4
+        value: 6.5704
+      - name: N1013AC4
+        value: 6.87278
+      - name: N1015AC4
+        value: 3.128645
+      - name: N1017AC4
+        value: 5.48098
+      - name: N1019AC4
+        value: 5.487385
+      - name: N1021AC1
+        value: 4.717475
+      - name: N1021AC3
+        value: 6.289965
+      - name: N1021AC4
+        value: 2.358735
+      - name: N1002AC1
+        value: 4.717475
+      - name: N1002AC3
+        value: 6.289965
+      - name: N1002AC4
+        value: 2.358735
+      - name: N1004AC4
+        value: 5.48098
+      - name: N1006AC1
+        value: 13.1408
+      - name: N1006AC3
+        value: 17.52107
+      - name: N1006AC4
+        value: 6.5704
+      - name: N1008AC4
+        value: 6.87278
+      - name: N1010AC4
+        value: 6.87918
+      - name: N1012AC4
+        value: 3.128645
+      - name: N1014AC4
+        value: 4.520445
+      - name: N1100AC4
+        value: 13.449575
+      - name: N1102AC4
+        value: 13.443175
+      - name: N1200AC4
+        value: 1.3918
+      - name: N1201AC4
+        value: 1.3918
+    operator: GTE
+    rhs: 0
+  MCLGAORD:
+    type: Standard
+    name: MCLGAORD
+    coefficients:
+      - name: N1013AC4
+        value: 1
+      - name: N1017AC4
+        value: 1
+      - name: N1019AC4
+        value: 1
+      - name: N1100AC4
+        value: 1
+    operator: GTE
+    rhs: 2
+  MCORDBOS:
+    type: Standard
+    name: MCORDBOS
+    coefficients:
+      - name: N1006AC3
+        value: 1
+      - name: N1006AC4
+        value: 1
+      - name: N1008AC4
+        value: 1
+      - name: N1010AC4
+        value: 1
+      - name: N1100AC4
+        value: 1
+      - name: N1102AC4
+        value: 1
+    operator: GTE
+    rhs: 1
+  MSBOSCLE:
+    type: Standard
+    name: MSBOSCLE
+    coefficients:
+      - name: N1005AC1
+        value: 1
+      - name: N1005AC2
+        value: 1
+      - name: N1011AC1
+        value: 1
+      - name: N1011AC2
+        value: 1
+      - name: N1100AC2
+        value: 1
+      - name: N1102AC2
+        value: 1
+    operator: GTE
+    rhs: 1
+  MSBOSLGA:
+    type: Standard
+    name: MSBOSLGA
+    coefficients:
+      - name: N1013AC2
+        value: 1
+      - name: N1100AC2
+        value: 1
+      - name: N1102AC2
+        value: 1
+      - name: N1200AC2
+        value: 1
+    operator: GTE
+    rhs: 7
+  MSBOSORD:
+    type: Standard
+    name: MSBOSORD
+    coefficients:
+      - name: N1003AC1
+        value: 1
+      - name: N1003AC2
+        value: 1
+      - name: N1011AC1
+        value: 1
+      - name: N1011AC2
+        value: 1
+      - name: N1013AC2
+        value: 1
+      - name: N1100AC2
+        value: 1
+      - name: N1102AC2
+        value: 1
+    operator: GTE
+    rhs: 3
+  MSCLEBOS:
+    type: Standard
+    name: MSCLEBOS
+    coefficients:
+      - name: N1006AC1
+        value: 1
+      - name: N1006AC2
+        value: 1
+      - name: N1010AC2
+        value: 1
+      - name: N1014AC2
+        value: 1
+      - name: N1100AC2
+        value: 1
+      - name: N1102AC2
+        value: 1
+    operator: GTE
+    rhs: 1
+  MSCLELGA:
+    type: Standard
+    name: MSCLELGA
+    coefficients:
+      - name: N1010AC2
+        value: 1
+      - name: N1012AC2
+        value: 1
+      - name: N1014AC2
+        value: 1
+      - name: N1102AC2
+        value: 1
+    operator: GTE
+    rhs: 3
+  MSCLEORD:
+    type: Standard
+    name: MSCLEORD
+    coefficients:
+      - name: N1011AC1
+        value: 1
+      - name: N1011AC2
+        value: 1
+      - name: N1019AC2
+        value: 1
+      - name: N1021AC1
+        value: 1
+      - name: N1021AC2
+        value: 1
+      - name: N1100AC2
+        value: 1
+      - name: N1102AC2
+        value: 1
+    operator: GTE
+    rhs: 6
+  MSLGABOS:
+    type: Standard
+    name: MSLGABOS
+    coefficients:
+      - name: N1008AC2
+        value: 1
+      - name: N1010AC2
+        value: 1
+      - name: N1014AC2
+        value: 1
+      - name: N1100AC2
+        value: 1
+      - name: N1102AC2
+        value: 1
+      - name: N1201AC2
+        value: 1
+    operator: GTE
+    rhs: 7
+  MSLGACLE:
+    type: Standard
+    name: MSLGACLE
+    coefficients:
+      - name: N1015AC2
+        value: 1
+      - name: N1019AC2
+        value: 1
+      - name: N1100AC2
+        value: 1
+    operator: GTE
+    rhs: 4
+  MSLGAORD:
+    type: Standard
+    name: MSLGAORD
+    coefficients:
+      - name: N1013AC2
+        value: 1
+      - name: N1017AC2
+        value: 1
+      - name: N1019AC2
+        value: 1
+      - name: N1100AC2
+        value: 1
+    operator: GTE
+    rhs: 5
+  MSORDBOS:
+    type: Standard
+    name: MSORDBOS
+    coefficients:
+      - name: N1006AC1
+        value: 1
+      - name: N1006AC2
+        value: 1
+      - name: N1008AC2
+        value: 1
+      - name: N1010AC2
+        value: 1
+      - name: N1100AC2
+        value: 1
+      - name: N1102AC2
+        value: 1
+    operator: GTE
+    rhs: 3
+  MSORDCLE:
+    type: Standard
+    name: MSORDCLE
+    coefficients:
+      - name: N1002AC1
+        value: 1
+      - name: N1002AC2
+        value: 1
+      - name: N1006AC1
+        value: 1
+      - name: N1006AC2
+        value: 1
+      - name: N1010AC2
+        value: 1
+      - name: N1100AC2
+        value: 1
+    operator: GTE
+    rhs: 5
+  MSORDLGA:
+    type: Standard
+    name: MSORDLGA
+    coefficients:
+      - name: N1004AC2
+        value: 1
+      - name: N1008AC2
+        value: 1
+      - name: N1010AC2
+        value: 1
+      - name: N1102AC2
+        value: 1
+    operator: GTE
+    rhs: 4
+  NOPTCLE0:
+    type: Standard
+    name: NOPTCLE0
+    coefficients:
+      - name: N1005AC1
+        value: 1
+      - name: N1005AC2
+        value: 1
+      - name: N1005AC3
+        value: 1
+      - name: N1005AC4
+        value: 1
+      - name: N1011AC1
+        value: 2
+      - name: N1011AC2
+        value: 2
+      - name: N1011AC3
+        value: 2
+      - name: N1011AC4
+        value: 2
+      - name: N1015AC2
+        value: 1
+      - name: N1015AC4
+        value: 1
+      - name: N1019AC2
+        value: 2
+      - name: N1019AC4
+        value: 2
+      - name: N1021AC1
+        value: 1
+      - name: N1021AC2
+        value: 1
+      - name: N1021AC3
+        value: 1
+      - name: N1021AC4
+        value: 1
+      - name: N1002AC1
+        value: 1
+      - name: N1002AC2
+        value: 1
+      - name: N1002AC3
+        value: 1
+      - name: N1002AC4
+        value: 1
+      - name: N1006AC1
+        value: 2
+      - name: N1006AC2
+        value: 2
+      - name: N1006AC3
+        value: 2
+      - name: N1006AC4
+        value: 2
+      - name: N1010AC2
+        value: 2
+      - name: N1010AC4
+        value: 2
+      - name: N1012AC2
+        value: 1
+      - name: N1012AC4
+        value: 1
+      - name: N1014AC2
+        value: 1
+      - name: N1014AC4
+        value: 1
+      - name: N1100AC2
+        value: 4
+      - name: N1100AC4
+        value: 4
+      - name: N1102AC2
+        value: 2
+      - name: N1102AC4
+        value: 2
+    operator: GTE
+    rhs: 24
+  PASSNGRS:
+    type: Standard
+    name: PASSNGRS
+    coefficients:
+      - name: PBOSORD0
+        value: 1
+      - name: PBOSORD1
+        value: 1
+      - name: PBOSORD2
+        value: 1
+      - name: PBOSORD3
+        value: 1
+      - name: PBOSORD4
+        value: 1
+      - name: PBOSLGA0
+        value: 1
+      - name: PBOSLGA1
+        value: 1
+      - name: PBOSLGA2
+        value: 1
+      - name: PBOSLGA3
+        value: 1
+      - name: PBOSCLE0
+        value: 1
+      - name: PBOSCLE1
+        value: 1
+      - name: PBOSCLE2
+        value: 1
+      - name: PBOSCLE3
+        value: 1
+      - name: PORDBOS0
+        value: 1
+      - name: PORDBOS1
+        value: 1
+      - name: PORDBOS2
+        value: 1
+      - name: PORDBOS3
+        value: 1
+      - name: PORDBOS4
+        value: 1
+      - name: PORDLGA0
+        value: 1
+      - name: PORDLGA1
+        value: 1
+      - name: PORDLGA2
+        value: 1
+      - name: PORDLGA3
+        value: 1
+      - name: PORDCLE0
+        value: 1
+      - name: PORDCLE1
+        value: 1
+      - name: PORDCLE2
+        value: 1
+      - name: PORDCLE3
+        value: 1
+      - name: PLGABOS0
+        value: 1
+      - name: PLGABOS1
+        value: 1
+      - name: PLGABOS2
+        value: 1
+      - name: PLGABOS3
+        value: 1
+      - name: PLGABOS4
+        value: 1
+      - name: PLGABOS5
+        value: 1
+      - name: PLGAORD0
+        value: 1
+      - name: PLGAORD1
+        value: 1
+      - name: PLGAORD2
+        value: 1
+      - name: PLGAORD3
+        value: 1
+      - name: PLGACLE0
+        value: 1
+      - name: PLGACLE1
+        value: 1
+      - name: PLGACLE2
+        value: 1
+      - name: PCLEBOS0
+        value: 1
+      - name: PCLEBOS1
+        value: 1
+      - name: PCLEBOS2
+        value: 1
+      - name: PCLEBOS3
+        value: 1
+      - name: PCLEBOS4
+        value: 1
+      - name: PCLEORD0
+        value: 1
+      - name: PCLEORD1
+        value: 1
+      - name: PCLEORD2
+        value: 1
+      - name: PCLEORD3
+        value: 1
+      - name: PCLEORD4
+        value: 1
+      - name: PCLELGA0
+        value: 1
+      - name: PCLELGA1
+        value: 1
+      - name: PCLELGA2
+        value: 1
+      - name: PCLELGA3
+        value: 1
+    operator: GTE
+    rhs: 9431
+  REVENUES:
+    type: Standard
+    name: REVENUES
+    coefficients:
+      - name: PBOSORD0
+        value: 0.075
+      - name: PBOSORD1
+        value: 0.075
+      - name: PBOSORD2
+        value: 0.075
+      - name: PBOSORD3
+        value: 0.075
+      - name: PBOSORD4
+        value: 0.075
+      - name: PBOSLGA0
+        value: 0.027
+      - name: PBOSLGA1
+        value: 0.027
+      - name: PBOSLGA2
+        value: 0.027
+      - name: PBOSLGA3
+        value: 0.027
+      - name: PBOSCLE0
+        value: 0.053
+      - name: PBOSCLE1
+        value: 0.053
+      - name: PBOSCLE2
+        value: 0.053
+      - name: PBOSCLE3
+        value: 0.053
+      - name: PORDBOS0
+        value: 0.075
+      - name: PORDBOS1
+        value: 0.075
+      - name: PORDBOS2
+        value: 0.075
+      - name: PORDBOS3
+        value: 0.075
+      - name: PORDBOS4
+        value: 0.075
+      - name: PORDLGA0
+        value: 0.068
+      - name: PORDLGA1
+        value: 0.068
+      - name: PORDLGA2
+        value: 0.068
+      - name: PORDLGA3
+        value: 0.068
+      - name: PORDCLE0
+        value: 0.035
+      - name: PORDCLE1
+        value: 0.035
+      - name: PORDCLE2
+        value: 0.035
+      - name: PORDCLE3
+        value: 0.035
+      - name: PLGABOS0
+        value: 0.027
+      - name: PLGABOS1
+        value: 0.027
+      - name: PLGABOS2
+        value: 0.027
+      - name: PLGABOS3
+        value: 0.027
+      - name: PLGABOS4
+        value: 0.027
+      - name: PLGABOS5
+        value: 0.027
+      - name: PLGAORD0
+        value: 0.068
+      - name: PLGAORD1
+        value: 0.068
+      - name: PLGAORD2
+        value: 0.068
+      - name: PLGAORD3
+        value: 0.068
+      - name: PLGACLE0
+        value: 0.037
+      - name: PLGACLE1
+        value: 0.037
+      - name: PLGACLE2
+        value: 0.037
+      - name: PCLEBOS0
+        value: 0.053
+      - name: PCLEBOS1
+        value: 0.053
+      - name: PCLEBOS2
+        value: 0.053
+      - name: PCLEBOS3
+        value: 0.053
+      - name: PCLEBOS4
+        value: 0.053
+      - name: PCLEORD0
+        value: 0.035
+      - name: PCLEORD1
+        value: 0.035
+      - name: PCLEORD2
+        value: 0.035
+      - name: PCLEORD3
+        value: 0.035
+      - name: PCLEORD4
+        value: 0.035
+      - name: PCLELGA0
+        value: 0.037
+      - name: PCLELGA1
+        value: 0.037
+      - name: PCLELGA2
+        value: 0.037
+      - name: PCLELGA3
+        value: 0.037
+      - name: BBOSORD0
+        value: 0.75
+      - name: BBOSORD1
+        value: 0.75
+      - name: BBOSCLE0
+        value: 0.53
+      - name: BBOSCLE1
+        value: 0.53
+      - name: BORDBOS0
+        value: 0.75
+      - name: CBOSORD0
+        value: 0.75
+      - name: CBOSORD1
+        value: 0.75
+      - name: CBOSORD2
+        value: 0.75
+      - name: CBOSORD3
+        value: 0.75
+      - name: CBOSORD4
+        value: 0.75
+      - name: CBOSCLE0
+        value: 0.53
+      - name: CBOSCLE1
+        value: 0.53
+      - name: CBOSCLE2
+        value: 0.53
+      - name: CBOSCLE3
+        value: 0.53
+      - name: CORDBOS0
+        value: 0.75
+      - name: CORDBOS1
+        value: 0.75
+      - name: CORDBOS2
+        value: 0.75
+      - name: CORDBOS3
+        value: 0.75
+      - name: CORDBOS4
+        value: 0.75
+      - name: CORDLGA0
+        value: 0.68
+      - name: CORDLGA1
+        value: 0.68
+      - name: CORDLGA2
+        value: 0.68
+      - name: CORDLGA3
+        value: 0.68
+      - name: CLGAORD0
+        value: 0.68
+      - name: CLGAORD1
+        value: 0.68
+      - name: CLGAORD2
+        value: 0.68
+      - name: CLGAORD3
+        value: 0.68
+      - name: CLGACLE0
+        value: 0.37
+      - name: CLGACLE1
+        value: 0.37
+      - name: CLGACLE2
+        value: 0.37
+      - name: CCLELGA0
+        value: 0.37
+      - name: CCLELGA1
+        value: 0.37
+      - name: CCLELGA2
+        value: 0.37
+      - name: CCLELGA3
+        value: 0.37
+    operator: GTE
+    rhs: 0
+  RPMILES:
+    type: Standard
+    name: RPMILES
+    coefficients:
+      - name: PBOSORD0
+        value: 0.86441
+      - name: PBOSORD1
+        value: 0.87605
+      - name: PBOSORD2
+        value: 0.91637
+      - name: PBOSORD3
+        value: 0.91722
+      - name: PBOSORD4
+        value: 0.87605
+      - name: PBOSLGA0
+        value: 0.18557
+      - name: PBOSLGA1
+        value: 0.18557
+      - name: PBOSLGA2
+        value: 1.60685
+      - name: PBOSLGA3
+        value: 0.18557
+      - name: PBOSCLE0
+        value: 0.56156
+      - name: PBOSCLE1
+        value: 0.56156
+      - name: PBOSCLE2
+        value: 0.60273
+      - name: PBOSCLE3
+        value: 0.56156
+      - name: PORDBOS0
+        value: 0.87605
+      - name: PORDBOS1
+        value: 0.91637
+      - name: PORDBOS2
+        value: 0.91722
+      - name: PORDBOS3
+        value: 0.87605
+      - name: PORDBOS4
+        value: 0.91637
+      - name: PORDLGA0
+        value: 0.7308
+      - name: PORDLGA1
+        value: 0.7308
+      - name: PORDLGA2
+        value: 0.73165
+      - name: PORDLGA3
+        value: 0.7308
+      - name: PORDCLE0
+        value: 0.3145
+      - name: PORDCLE1
+        value: 0.3145
+      - name: PORDCLE2
+        value: 0.3145
+      - name: PORDCLE3
+        value: 0.3145
+      - name: PLGABOS0
+        value: 0.18557
+      - name: PLGABOS1
+        value: 0.18557
+      - name: PLGABOS2
+        value: 0.18557
+      - name: PLGABOS3
+        value: 1.6077
+      - name: PLGABOS4
+        value: 0.18557
+      - name: PLGABOS5
+        value: 0.18557
+      - name: PLGAORD0
+        value: 0.7308
+      - name: PLGAORD1
+        value: 0.7308
+      - name: PLGAORD2
+        value: 0.73165
+      - name: PLGAORD3
+        value: 0.73165
+      - name: PLGACLE0
+        value: 0.41715
+      - name: PLGACLE1
+        value: 0.41715
+      - name: PLGACLE2
+        value: 0.41715
+      - name: PCLEBOS0
+        value: 0.56156
+      - name: PCLEBOS1
+        value: 0.60273
+      - name: PCLEBOS2
+        value: 0.60273
+      - name: PCLEBOS3
+        value: 0.56156
+      - name: PCLEBOS4
+        value: 1.23087
+      - name: PCLEORD0
+        value: 0.3145
+      - name: PCLEORD1
+        value: 0.3145
+      - name: PCLEORD2
+        value: 0.3145
+      - name: PCLEORD3
+        value: 0.3145
+      - name: PCLEORD4
+        value: 0.3145
+      - name: PCLELGA0
+        value: 0.41715
+      - name: PCLELGA1
+        value: 0.41715
+      - name: PCLELGA2
+        value: 0.41715
+      - name: PCLELGA3
+        value: 1.0453
+    operator: GTE
+    rhs: 0
+  RTONMILE:
+    type: Standard
+    name: RTONMILE
+    coefficients:
+      - name: BBOSORD0
+        value: 0.86441
+      - name: BBOSORD1
+        value: 0.87605
+      - name: BBOSCLE0
+        value: 0.56156
+      - name: BBOSCLE1
+        value: 0.56156
+      - name: BORDBOS0
+        value: 0.87605
+      - name: CBOSORD0
+        value: 0.86441
+      - name: CBOSORD1
+        value: 0.87605
+      - name: CBOSORD2
+        value: 0.91637
+      - name: CBOSORD3
+        value: 0.91722
+      - name: CBOSORD4
+        value: 0.87605
+      - name: CBOSCLE0
+        value: 0.56156
+      - name: CBOSCLE1
+        value: 0.56156
+      - name: CBOSCLE2
+        value: 0.60273
+      - name: CBOSCLE3
+        value: 0.56156
+      - name: CORDBOS0
+        value: 0.87605
+      - name: CORDBOS1
+        value: 0.91637
+      - name: CORDBOS2
+        value: 0.91722
+      - name: CORDBOS3
+        value: 0.87605
+      - name: CORDBOS4
+        value: 0.91637
+      - name: CORDLGA0
+        value: 0.7308
+      - name: CORDLGA1
+        value: 0.7308
+      - name: CORDLGA2
+        value: 0.73165
+      - name: CORDLGA3
+        value: 0.7308
+      - name: CLGAORD0
+        value: 0.7308
+      - name: CLGAORD1
+        value: 0.7308
+      - name: CLGAORD2
+        value: 0.73165
+      - name: CLGAORD3
+        value: 0.73165
+      - name: CLGACLE0
+        value: 0.41715
+      - name: CLGACLE1
+        value: 0.41715
+      - name: CLGACLE2
+        value: 0.41715
+      - name: CCLELGA0
+        value: 0.41715
+      - name: CCLELGA1
+        value: 0.41715
+      - name: CCLELGA2
+        value: 0.41715
+      - name: CCLELGA3
+        value: 1.0453
+    operator: GTE
+    rhs: 0
+  SYSTDEPT:
+    type: Standard
+    name: SYSTDEPT
+    coefficients:
+      - name: N1003AC1
+        value: 1
+      - name: N1003AC2
+        value: 1
+      - name: N1003AC3
+        value: 1
+      - name: N1003AC4
+        value: 1
+      - name: N1005AC1
+        value: 1
+      - name: N1005AC2
+        value: 1
+      - name: N1005AC3
+        value: 1
+      - name: N1005AC4
+        value: 1
+      - name: N1011AC1
+        value: 2
+      - name: N1011AC2
+        value: 2
+      - name: N1011AC3
+        value: 2
+      - name: N1011AC4
+        value: 2
+      - name: N1013AC2
+        value: 2
+      - name: N1013AC4
+        value: 2
+      - name: N1015AC2
+        value: 1
+      - name: N1015AC4
+        value: 1
+      - name: N1017AC2
+        value: 1
+      - name: N1017AC4
+        value: 1
+      - name: N1019AC2
+        value: 2
+      - name: N1019AC4
+        value: 2
+      - name: N1021AC1
+        value: 1
+      - name: N1021AC2
+        value: 1
+      - name: N1021AC3
+        value: 1
+      - name: N1021AC4
+        value: 1
+      - name: N1002AC1
+        value: 1
+      - name: N1002AC2
+        value: 1
+      - name: N1002AC3
+        value: 1
+      - name: N1002AC4
+        value: 1
+      - name: N1004AC2
+        value: 1
+      - name: N1004AC4
+        value: 1
+      - name: N1006AC1
+        value: 2
+      - name: N1006AC2
+        value: 2
+      - name: N1006AC3
+        value: 2
+      - name: N1006AC4
+        value: 2
+      - name: N1008AC2
+        value: 2
+      - name: N1008AC4
+        value: 2
+      - name: N1010AC2
+        value: 3
+      - name: N1010AC4
+        value: 3
+      - name: N1012AC2
+        value: 1
+      - name: N1012AC4
+        value: 1
+      - name: N1014AC2
+        value: 2
+      - name: N1014AC4
+        value: 2
+      - name: N1100AC2
+        value: 5
+      - name: N1100AC4
+        value: 5
+      - name: N1102AC2
+        value: 4
+      - name: N1102AC4
+        value: 4
+      - name: N1200AC2
+        value: 1
+      - name: N1200AC4
+        value: 1
+      - name: N1201AC2
+        value: 1
+      - name: N1201AC4
+        value: 1
+    operator: GTE
+    rhs: 50
+variables:
+  BBOSCLE0:
+    name: BBOSCLE0
+    var_type: Free
+  BBOSCLE1:
+    name: BBOSCLE1
+    var_type: Free
+  BBOSORD0:
+    name: BBOSORD0
+    var_type: Free
+  BBOSORD1:
+    name: BBOSORD1
+    var_type: Free
+  BORDBOS0:
+    name: BORDBOS0
+    var_type: Free
+  CBOSCLE0:
+    name: CBOSCLE0
+    var_type: Free
+  CBOSCLE1:
+    name: CBOSCLE1
+    var_type: Free
+  CBOSCLE2:
+    name: CBOSCLE2
+    var_type: Free
+  CBOSCLE3:
+    name: CBOSCLE3
+    var_type: Free
+  CBOSORD0:
+    name: CBOSORD0
+    var_type: Free
+  CBOSORD1:
+    name: CBOSORD1
+    var_type: Free
+  CBOSORD2:
+    name: CBOSORD2
+    var_type: Free
+  CBOSORD3:
+    name: CBOSORD3
+    var_type: Free
+  CBOSORD4:
+    name: CBOSORD4
+    var_type: Free
+  CCLELGA0:
+    name: CCLELGA0
+    var_type: Free
+  CCLELGA1:
+    name: CCLELGA1
+    var_type: Free
+  CCLELGA2:
+    name: CCLELGA2
+    var_type: Free
+  CCLELGA3:
+    name: CCLELGA3
+    var_type: Free
+  CLGACLE0:
+    name: CLGACLE0
+    var_type: Free
+  CLGACLE1:
+    name: CLGACLE1
+    var_type: Free
+  CLGACLE2:
+    name: CLGACLE2
+    var_type: Free
+  CLGAORD0:
+    name: CLGAORD0
+    var_type: Free
+  CLGAORD1:
+    name: CLGAORD1
+    var_type: Free
+  CLGAORD2:
+    name: CLGAORD2
+    var_type: Free
+  CLGAORD3:
+    name: CLGAORD3
+    var_type: Free
+  CORDBOS0:
+    name: CORDBOS0
+    var_type: Free
+  CORDBOS1:
+    name: CORDBOS1
+    var_type: Free
+  CORDBOS2:
+    name: CORDBOS2
+    var_type: Free
+  CORDBOS3:
+    name: CORDBOS3
+    var_type: Free
+  CORDBOS4:
+    name: CORDBOS4
+    var_type: Free
+  CORDLGA0:
+    name: CORDLGA0
+    var_type: Free
+  CORDLGA1:
+    name: CORDLGA1
+    var_type: Free
+  CORDLGA2:
+    name: CORDLGA2
+    var_type: Free
+  CORDLGA3:
+    name: CORDLGA3
+    var_type: Free
+  GRDTIMN1:
+    name: GRDTIMN1
+    var_type:
+      DoubleBound:
+        - -100
+        - 0
+  GRDTIMN2:
+    name: GRDTIMN2
+    var_type:
+      DoubleBound:
+        - -90
+        - 0
+  GRDTIMN3:
+    name: GRDTIMN3
+    var_type:
+      DoubleBound:
+        - -45
+        - 0
+  GRDTIMN4:
+    name: GRDTIMN4
+    var_type:
+      DoubleBound:
+        - -45
+        - 0
+  GRDTIMO1:
+    name: GRDTIMO1
+    var_type: Free
+  GRDTIMO2:
+    name: GRDTIMO2
+    var_type: Free
+  N1002AC1:
+    name: N1002AC1
+    var_type:
+      DoubleBound:
+        - 0
+        - 7
+  N1002AC2:
+    name: N1002AC2
+    var_type:
+      DoubleBound:
+        - 0
+        - 7
+  N1002AC3:
+    name: N1002AC3
+    var_type:
+      DoubleBound:
+        - 0
+        - 2
+  N1002AC4:
+    name: N1002AC4
+    var_type:
+      DoubleBound:
+        - 0
+        - 2
+  N1003AC1:
+    name: N1003AC1
+    var_type:
+      DoubleBound:
+        - 0
+        - 7
+  N1003AC2:
+    name: N1003AC2
+    var_type:
+      DoubleBound:
+        - 0
+        - 7
+  N1003AC3:
+    name: N1003AC3
+    var_type:
+      DoubleBound:
+        - 0
+        - 2
+  N1003AC4:
+    name: N1003AC4
+    var_type:
+      DoubleBound:
+        - 0
+        - 2
+  N1004AC2:
+    name: N1004AC2
+    var_type:
+      DoubleBound:
+        - 0
+        - 7
+  N1004AC4:
+    name: N1004AC4
+    var_type:
+      DoubleBound:
+        - 0
+        - 2
+  N1005AC1:
+    name: N1005AC1
+    var_type:
+      DoubleBound:
+        - 0
+        - 7
+  N1005AC2:
+    name: N1005AC2
+    var_type:
+      DoubleBound:
+        - 0
+        - 7
+  N1005AC3:
+    name: N1005AC3
+    var_type:
+      DoubleBound:
+        - 0
+        - 2
+  N1005AC4:
+    name: N1005AC4
+    var_type:
+      DoubleBound:
+        - 0
+        - 2
+  N1006AC1:
+    name: N1006AC1
+    var_type:
+      DoubleBound:
+        - 0
+        - 7
+  N1006AC2:
+    name: N1006AC2
+    var_type:
+      DoubleBound:
+        - 0
+        - 7
+  N1006AC3:
+    name: N1006AC3
+    var_type:
+      DoubleBound:
+        - 0
+        - 2
+  N1006AC4:
+    name: N1006AC4
+    var_type:
+      DoubleBound:
+        - 0
+        - 2
+  N1008AC2:
+    name: N1008AC2
+    var_type:
+      DoubleBound:
+        - 0
+        - 14
+  N1008AC4:
+    name: N1008AC4
+    var_type:
+      DoubleBound:
+        - 0
+        - 2
+  N1010AC2:
+    name: N1010AC2
+    var_type:
+      DoubleBound:
+        - 0
+        - 14
+  N1010AC4:
+    name: N1010AC4
+    var_type:
+      DoubleBound:
+        - 0
+        - 2
+  N1011AC1:
+    name: N1011AC1
+    var_type:
+      DoubleBound:
+        - 0
+        - 7
+  N1011AC2:
+    name: N1011AC2
+    var_type:
+      DoubleBound:
+        - 0
+        - 7
+  N1011AC3:
+    name: N1011AC3
+    var_type:
+      DoubleBound:
+        - 0
+        - 2
+  N1011AC4:
+    name: N1011AC4
+    var_type:
+      DoubleBound:
+        - 0
+        - 2
+  N1012AC2:
+    name: N1012AC2
+    var_type:
+      DoubleBound:
+        - 0
+        - 7
+  N1012AC4:
+    name: N1012AC4
+    var_type:
+      DoubleBound:
+        - 0
+        - 2
+  N1013AC2:
+    name: N1013AC2
+    var_type:
+      DoubleBound:
+        - 0
+        - 14
+  N1013AC4:
+    name: N1013AC4
+    var_type:
+      DoubleBound:
+        - 0
+        - 2
+  N1014AC2:
+    name: N1014AC2
+    var_type:
+      DoubleBound:
+        - 0
+        - 14
+  N1014AC4:
+    name: N1014AC4
+    var_type:
+      DoubleBound:
+        - 0
+        - 2
+  N1015AC2:
+    name: N1015AC2
+    var_type:
+      DoubleBound:
+        - 0
+        - 7
+  N1015AC4:
+    name: N1015AC4
+    var_type:
+      DoubleBound:
+        - 0
+        - 2
+  N1017AC2:
+    name: N1017AC2
+    var_type:
+      DoubleBound:
+        - 0
+        - 7
+  N1017AC4:
+    name: N1017AC4
+    var_type:
+      DoubleBound:
+        - 0
+        - 2
+  N1019AC2:
+    name: N1019AC2
+    var_type:
+      DoubleBound:
+        - 0
+        - 7
+  N1019AC4:
+    name: N1019AC4
+    var_type:
+      DoubleBound:
+        - 0
+        - 2
+  N1021AC1:
+    name: N1021AC1
+    var_type:
+      DoubleBound:
+        - 0
+        - 7
+  N1021AC2:
+    name: N1021AC2
+    var_type:
+      DoubleBound:
+        - 0
+        - 7
+  N1021AC3:
+    name: N1021AC3
+    var_type:
+      DoubleBound:
+        - 0
+        - 2
+  N1021AC4:
+    name: N1021AC4
+    var_type:
+      DoubleBound:
+        - 0
+        - 2
+  N1100AC2:
+    name: N1100AC2
+    var_type:
+      DoubleBound:
+        - 0
+        - 7
+  N1100AC4:
+    name: N1100AC4
+    var_type:
+      DoubleBound:
+        - 0
+        - 7
+  N1102AC2:
+    name: N1102AC2
+    var_type:
+      DoubleBound:
+        - 0
+        - 7
+  N1102AC4:
+    name: N1102AC4
+    var_type:
+      DoubleBound:
+        - 0
+        - 7
+  N1200AC2:
+    name: N1200AC2
+    var_type:
+      DoubleBound:
+        - 0
+        - 14
+  N1200AC4:
+    name: N1200AC4
+    var_type:
+      DoubleBound:
+        - 0
+        - 7
+  N1201AC2:
+    name: N1201AC2
+    var_type:
+      DoubleBound:
+        - 0
+        - 14
+  N1201AC4:
+    name: N1201AC4
+    var_type:
+      DoubleBound:
+        - 0
+        - 7
+  PBOSCLE0:
+    name: PBOSCLE0
+    var_type: Free
+  PBOSCLE1:
+    name: PBOSCLE1
+    var_type: Free
+  PBOSCLE2:
+    name: PBOSCLE2
+    var_type: Free
+  PBOSCLE3:
+    name: PBOSCLE3
+    var_type: Free
+  PBOSLGA0:
+    name: PBOSLGA0
+    var_type: Free
+  PBOSLGA1:
+    name: PBOSLGA1
+    var_type: Free
+  PBOSLGA2:
+    name: PBOSLGA2
+    var_type: Free
+  PBOSLGA3:
+    name: PBOSLGA3
+    var_type: Free
+  PBOSORD0:
+    name: PBOSORD0
+    var_type: Free
+  PBOSORD1:
+    name: PBOSORD1
+    var_type: Free
+  PBOSORD2:
+    name: PBOSORD2
+    var_type: Free
+  PBOSORD3:
+    name: PBOSORD3
+    var_type: Free
+  PBOSORD4:
+    name: PBOSORD4
+    var_type: Free
+  PCLEBOS0:
+    name: PCLEBOS0
+    var_type: Free
+  PCLEBOS1:
+    name: PCLEBOS1
+    var_type: Free
+  PCLEBOS2:
+    name: PCLEBOS2
+    var_type: Free
+  PCLEBOS3:
+    name: PCLEBOS3
+    var_type: Free
+  PCLEBOS4:
+    name: PCLEBOS4
+    var_type: Free
+  PCLELGA0:
+    name: PCLELGA0
+    var_type: Free
+  PCLELGA1:
+    name: PCLELGA1
+    var_type: Free
+  PCLELGA2:
+    name: PCLELGA2
+    var_type: Free
+  PCLELGA3:
+    name: PCLELGA3
+    var_type: Free
+  PCLEORD0:
+    name: PCLEORD0
+    var_type: Free
+  PCLEORD1:
+    name: PCLEORD1
+    var_type: Free
+  PCLEORD2:
+    name: PCLEORD2
+    var_type: Free
+  PCLEORD3:
+    name: PCLEORD3
+    var_type: Free
+  PCLEORD4:
+    name: PCLEORD4
+    var_type: Free
+  PLGABOS0:
+    name: PLGABOS0
+    var_type: Free
+  PLGABOS1:
+    name: PLGABOS1
+    var_type: Free
+  PLGABOS2:
+    name: PLGABOS2
+    var_type: Free
+  PLGABOS3:
+    name: PLGABOS3
+    var_type: Free
+  PLGABOS4:
+    name: PLGABOS4
+    var_type: Free
+  PLGABOS5:
+    name: PLGABOS5
+    var_type: Free
+  PLGACLE0:
+    name: PLGACLE0
+    var_type: Free
+  PLGACLE1:
+    name: PLGACLE1
+    var_type: Free
+  PLGACLE2:
+    name: PLGACLE2
+    var_type: Free
+  PLGAORD0:
+    name: PLGAORD0
+    var_type: Free
+  PLGAORD1:
+    name: PLGAORD1
+    var_type: Free
+  PLGAORD2:
+    name: PLGAORD2
+    var_type: Free
+  PLGAORD3:
+    name: PLGAORD3
+    var_type: Free
+  PORDBOS0:
+    name: PORDBOS0
+    var_type: Free
+  PORDBOS1:
+    name: PORDBOS1
+    var_type: Free
+  PORDBOS2:
+    name: PORDBOS2
+    var_type: Free
+  PORDBOS3:
+    name: PORDBOS3
+    var_type: Free
+  PORDBOS4:
+    name: PORDBOS4
+    var_type: Free
+  PORDCLE0:
+    name: PORDCLE0
+    var_type: Free
+  PORDCLE1:
+    name: PORDCLE1
+    var_type: Free
+  PORDCLE2:
+    name: PORDCLE2
+    var_type: Free
+  PORDCLE3:
+    name: PORDCLE3
+    var_type: Free
+  PORDLGA0:
+    name: PORDLGA0
+    var_type: Free
+  PORDLGA1:
+    name: PORDLGA1
+    var_type: Free
+  PORDLGA2:
+    name: PORDLGA2
+    var_type: Free
+  PORDLGA3:
+    name: PORDLGA3
+    var_type: Free
+  RgDCBOSCLE:
+    name: RgDCBOSCLE
+    var_type:
+      DoubleBound:
+        - -3.2
+        - 0
+  RgDCBOSORD:
+    name: RgDCBOSORD
+    var_type:
+      DoubleBound:
+        - -12
+        - 0
+  RgDCCLELGA:
+    name: RgDCCLELGA
+    var_type:
+      DoubleBound:
+        - -5
+        - 0
+  RgDCLGACLE:
+    name: RgDCLGACLE
+    var_type:
+      DoubleBound:
+        - -3.2
+        - 0
+  RgDCLGAORD:
+    name: RgDCLGAORD
+    var_type:
+      DoubleBound:
+        - -9
+        - 0
+  RgDCORDBOS:
+    name: RgDCORDBOS
+    var_type:
+      DoubleBound:
+        - -4.8
+        - 0
+  RgDCORDLGA:
+    name: RgDCORDLGA
+    var_type:
+      DoubleBound:
+        - -2.6
+        - 0
+  RgDMBOSCLE:
+    name: RgDMBOSCLE
+    var_type:
+      DoubleBound:
+        - -29
+        - 0
+  RgDMBOSLGA:
+    name: RgDMBOSLGA
+    var_type:
+      DoubleBound:
+        - -471
+        - 0
+  RgDMBOSORD:
+    name: RgDMBOSORD
+    var_type:
+      DoubleBound:
+        - -61
+        - 0
+  RgDMCLEBOS:
+    name: RgDMCLEBOS
+    var_type:
+      DoubleBound:
+        - -27
+        - 0
+  RgDMCLELGA:
+    name: RgDMCLELGA
+    var_type:
+      DoubleBound:
+        - -82
+        - 0
+  RgDMCLEORD:
+    name: RgDMCLEORD
+    var_type:
+      DoubleBound:
+        - -143
+        - 0
+  RgDMLGABOS:
+    name: RgDMLGABOS
+    var_type:
+      DoubleBound:
+        - -549
+        - 0
+  RgDMLGACLE:
+    name: RgDMLGACLE
+    var_type:
+      DoubleBound:
+        - -104
+        - 0
+  RgDMLGAORD:
+    name: RgDMLGAORD
+    var_type:
+      DoubleBound:
+        - -143
+        - 0
+  RgDMORDBOS:
+    name: RgDMORDBOS
+    var_type:
+      DoubleBound:
+        - -61
+        - 0
+  RgDMORDCLE:
+    name: RgDMORDCLE
+    var_type:
+      DoubleBound:
+        - -124
+        - 0
+  RgDMORDLGA:
+    name: RgDMORDLGA
+    var_type:
+      DoubleBound:
+        - -103
+        - 0

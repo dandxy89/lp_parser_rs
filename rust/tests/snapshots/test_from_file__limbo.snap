@@ -1,0 +1,46 @@
+---
+source: rust/tests/test_from_file.rs
+expression: parsed
+---
+name: ~
+sense: Minimize
+objectives:
+  __obj__:
+    name: __obj__
+    coefficients:
+      - name: b_5829890_x2
+        value: 1
+      - name: b_5880854_x2
+        value: 1
+constraints:
+  __c__:
+    type: Standard
+    name: __c__
+    coefficients:
+      - name: b_5880854_x2
+        value: 1
+      - name: b_5880854_x1
+        value: -1
+    operator: GTE
+    rhs: 32
+variables:
+  b_5829890_x1:
+    name: b_5829890_x1
+    var_type:
+      LowerBound: 10
+  b_5829890_x2:
+    name: b_5829890_x2
+    var_type:
+      DoubleBound:
+        - 1014
+        - 1917
+  b_5880854_x1:
+    name: b_5880854_x1
+    var_type:
+      UpperBound: 10
+  b_5880854_x2:
+    name: b_5880854_x2
+    var_type:
+      DoubleBound:
+        - 1014
+        - 1917

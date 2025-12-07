@@ -1,0 +1,278 @@
+---
+source: rust/tests/test_from_file.rs
+expression: parsed
+---
+name: diet
+sense: Minimize
+objectives:
+  obj:
+    name: obj
+    coefficients:
+      - name: Roasted_Chicken
+        value: 0.84
+      - name: Spaghetti_W__Sauce
+        value: 0.78
+      - name: "Tomato,Red,Ripe,Raw"
+        value: 0.27
+      - name: "Apple,Raw,W_Skin"
+        value: 0.24
+      - name: Grapes
+        value: 0.32
+      - name: Chocolate_Chip_Cookies
+        value: 0.03
+      - name: Lowfat_Milk
+        value: 0.23
+      - name: Raisin_Brn
+        value: 0.34
+      - name: Hotdog
+        value: 0.31
+constraints:
+  c1:
+    type: Standard
+    name: c1
+    coefficients:
+      - name: Roasted_Chicken
+        value: 277.4
+      - name: Spaghetti_W__Sauce
+        value: 358.2
+      - name: "Tomato,Red,Ripe,Raw"
+        value: 25.8
+      - name: "Apple,Raw,W_Skin"
+        value: 81.4
+      - name: Grapes
+        value: 15.1
+      - name: Chocolate_Chip_Cookies
+        value: 78.1
+      - name: Lowfat_Milk
+        value: 121.2
+      - name: Raisin_Brn
+        value: 115.1
+      - name: Hotdog
+        value: 242.1
+      - name: Rgc1
+        value: -1
+    operator: EQ
+    rhs: 2500
+  c2:
+    type: Standard
+    name: c2
+    coefficients:
+      - name: Roasted_Chicken
+        value: 21.9
+      - name: Spaghetti_W__Sauce
+        value: 80.2
+      - name: "Tomato,Red,Ripe,Raw"
+        value: 6.2
+      - name: "Apple,Raw,W_Skin"
+        value: 9.7
+      - name: Grapes
+        value: 3.4
+      - name: Chocolate_Chip_Cookies
+        value: 6.2
+      - name: Lowfat_Milk
+        value: 296.7
+      - name: Raisin_Brn
+        value: 12.9
+      - name: Hotdog
+        value: 23.5
+      - name: Rgc2
+        value: -1
+    operator: EQ
+    rhs: 1600
+  c3:
+    type: Standard
+    name: c3
+    coefficients:
+      - name: Roasted_Chicken
+        value: 1.8
+      - name: Spaghetti_W__Sauce
+        value: 2.3
+      - name: "Tomato,Red,Ripe,Raw"
+        value: 0.6
+      - name: "Apple,Raw,W_Skin"
+        value: 0.2
+      - name: Grapes
+        value: 0.1
+      - name: Chocolate_Chip_Cookies
+        value: 0.4
+      - name: Lowfat_Milk
+        value: 0.1
+      - name: Raisin_Brn
+        value: 16.8
+      - name: Hotdog
+        value: 2.3
+      - name: Rgc3
+        value: -1
+    operator: EQ
+    rhs: 30
+  c4:
+    type: Standard
+    name: c4
+    coefficients:
+      - name: Roasted_Chicken
+        value: 77.4
+      - name: Spaghetti_W__Sauce
+        value: 3055.2
+      - name: "Tomato,Red,Ripe,Raw"
+        value: 766.3
+      - name: "Apple,Raw,W_Skin"
+        value: 73.1
+      - name: Grapes
+        value: 24
+      - name: Chocolate_Chip_Cookies
+        value: 101.8
+      - name: Lowfat_Milk
+        value: 500.2
+      - name: Raisin_Brn
+        value: 1250.2
+      - name: Rgc4
+        value: -1
+    operator: EQ
+    rhs: 50000
+  c5:
+    type: Standard
+    name: c5
+    coefficients:
+      - name: Spaghetti_W__Sauce
+        value: 11.6
+      - name: "Tomato,Red,Ripe,Raw"
+        value: 1.4
+      - name: "Apple,Raw,W_Skin"
+        value: 3.7
+      - name: Grapes
+        value: 0.2
+      - name: Raisin_Brn
+        value: 4
+      - name: Rgc5
+        value: -1
+    operator: EQ
+    rhs: 100
+  c6:
+    type: Standard
+    name: c6
+    coefficients:
+      - name: Spaghetti_W__Sauce
+        value: 58.3
+      - name: "Tomato,Red,Ripe,Raw"
+        value: 5.7
+      - name: "Apple,Raw,W_Skin"
+        value: 21
+      - name: Grapes
+        value: 4.1
+      - name: Chocolate_Chip_Cookies
+        value: 9.3
+      - name: Lowfat_Milk
+        value: 11.7
+      - name: Raisin_Brn
+        value: 27.9
+      - name: Hotdog
+        value: 18
+      - name: Rgc6
+        value: -1
+    operator: EQ
+    rhs: 300
+  c7:
+    type: Standard
+    name: c7
+    coefficients:
+      - name: Roasted_Chicken
+        value: 42.2
+      - name: Spaghetti_W__Sauce
+        value: 8.2
+      - name: "Tomato,Red,Ripe,Raw"
+        value: 1
+      - name: "Apple,Raw,W_Skin"
+        value: 0.3
+      - name: Grapes
+        value: 0.2
+      - name: Chocolate_Chip_Cookies
+        value: 0.9
+      - name: Lowfat_Milk
+        value: 8.1
+      - name: Raisin_Brn
+        value: 4
+      - name: Hotdog
+        value: 10.4
+      - name: Rgc7
+        value: -1
+    operator: EQ
+    rhs: 100
+variables:
+  "Apple,Raw,W_Skin":
+    name: "Apple,Raw,W_Skin"
+    var_type:
+      UpperBound: 10
+  Chocolate_Chip_Cookies:
+    name: Chocolate_Chip_Cookies
+    var_type:
+      UpperBound: 10
+  Grapes:
+    name: Grapes
+    var_type:
+      UpperBound: 10
+  Hotdog:
+    name: Hotdog
+    var_type:
+      UpperBound: 10
+  Lowfat_Milk:
+    name: Lowfat_Milk
+    var_type:
+      UpperBound: 10
+  Raisin_Brn:
+    name: Raisin_Brn
+    var_type:
+      UpperBound: 10
+  Rgc1:
+    name: Rgc1
+    var_type:
+      DoubleBound:
+        - -500
+        - 0
+  Rgc2:
+    name: Rgc2
+    var_type:
+      DoubleBound:
+        - -800
+        - 0
+  Rgc3:
+    name: Rgc3
+    var_type:
+      DoubleBound:
+        - -20
+        - 0
+  Rgc4:
+    name: Rgc4
+    var_type:
+      DoubleBound:
+        - -45000
+        - 0
+  Rgc5:
+    name: Rgc5
+    var_type:
+      DoubleBound:
+        - -75
+        - 0
+  Rgc6:
+    name: Rgc6
+    var_type:
+      DoubleBound:
+        - -300
+        - 0
+  Rgc7:
+    name: Rgc7
+    var_type:
+      DoubleBound:
+        - -50
+        - 0
+  Roasted_Chicken:
+    name: Roasted_Chicken
+    var_type:
+      UpperBound: 10
+  Spaghetti_W__Sauce:
+    name: Spaghetti_W__Sauce
+    var_type:
+      UpperBound: 10
+  "Tomato,Red,Ripe,Raw":
+    name: "Tomato,Red,Ripe,Raw"
+    var_type:
+      UpperBound: 10

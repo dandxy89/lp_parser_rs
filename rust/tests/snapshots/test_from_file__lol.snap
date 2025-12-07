@@ -1,0 +1,80 @@
+---
+source: rust/tests/test_from_file.rs
+expression: parsed
+---
+name: ~
+sense: Maximize
+objectives:
+  obj:
+    name: obj
+    coefficients:
+      - name: x1
+        value: 3
+      - name: x2
+        value: 1
+      - name: x3
+        value: 5
+      - name: x4
+        value: 1
+constraints:
+  c1:
+    type: Standard
+    name: c1
+    coefficients:
+      - name: x1
+        value: 3
+      - name: x2
+        value: 1
+      - name: x3
+        value: 2
+    operator: EQ
+    rhs: 30
+  c2:
+    type: Standard
+    name: c2
+    coefficients:
+      - name: x1
+        value: 2
+      - name: x2
+        value: 1
+      - name: x3
+        value: 3
+      - name: x4
+        value: 1
+    operator: GTE
+    rhs: 15
+  c3:
+    type: Standard
+    name: c3
+    coefficients:
+      - name: x2
+        value: 2
+      - name: x4
+        value: 3
+    operator: LTE
+    rhs: 25
+variables:
+  x1:
+    name: x1
+    var_type:
+      DoubleBound:
+        - 0
+        - inf
+  x2:
+    name: x2
+    var_type:
+      DoubleBound:
+        - 0
+        - 10
+  x3:
+    name: x3
+    var_type:
+      DoubleBound:
+        - 0
+        - inf
+  x4:
+    name: x4
+    var_type:
+      DoubleBound:
+        - 0
+        - inf

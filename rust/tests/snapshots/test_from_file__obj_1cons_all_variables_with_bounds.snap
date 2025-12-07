@@ -1,0 +1,42 @@
+---
+source: rust/tests/test_from_file.rs
+expression: parsed
+---
+name: ~
+sense: Maximize
+objectives:
+  cost:
+    name: cost
+    coefficients:
+      - name: x
+        value: -2
+      - name: y
+        value: -3
+      - name: z
+        value: 4
+constraints:
+  cons:
+    type: Standard
+    name: cons
+    coefficients:
+      - name: x
+        value: 4.4
+      - name: y
+        value: 5.5
+      - name: z
+        value: 6.6
+    operator: LTE
+    rhs: 120
+variables:
+  x:
+    name: x
+    var_type: Free
+  y:
+    name: y
+    var_type:
+      DoubleBound:
+        - 10
+        - 12
+  z:
+    name: z
+    var_type: Binary

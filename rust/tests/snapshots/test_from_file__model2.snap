@@ -1,0 +1,100 @@
+---
+source: rust/tests/test_from_file.rs
+expression: parsed
+---
+name: ~
+sense: Minimize
+objectives:
+  obj:
+    name: obj
+    coefficients:
+      - name: V4
+        value: -1
+      - name: V5
+        value: 1
+constraints:
+  CON1:
+    type: Standard
+    name: CON1
+    coefficients:
+      - name: V1
+        value: 1
+    operator: GTE
+    rhs: 0
+  CON2:
+    type: Standard
+    name: CON2
+    coefficients:
+      - name: V2
+        value: 1
+    operator: GTE
+    rhs: 2
+  CON3:
+    type: Standard
+    name: CON3
+    coefficients:
+      - name: V3
+        value: 1
+    operator: LTE
+    rhs: 2.5
+  CON4:
+    type: Standard
+    name: CON4
+    coefficients:
+      - name: V5
+        value: 1
+      - name: V6
+        value: 1
+      - name: V7
+        value: 1
+    operator: LTE
+    rhs: 1
+variables:
+  V1:
+    name: V1
+    var_type:
+      DoubleBound:
+        - -inf
+        - 3
+  V2:
+    name: V2
+    var_type:
+      DoubleBound:
+        - -inf
+        - 3
+  V3:
+    name: V3
+    var_type:
+      DoubleBound:
+        - -inf
+        - 3
+  V4:
+    name: V4
+    var_type:
+      DoubleBound:
+        - 5.5
+        - inf
+  V5:
+    name: V5
+    var_type:
+      DoubleBound:
+        - 0
+        - 1
+  V6:
+    name: V6
+    var_type:
+      DoubleBound:
+        - 0
+        - 1
+  V7:
+    name: V7
+    var_type:
+      DoubleBound:
+        - 0
+        - 1
+  V8:
+    name: V8
+    var_type:
+      DoubleBound:
+        - 0
+        - 1
