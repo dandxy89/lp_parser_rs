@@ -1,0 +1,93 @@
+---
+source: rust/tests/test_from_file.rs
+expression: parsed
+---
+name: ~
+sense: Minimize
+objectives:
+  system_cost:
+    name: system_cost
+    coefficients:
+      - name: Gen_001d01h01
+        value: 0.2
+      - name: Gen_001d01h02
+        value: 0.2
+      - name: Gen_001d01h03
+        value: 0.2
+      - name: Gen_001d01h04
+        value: 0.2
+      - name: Gen_001d01h05
+        value: 0.2
+      - name: Gen_001d01h06
+        value: 0.2
+      - name: Gen_001d01h07
+        value: 0.2
+      - name: Gen_001d01h08
+        value: 0.2
+      - name: Gen_001d01h09
+        value: 0.2
+      - name: Gen_001d01h10
+        value: 0.2
+      - name: Gen_001d01h11
+        value: 0.2
+constraints:
+  dummy_constraint:
+    type: Standard
+    name: dummy_constraint
+    coefficients:
+      - name: Gen_001d01h01
+        value: 1
+      - name: Gen_001d01h02
+        value: 1
+      - name: "SO_GB.XYZ's.Dan.(1)"
+        value: 59.983048643
+      - name: STU_7_AL.rsuT.Wat.Job.(1)
+        value: -0.2
+    operator: LTE
+    rhs: 1000
+variables:
+  Gen_001d01h01:
+    name: Gen_001d01h01
+    var_type:
+      DoubleBound:
+        - 0
+        - 1
+  Gen_001d01h02:
+    name: Gen_001d01h02
+    var_type:
+      DoubleBound:
+        - 0
+        - inf
+  Gen_001d01h03:
+    name: Gen_001d01h03
+    var_type: Free
+  Gen_001d01h04:
+    name: Gen_001d01h04
+    var_type: Free
+  Gen_001d01h05:
+    name: Gen_001d01h05
+    var_type: Free
+  Gen_001d01h06:
+    name: Gen_001d01h06
+    var_type: Free
+  Gen_001d01h07:
+    name: Gen_001d01h07
+    var_type: Free
+  Gen_001d01h08:
+    name: Gen_001d01h08
+    var_type: Free
+  Gen_001d01h09:
+    name: Gen_001d01h09
+    var_type: Free
+  Gen_001d01h10:
+    name: Gen_001d01h10
+    var_type: Free
+  Gen_001d01h11:
+    name: Gen_001d01h11
+    var_type: Free
+  "SO_GB.XYZ's.Dan.(1)":
+    name: "SO_GB.XYZ's.Dan.(1)"
+    var_type: Free
+  STU_7_AL.rsuT.Wat.Job.(1):
+    name: STU_7_AL.rsuT.Wat.Job.(1)
+    var_type: Free

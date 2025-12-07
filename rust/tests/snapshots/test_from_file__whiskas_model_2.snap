@@ -1,0 +1,122 @@
+---
+source: rust/tests/test_from_file.rs
+expression: parsed
+---
+name: The_Whiskas_Problem
+sense: Minimize
+objectives:
+  Total_Cost_of_Ingredients_per_can:
+    name: Total_Cost_of_Ingredients_per_can
+    coefficients:
+      - name: Ingr_BEEF
+        value: 0.008
+      - name: Ingr_CHICKEN
+        value: 0.013
+      - name: Ingr_GEL
+        value: 0.001
+      - name: Ingr_MUTTON
+        value: 0.01
+      - name: Ingr_RICE
+        value: 0.002
+      - name: Ingr_WHEAT
+        value: 0.005
+constraints:
+  FatRequirement:
+    type: Standard
+    name: FatRequirement
+    coefficients:
+      - name: Ingr_BEEF
+        value: 0.1
+      - name: Ingr_CHICKEN
+        value: 0.08
+      - name: Ingr_MUTTON
+        value: 0.11
+      - name: Ingr_RICE
+        value: 0.01
+      - name: Ingr_WHEAT
+        value: 0.01
+    operator: GTE
+    rhs: 6
+  FibreRequirement:
+    type: Standard
+    name: FibreRequirement
+    coefficients:
+      - name: Ingr_BEEF
+        value: 0.005
+      - name: Ingr_CHICKEN
+        value: 0.001
+      - name: Ingr_MUTTON
+        value: 0.003
+      - name: Ingr_RICE
+        value: 0.1
+      - name: Ingr_WHEAT
+        value: 0.15
+    operator: LTE
+    rhs: 2
+  PercentagesSum:
+    type: Standard
+    name: PercentagesSum
+    coefficients:
+      - name: Ingr_BEEF
+        value: 1
+      - name: Ingr_CHICKEN
+        value: 1
+      - name: Ingr_GEL
+        value: 1
+      - name: Ingr_MUTTON
+        value: 1
+      - name: Ingr_RICE
+        value: 1
+      - name: Ingr_WHEAT
+        value: 1
+    operator: EQ
+    rhs: 100
+  ProteinRequirement:
+    type: Standard
+    name: ProteinRequirement
+    coefficients:
+      - name: Ingr_BEEF
+        value: 0.2
+      - name: Ingr_CHICKEN
+        value: 0.1
+      - name: Ingr_MUTTON
+        value: 0.15
+      - name: Ingr_WHEAT
+        value: 0.04
+    operator: GTE
+    rhs: 8
+  SaltRequirement:
+    type: Standard
+    name: SaltRequirement
+    coefficients:
+      - name: Ingr_BEEF
+        value: 0.005
+      - name: Ingr_CHICKEN
+        value: 0.002
+      - name: Ingr_MUTTON
+        value: 0.007
+      - name: Ingr_RICE
+        value: 0.002
+      - name: Ingr_WHEAT
+        value: 0.008
+    operator: LTE
+    rhs: 0.4
+variables:
+  Ingr_BEEF:
+    name: Ingr_BEEF
+    var_type: Free
+  Ingr_CHICKEN:
+    name: Ingr_CHICKEN
+    var_type: Free
+  Ingr_GEL:
+    name: Ingr_GEL
+    var_type: Free
+  Ingr_MUTTON:
+    name: Ingr_MUTTON
+    var_type: Free
+  Ingr_RICE:
+    name: Ingr_RICE
+    var_type: Free
+  Ingr_WHEAT:
+    name: Ingr_WHEAT
+    var_type: Free

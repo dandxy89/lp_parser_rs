@@ -1,0 +1,58 @@
+---
+source: rust/tests/test_from_file.rs
+expression: parsed
+---
+name: ~
+sense: Minimize
+objectives:
+  obj1:
+    name: obj1
+    coefficients:
+      - name: x
+        value: -0.5
+      - name: y
+        value: -2
+      - name: z
+        value: -8
+  obj2:
+    name: obj2
+    coefficients:
+      - name: y
+        value: 1
+      - name: x
+        value: 1
+      - name: z
+        value: 1
+constraints:
+  cons1:
+    type: Standard
+    name: cons1
+    coefficients:
+      - name: x
+        value: -199
+      - name: y
+        value: 10
+      - name: z
+        value: 1
+    operator: LTE
+    rhs: 0
+  cons2:
+    type: Standard
+    name: cons2
+    coefficients:
+      - name: y
+        value: 1
+      - name: z
+        value: 1
+    operator: GTE
+    rhs: 0
+variables:
+  x:
+    name: x
+    var_type: Binary
+  y:
+    name: y
+    var_type: Binary
+  z:
+    name: z
+    var_type: Binary

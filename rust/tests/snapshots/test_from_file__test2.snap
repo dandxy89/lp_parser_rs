@@ -1,0 +1,785 @@
+---
+source: rust/tests/test_from_file.rs
+expression: parsed
+---
+name: classroomAssignmentSP
+sense: Maximize
+objectives:
+  OBJ:
+    name: OBJ
+    coefficients:
+      - name: x_0_0_10
+        value: -0.666666666667
+      - name: x_0_0_11
+        value: -0.666666666667
+      - name: x_0_0_5
+        value: -0.666666666667
+      - name: x_0_0_6
+        value: -0.666666666667
+      - name: x_0_0_7
+        value: -0.666666666667
+      - name: x_0_0_8
+        value: -0.666666666667
+      - name: x_0_0_9
+        value: -0.666666666667
+      - name: x_0_1_10
+        value: -0.666666666667
+      - name: x_9_5_8
+        value: -0.333333333333
+      - name: x_9_5_9
+        value: -0.333333333333
+constraints:
+  c1_0_0_0:
+    type: Standard
+    name: c1_0_0_0
+    coefficients:
+      - name: __dummy
+        value: 1
+    operator: LTE
+    rhs: 1
+  c1_0_0_1:
+    type: Standard
+    name: c1_0_0_1
+    coefficients:
+      - name: x_11_0_0
+        value: 1
+      - name: x_11_3_0
+        value: 1
+      - name: x_11_4_0
+        value: 1
+      - name: x_11_6_0
+        value: 1
+      - name: x_15_0_0
+        value: 1
+      - name: x_15_3_0
+        value: 1
+      - name: x_15_4_0
+        value: 1
+      - name: x_15_6_0
+        value: 1
+      - name: x_32_0_0
+        value: 1
+      - name: x_32_3_0
+        value: 1
+      - name: x_32_4_0
+        value: 1
+      - name: x_32_6_0
+        value: 1
+      - name: x_54_0_0
+        value: 1
+      - name: x_54_15_0
+        value: 1
+      - name: x_54_16_0
+        value: 1
+      - name: x_54_17_0
+        value: 1
+      - name: x_54_18_0
+        value: 1
+      - name: x_54_19_0
+        value: 1
+      - name: x_54_20_0
+        value: 1
+      - name: x_54_25_0
+        value: 1
+      - name: x_54_26_0
+        value: 1
+      - name: x_54_27_0
+        value: 1
+      - name: x_54_28_0
+        value: 1
+      - name: x_54_30_0
+        value: 1
+      - name: x_54_5_0
+        value: 1
+      - name: x_54_6_0
+        value: 1
+      - name: x_54_7_0
+        value: 1
+      - name: x_54_8_0
+        value: 1
+      - name: x_56_0_0
+        value: 1
+      - name: x_56_15_0
+        value: 1
+      - name: x_56_16_0
+        value: 1
+      - name: x_56_17_0
+        value: 1
+      - name: x_56_18_0
+        value: 1
+      - name: x_56_19_0
+        value: 1
+      - name: x_56_20_0
+        value: 1
+      - name: x_56_25_0
+        value: 1
+      - name: x_56_26_0
+        value: 1
+      - name: x_56_27_0
+        value: 1
+      - name: x_56_28_0
+        value: 1
+      - name: x_56_30_0
+        value: 1
+      - name: x_56_5_0
+        value: 1
+      - name: x_56_6_0
+        value: 1
+      - name: x_56_7_0
+        value: 1
+      - name: x_56_8_0
+        value: 1
+      - name: x_59_0_0
+        value: 1
+      - name: x_59_3_0
+        value: 1
+      - name: x_59_4_0
+        value: 1
+      - name: x_59_6_0
+        value: 1
+    operator: LTE
+    rhs: 1
+  c1_9_4_4:
+    type: Standard
+    name: c1_9_4_4
+    coefficients:
+      - name: x_3_2_9
+        value: 1
+      - name: x_3_4_9
+        value: 1
+      - name: x_3_5_9
+        value: 1
+      - name: x_3_6_9
+        value: 1
+      - name: x_48_2_9
+        value: 1
+      - name: x_48_4_9
+        value: 1
+      - name: x_48_5_9
+        value: 1
+      - name: x_48_6_9
+        value: 1
+      - name: x_5_2_9
+        value: 1
+      - name: x_5_4_9
+        value: 1
+      - name: x_5_5_9
+        value: 1
+      - name: x_5_6_9
+        value: 1
+    operator: LTE
+    rhs: 1
+  c2_0_0:
+    type: Standard
+    name: c2_0_0
+    coefficients:
+      - name: x_0_0_10
+        value: 1
+      - name: x_0_0_11
+        value: 1
+      - name: x_0_0_5
+        value: 1
+      - name: x_0_0_6
+        value: 1
+      - name: x_0_0_7
+        value: 1
+      - name: x_0_0_8
+        value: 1
+      - name: x_0_0_9
+        value: 1
+      - name: x_0_3_10
+        value: 1
+      - name: x_0_3_11
+        value: 1
+      - name: x_0_3_5
+        value: 1
+      - name: x_0_3_6
+        value: 1
+      - name: x_0_3_7
+        value: 1
+      - name: x_0_3_8
+        value: 1
+      - name: x_0_3_9
+        value: 1
+      - name: x_0_4_10
+        value: 1
+      - name: x_0_4_11
+        value: 1
+      - name: x_0_4_5
+        value: 1
+      - name: x_0_4_6
+        value: 1
+      - name: x_0_4_7
+        value: 1
+      - name: x_0_4_8
+        value: 1
+      - name: x_0_4_9
+        value: 1
+      - name: x_0_6_10
+        value: 1
+      - name: x_0_6_11
+        value: 1
+      - name: x_0_6_5
+        value: 1
+      - name: x_0_6_6
+        value: 1
+      - name: x_0_6_7
+        value: 1
+      - name: x_0_6_8
+        value: 1
+      - name: x_0_6_9
+        value: 1
+    operator: EQ
+    rhs: 1
+  c2_9_2:
+    type: Standard
+    name: c2_9_2
+    coefficients:
+      - name: x_9_2_10
+        value: 1
+      - name: x_9_2_11
+        value: 1
+      - name: x_9_2_13
+        value: 1
+      - name: x_9_2_14
+        value: 1
+      - name: x_9_2_15
+        value: 1
+      - name: x_9_2_4
+        value: 1
+      - name: x_9_2_5
+        value: 1
+      - name: x_9_2_6
+        value: 1
+      - name: x_9_2_7
+        value: 1
+      - name: x_9_2_8
+        value: 1
+      - name: x_9_2_9
+        value: 1
+      - name: x_9_4_10
+        value: 1
+      - name: x_9_4_11
+        value: 1
+      - name: x_9_4_13
+        value: 1
+      - name: x_9_4_14
+        value: 1
+      - name: x_9_4_15
+        value: 1
+      - name: x_9_4_4
+        value: 1
+      - name: x_9_4_5
+        value: 1
+      - name: x_9_4_6
+        value: 1
+      - name: x_9_4_7
+        value: 1
+      - name: x_9_4_8
+        value: 1
+      - name: x_9_4_9
+        value: 1
+      - name: x_9_5_10
+        value: 1
+      - name: x_9_5_11
+        value: 1
+      - name: x_9_5_13
+        value: 1
+      - name: x_9_5_14
+        value: 1
+      - name: x_9_5_15
+        value: 1
+      - name: x_9_5_4
+        value: 1
+      - name: x_9_5_5
+        value: 1
+      - name: x_9_5_6
+        value: 1
+      - name: x_9_5_7
+        value: 1
+      - name: x_9_5_8
+        value: 1
+      - name: x_9_5_9
+        value: 1
+      - name: x_9_6_10
+        value: 1
+      - name: x_9_6_11
+        value: 1
+      - name: x_9_6_13
+        value: 1
+      - name: x_9_6_14
+        value: 1
+      - name: x_9_6_15
+        value: 1
+      - name: x_9_6_4
+        value: 1
+      - name: x_9_6_5
+        value: 1
+      - name: x_9_6_6
+        value: 1
+      - name: x_9_6_7
+        value: 1
+      - name: x_9_6_8
+        value: 1
+      - name: x_9_6_9
+        value: 1
+    operator: EQ
+    rhs: 1
+  c3_0_10:
+    type: Standard
+    name: c3_0_10
+    coefficients:
+      - name: x_0_0_10
+        value: 1
+      - name: x_0_1_10
+        value: 1
+      - name: x_0_2_10
+        value: 1
+      - name: x_0_3_10
+        value: 1
+      - name: x_0_4_10
+        value: 1
+      - name: x_0_5_10
+        value: 1
+      - name: x_0_6_10
+        value: 1
+    operator: LTE
+    rhs: 1
+  c3_9_9:
+    type: Standard
+    name: c3_9_9
+    coefficients:
+      - name: x_9_0_9
+        value: 1
+      - name: x_9_1_9
+        value: 1
+      - name: x_9_2_9
+        value: 1
+      - name: x_9_3_9
+        value: 1
+      - name: x_9_4_9
+        value: 1
+      - name: x_9_5_9
+        value: 1
+      - name: x_9_6_9
+        value: 1
+    operator: LTE
+    rhs: 1
+variables:
+  __dummy:
+    name: __dummy
+    var_type: Free
+  x_0_0_10:
+    name: x_0_0_10
+    var_type: Binary
+  x_0_0_11:
+    name: x_0_0_11
+    var_type: Binary
+  x_0_0_5:
+    name: x_0_0_5
+    var_type: Free
+  x_0_0_6:
+    name: x_0_0_6
+    var_type: Free
+  x_0_0_7:
+    name: x_0_0_7
+    var_type: Free
+  x_0_0_8:
+    name: x_0_0_8
+    var_type: Free
+  x_0_0_9:
+    name: x_0_0_9
+    var_type: Free
+  x_0_1_10:
+    name: x_0_1_10
+    var_type: Free
+  x_0_2_10:
+    name: x_0_2_10
+    var_type: Free
+  x_0_3_10:
+    name: x_0_3_10
+    var_type: Free
+  x_0_3_11:
+    name: x_0_3_11
+    var_type: Free
+  x_0_3_5:
+    name: x_0_3_5
+    var_type: Free
+  x_0_3_6:
+    name: x_0_3_6
+    var_type: Free
+  x_0_3_7:
+    name: x_0_3_7
+    var_type: Free
+  x_0_3_8:
+    name: x_0_3_8
+    var_type: Free
+  x_0_3_9:
+    name: x_0_3_9
+    var_type: Free
+  x_0_4_10:
+    name: x_0_4_10
+    var_type: Free
+  x_0_4_11:
+    name: x_0_4_11
+    var_type: Free
+  x_0_4_5:
+    name: x_0_4_5
+    var_type: Free
+  x_0_4_6:
+    name: x_0_4_6
+    var_type: Free
+  x_0_4_7:
+    name: x_0_4_7
+    var_type: Free
+  x_0_4_8:
+    name: x_0_4_8
+    var_type: Free
+  x_0_4_9:
+    name: x_0_4_9
+    var_type: Free
+  x_0_5_10:
+    name: x_0_5_10
+    var_type: Free
+  x_0_6_10:
+    name: x_0_6_10
+    var_type: Free
+  x_0_6_11:
+    name: x_0_6_11
+    var_type: Free
+  x_0_6_5:
+    name: x_0_6_5
+    var_type: Free
+  x_0_6_6:
+    name: x_0_6_6
+    var_type: Free
+  x_0_6_7:
+    name: x_0_6_7
+    var_type: Free
+  x_0_6_8:
+    name: x_0_6_8
+    var_type: Free
+  x_0_6_9:
+    name: x_0_6_9
+    var_type: Free
+  x_11_0_0:
+    name: x_11_0_0
+    var_type: Free
+  x_11_3_0:
+    name: x_11_3_0
+    var_type: Free
+  x_11_4_0:
+    name: x_11_4_0
+    var_type: Free
+  x_11_6_0:
+    name: x_11_6_0
+    var_type: Free
+  x_15_0_0:
+    name: x_15_0_0
+    var_type: Free
+  x_15_3_0:
+    name: x_15_3_0
+    var_type: Free
+  x_15_4_0:
+    name: x_15_4_0
+    var_type: Free
+  x_15_6_0:
+    name: x_15_6_0
+    var_type: Free
+  x_32_0_0:
+    name: x_32_0_0
+    var_type: Free
+  x_32_3_0:
+    name: x_32_3_0
+    var_type: Free
+  x_32_4_0:
+    name: x_32_4_0
+    var_type: Free
+  x_32_6_0:
+    name: x_32_6_0
+    var_type: Free
+  x_3_2_9:
+    name: x_3_2_9
+    var_type: Free
+  x_3_4_9:
+    name: x_3_4_9
+    var_type: Free
+  x_3_5_9:
+    name: x_3_5_9
+    var_type: Free
+  x_3_6_9:
+    name: x_3_6_9
+    var_type: Free
+  x_48_2_9:
+    name: x_48_2_9
+    var_type: Free
+  x_48_4_9:
+    name: x_48_4_9
+    var_type: Free
+  x_48_5_9:
+    name: x_48_5_9
+    var_type: Free
+  x_48_6_9:
+    name: x_48_6_9
+    var_type: Free
+  x_54_0_0:
+    name: x_54_0_0
+    var_type: Free
+  x_54_15_0:
+    name: x_54_15_0
+    var_type: Free
+  x_54_16_0:
+    name: x_54_16_0
+    var_type: Free
+  x_54_17_0:
+    name: x_54_17_0
+    var_type: Free
+  x_54_18_0:
+    name: x_54_18_0
+    var_type: Free
+  x_54_19_0:
+    name: x_54_19_0
+    var_type: Free
+  x_54_20_0:
+    name: x_54_20_0
+    var_type: Free
+  x_54_25_0:
+    name: x_54_25_0
+    var_type: Free
+  x_54_26_0:
+    name: x_54_26_0
+    var_type: Free
+  x_54_27_0:
+    name: x_54_27_0
+    var_type: Free
+  x_54_28_0:
+    name: x_54_28_0
+    var_type: Free
+  x_54_30_0:
+    name: x_54_30_0
+    var_type: Free
+  x_54_5_0:
+    name: x_54_5_0
+    var_type: Free
+  x_54_6_0:
+    name: x_54_6_0
+    var_type: Free
+  x_54_7_0:
+    name: x_54_7_0
+    var_type: Free
+  x_54_8_0:
+    name: x_54_8_0
+    var_type: Free
+  x_56_0_0:
+    name: x_56_0_0
+    var_type: Free
+  x_56_15_0:
+    name: x_56_15_0
+    var_type: Free
+  x_56_16_0:
+    name: x_56_16_0
+    var_type: Free
+  x_56_17_0:
+    name: x_56_17_0
+    var_type: Free
+  x_56_18_0:
+    name: x_56_18_0
+    var_type: Free
+  x_56_19_0:
+    name: x_56_19_0
+    var_type: Free
+  x_56_20_0:
+    name: x_56_20_0
+    var_type: Free
+  x_56_25_0:
+    name: x_56_25_0
+    var_type: Free
+  x_56_26_0:
+    name: x_56_26_0
+    var_type: Free
+  x_56_27_0:
+    name: x_56_27_0
+    var_type: Free
+  x_56_28_0:
+    name: x_56_28_0
+    var_type: Free
+  x_56_30_0:
+    name: x_56_30_0
+    var_type: Free
+  x_56_5_0:
+    name: x_56_5_0
+    var_type: Free
+  x_56_6_0:
+    name: x_56_6_0
+    var_type: Free
+  x_56_7_0:
+    name: x_56_7_0
+    var_type: Free
+  x_56_8_0:
+    name: x_56_8_0
+    var_type: Free
+  x_59_0_0:
+    name: x_59_0_0
+    var_type: Free
+  x_59_3_0:
+    name: x_59_3_0
+    var_type: Free
+  x_59_4_0:
+    name: x_59_4_0
+    var_type: Free
+  x_59_6_0:
+    name: x_59_6_0
+    var_type: Free
+  x_5_2_9:
+    name: x_5_2_9
+    var_type: Free
+  x_5_4_9:
+    name: x_5_4_9
+    var_type: Free
+  x_5_5_9:
+    name: x_5_5_9
+    var_type: Free
+  x_5_6_9:
+    name: x_5_6_9
+    var_type: Free
+  x_9_0_9:
+    name: x_9_0_9
+    var_type: Free
+  x_9_1_9:
+    name: x_9_1_9
+    var_type: Free
+  x_9_2_10:
+    name: x_9_2_10
+    var_type: Free
+  x_9_2_11:
+    name: x_9_2_11
+    var_type: Free
+  x_9_2_13:
+    name: x_9_2_13
+    var_type: Free
+  x_9_2_14:
+    name: x_9_2_14
+    var_type: Free
+  x_9_2_15:
+    name: x_9_2_15
+    var_type: Free
+  x_9_2_4:
+    name: x_9_2_4
+    var_type: Free
+  x_9_2_5:
+    name: x_9_2_5
+    var_type: Free
+  x_9_2_6:
+    name: x_9_2_6
+    var_type: Free
+  x_9_2_7:
+    name: x_9_2_7
+    var_type: Free
+  x_9_2_8:
+    name: x_9_2_8
+    var_type: Free
+  x_9_2_9:
+    name: x_9_2_9
+    var_type: Free
+  x_9_3_9:
+    name: x_9_3_9
+    var_type: Free
+  x_9_4_10:
+    name: x_9_4_10
+    var_type: Free
+  x_9_4_11:
+    name: x_9_4_11
+    var_type: Free
+  x_9_4_13:
+    name: x_9_4_13
+    var_type: Free
+  x_9_4_14:
+    name: x_9_4_14
+    var_type: Free
+  x_9_4_15:
+    name: x_9_4_15
+    var_type: Free
+  x_9_4_4:
+    name: x_9_4_4
+    var_type: Free
+  x_9_4_5:
+    name: x_9_4_5
+    var_type: Free
+  x_9_4_6:
+    name: x_9_4_6
+    var_type: Free
+  x_9_4_7:
+    name: x_9_4_7
+    var_type: Free
+  x_9_4_8:
+    name: x_9_4_8
+    var_type: Free
+  x_9_4_9:
+    name: x_9_4_9
+    var_type: Free
+  x_9_5_10:
+    name: x_9_5_10
+    var_type: Free
+  x_9_5_11:
+    name: x_9_5_11
+    var_type: Free
+  x_9_5_13:
+    name: x_9_5_13
+    var_type: Free
+  x_9_5_14:
+    name: x_9_5_14
+    var_type: Free
+  x_9_5_15:
+    name: x_9_5_15
+    var_type: Free
+  x_9_5_4:
+    name: x_9_5_4
+    var_type: Free
+  x_9_5_5:
+    name: x_9_5_5
+    var_type: Free
+  x_9_5_6:
+    name: x_9_5_6
+    var_type: Free
+  x_9_5_7:
+    name: x_9_5_7
+    var_type: Free
+  x_9_5_8:
+    name: x_9_5_8
+    var_type: Free
+  x_9_5_9:
+    name: x_9_5_9
+    var_type: Free
+  x_9_6_10:
+    name: x_9_6_10
+    var_type: Free
+  x_9_6_11:
+    name: x_9_6_11
+    var_type: Free
+  x_9_6_13:
+    name: x_9_6_13
+    var_type: Free
+  x_9_6_14:
+    name: x_9_6_14
+    var_type: Free
+  x_9_6_15:
+    name: x_9_6_15
+    var_type: Free
+  x_9_6_4:
+    name: x_9_6_4
+    var_type: Free
+  x_9_6_5:
+    name: x_9_6_5
+    var_type: Free
+  x_9_6_6:
+    name: x_9_6_6
+    var_type: Free
+  x_9_6_7:
+    name: x_9_6_7
+    var_type: Free
+  x_9_6_8:
+    name: x_9_6_8
+    var_type: Binary
+  x_9_6_9:
+    name: x_9_6_9
+    var_type: Binary

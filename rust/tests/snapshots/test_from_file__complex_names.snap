@@ -1,0 +1,64 @@
+---
+source: rust/tests/test_from_file.rs
+expression: parsed
+---
+name: ~
+sense: Minimize
+objectives:
+  total_cost_2025:
+    name: total_cost_2025
+    coefficients:
+      - name: Production_A_1
+        value: 100
+      - name: Production_B_2
+        value: 200
+      - name: Transport_X_Y
+        value: 150
+      - name: Storage_Facility_1
+        value: 300
+constraints:
+  Capacity_Constraint_1:
+    type: Standard
+    name: Capacity_Constraint_1
+    coefficients:
+      - name: Production_A_1
+        value: 1
+      - name: Production_B_2
+        value: 1
+    operator: LTE
+    rhs: 500
+  Demand_Region_X:
+    type: Standard
+    name: Demand_Region_X
+    coefficients:
+      - name: Transport_X_Y
+        value: 1
+      - name: Storage_Facility_1
+        value: 1
+    operator: GTE
+    rhs: 200
+variables:
+  Production_A_1:
+    name: Production_A_1
+    var_type:
+      DoubleBound:
+        - 0
+        - 300
+  Production_B_2:
+    name: Production_B_2
+    var_type:
+      DoubleBound:
+        - 0
+        - 400
+  Storage_Facility_1:
+    name: Storage_Facility_1
+    var_type:
+      DoubleBound:
+        - 0
+        - 1000
+  Transport_X_Y:
+    name: Transport_X_Y
+    var_type:
+      DoubleBound:
+        - 0
+        - inf

@@ -1,0 +1,200 @@
+---
+source: rust/tests/test_from_file.rs
+expression: parsed
+---
+name: Beer_Distribution_Problem
+sense: Minimize
+objectives:
+  Sum_of_Transporting_Costs:
+    name: Sum_of_Transporting_Costs
+    coefficients:
+      - name: Route_A_1
+        value: 2
+      - name: Route_A_2
+        value: 4
+      - name: Route_A_3
+        value: 5
+      - name: Route_A_4
+        value: 2
+      - name: Route_A_5
+        value: 1
+      - name: Route_B_1
+        value: 3
+      - name: Route_B_2
+        value: 1
+      - name: Route_B_3
+        value: 3
+      - name: Route_B_4
+        value: 2
+      - name: Route_B_5
+        value: 3
+constraints:
+  Sum_of_Products_into_Bar1:
+    type: Standard
+    name: Sum_of_Products_into_Bar1
+    coefficients:
+      - name: Route_A_1
+        value: 1
+      - name: Route_B_1
+        value: 1
+      - name: Route_C_1
+        value: 1
+    operator: GTE
+    rhs: 500
+  Sum_of_Products_into_Bar2:
+    type: Standard
+    name: Sum_of_Products_into_Bar2
+    coefficients:
+      - name: Route_A_2
+        value: 1
+      - name: Route_B_2
+        value: 1
+      - name: Route_C_2
+        value: 1
+    operator: GTE
+    rhs: 900
+  Sum_of_Products_into_Bar3:
+    type: Standard
+    name: Sum_of_Products_into_Bar3
+    coefficients:
+      - name: Route_A_3
+        value: 1
+      - name: Route_B_3
+        value: 1
+      - name: Route_C_3
+        value: 1
+    operator: GTE
+    rhs: 1800
+  Sum_of_Products_into_Bar4:
+    type: Standard
+    name: Sum_of_Products_into_Bar4
+    coefficients:
+      - name: Route_A_4
+        value: 1
+      - name: Route_B_4
+        value: 1
+      - name: Route_C_4
+        value: 1
+    operator: GTE
+    rhs: 200
+  Sum_of_Products_into_Bar5:
+    type: Standard
+    name: Sum_of_Products_into_Bar5
+    coefficients:
+      - name: Route_A_5
+        value: 1
+      - name: Route_B_5
+        value: 1
+      - name: Route_C_5
+        value: 1
+    operator: GTE
+    rhs: 700
+  Sum_of_Products_out_of_Warehouse_A:
+    type: Standard
+    name: Sum_of_Products_out_of_Warehouse_A
+    coefficients:
+      - name: Route_A_1
+        value: 1
+      - name: Route_A_2
+        value: 1
+      - name: Route_A_3
+        value: 1
+      - name: Route_A_4
+        value: 1
+      - name: Route_A_5
+        value: 1
+    operator: LTE
+    rhs: 1000
+  Sum_of_Products_out_of_Warehouse_B:
+    type: Standard
+    name: Sum_of_Products_out_of_Warehouse_B
+    coefficients:
+      - name: Route_B_1
+        value: 1
+      - name: Route_B_2
+        value: 1
+      - name: Route_B_3
+        value: 1
+      - name: Route_B_4
+        value: 1
+      - name: Route_B_5
+        value: 1
+    operator: LTE
+    rhs: 4000
+  Sum_of_Products_out_of_Warehouse_C:
+    type: Standard
+    name: Sum_of_Products_out_of_Warehouse_C
+    coefficients:
+      - name: Route_C_1
+        value: 1
+      - name: Route_C_2
+        value: 1
+      - name: Route_C_3
+        value: 1
+      - name: Route_C_4
+        value: 1
+      - name: Route_C_5
+        value: 1
+    operator: LTE
+    rhs: 100
+variables:
+  Route_A_1:
+    name: Route_A_1
+    var_type:
+      LowerBound: 0
+  Route_A_2:
+    name: Route_A_2
+    var_type:
+      LowerBound: 0
+  Route_A_3:
+    name: Route_A_3
+    var_type:
+      LowerBound: 0
+  Route_A_4:
+    name: Route_A_4
+    var_type:
+      LowerBound: 0
+  Route_A_5:
+    name: Route_A_5
+    var_type:
+      LowerBound: 0
+  Route_B_1:
+    name: Route_B_1
+    var_type:
+      LowerBound: 0
+  Route_B_2:
+    name: Route_B_2
+    var_type:
+      LowerBound: 0
+  Route_B_3:
+    name: Route_B_3
+    var_type:
+      LowerBound: 0
+  Route_B_4:
+    name: Route_B_4
+    var_type:
+      LowerBound: 0
+  Route_B_5:
+    name: Route_B_5
+    var_type:
+      LowerBound: 0
+  Route_C_1:
+    name: Route_C_1
+    var_type:
+      LowerBound: 0
+  Route_C_2:
+    name: Route_C_2
+    var_type:
+      LowerBound: 0
+  Route_C_3:
+    name: Route_C_3
+    var_type:
+      LowerBound: 0
+  Route_C_4:
+    name: Route_C_4
+    var_type:
+      LowerBound: 0
+  Route_C_5:
+    name: Route_C_5
+    var_type:
+      LowerBound: 0

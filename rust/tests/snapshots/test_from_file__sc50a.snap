@@ -1,0 +1,712 @@
+---
+source: rust/tests/test_from_file.rs
+expression: parsed
+---
+name: sc50a.lp
+sense: Minimize
+objectives:
+  MAXIM:
+    name: MAXIM
+    coefficients:
+      - name: COL00004
+        value: -1
+constraints:
+  ROW00001:
+    type: Standard
+    name: ROW00001
+    coefficients:
+      - name: COL00001
+        value: 2
+      - name: COL00002
+        value: 1
+      - name: COL00003
+        value: 1.5
+    operator: LTE
+    rhs: 170
+  ROW00002:
+    type: Standard
+    name: ROW00002
+    coefficients:
+      - name: COL00001
+        value: 1
+      - name: COL00002
+        value: 2
+      - name: COL00003
+        value: 1.5
+    operator: LTE
+    rhs: 130
+  ROW00004:
+    type: Standard
+    name: ROW00004
+    coefficients:
+      - name: COL00004
+        value: 1
+      - name: COL00005
+        value: -1
+    operator: EQ
+    rhs: 0
+  ROW00005:
+    type: Standard
+    name: ROW00005
+    coefficients:
+      - name: COL00001
+        value: -1
+      - name: COL00006
+        value: 1
+    operator: EQ
+    rhs: 0
+  ROW00006:
+    type: Standard
+    name: ROW00006
+    coefficients:
+      - name: COL00002
+        value: -1
+      - name: COL00007
+        value: 1
+    operator: EQ
+    rhs: 0
+  ROW00007:
+    type: Standard
+    name: ROW00007
+    coefficients:
+      - name: COL00003
+        value: -1
+      - name: COL00008
+        value: 1
+    operator: EQ
+    rhs: 0
+  ROW00008:
+    type: Standard
+    name: ROW00008
+    coefficients:
+      - name: COL00006
+        value: -1
+      - name: COL00009
+        value: 1
+    operator: LTE
+    rhs: 0
+  ROW00009:
+    type: Standard
+    name: ROW00009
+    coefficients:
+      - name: COL00007
+        value: -1
+      - name: COL00010
+        value: 1
+    operator: LTE
+    rhs: 0
+  ROW00010:
+    type: Standard
+    name: ROW00010
+    coefficients:
+      - name: COL00008
+        value: -1
+      - name: COL00011
+        value: 1
+    operator: LTE
+    rhs: 0
+  ROW00011:
+    type: Standard
+    name: ROW00011
+    coefficients:
+      - name: COL00009
+        value: -1
+      - name: COL00012
+        value: 2
+      - name: COL00013
+        value: 1
+      - name: COL00014
+        value: 1.5
+    operator: LTE
+    rhs: 170
+  ROW00012:
+    type: Standard
+    name: ROW00012
+    coefficients:
+      - name: COL00010
+        value: -1
+      - name: COL00012
+        value: 1
+      - name: COL00013
+        value: 2
+      - name: COL00014
+        value: 1.5
+    operator: LTE
+    rhs: 130
+  ROW00013:
+    type: Standard
+    name: ROW00013
+    coefficients:
+      - name: COL00005
+        value: 1
+      - name: COL00011
+        value: -1
+    operator: LTE
+    rhs: 0
+  ROW00014:
+    type: Standard
+    name: ROW00014
+    coefficients:
+      - name: COL00004
+        value: 1.1
+      - name: COL00015
+        value: -1
+    operator: EQ
+    rhs: 0
+  ROW00015:
+    type: Standard
+    name: ROW00015
+    coefficients:
+      - name: COL00005
+        value: 1
+      - name: COL00015
+        value: 1
+      - name: COL00016
+        value: -1
+    operator: EQ
+    rhs: 0
+  ROW00016:
+    type: Standard
+    name: ROW00016
+    coefficients:
+      - name: COL00006
+        value: -1
+      - name: COL00012
+        value: -1
+      - name: COL00017
+        value: 1
+    operator: EQ
+    rhs: 0
+  ROW00017:
+    type: Standard
+    name: ROW00017
+    coefficients:
+      - name: COL00007
+        value: -1
+      - name: COL00013
+        value: -1
+      - name: COL00018
+        value: 1
+    operator: EQ
+    rhs: 0
+  ROW00018:
+    type: Standard
+    name: ROW00018
+    coefficients:
+      - name: COL00008
+        value: -1
+      - name: COL00014
+        value: -1
+      - name: COL00019
+        value: 1
+    operator: EQ
+    rhs: 0
+  ROW00019:
+    type: Standard
+    name: ROW00019
+    coefficients:
+      - name: COL00017
+        value: -1
+      - name: COL00020
+        value: 1
+    operator: LTE
+    rhs: 0
+  ROW00020:
+    type: Standard
+    name: ROW00020
+    coefficients:
+      - name: COL00018
+        value: -1
+      - name: COL00021
+        value: 1
+    operator: LTE
+    rhs: 0
+  ROW00021:
+    type: Standard
+    name: ROW00021
+    coefficients:
+      - name: COL00019
+        value: -1
+      - name: COL00022
+        value: 1
+    operator: LTE
+    rhs: 0
+  ROW00022:
+    type: Standard
+    name: ROW00022
+    coefficients:
+      - name: COL00020
+        value: -1
+      - name: COL00023
+        value: 2
+      - name: COL00024
+        value: 1
+      - name: COL00025
+        value: 1.5
+    operator: LTE
+    rhs: 170
+  ROW00023:
+    type: Standard
+    name: ROW00023
+    coefficients:
+      - name: COL00021
+        value: -1
+      - name: COL00023
+        value: 1
+      - name: COL00024
+        value: 2
+      - name: COL00025
+        value: 1.5
+    operator: LTE
+    rhs: 130
+  ROW00024:
+    type: Standard
+    name: ROW00024
+    coefficients:
+      - name: COL00016
+        value: 1
+      - name: COL00022
+        value: -1
+    operator: LTE
+    rhs: 0
+  ROW00025:
+    type: Standard
+    name: ROW00025
+    coefficients:
+      - name: COL00015
+        value: 1.1
+      - name: COL00026
+        value: -1
+    operator: EQ
+    rhs: 0
+  ROW00026:
+    type: Standard
+    name: ROW00026
+    coefficients:
+      - name: COL00016
+        value: 1
+      - name: COL00026
+        value: 1
+      - name: COL00027
+        value: -1
+    operator: EQ
+    rhs: 0
+  ROW00027:
+    type: Standard
+    name: ROW00027
+    coefficients:
+      - name: COL00017
+        value: -1
+      - name: COL00023
+        value: -1
+      - name: COL00028
+        value: 1
+    operator: EQ
+    rhs: 0
+  ROW00028:
+    type: Standard
+    name: ROW00028
+    coefficients:
+      - name: COL00018
+        value: -1
+      - name: COL00024
+        value: -1
+      - name: COL00029
+        value: 1
+    operator: EQ
+    rhs: 0
+  ROW00029:
+    type: Standard
+    name: ROW00029
+    coefficients:
+      - name: COL00019
+        value: -1
+      - name: COL00025
+        value: -1
+      - name: COL00030
+        value: 1
+    operator: EQ
+    rhs: 0
+  ROW00030:
+    type: Standard
+    name: ROW00030
+    coefficients:
+      - name: COL00028
+        value: -1
+      - name: COL00031
+        value: 1
+    operator: LTE
+    rhs: 0
+  ROW00031:
+    type: Standard
+    name: ROW00031
+    coefficients:
+      - name: COL00029
+        value: -1
+      - name: COL00032
+        value: 1
+    operator: LTE
+    rhs: 0
+  ROW00032:
+    type: Standard
+    name: ROW00032
+    coefficients:
+      - name: COL00030
+        value: -1
+      - name: COL00033
+        value: 1
+    operator: LTE
+    rhs: 0
+  ROW00033:
+    type: Standard
+    name: ROW00033
+    coefficients:
+      - name: COL00031
+        value: -1
+      - name: COL00034
+        value: 2
+      - name: COL00035
+        value: 1
+      - name: COL00036
+        value: 1.5
+    operator: LTE
+    rhs: 170
+  ROW00034:
+    type: Standard
+    name: ROW00034
+    coefficients:
+      - name: COL00032
+        value: -1
+      - name: COL00034
+        value: 1
+      - name: COL00035
+        value: 2
+      - name: COL00036
+        value: 1.5
+    operator: LTE
+    rhs: 130
+  ROW00035:
+    type: Standard
+    name: ROW00035
+    coefficients:
+      - name: COL00027
+        value: 1
+      - name: COL00033
+        value: -1
+    operator: LTE
+    rhs: 0
+  ROW00036:
+    type: Standard
+    name: ROW00036
+    coefficients:
+      - name: COL00026
+        value: 1.1
+      - name: COL00037
+        value: -1
+    operator: EQ
+    rhs: 0
+  ROW00037:
+    type: Standard
+    name: ROW00037
+    coefficients:
+      - name: COL00027
+        value: 1
+      - name: COL00037
+        value: 1
+      - name: COL00038
+        value: -1
+    operator: EQ
+    rhs: 0
+  ROW00038:
+    type: Standard
+    name: ROW00038
+    coefficients:
+      - name: COL00028
+        value: -1
+      - name: COL00034
+        value: -1
+      - name: COL00039
+        value: 1
+    operator: EQ
+    rhs: 0
+  ROW00039:
+    type: Standard
+    name: ROW00039
+    coefficients:
+      - name: COL00029
+        value: -1
+      - name: COL00035
+        value: -1
+      - name: COL00040
+        value: 1
+    operator: EQ
+    rhs: 0
+  ROW00040:
+    type: Standard
+    name: ROW00040
+    coefficients:
+      - name: COL00030
+        value: -1
+      - name: COL00036
+        value: -1
+      - name: COL00041
+        value: 1
+    operator: EQ
+    rhs: 0
+  ROW00041:
+    type: Standard
+    name: ROW00041
+    coefficients:
+      - name: COL00039
+        value: -1
+      - name: COL00042
+        value: 1
+    operator: LTE
+    rhs: 0
+  ROW00042:
+    type: Standard
+    name: ROW00042
+    coefficients:
+      - name: COL00040
+        value: -1
+      - name: COL00043
+        value: 1
+    operator: LTE
+    rhs: 0
+  ROW00043:
+    type: Standard
+    name: ROW00043
+    coefficients:
+      - name: COL00041
+        value: -1
+      - name: COL00044
+        value: 1
+    operator: LTE
+    rhs: 0
+  ROW00044:
+    type: Standard
+    name: ROW00044
+    coefficients:
+      - name: COL00042
+        value: -1
+      - name: COL00045
+        value: 2
+      - name: COL00046
+        value: 1
+      - name: COL00047
+        value: 1.5
+    operator: LTE
+    rhs: 170
+  ROW00045:
+    type: Standard
+    name: ROW00045
+    coefficients:
+      - name: COL00043
+        value: -1
+      - name: COL00045
+        value: 1
+      - name: COL00046
+        value: 2
+      - name: COL00047
+        value: 1.5
+    operator: LTE
+    rhs: 130
+  ROW00046:
+    type: Standard
+    name: ROW00046
+    coefficients:
+      - name: COL00038
+        value: 1
+      - name: COL00044
+        value: -1
+    operator: LTE
+    rhs: 0
+  ROW00047:
+    type: Standard
+    name: ROW00047
+    coefficients:
+      - name: COL00037
+        value: 1.1
+      - name: COL00048
+        value: -1
+    operator: EQ
+    rhs: 0
+  ROW00048:
+    type: Standard
+    name: ROW00048
+    coefficients:
+      - name: COL00045
+        value: -0.8
+      - name: COL00046
+        value: 0.1
+      - name: COL00047
+        value: 0.15
+    operator: LTE
+    rhs: 0
+  ROW00049:
+    type: Standard
+    name: ROW00049
+    coefficients:
+      - name: COL00045
+        value: 0.1
+      - name: COL00046
+        value: -0.8
+      - name: COL00047
+        value: 0.15
+    operator: LTE
+    rhs: 0
+  ROW00050:
+    type: Standard
+    name: ROW00050
+    coefficients:
+      - name: COL00047
+        value: -1
+      - name: COL00048
+        value: 1
+    operator: LTE
+    rhs: 0
+variables:
+  COL00001:
+    name: COL00001
+    var_type: Free
+  COL00002:
+    name: COL00002
+    var_type: Free
+  COL00003:
+    name: COL00003
+    var_type: Free
+  COL00004:
+    name: COL00004
+    var_type: Free
+  COL00005:
+    name: COL00005
+    var_type: Free
+  COL00006:
+    name: COL00006
+    var_type: Free
+  COL00007:
+    name: COL00007
+    var_type: Free
+  COL00008:
+    name: COL00008
+    var_type: Free
+  COL00009:
+    name: COL00009
+    var_type: Free
+  COL00010:
+    name: COL00010
+    var_type: Free
+  COL00011:
+    name: COL00011
+    var_type: Free
+  COL00012:
+    name: COL00012
+    var_type: Free
+  COL00013:
+    name: COL00013
+    var_type: Free
+  COL00014:
+    name: COL00014
+    var_type: Free
+  COL00015:
+    name: COL00015
+    var_type: Free
+  COL00016:
+    name: COL00016
+    var_type: Free
+  COL00017:
+    name: COL00017
+    var_type: Free
+  COL00018:
+    name: COL00018
+    var_type: Free
+  COL00019:
+    name: COL00019
+    var_type: Free
+  COL00020:
+    name: COL00020
+    var_type: Free
+  COL00021:
+    name: COL00021
+    var_type: Free
+  COL00022:
+    name: COL00022
+    var_type: Free
+  COL00023:
+    name: COL00023
+    var_type: Free
+  COL00024:
+    name: COL00024
+    var_type: Free
+  COL00025:
+    name: COL00025
+    var_type: Free
+  COL00026:
+    name: COL00026
+    var_type: Free
+  COL00027:
+    name: COL00027
+    var_type: Free
+  COL00028:
+    name: COL00028
+    var_type: Free
+  COL00029:
+    name: COL00029
+    var_type: Free
+  COL00030:
+    name: COL00030
+    var_type: Free
+  COL00031:
+    name: COL00031
+    var_type: Free
+  COL00032:
+    name: COL00032
+    var_type: Free
+  COL00033:
+    name: COL00033
+    var_type: Free
+  COL00034:
+    name: COL00034
+    var_type: Free
+  COL00035:
+    name: COL00035
+    var_type: Free
+  COL00036:
+    name: COL00036
+    var_type: Free
+  COL00037:
+    name: COL00037
+    var_type: Free
+  COL00038:
+    name: COL00038
+    var_type: Free
+  COL00039:
+    name: COL00039
+    var_type: Free
+  COL00040:
+    name: COL00040
+    var_type: Free
+  COL00041:
+    name: COL00041
+    var_type: Free
+  COL00042:
+    name: COL00042
+    var_type: Free
+  COL00043:
+    name: COL00043
+    var_type: Free
+  COL00044:
+    name: COL00044
+    var_type: Free
+  COL00045:
+    name: COL00045
+    var_type: Free
+  COL00046:
+    name: COL00046
+    var_type: Free
+  COL00047:
+    name: COL00047
+    var_type: Free
+  COL00048:
+    name: COL00048
+    var_type: Free

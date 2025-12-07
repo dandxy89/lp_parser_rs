@@ -1,0 +1,1002 @@
+---
+source: rust/tests/test_from_file.rs
+expression: parsed
+---
+name: kb2.mps
+sense: Minimize
+objectives:
+  FAT7..J.:
+    name: FAT7..J.
+    coefficients:
+      - name: D3T...BW
+        value: -16.5
+      - name: _EN4...BW
+        value: 12
+      - name: _ETO...BW
+        value: 16
+      - name: QPB73EBW
+        value: 0.08757
+      - name: QPB73RBW
+        value: 0.08757
+constraints:
+  B3E...BW:
+    type: Standard
+    name: B3E...BW
+    coefficients:
+      - name: M3..3TBW
+        value: -0.29
+      - name: QVO73EBW
+        value: 1
+    operator: EQ
+    rhs: 0
+  B3E.VOBW:
+    type: Standard
+    name: B3E.VOBW
+    coefficients:
+      - name: BAL.3EBW
+        value: 1
+      - name: BHC.3EBW
+        value: 1
+      - name: BLC.3EBW
+        value: 1
+      - name: BLV.3EBW
+        value: 1
+      - name: BN4.3EBW
+        value: 1
+      - name: BP8.3EBW
+        value: 1
+      - name: BTO.3EBW
+        value: 1
+      - name: QVO73EBW
+        value: -1
+    operator: EQ
+    rhs: 0
+  B3P...BW:
+    type: Standard
+    name: B3P...BW
+    coefficients:
+      - name: M3..3TBW
+        value: -0.17
+      - name: QVO73PBW
+        value: 1
+    operator: EQ
+    rhs: 0
+  B3P.VOBW:
+    type: Standard
+    name: B3P.VOBW
+    coefficients:
+      - name: BAL.3PBW
+        value: 1
+      - name: BHC.3PBW
+        value: 1
+      - name: BLC.3PBW
+        value: 1
+      - name: BLV.3PBW
+        value: 1
+      - name: BN4.3PBW
+        value: 1
+      - name: BP8.3PBW
+        value: 1
+      - name: BTO.3PBW
+        value: 1
+      - name: QVO73PBW
+        value: -1
+    operator: EQ
+    rhs: 0
+  B3R...BW:
+    type: Standard
+    name: B3R...BW
+    coefficients:
+      - name: M3..3TBW
+        value: -0.54
+      - name: QVO73RBW
+        value: 1
+    operator: EQ
+    rhs: 0
+  B3R.VOBW:
+    type: Standard
+    name: B3R.VOBW
+    coefficients:
+      - name: BAL.3RBW
+        value: 1
+      - name: BHC.3RBW
+        value: 1
+      - name: BLC.3RBW
+        value: 1
+      - name: BLV.3RBW
+        value: 1
+      - name: BN4.3RBW
+        value: 1
+      - name: BP8.3RBW
+        value: 1
+      - name: BTO.3RBW
+        value: 1
+      - name: QVO73RBW
+        value: -1
+    operator: EQ
+    rhs: 0
+  B3T...BW:
+    type: Standard
+    name: B3T...BW
+    coefficients:
+      - name: D3T...BW
+        value: -1
+      - name: M3..3TBW
+        value: 1
+    operator: EQ
+    rhs: 0
+  BAL...BW:
+    type: Standard
+    name: BAL...BW
+    coefficients:
+      - name: BAL.3EBW
+        value: -1
+      - name: BAL.3PBW
+        value: -1
+      - name: BAL.3RBW
+        value: -1
+      - name: _EAL...BW
+        value: 1
+    operator: EQ
+    rhs: 0
+  BHC...BW:
+    type: Standard
+    name: BHC...BW
+    coefficients:
+      - name: BHC.3EBW
+        value: -1
+      - name: BHC.3PBW
+        value: -1
+      - name: BHC.3RBW
+        value: -1
+      - name: _EHC...BW
+        value: 1
+    operator: EQ
+    rhs: 0
+  BLC...BW:
+    type: Standard
+    name: BLC...BW
+    coefficients:
+      - name: BLC.3EBW
+        value: -1
+      - name: BLC.3PBW
+        value: -1
+      - name: BLC.3RBW
+        value: -1
+      - name: _ELC...BW
+        value: 1
+    operator: EQ
+    rhs: 0
+  BLV...BW:
+    type: Standard
+    name: BLV...BW
+    coefficients:
+      - name: BLV.3EBW
+        value: -1
+      - name: BLV.3PBW
+        value: -1
+      - name: BLV.3RBW
+        value: -1
+      - name: _ELV...BW
+        value: 1
+    operator: EQ
+    rhs: 0
+  BN4...BW:
+    type: Standard
+    name: BN4...BW
+    coefficients:
+      - name: BN4.3EBW
+        value: -1
+      - name: BN4.3PBW
+        value: -1
+      - name: BN4.3RBW
+        value: -1
+      - name: _EN4...BW
+        value: 1
+    operator: EQ
+    rhs: 0
+  BP8...BW:
+    type: Standard
+    name: BP8...BW
+    coefficients:
+      - name: BP8.3EBW
+        value: -1
+      - name: BP8.3PBW
+        value: -1
+      - name: BP8.3RBW
+        value: -1
+      - name: _EP8...BW
+        value: 1
+    operator: EQ
+    rhs: 0
+  BTO...BW:
+    type: Standard
+    name: BTO...BW
+    coefficients:
+      - name: BTO.3EBW
+        value: -1
+      - name: BTO.3PBW
+        value: -1
+      - name: BTO.3RBW
+        value: -1
+      - name: _ETO...BW
+        value: 1
+    operator: EQ
+    rhs: 0
+  HMH.3EBW:
+    type: Standard
+    name: HMH.3EBW
+    coefficients:
+      - name: BAL.3EBW
+        value: 99.18559
+      - name: BHC.3EBW
+        value: 82.04308
+      - name: BLC.3EBW
+        value: 83.9937
+      - name: BLV.3EBW
+        value: 85.61385
+      - name: BN4.3EBW
+        value: 98.06433
+      - name: BP8.3EBW
+        value: 91.62642
+      - name: BTO.3EBW
+        value: 90.49629
+      - name: QPB73EBW
+        value: 1.23842
+      - name: QVO73EBW
+        value: -2.10531
+      - name: WMO73EBW
+        value: -1
+    operator: GTE
+    rhs: 0
+  HMH.3RBW:
+    type: Standard
+    name: HMH.3RBW
+    coefficients:
+      - name: BAL.3RBW
+        value: 99.18559
+      - name: BHC.3RBW
+        value: 82.04308
+      - name: BLC.3RBW
+        value: 83.9937
+      - name: BLV.3RBW
+        value: 85.61385
+      - name: BN4.3RBW
+        value: 98.06433
+      - name: BP8.3RBW
+        value: 91.62642
+      - name: BTO.3RBW
+        value: 90.49629
+      - name: QPB73RBW
+        value: 1.75028
+      - name: QVO73RBW
+        value: -2.97548
+      - name: WMO73RBW
+        value: -1
+    operator: GTE
+    rhs: 0
+  HML.3EBW:
+    type: Standard
+    name: HML.3EBW
+    coefficients:
+      - name: BAL.3EBW
+        value: 94.63568
+      - name: BHC.3EBW
+        value: 79.40534
+      - name: BLC.3EBW
+        value: 80.37873
+      - name: BLV.3EBW
+        value: 80.36789
+      - name: BN4.3EBW
+        value: 92.71594
+      - name: BP8.3EBW
+        value: 90.03844
+      - name: BTO.3EBW
+        value: 89.10432
+      - name: QPB73EBW
+        value: 3.42918
+      - name: QVO73EBW
+        value: -1.37167
+      - name: WMO73EBW
+        value: -1
+    operator: GTE
+    rhs: 0
+  HML.3RBW:
+    type: Standard
+    name: HML.3RBW
+    coefficients:
+      - name: BAL.3RBW
+        value: 95.17073
+      - name: BHC.3RBW
+        value: 79.72867
+      - name: BLC.3RBW
+        value: 80.82888
+      - name: BLV.3RBW
+        value: 81.03825
+      - name: BN4.3RBW
+        value: 93.41749
+      - name: BP8.3RBW
+        value: 90.22411
+      - name: BTO.3RBW
+        value: 89.25587
+      - name: QPB73RBW
+        value: 4.41873
+      - name: QVO73RBW
+        value: -2.20937
+      - name: WMO73RBW
+        value: -1
+    operator: GTE
+    rhs: 0
+  HMM.3EBW:
+    type: Standard
+    name: HMM.3EBW
+    coefficients:
+      - name: BAL.3EBW
+        value: 98.08976
+      - name: BHC.3EBW
+        value: 81.47009
+      - name: BLC.3EBW
+        value: 83.22026
+      - name: BLV.3EBW
+        value: 84.5191
+      - name: BN4.3EBW
+        value: 96.86628
+      - name: BP8.3EBW
+        value: 91.26611
+      - name: BTO.3EBW
+        value: 90.14887
+      - name: QPB73EBW
+        value: 1.55751
+      - name: QVO73EBW
+        value: -2.02477
+      - name: WMO73EBW
+        value: -1
+    operator: GTE
+    rhs: 0
+  HMM.3RBW:
+    type: Standard
+    name: HMM.3RBW
+    coefficients:
+      - name: BAL.3RBW
+        value: 97.11016
+      - name: BHC.3RBW
+        value: 80.94047
+      - name: BLC.3RBW
+        value: 82.49926
+      - name: BLV.3RBW
+        value: 83.48458
+      - name: BN4.3RBW
+        value: 95.86635
+      - name: BP8.3RBW
+        value: 90.94112
+      - name: BTO.3RBW
+        value: 89.84584
+      - name: QPB73RBW
+        value: 2.74531
+      - name: QVO73RBW
+        value: -2.74531
+      - name: WMO73RBW
+        value: -1
+    operator: GTE
+    rhs: 0
+  HRH.3EBW:
+    type: Standard
+    name: HRH.3EBW
+    coefficients:
+      - name: BAL.3EBW
+        value: 103.0581
+      - name: BHC.3EBW
+        value: 95.02163
+      - name: BLC.3EBW
+        value: 98.64634
+      - name: BLV.3EBW
+        value: 88.46612
+      - name: BN4.3EBW
+        value: 101.66321
+      - name: BP8.3EBW
+        value: 102.51818
+      - name: BTO.3EBW
+        value: 106.46719
+      - name: QPB73EBW
+        value: 1.27141
+      - name: QVO73EBW
+        value: -2.16139
+      - name: WRO73EBW
+        value: -1
+    operator: GTE
+    rhs: 0
+  HRH.3RBW:
+    type: Standard
+    name: HRH.3RBW
+    coefficients:
+      - name: BAL.3RBW
+        value: 103.0581
+      - name: BHC.3RBW
+        value: 95.02163
+      - name: BLC.3RBW
+        value: 98.64634
+      - name: BLV.3RBW
+        value: 88.46612
+      - name: BN4.3RBW
+        value: 101.66321
+      - name: BP8.3RBW
+        value: 102.51818
+      - name: BTO.3RBW
+        value: 106.46719
+      - name: QPB73RBW
+        value: 1.64391
+      - name: QVO73RBW
+        value: -2.79464
+      - name: WRO73RBW
+        value: -1
+    operator: GTE
+    rhs: 0
+  HRL.3EBW:
+    type: Standard
+    name: HRL.3EBW
+    coefficients:
+      - name: BAL.3EBW
+        value: 98.70277
+      - name: BHC.3EBW
+        value: 92.89535
+      - name: BLC.3EBW
+        value: 95.38345
+      - name: BLV.3EBW
+        value: 82.8797
+      - name: BN4.3EBW
+        value: 97.32996
+      - name: BP8.3EBW
+        value: 101.17309
+      - name: BTO.3EBW
+        value: 105.47666
+      - name: QPB73EBW
+        value: 2.52143
+      - name: QVO73EBW
+        value: -1.00857
+      - name: WRO73EBW
+        value: -1
+    operator: GTE
+    rhs: 0
+  HRL.3RBW:
+    type: Standard
+    name: HRL.3RBW
+    coefficients:
+      - name: BAL.3RBW
+        value: 99.19039
+      - name: BHC.3RBW
+        value: 93.16124
+      - name: BLC.3RBW
+        value: 95.80861
+      - name: BLV.3RBW
+        value: 83.61375
+      - name: BN4.3RBW
+        value: 97.86876
+      - name: BP8.3RBW
+        value: 101.32905
+      - name: BTO.3RBW
+        value: 105.58392
+      - name: QPB73RBW
+        value: 4.31949
+      - name: QVO73RBW
+        value: -2.15975
+      - name: WRO73RBW
+        value: -1
+    operator: GTE
+    rhs: 0
+  HRM.3EBW:
+    type: Standard
+    name: HRM.3EBW
+    coefficients:
+      - name: BAL.3EBW
+        value: 102.02191
+      - name: BHC.3EBW
+        value: 94.57094
+      - name: BLC.3EBW
+        value: 97.97965
+      - name: BLV.3EBW
+        value: 87.33298
+      - name: BN4.3EBW
+        value: 100.65
+      - name: BP8.3EBW
+        value: 102.21363
+      - name: BTO.3EBW
+        value: 106.21918
+      - name: QPB73EBW
+        value: 1.54954
+      - name: QVO73EBW
+        value: -2.0144
+      - name: WRO73EBW
+        value: -1
+    operator: GTE
+    rhs: 0
+  HRM.3RBW:
+    type: Standard
+    name: HRM.3RBW
+    coefficients:
+      - name: BAL.3RBW
+        value: 101.0885
+      - name: BHC.3RBW
+        value: 94.14769
+      - name: BLC.3RBW
+        value: 97.34183
+      - name: BLV.3RBW
+        value: 86.24515
+      - name: BN4.3RBW
+        value: 99.77765
+      - name: BP8.3RBW
+        value: 101.93754
+      - name: BTO.3RBW
+        value: 106.0019
+      - name: QPB73RBW
+        value: 2.62696
+      - name: QVO73RBW
+        value: -2.62696
+      - name: WRO73RBW
+        value: -1
+    operator: GTE
+    rhs: 0
+  NOI.3EBW:
+    type: Standard
+    name: NOI.3EBW
+    coefficients:
+      - name: QVO73EBW
+        value: -107.52
+      - name: WMO73EBW
+        value: 0.73
+      - name: WRO73EBW
+        value: 0.41
+    operator: GTE
+    rhs: 0
+  NOI.3PBW:
+    type: Standard
+    name: NOI.3PBW
+    coefficients:
+      - name: QVO73PBW
+        value: -97.41
+      - name: WMO73PBW
+        value: 0.84
+      - name: WRO73PBW
+        value: 0.27
+    operator: GTE
+    rhs: 0
+  NOI.3RBW:
+    type: Standard
+    name: NOI.3RBW
+    coefficients:
+      - name: QVO73RBW
+        value: -98.5
+      - name: WMO73RBW
+        value: 0.81
+      - name: WRO73RBW
+        value: 0.31
+    operator: GTE
+    rhs: 0
+  WMO.3PBW:
+    type: Standard
+    name: WMO.3PBW
+    coefficients:
+      - name: BAL.3PBW
+        value: 91.96313
+      - name: BHC.3PBW
+        value: 78.09095
+      - name: BLC.3PBW
+        value: 80.74635
+      - name: BLV.3PBW
+        value: 77.37441
+      - name: BN4.3PBW
+        value: 88.35436
+      - name: BP8.3PBW
+        value: 88.58029
+      - name: BTO.3PBW
+        value: 88.18188
+      - name: WMO73PBW
+        value: -1
+    operator: EQ
+    rhs: 0
+  WRO.3PBW:
+    type: Standard
+    name: WRO.3PBW
+    coefficients:
+      - name: BAL.3PBW
+        value: 96.13556
+      - name: BHC.3PBW
+        value: 90.99637
+      - name: BLC.3PBW
+        value: 93.95665
+      - name: BLV.3PBW
+        value: 79.78002
+      - name: BN4.3PBW
+        value: 94.11062
+      - name: BP8.3PBW
+        value: 99.83178
+      - name: BTO.3PBW
+        value: 105.07558
+      - name: WRO73PBW
+        value: -1
+    operator: EQ
+    rhs: 0
+  X12.3EBW:
+    type: Standard
+    name: X12.3EBW
+    coefficients:
+      - name: BAL.3EBW
+        value: 50.3
+      - name: BHC.3EBW
+        value: -15.6
+      - name: BLC.3EBW
+        value: 57.9
+      - name: BLV.3EBW
+        value: 102.3
+      - name: BN4.3EBW
+        value: 113
+      - name: BP8.3EBW
+        value: 28.9
+      - name: BTO.3EBW
+        value: 5
+      - name: QVO73EBW
+        value: -61
+    operator: LTE
+    rhs: 0
+  X12.3PBW:
+    type: Standard
+    name: X12.3PBW
+    coefficients:
+      - name: BAL.3PBW
+        value: 50.3
+      - name: BHC.3PBW
+        value: -15.6
+      - name: BLC.3PBW
+        value: 57.9
+      - name: BLV.3PBW
+        value: 102.3
+      - name: BN4.3PBW
+        value: 113
+      - name: BP8.3PBW
+        value: 28.9
+      - name: BTO.3PBW
+        value: 5
+      - name: QVO73PBW
+        value: -61
+    operator: LTE
+    rhs: 0
+  X12.3RBW:
+    type: Standard
+    name: X12.3RBW
+    coefficients:
+      - name: BAL.3RBW
+        value: 50.3
+      - name: BHC.3RBW
+        value: -15.6
+      - name: BLC.3RBW
+        value: 57.9
+      - name: BLV.3RBW
+        value: 102.3
+      - name: BN4.3RBW
+        value: 113
+      - name: BP8.3RBW
+        value: 28.9
+      - name: BTO.3RBW
+        value: 5
+      - name: QVO73RBW
+        value: -61
+    operator: LTE
+    rhs: 0
+  XCV.3EBW:
+    type: Standard
+    name: XCV.3EBW
+    coefficients:
+      - name: BAL.3EBW
+        value: 6
+      - name: BHC.3EBW
+        value: -2
+      - name: BLC.3EBW
+        value: 7
+      - name: BLV.3EBW
+        value: 14
+      - name: BN4.3EBW
+        value: 80
+      - name: BP8.3EBW
+        value: 4
+      - name: BTO.3EBW
+        value: -1
+      - name: QVO73EBW
+        value: -16
+    operator: LTE
+    rhs: 0
+  XCV.3PBW:
+    type: Standard
+    name: XCV.3PBW
+    coefficients:
+      - name: BAL.3PBW
+        value: 6
+      - name: BHC.3PBW
+        value: -2
+      - name: BLC.3PBW
+        value: 7
+      - name: BLV.3PBW
+        value: 14
+      - name: BN4.3PBW
+        value: 80
+      - name: BP8.3PBW
+        value: 4
+      - name: BTO.3PBW
+        value: -1
+      - name: QVO73PBW
+        value: -16
+    operator: LTE
+    rhs: 0
+  XCV.3RBW:
+    type: Standard
+    name: XCV.3RBW
+    coefficients:
+      - name: BAL.3RBW
+        value: 6
+      - name: BHC.3RBW
+        value: -2
+      - name: BLC.3RBW
+        value: 7
+      - name: BLV.3RBW
+        value: 14
+      - name: BN4.3RBW
+        value: 80
+      - name: BP8.3RBW
+        value: 4
+      - name: BTO.3RBW
+        value: -1
+      - name: QVO73RBW
+        value: -16
+    operator: LTE
+    rhs: 0
+  XPB.3ABW:
+    type: Standard
+    name: XPB.3ABW
+    coefficients:
+      - name: QPB73EBW
+        value: 1
+      - name: QVO73EBW
+        value: -1.5
+      - name: QVO73PBW
+        value: -1.5
+      - name: QPB73RBW
+        value: 1
+      - name: QVO73RBW
+        value: -1.5
+    operator: LTE
+    rhs: 0
+  XPB.3EBW:
+    type: Standard
+    name: XPB.3EBW
+    coefficients:
+      - name: QPB73EBW
+        value: 1
+      - name: QVO73EBW
+        value: -1.7
+    operator: LTE
+    rhs: 0
+  XPB.3RBW:
+    type: Standard
+    name: XPB.3RBW
+    coefficients:
+      - name: QPB73RBW
+        value: 1
+      - name: QVO73RBW
+        value: -1.7
+    operator: LTE
+    rhs: 0
+  XRV.3EBW:
+    type: Standard
+    name: XRV.3EBW
+    coefficients:
+      - name: BAL.3EBW
+        value: 4
+      - name: BHC.3EBW
+        value: 0.5
+      - name: BLC.3EBW
+        value: 4.5
+      - name: BLV.3EBW
+        value: 7.2
+      - name: BN4.3EBW
+        value: 70
+      - name: BP8.3EBW
+        value: 3.6
+      - name: BTO.3EBW
+        value: 1.2
+      - name: QVO73EBW
+        value: -12
+    operator: LTE
+    rhs: 0
+  XRV.3PBW:
+    type: Standard
+    name: XRV.3PBW
+    coefficients:
+      - name: BAL.3PBW
+        value: 4
+      - name: BHC.3PBW
+        value: 0.5
+      - name: BLC.3PBW
+        value: 4.5
+      - name: BLV.3PBW
+        value: 7.2
+      - name: BN4.3PBW
+        value: 70
+      - name: BP8.3PBW
+        value: 3.6
+      - name: BTO.3PBW
+        value: 1.2
+      - name: QVO73PBW
+        value: -12
+    operator: LTE
+    rhs: 0
+  XRV.3RBW:
+    type: Standard
+    name: XRV.3RBW
+    coefficients:
+      - name: BAL.3RBW
+        value: 4
+      - name: BHC.3RBW
+        value: 0.5
+      - name: BLC.3RBW
+        value: 4.5
+      - name: BLV.3RBW
+        value: 7.2
+      - name: BN4.3RBW
+        value: 70
+      - name: BP8.3RBW
+        value: 3.6
+      - name: BTO.3RBW
+        value: 1.2
+      - name: QVO73RBW
+        value: -12
+    operator: LTE
+    rhs: 0
+variables:
+  BAL.3EBW:
+    name: BAL.3EBW
+    var_type: Free
+  BAL.3PBW:
+    name: BAL.3PBW
+    var_type: Free
+  BAL.3RBW:
+    name: BAL.3RBW
+    var_type: Free
+  BHC.3EBW:
+    name: BHC.3EBW
+    var_type:
+      DoubleBound:
+        - 0
+        - 10
+  BHC.3PBW:
+    name: BHC.3PBW
+    var_type: Free
+  BHC.3RBW:
+    name: BHC.3RBW
+    var_type: Free
+  BLC.3EBW:
+    name: BLC.3EBW
+    var_type: Free
+  BLC.3PBW:
+    name: BLC.3PBW
+    var_type: Free
+  BLC.3RBW:
+    name: BLC.3RBW
+    var_type: Free
+  BLV.3EBW:
+    name: BLV.3EBW
+    var_type: Free
+  BLV.3PBW:
+    name: BLV.3PBW
+    var_type: Free
+  BLV.3RBW:
+    name: BLV.3RBW
+    var_type: Free
+  BN4.3EBW:
+    name: BN4.3EBW
+    var_type: Free
+  BN4.3PBW:
+    name: BN4.3PBW
+    var_type: Free
+  BN4.3RBW:
+    name: BN4.3RBW
+    var_type: Free
+  BP8.3EBW:
+    name: BP8.3EBW
+    var_type: Free
+  BP8.3PBW:
+    name: BP8.3PBW
+    var_type: Free
+  BP8.3RBW:
+    name: BP8.3RBW
+    var_type: Free
+  BTO.3EBW:
+    name: BTO.3EBW
+    var_type: Free
+  BTO.3PBW:
+    name: BTO.3PBW
+    var_type: Free
+  BTO.3RBW:
+    name: BTO.3RBW
+    var_type: Free
+  D3T...BW:
+    name: D3T...BW
+    var_type:
+      DoubleBound:
+        - 0
+        - 200
+  M3..3TBW:
+    name: M3..3TBW
+    var_type: Free
+  QPB73EBW:
+    name: QPB73EBW
+    var_type: Free
+  QPB73RBW:
+    name: QPB73RBW
+    var_type: Free
+  QVO73EBW:
+    name: QVO73EBW
+    var_type: Free
+  QVO73PBW:
+    name: QVO73PBW
+    var_type: Free
+  QVO73RBW:
+    name: QVO73RBW
+    var_type: Free
+  WMO73EBW:
+    name: WMO73EBW
+    var_type: Free
+  WMO73PBW:
+    name: WMO73PBW
+    var_type: Free
+  WMO73RBW:
+    name: WMO73RBW
+    var_type: Free
+  WRO73EBW:
+    name: WRO73EBW
+    var_type: Free
+  WRO73PBW:
+    name: WRO73PBW
+    var_type: Free
+  WRO73RBW:
+    name: WRO73RBW
+    var_type: Free
+  _EAL...BW:
+    name: _EAL...BW
+    var_type:
+      DoubleBound:
+        - 0
+        - 10
+  _EHC...BW:
+    name: _EHC...BW
+    var_type:
+      DoubleBound:
+        - 0
+        - 20
+  _ELC...BW:
+    name: _ELC...BW
+    var_type:
+      DoubleBound:
+        - 0
+        - 25
+  _ELV...BW:
+    name: _ELV...BW
+    var_type:
+      DoubleBound:
+        - 0
+        - 12
+  _EN4...BW:
+    name: _EN4...BW
+    var_type:
+      DoubleBound:
+        - 0
+        - 100
+  _EP8...BW:
+    name: _EP8...BW
+    var_type:
+      DoubleBound:
+        - 0
+        - 35
+  _ETO...BW:
+    name: _ETO...BW
+    var_type:
+      DoubleBound:
+        - 0
+        - 5

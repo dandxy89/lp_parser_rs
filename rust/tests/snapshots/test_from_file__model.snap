@@ -1,0 +1,38 @@
+---
+source: rust/tests/test_from_file.rs
+expression: parsed
+---
+name: ilog.cplex
+sense: Minimize
+objectives:
+  obj:
+    name: obj
+    coefficients:
+      - name: x
+        value: -1
+      - name: y
+        value: -1
+constraints:
+  blah:
+    type: Standard
+    name: blah
+    coefficients:
+      - name: x
+        value: 1
+      - name: y
+        value: -1
+    operator: EQ
+    rhs: 0
+variables:
+  x:
+    name: x
+    var_type:
+      DoubleBound:
+        - 0
+        - 1
+  y:
+    name: y
+    var_type:
+      DoubleBound:
+        - 0.2
+        - 1
