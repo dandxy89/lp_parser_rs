@@ -1,5 +1,22 @@
 # Changelog
 
+## [3.0.3](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v3.0.2...lp_parser_rs-v3.0.3) (2025-12-11)
+
+
+### Build System
+
+* Bump logos crate to 0.16.0 ([690e83c](https://github.com/dandxy89/lp_parser_rs/commit/690e83c69277a9de49bc8579c86db3a433766389))
+
+
+### Bug Fixes
+
+* Improvements to the binary / main ([#151](https://github.com/dandxy89/lp_parser_rs/issues/151)) ([0ca04b8](https://github.com/dandxy89/lp_parser_rs/commit/0ca04b81cce55c7fac0b04211a493997ec0892b2))
+
+
+### Code Refactoring
+
+* Clippy ([#150](https://github.com/dandxy89/lp_parser_rs/issues/150)) ([0ec6a51](https://github.com/dandxy89/lp_parser_rs/commit/0ec6a510fe3bd3a9f6f52194de381a110ad19589))
+
 ## [3.0.2](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v3.0.1...lp_parser_rs-v3.0.2) (2025-12-07)
 
 

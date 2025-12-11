@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.3](https://github.com/dandxy89/lp_parser_rs/compare/parse_lp-v3.0.2...parse_lp-v3.0.3) (2025-12-11)
+
+
+### Code Refactoring
+
+* Clippy ([#150](https://github.com/dandxy89/lp_parser_rs/issues/150)) ([0ec6a51](https://github.com/dandxy89/lp_parser_rs/commit/0ec6a510fe3bd3a9f6f52194de381a110ad19589))
+
 ## [3.0.2](https://github.com/dandxy89/lp_parser_rs/compare/parse_lp-v3.0.0...parse_lp-v3.0.2) (2025-12-07)
 
 
