@@ -232,6 +232,10 @@ impl<'a> ParseContext<'a> {
     }
 
     /// Update the current position and recalculate line/column
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the new position is before the current position
     pub fn update_position(&mut self, new_position: usize) -> LpResult<()> {
         if new_position < self.position {
             return Err(LpParseError::internal_error("Cannot move position backwards"));
@@ -253,6 +257,10 @@ impl<'a> ParseContext<'a> {
     }
 
     /// Consume input and update position
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the consumed string doesn't match the current input
     pub fn consume(&mut self, consumed_str: &str) -> LpResult<()> {
         let consumed_len = consumed_str.len();
         if consumed_len == 0 {

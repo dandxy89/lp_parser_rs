@@ -14,7 +14,7 @@ use crate::model::{Constraint, Objective, Sense, Variable, VariableType};
 /// and relative epsilon comparisons.
 ///
 /// This handles edge cases better than simple `value.abs() < f64::EPSILON`:
-/// - For small values near zero, uses absolute epsilon (f64::EPSILON)
+/// - For small values near zero, uses absolute epsilon (`f64::EPSILON`)
 /// - For larger values, uses relative epsilon based on the reference magnitude
 ///
 /// # Arguments
@@ -136,6 +136,10 @@ impl<'a> LpProblem<'a> {
 
     #[inline]
     /// Parse a `Self` from a string slice
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the input string is not a valid LP file format
     pub fn parse(input: &'a str) -> LpResult<Self> {
         log::debug!("Starting to parse LP problem");
         Self::try_from(input)
@@ -202,6 +206,10 @@ impl<'a> LpProblem<'a> {
     /// # Returns
     ///
     /// `Ok(())` if successful, or an error if the objective doesn't exist
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the specified objective does not exist
     pub fn update_objective_coefficient(&mut self, objective_name: &str, variable_name: &'a str, new_coefficient: f64) -> LpResult<()> {
         let objective = self
             .objectives
@@ -243,6 +251,10 @@ impl<'a> LpProblem<'a> {
     /// # Returns
     ///
     /// `Ok(())` if successful, or an error if the constraint doesn't exist or is not a standard constraint
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the constraint does not exist or is an SOS constraint
     pub fn update_constraint_coefficient(&mut self, constraint_name: &str, variable_name: &'a str, new_coefficient: f64) -> LpResult<()> {
         let constraint = self
             .constraints
@@ -287,6 +299,10 @@ impl<'a> LpProblem<'a> {
     /// # Returns
     ///
     /// `Ok(())` if successful, or an error if the constraint doesn't exist or is not a standard constraint
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the constraint does not exist or is an SOS constraint
     pub fn update_constraint_rhs(&mut self, constraint_name: &str, new_rhs: f64) -> LpResult<()> {
         let constraint = self
             .constraints
@@ -313,6 +329,10 @@ impl<'a> LpProblem<'a> {
     /// # Returns
     ///
     /// `Ok(())` if successful, or an error if the constraint doesn't exist or is not a standard constraint
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the constraint does not exist or is an SOS constraint
     pub fn update_constraint_operator(&mut self, constraint_name: &str, new_operator: crate::model::ComparisonOp) -> LpResult<()> {
         let constraint = self
             .constraints
@@ -341,6 +361,14 @@ impl<'a> LpProblem<'a> {
     /// # Returns
     ///
     /// `Ok(())` if successful, or an error if the variable doesn't exist or the new name already exists
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the variable does not exist or the new name is already in use
+    ///
+    /// # Panics
+    ///
+    /// Panics if the variable exists in the map but cannot be removed (internal error)
     pub fn rename_variable(&mut self, old_name: &str, new_name: &'a str) -> LpResult<()> {
         // Check if old variable exists
         if !self.variables.contains_key(old_name) {
@@ -401,6 +429,14 @@ impl<'a> LpProblem<'a> {
     /// # Returns
     ///
     /// `Ok(())` if successful, or an error if the constraint doesn't exist or the new name already exists
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the constraint does not exist or the new name is already in use
+    ///
+    /// # Panics
+    ///
+    /// Panics if the constraint exists in the map but cannot be removed (internal error)
     pub fn rename_constraint(&mut self, old_name: &str, new_name: &str) -> LpResult<()> {
         // Check if old constraint exists
         if !self.constraints.contains_key(old_name) {
@@ -438,6 +474,14 @@ impl<'a> LpProblem<'a> {
     /// # Returns
     ///
     /// `Ok(())` if successful, or an error if the objective doesn't exist or the new name already exists
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the objective does not exist or the new name is already in use
+    ///
+    /// # Panics
+    ///
+    /// Panics if the objective exists in the map but cannot be removed (internal error)
     pub fn rename_objective(&mut self, old_name: &str, new_name: &str) -> LpResult<()> {
         // Check if old objective exists
         if !self.objectives.contains_key(old_name) {
@@ -470,6 +514,10 @@ impl<'a> LpProblem<'a> {
     /// # Returns
     ///
     /// `Ok(())` if successful, or an error if the variable doesn't exist
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the variable does not exist
     pub fn remove_variable(&mut self, variable_name: &str) -> LpResult<()> {
         // Check if variable exists
         if !self.variables.contains_key(variable_name) {
@@ -509,6 +557,10 @@ impl<'a> LpProblem<'a> {
     /// # Returns
     ///
     /// `Ok(())` if successful, or an error if the constraint doesn't exist
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the constraint does not exist
     pub fn remove_constraint(&mut self, constraint_name: &str) -> LpResult<()> {
         if self.constraints.remove(constraint_name).is_none() {
             return Err(LpParseError::validation_error(format!("Constraint '{constraint_name}' not found")));
@@ -526,6 +578,10 @@ impl<'a> LpProblem<'a> {
     /// # Returns
     ///
     /// `Ok(())` if successful, or an error if the objective doesn't exist
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the objective does not exist
     pub fn remove_objective(&mut self, objective_name: &str) -> LpResult<()> {
         if self.objectives.remove(objective_name).is_none() {
             return Err(LpParseError::validation_error(format!("Objective '{objective_name}' not found")));
@@ -544,6 +600,10 @@ impl<'a> LpProblem<'a> {
     /// # Returns
     ///
     /// `Ok(())` if successful, or an error if the variable doesn't exist
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the variable does not exist
     pub fn update_variable_type(&mut self, variable_name: &str, new_type: VariableType) -> LpResult<()> {
         let variable = self
             .variables
@@ -729,11 +789,11 @@ impl Default for LpProblemOwned {
 impl<'a> From<&LpProblem<'a>> for LpProblemOwned {
     fn from(problem: &LpProblem<'a>) -> Self {
         Self {
-            name: problem.name.as_ref().map(|n| n.to_string()),
+            name: problem.name.as_ref().map(std::string::ToString::to_string),
             sense: problem.sense.clone(),
             objectives: problem.objectives.iter().map(|(k, v)| (k.to_string(), ObjectiveOwned::from(v))).collect(),
             constraints: problem.constraints.iter().map(|(k, v)| (k.to_string(), ConstraintOwned::from(v))).collect(),
-            variables: problem.variables.iter().map(|(k, v)| (k.to_string(), VariableOwned::from(v))).collect(),
+            variables: problem.variables.iter().map(|(k, v)| ((*k).to_string(), VariableOwned::from(v))).collect(),
         }
     }
 }
@@ -752,7 +812,7 @@ impl std::fmt::Display for LpProblemOwned {
     }
 }
 
-impl<'a> LpProblem<'a> {
+impl LpProblem<'_> {
     /// Convert to an owned variant with no lifetime constraints.
     ///
     /// This is useful when you need to store the problem in a collection,
@@ -767,6 +827,7 @@ impl<'a> TryFrom<&'a str> for LpProblem<'a> {
     type Error = LpParseError;
 
     #[inline]
+    #[allow(clippy::too_many_lines)]
     fn try_from(input: &'a str) -> Result<Self, Self::Error> {
         log::debug!("Starting to parse LP problem with LALRPOP parser");
 
@@ -846,13 +907,13 @@ impl<'a> TryFrom<&'a str> for LpProblem<'a> {
             // Update constraint with final name and extract variables using Entry API
             match &mut con {
                 Constraint::Standard { name, coefficients, .. } => {
-                    *name = final_name.clone();
+                    name.clone_from(&final_name);
                     for coeff in coefficients.iter() {
                         variables.entry(coeff.name).or_insert_with(|| Variable::new(coeff.name));
                     }
                 }
                 Constraint::SOS { name, weights, .. } => {
-                    *name = final_name.clone();
+                    name.clone_from(&final_name);
                     for coeff in weights.iter() {
                         variables.entry(coeff.name).or_insert_with(|| Variable::new(coeff.name).with_var_type(VariableType::SOS));
                     }
@@ -938,13 +999,13 @@ impl<'a> TryFrom<&'a str> for LpProblem<'a> {
         for mut sos in sos_constraints {
             let name = match &sos {
                 Constraint::SOS { name, .. } => name.clone(),
-                _ => continue,
+                Constraint::Standard { .. } => continue,
             };
 
             let final_name = if name.is_empty() { Cow::Owned(format!("SOS{}", constraint_gen.next_id())) } else { name };
 
             if let Constraint::SOS { name, weights, .. } = &mut sos {
-                *name = final_name.clone();
+                name.clone_from(&final_name);
                 for coeff in weights.iter() {
                     variables.entry(coeff.name).or_insert_with(|| Variable::new(coeff.name).with_var_type(VariableType::SOS));
                 }

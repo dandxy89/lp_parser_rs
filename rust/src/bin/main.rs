@@ -27,6 +27,7 @@ fn dissemble_single_file(path: &str) -> Result<(), LpParseError> {
 }
 
 #[cfg(feature = "diff")]
+#[allow(clippy::items_after_statements)]
 fn compare_lp_files(p1: &str, p2: &str) -> Result<(), LpParseError> {
     println!("Attempting to compare {p1} to {p2}");
     use diff::Diff;

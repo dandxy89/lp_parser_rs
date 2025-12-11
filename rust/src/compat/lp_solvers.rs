@@ -109,10 +109,10 @@ impl fmt::Display for LpSolversCompatWarning {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::SosConstraintIgnored { name } => {
-                write!(f, "SOS constraint '{}' will be ignored; lp-solvers does not support SOS constraints", name)
+                write!(f, "SOS constraint '{name}' will be ignored; lp-solvers does not support SOS constraints")
             }
             Self::SemiContinuousApproximated { name } => {
-                write!(f, "semi-continuous variable '{}' is not directly supported; treating as continuous", name)
+                write!(f, "semi-continuous variable '{name}' is not directly supported; treating as continuous")
             }
         }
     }
@@ -168,7 +168,7 @@ pub struct ExpressionAdapter<'a> {
 }
 
 /// Tolerance for comparing floating-point coefficients to special values like 1.0.
-/// Using a slightly larger tolerance than f64::EPSILON to handle parsing rounding.
+/// Using a slightly larger tolerance than `f64::EPSILON` to handle parsing rounding.
 const COEFF_EPSILON: f64 = 1e-10;
 
 impl WriteToLpFileFormat for ExpressionAdapter<'_> {
@@ -262,7 +262,7 @@ impl<'a> Iterator for ConstraintIterator<'a> {
                         rhs: *rhs,
                     });
                 }
-                Some(Constraint::SOS { .. }) => continue, // Skip SOS constraints
+                Some(Constraint::SOS { .. }) => {} // Skip SOS constraints
                 None => return None,
             }
         }
@@ -286,6 +286,10 @@ impl<'a> LpSolversCompat<'a> {
     /// - The Problem has multiple objectives
     /// - The Problem has no objectives
     /// - Any constraint uses strict inequalities (`<` or `>`)
+    ///
+    /// # Panics
+    ///
+    /// Panics if the problem has exactly one objective but it cannot be accessed (internal error)
     pub fn try_new(problem: &'a LpProblem<'a>) -> Result<Self, LpSolversCompatError> {
         // Validate single objective
         if problem.objectives.is_empty() {
@@ -483,9 +487,17 @@ mod tests {
         ];
         for (vt, lb, ub, is_int) in cases {
             let (_, a) = adapter(vt.clone());
-            assert_eq!(a.lower_bound(), *lb, "lower_bound for {:?}", vt);
-            assert_eq!(a.upper_bound(), *ub, "upper_bound for {:?}", vt);
-            assert_eq!(a.is_integer(), *is_int, "is_integer for {:?}", vt);
+            assert!(
+                (a.lower_bound() - *lb).abs() < f64::EPSILON
+                    || (a.lower_bound().is_infinite() && lb.is_infinite() && a.lower_bound().signum() == lb.signum()),
+                "lower_bound for {vt:?}"
+            );
+            assert!(
+                (a.upper_bound() - *ub).abs() < f64::EPSILON
+                    || (a.upper_bound().is_infinite() && ub.is_infinite() && a.upper_bound().signum() == ub.signum()),
+                "upper_bound for {vt:?}"
+            );
+            assert_eq!(a.is_integer(), *is_int, "is_integer for {vt:?}");
         }
     }
 

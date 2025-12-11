@@ -131,14 +131,14 @@ impl<'input> From<lalrpop_util::ParseError<usize, crate::lexer::Token<'input>, c
             lalrpop_util::ParseError::InvalidToken { location } => Self::parse_error(location, "Invalid token"),
             lalrpop_util::ParseError::UnrecognizedEof { location, expected } => {
                 let expected_str = if expected.is_empty() { String::new() } else { format!(", expected one of: {}", expected.join(", ")) };
-                Self::parse_error(location, format!("Unexpected end of input{}", expected_str))
+                Self::parse_error(location, format!("Unexpected end of input{expected_str}"))
             }
             lalrpop_util::ParseError::UnrecognizedToken { token: (start, tok, _), expected } => {
                 let expected_str = if expected.is_empty() { String::new() } else { format!(", expected one of: {}", expected.join(", ")) };
-                Self::parse_error(start, format!("Unexpected token {:?}{}", tok, expected_str))
+                Self::parse_error(start, format!("Unexpected token {tok:?}{expected_str}"))
             }
-            lalrpop_util::ParseError::ExtraToken { token: (start, tok, _) } => Self::parse_error(start, format!("Extra token {:?}", tok)),
-            lalrpop_util::ParseError::User { error } => Self::parse_error(0, format!("Lexer error: {:?}", error)),
+            lalrpop_util::ParseError::ExtraToken { token: (start, tok, _) } => Self::parse_error(start, format!("Extra token {tok:?}")),
+            lalrpop_util::ParseError::User { error } => Self::parse_error(0, format!("Lexer error: {error:?}")),
         }
     }
 }
@@ -163,9 +163,17 @@ pub type LpResult<T> = Result<T, LpParseError>;
 /// Context extension trait for adding location information to errors
 pub trait ErrorContext<T> {
     /// Add position context to an error
+    ///
+    /// # Errors
+    ///
+    /// Propagates the original error with updated position information
     fn with_position(self, position: usize) -> LpResult<T>;
 
     /// Add general context to an error
+    ///
+    /// # Errors
+    ///
+    /// Propagates the original error with added context message
     fn with_context(self, context: &str) -> LpResult<T>;
 }
 
