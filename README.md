@@ -61,16 +61,6 @@ lp_parser_rs = "3.0.0" # x-release-please-version
 
 ### Basic Usage
 
-Clone and run with a sample file:
-
-```bash
-git clone https://github.com/dandxy89/lp_parser_rs.git
-# Parse a single LP file
-cargo run --bin lp_parser --release -- {{ /path/to/your/file.lp }}
-# Compare two LP files (enabling the 'diff' feature)
-cargo run --bin lp_parser --release --features diff -- {{ /path/to/your/file.lp }} {{ /path/to/your/other/file.lp }}
-```
-
 Using the library directly:
 
 ```rust
@@ -132,7 +122,98 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 lp_parser_rs = { version = "3.0.0", features = ["serde", "diff"] } # x-release-please-version
 ```
 
-### Solving with External Solvers (`lp-solvers` feature)
+## Command-Line Interface
+
+The `lp_parser` binary provides a comprehensive CLI for working with LP files.
+
+### Installation
+
+```bash
+# Install with all features
+cargo install lp_parser_rs --all-features
+
+# Or build from source
+git clone https://github.com/dandxy89/lp_parser_rs.git
+cd lp_parser_rs/rust
+cargo build --release --all-features
+```
+
+### Commands
+
+```
+lp_parser <COMMAND>
+
+Commands:
+  parse    Parse an LP file and display its structure
+  info     Show detailed statistics about an LP problem
+  diff     Compare two LP files (requires 'diff' feature)
+  convert  Convert LP file to another format
+  solve    Solve an LP problem using external solvers (requires 'lp-solvers' feature)
+
+Global Options:
+  -v, --verbose    Increase output verbosity
+  -q, --quiet      Suppress non-essential output
+  -h, --help       Print help
+  -V, --version    Print version
+```
+
+### Examples
+
+**Parse and display an LP file:**
+
+```bash
+lp_parser parse problem.lp
+```
+
+**Get problem statistics:**
+
+```bash
+lp_parser info problem.lp
+# With detailed listings
+lp_parser info problem.lp --variables --constraints --objectives
+```
+
+**Output as JSON or YAML:**
+
+```bash
+lp_parser info problem.lp --format json --pretty
+lp_parser parse problem.lp --format yaml -o problem.yaml
+```
+
+**Compare two LP files:**
+
+```bash
+lp_parser diff old_model.lp new_model.lp
+lp_parser diff old.lp new.lp --format json --pretty
+```
+
+**Convert between formats:**
+
+```bash
+# To LP (with formatting options)
+lp_parser convert problem.lp --format lp --precision 4 --compact
+
+# To CSV (creates constraints.csv, objectives.csv, variables.csv)
+lp_parser convert problem.lp --format csv --output ./output_dir
+
+# To JSON/YAML
+lp_parser convert problem.lp --format json --pretty -o problem.json
+lp_parser convert problem.lp --format yaml -o problem.yaml
+```
+
+**Solve with external solvers:**
+```bash
+# Using CBC (default)
+lp_parser solve problem.lp
+
+# Using GLPK
+lp_parser solve problem.lp --solver glpk
+
+# Output solution as JSON
+lp_parser solve problem.lp --format json --pretty
+```
+
+## Solving with External Solvers (`lp-solvers` feature)
 
 Enable the `lp-solvers` feature to solve parsed LP problems using external solvers like CBC, Gurobi, CPLEX, or GLPK via the [lp-solvers](https://crates.io/crates/lp-solvers) crate:
 

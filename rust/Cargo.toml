@@ -26,9 +26,10 @@ doctest = false
 
 [[bin]]
 name = "lp_parser"
-path = "src/bin/main.rs"
+path = "src/bin/lp_parser/main.rs"
 
 [dependencies]
+clap = { version = "4.5", features = ["derive"] }
 csv = { version = "1.4.0", optional = true }
 diff-struct = { version = "0.5.3", optional = true }
 lalrpop-util = "0.22.2"
@@ -36,6 +37,8 @@ lp-solvers = { version = "1.1", optional = true }
 log = "0.4.29"
 logos = "0.16.0"
 serde = { version = "1.0.228", features = ["derive"], optional = true }
+serde_json = { version = "1.0", optional = true }
+serde_yaml = { version = "0.9", optional = true }
 thiserror = "2.0.17"
 unique_id = { version = "0.1.7", features = ["sequence"] }
 
@@ -52,7 +55,7 @@ csv = ["dep:csv"]
 default = []
 diff = ["dep:diff-struct", "serde"]
 lp-solvers = ["dep:lp-solvers"]
-serde = ["dep:serde"]
+serde = ["dep:serde", "dep:serde_json", "dep:serde_yaml"]
 test-cbc = ["lp-solvers"]
 
 [package.metadata.cargo-machete]
