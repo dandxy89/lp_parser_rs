@@ -14,6 +14,10 @@
 //! - `Variable`: Struct representing a variable with a name and type.
 //!
 
+// Allow float_cmp in this module because the diff::Diff derive macro generates
+// code that uses direct f64 comparisons which we can't annotate
+#![allow(clippy::float_cmp)]
+
 use std::borrow::Cow;
 
 #[cfg_attr(feature = "diff", derive(diff::Diff), diff(attr(#[derive(Debug, PartialEq)])))]

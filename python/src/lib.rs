@@ -1,3 +1,6 @@
+// Allow pedantic lints that are unavoidable due to PyO3 macro requirements
+#![allow(clippy::unnecessary_wraps, clippy::needless_pass_by_value, clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
+
 use std::borrow::Cow;
 use std::path::{Path, PathBuf};
 
@@ -36,7 +39,7 @@ impl LpParser {
     #[pyo3(text_signature = "($self)")]
     fn parse(&mut self) -> PyResult<()> {
         let input = parse_file(&PathBuf::from(&self.lp_file)).map_err(|_| PyRuntimeError::new_err("Unable to read LpFile."))?;
-        self.parsed_content = Some(input.to_owned());
+        self.parsed_content = Some(input.clone());
         Ok(())
     }
 

@@ -42,9 +42,20 @@ pub mod writer;
 // LALRPOP generated grammar module
 use lalrpop_util::lalrpop_mod;
 
-#[allow(clippy::redundant_field_names, clippy::type_complexity, clippy::missing_const_for_fn)]
+#[allow(
+    clippy::redundant_field_names,
+    clippy::type_complexity,
+    clippy::missing_const_for_fn,
+    clippy::too_many_lines,
+    clippy::cast_sign_loss,
+    clippy::match_same_arms,
+    clippy::missing_errors_doc,
+    clippy::no_effect_underscore_binding,
+    clippy::trivially_copy_pass_by_ref,
+    clippy::unnecessary_wraps
+)]
 mod lp_grammar {
-    use super::*;
+    use super::lalrpop_mod;
     lalrpop_mod!(pub lp);
 }
 pub use lp_grammar::lp;

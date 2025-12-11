@@ -133,6 +133,10 @@ impl<'a> LpProblemBuilder<'a> {
     }
 
     /// Build the LP problem
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any objective or constraint builder fails validation
     pub fn build(self) -> LpResult<LpProblem<'a>> {
         let mut problem = LpProblem::new();
 
@@ -191,6 +195,10 @@ impl<'a> ObjectiveBuilder<'a> {
     }
 
     /// Build the objective
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the objective has no coefficients
     pub fn build(self) -> LpResult<Objective<'a>> {
         if self.coefficients.is_empty() {
             return Err(LpParseError::validation_error(format!("Objective '{}' has no coefficients", self.name)));
@@ -278,6 +286,10 @@ impl<'a> ConstraintBuilder<'a> {
     }
 
     /// Build the constraint
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the constraint is missing an operator, RHS, or has no coefficients
     pub fn build(self) -> LpResult<Constraint<'a>> {
         match self {
             Self::Standard { name, coefficients, operator, rhs } => {
@@ -366,6 +378,10 @@ impl<'a> VariableBuilder<'a> {
     }
 
     /// Build the variable
+    ///
+    /// # Errors
+    ///
+    /// This method currently never fails, but returns `Result` for API consistency
     pub const fn build(self) -> LpResult<Variable<'a>> {
         Ok(Variable { name: self.name, var_type: self.var_type })
     }
@@ -413,8 +429,8 @@ mod tests {
             .objective("obj2", |o| o.coefficient("x2", 2.0))
             .constraint("c1", |c| c.coefficient("x1", 1.0).le(10.0))
             .constraint("c2", |c| c.coefficient("x2", 2.0).ge(5.0))
-            .variable("x1", |v| v.binary())
-            .variable("x2", |v| v.integer())
+            .variable("x1", super::VariableBuilder::binary)
+            .variable("x2", super::VariableBuilder::integer)
             .build()
             .unwrap();
 
@@ -433,8 +449,8 @@ mod tests {
             .objective("obj", |o| o.coefficient("y", 2.0))
             .constraint("c", |c| c.coefficient("a", 1.0).le(10.0))
             .constraint("c", |c| c.coefficient("b", 2.0).ge(5.0))
-            .variable("v", |v| v.binary())
-            .variable("v", |v| v.integer())
+            .variable("v", super::VariableBuilder::binary)
+            .variable("v", super::VariableBuilder::integer)
             .build()
             .unwrap();
 
@@ -558,7 +574,7 @@ mod tests {
             .objective("profit", |o| o.coefficient("x1", 10.0).coefficient("x2", 15.0))
             .constraint("cap", |c| c.coefficient("x1", 2.0).coefficient("x2", 3.0).le(100.0))
             .variable("x1", |v| v.bounds(0.0, f64::INFINITY))
-            .variable("x2", |v| v.binary())
+            .variable("x2", super::VariableBuilder::binary)
             .build()
             .unwrap();
 
@@ -582,8 +598,8 @@ mod tests {
         let long = "x".repeat(1000);
         let problem = LpProblemBuilder::new()
             .name(&long)
-            .variable("var_1.2$special", |v| v.general())
-            .variable(&long, |v| v.binary())
+            .variable("var_1.2$special", super::VariableBuilder::general)
+            .variable(&long, super::VariableBuilder::binary)
             .build()
             .unwrap();
         assert!(problem.variables.contains_key("var_1.2$special"));

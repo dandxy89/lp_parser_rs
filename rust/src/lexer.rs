@@ -31,6 +31,7 @@ pub enum ConstraintCont<'input> {
 
 impl<'input> ConstraintCont<'input> {
     /// Convert to a Constraint, using the given identifier as either name or first variable
+    #[must_use]
     pub fn into_constraint(self, id: &'input str) -> crate::model::Constraint<'input> {
         use std::borrow::Cow;
         match self {
@@ -194,7 +195,8 @@ fn parse_number<'input>(lex: &mut logos::Lexer<'input, Token<'input>>) -> Option
 }
 
 impl Token<'_> {
-    /// Convert comparison tokens to ComparisonOp
+    /// Convert comparison tokens to `ComparisonOp`
+    #[must_use]
     pub const fn as_comparison_op(&self) -> Option<ComparisonOp> {
         match self {
             Token::Lte => Some(ComparisonOp::LTE),
@@ -207,6 +209,7 @@ impl Token<'_> {
     }
 
     /// Check if token is a comparison operator
+    #[must_use]
     pub const fn is_comparison_op(&self) -> bool {
         matches!(self, Token::Lte | Token::Gte | Token::Lt | Token::Gt | Token::Eq)
     }
@@ -222,6 +225,7 @@ pub struct Lexer<'input> {
 
 impl<'input> Lexer<'input> {
     /// Create a new lexer for the given input
+    #[must_use]
     pub fn new(input: &'input str) -> Self {
         Self { inner: Token::lexer(input) }
     }
@@ -236,9 +240,8 @@ impl<'input> Iterator for Lexer<'input> {
             let span = self.inner.span();
 
             match token {
-                Ok(Token::BlockComment) | Ok(Token::LineComment) | Ok(Token::Newline) => {
+                Ok(Token::BlockComment | Token::LineComment | Token::Newline) => {
                     // Skip comments and newlines in the token stream
-                    continue;
                 }
                 Ok(tok) => return Some(Ok((span.start, tok, span.end))),
                 Err(e) => return Some(Err(e)),
@@ -252,11 +255,11 @@ mod tests {
     use super::*;
 
     fn tokenize(input: &str) -> Vec<Token<'_>> {
-        Lexer::new(input).filter_map(|r| r.ok()).map(|(_, tok, _)| tok).collect()
+        Lexer::new(input).filter_map(std::result::Result::ok).map(|(_, tok, _)| tok).collect()
     }
 
     fn tokenize_with_positions(input: &str) -> Vec<(usize, Token<'_>, usize)> {
-        Lexer::new(input).filter_map(|r| r.ok()).collect()
+        Lexer::new(input).filter_map(std::result::Result::ok).collect()
     }
 
     #[test]
@@ -280,7 +283,7 @@ mod tests {
 
         for (input, expected) in cases {
             let tokens = tokenize(input);
-            assert_eq!(tokens, vec![Token::SenseKw(expected)], "Failed for input: {}", input);
+            assert_eq!(tokens, vec![Token::SenseKw(expected)], "Failed for input: {input}");
         }
     }
 
@@ -347,11 +350,11 @@ mod tests {
         assert_eq!(tokenize("123."), vec![Token::Number(123.0)]);
 
         // Scientific notation
-        assert_eq!(tokenize("1e5"), vec![Token::Number(100000.0)]);
-        assert_eq!(tokenize("1E5"), vec![Token::Number(100000.0)]);
+        assert_eq!(tokenize("1e5"), vec![Token::Number(100_000.0)]);
+        assert_eq!(tokenize("1E5"), vec![Token::Number(100_000.0)]);
         assert_eq!(tokenize("1.5e3"), vec![Token::Number(1500.0)]);
         assert_eq!(tokenize("1.5E-3"), vec![Token::Number(0.0015)]);
-        assert_eq!(tokenize("2.5e+10"), vec![Token::Number(25000000000.0)]);
+        assert_eq!(tokenize("2.5e+10"), vec![Token::Number(25_000_000_000.0)]);
     }
 
     #[test]
@@ -508,7 +511,7 @@ end
         let input = "minimize\nx1\nsubject to\nc1: x1 <= 1\nend";
         let tokens = tokenize_with_positions(input);
         for (start, tok, end) in &tokens {
-            println!("({:3}, {:3}): {:?}", start, end, tok);
+            println!("({start:3}, {end:3}): {tok:?}");
         }
         // Check specific tokens
         assert!(tokens.iter().any(|(_, t, _)| matches!(t, Token::SenseKw(Sense::Minimize))));
@@ -528,8 +531,8 @@ end
         let lexer = Lexer::new(input);
         let parser = LpProblemParser::new();
         let result = parser.parse(lexer);
-        println!("Simple parse result: {:?}", result);
-        assert!(result.is_ok(), "Simple parse failed: {:?}", result);
+        println!("Simple parse result: {result:?}");
+        assert!(result.is_ok(), "Simple parse failed: {result:?}");
     }
 
     #[test]
@@ -541,8 +544,8 @@ end
         let lexer = Lexer::new(input);
         let parser = LpProblemParser::new();
         let result = parser.parse(lexer);
-        println!("Named objective result: {:?}", result);
-        assert!(result.is_ok(), "Named objective failed: {:?}", result);
+        println!("Named objective result: {result:?}");
+        assert!(result.is_ok(), "Named objective failed: {result:?}");
     }
 
     #[test]
@@ -554,8 +557,8 @@ end
         let lexer = Lexer::new(input);
         let parser = LpProblemParser::new();
         let result = parser.parse(lexer);
-        println!("With constraint result: {:?}", result);
-        assert!(result.is_ok(), "With constraint failed: {:?}", result);
+        println!("With constraint result: {result:?}");
+        assert!(result.is_ok(), "With constraint failed: {result:?}");
     }
 
     #[test]
@@ -564,16 +567,16 @@ end
 
         // Test with UNNAMED objective and named constraint - this is what minimal_parse uses
         let input = "minimize\nx1\nsubject to\nc1: x1 <= 1\nend";
-        println!("Input: {:?}", input);
+        println!("Input: {input:?}");
         let tokens = tokenize_with_positions(input);
         for (start, tok, end) in &tokens {
-            println!("  ({:3}, {:3}): {:?}", start, end, tok);
+            println!("  ({start:3}, {end:3}): {tok:?}");
         }
 
         let lexer = Lexer::new(input);
         let parser = LpProblemParser::new();
         let result = parser.parse(lexer);
-        println!("Unnamed obj + constraint result: {:?}", result);
-        assert!(result.is_ok(), "Unnamed obj + constraint failed: {:?}", result);
+        println!("Unnamed obj + constraint result: {result:?}");
+        assert!(result.is_ok(), "Unnamed obj + constraint failed: {result:?}");
     }
 }

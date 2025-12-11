@@ -4,12 +4,34 @@ use std::path::Path;
 use crate::model::{Constraint, VariableType};
 use crate::problem::LpProblem;
 
+/// Trait for writing LP problem data to CSV files
 pub trait LpCsvWriter {
+    /// Write constraints to a CSV file
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be created or written to
     fn write_constraints(&self, base_path: &Path) -> Result<(), Box<dyn Error>>;
+
+    /// Write objectives to a CSV file
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be created or written to
     fn write_objectives(&self, base_path: &Path) -> Result<(), Box<dyn Error>>;
+
+    /// Write variables to a CSV file
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be created or written to
     fn write_variables(&self, base_path: &Path) -> Result<(), Box<dyn Error>>;
 
-    // Writes the problem data to CSV files with normalised structure.
+    /// Writes the problem data to CSV files with normalised structure.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any of the CSV files cannot be created or written to
     fn to_csv(&self, base_path: &std::path::Path) -> Result<(), Box<dyn std::error::Error>> {
         self.write_objectives(base_path)?;
         self.write_constraints(base_path)?;

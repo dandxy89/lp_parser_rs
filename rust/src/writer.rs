@@ -69,6 +69,10 @@ pub fn write_lp_string(problem: &LpProblem) -> LpResult<String> {
 /// # Returns
 ///
 /// A string containing the LP file content
+///
+/// # Errors
+///
+/// Returns an error if the problem cannot be formatted (e.g., invalid structure)
 pub fn write_lp_string_with_options(problem: &LpProblem, options: &LpWriterOptions) -> LpResult<String> {
     let mut output = String::new();
 
@@ -147,7 +151,7 @@ fn write_constraints_section(output: &mut String, problem: &LpProblem, options: 
 fn write_constraint(output: &mut String, constraint: &Constraint, options: &LpWriterOptions) -> LpResult<()> {
     match constraint {
         Constraint::Standard { name, coefficients, operator, rhs } => {
-            write!(output, " {}: ", name).map_err(|err| LpParseError::io_error(format!("Failed to write constraint name: {err}")))?;
+            write!(output, " {name}: ").map_err(|err| LpParseError::io_error(format!("Failed to write constraint name: {err}")))?;
 
             write_coefficients_line(output, coefficients, options)?;
 
@@ -155,7 +159,7 @@ fn write_constraint(output: &mut String, constraint: &Constraint, options: &LpWr
                 .map_err(|err| LpParseError::io_error(format!("Failed to write constraint RHS: {err}")))?;
         }
         Constraint::SOS { name, sos_type, weights } => {
-            write!(output, " {}: {}:: ", name, sos_type)
+            write!(output, " {name}: {sos_type}:: ")
                 .map_err(|err| LpParseError::io_error(format!("Failed to write SOS constraint: {err}")))?;
 
             for (i, weight) in weights.iter().enumerate() {
@@ -271,20 +275,20 @@ fn write_variable_type_section(output: &mut String, section_name: &str, variable
     if options.include_section_spacing {
         writeln!(output).map_err(|err| LpParseError::io_error(format!("Failed to write newline: {err}")))?;
     }
-    writeln!(output, "{}", section_name).map_err(|err| LpParseError::io_error(format!("Failed to write section header: {err}")))?;
+    writeln!(output, "{section_name}").map_err(|err| LpParseError::io_error(format!("Failed to write section header: {err}")))?;
 
     // Write variables, potentially wrapping lines
     let mut current_line_length = 0;
     for (i, &var_name) in variables.iter().enumerate() {
         let separator = " ";
-        let var_text = format!("{}{}", separator, var_name);
+        let var_text = format!("{separator}{var_name}");
 
         if current_line_length + var_text.len() > options.max_line_length && i > 0 {
             writeln!(output).map_err(|err| LpParseError::io_error(format!("Failed to write newline: {err}")))?;
-            write!(output, " {}", var_name).map_err(|err| LpParseError::io_error(format!("Failed to write variable: {err}")))?;
+            write!(output, " {var_name}").map_err(|err| LpParseError::io_error(format!("Failed to write variable: {err}")))?;
             current_line_length = var_name.len() + 1;
         } else {
-            write!(output, "{}", var_text).map_err(|err| LpParseError::io_error(format!("Failed to write variable: {err}")))?;
+            write!(output, "{var_text}").map_err(|err| LpParseError::io_error(format!("Failed to write variable: {err}")))?;
             current_line_length += var_text.len();
         }
     }
@@ -297,26 +301,30 @@ fn write_variable_type_section(output: &mut String, section_name: &str, variable
 fn write_coefficients_line(output: &mut String, coefficients: &[crate::model::Coefficient], options: &LpWriterOptions) -> LpResult<()> {
     for (i, coeff) in coefficients.iter().enumerate() {
         let formatted_coeff = format_coefficient(coeff, i == 0, options.decimal_precision);
-        write!(output, "{}", formatted_coeff).map_err(|err| LpParseError::io_error(format!("Failed to write coefficient: {err}")))?;
+        write!(output, "{formatted_coeff}").map_err(|err| LpParseError::io_error(format!("Failed to write coefficient: {err}")))?;
     }
 
     Ok(())
 }
 
+/// Tolerance for checking if a coefficient is effectively 1.0
+const COEFF_ONE_EPSILON: f64 = 1e-10;
+
 /// Format a coefficient with proper sign handling
 fn format_coefficient(coeff: &crate::model::Coefficient, is_first: bool, precision: usize) -> String {
     let abs_value = coeff.value.abs();
     let sign = if coeff.value < 0.0 { "-" } else { "+" };
+    let is_one = (abs_value - 1.0).abs() < COEFF_ONE_EPSILON;
 
     if is_first {
         if coeff.value < 0.0 {
-            if abs_value == 1.0 { format!("- {}", coeff.name) } else { format!("- {} {}", format_number(abs_value, precision), coeff.name) }
-        } else if abs_value == 1.0 {
+            if is_one { format!("- {}", coeff.name) } else { format!("- {} {}", format_number(abs_value, precision), coeff.name) }
+        } else if is_one {
             coeff.name.to_string()
         } else {
             format!("{} {}", format_number(abs_value, precision), coeff.name)
         }
-    } else if abs_value == 1.0 {
+    } else if is_one {
         format!(" {sign} {}", coeff.name)
     } else {
         format!(" {sign} {} {}", format_number(abs_value, precision), coeff.name)
@@ -324,10 +332,10 @@ fn format_coefficient(coeff: &crate::model::Coefficient, is_first: bool, precisi
 }
 
 /// Format a number with specified precision, removing trailing zeros
-#[allow(clippy::uninlined_format_args)]
+#[allow(clippy::uninlined_format_args, clippy::cast_precision_loss, clippy::cast_possible_truncation)]
 fn format_number(value: f64, precision: usize) -> String {
     // Check if value is a whole number and within safe i64 range for integer formatting
-    let is_whole_number = value.fract() == 0.0;
+    let is_whole_number = value.fract().abs() < f64::EPSILON;
     let is_safe_for_i64 = value >= (i64::MIN as f64) && value <= (i64::MAX as f64);
 
     if is_whole_number && is_safe_for_i64 && value.abs() < 1e10 {
@@ -352,7 +360,7 @@ mod tests {
     fn test_format_number() {
         assert_eq!(format_number(1.0, 6), "1");
         assert_eq!(format_number(1.5, 6), "1.5");
-        assert_eq!(format_number(1.500000, 6), "1.5");
+        assert_eq!(format_number(1.500_000, 6), "1.5");
         assert_eq!(format_number(0.0, 6), "0");
         assert_eq!(format_number(-1.0, 6), "-1");
         assert_eq!(format_number(2.789, 2), "2.79");
