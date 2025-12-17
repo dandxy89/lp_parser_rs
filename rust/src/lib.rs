@@ -1,3 +1,5 @@
+#![allow(clippy::multiple_crate_versions)]
+
 //! LP Parser - A Linear Programming File Parser
 //!
 //! This crate provides robust parsing capabilities for Linear Programming (LP)
@@ -43,16 +45,23 @@ pub mod writer;
 use lalrpop_util::lalrpop_mod;
 
 #[allow(
-    clippy::redundant_field_names,
-    clippy::type_complexity,
-    clippy::missing_const_for_fn,
-    clippy::too_many_lines,
     clippy::cast_sign_loss,
+    clippy::cloned_instead_of_copied,
+    clippy::cognitive_complexity,
+    clippy::elidable_lifetime_names,
     clippy::match_same_arms,
+    clippy::missing_const_for_fn,
     clippy::missing_errors_doc,
+    clippy::must_use_candidate,
     clippy::no_effect_underscore_binding,
+    clippy::option_if_let_else,
+    clippy::redundant_field_names,
+    clippy::redundant_pub_crate,
+    clippy::too_many_lines,
     clippy::trivially_copy_pass_by_ref,
-    clippy::unnecessary_wraps
+    clippy::type_complexity,
+    clippy::unnecessary_wraps,
+    clippy::use_self
 )]
 mod lp_grammar {
     use super::lalrpop_mod;

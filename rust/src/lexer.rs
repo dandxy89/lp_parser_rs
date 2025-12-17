@@ -8,7 +8,7 @@ use logos::Logos;
 use crate::model::{Coefficient, ComparisonOp, SOSType, Sense};
 
 /// Lexer error type
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct LexerError;
 
 /// Helper enum for parsing SOS entries in the grammar
@@ -190,7 +190,7 @@ pub enum Token<'input> {
     Identifier(&'input str),
 }
 
-fn parse_number<'input>(lex: &mut logos::Lexer<'input, Token<'input>>) -> Option<f64> {
+fn parse_number<'input>(lex: &logos::Lexer<'input, Token<'input>>) -> Option<f64> {
     lex.slice().parse().ok()
 }
 

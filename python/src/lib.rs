@@ -1,5 +1,12 @@
 // Allow pedantic lints that are unavoidable due to PyO3 macro requirements
-#![allow(clippy::unnecessary_wraps, clippy::needless_pass_by_value, clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
+// syn v1 is used by diff_derive (transitive dep of diff-struct via lp_parser_rs) - unavoidable
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::multiple_crate_versions,
+    clippy::needless_pass_by_value,
+    clippy::unnecessary_wraps
+)]
 
 use std::borrow::Cow;
 use std::path::{Path, PathBuf};
@@ -39,7 +46,7 @@ impl LpParser {
     #[pyo3(text_signature = "($self)")]
     fn parse(&mut self) -> PyResult<()> {
         let input = parse_file(&PathBuf::from(&self.lp_file)).map_err(|_| PyRuntimeError::new_err("Unable to read LpFile."))?;
-        self.parsed_content = Some(input.clone());
+        self.parsed_content = Some(input);
         Ok(())
     }
 
@@ -182,7 +189,7 @@ impl LpParser {
     }
 
     #[pyo3(text_signature = "($self, other)")]
-    fn compare(&self, other: &LpParser, py: Python) -> PyResult<Py<PyAny>> {
+    fn compare(&self, other: &Self, py: Python) -> PyResult<Py<PyAny>> {
         let p1 = self.get_problem()?;
         let p2 = other.get_problem()?;
 
@@ -464,19 +471,17 @@ impl LpParser {
 
 impl LpParser {
     fn get_problem(&self) -> PyResult<LpProblem<'_>> {
-        if let Some(ref content) = self.parsed_content {
-            LpProblem::parse(content).map_err(|_| PyRuntimeError::new_err("Unable to parse LpProblem"))
-        } else {
-            Err(PyRuntimeError::new_err("Must call parse() first"))
-        }
+        self.parsed_content.as_ref().map_or_else(
+            || Err(PyRuntimeError::new_err("Must call parse() first")),
+            |content| LpProblem::parse(content).map_err(|_| PyRuntimeError::new_err("Unable to parse LpProblem")),
+        )
     }
 
-    fn get_mutable_problem(&mut self) -> PyResult<LpProblem<'_>> {
-        if let Some(ref content) = self.parsed_content {
-            LpProblem::parse(content).map_err(|_| PyRuntimeError::new_err("Unable to parse LpProblem"))
-        } else {
-            Err(PyRuntimeError::new_err("Must call parse() first"))
-        }
+    fn get_mutable_problem(&self) -> PyResult<LpProblem<'_>> {
+        self.parsed_content.as_ref().map_or_else(
+            || Err(PyRuntimeError::new_err("Must call parse() first")),
+            |content| LpProblem::parse(content).map_err(|_| PyRuntimeError::new_err("Unable to parse LpProblem")),
+        )
     }
 }
 
