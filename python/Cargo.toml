@@ -1,6 +1,6 @@
 [package]
 name = "parse_lp"
-version = "3.0.3"
+version = "3.1.0"
 edition = "2021"
 authors = ["Dan Dixey", "Dan Dixey <dan@functorml.co.uk>"]
 rust-version = "1.74.0"
