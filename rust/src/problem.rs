@@ -1,14 +1,19 @@
 use std::borrow::Cow;
-use std::collections::HashMap;
 use std::collections::hash_map::Entry;
+use std::collections::{BTreeSet, HashMap};
+use std::fmt::{Display, Formatter, Result as FmtResult};
+use std::marker::PhantomData;
 
 use unique_id::Generator;
 use unique_id::sequence::SequenceGenerator;
 
+use crate::NUMERIC_EPSILON;
 use crate::error::{LpParseError, LpResult};
 use crate::lexer::Lexer;
 use crate::lp::LpProblemParser;
-use crate::model::{Constraint, ConstraintOwned, Objective, ObjectiveOwned, Sense, Variable, VariableOwned, VariableType};
+use crate::model::{
+    Coefficient, ComparisonOp, Constraint, ConstraintOwned, Objective, ObjectiveOwned, Sense, Variable, VariableOwned, VariableType,
+};
 
 /// Check if a floating-point value is effectively zero using both absolute
 /// and relative epsilon comparisons.
@@ -32,7 +37,7 @@ fn is_effectively_zero(value: f64, reference: f64) -> bool {
 
     // Relative check: value is negligible compared to reference
     if abs_reference > f64::EPSILON {
-        return abs_value < abs_reference * crate::NUMERIC_EPSILON;
+        return abs_value < abs_reference * NUMERIC_EPSILON;
     }
 
     false
@@ -247,7 +252,7 @@ impl<'a> LpProblem<'a> {
             }
         } else if !is_effectively_zero(new_coefficient, 1.0) {
             // Add new coefficient if it doesn't exist and value is non-zero
-            objective.coefficients.push(crate::model::Coefficient { name: variable_name, value: new_coefficient });
+            objective.coefficients.push(Coefficient { name: variable_name, value: new_coefficient });
 
             // Ensure variable exists using Entry API
             self.variables.entry(variable_name).or_insert_with(|| Variable::new(variable_name));
@@ -294,7 +299,7 @@ impl<'a> LpProblem<'a> {
                     }
                 } else if !is_effectively_zero(new_coefficient, 1.0) {
                     // Add new coefficient if it doesn't exist and value is non-zero
-                    coefficients.push(crate::model::Coefficient { name: variable_name, value: new_coefficient });
+                    coefficients.push(Coefficient { name: variable_name, value: new_coefficient });
 
                     // Ensure variable exists using Entry API
                     self.variables.entry(variable_name).or_insert_with(|| Variable::new(variable_name));
@@ -353,7 +358,7 @@ impl<'a> LpProblem<'a> {
     /// # Errors
     ///
     /// Returns an error if the constraint does not exist or is an SOS constraint
-    pub fn update_constraint_operator(&mut self, constraint_name: &str, new_operator: crate::model::ComparisonOp) -> LpResult<()> {
+    pub fn update_constraint_operator(&mut self, constraint_name: &str, new_operator: ComparisonOp) -> LpResult<()> {
         let constraint = self
             .constraints
             .get_mut(constraint_name)
@@ -644,7 +649,7 @@ impl<'a> LpProblem<'a> {
     /// A vector of variable names
     #[must_use]
     pub fn get_all_variable_names(&self) -> Vec<&str> {
-        let mut names = std::collections::BTreeSet::new();
+        let mut names = BTreeSet::new();
 
         // Add from variables map
         for name in self.variables.keys() {
@@ -680,8 +685,8 @@ impl<'a> LpProblem<'a> {
 
 macro_rules! impl_lp_problem_display {
     ($type:ty) => {
-        impl std::fmt::Display for $type {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        impl Display for $type {
+            fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
                 if let Some(problem_name) = self.name() {
                     writeln!(f, "Problem name: {problem_name}")?;
                 }
@@ -804,7 +809,7 @@ impl Default for LpProblemOwned {
 impl<'a> From<&LpProblem<'a>> for LpProblemOwned {
     fn from(problem: &LpProblem<'a>) -> Self {
         Self {
-            name: problem.name.as_ref().map(std::string::ToString::to_string),
+            name: problem.name.as_ref().map(ToString::to_string),
             sense: problem.sense.clone(),
             objectives: problem.objectives.iter().map(|(k, v)| (k.to_string(), ObjectiveOwned::from(v))).collect(),
             constraints: problem.constraints.iter().map(|(k, v)| (k.to_string(), ConstraintOwned::from(v))).collect(),
@@ -983,12 +988,12 @@ impl<'de: 'a, 'a> serde::Deserialize<'de> for LpProblem<'a> {
             Variables,
         }
 
-        struct LpProblemVisitor<'a>(std::marker::PhantomData<LpProblem<'a>>);
+        struct LpProblemVisitor<'a>(PhantomData<LpProblem<'a>>);
 
         impl<'de: 'a, 'a> serde::de::Visitor<'de> for LpProblemVisitor<'a> {
             type Value = LpProblem<'a>;
 
-            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            fn expecting(&self, formatter: &mut Formatter) -> FmtResult {
                 formatter.write_str("struct LpProblem")
             }
 
@@ -1045,7 +1050,7 @@ impl<'de: 'a, 'a> serde::Deserialize<'de> for LpProblem<'a> {
         }
 
         const FIELDS: &[&str] = &["name", "sense", "objectives", "constraints", "variables"];
-        deserializer.deserialize_struct("LpProblem", FIELDS, LpProblemVisitor(std::marker::PhantomData))
+        deserializer.deserialize_struct("LpProblem", FIELDS, LpProblemVisitor(PhantomData))
     }
 }
 

@@ -57,12 +57,15 @@
 //! - **Semi-continuous variables**: These are approximated as continuous variables
 //!   with a warning.
 
+use std::borrow::Cow;
 use std::cmp::Ordering;
+use std::collections::hash_map::Values;
 use std::fmt;
 
 use lp_solvers::lp_format::{AsVariable, LpObjective, WriteToLpFileFormat};
 
-use crate::model::{Coefficient, ComparisonOp, Constraint, Objective, Sense, VariableType};
+use crate::NUMERIC_EPSILON;
+use crate::model::{Coefficient, ComparisonOp, Constraint, Objective, Sense, Variable, VariableType};
 use crate::problem::LpProblem;
 
 /// Errors that can occur when converting an `LpProblem` to lp-solvers format.
@@ -167,8 +170,6 @@ pub struct ExpressionAdapter<'a> {
     coefficients: &'a [Coefficient<'a>],
 }
 
-use crate::NUMERIC_EPSILON;
-
 impl WriteToLpFileFormat for ExpressionAdapter<'_> {
     fn to_lp_file_format(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Filter out zero and non-finite coefficients
@@ -214,7 +215,7 @@ impl WriteToLpFileFormat for ExpressionAdapter<'_> {
 
 /// Iterator over variables adapted for lp-solvers.
 pub struct VariableIterator<'a> {
-    inner: std::collections::hash_map::Values<'a, &'a str, crate::model::Variable<'a>>,
+    inner: Values<'a, &'a str, Variable<'a>>,
 }
 
 impl<'a> Iterator for VariableIterator<'a> {
@@ -235,7 +236,7 @@ impl ExactSizeIterator for VariableIterator<'_> {}
 ///
 /// This iterator filters out SOS constraints since lp-solvers does not support them.
 pub struct ConstraintIterator<'a> {
-    inner: std::collections::hash_map::Values<'a, std::borrow::Cow<'a, str>, Constraint<'a>>,
+    inner: Values<'a, Cow<'a, str>, Constraint<'a>>,
 }
 
 impl<'a> Iterator for ConstraintIterator<'a> {

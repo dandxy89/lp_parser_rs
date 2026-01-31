@@ -19,8 +19,9 @@
 
 use std::fmt::Write;
 
+use crate::NUMERIC_EPSILON;
 use crate::error::{LpParseError, LpResult};
-use crate::model::{Constraint, Objective, Variable, VariableType};
+use crate::model::{Coefficient, Constraint, Objective, Variable, VariableType};
 use crate::problem::LpProblem;
 
 /// Options for controlling LP file output format
@@ -298,7 +299,7 @@ fn write_variable_type_section(output: &mut String, section_name: &str, variable
 }
 
 /// Write a line of coefficients with proper formatting
-fn write_coefficients_line(output: &mut String, coefficients: &[crate::model::Coefficient], options: &LpWriterOptions) -> LpResult<()> {
+fn write_coefficients_line(output: &mut String, coefficients: &[Coefficient], options: &LpWriterOptions) -> LpResult<()> {
     for (i, coeff) in coefficients.iter().enumerate() {
         let formatted_coeff = format_coefficient(coeff, i == 0, options.decimal_precision);
         write!(output, "{formatted_coeff}").map_err(|err| LpParseError::io_error(format!("Failed to write coefficient: {err}")))?;
@@ -307,10 +308,8 @@ fn write_coefficients_line(output: &mut String, coefficients: &[crate::model::Co
     Ok(())
 }
 
-use crate::NUMERIC_EPSILON;
-
 /// Format a coefficient with proper sign handling
-fn format_coefficient(coeff: &crate::model::Coefficient, is_first: bool, precision: usize) -> String {
+fn format_coefficient(coeff: &Coefficient, is_first: bool, precision: usize) -> String {
     let abs_value = coeff.value.abs();
     let sign = if coeff.value < 0.0 { "-" } else { "+" };
     let is_one = (abs_value - 1.0).abs() < NUMERIC_EPSILON;

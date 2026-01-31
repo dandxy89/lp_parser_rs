@@ -1,4 +1,8 @@
+use std::io;
+
 use thiserror::Error;
+
+use crate::lexer::{LexerError, Token};
 
 /// This error type provides detailed context about parsing failures,
 /// including location information and specific error conditions.
@@ -125,8 +129,8 @@ impl LpParseError {
 }
 
 /// Convert from LALRPOP parsing errors to our custom error type.
-impl<'input> From<lalrpop_util::ParseError<usize, crate::lexer::Token<'input>, crate::lexer::LexerError>> for LpParseError {
-    fn from(err: lalrpop_util::ParseError<usize, crate::lexer::Token<'input>, crate::lexer::LexerError>) -> Self {
+impl<'input> From<lalrpop_util::ParseError<usize, Token<'input>, LexerError>> for LpParseError {
+    fn from(err: lalrpop_util::ParseError<usize, Token<'input>, LexerError>) -> Self {
         match err {
             lalrpop_util::ParseError::InvalidToken { location } => Self::parse_error(location, "Invalid token"),
             lalrpop_util::ParseError::UnrecognizedEof { location, expected } => {
@@ -144,15 +148,15 @@ impl<'input> From<lalrpop_util::ParseError<usize, crate::lexer::Token<'input>, c
 }
 
 /// Convert from standard I/O errors
-impl From<std::io::Error> for LpParseError {
-    fn from(err: std::io::Error) -> Self {
+impl From<io::Error> for LpParseError {
+    fn from(err: io::Error) -> Self {
         Self::io_error(err.to_string())
     }
 }
 
 /// Convert from boxed errors (used by CSV module)
-impl From<Box<dyn std::error::Error>> for LpParseError {
-    fn from(err: Box<dyn std::error::Error>) -> Self {
+impl From<Box<dyn std::error::Error + 'static>> for LpParseError {
+    fn from(err: Box<dyn std::error::Error + 'static>) -> Self {
         Self::io_error(err.to_string())
     }
 }
@@ -216,7 +220,7 @@ mod tests {
 
     #[test]
     fn test_io_error_conversion() {
-        let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "file not found");
+        let io_err = io::Error::new(io::ErrorKind::NotFound, "file not found");
         let lp_err: LpParseError = io_err.into();
 
         match lp_err {
