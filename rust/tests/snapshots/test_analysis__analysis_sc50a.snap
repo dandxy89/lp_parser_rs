@@ -1,0 +1,115 @@
+---
+source: rust/tests/test_analysis.rs
+expression: analysis
+---
+summary:
+  name: sc50a.lp
+  sense: Minimize
+  objective_count: 1
+  constraint_count: 49
+  variable_count: 48
+  total_nonzeros: 130
+  density: 0.05527
+sparsity:
+  min_vars_per_constraint: 2
+  max_vars_per_constraint: 4
+variables:
+  type_distribution:
+    free: 48
+    general: 0
+    lower_bounded: 0
+    upper_bounded: 0
+    double_bounded: 0
+    binary: 0
+    integer: 0
+    semi_continuous: 0
+    sos: 0
+  free_variables:
+    - COL00001
+    - COL00002
+    - COL00003
+    - COL00004
+    - COL00005
+    - COL00006
+    - COL00007
+    - COL00008
+    - COL00009
+    - COL00010
+    - COL00011
+    - COL00012
+    - COL00013
+    - COL00014
+    - COL00015
+    - COL00016
+    - COL00017
+    - COL00018
+    - COL00019
+    - COL00020
+    - COL00021
+    - COL00022
+    - COL00023
+    - COL00024
+    - COL00025
+    - COL00026
+    - COL00027
+    - COL00028
+    - COL00029
+    - COL00030
+    - COL00031
+    - COL00032
+    - COL00033
+    - COL00034
+    - COL00035
+    - COL00036
+    - COL00037
+    - COL00038
+    - COL00039
+    - COL00040
+    - COL00041
+    - COL00042
+    - COL00043
+    - COL00044
+    - COL00045
+    - COL00046
+    - COL00047
+    - COL00048
+  fixed_variables: []
+  invalid_bounds: []
+  unused_variables: []
+  discrete_variable_count: 0
+constraints:
+  type_distribution:
+    equality: 20
+    less_than_equal: 29
+    greater_than_equal: 0
+    less_than: 0
+    greater_than: 0
+    sos1: 0
+    sos2: 0
+  empty_constraints: []
+  singleton_constraints: []
+  rhs_range:
+    min: 0
+    max: 170
+    count: 49
+  sos_summary:
+    s1_count: 0
+    s2_count: 0
+    total_sos_variables: 0
+coefficients:
+  constraint_coeff_range:
+    min: 0.1
+    max: 2
+    count: 130
+  objective_coeff_range:
+    min: 1
+    max: 1
+    count: 1
+  large_coefficients: []
+  small_coefficients: []
+  coefficient_ratio: 20
+issues:
+  - severity: Warning
+    category: Other
+    message: "Problem may be over-constrained: 49 constraints for 48 variables"
+    details: Over-constrained problems often have degenerate or infeasible solutions

@@ -19,6 +19,8 @@
 #![allow(clippy::float_cmp)]
 
 use std::borrow::Cow;
+use std::fmt::{Display, Formatter, Result as FmtResult};
+use std::marker::PhantomData;
 
 #[cfg_attr(feature = "diff", derive(diff::Diff), diff(attr(#[derive(Debug, PartialEq, Eq)])))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -50,9 +52,9 @@ impl AsRef<[u8]> for ComparisonOp {
     }
 }
 
-impl std::fmt::Display for ComparisonOp {
+impl Display for ComparisonOp {
     #[inline]
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
             Self::GT => write!(f, ">"),
             Self::GTE => write!(f, ">="),
@@ -82,9 +84,9 @@ impl Sense {
     }
 }
 
-impl std::fmt::Display for Sense {
+impl Display for Sense {
     #[inline]
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
             Self::Minimize => write!(f, "Minimize"),
             Self::Maximize => write!(f, "Maximize"),
@@ -113,9 +115,9 @@ impl AsRef<[u8]> for SOSType {
     }
 }
 
-impl std::fmt::Display for SOSType {
+impl Display for SOSType {
     #[inline]
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
             Self::S1 => write!(f, "S1"),
             Self::S2 => write!(f, "S2"),
@@ -134,9 +136,9 @@ pub struct Coefficient<'a> {
     pub value: f64,
 }
 
-impl std::fmt::Display for Coefficient<'_> {
+impl Display for Coefficient<'_> {
     #[inline]
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         if (self.value - 1.0).abs() < f64::EPSILON {
             write!(f, "{}", self.name)
         } else if (self.value - (-1.0)).abs() < f64::EPSILON {
@@ -179,11 +181,27 @@ impl<'a> Constraint<'a> {
             Constraint::Standard { name, .. } | Constraint::SOS { name, .. } => name.clone(),
         }
     }
+
+    #[must_use]
+    #[inline]
+    /// Returns a reference to the constraint's name without cloning.
+    pub fn name_ref(&self) -> &str {
+        match self {
+            Constraint::Standard { name, .. } | Constraint::SOS { name, .. } => name,
+        }
+    }
+
+    #[must_use]
+    #[inline]
+    /// Returns `true` if the constraint has no name (empty string).
+    pub fn is_unnamed(&self) -> bool {
+        self.name_ref().is_empty()
+    }
 }
 
-impl std::fmt::Display for Constraint<'_> {
+impl Display for Constraint<'_> {
     #[inline]
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
             Constraint::Standard { name, coefficients, operator, rhs } => {
                 write!(f, "{name}: ")?;
@@ -265,9 +283,9 @@ impl AsRef<[u8]> for VariableType {
     }
 }
 
-impl std::fmt::Display for VariableType {
+impl Display for VariableType {
     #[inline]
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
             Self::Free => write!(f, "Free"),
             Self::General => write!(f, "General"),
@@ -349,12 +367,12 @@ impl<'de: 'a, 'a> serde::Deserialize<'de> for Constraint<'a> {
             Weights,
         }
 
-        struct ConstraintVisitor<'a>(std::marker::PhantomData<Constraint<'a>>);
+        struct ConstraintVisitor<'a>(PhantomData<Constraint<'a>>);
 
         impl<'de: 'a, 'a> serde::de::Visitor<'de> for ConstraintVisitor<'a> {
             type Value = Constraint<'a>;
 
-            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            fn expecting(&self, formatter: &mut Formatter) -> FmtResult {
                 formatter.write_str("struct Constraint")
             }
 
@@ -417,7 +435,7 @@ impl<'de: 'a, 'a> serde::Deserialize<'de> for Constraint<'a> {
         }
 
         const FIELDS: &[&str] = &["type", "name", "coefficients", "weights", "operator", "rhs", "sos_type"];
-        deserializer.deserialize_struct("Constraint", FIELDS, ConstraintVisitor(std::marker::PhantomData))
+        deserializer.deserialize_struct("Constraint", FIELDS, ConstraintVisitor(PhantomData))
     }
 }
 
@@ -432,12 +450,12 @@ impl<'de: 'a, 'a> serde::Deserialize<'de> for Objective<'a> {
             Name,
         }
 
-        struct ObjectiveVisitor<'a>(std::marker::PhantomData<Objective<'a>>);
+        struct ObjectiveVisitor<'a>(PhantomData<Objective<'a>>);
 
         impl<'de: 'a, 'a> serde::de::Visitor<'de> for ObjectiveVisitor<'a> {
             type Value = Objective<'a>;
 
-            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            fn expecting(&self, formatter: &mut Formatter) -> FmtResult {
                 formatter.write_str("struct Objective")
             }
 
@@ -459,7 +477,7 @@ impl<'de: 'a, 'a> serde::Deserialize<'de> for Objective<'a> {
             }
         }
 
-        deserializer.deserialize_struct("Objective", &["name", "coefficients"], ObjectiveVisitor(std::marker::PhantomData))
+        deserializer.deserialize_struct("Objective", &["name", "coefficients"], ObjectiveVisitor(PhantomData))
     }
 }
 
@@ -482,8 +500,8 @@ impl<'a> From<&Coefficient<'a>> for CoefficientOwned {
     }
 }
 
-impl std::fmt::Display for CoefficientOwned {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl Display for CoefficientOwned {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         if (self.value - 1.0).abs() < f64::EPSILON {
             write!(f, "{}", self.name)
         } else if (self.value - (-1.0)).abs() < f64::EPSILON {

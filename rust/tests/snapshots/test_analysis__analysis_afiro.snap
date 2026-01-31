@@ -1,0 +1,109 @@
+---
+source: rust/tests/test_analysis.rs
+expression: analysis
+---
+summary:
+  name: afiro.mps
+  sense: Minimize
+  objective_count: 3
+  constraint_count: 27
+  variable_count: 32
+  total_nonzeros: 83
+  density: 0.09606
+sparsity:
+  min_vars_per_constraint: 1
+  max_vars_per_constraint: 9
+variables:
+  type_distribution:
+    free: 32
+    general: 0
+    lower_bounded: 0
+    upper_bounded: 0
+    double_bounded: 0
+    binary: 0
+    integer: 0
+    semi_continuous: 0
+    sos: 0
+  free_variables:
+    - X01
+    - X02
+    - X03
+    - X04
+    - X06
+    - X07
+    - X08
+    - X09
+    - X10
+    - X11
+    - X12
+    - X13
+    - X14
+    - X15
+    - X16
+    - X22
+    - X23
+    - X24
+    - X25
+    - X26
+    - X28
+    - X29
+    - X30
+    - X31
+    - X32
+    - X33
+    - X34
+    - X35
+    - X36
+    - X37
+    - X38
+    - X39
+  fixed_variables: []
+  invalid_bounds: []
+  unused_variables: []
+  discrete_variable_count: 0
+constraints:
+  type_distribution:
+    equality: 8
+    less_than_equal: 19
+    greater_than_equal: 0
+    less_than: 0
+    greater_than: 0
+    sos1: 0
+    sos2: 0
+  empty_constraints: []
+  singleton_constraints:
+    - name: X05
+      variable: X01
+      coefficient: 1
+      operator: "<="
+      rhs: 80
+    - name: X27
+      variable: X22
+      coefficient: 1
+      operator: "<="
+      rhs: 500
+  rhs_range:
+    min: 0
+    max: 500
+    count: 27
+  sos_summary:
+    s1_count: 0
+    s2_count: 0
+    total_sos_variables: 0
+coefficients:
+  constraint_coeff_range:
+    min: 0.107
+    max: 2.429
+    count: 83
+  objective_coeff_range:
+    min: 0.32
+    max: 10.4
+    count: 11
+  large_coefficients: []
+  small_coefficients: []
+  coefficient_ratio: 97.19626168224299
+issues:
+  - severity: Info
+    category: SingletonConstraint
+    message: 2 singleton constraint(s) detected (may represent simple bounds)
+    details: ~

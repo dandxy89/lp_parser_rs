@@ -29,6 +29,7 @@
 //! }
 //! ```
 
+pub mod analysis;
 pub mod builder;
 pub mod compat;
 pub mod context;
@@ -68,3 +69,7 @@ mod lp_grammar {
     lalrpop_mod!(pub lp);
 }
 pub use lp_grammar::lp;
+
+/// Tolerance for floating-point comparisons in coefficient handling.
+/// Used for checking if values are effectively zero or one.
+pub(crate) const NUMERIC_EPSILON: f64 = 1e-10;

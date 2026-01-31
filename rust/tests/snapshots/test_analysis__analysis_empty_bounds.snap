@@ -1,0 +1,63 @@
+---
+source: rust/tests/test_analysis.rs
+expression: analysis
+---
+summary:
+  name: ~
+  sense: Minimize
+  objective_count: 1
+  constraint_count: 1
+  variable_count: 2
+  total_nonzeros: 2
+  density: 1
+sparsity:
+  min_vars_per_constraint: 2
+  max_vars_per_constraint: 2
+variables:
+  type_distribution:
+    free: 0
+    general: 0
+    lower_bounded: 0
+    upper_bounded: 0
+    double_bounded: 0
+    binary: 2
+    integer: 0
+    semi_continuous: 0
+    sos: 0
+  free_variables: []
+  fixed_variables: []
+  invalid_bounds: []
+  unused_variables: []
+  discrete_variable_count: 2
+constraints:
+  type_distribution:
+    equality: 0
+    less_than_equal: 0
+    greater_than_equal: 1
+    less_than: 0
+    greater_than: 0
+    sos1: 0
+    sos2: 0
+  empty_constraints: []
+  singleton_constraints: []
+  rhs_range:
+    min: 1
+    max: 1
+    count: 1
+  sos_summary:
+    s1_count: 0
+    s2_count: 0
+    total_sos_variables: 0
+coefficients:
+  constraint_coeff_range:
+    min: 1
+    max: 1
+    count: 2
+  objective_coeff_range:
+    min: 1
+    max: 10
+    count: 2
+  large_coefficients: []
+  small_coefficients: []
+  coefficient_ratio: 10
+issues: []

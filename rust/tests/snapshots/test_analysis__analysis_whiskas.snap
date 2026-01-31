@@ -1,0 +1,69 @@
+---
+source: rust/tests/test_analysis.rs
+expression: analysis
+---
+summary:
+  name: The_Whiskas_Problem
+  sense: Minimize
+  objective_count: 1
+  constraint_count: 5
+  variable_count: 6
+  total_nonzeros: 25
+  density: 0.83333
+sparsity:
+  min_vars_per_constraint: 4
+  max_vars_per_constraint: 6
+variables:
+  type_distribution:
+    free: 6
+    general: 0
+    lower_bounded: 0
+    upper_bounded: 0
+    double_bounded: 0
+    binary: 0
+    integer: 0
+    semi_continuous: 0
+    sos: 0
+  free_variables:
+    - Ingr_BEEF
+    - Ingr_CHICKEN
+    - Ingr_GEL
+    - Ingr_MUTTON
+    - Ingr_RICE
+    - Ingr_WHEAT
+  fixed_variables: []
+  invalid_bounds: []
+  unused_variables: []
+  discrete_variable_count: 0
+constraints:
+  type_distribution:
+    equality: 1
+    less_than_equal: 2
+    greater_than_equal: 2
+    less_than: 0
+    greater_than: 0
+    sos1: 0
+    sos2: 0
+  empty_constraints: []
+  singleton_constraints: []
+  rhs_range:
+    min: 0.4
+    max: 100
+    count: 5
+  sos_summary:
+    s1_count: 0
+    s2_count: 0
+    total_sos_variables: 0
+coefficients:
+  constraint_coeff_range:
+    min: 0.001
+    max: 1
+    count: 25
+  objective_coeff_range:
+    min: 0.001
+    max: 0.013
+    count: 6
+  large_coefficients: []
+  small_coefficients: []
+  coefficient_ratio: 1000
+issues: []

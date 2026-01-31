@@ -1,0 +1,87 @@
+---
+source: rust/tests/test_analysis.rs
+expression: analysis
+---
+summary:
+  name: ~
+  sense: Maximize
+  objective_count: 1
+  constraint_count: 6
+  variable_count: 8
+  total_nonzeros: 12
+  density: 0.25
+sparsity:
+  min_vars_per_constraint: 1
+  max_vars_per_constraint: 3
+variables:
+  type_distribution:
+    free: 0
+    general: 0
+    lower_bounded: 0
+    upper_bounded: 0
+    double_bounded: 8
+    binary: 0
+    integer: 0
+    semi_continuous: 0
+    sos: 0
+  free_variables: []
+  fixed_variables: []
+  invalid_bounds: []
+  unused_variables:
+    - V8
+  discrete_variable_count: 0
+constraints:
+  type_distribution:
+    equality: 0
+    less_than_equal: 2
+    greater_than_equal: 2
+    less_than: 0
+    greater_than: 0
+    sos1: 1
+    sos2: 1
+  empty_constraints: []
+  singleton_constraints:
+    - name: CON1
+      variable: V1
+      coefficient: 1
+      operator: ">="
+      rhs: 0
+    - name: CON2
+      variable: V2
+      coefficient: 1
+      operator: ">="
+      rhs: 2
+    - name: CON3
+      variable: V3
+      coefficient: 1
+      operator: "<="
+      rhs: 2.5
+  rhs_range:
+    min: 0
+    max: 2.5
+    count: 4
+  sos_summary:
+    s1_count: 1
+    s2_count: 1
+    total_sos_variables: 6
+coefficients:
+  constraint_coeff_range:
+    min: 1
+    max: 1
+    count: 6
+  objective_coeff_range:
+    min: 1
+    max: 1
+    count: 2
+  large_coefficients: []
+  small_coefficients: []
+  coefficient_ratio: 1
+issues:
+  - severity: Info
+    category: UnusedVariable
+    message: "Variable 'V8' is not used in any constraint or objective"
+    details: ~
+  - severity: Info
+    category: SingletonConstraint
+    message: 3 singleton constraint(s) detected (may represent simple bounds)
+    details: ~

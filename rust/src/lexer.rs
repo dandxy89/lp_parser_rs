@@ -3,9 +3,12 @@
 //! This module provides a token-based lexer for Linear Programming files,
 //! handling case-insensitive keywords, numbers, identifiers, and operators.
 
+use std::borrow::Cow;
+use std::fmt::{Display, Formatter, Result as FmtResult};
+
 use logos::Logos;
 
-use crate::model::{Coefficient, ComparisonOp, SOSType, Sense};
+use crate::model::{Coefficient, ComparisonOp, Constraint, SOSType, Sense, VariableType};
 
 /// Lexer error type
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -32,18 +35,17 @@ pub enum ConstraintCont<'input> {
 impl<'input> ConstraintCont<'input> {
     /// Convert to a Constraint, using the given identifier as either name or first variable
     #[must_use]
-    pub fn into_constraint(self, id: &'input str) -> crate::model::Constraint<'input> {
-        use std::borrow::Cow;
+    pub fn into_constraint(self, id: &'input str) -> Constraint<'input> {
         match self {
             ConstraintCont::Named(coeffs, op, rhs) => {
-                crate::model::Constraint::Standard { name: Cow::Borrowed(id), coefficients: coeffs, operator: op, rhs }
+                Constraint::Standard { name: Cow::Borrowed(id), coefficients: coeffs, operator: op, rhs }
             }
             ConstraintCont::Unnamed(rest, op, rhs) => {
                 let mut coeffs = vec![Coefficient { name: id, value: 1.0 }];
                 for (s, c) in rest {
                     coeffs.push(Coefficient { name: c.name, value: s * c.value });
                 }
-                crate::model::Constraint::Standard { name: Cow::Borrowed("__c__"), coefficients: coeffs, operator: op, rhs }
+                Constraint::Standard { name: Cow::Borrowed("__c__"), coefficients: coeffs, operator: op, rhs }
             }
         }
     }
@@ -52,16 +54,16 @@ impl<'input> ConstraintCont<'input> {
 /// Helper enum for optional sections that can appear in any order
 #[derive(Debug, Clone, PartialEq)]
 pub enum OptionalSection<'input> {
-    Bounds(Vec<(&'input str, crate::model::VariableType)>),
+    Bounds(Vec<(&'input str, VariableType)>),
     Generals(Vec<&'input str>),
     Integers(Vec<&'input str>),
     Binaries(Vec<&'input str>),
     SemiContinuous(Vec<&'input str>),
-    SOS(Vec<crate::model::Constraint<'input>>),
+    SOS(Vec<Constraint<'input>>),
 }
 
-impl std::fmt::Display for LexerError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl Display for LexerError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         write!(f, "lexer error")
     }
 }
@@ -255,11 +257,11 @@ mod tests {
     use super::*;
 
     fn tokenize(input: &str) -> Vec<Token<'_>> {
-        Lexer::new(input).filter_map(std::result::Result::ok).map(|(_, tok, _)| tok).collect()
+        Lexer::new(input).filter_map(Result::ok).map(|(_, tok, _)| tok).collect()
     }
 
     fn tokenize_with_positions(input: &str) -> Vec<(usize, Token<'_>, usize)> {
-        Lexer::new(input).filter_map(std::result::Result::ok).collect()
+        Lexer::new(input).filter_map(Result::ok).collect()
     }
 
     #[test]

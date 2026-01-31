@@ -1,4 +1,6 @@
 use std::collections::HashMap;
+use std::fmt::{Display, Formatter, Result as FmtResult};
+use std::time::Instant;
 
 use crate::error::{LpParseError, LpResult};
 
@@ -29,8 +31,8 @@ pub enum SectionType {
     End,
 }
 
-impl std::fmt::Display for SectionType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl Display for SectionType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
             Self::Header => write!(f, "Header"),
             Self::Sense => write!(f, "Sense"),
@@ -69,8 +71,8 @@ impl ParseWarning {
     }
 }
 
-impl std::fmt::Display for ParseWarning {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl Display for ParseWarning {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         write!(f, "Warning in {} section at line {}, column {}: {}", self.section, self.line, self.column, self.message)
     }
 }
@@ -308,13 +310,13 @@ impl<'a> ParseContext<'a> {
     }
 
     /// Mark the start of parsing a section
-    pub fn start_section(&mut self, section: SectionType) -> std::time::Instant {
+    pub fn start_section(&mut self, section: SectionType) -> Instant {
         self.set_section(section);
-        std::time::Instant::now()
+        Instant::now()
     }
 
     /// Mark the end of parsing a section
-    pub fn end_section(&mut self, section: SectionType, start_time: std::time::Instant) {
+    pub fn end_section(&mut self, section: SectionType, start_time: Instant) {
         if self.config.collect_metrics {
             let duration = start_time.elapsed();
             self.metrics.record_section_time(section, u64::try_from(duration.as_nanos()).unwrap_or(u64::MAX));
@@ -343,6 +345,8 @@ impl<'a> ParseContext<'a> {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use super::*;
 
     #[test]
@@ -417,7 +421,7 @@ mod tests {
         let mut context = ParseContext::with_config(input, config);
 
         let start = context.start_section(SectionType::Objectives);
-        std::thread::sleep(std::time::Duration::from_millis(1));
+        std::thread::sleep(Duration::from_millis(1));
         context.end_section(SectionType::Objectives, start);
 
         assert!(context.metrics().section_times.contains_key(&SectionType::Objectives));

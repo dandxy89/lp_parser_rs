@@ -1,0 +1,218 @@
+---
+source: rust/tests/test_analysis.rs
+expression: analysis
+---
+summary:
+  name: Sudoku Problem
+  sense: Minimize
+  objective_count: 1
+  constraint_count: 353
+  variable_count: 730
+  total_nonzeros: 2945
+  density: 0.01143
+sparsity:
+  min_vars_per_constraint: 1
+  max_vars_per_constraint: 9
+variables:
+  type_distribution:
+    free: 0
+    general: 0
+    lower_bounded: 0
+    upper_bounded: 0
+    double_bounded: 1
+    binary: 729
+    integer: 0
+    semi_continuous: 0
+    sos: 0
+  free_variables: []
+  fixed_variables:
+    - name: __dummy
+      value: 0
+  invalid_bounds: []
+  unused_variables: []
+  discrete_variable_count: 729
+constraints:
+  type_distribution:
+    equality: 353
+    less_than_equal: 0
+    greater_than_equal: 0
+    less_than: 0
+    greater_than: 0
+    sos1: 0
+    sos2: 0
+  empty_constraints: []
+  singleton_constraints:
+    - name: _C325
+      variable: Choice_5_1_1
+      coefficient: 1
+      operator: "="
+      rhs: 1
+    - name: _C326
+      variable: Choice_6_2_1
+      coefficient: 1
+      operator: "="
+      rhs: 1
+    - name: _C327
+      variable: Choice_8_4_1
+      coefficient: 1
+      operator: "="
+      rhs: 1
+    - name: _C328
+      variable: Choice_4_5_1
+      coefficient: 1
+      operator: "="
+      rhs: 1
+    - name: _C329
+      variable: Choice_7_6_1
+      coefficient: 1
+      operator: "="
+      rhs: 1
+    - name: _C330
+      variable: Choice_3_1_2
+      coefficient: 1
+      operator: "="
+      rhs: 1
+    - name: _C331
+      variable: Choice_9_3_2
+      coefficient: 1
+      operator: "="
+      rhs: 1
+    - name: _C332
+      variable: Choice_6_7_2
+      coefficient: 1
+      operator: "="
+      rhs: 1
+    - name: _C333
+      variable: Choice_8_3_3
+      coefficient: 1
+      operator: "="
+      rhs: 1
+    - name: _C334
+      variable: Choice_1_2_4
+      coefficient: 1
+      operator: "="
+      rhs: 1
+    - name: _C335
+      variable: Choice_8_5_4
+      coefficient: 1
+      operator: "="
+      rhs: 1
+    - name: _C336
+      variable: Choice_4_8_4
+      coefficient: 1
+      operator: "="
+      rhs: 1
+    - name: _C337
+      variable: Choice_7_1_5
+      coefficient: 1
+      operator: "="
+      rhs: 1
+    - name: _C338
+      variable: Choice_9_2_5
+      coefficient: 1
+      operator: "="
+      rhs: 1
+    - name: _C339
+      variable: Choice_6_4_5
+      coefficient: 1
+      operator: "="
+      rhs: 1
+    - name: _C340
+      variable: Choice_2_6_5
+      coefficient: 1
+      operator: "="
+      rhs: 1
+    - name: _C341
+      variable: Choice_1_8_5
+      coefficient: 1
+      operator: "="
+      rhs: 1
+    - name: _C342
+      variable: Choice_8_9_5
+      coefficient: 1
+      operator: "="
+      rhs: 1
+    - name: _C343
+      variable: Choice_5_2_6
+      coefficient: 1
+      operator: "="
+      rhs: 1
+    - name: _C344
+      variable: Choice_3_5_6
+      coefficient: 1
+      operator: "="
+      rhs: 1
+    - name: _C345
+      variable: Choice_9_8_6
+      coefficient: 1
+      operator: "="
+      rhs: 1
+    - name: _C346
+      variable: Choice_2_7_7
+      coefficient: 1
+      operator: "="
+      rhs: 1
+    - name: _C347
+      variable: Choice_6_3_8
+      coefficient: 1
+      operator: "="
+      rhs: 1
+    - name: _C348
+      variable: Choice_8_7_8
+      coefficient: 1
+      operator: "="
+      rhs: 1
+    - name: _C349
+      variable: Choice_7_9_8
+      coefficient: 1
+      operator: "="
+      rhs: 1
+    - name: _C350
+      variable: Choice_3_4_9
+      coefficient: 1
+      operator: "="
+      rhs: 1
+    - name: _C351
+      variable: Choice_1_5_9
+      coefficient: 1
+      operator: "="
+      rhs: 1
+    - name: _C352
+      variable: Choice_6_6_9
+      coefficient: 1
+      operator: "="
+      rhs: 1
+    - name: _C353
+      variable: Choice_5_8_9
+      coefficient: 1
+      operator: "="
+      rhs: 1
+  rhs_range:
+    min: 1
+    max: 1
+    count: 353
+  sos_summary:
+    s1_count: 0
+    s2_count: 0
+    total_sos_variables: 0
+coefficients:
+  constraint_coeff_range:
+    min: 1
+    max: 1
+    count: 2945
+  objective_coeff_range:
+    min: 1
+    max: 1
+    count: 1
+  large_coefficients: []
+  small_coefficients: []
+  coefficient_ratio: 1
+issues:
+  - severity: Info
+    category: FixedVariable
+    message: "Variable '__dummy' is fixed at value 0"
+    details: ~
+  - severity: Info
+    category: SingletonConstraint
+    message: 29 singleton constraint(s) detected (may represent simple bounds)
+    details: ~

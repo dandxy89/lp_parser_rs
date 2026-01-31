@@ -1,14 +1,19 @@
 use std::borrow::Cow;
-use std::collections::HashMap;
 use std::collections::hash_map::Entry;
+use std::collections::{BTreeSet, HashMap};
+use std::fmt::{Display, Formatter, Result as FmtResult};
+use std::marker::PhantomData;
 
 use unique_id::Generator;
 use unique_id::sequence::SequenceGenerator;
 
+use crate::NUMERIC_EPSILON;
 use crate::error::{LpParseError, LpResult};
 use crate::lexer::Lexer;
 use crate::lp::LpProblemParser;
-use crate::model::{Constraint, Objective, Sense, Variable, VariableType};
+use crate::model::{
+    Coefficient, ComparisonOp, Constraint, ConstraintOwned, Objective, ObjectiveOwned, Sense, Variable, VariableOwned, VariableType,
+};
 
 /// Check if a floating-point value is effectively zero using both absolute
 /// and relative epsilon comparisons.
@@ -32,12 +37,32 @@ fn is_effectively_zero(value: f64, reference: f64) -> bool {
 
     // Relative check: value is negligible compared to reference
     if abs_reference > f64::EPSILON {
-        // Use a reasonable relative tolerance (1e-10 is typical for numerical algorithms)
-        const RELATIVE_EPSILON: f64 = 1e-10;
-        return abs_value < abs_reference * RELATIVE_EPSILON;
+        return abs_value < abs_reference * NUMERIC_EPSILON;
     }
 
     false
+}
+
+/// Apply a variable type to a list of variable names, only if the variable
+/// doesn't already have explicit bounds set.
+#[inline]
+fn apply_variable_type<'a>(
+    variables: &mut HashMap<&'a str, Variable<'a>>,
+    var_names: impl IntoIterator<Item = &'a str>,
+    var_type: VariableType,
+) {
+    for var_name in var_names {
+        match variables.entry(var_name) {
+            Entry::Occupied(mut entry) => {
+                if matches!(entry.get().var_type, VariableType::Free) {
+                    entry.get_mut().set_var_type(var_type.clone());
+                }
+            }
+            Entry::Vacant(entry) => {
+                entry.insert(Variable::new(var_name).with_var_type(var_type.clone()));
+            }
+        }
+    }
 }
 
 #[cfg_attr(feature = "diff", derive(diff::Diff), diff(attr(#[derive(Debug, PartialEq)])))]
@@ -227,7 +252,7 @@ impl<'a> LpProblem<'a> {
             }
         } else if !is_effectively_zero(new_coefficient, 1.0) {
             // Add new coefficient if it doesn't exist and value is non-zero
-            objective.coefficients.push(crate::model::Coefficient { name: variable_name, value: new_coefficient });
+            objective.coefficients.push(Coefficient { name: variable_name, value: new_coefficient });
 
             // Ensure variable exists using Entry API
             self.variables.entry(variable_name).or_insert_with(|| Variable::new(variable_name));
@@ -274,7 +299,7 @@ impl<'a> LpProblem<'a> {
                     }
                 } else if !is_effectively_zero(new_coefficient, 1.0) {
                     // Add new coefficient if it doesn't exist and value is non-zero
-                    coefficients.push(crate::model::Coefficient { name: variable_name, value: new_coefficient });
+                    coefficients.push(Coefficient { name: variable_name, value: new_coefficient });
 
                     // Ensure variable exists using Entry API
                     self.variables.entry(variable_name).or_insert_with(|| Variable::new(variable_name));
@@ -333,7 +358,7 @@ impl<'a> LpProblem<'a> {
     /// # Errors
     ///
     /// Returns an error if the constraint does not exist or is an SOS constraint
-    pub fn update_constraint_operator(&mut self, constraint_name: &str, new_operator: crate::model::ComparisonOp) -> LpResult<()> {
+    pub fn update_constraint_operator(&mut self, constraint_name: &str, new_operator: ComparisonOp) -> LpResult<()> {
         let constraint = self
             .constraints
             .get_mut(constraint_name)
@@ -624,7 +649,7 @@ impl<'a> LpProblem<'a> {
     /// A vector of variable names
     #[must_use]
     pub fn get_all_variable_names(&self) -> Vec<&str> {
-        let mut names = std::collections::HashSet::new();
+        let mut names = BTreeSet::new();
 
         // Add from variables map
         for name in self.variables.keys() {
@@ -654,32 +679,27 @@ impl<'a> LpProblem<'a> {
             }
         }
 
-        let mut result: Vec<&str> = names.into_iter().collect();
-        result.sort_unstable();
-        result
+        names.into_iter().collect()
     }
 }
 
-impl std::fmt::Display for LpProblem<'_> {
-    #[inline]
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let Some(problem_name) = &self.name {
-            writeln!(f, "Problem name: {problem_name}")?;
+macro_rules! impl_lp_problem_display {
+    ($type:ty) => {
+        impl Display for $type {
+            fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+                if let Some(problem_name) = self.name() {
+                    writeln!(f, "Problem name: {problem_name}")?;
+                }
+                writeln!(f, "Sense: {}", self.sense)?;
+                writeln!(f, "Objectives: {}", self.objective_count())?;
+                writeln!(f, "Constraints: {}", self.constraint_count())?;
+                writeln!(f, "Variables: {}", self.variable_count())
+            }
         }
-        writeln!(f, "Sense: {}", self.sense)?;
-        writeln!(f, "Objectives: {}", self.objectives.len())?;
-        writeln!(f, "Constraints: {}", self.constraints.len())?;
-        writeln!(f, "Variables: {}", self.variables.len())?;
-
-        Ok(())
-    }
+    };
 }
 
-// ============================================================================
-// Owned LpProblem Variant
-// ============================================================================
-
-use crate::model::{ConstraintOwned, ObjectiveOwned, VariableOwned};
+impl_lp_problem_display!(LpProblem<'_>);
 
 /// Owned variant of [`LpProblem`] with no lifetime constraints.
 ///
@@ -789,7 +809,7 @@ impl Default for LpProblemOwned {
 impl<'a> From<&LpProblem<'a>> for LpProblemOwned {
     fn from(problem: &LpProblem<'a>) -> Self {
         Self {
-            name: problem.name.as_ref().map(std::string::ToString::to_string),
+            name: problem.name.as_ref().map(ToString::to_string),
             sense: problem.sense.clone(),
             objectives: problem.objectives.iter().map(|(k, v)| (k.to_string(), ObjectiveOwned::from(v))).collect(),
             constraints: problem.constraints.iter().map(|(k, v)| (k.to_string(), ConstraintOwned::from(v))).collect(),
@@ -798,19 +818,7 @@ impl<'a> From<&LpProblem<'a>> for LpProblemOwned {
     }
 }
 
-impl std::fmt::Display for LpProblemOwned {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let Some(problem_name) = &self.name {
-            writeln!(f, "Problem name: {problem_name}")?;
-        }
-        writeln!(f, "Sense: {}", self.sense)?;
-        writeln!(f, "Objectives: {}", self.objectives.len())?;
-        writeln!(f, "Constraints: {}", self.constraints.len())?;
-        writeln!(f, "Variables: {}", self.variables.len())?;
-
-        Ok(())
-    }
-}
+impl_lp_problem_display!(LpProblemOwned);
 
 impl LpProblem<'_> {
     /// Convert to an owned variant with no lifetime constraints.
@@ -897,12 +905,9 @@ impl<'a> TryFrom<&'a str> for LpProblem<'a> {
         let mut constraints: HashMap<Cow<'a, str>, Constraint<'a>> = HashMap::new();
 
         for mut con in constraints_vec {
-            // Generate name if empty
-            let name = match &con {
-                Constraint::Standard { name, .. } | Constraint::SOS { name, .. } => name.clone(),
-            };
-
-            let final_name = if name.is_empty() { Cow::Owned(format!("C{}", constraint_gen.next_id())) } else { name };
+            // Generate name if unnamed, otherwise clone existing name
+            let final_name =
+                if con.is_unnamed() { Cow::Owned(format!("C{}", constraint_gen.next_id())) } else { Cow::Owned(con.name_ref().to_owned()) };
 
             // Update constraint with final name and extract variables using Entry API
             match &mut con {
@@ -935,74 +940,23 @@ impl<'a> TryFrom<&'a str> for LpProblem<'a> {
             }
         }
 
-        // Process generals - only set type if variable doesn't already have explicit bounds
-        for var_name in generals {
-            match variables.entry(var_name) {
-                Entry::Occupied(mut entry) => {
-                    // Preserve existing bounds (DoubleBound, LowerBound, UpperBound)
-                    if matches!(entry.get().var_type, VariableType::Free) {
-                        entry.get_mut().set_var_type(VariableType::General);
-                    }
-                }
-                Entry::Vacant(entry) => {
-                    entry.insert(Variable::new(var_name).with_var_type(VariableType::General));
-                }
-            }
-        }
-
-        // Process integers - only set type if variable doesn't already have explicit bounds
-        for var_name in integers {
-            match variables.entry(var_name) {
-                Entry::Occupied(mut entry) => {
-                    // Preserve existing bounds (DoubleBound, LowerBound, UpperBound)
-                    if matches!(entry.get().var_type, VariableType::Free) {
-                        entry.get_mut().set_var_type(VariableType::Integer);
-                    }
-                }
-                Entry::Vacant(entry) => {
-                    entry.insert(Variable::new(var_name).with_var_type(VariableType::Integer));
-                }
-            }
-        }
-
-        // Process binaries - only set type if variable doesn't already have explicit bounds
-        for var_name in binaries {
-            match variables.entry(var_name) {
-                Entry::Occupied(mut entry) => {
-                    // Preserve existing bounds (DoubleBound, LowerBound, UpperBound)
-                    if matches!(entry.get().var_type, VariableType::Free) {
-                        entry.get_mut().set_var_type(VariableType::Binary);
-                    }
-                }
-                Entry::Vacant(entry) => {
-                    entry.insert(Variable::new(var_name).with_var_type(VariableType::Binary));
-                }
-            }
-        }
-
-        // Process semi-continuous - only set type if variable doesn't already have explicit bounds
-        for var_name in semis {
-            match variables.entry(var_name) {
-                Entry::Occupied(mut entry) => {
-                    // Preserve existing bounds (DoubleBound, LowerBound, UpperBound)
-                    if matches!(entry.get().var_type, VariableType::Free) {
-                        entry.get_mut().set_var_type(VariableType::SemiContinuous);
-                    }
-                }
-                Entry::Vacant(entry) => {
-                    entry.insert(Variable::new(var_name).with_var_type(VariableType::SemiContinuous));
-                }
-            }
-        }
+        // Process variable type sections (only set type if variable doesn't already have explicit bounds)
+        apply_variable_type(&mut variables, generals, VariableType::General);
+        apply_variable_type(&mut variables, integers, VariableType::Integer);
+        apply_variable_type(&mut variables, binaries, VariableType::Binary);
+        apply_variable_type(&mut variables, semis, VariableType::SemiContinuous);
 
         // Process SOS constraints
         for mut sos in sos_constraints {
-            let name = match &sos {
-                Constraint::SOS { name, .. } => name.clone(),
-                Constraint::Standard { .. } => continue,
-            };
+            if matches!(sos, Constraint::Standard { .. }) {
+                continue;
+            }
 
-            let final_name = if name.is_empty() { Cow::Owned(format!("SOS{}", constraint_gen.next_id())) } else { name };
+            let final_name = if sos.is_unnamed() {
+                Cow::Owned(format!("SOS{}", constraint_gen.next_id()))
+            } else {
+                Cow::Owned(sos.name_ref().to_owned())
+            };
 
             if let Constraint::SOS { name, weights, .. } = &mut sos {
                 name.clone_from(&final_name);
@@ -1034,12 +988,12 @@ impl<'de: 'a, 'a> serde::Deserialize<'de> for LpProblem<'a> {
             Variables,
         }
 
-        struct LpProblemVisitor<'a>(std::marker::PhantomData<LpProblem<'a>>);
+        struct LpProblemVisitor<'a>(PhantomData<LpProblem<'a>>);
 
         impl<'de: 'a, 'a> serde::de::Visitor<'de> for LpProblemVisitor<'a> {
             type Value = LpProblem<'a>;
 
-            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            fn expecting(&self, formatter: &mut Formatter) -> FmtResult {
                 formatter.write_str("struct LpProblem")
             }
 
@@ -1096,7 +1050,7 @@ impl<'de: 'a, 'a> serde::Deserialize<'de> for LpProblem<'a> {
         }
 
         const FIELDS: &[&str] = &["name", "sense", "objectives", "constraints", "variables"];
-        deserializer.deserialize_struct("LpProblem", FIELDS, LpProblemVisitor(std::marker::PhantomData))
+        deserializer.deserialize_struct("LpProblem", FIELDS, LpProblemVisitor(PhantomData))
     }
 }
 

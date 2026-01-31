@@ -2,19 +2,24 @@
 
 mod cli;
 
-use std::io::Write;
+use std::fs;
+use std::io::{self, Stdout, Write};
 use std::path::PathBuf;
 
 use clap::Parser;
 #[cfg(feature = "diff")]
 use cli::DiffArgs;
-use cli::{Cli, Commands, ConvertArgs, ConvertFormat, InfoArgs, OutputFormat, ParseArgs};
+use cli::{AnalyzeArgs, Cli, Commands, ConvertArgs, ConvertFormat, InfoArgs, OutputFormat, ParseArgs};
 #[cfg(feature = "lp-solvers")]
 use cli::{SolveArgs, Solver};
+use lp_parser_rs::analysis::AnalysisConfig;
+use lp_parser_rs::model::{Constraint, VariableType};
 use lp_parser_rs::parser::parse_file;
 use lp_parser_rs::problem::LpProblem;
 
-fn cmd_parse(args: ParseArgs, verbose: u8, quiet: bool) -> Result<(), Box<dyn std::error::Error>> {
+type BoxError = Box<dyn std::error::Error>;
+
+fn cmd_parse(args: ParseArgs, verbose: u8, quiet: bool) -> Result<(), BoxError> {
     let content = parse_file(&args.file)?;
     let problem = LpProblem::parse(&content)?;
 
@@ -52,7 +57,7 @@ fn cmd_parse(args: ParseArgs, verbose: u8, quiet: bool) -> Result<(), Box<dyn st
     Ok(())
 }
 
-fn cmd_info(args: &InfoArgs, verbose: u8, quiet: bool) -> Result<(), Box<dyn std::error::Error>> {
+fn cmd_info(args: &InfoArgs, verbose: u8, quiet: bool) -> Result<(), BoxError> {
     let content = parse_file(&args.file)?;
     let problem = LpProblem::parse(&content)?;
 
@@ -86,7 +91,69 @@ fn cmd_info(args: &InfoArgs, verbose: u8, quiet: bool) -> Result<(), Box<dyn std
     Ok(())
 }
 
-fn write_info_text<W: Write>(writer: &mut W, problem: &LpProblem, args: &InfoArgs) -> Result<(), Box<dyn std::error::Error>> {
+fn cmd_analyze(args: AnalyzeArgs, verbose: u8, quiet: bool) -> Result<(), BoxError> {
+    let content = parse_file(&args.file)?;
+    let problem = LpProblem::parse(&content)?;
+
+    if !quiet && verbose > 0 {
+        eprintln!("Analyzing file: {}", args.file.display());
+    }
+
+    let config = AnalysisConfig {
+        large_coefficient_threshold: args.large_coeff_threshold,
+        small_coefficient_threshold: args.small_coeff_threshold,
+        large_rhs_threshold: args.large_coeff_threshold,
+        coefficient_ratio_threshold: args.ratio_threshold,
+    };
+
+    let analysis = problem.analyze_with_config(&config);
+
+    let mut writer = OutputWriter::new(args.output)?;
+
+    match args.format {
+        OutputFormat::Text => {
+            if args.issues_only {
+                if analysis.issues.is_empty() {
+                    writeln!(writer, "No issues detected.")?;
+                } else {
+                    writeln!(writer, "Issues Found: {}", analysis.issues.len())?;
+                    for issue in &analysis.issues {
+                        writeln!(writer, "  {issue}")?;
+                    }
+                }
+            } else {
+                write!(writer, "{analysis}")?;
+            }
+        }
+        #[cfg(feature = "serde")]
+        OutputFormat::Json => {
+            if args.issues_only {
+                if args.pretty {
+                    serde_json::to_writer_pretty(&mut writer, &analysis.issues)?;
+                } else {
+                    serde_json::to_writer(&mut writer, &analysis.issues)?;
+                }
+            } else if args.pretty {
+                serde_json::to_writer_pretty(&mut writer, &analysis)?;
+            } else {
+                serde_json::to_writer(&mut writer, &analysis)?;
+            }
+            writeln!(writer)?;
+        }
+        #[cfg(feature = "serde")]
+        OutputFormat::Yaml => {
+            if args.issues_only {
+                serde_yaml::to_writer(&mut writer, &analysis.issues)?;
+            } else {
+                serde_yaml::to_writer(&mut writer, &analysis)?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn write_info_text<W: Write>(writer: &mut W, problem: &LpProblem, args: &InfoArgs) -> Result<(), BoxError> {
     writeln!(writer, "=== LP Problem Info ===")?;
 
     if let Some(name) = problem.name() {
@@ -104,8 +171,8 @@ fn write_info_text<W: Write>(writer: &mut W, problem: &LpProblem, args: &InfoArg
 
     for var in problem.variables.values() {
         match var.var_type {
-            lp_parser_rs::model::VariableType::Binary => binary_count += 1,
-            lp_parser_rs::model::VariableType::Integer => integer_count += 1,
+            VariableType::Binary => binary_count += 1,
+            VariableType::Integer => integer_count += 1,
             _ => continuous_count += 1,
         }
     }
@@ -129,10 +196,10 @@ fn write_info_text<W: Write>(writer: &mut W, problem: &LpProblem, args: &InfoArg
         writeln!(writer, "Constraints:")?;
         for (name, constr) in &problem.constraints {
             match constr {
-                lp_parser_rs::model::Constraint::Standard { coefficients, operator, rhs, .. } => {
+                Constraint::Standard { coefficients, operator, rhs, .. } => {
                     writeln!(writer, "  {name}: {} terms {operator} {rhs}", coefficients.len())?;
                 }
-                lp_parser_rs::model::Constraint::SOS { sos_type, weights, .. } => {
+                Constraint::SOS { sos_type, weights, .. } => {
                     writeln!(writer, "  {name}: {sos_type} with {} variables", weights.len())?;
                 }
             }
@@ -205,8 +272,8 @@ fn build_info_struct(problem: &LpProblem, args: &InfoArgs) -> ProblemInfo {
 
     for var in problem.variables.values() {
         match var.var_type {
-            lp_parser_rs::model::VariableType::Binary => binary_count += 1,
-            lp_parser_rs::model::VariableType::Integer => integer_count += 1,
+            VariableType::Binary => binary_count += 1,
+            VariableType::Integer => integer_count += 1,
             _ => continuous_count += 1,
         }
     }
@@ -229,12 +296,12 @@ fn build_info_struct(problem: &LpProblem, args: &InfoArgs) -> ProblemInfo {
                 .constraints
                 .iter()
                 .map(|(name, constr)| match constr {
-                    lp_parser_rs::model::Constraint::Standard { coefficients, operator, rhs, .. } => ConstraintInfo {
+                    Constraint::Standard { coefficients, operator, rhs, .. } => ConstraintInfo {
                         name: name.to_string(),
                         constraint_type: "standard".to_string(),
                         details: format!("{} terms {} {}", coefficients.len(), operator, rhs),
                     },
-                    lp_parser_rs::model::Constraint::SOS { sos_type, weights, .. } => ConstraintInfo {
+                    Constraint::SOS { sos_type, weights, .. } => ConstraintInfo {
                         name: name.to_string(),
                         constraint_type: "sos".to_string(),
                         details: format!("{} with {} variables", sos_type, weights.len()),
@@ -272,7 +339,7 @@ fn build_info_struct(problem: &LpProblem, args: &InfoArgs) -> ProblemInfo {
 }
 
 #[cfg(feature = "diff")]
-fn cmd_diff(args: DiffArgs, verbose: u8, quiet: bool) -> Result<(), Box<dyn std::error::Error>> {
+fn cmd_diff(args: DiffArgs, verbose: u8, quiet: bool) -> Result<(), BoxError> {
     use diff::Diff;
     use lp_parser_rs::problem::LpProblemDiff;
 
@@ -352,12 +419,12 @@ fn build_diff_output(difference: &lp_parser_rs::problem::LpProblemDiff, problem2
         .filter_map(|(k, _)| problem2.constraints.get(k).map(|_| k.to_string()))
         .collect();
 
-    let constraints_removed: Vec<String> = difference.constraints.removed.iter().map(std::string::ToString::to_string).collect();
+    let constraints_removed: Vec<String> = difference.constraints.removed.iter().map(ToString::to_string).collect();
 
     let objectives_changed: Vec<String> =
         difference.objectives.altered.iter().filter_map(|(k, _)| problem2.objectives.get(k).map(|_| k.to_string())).collect();
 
-    let objectives_removed: Vec<String> = difference.objectives.removed.iter().map(std::string::ToString::to_string).collect();
+    let objectives_removed: Vec<String> = difference.objectives.removed.iter().map(ToString::to_string).collect();
 
     DiffOutput { variables_changed, variables_removed, constraints_changed, constraints_removed, objectives_changed, objectives_removed }
 }
@@ -367,7 +434,7 @@ fn write_diff_text<W: Write>(
     writer: &mut W,
     difference: &lp_parser_rs::problem::LpProblemDiff,
     problem2: &LpProblem,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), BoxError> {
     use lp_parser_rs::model::{ConstraintDiff, VariableTypeDiff};
 
     let mut has_changes = false;
@@ -425,7 +492,7 @@ fn write_diff_text<W: Write>(
     Ok(())
 }
 
-fn cmd_convert(args: ConvertArgs, verbose: u8, quiet: bool) -> Result<(), Box<dyn std::error::Error>> {
+fn cmd_convert(args: ConvertArgs, verbose: u8, quiet: bool) -> Result<(), BoxError> {
     use lp_parser_rs::writer::{LpWriterOptions, write_lp_string_with_options};
 
     let content = parse_file(&args.file)?;
@@ -454,7 +521,7 @@ fn cmd_convert(args: ConvertArgs, verbose: u8, quiet: bool) -> Result<(), Box<dy
 
             let dir = args.output.ok_or("CSV output requires --output directory")?;
             if !dir.exists() {
-                std::fs::create_dir_all(&dir)?;
+                fs::create_dir_all(&dir)?;
             }
             problem.to_csv(&dir)?;
 
@@ -483,7 +550,7 @@ fn cmd_convert(args: ConvertArgs, verbose: u8, quiet: bool) -> Result<(), Box<dy
 }
 
 #[cfg(feature = "lp-solvers")]
-fn cmd_solve(args: SolveArgs, verbose: u8, quiet: bool) -> Result<(), Box<dyn std::error::Error>> {
+fn cmd_solve(args: SolveArgs, verbose: u8, quiet: bool) -> Result<(), BoxError> {
     use lp_parser_rs::compat::lp_solvers::ToLpSolvers;
     use lp_solvers::solvers::{CbcSolver, GlpkSolver, SolverTrait, Status};
 
@@ -537,7 +604,7 @@ fn cmd_solve(args: SolveArgs, verbose: u8, quiet: bool) -> Result<(), Box<dyn st
                         writeln!(writer, "  {name} = {value}")?;
                     }
                 }
-                Status::Infeasible | Status::Unbounded | Status::NotSolved => {}
+                Status::TimeLimit | Status::MipGap | Status::Infeasible | Status::Unbounded | Status::NotSolved => {}
             }
         }
         #[cfg(feature = "serde")]
@@ -548,6 +615,8 @@ fn cmd_solve(args: SolveArgs, verbose: u8, quiet: bool) -> Result<(), Box<dyn st
                 Status::Infeasible => "infeasible",
                 Status::Unbounded => "unbounded",
                 Status::NotSolved => "not_solved",
+                Status::TimeLimit => "time_limit",
+                Status::MipGap => "mip_gap",
             };
             let solution_json = serde_json::json!({
                 "status": status_str,
@@ -568,6 +637,8 @@ fn cmd_solve(args: SolveArgs, verbose: u8, quiet: bool) -> Result<(), Box<dyn st
                 Status::Infeasible => "infeasible",
                 Status::Unbounded => "unbounded",
                 Status::NotSolved => "not_solved",
+                Status::TimeLimit => "time_limit",
+                Status::MipGap => "mip_gap",
             };
             let solution_yaml = serde_json::json!({
                 "status": status_str,
@@ -581,28 +652,28 @@ fn cmd_solve(args: SolveArgs, verbose: u8, quiet: bool) -> Result<(), Box<dyn st
 }
 
 enum OutputWriter {
-    Stdout(std::io::Stdout),
-    File(std::fs::File),
+    Stdout(Stdout),
+    File(fs::File),
 }
 
 impl OutputWriter {
-    fn new(path: Option<PathBuf>) -> std::io::Result<Self> {
+    fn new(path: Option<PathBuf>) -> io::Result<Self> {
         match path {
-            Some(p) => Ok(Self::File(std::fs::File::create(p)?)),
-            None => Ok(Self::Stdout(std::io::stdout())),
+            Some(p) => Ok(Self::File(fs::File::create(p)?)),
+            None => Ok(Self::Stdout(io::stdout())),
         }
     }
 }
 
 impl Write for OutputWriter {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         match self {
             Self::Stdout(s) => s.write(buf),
             Self::File(f) => f.write(buf),
         }
     }
 
-    fn flush(&mut self) -> std::io::Result<()> {
+    fn flush(&mut self) -> io::Result<()> {
         match self {
             Self::Stdout(s) => s.flush(),
             Self::File(f) => f.flush(),
@@ -610,12 +681,13 @@ impl Write for OutputWriter {
     }
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<(), BoxError> {
     let cli = Cli::parse();
 
     match cli.command {
         Commands::Parse(args) => cmd_parse(args, cli.verbose, cli.quiet),
         Commands::Info(args) => cmd_info(&args, cli.verbose, cli.quiet),
+        Commands::Analyze(args) => cmd_analyze(args, cli.verbose, cli.quiet),
         #[cfg(feature = "diff")]
         Commands::Diff(args) => cmd_diff(args, cli.verbose, cli.quiet),
         Commands::Convert(args) => cmd_convert(args, cli.verbose, cli.quiet),

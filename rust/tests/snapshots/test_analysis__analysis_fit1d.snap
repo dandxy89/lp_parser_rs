@@ -1,0 +1,63 @@
+---
+source: rust/tests/test_analysis.rs
+expression: analysis
+---
+summary:
+  name: fit1d.mps
+  sense: Minimize
+  objective_count: 1
+  constraint_count: 24
+  variable_count: 1026
+  total_nonzeros: 13404
+  density: 0.54435
+sparsity:
+  min_vars_per_constraint: 106
+  max_vars_per_constraint: 1026
+variables:
+  type_distribution:
+    free: 0
+    general: 0
+    lower_bounded: 0
+    upper_bounded: 0
+    double_bounded: 1026
+    binary: 0
+    integer: 0
+    semi_continuous: 0
+    sos: 0
+  free_variables: []
+  fixed_variables: []
+  invalid_bounds: []
+  unused_variables: []
+  discrete_variable_count: 0
+constraints:
+  type_distribution:
+    equality: 1
+    less_than_equal: 12
+    greater_than_equal: 11
+    less_than: 0
+    greater_than: 0
+    sos1: 0
+    sos2: 0
+  empty_constraints: []
+  singleton_constraints: []
+  rhs_range:
+    min: 0
+    max: 0
+    count: 24
+  sos_summary:
+    s1_count: 0
+    s2_count: 0
+    total_sos_variables: 0
+coefficients:
+  constraint_coeff_range:
+    min: 0.01
+    max: 1890
+    count: 13404
+  objective_coeff_range:
+    min: 9.5
+    max: 1440
+    count: 1026
+  large_coefficients: []
+  small_coefficients: []
+  coefficient_ratio: 189000
+issues: []
