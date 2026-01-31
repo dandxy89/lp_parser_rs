@@ -43,7 +43,7 @@ thiserror = "2.0.17"
 unique_id = { version = "0.1.7", features = ["sequence"] }
 
 [build-dependencies]
-lalrpop = { git = "https://github.com/lalrpop/lalrpop", rev = "85e4ba54" }
+lalrpop = { version = "0.22.2" }
 
 [dev-dependencies]
 insta = { version = "1.46.2", features = ["yaml", "redactions"] }
