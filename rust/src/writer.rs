@@ -307,14 +307,13 @@ fn write_coefficients_line(output: &mut String, coefficients: &[crate::model::Co
     Ok(())
 }
 
-/// Tolerance for checking if a coefficient is effectively 1.0
-const COEFF_ONE_EPSILON: f64 = 1e-10;
+use crate::NUMERIC_EPSILON;
 
 /// Format a coefficient with proper sign handling
 fn format_coefficient(coeff: &crate::model::Coefficient, is_first: bool, precision: usize) -> String {
     let abs_value = coeff.value.abs();
     let sign = if coeff.value < 0.0 { "-" } else { "+" };
-    let is_one = (abs_value - 1.0).abs() < COEFF_ONE_EPSILON;
+    let is_one = (abs_value - 1.0).abs() < NUMERIC_EPSILON;
 
     if is_first {
         if coeff.value < 0.0 {

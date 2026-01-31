@@ -179,6 +179,22 @@ impl<'a> Constraint<'a> {
             Constraint::Standard { name, .. } | Constraint::SOS { name, .. } => name.clone(),
         }
     }
+
+    #[must_use]
+    #[inline]
+    /// Returns a reference to the constraint's name without cloning.
+    pub fn name_ref(&self) -> &str {
+        match self {
+            Constraint::Standard { name, .. } | Constraint::SOS { name, .. } => name,
+        }
+    }
+
+    #[must_use]
+    #[inline]
+    /// Returns `true` if the constraint has no name (empty string).
+    pub fn is_unnamed(&self) -> bool {
+        self.name_ref().is_empty()
+    }
 }
 
 impl std::fmt::Display for Constraint<'_> {

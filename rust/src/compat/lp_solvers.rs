@@ -167,14 +167,12 @@ pub struct ExpressionAdapter<'a> {
     coefficients: &'a [Coefficient<'a>],
 }
 
-/// Tolerance for comparing floating-point coefficients to special values like 1.0.
-/// Using a slightly larger tolerance than `f64::EPSILON` to handle parsing rounding.
-const COEFF_EPSILON: f64 = 1e-10;
+use crate::NUMERIC_EPSILON;
 
 impl WriteToLpFileFormat for ExpressionAdapter<'_> {
     fn to_lp_file_format(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Filter out zero and non-finite coefficients
-        let non_zero: Vec<_> = self.coefficients.iter().filter(|c| c.value.is_finite() && c.value.abs() > COEFF_EPSILON).collect();
+        let non_zero: Vec<_> = self.coefficients.iter().filter(|c| c.value.is_finite() && c.value.abs() > NUMERIC_EPSILON).collect();
 
         // Handle empty expression (all zeros or no terms)
         if non_zero.is_empty() {
@@ -188,12 +186,12 @@ impl WriteToLpFileFormat for ExpressionAdapter<'_> {
             if i == 0 {
                 // First term
                 if value < 0.0 {
-                    if (value.abs() - 1.0).abs() < COEFF_EPSILON {
+                    if (value.abs() - 1.0).abs() < NUMERIC_EPSILON {
                         write!(f, "- {name}")?;
                     } else {
                         write!(f, "- {} {name}", value.abs())?;
                     }
-                } else if (value - 1.0).abs() < COEFF_EPSILON {
+                } else if (value - 1.0).abs() < NUMERIC_EPSILON {
                     write!(f, "{name}")?;
                 } else {
                     write!(f, "{value} {name}")?;
@@ -203,7 +201,7 @@ impl WriteToLpFileFormat for ExpressionAdapter<'_> {
                 let sign = if value < 0.0 { "-" } else { "+" };
                 let abs_val = value.abs();
 
-                if (abs_val - 1.0).abs() < COEFF_EPSILON {
+                if (abs_val - 1.0).abs() < NUMERIC_EPSILON {
                     write!(f, " {sign} {name}")?;
                 } else {
                     write!(f, " {sign} {abs_val} {name}")?;

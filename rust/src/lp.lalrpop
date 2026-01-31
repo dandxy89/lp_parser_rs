@@ -44,10 +44,6 @@ extern {
     }
 }
 
-// ============================================================================
-// Top-level: LpProblem
-// ============================================================================
-
 pub LpProblem: (Sense, Vec<Objective<'input>>, Vec<Constraint<'input>>, Vec<(&'input str, VariableType)>, Vec<&'input str>, Vec<&'input str>, Vec<&'input str>, Vec<&'input str>, Vec<Constraint<'input>>) = {
     <sense:"sense">
     <objectives:ObjectivesSection>
@@ -87,14 +83,6 @@ AnySection: OptionalSection<'input> = {
     <s:SemiSection> => OptionalSection::SemiContinuous(s),
     <s:SosSection> => OptionalSection::SOS(s),
 };
-
-// ============================================================================
-// Objectives Section
-// Supports:
-// - One unnamed objective: "x + 2y"
-// - One or more named objectives: "obj1: x + y" "obj2: 2x - z"
-// Uses left-factoring to handle the common identifier prefix
-// ============================================================================
 
 ObjectivesSection: Vec<Objective<'input>> = {
     // Starts with sign: definitely unnamed objective
@@ -163,11 +151,6 @@ OptSign: f64 = {
     "-" => -1.0,
 };
 
-// ============================================================================
-// Constraints Section
-// Supports both named (c1: x <= 10) and unnamed (x <= 10) constraints
-// ============================================================================
-
 ConstraintsSection: Vec<Constraint<'input>> = {
     "subject to" <constraints:ConstraintEntry*> => constraints,
 };
@@ -226,10 +209,6 @@ ConstraintContinuation: ConstraintCont<'input> = {
     <rest:CoeffTail*> <op:CompOp> <rhs:NumericValue> => ConstraintCont::Unnamed(rest, op, rhs),
 };
 
-// ============================================================================
-// Coefficient List - Left-recursive to avoid ambiguity
-// ============================================================================
-
 CoeffList: Vec<Coefficient<'input>> = {
     <c:Coeff> => vec![c],
     <mut list:CoeffList> "+" <c:UnsignedCoeff> => {
@@ -255,10 +234,6 @@ UnsignedCoeff: Coefficient<'input> = {
     <num:"number"> <var:"identifier"> => Coefficient { name: var, value: num },
     <inf:"infinity"> <var:"identifier"> => Coefficient { name: var, value: inf },
 };
-
-// ============================================================================
-// Bounds Section
-// ============================================================================
 
 BoundsSection: Vec<(&'input str, VariableType)> = {
     "bounds" <bounds:BoundSpec*> => bounds,
@@ -295,10 +270,6 @@ BoundSpec: (&'input str, VariableType) = {
     <bound:NumericValue> "=" <var:"identifier"> => (var, VariableType::DoubleBound(bound, bound)),
 };
 
-// ============================================================================
-// Variable Type Sections
-// ============================================================================
-
 GeneralsSection: Vec<&'input str> = {
     "generals" <vars:"identifier"*> => vars,
 };
@@ -314,11 +285,6 @@ BinariesSection: Vec<&'input str> = {
 SemiSection: Vec<&'input str> = {
     "semi-continuous" <vars:"identifier"*> => vars,
 };
-
-// ============================================================================
-// SOS Section
-// Parse flat list of SOS entries, each entry is either a header or a weight
-// ============================================================================
 
 SosSection: Vec<Constraint<'input>> = {
     "sos" <entries:SosEntry*> => {
@@ -373,10 +339,6 @@ SosEntry: SosEntryKind<'input> = {
     <var:"identifier"> ":" <weight:NumericValue> => SosEntryKind::Weight(Coefficient { name: var, value: weight }),
 };
 
-// ============================================================================
-// Comparison Operators
-// ============================================================================
-
 CompOp: ComparisonOp = {
     "<=" => ComparisonOp::LTE,
     ">=" => ComparisonOp::GTE,
@@ -384,10 +346,6 @@ CompOp: ComparisonOp = {
     ">" => ComparisonOp::GT,
     "=" => ComparisonOp::EQ,
 };
-
-// ============================================================================
-// Numeric Values
-// ============================================================================
 
 NumericValue: f64 = {
     <n:"number"> => n,
