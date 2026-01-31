@@ -39,6 +39,14 @@ The Grammar is defined with the [lp.lalrpop](/rust/src/lp.lalrpop) file - should
 
 ### Advanced Features
 
+- **Problem Analysis**
+  - Comprehensive statistics: variable/constraint counts, matrix density, sparsity metrics
+  - Variable analysis: type distribution, unused/fixed variables, invalid bounds detection
+  - Constraint analysis: type distribution, empty/singleton constraints, RHS ranges
+  - Coefficient analysis: ranges, large/small coefficient detection, scaling ratios
+  - Issue detection with severity levels (errors, warnings, info)
+  - Configurable thresholds for different problem domains
+
 - **LP File Comparison (`diff` feature)**
   - Identify added, removed, and modified elements
   - Useful for model version control and validation
@@ -146,6 +154,7 @@ lp_parser <COMMAND>
 Commands:
   parse    Parse an LP file and display its structure
   info     Show detailed statistics about an LP problem
+  analyze  Analyze problem structure, detect issues, and report statistics
   diff     Compare two LP files (requires 'diff' feature)
   convert  Convert LP file to another format
   solve    Solve an LP problem using external solvers (requires 'lp-solvers' feature)
@@ -171,6 +180,55 @@ lp_parser parse problem.lp
 lp_parser info problem.lp
 # With detailed listings
 lp_parser info problem.lp --variables --constraints --objectives
+```
+
+**Analyze problem structure and detect issues:**
+
+```bash
+# Full analysis with statistics and issue detection
+lp_parser analyze problem.lp
+
+# Show only warnings and errors
+lp_parser analyze problem.lp --issues-only
+
+# Output as JSON or YAML
+lp_parser analyze problem.lp --format json --pretty
+lp_parser analyze problem.lp --format yaml -o analysis.yaml
+
+# Custom thresholds for numerical issue detection
+lp_parser analyze problem.lp --large-coeff-threshold 1e8 --ratio-threshold 1e5
+```
+
+Example analysis output:
+```yaml
+summary:
+  name: diet
+  sense: Minimize
+  objective_count: 1
+  constraint_count: 7
+  variable_count: 16
+  total_nonzeros: 64
+  density: 0.571
+sparsity:
+  min_vars_per_constraint: 6
+  max_vars_per_constraint: 10
+variables:
+  type_distribution:
+    upper_bounded: 9
+    double_bounded: 7
+  discrete_variable_count: 0
+constraints:
+  type_distribution:
+    equality: 7
+  rhs_range:
+    min: 30.0
+    max: 50000.0
+coefficients:
+  constraint_coeff_range:
+    min: 0.1
+    max: 3055.2
+  coefficient_ratio: 101840.0
+issues: []
 ```
 
 **Output as JSON or YAML:**

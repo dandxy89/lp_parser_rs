@@ -9,6 +9,7 @@ A LP file format parser, writer, and modifier for Python, powered by Rust.
 - **Complete LP Support**: Handles all standard LP file format features
 - **Problem Modification**: Programmatically modify objectives, constraints, and variables
 - **LP File Writing**: Generate LP files from modified problems with round-trip compatibility
+- **Problem Analysis**: Comprehensive statistics, structure analysis, and issue detection with configurable thresholds
 - **Easy Data Access**: Direct access to problem components (variables, constraints, objectives)
 - **CSV Export**: Export parsed data to CSV files for further analysis
 - **Problem Comparison**: Compare two LP problems to identify differences
@@ -43,6 +44,11 @@ parser.update_constraint_rhs("C1", 100.0)
 # Write back to LP format
 modified_lp = parser.to_lp_string()
 parser.save_to_file("modified_problem.lp")
+
+# Analyze problem structure and detect issues
+analysis = parser.analyze()
+print(f"Matrix density: {analysis['summary']['density']:.4f}")
+print(f"Issues found: {len(analysis['issues'])}")
 
 # Export to CSV files
 parser.to_csv("output_directory/")
@@ -112,6 +118,78 @@ parser.to_csv("output/")
 # - output/constraints.csv
 # - output/objectives.csv
 ```
+
+### Problem Analysis
+
+Analyze problem structure, detect potential issues, and get comprehensive statistics.
+
+```python
+from parse_lp import LpParser
+
+parser = LpParser("problem.lp")
+parser.parse()
+
+# Get complete analysis
+analysis = parser.analyze()
+
+# Summary statistics
+summary = analysis['summary']
+print(f"Problem: {summary['name']}")
+print(f"Sense: {summary['sense']}")
+print(f"Variables: {summary['variable_count']}")
+print(f"Constraints: {summary['constraint_count']}")
+print(f"Nonzeros: {summary['total_nonzeros']}")
+print(f"Matrix density: {summary['density']:.4f}")
+
+# Sparsity metrics
+sparsity = analysis['sparsity']
+print(f"Variables per constraint: {sparsity['min_vars_per_constraint']} - {sparsity['max_vars_per_constraint']}")
+
+# Variable type distribution
+var_types = analysis['variables']['type_distribution']
+print(f"Variable types: {var_types}")
+
+# Coefficient ranges
+coeffs = analysis['coefficients']
+print(f"Constraint coefficients: {coeffs['constraint_coeff_range']}")
+print(f"Objective coefficients: {coeffs['objective_coeff_range']}")
+print(f"Coefficient ratio: {coeffs['coefficient_ratio']:.2f}")
+
+# Check for issues (warnings and errors)
+for issue in analysis['issues']:
+    print(f"[{issue['severity']}] {issue['category']}: {issue['message']}")
+```
+
+**Analysis with custom thresholds:**
+
+```python
+# Customize thresholds for issue detection
+analysis = parser.analyze_with_config(
+    large_coeff_threshold=1e8,      # Flag coefficients above this
+    small_coeff_threshold=1e-10,    # Flag coefficients below this
+    ratio_threshold=1e5             # Flag if max/min ratio exceeds this
+)
+```
+
+**Get issues only:**
+
+```python
+# Get just the detected issues without full analysis
+issues = parser.get_issues()
+
+for issue in issues:
+    print(f"[{issue['severity']}] {issue['category']}: {issue['message']}")
+    if issue['details']:
+        print(f"  Details: {issue['details']}")
+```
+
+**Issue types detected:**
+- Invalid variable bounds (lower > upper)
+- Numerical scaling warnings (large coefficients, high ratios)
+- Empty constraints (no variables)
+- Unused variables (not in any constraint or objective)
+- Fixed variables (lower bound = upper bound)
+- Singleton constraints (only one variable)
 
 ### Problem Modification
 
@@ -258,6 +336,12 @@ print(f"Removed constraints: {diff['removed_constraints']}")
 - `to_lp_string()` - Generate LP format string
 - `to_lp_string_with_options(**options)` - Generate with custom formatting
 - `save_to_file(filepath)` - Save to LP file
+
+### Analysis Methods
+
+- `analyze()` - Get complete problem analysis including statistics and issues
+- `analyze_with_config(large_coeff_threshold, small_coeff_threshold, ratio_threshold)` - Analysis with custom thresholds
+- `get_issues()` - Get only detected issues/warnings without full analysis
 
 ### Variable Types
 
