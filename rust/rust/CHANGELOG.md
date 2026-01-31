@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.1.0](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v3.0.3...lp_parser_rs-v3.1.0) (2026-01-31)
+
+
+### Features
+
+* Detailed statistics ([#154](https://github.com/dandxy89/lp_parser_rs/issues/154)) ([e4d74b7](https://github.com/dandxy89/lp_parser_rs/commit/e4d74b7240be508c07ec15998f511e7610c8e5f4))
+
+
+### Bug Fixes
+
+* Updating lints ([dc95549](https://github.com/dandxy89/lp_parser_rs/commit/dc955496f611528250061f1ad55f894d73a1912c))
+
 ## [3.0.3](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v3.0.2...lp_parser_rs-v3.0.3) (2025-12-11)
 
 
