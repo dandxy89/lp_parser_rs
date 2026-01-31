@@ -35,7 +35,7 @@ diff-struct = { version = "0.5.3", optional = true }
 lalrpop-util = { git = "https://github.com/lalrpop/lalrpop", rev = "85e4ba54", features = [
     "lexer",
 ] }
-lp-solvers = { version = "1.1", optional = true }
+lp-solvers = { version = "1.2.0", optional = true }
 log = "0.4.29"
 logos = "0.16.0"
 serde = { version = "1.0.228", features = ["derive"], optional = true }

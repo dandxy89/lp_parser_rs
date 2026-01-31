@@ -604,7 +604,7 @@ fn cmd_solve(args: SolveArgs, verbose: u8, quiet: bool) -> Result<(), BoxError> 
                         writeln!(writer, "  {name} = {value}")?;
                     }
                 }
-                Status::Infeasible | Status::Unbounded | Status::NotSolved => {}
+                Status::TimeLimit | Status::MipGap | Status::Infeasible | Status::Unbounded | Status::NotSolved => {}
             }
         }
         #[cfg(feature = "serde")]
@@ -615,6 +615,8 @@ fn cmd_solve(args: SolveArgs, verbose: u8, quiet: bool) -> Result<(), BoxError> 
                 Status::Infeasible => "infeasible",
                 Status::Unbounded => "unbounded",
                 Status::NotSolved => "not_solved",
+                Status::TimeLimit => "time_limit",
+                Status::MipGap => "mip_gap",
             };
             let solution_json = serde_json::json!({
                 "status": status_str,
@@ -635,6 +637,8 @@ fn cmd_solve(args: SolveArgs, verbose: u8, quiet: bool) -> Result<(), BoxError> 
                 Status::Infeasible => "infeasible",
                 Status::Unbounded => "unbounded",
                 Status::NotSolved => "not_solved",
+                Status::TimeLimit => "time_limit",
+                Status::MipGap => "mip_gap",
             };
             let solution_yaml = serde_json::json!({
                 "status": status_str,
