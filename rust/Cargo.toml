@@ -60,4 +60,4 @@ serde = ["dep:serde", "dep:serde_json", "dep:serde_yaml"]
 test-cbc = ["lp-solvers"]
 
 [package.metadata.cargo-machete]
-ignored = ["lalrpop"]
+ignored = ["lalrpop", "diff-struct"]
