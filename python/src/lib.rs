@@ -467,6 +467,77 @@ impl LpParser {
         self.parsed_content = Some(updated_content);
         Ok(())
     }
+
+    /// Perform comprehensive analysis on the LP problem.
+    ///
+    /// Returns a dictionary containing:
+    /// - summary: Basic statistics (counts, density, etc.)
+    /// - sparsity: Sparsity metrics (variables per constraint, connectivity)
+    /// - variables: Variable analysis (type distribution, invalid bounds, etc.)
+    /// - constraints: Constraint analysis (type distribution, empty/singleton)
+    /// - coefficients: Coefficient range analysis
+    /// - objectives: Objective analysis
+    /// - issues: List of detected issues/warnings
+    #[pyo3(text_signature = "($self)")]
+    fn analyze(&self, py: Python) -> PyResult<Py<PyAny>> {
+        use lp_parser_rs::analysis::AnalysisConfig;
+
+        let problem = self.get_problem()?;
+        let analysis = problem.analyze_with_config(&AnalysisConfig::default());
+        self.analysis_to_dict(py, &analysis)
+    }
+
+    /// Perform analysis with custom thresholds.
+    ///
+    /// Args:
+    ///     large_coeff_threshold: Threshold for large coefficient warnings (default: 1e9)
+    ///     small_coeff_threshold: Threshold for small coefficient warnings (default: 1e-9)
+    ///     ratio_threshold: Coefficient ratio threshold for scaling warnings (default: 1e6)
+    #[pyo3(signature = (*, large_coeff_threshold=1e9, small_coeff_threshold=1e-9, ratio_threshold=1e6))]
+    fn analyze_with_config(
+        &self,
+        py: Python,
+        large_coeff_threshold: f64,
+        small_coeff_threshold: f64,
+        ratio_threshold: f64,
+    ) -> PyResult<Py<PyAny>> {
+        use lp_parser_rs::analysis::AnalysisConfig;
+
+        let problem = self.get_problem()?;
+        let config = AnalysisConfig {
+            large_coefficient_threshold: large_coeff_threshold,
+            small_coefficient_threshold: small_coeff_threshold,
+            large_rhs_threshold: large_coeff_threshold,
+            coefficient_ratio_threshold: ratio_threshold,
+        };
+        let analysis = problem.analyze_with_config(&config);
+        self.analysis_to_dict(py, &analysis)
+    }
+
+    /// Get only the issues/warnings from the analysis.
+    ///
+    /// Returns a list of issue dictionaries, each containing:
+    /// - severity: "ERROR", "WARNING", or "INFO"
+    /// - category: Issue category
+    /// - message: Human-readable message
+    /// - details: Optional additional details
+    #[pyo3(text_signature = "($self)")]
+    fn get_issues(&self, py: Python) -> PyResult<Py<PyAny>> {
+        let problem = self.get_problem()?;
+        let analysis = problem.analyze();
+
+        let issues_list = PyList::empty(py);
+        for issue in &analysis.issues {
+            let issue_dict = PyDict::new(py);
+            issue_dict.set_item("severity", format!("{}", issue.severity))?;
+            issue_dict.set_item("category", format!("{}", issue.category))?;
+            issue_dict.set_item("message", &issue.message)?;
+            issue_dict.set_item("details", &issue.details)?;
+            issues_list.append(issue_dict)?;
+        }
+
+        Ok(issues_list.into())
+    }
 }
 
 impl LpParser {
@@ -482,6 +553,154 @@ impl LpParser {
             || Err(PyRuntimeError::new_err("Must call parse() first")),
             |content| LpProblem::parse(content).map_err(|_| PyRuntimeError::new_err("Unable to parse LpProblem")),
         )
+    }
+
+    fn analysis_to_dict(&self, py: Python, analysis: &lp_parser_rs::analysis::ProblemAnalysis) -> PyResult<Py<PyAny>> {
+        let result = PyDict::new(py);
+
+        // Summary
+        let summary = PyDict::new(py);
+        summary.set_item("name", &analysis.summary.name)?;
+        summary.set_item("sense", &analysis.summary.sense)?;
+        summary.set_item("objective_count", analysis.summary.objective_count)?;
+        summary.set_item("constraint_count", analysis.summary.constraint_count)?;
+        summary.set_item("variable_count", analysis.summary.variable_count)?;
+        summary.set_item("total_nonzeros", analysis.summary.total_nonzeros)?;
+        summary.set_item("density", analysis.summary.density)?;
+        result.set_item("summary", summary)?;
+
+        // Sparsity
+        let sparsity = PyDict::new(py);
+        sparsity.set_item("min_vars_per_constraint", analysis.sparsity.min_vars_per_constraint)?;
+        sparsity.set_item("max_vars_per_constraint", analysis.sparsity.max_vars_per_constraint)?;
+        result.set_item("sparsity", sparsity)?;
+
+        // Variables
+        let variables = PyDict::new(py);
+        let type_dist = PyDict::new(py);
+        type_dist.set_item("free", analysis.variables.type_distribution.free)?;
+        type_dist.set_item("general", analysis.variables.type_distribution.general)?;
+        type_dist.set_item("lower_bounded", analysis.variables.type_distribution.lower_bounded)?;
+        type_dist.set_item("upper_bounded", analysis.variables.type_distribution.upper_bounded)?;
+        type_dist.set_item("double_bounded", analysis.variables.type_distribution.double_bounded)?;
+        type_dist.set_item("binary", analysis.variables.type_distribution.binary)?;
+        type_dist.set_item("integer", analysis.variables.type_distribution.integer)?;
+        type_dist.set_item("semi_continuous", analysis.variables.type_distribution.semi_continuous)?;
+        type_dist.set_item("sos", analysis.variables.type_distribution.sos)?;
+        variables.set_item("type_distribution", type_dist)?;
+        variables.set_item("free_variables", &analysis.variables.free_variables)?;
+
+        let fixed_list = PyList::empty(py);
+        for fixed in &analysis.variables.fixed_variables {
+            let d = PyDict::new(py);
+            d.set_item("name", &fixed.name)?;
+            d.set_item("value", fixed.value)?;
+            fixed_list.append(d)?;
+        }
+        variables.set_item("fixed_variables", fixed_list)?;
+
+        let invalid_list = PyList::empty(py);
+        for invalid in &analysis.variables.invalid_bounds {
+            let d = PyDict::new(py);
+            d.set_item("name", &invalid.name)?;
+            d.set_item("lower", invalid.lower)?;
+            d.set_item("upper", invalid.upper)?;
+            invalid_list.append(d)?;
+        }
+        variables.set_item("invalid_bounds", invalid_list)?;
+        variables.set_item("unused_variables", &analysis.variables.unused_variables)?;
+        variables.set_item("discrete_variable_count", analysis.variables.discrete_variable_count)?;
+        result.set_item("variables", variables)?;
+
+        // Constraints
+        let constraints = PyDict::new(py);
+        let cons_dist = PyDict::new(py);
+        cons_dist.set_item("equality", analysis.constraints.type_distribution.equality)?;
+        cons_dist.set_item("less_than_equal", analysis.constraints.type_distribution.less_than_equal)?;
+        cons_dist.set_item("greater_than_equal", analysis.constraints.type_distribution.greater_than_equal)?;
+        cons_dist.set_item("less_than", analysis.constraints.type_distribution.less_than)?;
+        cons_dist.set_item("greater_than", analysis.constraints.type_distribution.greater_than)?;
+        cons_dist.set_item("sos1", analysis.constraints.type_distribution.sos1)?;
+        cons_dist.set_item("sos2", analysis.constraints.type_distribution.sos2)?;
+        constraints.set_item("type_distribution", cons_dist)?;
+        constraints.set_item("empty_constraints", &analysis.constraints.empty_constraints)?;
+
+        let singleton_list = PyList::empty(py);
+        for singleton in &analysis.constraints.singleton_constraints {
+            let d = PyDict::new(py);
+            d.set_item("name", &singleton.name)?;
+            d.set_item("variable", &singleton.variable)?;
+            d.set_item("coefficient", singleton.coefficient)?;
+            d.set_item("operator", &singleton.operator)?;
+            d.set_item("rhs", singleton.rhs)?;
+            singleton_list.append(d)?;
+        }
+        constraints.set_item("singleton_constraints", singleton_list)?;
+
+        let rhs_range = PyDict::new(py);
+        rhs_range.set_item("min", analysis.constraints.rhs_range.min)?;
+        rhs_range.set_item("max", analysis.constraints.rhs_range.max)?;
+        rhs_range.set_item("count", analysis.constraints.rhs_range.count)?;
+        constraints.set_item("rhs_range", rhs_range)?;
+
+        let sos_summary = PyDict::new(py);
+        sos_summary.set_item("s1_count", analysis.constraints.sos_summary.s1_count)?;
+        sos_summary.set_item("s2_count", analysis.constraints.sos_summary.s2_count)?;
+        sos_summary.set_item("total_sos_variables", analysis.constraints.sos_summary.total_sos_variables)?;
+        constraints.set_item("sos_summary", sos_summary)?;
+        result.set_item("constraints", constraints)?;
+
+        // Coefficients
+        let coefficients = PyDict::new(py);
+        let constraint_coeff = PyDict::new(py);
+        constraint_coeff.set_item("min", analysis.coefficients.constraint_coeff_range.min)?;
+        constraint_coeff.set_item("max", analysis.coefficients.constraint_coeff_range.max)?;
+        constraint_coeff.set_item("count", analysis.coefficients.constraint_coeff_range.count)?;
+        coefficients.set_item("constraint_coeff_range", constraint_coeff)?;
+
+        let objective_coeff = PyDict::new(py);
+        objective_coeff.set_item("min", analysis.coefficients.objective_coeff_range.min)?;
+        objective_coeff.set_item("max", analysis.coefficients.objective_coeff_range.max)?;
+        objective_coeff.set_item("count", analysis.coefficients.objective_coeff_range.count)?;
+        coefficients.set_item("objective_coeff_range", objective_coeff)?;
+
+        let large_list = PyList::empty(py);
+        for loc in &analysis.coefficients.large_coefficients {
+            let d = PyDict::new(py);
+            d.set_item("location", &loc.location)?;
+            d.set_item("is_objective", loc.is_objective)?;
+            d.set_item("variable", &loc.variable)?;
+            d.set_item("value", loc.value)?;
+            large_list.append(d)?;
+        }
+        coefficients.set_item("large_coefficients", large_list)?;
+
+        let small_list = PyList::empty(py);
+        for loc in &analysis.coefficients.small_coefficients {
+            let d = PyDict::new(py);
+            d.set_item("location", &loc.location)?;
+            d.set_item("is_objective", loc.is_objective)?;
+            d.set_item("variable", &loc.variable)?;
+            d.set_item("value", loc.value)?;
+            small_list.append(d)?;
+        }
+        coefficients.set_item("small_coefficients", small_list)?;
+        coefficients.set_item("coefficient_ratio", analysis.coefficients.coefficient_ratio)?;
+        result.set_item("coefficients", coefficients)?;
+
+        // Issues
+        let issues_list = PyList::empty(py);
+        for issue in &analysis.issues {
+            let issue_dict = PyDict::new(py);
+            issue_dict.set_item("severity", format!("{}", issue.severity))?;
+            issue_dict.set_item("category", format!("{}", issue.category))?;
+            issue_dict.set_item("message", &issue.message)?;
+            issue_dict.set_item("details", &issue.details)?;
+            issues_list.append(issue_dict)?;
+        }
+        result.set_item("issues", issues_list)?;
+
+        Ok(result.into())
     }
 }
 

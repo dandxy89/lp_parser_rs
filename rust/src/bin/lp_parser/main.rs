@@ -9,9 +9,10 @@ use std::path::PathBuf;
 use clap::Parser;
 #[cfg(feature = "diff")]
 use cli::DiffArgs;
-use cli::{Cli, Commands, ConvertArgs, ConvertFormat, InfoArgs, OutputFormat, ParseArgs};
+use cli::{AnalyzeArgs, Cli, Commands, ConvertArgs, ConvertFormat, InfoArgs, OutputFormat, ParseArgs};
 #[cfg(feature = "lp-solvers")]
 use cli::{SolveArgs, Solver};
+use lp_parser_rs::analysis::AnalysisConfig;
 use lp_parser_rs::model::{Constraint, VariableType};
 use lp_parser_rs::parser::parse_file;
 use lp_parser_rs::problem::LpProblem;
@@ -84,6 +85,68 @@ fn cmd_info(args: &InfoArgs, verbose: u8, quiet: bool) -> Result<(), BoxError> {
         OutputFormat::Yaml => {
             let info = build_info_struct(&problem, args);
             serde_yaml::to_writer(&mut writer, &info)?;
+        }
+    }
+
+    Ok(())
+}
+
+fn cmd_analyze(args: AnalyzeArgs, verbose: u8, quiet: bool) -> Result<(), BoxError> {
+    let content = parse_file(&args.file)?;
+    let problem = LpProblem::parse(&content)?;
+
+    if !quiet && verbose > 0 {
+        eprintln!("Analyzing file: {}", args.file.display());
+    }
+
+    let config = AnalysisConfig {
+        large_coefficient_threshold: args.large_coeff_threshold,
+        small_coefficient_threshold: args.small_coeff_threshold,
+        large_rhs_threshold: args.large_coeff_threshold,
+        coefficient_ratio_threshold: args.ratio_threshold,
+    };
+
+    let analysis = problem.analyze_with_config(&config);
+
+    let mut writer = OutputWriter::new(args.output)?;
+
+    match args.format {
+        OutputFormat::Text => {
+            if args.issues_only {
+                if analysis.issues.is_empty() {
+                    writeln!(writer, "No issues detected.")?;
+                } else {
+                    writeln!(writer, "Issues Found: {}", analysis.issues.len())?;
+                    for issue in &analysis.issues {
+                        writeln!(writer, "  {issue}")?;
+                    }
+                }
+            } else {
+                write!(writer, "{analysis}")?;
+            }
+        }
+        #[cfg(feature = "serde")]
+        OutputFormat::Json => {
+            if args.issues_only {
+                if args.pretty {
+                    serde_json::to_writer_pretty(&mut writer, &analysis.issues)?;
+                } else {
+                    serde_json::to_writer(&mut writer, &analysis.issues)?;
+                }
+            } else if args.pretty {
+                serde_json::to_writer_pretty(&mut writer, &analysis)?;
+            } else {
+                serde_json::to_writer(&mut writer, &analysis)?;
+            }
+            writeln!(writer)?;
+        }
+        #[cfg(feature = "serde")]
+        OutputFormat::Yaml => {
+            if args.issues_only {
+                serde_yaml::to_writer(&mut writer, &analysis.issues)?;
+            } else {
+                serde_yaml::to_writer(&mut writer, &analysis)?;
+            }
         }
     }
 
@@ -620,6 +683,7 @@ fn main() -> Result<(), BoxError> {
     match cli.command {
         Commands::Parse(args) => cmd_parse(args, cli.verbose, cli.quiet),
         Commands::Info(args) => cmd_info(&args, cli.verbose, cli.quiet),
+        Commands::Analyze(args) => cmd_analyze(args, cli.verbose, cli.quiet),
         #[cfg(feature = "diff")]
         Commands::Diff(args) => cmd_diff(args, cli.verbose, cli.quiet),
         Commands::Convert(args) => cmd_convert(args, cli.verbose, cli.quiet),

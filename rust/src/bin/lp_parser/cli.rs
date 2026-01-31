@@ -1,5 +1,3 @@
-//! CLI argument definitions for `lp_parser`.
-
 use std::path::PathBuf;
 
 use clap::{Parser, Subcommand, ValueEnum};
@@ -29,6 +27,9 @@ pub enum Commands {
 
     /// Show detailed statistics about an LP problem
     Info(InfoArgs),
+
+    /// Perform comprehensive analysis on an LP problem
+    Analyze(AnalyzeArgs),
 
     /// Compare two LP files
     #[cfg(feature = "diff")]
@@ -71,6 +72,41 @@ pub struct ParseArgs {
     /// Pretty-print structured output (for JSON/YAML)
     #[arg(long)]
     pub pretty: bool,
+}
+
+#[derive(clap::Args)]
+#[allow(clippy::struct_excessive_bools)]
+pub struct AnalyzeArgs {
+    /// Path to the LP file
+    pub file: PathBuf,
+
+    /// Write output to file instead of stdout
+    #[arg(short, long)]
+    pub output: Option<PathBuf>,
+
+    /// Output format
+    #[arg(short, long, value_enum, default_value = "text")]
+    pub format: OutputFormat,
+
+    /// Pretty-print structured output
+    #[arg(long)]
+    pub pretty: bool,
+
+    /// Show only issues/warnings (skip full analysis output)
+    #[arg(long)]
+    pub issues_only: bool,
+
+    /// Large coefficient warning threshold
+    #[arg(long, default_value = "1000000000")]
+    pub large_coeff_threshold: f64,
+
+    /// Small coefficient warning threshold
+    #[arg(long, default_value = "0.000000001")]
+    pub small_coeff_threshold: f64,
+
+    /// Coefficient ratio warning threshold
+    #[arg(long, default_value = "1000000")]
+    pub ratio_threshold: f64,
 }
 
 #[derive(clap::Args)]
