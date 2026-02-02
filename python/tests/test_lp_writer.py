@@ -117,7 +117,7 @@ class TestLpModification:
 
         # Invalid type
         with pytest.raises(RuntimeError, match="Unknown variable type"):
-            parser.update_variable_type("x1", "invalid_type")
+            parser.update_variable_type("x1", "invalid_type")  # type: ignore[arg-type]
 
         # Set problem name
         parser.set_problem_name("Test Problem")
@@ -129,7 +129,7 @@ class TestLpModification:
 
         # Invalid sense
         with pytest.raises(RuntimeError, match="Invalid sense"):
-            parser.set_sense("invalid_sense")
+            parser.set_sense("invalid_sense")  # type: ignore[arg-type]
 
     def test_complex_workflow(self, simple_lp_file: Path) -> None:
         parser = LpParser(str(simple_lp_file))

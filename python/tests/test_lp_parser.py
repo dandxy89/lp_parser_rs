@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Generator
+from collections.abc import Callable
+from contextlib import AbstractContextManager
 from pathlib import Path
 
 import pytest
@@ -128,7 +129,7 @@ class TestLpParserDiff:
     def test_compare_unparsed_parser(
         self,
         simple_lp_file: Path,
-        temp_lp_file: Callable[[str], Generator[str, None, None]],
+        temp_lp_file: Callable[[str], AbstractContextManager[str]],
     ) -> None:
         parser1 = LpParser(str(simple_lp_file))
         parser1.parse()
@@ -205,7 +206,7 @@ class TestLpParserProperties:
         assert parser.sense == expected_sense
 
     def test_counts_unparsed(
-        self, temp_lp_file: Callable[[str], Generator[str, None, None]]
+        self, temp_lp_file: Callable[[str], AbstractContextManager[str]]
     ) -> None:
         content = """Maximize
 OBJ: x1

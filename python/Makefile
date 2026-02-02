@@ -10,7 +10,7 @@ MATURIN_EXTRA_ARGS=--release
 .PHONY: setup
 setup: ## Setup the requirements
 	$(info --- Setup dependencies ---)
-	uv sync --group dev --no-install-project
+	uv sync
 
 .PHONY: build
 build: setup ## Build Python binding
@@ -42,15 +42,16 @@ check-python: ## Run check on Python
 	uv run --no-sync ruff format --check --diff .
 	$(info Check Python linting)
 	uv run --no-sync ruff check .
-	$(info Check Python mypy)
-	uv run --no-sync mypy
-	$(info Check Python pyrefly)
-	uv run pyrefly check
+	$(info Check Python ty)
+	uv run ty check
 
 .PHONY: unit-test
 unit-test: install ## Run unit test
 	$(info --- Run Python unit-test ---)
 	uv run --no-sync pytest --doctest-modules
+
+pre_commit: setup format check-python unit-test ## Run pre-commit checks
+	$(info --- Pre-commit checks passed ---)
 
 .PHONY: clean
 clean: ## Run clean

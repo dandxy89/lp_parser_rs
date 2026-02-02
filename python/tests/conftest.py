@@ -1,7 +1,8 @@
 import tempfile
-from collections.abc import Callable, Generator
-from contextlib import contextmanager
+from collections.abc import Generator
+from contextlib import AbstractContextManager, contextmanager
 from pathlib import Path
+from typing import Callable
 
 import pytest
 
@@ -22,7 +23,7 @@ def afiro_lp_file() -> Path:
 
 
 @pytest.fixture
-def temp_lp_file() -> Callable[[str], Generator[str, None, None]]:
+def temp_lp_file() -> Callable[[str], AbstractContextManager[str]]:
     @contextmanager
     def _create_file(content: str) -> Generator[str, None, None]:
         with tempfile.NamedTemporaryFile(mode="w", suffix=".lp", delete=False) as f:
