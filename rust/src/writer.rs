@@ -310,6 +310,8 @@ fn write_coefficients_line(output: &mut String, coefficients: &[Coefficient], op
 
 /// Format a coefficient with proper sign handling
 fn format_coefficient(coeff: &Coefficient, is_first: bool, precision: usize) -> String {
+    debug_assert!(!coeff.name.is_empty(), "coefficient name must not be empty");
+    debug_assert!(coeff.value.is_finite(), "coefficient value must be finite, got: {}", coeff.value);
     let abs_value = coeff.value.abs();
     let sign = if coeff.value < 0.0 { "-" } else { "+" };
     let is_one = (abs_value - 1.0).abs() < NUMERIC_EPSILON;
@@ -332,13 +334,16 @@ fn format_coefficient(coeff: &Coefficient, is_first: bool, precision: usize) -> 
 /// Format a number with specified precision, removing trailing zeros
 #[allow(clippy::uninlined_format_args, clippy::cast_precision_loss, clippy::cast_possible_truncation)]
 fn format_number(value: f64, precision: usize) -> String {
+    debug_assert!(value.is_finite(), "format_number called with non-finite value: {value}");
     // Check if value is a whole number and within safe i64 range for integer formatting
     let is_whole_number = value.fract().abs() < f64::EPSILON;
     let is_safe_for_i64 = value >= (i64::MIN as f64) && value <= (i64::MAX as f64);
 
     if is_whole_number && is_safe_for_i64 && value.abs() < 1e10 {
         // Integer value within safe range - format as integer
-        format!("{}", value as i64)
+        let cast = value as i64;
+        debug_assert!((cast as f64 - value).abs() < 1.0, "i64 cast lost precision: {value} -> {cast}");
+        format!("{}", cast)
     } else {
         // Decimal value or out of i64 range - format with precision and remove trailing zeros
         let formatted = format!("{:.precision$}", value, precision = precision);

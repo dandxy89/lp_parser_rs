@@ -43,6 +43,7 @@ pub trait LpCsvWriter {
 
 #[inline]
 fn f64_to_bytes(value: f64) -> Vec<u8> {
+    debug_assert!(value.is_finite(), "f64_to_bytes called with non-finite value: {value}");
     format!("{value}").into_bytes()
 }
 

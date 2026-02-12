@@ -490,9 +490,9 @@ impl LpParser {
     /// Perform analysis with custom thresholds.
     ///
     /// Args:
-    ///     large_coeff_threshold: Threshold for large coefficient warnings (default: 1e9)
-    ///     small_coeff_threshold: Threshold for small coefficient warnings (default: 1e-9)
-    ///     ratio_threshold: Coefficient ratio threshold for scaling warnings (default: 1e6)
+    ///     `large_coeff_threshold`: Threshold for large coefficient warnings (default: 1e9)
+    ///     `small_coeff_threshold`: Threshold for small coefficient warnings (default: 1e-9)
+    ///     `ratio_threshold`: Coefficient ratio threshold for scaling warnings (default: 1e6)
     #[pyo3(signature = (*, large_coeff_threshold=1e9, small_coeff_threshold=1e-9, ratio_threshold=1e6))]
     fn analyze_with_config(
         &self,

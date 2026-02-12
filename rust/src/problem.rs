@@ -27,6 +27,8 @@ use crate::model::{
 /// * `reference` - A reference magnitude for relative comparison (e.g., existing coefficient)
 #[inline]
 fn is_effectively_zero(value: f64, reference: f64) -> bool {
+    debug_assert!(value.is_finite(), "is_effectively_zero called with non-finite value: {value}");
+    debug_assert!(reference.is_finite(), "is_effectively_zero called with non-finite reference: {reference}");
     let abs_value = value.abs();
     let abs_reference = reference.abs();
 
@@ -236,6 +238,8 @@ impl<'a> LpProblem<'a> {
     ///
     /// Returns an error if the specified objective does not exist
     pub fn update_objective_coefficient(&mut self, objective_name: &str, variable_name: &'a str, new_coefficient: f64) -> LpResult<()> {
+        debug_assert!(!variable_name.is_empty(), "variable_name must not be empty");
+        debug_assert!(new_coefficient.is_finite(), "new_coefficient must be finite, got: {new_coefficient}");
         let objective = self
             .objectives
             .get_mut(objective_name)
@@ -281,6 +285,8 @@ impl<'a> LpProblem<'a> {
     ///
     /// Returns an error if the constraint does not exist or is an SOS constraint
     pub fn update_constraint_coefficient(&mut self, constraint_name: &str, variable_name: &'a str, new_coefficient: f64) -> LpResult<()> {
+        debug_assert!(!variable_name.is_empty(), "variable_name must not be empty");
+        debug_assert!(new_coefficient.is_finite(), "new_coefficient must be finite, got: {new_coefficient}");
         let constraint = self
             .constraints
             .get_mut(constraint_name)
@@ -329,6 +335,7 @@ impl<'a> LpProblem<'a> {
     ///
     /// Returns an error if the constraint does not exist or is an SOS constraint
     pub fn update_constraint_rhs(&mut self, constraint_name: &str, new_rhs: f64) -> LpResult<()> {
+        debug_assert!(new_rhs.is_finite(), "new_rhs must be finite, got: {new_rhs}");
         let constraint = self
             .constraints
             .get_mut(constraint_name)
@@ -406,7 +413,7 @@ impl<'a> LpProblem<'a> {
         }
 
         // Update variable in variables map
-        let variable = self.variables.remove(old_name).unwrap();
+        let variable = self.variables.remove(old_name).expect("variable must exist: contains_key check passed");
         let mut new_variable = Variable::new(new_name);
         new_variable.var_type = variable.var_type;
         self.variables.insert(new_name, new_variable);
@@ -440,6 +447,8 @@ impl<'a> LpProblem<'a> {
             }
         }
 
+        debug_assert!(!self.variables.contains_key(old_name), "postcondition: old_name '{old_name}' must be gone from variables");
+        debug_assert!(self.variables.contains_key(new_name), "postcondition: new_name '{new_name}' must be present in variables");
         Ok(())
     }
 
@@ -474,7 +483,7 @@ impl<'a> LpProblem<'a> {
         }
 
         // Move constraint to new name
-        let mut constraint = self.constraints.remove(old_name).unwrap();
+        let mut constraint = self.constraints.remove(old_name).expect("constraint must exist: contains_key check passed");
 
         // Update the constraint's internal name
         match &mut constraint {
@@ -485,6 +494,8 @@ impl<'a> LpProblem<'a> {
 
         self.constraints.insert(Cow::Owned(new_name.to_string()), constraint);
 
+        debug_assert!(!self.constraints.contains_key(old_name), "postcondition: old_name '{old_name}' must be gone from constraints");
+        debug_assert!(self.constraints.contains_key(new_name), "postcondition: new_name '{new_name}' must be present in constraints");
         Ok(())
     }
 
@@ -519,10 +530,12 @@ impl<'a> LpProblem<'a> {
         }
 
         // Move objective to new name
-        let mut objective = self.objectives.remove(old_name).unwrap();
+        let mut objective = self.objectives.remove(old_name).expect("objective must exist: contains_key check passed");
         objective.name = Cow::Owned(new_name.to_string());
         self.objectives.insert(Cow::Owned(new_name.to_string()), objective);
 
+        debug_assert!(!self.objectives.contains_key(old_name), "postcondition: old_name '{old_name}' must be gone from objectives");
+        debug_assert!(self.objectives.contains_key(new_name), "postcondition: new_name '{new_name}' must be present in objectives");
         Ok(())
     }
 
@@ -569,6 +582,18 @@ impl<'a> LpProblem<'a> {
             }
         }
 
+        debug_assert!(!self.variables.contains_key(variable_name), "postcondition: variable must be removed from variables map");
+        debug_assert!(
+            !self.objectives.values().any(|o| o.coefficients.iter().any(|c| c.name == variable_name)),
+            "postcondition: variable must not appear in any objective coefficients"
+        );
+        debug_assert!(
+            !self.constraints.values().any(|con| match con {
+                Constraint::Standard { coefficients, .. } => coefficients.iter().any(|c| c.name == variable_name),
+                Constraint::SOS { weights, .. } => weights.iter().any(|w| w.name == variable_name),
+            }),
+            "postcondition: variable must not appear in any constraint"
+        );
         Ok(())
     }
 

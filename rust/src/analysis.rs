@@ -434,20 +434,20 @@ impl Display for ProblemAnalysis {
         }
 
         // Issues
-        if !self.issues.is_empty() {
+        if self.issues.is_empty() {
+            writeln!(f, "No issues detected.")?;
+        } else {
             writeln!(f, "Issues Found: {}", self.issues.len())?;
             for issue in &self.issues {
                 writeln!(f, "  {issue}")?;
             }
-        } else {
-            writeln!(f, "No issues detected.")?;
         }
 
         Ok(())
     }
 }
 
-impl<'a> LpProblem<'a> {
+impl LpProblem<'_> {
     /// Perform comprehensive analysis on the LP problem with default configuration.
     #[must_use]
     pub fn analyze(&self) -> ProblemAnalysis {
@@ -479,8 +479,10 @@ impl<'a> LpProblem<'a> {
             0.0
         };
 
+        debug_assert!(density >= 0.0, "postcondition: density must be non-negative, got: {density}");
+
         ProblemSummary {
-            name: self.name.as_ref().map(|n| n.to_string()),
+            name: self.name.as_ref().map(std::string::ToString::to_string),
             sense: self.sense.to_string(),
             objective_count: self.objective_count(),
             constraint_count,
@@ -578,6 +580,20 @@ impl<'a> LpProblem<'a> {
             self.variables.keys().filter(|name| !used_variables.contains(*name)).map(|s| (*s).to_string()).collect();
 
         let discrete_variable_count = type_distribution.binary + type_distribution.integer;
+
+        debug_assert_eq!(
+            type_distribution.free
+                + type_distribution.general
+                + type_distribution.lower_bounded
+                + type_distribution.upper_bounded
+                + type_distribution.double_bounded
+                + type_distribution.binary
+                + type_distribution.integer
+                + type_distribution.semi_continuous
+                + type_distribution.sos,
+            self.variables.len(),
+            "postcondition: type distribution must sum to total variable count"
+        );
 
         VariableAnalysis { type_distribution, free_variables, fixed_variables, invalid_bounds, unused_variables, discrete_variable_count }
     }
@@ -707,6 +723,11 @@ impl<'a> LpProblem<'a> {
             let max = all_coeffs.iter().copied().fold(0.0, f64::max);
             if min > 0.0 { max / min } else { 1.0 }
         };
+
+        debug_assert!(
+            all_coeffs.is_empty() || coefficient_ratio >= 1.0,
+            "postcondition: coefficient_ratio must be >= 1.0 when coefficients exist, got: {coefficient_ratio}"
+        );
 
         CoefficientAnalysis {
             constraint_coeff_range: RangeStats::from_values(&constraint_coeffs),

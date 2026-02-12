@@ -204,7 +204,9 @@ impl<'a> ObjectiveBuilder<'a> {
             return Err(LpParseError::validation_error(format!("Objective '{}' has no coefficients", self.name)));
         }
 
-        Ok(Objective { name: self.name, coefficients: self.coefficients })
+        let objective = Objective { name: self.name, coefficients: self.coefficients };
+        debug_assert!(!objective.coefficients.is_empty(), "postcondition: built objective must have coefficients");
+        Ok(objective)
     }
 }
 
@@ -302,6 +304,10 @@ impl<'a> ConstraintBuilder<'a> {
                     return Err(LpParseError::constraint_syntax(0, format!("Constraint '{name}' has no coefficients")));
                 }
 
+                debug_assert!(
+                    coefficients.iter().all(|c| c.value.is_finite()),
+                    "postcondition: all Standard constraint coefficient values must be finite"
+                );
                 Ok(Constraint::Standard { name, coefficients, operator, rhs })
             }
             Self::SOS { name, sos_type, weights } => {
@@ -309,6 +315,10 @@ impl<'a> ConstraintBuilder<'a> {
                     return Err(LpParseError::invalid_sos_constraint(name.as_ref(), "No weights specified"));
                 }
 
+                debug_assert!(
+                    weights.iter().all(|w| w.value.is_finite()),
+                    "postcondition: all SOS constraint weight values must be finite"
+                );
                 Ok(Constraint::SOS { name, sos_type, weights })
             }
         }
@@ -319,6 +329,7 @@ impl<'a> VariableBuilder<'a> {
     #[must_use]
     /// Create a new variable builder
     pub fn new(name: &'a str) -> Self {
+        debug_assert!(!name.is_empty(), "variable name must not be empty");
         Self { name, var_type: VariableType::default() }
     }
 
@@ -382,7 +393,10 @@ impl<'a> VariableBuilder<'a> {
     /// # Errors
     ///
     /// This method currently never fails, but returns `Result` for API consistency
-    pub const fn build(self) -> LpResult<Variable<'a>> {
+    pub fn build(self) -> LpResult<Variable<'a>> {
+        if let VariableType::DoubleBound(lower, upper) = self.var_type {
+            debug_assert!(lower <= upper, "DoubleBound lower ({lower}) must be <= upper ({upper})");
+        }
         Ok(Variable { name: self.name, var_type: self.var_type })
     }
 }

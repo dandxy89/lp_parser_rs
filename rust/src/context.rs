@@ -243,6 +243,12 @@ impl<'a> ParseContext<'a> {
             return Err(LpParseError::internal_error("Cannot move position backwards"));
         }
 
+        debug_assert!(
+            new_position <= self.original_input.len(),
+            "new_position ({new_position}) must not exceed input length ({})",
+            self.original_input.len()
+        );
+
         // Update line and column based on the consumed text
         let consumed = &self.original_input[self.position..new_position];
         for ch in consumed.chars() {
@@ -268,6 +274,13 @@ impl<'a> ParseContext<'a> {
         if consumed_len == 0 {
             return Ok(());
         }
+
+        debug_assert!(
+            self.position + consumed_len <= self.original_input.len(),
+            "consume would exceed input length: position ({}) + consumed_len ({consumed_len}) > input length ({})",
+            self.position,
+            self.original_input.len()
+        );
 
         // Verify the consumed string matches the current input
         let current = self.current_input();

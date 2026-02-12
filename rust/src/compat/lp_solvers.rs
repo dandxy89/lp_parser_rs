@@ -298,7 +298,7 @@ impl<'a> LpSolversCompat<'a> {
             return Err(LpSolversCompatError::MultipleObjectives { count: problem.objectives.len() });
         }
 
-        let objective = problem.objectives.values().next().unwrap();
+        let objective = problem.objectives.values().next().expect("objective must exist: length check passed");
         let mut warnings = Vec::new();
 
         // Validate constraints (no strict inequalities)
