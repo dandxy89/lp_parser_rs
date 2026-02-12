@@ -1,5 +1,18 @@
 # Changelog
 
+## [3.1.1](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v3.1.0...lp_parser_rs-v3.1.1) (2026-02-12)
+
+
+### Build System
+
+* Crates.io requires a specific version ([0226316](https://github.com/dandxy89/lp_parser_rs/commit/0226316858c10f7e2de17bb35649938021b92ef2))
+* Updating lalrpop to a specific version ([52fd6d5](https://github.com/dandxy89/lp_parser_rs/commit/52fd6d5eae22831049055118460c3434b3cf02fd))
+
+
+### Miscellaneous Chores
+
+* Adding more validation / debug_asserts ([cdc94bd](https://github.com/dandxy89/lp_parser_rs/commit/cdc94bd8d39c910faf27529e187bf9a07bf904b7))
+
 ## [3.1.0](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v3.0.3...lp_parser_rs-v3.1.0) (2026-01-31)
 
 
