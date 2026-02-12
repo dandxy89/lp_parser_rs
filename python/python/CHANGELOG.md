@@ -1,5 +1,23 @@
 # Changelog
 
+## [3.2.0](https://github.com/dandxy89/lp_parser_rs/compare/parse_lp-v3.1.0...parse_lp-v3.2.0) (2026-02-12)
+
+
+### Build System
+
+* Python updates + lint fixes ([e6693a0](https://github.com/dandxy89/lp_parser_rs/commit/e6693a03111ce494bc90196f93c176122c47cda2))
+* update pyo3 to version 0.28.0 and replace pyrefly with ty in dependencies ([38907e5](https://github.com/dandxy89/lp_parser_rs/commit/38907e513cb5865aca186c253d8c48dab48dc5ec))
+
+
+### Miscellaneous Chores
+
+* Adding more validation / debug_asserts ([cdc94bd](https://github.com/dandxy89/lp_parser_rs/commit/cdc94bd8d39c910faf27529e187bf9a07bf904b7))
+
+
+### Features
+
+* Extending python library with runnable main ([8eef3a6](https://github.com/dandxy89/lp_parser_rs/commit/8eef3a62360adef6e35818884e5e2ad475bfb992))
+
 ## [3.1.0](https://github.com/dandxy89/lp_parser_rs/compare/parse_lp-v3.0.3...parse_lp-v3.1.0) (2026-01-31)
 
 
