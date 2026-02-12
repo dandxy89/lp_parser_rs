@@ -1,12 +1,15 @@
 from __future__ import annotations
 
-from collections.abc import Callable
-from contextlib import AbstractContextManager
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
 from parse_lp import LpParser
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+    from contextlib import AbstractContextManager
+    from pathlib import Path
 
 
 class TestLpParserBasic:
@@ -111,7 +114,9 @@ class TestLpParserDiff:
         assert len(diff["modified_variables"]) == 0
 
     def test_compare_different_parsers(
-        self, simple_lp_file: Path, minimize_lp_file: Path
+        self,
+        simple_lp_file: Path,
+        minimize_lp_file: Path,
     ) -> None:
         parser1 = LpParser(str(simple_lp_file))
         parser1.parse()
@@ -206,7 +211,8 @@ class TestLpParserProperties:
         assert parser.sense == expected_sense
 
     def test_counts_unparsed(
-        self, temp_lp_file: Callable[[str], AbstractContextManager[str]]
+        self,
+        temp_lp_file: Callable[[str], AbstractContextManager[str]],
     ) -> None:
         content = """Maximize
 OBJ: x1

@@ -31,27 +31,20 @@ include = ["README.md", "LICENSE-APACHE", "parse_lp/py.typed", "parse_lp/*.pyi"]
 
 [dependency-groups]
 dev = [
-    "basedpyright>=1.37.2",
-    "pip>=26.0",
-    "pytest>=8.4.1",
-    "ruff>=0.14.14",
-    "ty>=0.0.14",
-    "wheel>=0.46.3",
+    "basedpyright==1.38.0",
+    "pip==26.0.1",
+    "pytest",
+    "ruff==0.15.0",
+    "ty==0.0.16",
+    "wheel",
 ]
 
+[tool.ruff]
+line-length = 120
+
 [tool.ruff.lint]
-select = [
-    "E",      # pycodestyle errors
-    "F",      # pyflakes
-    "I",      # isort
-    "RUF",    # ruff-specific
-    "B",      # flake8-bugbear (catches common bugs)
-    "C4",     # flake8-comprehensions
-    "UP",     # pyupgrade (modernize syntax)
-    "SIM",    # flake8-simplify
-    "PTH",    # flake8-use-pathlib
-]
-ignore = ["E501", "SIM108"]  # line length, ternary operator
+select = ["ALL"]
+ignore = ["E501", "SIM108", "D", "S", "PLR2004", "COM"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["parse_lp"]

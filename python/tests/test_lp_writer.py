@@ -31,7 +31,8 @@ class TestLpWriter:
             decimal_precision=2,
             include_section_spacing=False,
         )
-        assert "Maximize" in lp_string and "\\Problem name:" not in lp_string
+        assert "Maximize" in lp_string
+        assert "\\Problem name:" not in lp_string
 
     def test_save_and_round_trip(self, simple_lp_file: Path, tmp_path: Path) -> None:
         parser1 = LpParser(str(simple_lp_file))
@@ -42,7 +43,8 @@ class TestLpWriter:
         parser1.save_to_file(str(output_path))
         assert output_path.exists()
         content = output_path.read_text()
-        assert "Maximize" in content and "End" in content
+        assert "Maximize" in content
+        assert "End" in content
 
         # Round trip
         parser2 = LpParser(str(output_path))
@@ -84,12 +86,14 @@ class TestLpModification:
         # Rename constraint
         parser.rename_constraint("C1", "CAPACITY")
         constraint_names = {c["name"] for c in parser.constraints}
-        assert "CAPACITY" in constraint_names and "C1" not in constraint_names
+        assert "CAPACITY" in constraint_names
+        assert "C1" not in constraint_names
 
         # Rename variable - propagates everywhere
         parser.rename_variable("x1", "production")
         coeff_names = {c["name"] for c in parser.objectives[0]["coefficients"]}
-        assert "production" in coeff_names and "x1" not in coeff_names
+        assert "production" in coeff_names
+        assert "x1" not in coeff_names
 
     def test_remove_operations(self, simple_lp_file: Path) -> None:
         parser = LpParser(str(simple_lp_file))
@@ -150,13 +154,16 @@ class TestLpModification:
         assert parser.name == "Modified Problem"
         assert parser.objectives[0]["name"] == "PROFIT"
         coeffs = {c["name"]: c["value"] for c in parser.objectives[0]["coefficients"]}
-        assert coeffs["x1"] == 5.0 and coeffs["x3"] == 1.5 and "production" in coeffs
+        assert coeffs["x1"] == 5.0
+        assert coeffs["x3"] == 1.5
+        assert "production" in coeffs
 
         capacity = next(c for c in parser.constraints if c["name"] == "CAPACITY")
         assert capacity["rhs"] == 10.0
 
         assert "Integer" in parser.variables["x1"]["var_type"]
-        assert "production" in parser.variables and "x2" not in parser.variables
+        assert "production" in parser.variables
+        assert "x2" not in parser.variables
 
 
 class TestLpModificationErrors:
@@ -169,7 +176,10 @@ class TestLpModificationErrors:
         ],
     )
     def test_nonexistent_elements(
-        self, simple_lp_file: Path, method: str, args: tuple
+        self,
+        simple_lp_file: Path,
+        method: str,
+        args: tuple,
     ) -> None:
         parser = LpParser(str(simple_lp_file))
         parser.parse()
