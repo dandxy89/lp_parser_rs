@@ -22,6 +22,9 @@ classifiers = [
 ]
 dynamic = ["version"]
 
+[project.scripts]
+parse-lp = "parse_lp.cli:cli_entry"
+
 [build-system]
 requires = ["maturin>=1,<2"]
 build-backend = "maturin"
@@ -45,6 +48,9 @@ line-length = 120
 [tool.ruff.lint]
 select = ["ALL"]
 ignore = ["E501", "SIM108", "D", "S", "PLR2004", "COM"]
+
+[tool.ruff.lint.per-file-ignores]
+"parse_lp/cli.py" = ["T201"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["parse_lp"]
