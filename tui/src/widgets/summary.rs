@@ -14,6 +14,7 @@ use ratatui::widgets::Paragraph;
 use crate::diff_model::{DiffCounts, DiffSummary, LpDiffReport};
 
 /// Draw the summary content into `area` (no border — caller provides the border).
+/// Returns the total content line count.
 pub fn draw_summary(
     frame: &mut Frame,
     area: Rect,
@@ -22,7 +23,7 @@ pub fn draw_summary(
     analysis1: &ProblemAnalysis,
     analysis2: &ProblemAnalysis,
     scroll: u16,
-) {
+) -> usize {
     let mut lines: Vec<Line<'static>> = Vec::with_capacity(64);
 
     build_header(&mut lines, report);
@@ -52,13 +53,11 @@ pub fn draw_summary(
     lines.push(Line::from(""));
     build_issues_section(&mut lines, report, analysis1, analysis2);
 
+    let line_count = lines.len();
     let paragraph = Paragraph::new(lines).scroll((scroll, 0));
     frame.render_widget(paragraph, area);
+    line_count
 }
-
-// ---------------------------------------------------------------------------
-// Header (file paths, name/sense changes)
-// ---------------------------------------------------------------------------
 
 fn build_header(lines: &mut Vec<Line<'static>>, report: &LpDiffReport) {
     lines.push(Line::from(vec![
@@ -88,10 +87,6 @@ fn build_header(lines: &mut Vec<Line<'static>>, report: &LpDiffReport) {
         ]));
     }
 }
-
-// ---------------------------------------------------------------------------
-// Diff counts table
-// ---------------------------------------------------------------------------
 
 fn build_column_headings(lines: &mut Vec<Line<'static>>) {
     lines.push(Line::from(vec![Span::styled(
@@ -135,10 +130,6 @@ fn format_count_row(label: &str, counts: &DiffCounts, is_total: bool) -> Line<'s
     ])
 }
 
-// ---------------------------------------------------------------------------
-// Comparative analysis helpers
-// ---------------------------------------------------------------------------
-
 /// Render a section heading with underline.
 fn section_heading(lines: &mut Vec<Line<'static>>, title: &str) {
     lines.push(Line::from(vec![Span::styled(format!("  {title}"), Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))]));
@@ -153,6 +144,7 @@ fn comparison_header(lines: &mut Vec<Line<'static>>, label_width: usize) {
 }
 
 /// Render a comparison row with usize values and a delta.
+#[allow(clippy::cast_possible_wrap)] // values are LP problem dimensions, never close to i64::MAX
 fn comparison_row_usize(lines: &mut Vec<Line<'static>>, label: &str, label_width: usize, a: usize, b: usize) {
     let delta = b as i64 - a as i64;
     let delta_str = format_delta_i64(delta);
@@ -196,16 +188,14 @@ fn comparison_row_str(lines: &mut Vec<Line<'static>>, label: &str, label_width: 
 }
 
 fn format_delta_i64(delta: i64) -> String {
-    if delta == 0 {
-        "\u{2014}".to_string()
-    } else if delta > 0 {
-        format!("+{delta}")
-    } else {
-        format!("{delta}")
+    match delta.cmp(&0) {
+        std::cmp::Ordering::Equal => "\u{2014}".to_string(),
+        std::cmp::Ordering::Greater => format!("+{delta}"),
+        std::cmp::Ordering::Less => format!("{delta}"),
     }
 }
 
-fn delta_colour_i64(delta: i64) -> Color {
+const fn delta_colour_i64(delta: i64) -> Color {
     if delta == 0 {
         Color::DarkGray
     } else if delta > 0 {
@@ -214,10 +204,6 @@ fn delta_colour_i64(delta: i64) -> Color {
         Color::Red
     }
 }
-
-// ---------------------------------------------------------------------------
-// Problem Dimensions
-// ---------------------------------------------------------------------------
 
 fn build_dimensions_table(lines: &mut Vec<Line<'static>>, a: &ProblemAnalysis, b: &ProblemAnalysis) {
     const W: usize = 18;
@@ -232,10 +218,6 @@ fn build_dimensions_table(lines: &mut Vec<Line<'static>>, a: &ProblemAnalysis, b
     let sparsity_b = format!("{}\u{2013}{}", b.sparsity.min_vars_per_constraint, b.sparsity.max_vars_per_constraint);
     comparison_row_str(lines, "Vars/constraint", W, &sparsity_a, &sparsity_b);
 }
-
-// ---------------------------------------------------------------------------
-// Variable Type Distribution
-// ---------------------------------------------------------------------------
 
 fn build_variable_type_table(lines: &mut Vec<Line<'static>>, a: &ProblemAnalysis, b: &ProblemAnalysis) {
     const W: usize = 18;
@@ -253,10 +235,6 @@ fn build_variable_type_table(lines: &mut Vec<Line<'static>>, a: &ProblemAnalysis
     comparison_row_usize(lines, "Semi-continuous", W, va.semi_continuous, vb.semi_continuous);
 }
 
-// ---------------------------------------------------------------------------
-// Constraint Type Distribution
-// ---------------------------------------------------------------------------
-
 fn build_constraint_type_table(lines: &mut Vec<Line<'static>>, a: &ProblemAnalysis, b: &ProblemAnalysis) {
     const W: usize = 18;
     comparison_header(lines, W);
@@ -271,10 +249,6 @@ fn build_constraint_type_table(lines: &mut Vec<Line<'static>>, a: &ProblemAnalys
     comparison_row_usize(lines, "SOS1", W, ca.sos1, cb.sos1);
     comparison_row_usize(lines, "SOS2", W, ca.sos2, cb.sos2);
 }
-
-// ---------------------------------------------------------------------------
-// Coefficient Scaling
-// ---------------------------------------------------------------------------
 
 fn format_range(r: &lp_parser_rs::analysis::RangeStats) -> String {
     if r.count == 0 { "\u{2014}".to_string() } else { format!("[{:.1e}, {:.1e}]", r.min, r.max) }
@@ -320,10 +294,6 @@ fn format_scientific(v: f64) -> String {
     if v == 0.0 || !v.is_finite() { "\u{2014}".to_string() } else { format!("{v:.2e}") }
 }
 
-// ---------------------------------------------------------------------------
-// Issues
-// ---------------------------------------------------------------------------
-
 fn build_issues_section(lines: &mut Vec<Line<'static>>, report: &LpDiffReport, analysis1: &ProblemAnalysis, analysis2: &ProblemAnalysis) {
     let (err1, warn1, info1) = count_issues(&analysis1.issues);
     let (err2, warn2, info2) = count_issues(&analysis2.issues);
@@ -355,15 +325,15 @@ fn build_issues_section(lines: &mut Vec<Line<'static>>, report: &LpDiffReport, a
     lines.push(Line::from(""));
 
     // File A issues
-    let file_a_label = short_filename(&report.file1);
+    let label_a = short_filename(&report.file1);
     for issue in &analysis1.issues {
-        lines.push(format_issue_line(&file_a_label, issue));
+        lines.push(format_issue_line(&label_a, issue));
     }
 
     // File B issues
-    let file_b_label = short_filename(&report.file2);
+    let label_b = short_filename(&report.file2);
     for issue in &analysis2.issues {
-        lines.push(format_issue_line(&file_b_label, issue));
+        lines.push(format_issue_line(&label_b, issue));
     }
 }
 
@@ -387,7 +357,7 @@ fn issue_count_span(count: usize, label: &str, colour: Color) -> Span<'static> {
     Span::styled(format!("{count} {label}{plural}"), style)
 }
 
-fn severity_colour(severity: IssueSeverity) -> Color {
+const fn severity_colour(severity: IssueSeverity) -> Color {
     match severity {
         IssueSeverity::Error => Color::Red,
         IssueSeverity::Warning => Color::Yellow,

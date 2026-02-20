@@ -4,6 +4,9 @@ version = "0.1.0"
 edition = "2024"
 description = "Interactive TUI diff viewer for LP files"
 license = "MIT OR Apache-2.0"
+repository = "https://github.com/dandxy89/lp_parser_rs"
+keywords = ["lp", "parser", "tui", "diff"]
+categories = ["command-line-utilities"]
 
 [[bin]]
 name = "lp_diff"
@@ -17,3 +20,4 @@ crossterm = "0.29.0"
 frizbee = "0.8.2"
 ratatui = { version = "0.30.0", default-features = false, features = ["crossterm"] }
 regex = "1.12.3"
+arboard = "3"

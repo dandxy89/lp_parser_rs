@@ -34,7 +34,7 @@ fn detail_header(entity_label: &str, name: &str, kind: DiffKind) -> Vec<Line<'st
 
 /// Extract (lower, upper) bounds from a `VariableType`, returning `None` for
 /// bounds that don't apply to that type.
-pub(crate) const fn variable_bounds(vt: &VariableType) -> (Option<f64>, Option<f64>) {
+pub const fn variable_bounds(vt: &VariableType) -> (Option<f64>, Option<f64>) {
     match *vt {
         VariableType::LowerBound(lb) => (Some(lb), None),
         VariableType::UpperBound(ub) => (None, Some(ub)),
@@ -45,14 +45,12 @@ pub(crate) const fn variable_bounds(vt: &VariableType) -> (Option<f64>, Option<f
 
 /// Format an optional bound value as a string for display.
 fn fmt_bound(val: Option<f64>) -> String {
-    match val {
-        Some(v) => format!("{v}"),
-        None => "\u{2014}".to_owned(), // em-dash
-    }
+    val.map_or_else(|| "\u{2014}".to_owned(), |v| format!("{v}"))
 }
 
-/// Render a variable detail panel.
-pub(crate) fn render_variable_detail(frame: &mut Frame, area: Rect, entry: &VariableDiffEntry, border_style: Style, scroll: u16) {
+/// Render a variable detail panel. Returns the total content line count.
+#[allow(clippy::too_many_lines)]
+pub fn render_variable_detail(frame: &mut Frame, area: Rect, entry: &VariableDiffEntry, border_style: Style, scroll: u16) -> usize {
     let mut lines = detail_header("Variable", &entry.name, entry.kind);
 
     match entry.kind {
@@ -118,23 +116,25 @@ pub(crate) fn render_variable_detail(frame: &mut Frame, area: Rect, entry: &Vari
             let old_label = std::str::from_utf8(old.as_ref()).unwrap_or("?");
             let new_label = std::str::from_utf8(new.as_ref()).unwrap_or("?");
 
-            if old_label != new_label {
+            if old_label == new_label {
+                lines.push(Line::from(vec![
+                    Span::styled("  Type:   ", Style::default().fg(Color::DarkGray)),
+                    Span::styled(old_label.to_owned(), Style::default().fg(Color::White)),
+                    Span::styled(" (unchanged)", Style::default().fg(Color::DarkGray)),
+                ]));
+            } else {
                 lines.push(Line::from(vec![
                     Span::styled("  Type:   ", Style::default().fg(Color::DarkGray)),
                     Span::styled(old_label.to_owned(), Style::default().fg(Color::Red)),
                     Span::styled("  \u{2192}  ", Style::default().fg(Color::DarkGray)),
                     Span::styled(new_label.to_owned(), Style::default().fg(Color::Green)),
                 ]));
-            } else {
-                lines.push(Line::from(vec![
-                    Span::styled("  Type:   ", Style::default().fg(Color::DarkGray)),
-                    Span::styled(old_label.to_owned(), Style::default().fg(Color::White)),
-                    Span::styled(" (unchanged)", Style::default().fg(Color::DarkGray)),
-                ]));
             }
 
             // Bounds comparison.
+            #[allow(clippy::similar_names)] // lb/ub are standard abbreviations for lower/upper bound
             let (old_lb, old_ub) = variable_bounds(old);
+            #[allow(clippy::similar_names)]
             let (new_lb, new_ub) = variable_bounds(new);
 
             if old_lb.is_some() || new_lb.is_some() {
@@ -168,10 +168,12 @@ pub(crate) fn render_variable_detail(frame: &mut Frame, area: Rect, entry: &Vari
         }
     }
 
-    render_panel(frame, area, " Variable Detail ", lines, border_style, scroll);
+    render_panel(frame, area, " Variable Detail ", lines, border_style, scroll)
 }
 
-pub(crate) fn render_constraint_detail(frame: &mut Frame, area: Rect, entry: &ConstraintDiffEntry, border_style: Style, scroll: u16) {
+/// Render a constraint detail panel. Returns the total content line count.
+#[allow(clippy::too_many_lines)]
+pub fn render_constraint_detail(frame: &mut Frame, area: Rect, entry: &ConstraintDiffEntry, border_style: Style, scroll: u16) -> usize {
     let mut lines = detail_header("Constraint", &entry.name, entry.kind);
 
     // Render line number location if available.
@@ -311,10 +313,11 @@ pub(crate) fn render_constraint_detail(frame: &mut Frame, area: Rect, entry: &Co
         }
     }
 
-    render_panel(frame, area, " Constraint Detail ", lines, border_style, scroll);
+    render_panel(frame, area, " Constraint Detail ", lines, border_style, scroll)
 }
 
-pub(crate) fn render_objective_detail(frame: &mut Frame, area: Rect, entry: &ObjectiveDiffEntry, border_style: Style, scroll: u16) {
+/// Render an objective detail panel. Returns the total content line count.
+pub fn render_objective_detail(frame: &mut Frame, area: Rect, entry: &ObjectiveDiffEntry, border_style: Style, scroll: u16) -> usize {
     let mut lines = detail_header("Objective", &entry.name, entry.kind);
 
     lines.push(Line::from(Span::styled("  Coefficients:", Style::default().fg(Color::DarkGray).add_modifier(Modifier::BOLD))));
@@ -332,7 +335,7 @@ pub(crate) fn render_objective_detail(frame: &mut Frame, area: Rect, entry: &Obj
         }
     }
 
-    render_panel(frame, area, " Objective Detail ", lines, border_style, scroll);
+    render_panel(frame, area, " Objective Detail ", lines, border_style, scroll)
 }
 
 /// `(old value, new value, change kind)` entry in the per-variable diff map.
@@ -346,6 +349,9 @@ fn render_coeff_changes(
     old_coefficients: &[lp_parser_rs::model::CoefficientOwned],
     new_coefficients: &[lp_parser_rs::model::CoefficientOwned],
 ) {
+    // Column width for value formatting — wide enough for typical LP coefficients.
+    const VAL_WIDTH: usize = 12;
+
     let mut all_vars: BTreeMap<String, CoeffEntry> = BTreeMap::new();
 
     for c in old_coefficients {
@@ -359,9 +365,6 @@ fn render_coeff_changes(
             entry.2 = Some(change.kind);
         }
     }
-
-    // Column width for value formatting — wide enough for typical LP coefficients.
-    const VAL_WIDTH: usize = 12;
 
     for (var_name, (old_val, new_val, change_kind)) in &all_vars {
         let old_str = old_val.map_or_else(String::new, |v| format!("{v}"));
@@ -407,9 +410,11 @@ fn render_coeff_changes(
 }
 
 /// Wrap `lines` in a bordered block with the given `title` and render it,
-/// applying vertical scroll.
-fn render_panel(frame: &mut Frame, area: Rect, title: &'static str, lines: Vec<Line<'_>>, border_style: Style, scroll: u16) {
+/// applying vertical scroll. Returns the total content line count.
+fn render_panel(frame: &mut Frame, area: Rect, title: &'static str, lines: Vec<Line<'_>>, border_style: Style, scroll: u16) -> usize {
+    let line_count = lines.len();
     let block = Block::default().borders(Borders::ALL).border_style(border_style).title(title);
     let paragraph = Paragraph::new(lines).block(block).scroll((scroll, 0));
     frame.render_widget(paragraph, area);
+    line_count
 }

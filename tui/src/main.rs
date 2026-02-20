@@ -1,28 +1,30 @@
 mod app;
+mod detail_text;
 mod diff_model;
 mod event;
+mod input;
+mod line_index;
+mod parse;
 mod search;
+mod state;
 mod ui;
 mod widgets;
 
-use std::collections::HashMap;
 use std::io::{self, Write as _, stderr};
-use std::path::{Path, PathBuf};
-use std::time::Instant;
+use std::path::PathBuf;
+use std::time::{Duration, Instant};
 
 use clap::Parser;
-use crossterm::event::DisableMouseCapture;
+use crossterm::event::{DisableMouseCapture, EnableMouseCapture};
 use crossterm::execute;
 use crossterm::terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode};
-use lp_parser_rs::analysis::ProblemAnalysis;
-use lp_parser_rs::parser::parse_file;
-use lp_parser_rs::problem::{LpProblem, LpProblemOwned};
 use ratatui::Terminal;
 use ratatui::prelude::CrosstermBackend;
 
 use crate::app::App;
-use crate::diff_model::{LineIndex, build_diff_report};
+use crate::diff_model::{DiffInput, build_diff_report};
 use crate::event::{Event, EventHandler};
+use crate::parse::parse_lp_file;
 
 /// Interactive diff viewer for LP files
 #[derive(Parser)]
@@ -34,36 +36,16 @@ struct Cli {
     file2: PathBuf,
 }
 
-/// Build a map from constraint name to 1-based line number using byte offsets
-/// captured during parsing and a `LineIndex` built from the source text.
-fn build_constraint_line_map(problem: &LpProblem, line_index: &LineIndex) -> HashMap<String, usize> {
-    let mut map = HashMap::new();
-    for constraint in problem.constraints.values() {
-        if let Some(offset) = constraint.byte_offset()
-            && let Some(line) = line_index.line_number(offset)
-        {
-            map.insert(constraint.name_ref().to_owned(), line);
-        }
-    }
-    map
-}
-
-/// Parsed LP file: the owned problem, structural analysis, and a constraint→line-number map.
-type ParsedLpFile = (LpProblemOwned, ProblemAnalysis, HashMap<String, usize>);
-
-/// Parse an LP file, returning the owned problem, analysis, and a constraint→line-number map.
-fn parse_lp_file(path: &Path) -> Result<ParsedLpFile, Box<dyn std::error::Error>> {
-    let content = parse_file(path).map_err(|e| format!("failed to read '{}': {e}", path.display()))?;
-    let problem = LpProblem::parse(&content).map_err(|e| format!("failed to parse '{}': {e}", path.display()))?;
-    let line_index = LineIndex::new(&content);
-    let line_map = build_constraint_line_map(&problem, &line_index);
-    let analysis = problem.analyze();
-    let owned = problem.to_owned();
-    Ok((owned, analysis, line_map))
-}
-
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Cli::parse();
+
+    // Validate file existence at the CLI boundary before doing any work.
+    if !args.file1.exists() {
+        return Err(format!("file not found: '{}'", args.file1.display()).into());
+    }
+    if !args.file2.exists() {
+        return Err(format!("file not found: '{}'", args.file2.display()).into());
+    }
 
     // Parse files with progress output to stderr
     let start = Instant::now();
@@ -93,7 +75,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     stderr().flush()?;
     let file1_str = args.file1.display().to_string();
     let file2_str = args.file2.display().to_string();
-    let report = build_diff_report(&file1_str, &file2_str, &owned1, &owned2, &line_map1, &line_map2, analysis1, analysis2);
+    let report = build_diff_report(&DiffInput {
+        file1: &file1_str,
+        file2: &file2_str,
+        p1: &owned1,
+        p2: &owned2,
+        line_map1: &line_map1,
+        line_map2: &line_map2,
+        analysis1,
+        analysis2,
+    });
     eprintln!("done ({:.1}s, {} changes found)", diff_start.elapsed().as_secs_f64(), report.summary().total_changes(),);
 
     // Free parsed problems — only the (small) diff report is needed for the TUI
@@ -106,7 +97,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // because the event thread immediately starts polling for key events.
     enable_raw_mode()?;
     let mut stderr_handle = stderr();
-    execute!(stderr_handle, EnterAlternateScreen)?;
+    execute!(stderr_handle, EnterAlternateScreen, EnableMouseCapture)?;
     let backend = CrosstermBackend::new(stderr_handle);
     let mut terminal = Terminal::new(backend)?;
 
@@ -125,16 +116,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create app and event handler
     let mut app = App::new(report);
-    let events = EventHandler::new(std::time::Duration::from_millis(50));
+    let events = EventHandler::new(Duration::from_millis(50));
 
     // Main loop — draw then process the next event
     while !app.should_quit {
         terminal.draw(|frame| ui::draw(frame, &mut app))?;
 
+        // Clear yank flash after 1.5 seconds.
+        if let Some(flash_time) = app.yank_flash
+            && flash_time.elapsed() >= Duration::from_millis(1500)
+        {
+            app.yank_flash = None;
+            app.yank_message.clear();
+        }
+
         match events.next()? {
             Event::Key(key) => app.handle_key(key),
-            Event::Resize(_, _) => {} // ratatui handles resize automatically
-            Event::Tick => {}
+            Event::Mouse(mouse) => app.handle_mouse(mouse),
+            Event::Resize(_, _) | Event::Tick => {} // ratatui handles resize automatically
             Event::Error(e) => return Err(e.into()),
         }
     }

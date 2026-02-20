@@ -7,6 +7,7 @@ use crate::diff_model::DiffKind;
 pub mod detail;
 pub mod help;
 pub mod search;
+pub mod sidebar;
 pub mod status_bar;
 pub mod summary;
 

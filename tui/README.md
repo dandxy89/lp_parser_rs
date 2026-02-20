@@ -51,8 +51,14 @@ Press `?` at any time to open the key bindings pop up.
 |-----|--------|
 | `j` / `↓` | Move down |
 | `k` / `↑` | Move up |
+| `n` | Next match (or down when no search) |
+| `N` | Previous match (or up when no search) |
 | `g` / `Home` | Jump to top |
 | `G` / `End` | Jump to bottom |
+| `Ctrl+d` | Half page down |
+| `Ctrl+u` | Half page up |
+| `Ctrl+f` | Full page down |
+| `Ctrl+b` | Full page up |
 | `Tab` | Next panel |
 | `Shift+Tab` | Previous panel |
 | `Enter` | Go to detail panel |
@@ -77,6 +83,14 @@ Press `?` at any time to open the key bindings pop up.
 | `/query` | Fuzzy match (default) |
 | `/r:pattern` | Regex |
 | `/s:text` | Substring |
+| `n` / `N` | Next / previous match (when search is committed) |
+
+**Clipboard**
+
+| Key | Action |
+|-----|--------|
+| `y` | Yank selected entry name to clipboard |
+| `Y` | Yank full detail panel content to clipboard |
 
 **Other**
 

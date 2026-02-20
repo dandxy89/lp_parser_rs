@@ -28,51 +28,6 @@ fn build_searchable_text(name: &str, extra: impl Iterator<Item = impl AsRef<str>
 // Epsilon used for floating-point coefficient value comparison.
 const COEFF_EPSILON: f64 = 1e-10;
 
-/// Index mapping byte offsets to 1-based line numbers within source text.
-///
-/// Built once per input file then used to convert `Constraint::byte_offset`
-/// values into human-readable line numbers before the input text is dropped.
-pub struct LineIndex {
-    /// Byte offsets of each line start (index 0 → byte 0, index 1 → first byte after first '\n', etc.).
-    line_starts: Vec<usize>,
-}
-
-impl LineIndex {
-    /// Build a line index from the full source text.
-    #[must_use]
-    pub fn new(source: &str) -> Self {
-        debug_assert!(!source.is_empty(), "LineIndex::new called with empty source");
-        let mut line_starts = vec![0];
-        for (i, byte) in source.bytes().enumerate() {
-            if byte == b'\n' {
-                line_starts.push(i + 1);
-            }
-        }
-        Self { line_starts }
-    }
-
-    /// Convert a byte offset to a 1-based line number.
-    ///
-    /// Returns `None` if `byte_offset` is past the end of the source.
-    #[must_use]
-    pub fn line_number(&self, byte_offset: usize) -> Option<usize> {
-        if self.line_starts.is_empty() {
-            return None;
-        }
-        // Binary search: find the last line_start <= byte_offset.
-        match self.line_starts.binary_search(&byte_offset) {
-            Ok(idx) => Some(idx + 1),
-            Err(idx) => {
-                if idx == 0 {
-                    None
-                } else {
-                    Some(idx) // idx is insertion point; line number is idx (1-based)
-                }
-            }
-        }
-    }
-}
-
 /// A complete diff report between two LP problem files.
 #[derive(Debug)]
 pub struct LpDiffReport {
@@ -536,6 +491,7 @@ fn diff_variables(p1: &LpProblemOwned, p2: &LpProblemOwned) -> SectionDiff<Varia
 }
 
 /// Diff the constraints section between two problems.
+#[allow(clippy::too_many_lines)]
 fn diff_constraints(
     p1: &LpProblemOwned,
     p2: &LpProblemOwned,
@@ -722,48 +678,49 @@ fn diff_objectives(p1: &LpProblemOwned, p2: &LpProblemOwned) -> SectionDiff<Obje
     SectionDiff { entries, counts }
 }
 
+/// All inputs needed to build a diff report between two LP problem files.
+pub struct DiffInput<'a> {
+    /// Label or path for the first file.
+    pub file1: &'a str,
+    /// Label or path for the second file.
+    pub file2: &'a str,
+    /// The first LP problem.
+    pub p1: &'a LpProblemOwned,
+    /// The second LP problem.
+    pub p2: &'a LpProblemOwned,
+    /// Constraint name → 1-based line number for file 1.
+    pub line_map1: &'a HashMap<String, usize>,
+    /// Constraint name → 1-based line number for file 2.
+    pub line_map2: &'a HashMap<String, usize>,
+    /// Structural analysis of the first file.
+    pub analysis1: ProblemAnalysis,
+    /// Structural analysis of the second file.
+    pub analysis2: ProblemAnalysis,
+}
+
 /// Build a complete diff report comparing two LP problems.
-///
-/// # Arguments
-///
-/// * `file1` - Label or path for the first problem (used in the report).
-/// * `file2` - Label or path for the second problem (used in the report).
-/// * `p1` - The first LP problem.
-/// * `p2` - The second LP problem.
-/// * `line_map1` - Constraint name → 1-based line number for file 1.
-/// * `line_map2` - Constraint name → 1-based line number for file 2.
-#[allow(clippy::too_many_arguments)]
-pub fn build_diff_report(
-    file1: &str,
-    file2: &str,
-    p1: &LpProblemOwned,
-    p2: &LpProblemOwned,
-    line_map1: &HashMap<String, usize>,
-    line_map2: &HashMap<String, usize>,
-    analysis1: ProblemAnalysis,
-    analysis2: ProblemAnalysis,
-) -> LpDiffReport {
-    debug_assert!(!file1.is_empty(), "file1 label must not be empty");
-    debug_assert!(!file2.is_empty(), "file2 label must not be empty");
+pub fn build_diff_report(input: &DiffInput<'_>) -> LpDiffReport {
+    debug_assert!(!input.file1.is_empty(), "file1 label must not be empty");
+    debug_assert!(!input.file2.is_empty(), "file2 label must not be empty");
 
-    let variables = diff_variables(p1, p2);
-    let constraints = diff_constraints(p1, p2, line_map1, line_map2);
-    let objectives = diff_objectives(p1, p2);
+    let variables = diff_variables(input.p1, input.p2);
+    let constraints = diff_constraints(input.p1, input.p2, input.line_map1, input.line_map2);
+    let objectives = diff_objectives(input.p1, input.p2);
 
-    let sense_changed = if p1.sense == p2.sense { None } else { Some((p1.sense.clone(), p2.sense.clone())) };
+    let sense_changed = if input.p1.sense == input.p2.sense { None } else { Some((input.p1.sense.clone(), input.p2.sense.clone())) };
 
-    let name_changed = if p1.name == p2.name { None } else { Some((p1.name.clone(), p2.name.clone())) };
+    let name_changed = if input.p1.name == input.p2.name { None } else { Some((input.p1.name.clone(), input.p2.name.clone())) };
 
     LpDiffReport {
-        file1: file1.to_string(),
-        file2: file2.to_string(),
+        file1: input.file1.to_string(),
+        file2: input.file2.to_string(),
         sense_changed,
         name_changed,
         variables,
         constraints,
         objectives,
-        analysis1,
-        analysis2,
+        analysis1: input.analysis1.clone(),
+        analysis2: input.analysis2.clone(),
     }
 }
 
@@ -816,11 +773,26 @@ mod tests {
         }
     }
 
+    /// Shorthand for building a `DiffInput` and calling `build_diff_report` in tests.
+    #[allow(clippy::too_many_arguments)]
+    fn test_diff_report(
+        file1: &str,
+        file2: &str,
+        p1: &LpProblemOwned,
+        p2: &LpProblemOwned,
+        line_map1: &HashMap<String, usize>,
+        line_map2: &HashMap<String, usize>,
+        analysis1: ProblemAnalysis,
+        analysis2: ProblemAnalysis,
+    ) -> LpDiffReport {
+        build_diff_report(&DiffInput { file1, file2, p1, p2, line_map1, line_map2, analysis1, analysis2 })
+    }
+
     #[test]
     fn test_empty_problems() {
         let p1 = empty_problem();
         let p2 = empty_problem();
-        let report = build_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new(), dummy_analysis(), dummy_analysis());
+        let report = test_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new(), dummy_analysis(), dummy_analysis());
 
         assert!(report.variables.entries.is_empty());
         assert!(report.constraints.entries.is_empty());
@@ -834,7 +806,7 @@ mod tests {
     fn test_variable_added() {
         let p1 = empty_problem();
         let p2 = problem_with_variable("x", VariableType::Binary);
-        let report = build_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new(), dummy_analysis(), dummy_analysis());
+        let report = test_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new(), dummy_analysis(), dummy_analysis());
 
         assert_eq!(report.variables.entries.len(), 1);
         let entry = &report.variables.entries[0];
@@ -850,7 +822,7 @@ mod tests {
     fn test_variable_removed() {
         let p1 = problem_with_variable("y", VariableType::Integer);
         let p2 = empty_problem();
-        let report = build_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new(), dummy_analysis(), dummy_analysis());
+        let report = test_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new(), dummy_analysis(), dummy_analysis());
 
         assert_eq!(report.variables.entries.len(), 1);
         let entry = &report.variables.entries[0];
@@ -864,7 +836,7 @@ mod tests {
     fn test_variable_modified() {
         let p1 = problem_with_variable("z", VariableType::Free);
         let p2 = problem_with_variable("z", VariableType::Binary);
-        let report = build_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new(), dummy_analysis(), dummy_analysis());
+        let report = test_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new(), dummy_analysis(), dummy_analysis());
 
         assert_eq!(report.variables.entries.len(), 1);
         let entry = &report.variables.entries[0];
@@ -881,7 +853,7 @@ mod tests {
         // p2: c1: 2x + 5z <= 10   (y removed, z added, x unchanged)
         let p1 = problem_with_standard_constraint("c1", vec![("x", 2.0), ("y", 3.0)], ComparisonOp::LTE, 10.0);
         let p2 = problem_with_standard_constraint("c1", vec![("x", 2.0), ("z", 5.0)], ComparisonOp::LTE, 10.0);
-        let report = build_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new(), dummy_analysis(), dummy_analysis());
+        let report = test_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new(), dummy_analysis(), dummy_analysis());
 
         assert_eq!(report.constraints.entries.len(), 1);
         let entry = &report.constraints.entries[0];
@@ -926,7 +898,7 @@ mod tests {
             byte_offset: None,
         });
 
-        let report = build_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new(), dummy_analysis(), dummy_analysis());
+        let report = test_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new(), dummy_analysis(), dummy_analysis());
 
         assert_eq!(report.constraints.entries.len(), 1);
         let entry = &report.constraints.entries[0];
@@ -943,7 +915,7 @@ mod tests {
         // b changed from 2.0 to 5.0; a unchanged; c added.
         p2.add_objective(make_objective("obj1", vec![("a", 1.0), ("b", 5.0), ("c", 3.0)]));
 
-        let report = build_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new(), dummy_analysis(), dummy_analysis());
+        let report = test_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new(), dummy_analysis(), dummy_analysis());
 
         assert_eq!(report.objectives.entries.len(), 1);
         let entry = &report.objectives.entries[0];
@@ -961,7 +933,7 @@ mod tests {
     fn test_sense_changed() {
         let p1 = LpProblemOwned::new().with_sense(Sense::Minimize);
         let p2 = LpProblemOwned::new().with_sense(Sense::Maximize);
-        let report = build_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new(), dummy_analysis(), dummy_analysis());
+        let report = test_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new(), dummy_analysis(), dummy_analysis());
 
         assert!(report.sense_changed.is_some());
         let (old, new) = report.sense_changed.unwrap();
@@ -984,7 +956,7 @@ mod tests {
         p1.add_variable(VariableOwned::new("changed").with_var_type(VariableType::Free));
         p2.add_variable(VariableOwned::new("changed").with_var_type(VariableType::Binary));
 
-        let report = build_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new(), dummy_analysis(), dummy_analysis());
+        let report = test_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new(), dummy_analysis(), dummy_analysis());
 
         // Only the changed variable should be stored.
         assert_eq!(report.variables.entries.len(), 1);
@@ -1106,7 +1078,7 @@ mod tests {
     fn test_searchable_text_variable() {
         let p1 = empty_problem();
         let p2 = problem_with_variable("flow_x", VariableType::Binary);
-        let report = build_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new(), dummy_analysis(), dummy_analysis());
+        let report = test_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new(), dummy_analysis(), dummy_analysis());
 
         let entry = &report.variables.entries[0];
         // Variables have no extra fields, so searchable_text is just the name.
@@ -1117,7 +1089,7 @@ mod tests {
     fn test_searchable_text_constraint_with_coefficients() {
         let p1 = empty_problem();
         let p2 = problem_with_standard_constraint("c1", vec![("alpha", 1.0), ("beta", 2.0)], ComparisonOp::LTE, 10.0);
-        let report = build_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new(), dummy_analysis(), dummy_analysis());
+        let report = test_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new(), dummy_analysis(), dummy_analysis());
 
         let entry = &report.constraints.entries[0];
         // Should contain name + variable names separated by \0.
@@ -1132,12 +1104,12 @@ mod tests {
         let mut p1 = LpProblemOwned::new();
         p1.add_objective(make_objective("obj1", vec![("x", 1.0), ("y", 2.0)]));
         let p2 = empty_problem();
-        let report = build_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new(), dummy_analysis(), dummy_analysis());
+        let report = test_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new(), dummy_analysis(), dummy_analysis());
 
         let entry = &report.objectives.entries[0];
         assert!(entry.searchable_text.contains("obj1"), "searchable_text: {}", entry.searchable_text);
-        assert!(entry.searchable_text.contains("x"), "searchable_text: {}", entry.searchable_text);
-        assert!(entry.searchable_text.contains("y"), "searchable_text: {}", entry.searchable_text);
+        assert!(entry.searchable_text.contains('x'), "searchable_text: {}", entry.searchable_text);
+        assert!(entry.searchable_text.contains('y'), "searchable_text: {}", entry.searchable_text);
     }
 
     #[test]
@@ -1146,35 +1118,13 @@ mod tests {
         // p2: c1: 2x + 5z <= 10   (y removed, z added)
         let p1 = problem_with_standard_constraint("c1", vec![("x", 2.0), ("y", 3.0)], ComparisonOp::LTE, 10.0);
         let p2 = problem_with_standard_constraint("c1", vec![("x", 2.0), ("z", 5.0)], ComparisonOp::LTE, 10.0);
-        let report = build_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new(), dummy_analysis(), dummy_analysis());
+        let report = test_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new(), dummy_analysis(), dummy_analysis());
 
         let entry = &report.constraints.entries[0];
         // Should contain all variables from both versions (union).
-        assert!(entry.searchable_text.contains("x"), "searchable_text: {}", entry.searchable_text);
-        assert!(entry.searchable_text.contains("y"), "searchable_text: {}", entry.searchable_text);
-        assert!(entry.searchable_text.contains("z"), "searchable_text: {}", entry.searchable_text);
-    }
-
-    #[test]
-    fn test_line_index_basic() {
-        let source = "line1\nline2\nline3\n";
-        let idx = LineIndex::new(source);
-        // "line1" starts at byte 0 → line 1
-        assert_eq!(idx.line_number(0), Some(1));
-        // "line2" starts at byte 6 → line 2
-        assert_eq!(idx.line_number(6), Some(2));
-        // "line3" starts at byte 12 → line 3
-        assert_eq!(idx.line_number(12), Some(3));
-        // Middle of "line1" → still line 1
-        assert_eq!(idx.line_number(3), Some(1));
-    }
-
-    #[test]
-    fn test_line_index_single_line() {
-        let source = "no newlines";
-        let idx = LineIndex::new(source);
-        assert_eq!(idx.line_number(0), Some(1));
-        assert_eq!(idx.line_number(5), Some(1));
+        assert!(entry.searchable_text.contains('x'), "searchable_text: {}", entry.searchable_text);
+        assert!(entry.searchable_text.contains('y'), "searchable_text: {}", entry.searchable_text);
+        assert!(entry.searchable_text.contains('z'), "searchable_text: {}", entry.searchable_text);
     }
 
     #[test]
@@ -1187,7 +1137,7 @@ mod tests {
         let mut lm2 = HashMap::new();
         lm2.insert("c1".to_string(), 8);
 
-        let report = build_diff_report("a.lp", "b.lp", &p1, &p2, &lm1, &lm2, dummy_analysis(), dummy_analysis());
+        let report = test_diff_report("a.lp", "b.lp", &p1, &p2, &lm1, &lm2, dummy_analysis(), dummy_analysis());
         let entry = &report.constraints.entries[0];
         assert_eq!(entry.line_file1, Some(5));
         assert_eq!(entry.line_file2, Some(8));

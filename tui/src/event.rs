@@ -1,12 +1,14 @@
-use std::sync::mpsc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, mpsc};
 use std::time::Duration;
 use std::{io, thread};
 
-use crossterm::event::{self, Event as CrosstermEvent, KeyEvent};
+use crossterm::event::{self, Event as CrosstermEvent, KeyEvent, MouseEvent};
 
 #[derive(Debug)]
 pub enum Event {
     Key(KeyEvent),
+    Mouse(MouseEvent),
     /// Terminal resize event. The dimensions are forwarded from crossterm but
     /// ratatui re-queries the terminal size automatically, so the values are
     /// intentionally unused here.
@@ -22,6 +24,8 @@ pub struct EventHandler {
     /// Keep the sender alive so the spawned thread does not detect a disconnected channel
     /// prematurely and exit before `EventHandler` is dropped.
     _tx: mpsc::Sender<Event>,
+    /// Shutdown flag checked by the polling thread.
+    shutdown: Arc<AtomicBool>,
 }
 
 impl EventHandler {
@@ -30,9 +34,15 @@ impl EventHandler {
     pub fn new(tick_rate: Duration) -> Self {
         let (tx, rx) = mpsc::channel();
         let event_tx = tx.clone();
+        let shutdown = Arc::new(AtomicBool::new(false));
+        let thread_shutdown = Arc::clone(&shutdown);
 
         thread::spawn(move || {
             loop {
+                if thread_shutdown.load(Ordering::Relaxed) {
+                    return;
+                }
+
                 let poll_result = match event::poll(tick_rate) {
                     Ok(ready) => ready,
                     Err(e) => {
@@ -60,11 +70,17 @@ impl EventHandler {
                                 return;
                             }
                         }
+                        CrosstermEvent::Mouse(mouse) => {
+                            if event_tx.send(Event::Mouse(mouse)).is_err() {
+                                return;
+                            }
+                        }
                         CrosstermEvent::Resize(w, h) => {
                             if event_tx.send(Event::Resize(w, h)).is_err() {
                                 return;
                             }
                         }
+                        // Paste, focus, and other crossterm events are intentionally ignored.
                         _ => {}
                     }
                 } else if event_tx.send(Event::Tick).is_err() {
@@ -73,11 +89,17 @@ impl EventHandler {
             }
         });
 
-        Self { rx, _tx: tx }
+        Self { rx, _tx: tx, shutdown }
     }
 
     /// Block until the next event is available.
     pub fn next(&self) -> Result<Event, mpsc::RecvError> {
         self.rx.recv()
+    }
+}
+
+impl Drop for EventHandler {
+    fn drop(&mut self) {
+        self.shutdown.store(true, Ordering::Relaxed);
     }
 }

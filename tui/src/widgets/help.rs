@@ -16,12 +16,21 @@ const HELP_TEXT: &[&str] = &[
     "  k / ↑   Up          +   Added           ?   This help",
     "  g / Home Top         -   Removed         q   Quit",
     "  G / End  Bottom      m   Modified        Ctrl-C  Force quit",
-    "  Tab     Next panel",
+    "  Ctrl-d  Half page ↓",
+    "  Ctrl-u  Half page ↑                     Clipboard",
+    "  Ctrl-f  Full page ↓                     ─────────",
+    "  Ctrl-b  Full page ↑                     y   Yank name",
+    "  Tab     Next panel                      Y   Yank detail",
     "  ⇧Tab    Prev panel",
     "  Enter   Go to detail",
     "  h / l   Sidebar / Detail",
     "  1–4     Jump to section",
     "  Esc     Back / Clear search",
+    "",
+    "  Search",
+    "  ──────",
+    "  n       Next match (or Down when no search)",
+    "  N       Prev match (or Up when no search)",
     "",
     "  Search Modes",
     "  ────────────",
@@ -29,10 +38,12 @@ const HELP_TEXT: &[&str] = &[
     "  /r:pattern  Regex",
     "  /s:text     Substring",
     "",
+    "  Mouse: scroll wheel navigates, click selects",
+    "",
 ];
 
 const POPUP_WIDTH: u16 = 60;
-const POPUP_HEIGHT: u16 = 24;
+const POPUP_HEIGHT: u16 = 36;
 
 /// Draw a centred help popup overlay on top of the current frame.
 pub fn draw_help(frame: &mut Frame, area: Rect) {
