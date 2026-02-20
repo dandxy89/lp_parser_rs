@@ -20,6 +20,7 @@
 
 use std::borrow::Cow;
 use std::fmt::{Display, Formatter, Result as FmtResult};
+#[cfg(feature = "serde")]
 use std::marker::PhantomData;
 
 #[cfg_attr(feature = "diff", derive(diff::Diff), diff(attr(#[derive(Debug, PartialEq, Eq)])))]
@@ -152,7 +153,7 @@ impl Display for Coefficient<'_> {
 #[cfg_attr(feature = "diff", derive(diff::Diff), diff(attr(#[derive(Debug, PartialEq)])))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[cfg_attr(feature = "serde", serde(tag = "type"))]
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 /// Represents a constraint in an optimisation problem, which can be either a
 /// standard linear constraint or a special ordered set (SOS) constraint.
 ///
@@ -167,9 +168,40 @@ impl Display for Coefficient<'_> {
 ///
 pub enum Constraint<'a> {
     /// A linear constraint defined by a name, a vector of coefficients, a comparison operator, and a right-hand side value.
-    Standard { name: Cow<'a, str>, coefficients: Vec<Coefficient<'a>>, operator: ComparisonOp, rhs: f64 },
+    Standard {
+        name: Cow<'a, str>,
+        coefficients: Vec<Coefficient<'a>>,
+        operator: ComparisonOp,
+        rhs: f64,
+        /// Byte offset of this constraint in the source text (for line number mapping).
+        #[cfg_attr(feature = "serde", serde(skip))]
+        byte_offset: Option<usize>,
+    },
     /// A special ordered set constraint defined by a name, a type of SOS and a vector of weights.
-    SOS { name: Cow<'a, str>, sos_type: SOSType, weights: Vec<Coefficient<'a>> },
+    SOS {
+        name: Cow<'a, str>,
+        sos_type: SOSType,
+        weights: Vec<Coefficient<'a>>,
+        /// Byte offset of this constraint in the source text (for line number mapping).
+        #[cfg_attr(feature = "serde", serde(skip))]
+        byte_offset: Option<usize>,
+    },
+}
+
+impl PartialEq for Constraint<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (
+                Constraint::Standard { name: n1, coefficients: c1, operator: o1, rhs: r1, .. },
+                Constraint::Standard { name: n2, coefficients: c2, operator: o2, rhs: r2, .. },
+            ) => n1 == n2 && c1 == c2 && o1 == o2 && r1 == r2,
+            (
+                Constraint::SOS { name: n1, sos_type: t1, weights: w1, .. },
+                Constraint::SOS { name: n2, sos_type: t2, weights: w2, .. },
+            ) => n1 == n2 && t1 == t2 && w1 == w2,
+            _ => false,
+        }
+    }
 }
 
 impl<'a> Constraint<'a> {
@@ -197,13 +229,22 @@ impl<'a> Constraint<'a> {
     pub fn is_unnamed(&self) -> bool {
         self.name_ref().is_empty()
     }
+
+    #[must_use]
+    #[inline]
+    /// Returns the byte offset of this constraint in the source text, if available.
+    pub fn byte_offset(&self) -> Option<usize> {
+        match self {
+            Constraint::Standard { byte_offset, .. } | Constraint::SOS { byte_offset, .. } => *byte_offset,
+        }
+    }
 }
 
 impl Display for Constraint<'_> {
     #[inline]
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
-            Constraint::Standard { name, coefficients, operator, rhs } => {
+            Constraint::Standard { name, coefficients, operator, rhs, .. } => {
                 write!(f, "{name}: ")?;
                 for (i, coef) in coefficients.iter().enumerate() {
                     if i > 0 && coef.value > 0.0 {
@@ -213,7 +254,7 @@ impl Display for Constraint<'_> {
                 }
                 write!(f, "{operator} {rhs}")
             }
-            Constraint::SOS { name, sos_type, weights } => {
+            Constraint::SOS { name, sos_type, weights, .. } => {
                 write!(f, "{name}: {sos_type}:: ")?;
                 for (i, weight) in weights.iter().enumerate() {
                     if i > 0 {
@@ -405,6 +446,7 @@ impl<'de: 'a, 'a> serde::Deserialize<'de> for Constraint<'a> {
                             coefficients: coefficients.ok_or_else(|| serde::de::Error::missing_field("coefficients"))?,
                             operator: operator.ok_or_else(|| serde::de::Error::missing_field("operator"))?,
                             rhs: rhs.ok_or_else(|| serde::de::Error::missing_field("rhs"))?,
+                            byte_offset: None,
                         })
                     }
                     "SOS" => {
@@ -427,6 +469,7 @@ impl<'de: 'a, 'a> serde::Deserialize<'de> for Constraint<'a> {
                             name: Cow::Borrowed(name),
                             sos_type: sos_type.ok_or_else(|| serde::de::Error::missing_field("sos_type"))?,
                             weights: weights.ok_or_else(|| serde::de::Error::missing_field("weights"))?,
+                            byte_offset: None,
                         })
                     }
                     _ => Err(serde::de::Error::unknown_variant(&constraint_type, &["Standard", "SOS"])),
@@ -518,12 +561,43 @@ impl Display for CoefficientOwned {
 /// making it suitable for long-lived data structures and mutation.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(tag = "type"))]
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum ConstraintOwned {
     /// A standard linear constraint with owned strings.
-    Standard { name: String, coefficients: Vec<CoefficientOwned>, operator: ComparisonOp, rhs: f64 },
+    Standard {
+        name: String,
+        coefficients: Vec<CoefficientOwned>,
+        operator: ComparisonOp,
+        rhs: f64,
+        /// Byte offset of this constraint in the source text (for line number mapping).
+        #[cfg_attr(feature = "serde", serde(skip))]
+        byte_offset: Option<usize>,
+    },
     /// An SOS constraint with owned strings.
-    SOS { name: String, sos_type: SOSType, weights: Vec<CoefficientOwned> },
+    SOS {
+        name: String,
+        sos_type: SOSType,
+        weights: Vec<CoefficientOwned>,
+        /// Byte offset of this constraint in the source text (for line number mapping).
+        #[cfg_attr(feature = "serde", serde(skip))]
+        byte_offset: Option<usize>,
+    },
+}
+
+impl PartialEq for ConstraintOwned {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (
+                ConstraintOwned::Standard { name: n1, coefficients: c1, operator: o1, rhs: r1, .. },
+                ConstraintOwned::Standard { name: n2, coefficients: c2, operator: o2, rhs: r2, .. },
+            ) => n1 == n2 && c1 == c2 && o1 == o2 && r1 == r2,
+            (
+                ConstraintOwned::SOS { name: n1, sos_type: t1, weights: w1, .. },
+                ConstraintOwned::SOS { name: n2, sos_type: t2, weights: w2, .. },
+            ) => n1 == n2 && t1 == t2 && w1 == w2,
+            _ => false,
+        }
+    }
 }
 
 impl ConstraintOwned {
@@ -534,21 +608,31 @@ impl ConstraintOwned {
             Self::Standard { name, .. } | Self::SOS { name, .. } => name,
         }
     }
+
+    /// Returns the byte offset of this constraint in the source text, if available.
+    #[must_use]
+    pub fn byte_offset(&self) -> Option<usize> {
+        match self {
+            Self::Standard { byte_offset, .. } | Self::SOS { byte_offset, .. } => *byte_offset,
+        }
+    }
 }
 
 impl<'a> From<&Constraint<'a>> for ConstraintOwned {
     fn from(constraint: &Constraint<'a>) -> Self {
         match constraint {
-            Constraint::Standard { name, coefficients, operator, rhs } => Self::Standard {
+            Constraint::Standard { name, coefficients, operator, rhs, byte_offset } => Self::Standard {
                 name: name.to_string(),
                 coefficients: coefficients.iter().map(CoefficientOwned::from).collect(),
                 operator: operator.clone(),
                 rhs: *rhs,
+                byte_offset: *byte_offset,
             },
-            Constraint::SOS { name, sos_type, weights } => Self::SOS {
+            Constraint::SOS { name, sos_type, weights, byte_offset } => Self::SOS {
                 name: name.to_string(),
                 sos_type: sos_type.clone(),
                 weights: weights.iter().map(CoefficientOwned::from).collect(),
+                byte_offset: *byte_offset,
             },
         }
     }
@@ -695,19 +779,24 @@ mod tests {
             coefficients: vec![Coefficient { name: "x1", value: 2.0 }, Coefficient { name: "x2", value: -1.0 }],
             operator: ComparisonOp::LTE,
             rhs: 10.0,
+            byte_offset: None,
         };
         assert_eq!(std_constraint.name(), Cow::Borrowed("c1"));
         let display = format!("{std_constraint}");
         assert!(display.contains("c1:") && display.contains("<= 10"));
 
         // SOS constraint
-        let sos_constraint =
-            Constraint::SOS { name: Cow::Borrowed("sos1"), sos_type: SOSType::S1, weights: vec![Coefficient { name: "x1", value: 1.0 }] };
+        let sos_constraint = Constraint::SOS {
+            name: Cow::Borrowed("sos1"),
+            sos_type: SOSType::S1,
+            weights: vec![Coefficient { name: "x1", value: 1.0 }],
+            byte_offset: None,
+        };
         assert_eq!(sos_constraint.name(), Cow::Borrowed("sos1"));
         assert!(format!("{sos_constraint}").contains("S1::"));
 
         // Empty coefficients
-        let empty = Constraint::Standard { name: Cow::Borrowed("e"), coefficients: vec![], operator: ComparisonOp::EQ, rhs: 0.0 };
+        let empty = Constraint::Standard { name: Cow::Borrowed("e"), coefficients: vec![], operator: ComparisonOp::EQ, rhs: 0.0, byte_offset: None };
         if let Constraint::Standard { coefficients, .. } = empty {
             assert!(coefficients.is_empty());
         }

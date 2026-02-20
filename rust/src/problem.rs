@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::collections::hash_map::Entry;
 use std::collections::{BTreeSet, HashMap};
 use std::fmt::{Display, Formatter, Result as FmtResult};
+#[cfg(feature = "serde")]
 use std::marker::PhantomData;
 
 use unique_id::Generator;
@@ -1208,6 +1209,7 @@ End";
             coefficients: vec![Coefficient { name: "x1", value: 1.0 }, Coefficient { name: "x2", value: 2.0 }],
             operator: ComparisonOp::LTE,
             rhs: 5.0,
+            byte_offset: None,
         });
         assert_eq!(problem.constraint_count(), 1);
         assert_eq!(problem.variable_count(), 2);
@@ -1222,6 +1224,7 @@ End";
             name: Cow::Borrowed("sos1"),
             sos_type: crate::model::SOSType::S1,
             weights: vec![Coefficient { name: "s1", value: 1.0 }],
+            byte_offset: None,
         });
         assert_eq!(problem.variables["s1"].var_type, VariableType::SOS);
     }
@@ -1340,6 +1343,7 @@ End";
                 coefficients: vec![Coefficient { name, value: 1.0 }],
                 operator: ComparisonOp::LTE,
                 rhs: 10.0,
+                byte_offset: None,
             });
         }
         assert_eq!(problem.variable_count(), 100);
@@ -1365,6 +1369,7 @@ mod modification_tests {
             coefficients: vec![Coefficient { name: "x1", value: 1.0 }, Coefficient { name: "x2", value: 1.0 }],
             operator: ComparisonOp::LTE,
             rhs: 10.0,
+            byte_offset: None,
         });
         problem
     }
@@ -1453,6 +1458,7 @@ mod modification_tests {
             name: Cow::Borrowed("sos1"),
             sos_type: crate::model::SOSType::S1,
             weights: vec![Coefficient { name: "x1", value: 1.0 }],
+            byte_offset: None,
         });
 
         // Can't modify SOS coefficients/rhs/operator

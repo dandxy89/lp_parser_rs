@@ -308,7 +308,7 @@ impl<'a> ConstraintBuilder<'a> {
                     coefficients.iter().all(|c| c.value.is_finite()),
                     "postcondition: all Standard constraint coefficient values must be finite"
                 );
-                Ok(Constraint::Standard { name, coefficients, operator, rhs })
+                Ok(Constraint::Standard { name, coefficients, operator, rhs, byte_offset: None })
             }
             Self::SOS { name, sos_type, weights } => {
                 if weights.is_empty() {
@@ -319,7 +319,7 @@ impl<'a> ConstraintBuilder<'a> {
                     weights.iter().all(|w| w.value.is_finite()),
                     "postcondition: all SOS constraint weight values must be finite"
                 );
-                Ok(Constraint::SOS { name, sos_type, weights })
+                Ok(Constraint::SOS { name, sos_type, weights, byte_offset: None })
             }
         }
     }
@@ -526,7 +526,7 @@ mod tests {
     fn test_constraint_builder_sos() {
         let constraint = ConstraintBuilder::sos("sos".into(), SOSType::S1).coefficient("x1", 1.0).coefficient("x2", 2.0).build().unwrap();
 
-        if let Constraint::SOS { name, sos_type, weights } = constraint {
+        if let Constraint::SOS { name, sos_type, weights, .. } = constraint {
             assert_eq!(name, "sos");
             assert_eq!(sos_type, SOSType::S1);
             assert_eq!(weights.len(), 2);

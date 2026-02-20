@@ -151,7 +151,7 @@ fn write_constraints_section(output: &mut String, problem: &LpProblem, options: 
 /// Write a single constraint
 fn write_constraint(output: &mut String, constraint: &Constraint, options: &LpWriterOptions) -> LpResult<()> {
     match constraint {
-        Constraint::Standard { name, coefficients, operator, rhs } => {
+        Constraint::Standard { name, coefficients, operator, rhs, .. } => {
             write!(output, " {name}: ").map_err(|err| LpParseError::io_error(format!("Failed to write constraint name: {err}")))?;
 
             write_coefficients_line(output, coefficients, options)?;
@@ -159,7 +159,7 @@ fn write_constraint(output: &mut String, constraint: &Constraint, options: &LpWr
             writeln!(output, " {} {}", operator, format_number(*rhs, options.decimal_precision))
                 .map_err(|err| LpParseError::io_error(format!("Failed to write constraint RHS: {err}")))?;
         }
-        Constraint::SOS { name, sos_type, weights } => {
+        Constraint::SOS { name, sos_type, weights, .. } => {
             write!(output, " {name}: {sos_type}:: ")
                 .map_err(|err| LpParseError::io_error(format!("Failed to write SOS constraint: {err}")))?;
 
@@ -410,6 +410,7 @@ mod tests {
             coefficients: vec![Coefficient { name: "x1", value: 1.0 }, Coefficient { name: "x2", value: 1.0 }],
             operator: ComparisonOp::LTE,
             rhs: 100.0,
+            byte_offset: None,
         };
         problem.add_constraint(constraint);
 
@@ -465,6 +466,7 @@ End";
             coefficients: vec![Coefficient { name: "x1", value: 1.0 }],
             operator: ComparisonOp::GTE,
             rhs: 20.0,
+            byte_offset: None,
         };
         problem.add_constraint(new_constraint);
 
@@ -527,6 +529,7 @@ End";
             ],
             operator: ComparisonOp::LTE,
             rhs: 100.0,
+            byte_offset: None,
         };
         problem.add_constraint(constraint1);
 
@@ -564,6 +567,7 @@ End";
                 Coefficient { name: "x2", value: 2.0 },
                 Coefficient { name: "x3", value: 3.0 },
             ],
+            byte_offset: None,
         };
         problem.add_constraint(sos_constraint);
 

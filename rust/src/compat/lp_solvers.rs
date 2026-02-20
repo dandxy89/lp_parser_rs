@@ -413,6 +413,7 @@ mod tests {
                 coefficients: vec![Coefficient { name: "x", value: 1.0 }],
                 operator: ComparisonOp::LTE,
                 rhs: 10.0,
+                byte_offset: None,
             },
         );
         p.variables.insert("x", Variable::new("x").with_var_type(VariableType::General));
@@ -450,7 +451,7 @@ mod tests {
             let mut p = simple_problem();
             p.constraints.insert(
                 Cow::Borrowed("c2"),
-                Constraint::Standard { name: Cow::Borrowed("c2"), coefficients: vec![], operator: op, rhs: 0.0 },
+                Constraint::Standard { name: Cow::Borrowed("c2"), coefficients: vec![], operator: op, rhs: 0.0, byte_offset: None },
             );
             assert!(matches!(LpSolversCompat::try_new(&p), Err(LpSolversCompatError::StrictInequalityNotSupported { .. })));
         }
@@ -461,7 +462,7 @@ mod tests {
         // SOS constraint
         let mut p = simple_problem();
         p.constraints
-            .insert(Cow::Borrowed("sos1"), Constraint::SOS { name: Cow::Borrowed("sos1"), sos_type: SOSType::S1, weights: vec![] });
+            .insert(Cow::Borrowed("sos1"), Constraint::SOS { name: Cow::Borrowed("sos1"), sos_type: SOSType::S1, weights: vec![], byte_offset: None });
         let c = LpSolversCompat::try_new(&p).unwrap();
         assert!(!c.is_fully_compatible());
         assert!(matches!(&c.warnings()[0], LpSolversCompatWarning::SosConstraintIgnored { .. }));

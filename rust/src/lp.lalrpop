@@ -158,7 +158,7 @@ ConstraintsSection: Vec<Constraint<'input>> = {
 // A constraint entry can be named or unnamed
 ConstraintEntry: Constraint<'input> = {
     // Starts with sign: definitely unnamed constraint
-    <sign:OptSign> <first:UnsignedCoeff> <rest:CoeffTail*> <op:CompOp> <rhs:NumericValue> => {
+    <loc:@L> <sign:OptSign> <first:UnsignedCoeff> <rest:CoeffTail*> <op:CompOp> <rhs:NumericValue> => {
         let mut coeffs = vec![Coefficient { name: first.name, value: sign * first.value }];
         for (s, c) in rest {
             coeffs.push(Coefficient { name: c.name, value: s * c.value });
@@ -168,10 +168,11 @@ ConstraintEntry: Constraint<'input> = {
             coefficients: coeffs,
             operator: op,
             rhs: rhs,
+            byte_offset: Some(loc),
         }
     },
     // Starts with number: definitely unnamed constraint
-    <num:"number"> <var:"identifier"> <rest:CoeffTail*> <op:CompOp> <rhs:NumericValue> => {
+    <loc:@L> <num:"number"> <var:"identifier"> <rest:CoeffTail*> <op:CompOp> <rhs:NumericValue> => {
         let mut coeffs = vec![Coefficient { name: var, value: num }];
         for (s, c) in rest {
             coeffs.push(Coefficient { name: c.name, value: s * c.value });
@@ -181,10 +182,11 @@ ConstraintEntry: Constraint<'input> = {
             coefficients: coeffs,
             operator: op,
             rhs: rhs,
+            byte_offset: Some(loc),
         }
     },
     // Starts with infinity: definitely unnamed constraint (includes sign in token)
-    <inf:"infinity"> <var:"identifier"> <rest:CoeffTail*> <op:CompOp> <rhs:NumericValue> => {
+    <loc:@L> <inf:"infinity"> <var:"identifier"> <rest:CoeffTail*> <op:CompOp> <rhs:NumericValue> => {
         let mut coeffs = vec![Coefficient { name: var, value: inf }];
         for (s, c) in rest {
             coeffs.push(Coefficient { name: c.name, value: s * c.value });
@@ -194,10 +196,11 @@ ConstraintEntry: Constraint<'input> = {
             coefficients: coeffs,
             operator: op,
             rhs: rhs,
+            byte_offset: Some(loc),
         }
     },
     // Starts with identifier: could be named or unnamed - use left-factoring
-    <id:"identifier"> <cont:ConstraintContinuation> => cont.into_constraint(id),
+    <loc:@L> <id:"identifier"> <cont:ConstraintContinuation> => cont.into_constraint(id, Some(loc)),
 };
 
 // Constraint continuation after initial identifier
@@ -292,11 +295,12 @@ SosSection: Vec<Constraint<'input>> = {
         let mut constraints = Vec::new();
         let mut current_name: Option<&'input str> = None;
         let mut current_type: Option<SOSType> = None;
+        let mut current_offset: Option<usize> = None;
         let mut current_weights: Vec<Coefficient<'input>> = Vec::new();
 
         for entry in entries {
             match entry {
-                SosEntryKind::Header(name, sos_type) => {
+                SosEntryKind::Header(name, sos_type, offset) => {
                     // Save previous constraint if exists
                     if let (Some(n), Some(t)) = (current_name.take(), current_type.take()) {
                         if !current_weights.is_empty() {
@@ -304,11 +308,13 @@ SosSection: Vec<Constraint<'input>> = {
                                 name: Cow::Borrowed(n),
                                 sos_type: t,
                                 weights: std::mem::take(&mut current_weights),
+                                byte_offset: current_offset,
                             });
                         }
                     }
                     current_name = Some(name);
                     current_type = Some(sos_type);
+                    current_offset = Some(offset);
                 }
                 SosEntryKind::Weight(coeff) => {
                     current_weights.push(coeff);
@@ -323,6 +329,7 @@ SosSection: Vec<Constraint<'input>> = {
                     name: Cow::Borrowed(n),
                     sos_type: t,
                     weights: current_weights,
+                    byte_offset: current_offset,
                 });
             }
         }
@@ -334,7 +341,7 @@ SosSection: Vec<Constraint<'input>> = {
 // Entry in SOS section - either a constraint header or a weight
 SosEntry: SosEntryKind<'input> = {
     // Header: "name: S1::" or "name: S2::"
-    <name:"identifier"> ":" <sos_type:"sos_type"> "::" => SosEntryKind::Header(name, sos_type),
+    <loc:@L> <name:"identifier"> ":" <sos_type:"sos_type"> "::" => SosEntryKind::Header(name, sos_type, loc),
     // Weight: "var:value"
     <var:"identifier"> ":" <weight:NumericValue> => SosEntryKind::Weight(Coefficient { name: var, value: weight }),
 };

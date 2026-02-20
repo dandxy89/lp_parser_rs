@@ -17,8 +17,8 @@ pub struct LexerError;
 /// Helper enum for parsing SOS entries in the grammar
 #[derive(Debug, Clone, PartialEq)]
 pub enum SosEntryKind<'input> {
-    /// SOS constraint header: name and type
-    Header(&'input str, SOSType),
+    /// SOS constraint header: name, type, and byte offset
+    Header(&'input str, SOSType, usize),
     /// SOS weight: variable and weight value
     Weight(Coefficient<'input>),
 }
@@ -33,19 +33,21 @@ pub enum ConstraintCont<'input> {
 }
 
 impl<'input> ConstraintCont<'input> {
-    /// Convert to a Constraint, using the given identifier as either name or first variable
+    /// Convert to a Constraint, using the given identifier as either name or first variable.
+    ///
+    /// `byte_offset` is the position of the constraint in the source text.
     #[must_use]
-    pub fn into_constraint(self, id: &'input str) -> Constraint<'input> {
+    pub fn into_constraint(self, id: &'input str, byte_offset: Option<usize>) -> Constraint<'input> {
         match self {
             ConstraintCont::Named(coeffs, op, rhs) => {
-                Constraint::Standard { name: Cow::Borrowed(id), coefficients: coeffs, operator: op, rhs }
+                Constraint::Standard { name: Cow::Borrowed(id), coefficients: coeffs, operator: op, rhs, byte_offset }
             }
             ConstraintCont::Unnamed(rest, op, rhs) => {
                 let mut coeffs = vec![Coefficient { name: id, value: 1.0 }];
                 for (s, c) in rest {
                     coeffs.push(Coefficient { name: c.name, value: s * c.value });
                 }
-                Constraint::Standard { name: Cow::Borrowed("__c__"), coefficients: coeffs, operator: op, rhs }
+                Constraint::Standard { name: Cow::Borrowed("__c__"), coefficients: coeffs, operator: op, rhs, byte_offset }
             }
         }
     }
