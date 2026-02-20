@@ -239,7 +239,7 @@ impl<'a> ConstraintBuilder<'a> {
 
     #[must_use]
     /// Set the constraint to less than or equal
-    pub fn le(mut self, rhs: f64) -> Self {
+    pub const fn le(mut self, rhs: f64) -> Self {
         if let Self::Standard { operator, rhs: rhs_ref, .. } = &mut self {
             *operator = Some(ComparisonOp::LTE);
             *rhs_ref = Some(rhs);
@@ -249,7 +249,7 @@ impl<'a> ConstraintBuilder<'a> {
 
     #[must_use]
     /// Set the constraint to less than
-    pub fn lt(mut self, rhs: f64) -> Self {
+    pub const fn lt(mut self, rhs: f64) -> Self {
         if let Self::Standard { operator, rhs: rhs_ref, .. } = &mut self {
             *operator = Some(ComparisonOp::LT);
             *rhs_ref = Some(rhs);
@@ -259,7 +259,7 @@ impl<'a> ConstraintBuilder<'a> {
 
     #[must_use]
     /// Set the constraint to greater than or equal
-    pub fn ge(mut self, rhs: f64) -> Self {
+    pub const fn ge(mut self, rhs: f64) -> Self {
         if let Self::Standard { operator, rhs: rhs_ref, .. } = &mut self {
             *operator = Some(ComparisonOp::GTE);
             *rhs_ref = Some(rhs);
@@ -269,7 +269,7 @@ impl<'a> ConstraintBuilder<'a> {
 
     #[must_use]
     /// Set the constraint to greater than
-    pub fn gt(mut self, rhs: f64) -> Self {
+    pub const fn gt(mut self, rhs: f64) -> Self {
         if let Self::Standard { operator, rhs: rhs_ref, .. } = &mut self {
             *operator = Some(ComparisonOp::GT);
             *rhs_ref = Some(rhs);
@@ -279,7 +279,7 @@ impl<'a> ConstraintBuilder<'a> {
 
     #[must_use]
     /// Set the constraint to equal
-    pub fn eq(mut self, rhs: f64) -> Self {
+    pub const fn eq(mut self, rhs: f64) -> Self {
         if let Self::Standard { operator, rhs: rhs_ref, .. } = &mut self {
             *operator = Some(ComparisonOp::EQ);
             *rhs_ref = Some(rhs);

@@ -1,9 +1,9 @@
 [package]
 name = "lp_parser_rs"
 version = "3.1.1"
-edition = "2021"
+edition = "2024"
 authors = ["Dan Dixey", "Dan Dixey <dan@functorml.co.uk>"]
-rust-version = "1.70.0"
+rust-version = "1.85.0"
 license = "MIT OR Apache-2.0"
 readme = "../README.md"
 description = "A Rust parser for the LP file format."
@@ -39,14 +39,14 @@ logos = "0.16.0"
 serde = { version = "1.0.228", features = ["derive"], optional = true }
 serde_json = { version = "1.0", optional = true }
 serde_yaml = { version = "0.9", optional = true }
-thiserror = "2.0.17"
+thiserror = "2.0.18"
 unique_id = { version = "0.1.7", features = ["sequence"] }
 
 [build-dependencies]
 lalrpop = { version = "0.23.0" }
 
 [dev-dependencies]
-insta = { version = "1.46.2", features = ["yaml", "redactions"] }
+insta = { version = "1.46.3", features = ["yaml", "redactions"] }
 serde_json = "1.0.149"
 
 [features]

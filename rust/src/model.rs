@@ -338,7 +338,7 @@ impl<'a> Variable<'a> {
 
     #[inline]
     /// Setter to override `VariableType`.
-    pub fn set_var_type(&mut self, var_type: VariableType) {
+    pub const fn set_var_type(&mut self, var_type: VariableType) {
         self.var_type = var_type;
     }
 

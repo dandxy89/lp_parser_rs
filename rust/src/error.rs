@@ -184,7 +184,7 @@ pub trait ErrorContext<T> {
 impl<T> ErrorContext<T> for Result<T, LpParseError> {
     fn with_position(self, position: usize) -> Self {
         self.map_err(|mut err| {
-            if let LpParseError::ParseError { position: ref mut pos, .. } = &mut err {
+            if let LpParseError::ParseError { position: pos, .. } = &mut err {
                 *pos = position;
             }
             err

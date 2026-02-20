@@ -229,7 +229,7 @@ impl<'a> ParseContext<'a> {
     }
 
     /// Get mutable access to metrics
-    pub fn metrics_mut(&mut self) -> &mut ParseMetrics {
+    pub const fn metrics_mut(&mut self) -> &mut ParseMetrics {
         &mut self.metrics
     }
 
@@ -296,7 +296,7 @@ impl<'a> ParseContext<'a> {
     }
 
     /// Set the current section
-    pub fn set_section(&mut self, section: SectionType) {
+    pub const fn set_section(&mut self, section: SectionType) {
         self.current_section = section;
     }
 
