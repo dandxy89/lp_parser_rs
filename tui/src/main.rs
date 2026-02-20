@@ -14,6 +14,7 @@ use clap::Parser;
 use crossterm::event::DisableMouseCapture;
 use crossterm::execute;
 use crossterm::terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode};
+use lp_parser_rs::analysis::ProblemAnalysis;
 use lp_parser_rs::parser::parse_file;
 use lp_parser_rs::problem::{LpProblem, LpProblemOwned};
 use ratatui::Terminal;
@@ -47,14 +48,18 @@ fn build_constraint_line_map(problem: &LpProblem, line_index: &LineIndex) -> Has
     map
 }
 
-/// Parse an LP file, returning the owned problem and a constraint→line-number map.
-fn parse_lp_file(path: &Path) -> Result<(LpProblemOwned, HashMap<String, usize>), Box<dyn std::error::Error>> {
+/// Parsed LP file: the owned problem, structural analysis, and a constraint→line-number map.
+type ParsedLpFile = (LpProblemOwned, ProblemAnalysis, HashMap<String, usize>);
+
+/// Parse an LP file, returning the owned problem, analysis, and a constraint→line-number map.
+fn parse_lp_file(path: &Path) -> Result<ParsedLpFile, Box<dyn std::error::Error>> {
     let content = parse_file(path).map_err(|e| format!("failed to read '{}': {e}", path.display()))?;
     let problem = LpProblem::parse(&content).map_err(|e| format!("failed to parse '{}': {e}", path.display()))?;
     let line_index = LineIndex::new(&content);
     let line_map = build_constraint_line_map(&problem, &line_index);
+    let analysis = problem.analyze();
     let owned = problem.to_owned();
-    Ok((owned, line_map))
+    Ok((owned, analysis, line_map))
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -64,7 +69,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let start = Instant::now();
     eprint!("Parsing {}... ", args.file1.display());
     stderr().flush()?;
-    let (owned1, line_map1) = parse_lp_file(&args.file1)?;
+    let (owned1, analysis1, line_map1) = parse_lp_file(&args.file1)?;
     eprintln!(
         "done ({:.1}s, {} variables, {} constraints)",
         start.elapsed().as_secs_f64(),
@@ -75,7 +80,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let start2 = Instant::now();
     eprint!("Parsing {}... ", args.file2.display());
     stderr().flush()?;
-    let (owned2, line_map2) = parse_lp_file(&args.file2)?;
+    let (owned2, analysis2, line_map2) = parse_lp_file(&args.file2)?;
     eprintln!(
         "done ({:.1}s, {} variables, {} constraints)",
         start2.elapsed().as_secs_f64(),
@@ -88,7 +93,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     stderr().flush()?;
     let file1_str = args.file1.display().to_string();
     let file2_str = args.file2.display().to_string();
-    let report = build_diff_report(&file1_str, &file2_str, &owned1, &owned2, &line_map1, &line_map2);
+    let report = build_diff_report(&file1_str, &file2_str, &owned1, &owned2, &line_map1, &line_map2, analysis1, analysis2);
     eprintln!("done ({:.1}s, {} changes found)", diff_start.elapsed().as_secs_f64(), report.summary().total_changes(),);
 
     // Free parsed problems — only the (small) diff report is needed for the TUI

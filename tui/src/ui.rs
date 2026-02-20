@@ -239,7 +239,15 @@ fn draw_detail_panel(frame: &mut Frame, area: Rect, app: &mut App, report_summar
             let block = Block::default().borders(Borders::ALL).border_style(border_style).title(" Summary ");
             let inner = block.inner(content_area);
             frame.render_widget(block, content_area);
-            summary::draw_summary(frame, inner, &app.report, report_summary);
+            summary::draw_summary(
+                frame,
+                inner,
+                &app.report,
+                report_summary,
+                &app.report.analysis1,
+                &app.report.analysis2,
+                app.detail_scroll,
+            );
         }
         Section::Variables => {
             let (filtered, state) = app.section_states[0].indices_and_state_mut();

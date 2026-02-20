@@ -567,8 +567,10 @@ impl App {
                         self.active_name_list_state_mut().select(Some(0));
                     }
                     self.focus = Focus::NameList;
+                } else if self.active_section == Section::Summary {
+                    self.focus = Focus::Detail;
+                    self.detail_scroll = 0;
                 }
-                // Summary section: do nothing
             }
             Focus::NameList => {
                 self.focus = Focus::Detail;

@@ -5,6 +5,7 @@
 use std::collections::HashMap;
 use std::fmt;
 
+use lp_parser_rs::analysis::ProblemAnalysis;
 use lp_parser_rs::model::{CoefficientOwned, ComparisonOp, ConstraintOwned, SOSType, Sense, VariableType};
 use lp_parser_rs::problem::LpProblemOwned;
 
@@ -89,6 +90,10 @@ pub struct LpDiffReport {
     pub constraints: SectionDiff<ConstraintDiffEntry>,
     /// Per-objective diff entries.
     pub objectives: SectionDiff<ObjectiveDiffEntry>,
+    /// Structural analysis of the first file.
+    pub analysis1: ProblemAnalysis,
+    /// Structural analysis of the second file.
+    pub analysis2: ProblemAnalysis,
 }
 
 impl LpDiffReport {
@@ -727,6 +732,7 @@ fn diff_objectives(p1: &LpProblemOwned, p2: &LpProblemOwned) -> SectionDiff<Obje
 /// * `p2` - The second LP problem.
 /// * `line_map1` - Constraint name → 1-based line number for file 1.
 /// * `line_map2` - Constraint name → 1-based line number for file 2.
+#[allow(clippy::too_many_arguments)]
 pub fn build_diff_report(
     file1: &str,
     file2: &str,
@@ -734,6 +740,8 @@ pub fn build_diff_report(
     p2: &LpProblemOwned,
     line_map1: &HashMap<String, usize>,
     line_map2: &HashMap<String, usize>,
+    analysis1: ProblemAnalysis,
+    analysis2: ProblemAnalysis,
 ) -> LpDiffReport {
     debug_assert!(!file1.is_empty(), "file1 label must not be empty");
     debug_assert!(!file2.is_empty(), "file2 label must not be empty");
@@ -746,15 +754,33 @@ pub fn build_diff_report(
 
     let name_changed = if p1.name == p2.name { None } else { Some((p1.name.clone(), p2.name.clone())) };
 
-    LpDiffReport { file1: file1.to_string(), file2: file2.to_string(), sense_changed, name_changed, variables, constraints, objectives }
+    LpDiffReport {
+        file1: file1.to_string(),
+        file2: file2.to_string(),
+        sense_changed,
+        name_changed,
+        variables,
+        constraints,
+        objectives,
+        analysis1,
+        analysis2,
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use lp_parser_rs::analysis::ProblemAnalysis;
     use lp_parser_rs::model::{CoefficientOwned, ConstraintOwned, ObjectiveOwned, SOSType, Sense, VariableOwned, VariableType};
-    use lp_parser_rs::problem::LpProblemOwned;
+    use lp_parser_rs::problem::{LpProblem, LpProblemOwned};
 
     use super::*;
+
+    /// Create a dummy `ProblemAnalysis` for tests that don't care about analysis content.
+    fn dummy_analysis() -> ProblemAnalysis {
+        let content = "Minimize\n obj: x\nSubject To\n c1: x >= 0\nEnd\n";
+        let problem = LpProblem::parse(content).expect("dummy LP should parse");
+        problem.analyze()
+    }
 
     fn empty_problem() -> LpProblemOwned {
         LpProblemOwned::new()
@@ -794,7 +820,7 @@ mod tests {
     fn test_empty_problems() {
         let p1 = empty_problem();
         let p2 = empty_problem();
-        let report = build_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new());
+        let report = build_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new(), dummy_analysis(), dummy_analysis());
 
         assert!(report.variables.entries.is_empty());
         assert!(report.constraints.entries.is_empty());
@@ -808,7 +834,7 @@ mod tests {
     fn test_variable_added() {
         let p1 = empty_problem();
         let p2 = problem_with_variable("x", VariableType::Binary);
-        let report = build_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new());
+        let report = build_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new(), dummy_analysis(), dummy_analysis());
 
         assert_eq!(report.variables.entries.len(), 1);
         let entry = &report.variables.entries[0];
@@ -824,7 +850,7 @@ mod tests {
     fn test_variable_removed() {
         let p1 = problem_with_variable("y", VariableType::Integer);
         let p2 = empty_problem();
-        let report = build_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new());
+        let report = build_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new(), dummy_analysis(), dummy_analysis());
 
         assert_eq!(report.variables.entries.len(), 1);
         let entry = &report.variables.entries[0];
@@ -838,7 +864,7 @@ mod tests {
     fn test_variable_modified() {
         let p1 = problem_with_variable("z", VariableType::Free);
         let p2 = problem_with_variable("z", VariableType::Binary);
-        let report = build_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new());
+        let report = build_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new(), dummy_analysis(), dummy_analysis());
 
         assert_eq!(report.variables.entries.len(), 1);
         let entry = &report.variables.entries[0];
@@ -855,7 +881,7 @@ mod tests {
         // p2: c1: 2x + 5z <= 10   (y removed, z added, x unchanged)
         let p1 = problem_with_standard_constraint("c1", vec![("x", 2.0), ("y", 3.0)], ComparisonOp::LTE, 10.0);
         let p2 = problem_with_standard_constraint("c1", vec![("x", 2.0), ("z", 5.0)], ComparisonOp::LTE, 10.0);
-        let report = build_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new());
+        let report = build_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new(), dummy_analysis(), dummy_analysis());
 
         assert_eq!(report.constraints.entries.len(), 1);
         let entry = &report.constraints.entries[0];
@@ -900,7 +926,7 @@ mod tests {
             byte_offset: None,
         });
 
-        let report = build_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new());
+        let report = build_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new(), dummy_analysis(), dummy_analysis());
 
         assert_eq!(report.constraints.entries.len(), 1);
         let entry = &report.constraints.entries[0];
@@ -917,7 +943,7 @@ mod tests {
         // b changed from 2.0 to 5.0; a unchanged; c added.
         p2.add_objective(make_objective("obj1", vec![("a", 1.0), ("b", 5.0), ("c", 3.0)]));
 
-        let report = build_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new());
+        let report = build_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new(), dummy_analysis(), dummy_analysis());
 
         assert_eq!(report.objectives.entries.len(), 1);
         let entry = &report.objectives.entries[0];
@@ -935,7 +961,7 @@ mod tests {
     fn test_sense_changed() {
         let p1 = LpProblemOwned::new().with_sense(Sense::Minimize);
         let p2 = LpProblemOwned::new().with_sense(Sense::Maximize);
-        let report = build_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new());
+        let report = build_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new(), dummy_analysis(), dummy_analysis());
 
         assert!(report.sense_changed.is_some());
         let (old, new) = report.sense_changed.unwrap();
@@ -958,7 +984,7 @@ mod tests {
         p1.add_variable(VariableOwned::new("changed").with_var_type(VariableType::Free));
         p2.add_variable(VariableOwned::new("changed").with_var_type(VariableType::Binary));
 
-        let report = build_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new());
+        let report = build_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new(), dummy_analysis(), dummy_analysis());
 
         // Only the changed variable should be stored.
         assert_eq!(report.variables.entries.len(), 1);
@@ -1080,7 +1106,7 @@ mod tests {
     fn test_searchable_text_variable() {
         let p1 = empty_problem();
         let p2 = problem_with_variable("flow_x", VariableType::Binary);
-        let report = build_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new());
+        let report = build_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new(), dummy_analysis(), dummy_analysis());
 
         let entry = &report.variables.entries[0];
         // Variables have no extra fields, so searchable_text is just the name.
@@ -1091,7 +1117,7 @@ mod tests {
     fn test_searchable_text_constraint_with_coefficients() {
         let p1 = empty_problem();
         let p2 = problem_with_standard_constraint("c1", vec![("alpha", 1.0), ("beta", 2.0)], ComparisonOp::LTE, 10.0);
-        let report = build_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new());
+        let report = build_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new(), dummy_analysis(), dummy_analysis());
 
         let entry = &report.constraints.entries[0];
         // Should contain name + variable names separated by \0.
@@ -1106,7 +1132,7 @@ mod tests {
         let mut p1 = LpProblemOwned::new();
         p1.add_objective(make_objective("obj1", vec![("x", 1.0), ("y", 2.0)]));
         let p2 = empty_problem();
-        let report = build_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new());
+        let report = build_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new(), dummy_analysis(), dummy_analysis());
 
         let entry = &report.objectives.entries[0];
         assert!(entry.searchable_text.contains("obj1"), "searchable_text: {}", entry.searchable_text);
@@ -1120,7 +1146,7 @@ mod tests {
         // p2: c1: 2x + 5z <= 10   (y removed, z added)
         let p1 = problem_with_standard_constraint("c1", vec![("x", 2.0), ("y", 3.0)], ComparisonOp::LTE, 10.0);
         let p2 = problem_with_standard_constraint("c1", vec![("x", 2.0), ("z", 5.0)], ComparisonOp::LTE, 10.0);
-        let report = build_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new());
+        let report = build_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new(), dummy_analysis(), dummy_analysis());
 
         let entry = &report.constraints.entries[0];
         // Should contain all variables from both versions (union).
@@ -1161,7 +1187,7 @@ mod tests {
         let mut lm2 = HashMap::new();
         lm2.insert("c1".to_string(), 8);
 
-        let report = build_diff_report("a.lp", "b.lp", &p1, &p2, &lm1, &lm2);
+        let report = build_diff_report("a.lp", "b.lp", &p1, &p2, &lm1, &lm2, dummy_analysis(), dummy_analysis());
         let entry = &report.constraints.entries[0];
         assert_eq!(entry.line_file1, Some(5));
         assert_eq!(entry.line_file2, Some(8));
