@@ -11,8 +11,13 @@ impl App {
             return;
         }
 
+        if self.show_search_popup {
+            self.handle_search_popup_key(key);
+            return;
+        }
+
         if self.show_help {
-            // Any key dismisses the help popup.
+            // Any key dismisses the help pop-up.
             self.show_help = false;
             return;
         }
@@ -47,6 +52,37 @@ impl App {
             KeyCode::Char(c) => {
                 self.search_query.push(c);
                 self.invalidate_cache();
+            }
+            _ => {}
+        }
+    }
+
+    /// Handle a key event while the search pop-up is visible.
+    fn handle_search_popup_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Esc => {
+                self.show_search_popup = false;
+            }
+            KeyCode::Enter => {
+                self.confirm_search_selection();
+            }
+            KeyCode::Backspace => {
+                self.search_popup_query.pop();
+                self.recompute_search_popup();
+            }
+            KeyCode::Char('j') | KeyCode::Down => {
+                if !self.search_popup_results.is_empty() {
+                    self.search_popup_selected = (self.search_popup_selected + 1).min(self.search_popup_results.len() - 1);
+                    self.search_popup_scroll = 0;
+                }
+            }
+            KeyCode::Char('k') | KeyCode::Up => {
+                self.search_popup_selected = self.search_popup_selected.saturating_sub(1);
+                self.search_popup_scroll = 0;
+            }
+            KeyCode::Char(c) => {
+                self.search_popup_query.push(c);
+                self.recompute_search_popup();
             }
             _ => {}
         }
@@ -147,7 +183,7 @@ impl App {
             KeyCode::Char('-') => self.set_filter(DiffFilter::Removed),
             KeyCode::Char('m') => self.set_filter(DiffFilter::Modified),
 
-            // Toggle help popup.
+            // Toggle help pop-up.
             KeyCode::Char('?') => {
                 self.show_help = !self.show_help;
             }
@@ -156,11 +192,14 @@ impl App {
             KeyCode::Char('y') => self.yank_name(),
             KeyCode::Char('Y') => self.yank_detail(),
 
-            // Open the search bar.
+            // Open the search pop-up.
             KeyCode::Char('/') => {
-                self.search_active = true;
-                self.search_query.clear();
-                self.invalidate_cache();
+                self.show_search_popup = true;
+                self.search_popup_query.clear();
+                self.search_popup_results.clear();
+                self.search_popup_selected = 0;
+                self.search_popup_scroll = 0;
+                self.recompute_search_popup();
             }
 
             _ => {}
@@ -398,6 +437,11 @@ impl App {
 
     /// Handle a mouse event: scroll wheels and left-click panel selection.
     pub fn handle_mouse(&mut self, event: MouseEvent) {
+        // Ignore mouse events while search pop-up is visible.
+        if self.show_search_popup {
+            return;
+        }
+
         if self.show_help {
             // Any mouse interaction dismisses the help overlay.
             if matches!(event.kind, MouseEventKind::Down(MouseButton::Left)) {

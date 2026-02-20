@@ -3,6 +3,23 @@ use ratatui::widgets::ListState;
 use crate::diff_model::{DiffEntry, DiffKind};
 use crate::search::CompiledSearch;
 
+/// A single result from the search pop-up, spanning all sections.
+#[derive(Debug, Clone)]
+pub struct SearchResult {
+    /// Which section this entry belongs to.
+    pub section: Section,
+    /// Index into the section's `entries` vec.
+    pub entry_index: usize,
+    /// Fuzzy match score (0 for regex/substring modes).
+    pub score: u16,
+    /// Character positions in the name that matched (for highlighting).
+    pub match_indices: Vec<usize>,
+    /// Cached entry name for display.
+    pub name: String,
+    /// Diff kind for badge rendering.
+    pub kind: DiffKind,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Section {
     Summary,

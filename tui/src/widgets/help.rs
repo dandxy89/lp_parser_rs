@@ -1,6 +1,6 @@
-//! Help popup overlay widget.
+//! Help pop-up overlay widget.
 //!
-//! Renders a centred popup listing all keybindings grouped by category.
+//! Renders a centred pop-up listing all keybindings grouped by category.
 
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Flex, Layout, Rect};
@@ -27,25 +27,29 @@ const HELP_TEXT: &[&str] = &[
     "  1–4     Jump to section",
     "  Esc     Back / Clear search",
     "",
-    "  Search",
-    "  ──────",
-    "  n       Next match (or Down when no search)",
-    "  N       Prev match (or Up when no search)",
+    "  Search (Telescope-style pop-up)",
+    "  ──────────────────────────────",
+    "  /         Open search pop-up",
+    "  j / ↓     Next result (in pop-up)",
+    "  k / ↑     Prev result (in pop-up)",
+    "  Enter     Jump to selected entry",
+    "  Esc       Cancel search",
+    "  n / N     Next/prev match (main view)",
     "",
-    "  Search Modes",
-    "  ────────────",
-    "  /query      Fuzzy (default)",
-    "  /r:pattern  Regex",
-    "  /s:text     Substring",
+    "  Search Modes (type prefix in pop-up)",
+    "  ───────────────────────────────────",
+    "  query       Fuzzy (default)",
+    "  r:pattern   Regex",
+    "  s:text      Substring",
     "",
     "  Mouse: scroll wheel navigates, click selects",
     "",
 ];
 
 const POPUP_WIDTH: u16 = 60;
-const POPUP_HEIGHT: u16 = 36;
+const POPUP_HEIGHT: u16 = 40;
 
-/// Draw a centred help popup overlay on top of the current frame.
+/// Draw a centred help pop-up overlay on top of the current frame.
 pub fn draw_help(frame: &mut Frame, area: Rect) {
     let popup = centred_rect(area);
 

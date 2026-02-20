@@ -461,8 +461,10 @@ mod tests {
     fn test_warnings() {
         // SOS constraint
         let mut p = simple_problem();
-        p.constraints
-            .insert(Cow::Borrowed("sos1"), Constraint::SOS { name: Cow::Borrowed("sos1"), sos_type: SOSType::S1, weights: vec![], byte_offset: None });
+        p.constraints.insert(
+            Cow::Borrowed("sos1"),
+            Constraint::SOS { name: Cow::Borrowed("sos1"), sos_type: SOSType::S1, weights: vec![], byte_offset: None },
+        );
         let c = LpSolversCompat::try_new(&p).unwrap();
         assert!(!c.is_fully_compatible());
         assert!(matches!(&c.warnings()[0], LpSolversCompatWarning::SosConstraintIgnored { .. }));

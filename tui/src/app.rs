@@ -3,9 +3,9 @@ use std::time::Instant;
 use ratatui::layout::Rect;
 use ratatui::widgets::ListState;
 
-use crate::diff_model::LpDiffReport;
-use crate::search::CompiledSearch;
-pub use crate::state::{DiffFilter, Focus, Section, SectionViewState};
+use crate::diff_model::{DiffEntry, LpDiffReport};
+use crate::search::{self, CompiledSearch, SearchMode};
+pub use crate::state::{DiffFilter, Focus, SearchResult, Section, SectionViewState};
 
 pub struct App {
     pub report: LpDiffReport,
@@ -14,7 +14,7 @@ pub struct App {
     pub filter: DiffFilter,
     pub should_quit: bool,
 
-    /// Whether the help popup overlay is visible.
+    /// Whether the help pop-up overlay is visible.
     pub show_help: bool,
 
     /// Whether the search bar is currently accepting input.
@@ -51,6 +51,18 @@ pub struct App {
     pub yank_flash: Option<Instant>,
     /// Message displayed in the status bar after a successful yank.
     pub yank_message: String,
+
+    // Search pop-up (Telescope-style)
+    /// Whether the search pop-up overlay is visible.
+    pub show_search_popup: bool,
+    /// Current query text in the search pop-up input.
+    pub search_popup_query: String,
+    /// Ranked search results spanning all sections.
+    pub search_popup_results: Vec<SearchResult>,
+    /// Currently highlighted result index in the pop-up.
+    pub search_popup_selected: usize,
+    /// Scroll offset for the detail preview pane inside the pop-up.
+    pub search_popup_scroll: u16,
 }
 
 impl App {
@@ -79,6 +91,11 @@ impl App {
             detail_rect: Rect::default(),
             yank_flash: None,
             yank_message: String::new(),
+            show_search_popup: false,
+            search_popup_query: String::new(),
+            search_popup_results: Vec::new(),
+            search_popup_selected: 0,
+            search_popup_scroll: 0,
         }
     }
 
@@ -273,6 +290,115 @@ impl App {
             Section::Objectives => self.report.objectives.entries.get(entry_idx).map(|e| e.name.as_str()),
             Section::Summary => None,
         }
+    }
+
+    /// Recompute search pop-up results from the current query.
+    ///
+    /// Builds a flat haystack from all three sections (variables, constraints,
+    /// objectives), runs the appropriate search mode, and populates
+    /// `search_popup_results` with ranked/filtered results.
+    pub fn recompute_search_popup(&mut self) {
+        self.search_popup_results.clear();
+        self.search_popup_selected = 0;
+        self.search_popup_scroll = 0;
+
+        let (mode, pattern) = search::parse_query(&self.search_popup_query);
+
+        // Build flat entry metadata: (Section, entry_index, name, kind).
+        let mut entries: Vec<(Section, usize, String, crate::diff_model::DiffKind)> = Vec::new();
+        for (i, e) in self.report.variables.entries.iter().enumerate() {
+            entries.push((Section::Variables, i, e.name().to_owned(), e.kind()));
+        }
+        for (i, e) in self.report.constraints.entries.iter().enumerate() {
+            entries.push((Section::Constraints, i, e.name().to_owned(), e.kind()));
+        }
+        for (i, e) in self.report.objectives.entries.iter().enumerate() {
+            entries.push((Section::Objectives, i, e.name().to_owned(), e.kind()));
+        }
+
+        if self.search_popup_query.is_empty() {
+            // Show all entries, no scoring.
+            for (section, idx, name, kind) in entries {
+                self.search_popup_results.push(SearchResult { section, entry_index: idx, score: 0, match_indices: Vec::new(), name, kind });
+            }
+            return;
+        }
+
+        match mode {
+            SearchMode::Fuzzy => {
+                let names: Vec<&str> = entries.iter().map(|(_, _, name, _)| name.as_str()).collect();
+                let config = frizbee::Config { sort: true, ..Default::default() };
+                let matches = frizbee::match_list_indices(pattern, &names, &config);
+
+                for m in matches {
+                    let (section, entry_index, name, kind) = &entries[m.index as usize];
+                    // frizbee returns indices in reverse order; sort ascending for highlighting.
+                    let mut indices = m.indices;
+                    indices.sort_unstable();
+                    self.search_popup_results.push(SearchResult {
+                        section: *section,
+                        entry_index: *entry_index,
+                        score: m.score,
+                        match_indices: indices,
+                        name: name.clone(),
+                        kind: *kind,
+                    });
+                }
+            }
+            SearchMode::Regex | SearchMode::Substring => {
+                let compiled = CompiledSearch::compile(&self.search_popup_query);
+                for (section, idx, name, kind) in entries {
+                    if compiled.matches(&name) {
+                        self.search_popup_results.push(SearchResult {
+                            section,
+                            entry_index: idx,
+                            score: 0,
+                            match_indices: Vec::new(),
+                            name,
+                            kind,
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    /// Confirm the currently selected search pop-up result: close the pop-up,
+    /// switch to the result's section, select the entry, and focus the name list.
+    pub fn confirm_search_selection(&mut self) {
+        let Some(result) = self.search_popup_results.get(self.search_popup_selected) else {
+            // Nothing selected — just close.
+            self.show_search_popup = false;
+            return;
+        };
+
+        let section = result.section;
+        let entry_index = result.entry_index;
+
+        // Close pop-up.
+        self.show_search_popup = false;
+
+        // Switch to the target section.
+        self.active_section = section;
+        self.section_selector_state.select(Some(section.index()));
+
+        // Clear any existing inline search and recompute caches with no filter.
+        self.search_query.clear();
+        self.filter = DiffFilter::All;
+        self.invalidate_cache();
+        self.ensure_active_section_cache();
+
+        // Find the position of `entry_index` within the filtered indices and select it.
+        let Some(list_idx) = section.list_index() else {
+            return;
+        };
+        let filtered = self.section_states[list_idx].cached_indices();
+        if let Some(pos) = filtered.iter().position(|&i| i == entry_index) {
+            self.section_states[list_idx].list_state.select(Some(pos));
+        }
+
+        self.focus = Focus::NameList;
+        self.detail_scroll = 0;
     }
 
     /// Move up by `n` steps in the focused panel. No-op for `SectionSelector`.

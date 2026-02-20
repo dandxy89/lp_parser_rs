@@ -15,9 +15,9 @@ path = "src/main.rs"
 [dependencies]
 lp_parser_rs = { path = "../rust", features = ["diff", "serde"] }
 
+arboard = "3.6.1"
 clap = { version = "4.5.60", features = ["derive"] }
 crossterm = "0.29.0"
 frizbee = "0.8.2"
 ratatui = { version = "0.30.0", default-features = false, features = ["crossterm"] }
 regex = "1.12.3"
-arboard = "3"

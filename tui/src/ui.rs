@@ -22,7 +22,7 @@ use ratatui::widgets::{Block, Borders};
 use crate::app::{App, Focus, Section};
 use crate::search;
 use crate::widgets::status_bar::SearchState;
-use crate::widgets::{detail, help, search as search_widget, sidebar, status_bar, summary};
+use crate::widgets::{detail, help, search as search_widget, search_popup, sidebar, status_bar, summary};
 
 /// Minimum width for the sidebar panel in columns.
 const SIDEBAR_MIN_WIDTH: u16 = 20;
@@ -71,13 +71,13 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     app.name_list_height = sidebar_chunks[1].height;
     app.detail_height = detail_area.height;
 
-    // -- Section Selector --
+    // Section Selector
     sidebar::draw_section_selector(frame, sidebar_chunks[0], app);
 
-    // -- Name List --
+    // Name List
     sidebar::draw_name_list(frame, sidebar_chunks[1], app);
 
-    // -- Detail Panel --
+    // Detail Panel
     draw_detail_panel(frame, detail_area, app, &report_summary);
 
     // Status bar (drawn after detail so detail_content_lines is populated).
@@ -98,6 +98,11 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
         detail_pos.as_ref(),
         yank_flash.as_ref(),
     );
+
+    // Search pop-up overlay — rendered on top of main content.
+    if app.show_search_popup {
+        search_popup::draw_search_popup(frame, frame.area(), app);
+    }
 
     // Help overlay — rendered last so it draws on top of everything.
     if app.show_help {

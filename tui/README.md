@@ -75,15 +75,24 @@ Press `?` at any time to open the key bindings pop up.
 | `-` | Removed only |
 | `m` | Modified only |
 
-**Search**
+**Search (Telescope-style pop-up)**
 
 | Key | Action |
 |-----|--------|
-| `/` | Open search bar |
-| `/query` | Fuzzy match (default) |
-| `/r:pattern` | Regex |
-| `/s:text` | Substring |
-| `n` / `N` | Next / previous match (when search is committed) |
+| `/` | Open search pop-up (searches across all sections) |
+| `j` / `↓` | Next result (in pop-up) |
+| `k` / `↑` | Previous result (in pop-up) |
+| `Enter` | Jump to selected entry |
+| `Esc` | Cancel search |
+| `n` / `N` | Next / previous match (main view, when search was committed) |
+
+Search mode prefixes (type in the pop-up input):
+
+| Prefix | Mode |
+|--------|------|
+| *(none)* | Fuzzy match (default, ranked by score) |
+| `r:` | Regex (case-insensitive) |
+| `s:` | Substring (case-insensitive) |
 
 **Clipboard**
 
@@ -96,7 +105,7 @@ Press `?` at any time to open the key bindings pop up.
 
 | Key | Action |
 |-----|--------|
-| `?` | Toggle help popup |
+| `?` | Toggle help pop-up |
 | `q` | Quit |
 | `Ctrl+C` | Force quit |
 

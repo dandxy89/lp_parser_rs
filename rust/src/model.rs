@@ -195,10 +195,9 @@ impl PartialEq for Constraint<'_> {
                 Constraint::Standard { name: n1, coefficients: c1, operator: o1, rhs: r1, .. },
                 Constraint::Standard { name: n2, coefficients: c2, operator: o2, rhs: r2, .. },
             ) => n1 == n2 && c1 == c2 && o1 == o2 && r1 == r2,
-            (
-                Constraint::SOS { name: n1, sos_type: t1, weights: w1, .. },
-                Constraint::SOS { name: n2, sos_type: t2, weights: w2, .. },
-            ) => n1 == n2 && t1 == t2 && w1 == w2,
+            (Constraint::SOS { name: n1, sos_type: t1, weights: w1, .. }, Constraint::SOS { name: n2, sos_type: t2, weights: w2, .. }) => {
+                n1 == n2 && t1 == t2 && w1 == w2
+            }
             _ => false,
         }
     }
@@ -233,7 +232,7 @@ impl<'a> Constraint<'a> {
     #[must_use]
     #[inline]
     /// Returns the byte offset of this constraint in the source text, if available.
-    pub fn byte_offset(&self) -> Option<usize> {
+    pub const fn byte_offset(&self) -> Option<usize> {
         match self {
             Constraint::Standard { byte_offset, .. } | Constraint::SOS { byte_offset, .. } => *byte_offset,
         }
@@ -588,13 +587,12 @@ impl PartialEq for ConstraintOwned {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (
-                ConstraintOwned::Standard { name: n1, coefficients: c1, operator: o1, rhs: r1, .. },
-                ConstraintOwned::Standard { name: n2, coefficients: c2, operator: o2, rhs: r2, .. },
+                Self::Standard { name: n1, coefficients: c1, operator: o1, rhs: r1, .. },
+                Self::Standard { name: n2, coefficients: c2, operator: o2, rhs: r2, .. },
             ) => n1 == n2 && c1 == c2 && o1 == o2 && r1 == r2,
-            (
-                ConstraintOwned::SOS { name: n1, sos_type: t1, weights: w1, .. },
-                ConstraintOwned::SOS { name: n2, sos_type: t2, weights: w2, .. },
-            ) => n1 == n2 && t1 == t2 && w1 == w2,
+            (Self::SOS { name: n1, sos_type: t1, weights: w1, .. }, Self::SOS { name: n2, sos_type: t2, weights: w2, .. }) => {
+                n1 == n2 && t1 == t2 && w1 == w2
+            }
             _ => false,
         }
     }
@@ -611,7 +609,7 @@ impl ConstraintOwned {
 
     /// Returns the byte offset of this constraint in the source text, if available.
     #[must_use]
-    pub fn byte_offset(&self) -> Option<usize> {
+    pub const fn byte_offset(&self) -> Option<usize> {
         match self {
             Self::Standard { byte_offset, .. } | Self::SOS { byte_offset, .. } => *byte_offset,
         }
@@ -796,7 +794,13 @@ mod tests {
         assert!(format!("{sos_constraint}").contains("S1::"));
 
         // Empty coefficients
-        let empty = Constraint::Standard { name: Cow::Borrowed("e"), coefficients: vec![], operator: ComparisonOp::EQ, rhs: 0.0, byte_offset: None };
+        let empty = Constraint::Standard {
+            name: Cow::Borrowed("e"),
+            coefficients: vec![],
+            operator: ComparisonOp::EQ,
+            rhs: 0.0,
+            byte_offset: None,
+        };
         if let Constraint::Standard { coefficients, .. } = empty {
             assert!(coefficients.is_empty());
         }
