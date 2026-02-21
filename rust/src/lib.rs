@@ -36,6 +36,7 @@ pub mod context;
 #[cfg(feature = "csv")]
 pub mod csv;
 pub mod error;
+pub mod interner;
 pub mod lexer;
 pub mod model;
 pub mod parser;

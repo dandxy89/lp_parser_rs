@@ -46,12 +46,20 @@ const HELP_TEXT: &[&str] = &[
     "  r:pattern   Regex",
     "  s:text      Substring",
     "",
+    "  Solver Results (after S → solve)",
+    "  ────────────────────────────────",
+    "  y         Yank results to clipboard",
+    "  w         Write diff to CSV (both mode)",
+    "  d         Toggle diff-only (both mode)",
+    "  1–4       Switch tab",
+    "  Esc       Close solver overlay",
+    "",
     "  Mouse: scroll wheel navigates, click selects",
     "",
 ];
 
 const POPUP_WIDTH: u16 = 60;
-const POPUP_HEIGHT: u16 = 43;
+const POPUP_HEIGHT: u16 = 50;
 
 /// Draw a centred help pop-up overlay on top of the current frame.
 pub fn draw_help(frame: &mut Frame, area: Rect) {

@@ -21,6 +21,7 @@ use std::fmt::Write;
 
 use crate::NUMERIC_EPSILON;
 use crate::error::{LpParseError, LpResult};
+use crate::interner::NameInterner;
 use crate::model::{Coefficient, Constraint, Objective, Variable, VariableType};
 use crate::problem::LpProblem;
 
@@ -121,17 +122,18 @@ fn write_objectives_section(output: &mut String, problem: &LpProblem, options: &
 
     // Write objectives
     for objective in problem.objectives.values() {
-        write_objective(output, objective, options)?;
+        write_objective(output, objective, &problem.interner, options)?;
     }
 
     Ok(())
 }
 
 /// Write a single objective
-fn write_objective(output: &mut String, objective: &Objective, options: &LpWriterOptions) -> LpResult<()> {
-    write!(output, " {}: ", objective.name).map_err(|err| LpParseError::io_error(format!("Failed to write objective name: {err}")))?;
+fn write_objective(output: &mut String, objective: &Objective, interner: &NameInterner, options: &LpWriterOptions) -> LpResult<()> {
+    let name = interner.resolve(objective.name);
+    write!(output, " {name}: ").map_err(|err| LpParseError::io_error(format!("Failed to write objective name: {err}")))?;
 
-    write_coefficients_line(output, &objective.coefficients, options)?;
+    write_coefficients_line(output, &objective.coefficients, interner, options)?;
     writeln!(output).map_err(|err| LpParseError::io_error(format!("Failed to write newline: {err}")))?;
 
     Ok(())
@@ -142,32 +144,36 @@ fn write_constraints_section(output: &mut String, problem: &LpProblem, options: 
     writeln!(output, "Subject To").map_err(|err| LpParseError::io_error(format!("Failed to write constraints header: {err}")))?;
 
     for constraint in problem.constraints.values() {
-        write_constraint(output, constraint, options)?;
+        write_constraint(output, constraint, &problem.interner, options)?;
     }
 
     Ok(())
 }
 
 /// Write a single constraint
-fn write_constraint(output: &mut String, constraint: &Constraint, options: &LpWriterOptions) -> LpResult<()> {
+fn write_constraint(output: &mut String, constraint: &Constraint, interner: &NameInterner, options: &LpWriterOptions) -> LpResult<()> {
     match constraint {
         Constraint::Standard { name, coefficients, operator, rhs, .. } => {
-            write!(output, " {name}: ").map_err(|err| LpParseError::io_error(format!("Failed to write constraint name: {err}")))?;
+            let resolved_name = interner.resolve(*name);
+            write!(output, " {resolved_name}: ")
+                .map_err(|err| LpParseError::io_error(format!("Failed to write constraint name: {err}")))?;
 
-            write_coefficients_line(output, coefficients, options)?;
+            write_coefficients_line(output, coefficients, interner, options)?;
 
             writeln!(output, " {} {}", operator, format_number(*rhs, options.decimal_precision))
                 .map_err(|err| LpParseError::io_error(format!("Failed to write constraint RHS: {err}")))?;
         }
         Constraint::SOS { name, sos_type, weights, .. } => {
-            write!(output, " {name}: {sos_type}:: ")
+            let resolved_name = interner.resolve(*name);
+            write!(output, " {resolved_name}: {sos_type}:: ")
                 .map_err(|err| LpParseError::io_error(format!("Failed to write SOS constraint: {err}")))?;
 
             for (i, weight) in weights.iter().enumerate() {
                 if i > 0 {
                     write!(output, " ").map_err(|err| LpParseError::io_error(format!("Failed to write space: {err}")))?;
                 }
-                write!(output, "{}:{}", weight.name, format_number(weight.value, options.decimal_precision))
+                let var_name = interner.resolve(weight.name);
+                write!(output, "{}:{}", var_name, format_number(weight.value, options.decimal_precision))
                     .map_err(|err| LpParseError::io_error(format!("Failed to write SOS weight: {err}")))?;
             }
             writeln!(output).map_err(|err| LpParseError::io_error(format!("Failed to write newline: {err}")))?;
@@ -196,7 +202,7 @@ fn write_bounds_section(output: &mut String, problem: &LpProblem, options: &LpWr
         writeln!(output, "Bounds").map_err(|err| LpParseError::io_error(format!("Failed to write bounds header: {err}")))?;
 
         for variable in problem.variables.values() {
-            write_variable_bounds(output, variable, options)?;
+            write_variable_bounds(output, variable, &problem.interner, options)?;
         }
     }
 
@@ -209,26 +215,25 @@ const fn needs_bounds_declaration(var_type: &VariableType) -> bool {
 }
 
 /// Write bounds for a single variable
-fn write_variable_bounds(output: &mut String, variable: &Variable, options: &LpWriterOptions) -> LpResult<()> {
+fn write_variable_bounds(output: &mut String, variable: &Variable, interner: &NameInterner, options: &LpWriterOptions) -> LpResult<()> {
+    let var_name = interner.resolve(variable.name);
     match &variable.var_type {
         VariableType::Free => {
-            writeln!(output, "{} free", variable.name)
-                .map_err(|err| LpParseError::io_error(format!("Failed to write free variable: {err}")))?;
+            writeln!(output, "{var_name} free").map_err(|err| LpParseError::io_error(format!("Failed to write free variable: {err}")))?;
         }
         VariableType::LowerBound(bound) => {
-            writeln!(output, "{} >= {}", variable.name, format_number(*bound, options.decimal_precision))
+            writeln!(output, "{var_name} >= {}", format_number(*bound, options.decimal_precision))
                 .map_err(|err| LpParseError::io_error(format!("Failed to write lower bound: {err}")))?;
         }
         VariableType::UpperBound(bound) => {
-            writeln!(output, "{} <= {}", variable.name, format_number(*bound, options.decimal_precision))
+            writeln!(output, "{var_name} <= {}", format_number(*bound, options.decimal_precision))
                 .map_err(|err| LpParseError::io_error(format!("Failed to write upper bound: {err}")))?;
         }
         VariableType::DoubleBound(lower, upper) => {
             writeln!(
                 output,
-                "{} <= {} <= {}",
+                "{} <= {var_name} <= {}",
                 format_number(*lower, options.decimal_precision),
-                variable.name,
                 format_number(*upper, options.decimal_precision)
             )
             .map_err(|err| LpParseError::io_error(format!("Failed to write double bound: {err}")))?;
@@ -241,16 +246,17 @@ fn write_variable_bounds(output: &mut String, variable: &Variable, options: &LpW
 
 /// Write variable type sections (binaries, integers, etc.)
 fn write_variable_types_sections(output: &mut String, problem: &LpProblem, options: &LpWriterOptions) -> LpResult<()> {
-    // Group variables by type
+    // Group variables by type, resolving names
     let mut binaries = Vec::new();
     let mut integers = Vec::new();
     let mut semi_continuous = Vec::new();
 
     for variable in problem.variables.values() {
+        let var_name = problem.interner.resolve(variable.name);
         match variable.var_type {
-            VariableType::Binary => binaries.push(variable.name),
-            VariableType::Integer => integers.push(variable.name),
-            VariableType::SemiContinuous => semi_continuous.push(variable.name),
+            VariableType::Binary => binaries.push(var_name),
+            VariableType::Integer => integers.push(var_name),
+            VariableType::SemiContinuous => semi_continuous.push(var_name),
             _ => {} // Other types handled elsewhere
         }
     }
@@ -299,9 +305,15 @@ fn write_variable_type_section(output: &mut String, section_name: &str, variable
 }
 
 /// Write a line of coefficients with proper formatting
-fn write_coefficients_line(output: &mut String, coefficients: &[Coefficient], options: &LpWriterOptions) -> LpResult<()> {
+fn write_coefficients_line(
+    output: &mut String,
+    coefficients: &[Coefficient],
+    interner: &NameInterner,
+    options: &LpWriterOptions,
+) -> LpResult<()> {
     for (i, coeff) in coefficients.iter().enumerate() {
-        let formatted_coeff = format_coefficient(coeff, i == 0, options.decimal_precision);
+        let var_name = interner.resolve(coeff.name);
+        let formatted_coeff = format_coefficient(var_name, coeff.value, i == 0, options.decimal_precision);
         write!(output, "{formatted_coeff}").map_err(|err| LpParseError::io_error(format!("Failed to write coefficient: {err}")))?;
     }
 
@@ -309,25 +321,25 @@ fn write_coefficients_line(output: &mut String, coefficients: &[Coefficient], op
 }
 
 /// Format a coefficient with proper sign handling
-fn format_coefficient(coeff: &Coefficient, is_first: bool, precision: usize) -> String {
-    debug_assert!(!coeff.name.is_empty(), "coefficient name must not be empty");
-    debug_assert!(coeff.value.is_finite(), "coefficient value must be finite, got: {}", coeff.value);
-    let abs_value = coeff.value.abs();
-    let sign = if coeff.value < 0.0 { "-" } else { "+" };
+fn format_coefficient(name: &str, value: f64, is_first: bool, precision: usize) -> String {
+    debug_assert!(!name.is_empty(), "coefficient name must not be empty");
+    debug_assert!(value.is_finite(), "coefficient value must be finite, got: {value}");
+    let abs_value = value.abs();
+    let sign = if value < 0.0 { "-" } else { "+" };
     let is_one = (abs_value - 1.0).abs() < NUMERIC_EPSILON;
 
     if is_first {
-        if coeff.value < 0.0 {
-            if is_one { format!("- {}", coeff.name) } else { format!("- {} {}", format_number(abs_value, precision), coeff.name) }
+        if value < 0.0 {
+            if is_one { format!("- {name}") } else { format!("- {} {name}", format_number(abs_value, precision)) }
         } else if is_one {
-            coeff.name.to_string()
+            name.to_string()
         } else {
-            format!("{} {}", format_number(abs_value, precision), coeff.name)
+            format!("{} {name}", format_number(abs_value, precision))
         }
     } else if is_one {
-        format!(" {sign} {}", coeff.name)
+        format!(" {sign} {name}")
     } else {
-        format!(" {sign} {} {}", format_number(abs_value, precision), coeff.name)
+        format!(" {sign} {} {name}", format_number(abs_value, precision))
     }
 }
 
@@ -356,8 +368,6 @@ fn format_number(value: f64, precision: usize) -> String {
 
 #[cfg(test)]
 mod tests {
-    use std::borrow::Cow;
-
     use super::*;
     use crate::model::{Coefficient, ComparisonOp, Constraint, Objective, Sense, VariableType};
     use crate::problem::LpProblem;
@@ -374,17 +384,10 @@ mod tests {
 
     #[test]
     fn test_format_coefficient() {
-        let coeff1 = Coefficient { name: "x1", value: 1.0 };
-        assert_eq!(format_coefficient(&coeff1, true, 6), "x1");
-
-        let coeff2 = Coefficient { name: "x2", value: -1.0 };
-        assert_eq!(format_coefficient(&coeff2, true, 6), "- x2");
-
-        let coeff3 = Coefficient { name: "x3", value: 2.5 };
-        assert_eq!(format_coefficient(&coeff3, false, 6), " + 2.5 x3");
-
-        let coeff4 = Coefficient { name: "x4", value: -3.7 };
-        assert_eq!(format_coefficient(&coeff4, false, 6), " - 3.7 x4");
+        assert_eq!(format_coefficient("x1", 1.0, true, 6), "x1");
+        assert_eq!(format_coefficient("x2", -1.0, true, 6), "- x2");
+        assert_eq!(format_coefficient("x3", 2.5, false, 6), " + 2.5 x3");
+        assert_eq!(format_coefficient("x4", -3.7, false, 6), " - 3.7 x4");
     }
 
     #[test]
@@ -398,19 +401,25 @@ mod tests {
 
     #[test]
     fn test_write_simple_problem() {
-        let mut problem = LpProblem::new().with_problem_name("Test Problem".into()).with_sense(Sense::Maximize);
+        let mut problem = LpProblem::new().with_problem_name(String::from("Test Problem")).with_sense(Sense::Maximize);
+
+        // Intern names and build types
+        let profit_id = problem.intern("profit");
+        let x1_id = problem.intern("x1");
+        let x2_id = problem.intern("x2");
+        let capacity_id = problem.intern("capacity");
 
         // Add objective
         let objective = Objective {
-            name: Cow::Borrowed("profit"),
-            coefficients: vec![Coefficient { name: "x1", value: 3.0 }, Coefficient { name: "x2", value: 2.0 }],
+            name: profit_id,
+            coefficients: vec![Coefficient { name: x1_id, value: 3.0 }, Coefficient { name: x2_id, value: 2.0 }],
         };
         problem.add_objective(objective);
 
         // Add constraint
         let constraint = Constraint::Standard {
-            name: Cow::Borrowed("capacity"),
-            coefficients: vec![Coefficient { name: "x1", value: 1.0 }, Coefficient { name: "x2", value: 1.0 }],
+            name: capacity_id,
+            coefficients: vec![Coefficient { name: x1_id, value: 1.0 }, Coefficient { name: x2_id, value: 1.0 }],
             operator: ComparisonOp::LTE,
             rhs: 100.0,
             byte_offset: None,
@@ -429,11 +438,6 @@ mod tests {
 
     #[test]
     fn test_complete_lp_rewriting_workflow() {
-        // This test demonstrates a complete workflow of:
-        // 1. Parsing an LP file
-        // 2. Modifying the problem
-        // 3. Writing it back to LP format
-
         // Step 1: Parse an existing LP problem
         let original_lp = r"
 Maximize
@@ -452,21 +456,17 @@ End";
         let mut problem = crate::problem::LpProblem::parse(original_lp).unwrap();
 
         // Step 2: Modify the problem
-
-        // Change objective coefficient
         problem.update_objective_coefficient("profit", "x1", 5.0).unwrap();
-
-        // Add new variable to objective
         problem.update_objective_coefficient("profit", "x3", 1.5).unwrap();
-
-        // Modify constraint
         problem.update_constraint_coefficient("capacity", "x3", 0.5).unwrap();
         problem.update_constraint_rhs("material", 200.0).unwrap();
 
-        // Add new constraint
+        // Add new constraint using interned names
+        let demand_id = problem.intern("demand");
+        let x1_id = problem.get_name_id("x1").unwrap();
         let new_constraint = Constraint::Standard {
-            name: Cow::Borrowed("demand"),
-            coefficients: vec![Coefficient { name: "x1", value: 1.0 }],
+            name: demand_id,
+            coefficients: vec![Coefficient { name: x1_id, value: 1.0 }],
             operator: ComparisonOp::GTE,
             rhs: 20.0,
             byte_offset: None,
@@ -501,34 +501,40 @@ End";
         assert_eq!(reparsed_problem.sense, crate::model::Sense::Maximize);
         assert_eq!(reparsed_problem.constraint_count(), 3);
         assert_eq!(reparsed_problem.variable_count(), 3);
-        assert!(reparsed_problem.variables.contains_key("production"));
-        assert!(!reparsed_problem.variables.contains_key("x2"));
-        assert!(reparsed_problem.constraints.contains_key("resource_limit"));
-        assert!(!reparsed_problem.constraints.contains_key("capacity"));
+        assert!(reparsed_problem.get_name_id("production").and_then(|id| reparsed_problem.variables.get(&id)).is_some());
+        assert!(reparsed_problem.get_name_id("x2").and_then(|id| reparsed_problem.variables.get(&id)).is_none());
+        assert!(reparsed_problem.get_name_id("resource_limit").and_then(|id| reparsed_problem.constraints.get(&id)).is_some());
+        assert!(reparsed_problem.get_name_id("capacity").and_then(|id| reparsed_problem.constraints.get(&id)).is_none());
     }
 
     #[test]
     fn test_write_problem_with_bounds_and_variable_types() {
-        let mut problem = LpProblem::new().with_problem_name("Complex Problem".into()).with_sense(crate::model::Sense::Minimize);
+        let mut problem = LpProblem::new().with_problem_name(String::from("Complex Problem")).with_sense(crate::model::Sense::Minimize);
+
+        let cost_id = problem.intern("cost");
+        let x1_id = problem.intern("x1");
+        let x2_id = problem.intern("x2");
+        let x3_id = problem.intern("x3");
+        let resource1_id = problem.intern("resource1");
 
         // Add objective
         let objective = Objective {
-            name: Cow::Borrowed("cost"),
+            name: cost_id,
             coefficients: vec![
-                Coefficient { name: "x1", value: 10.0 },
-                Coefficient { name: "x2", value: 15.0 },
-                Coefficient { name: "x3", value: 20.0 },
+                Coefficient { name: x1_id, value: 10.0 },
+                Coefficient { name: x2_id, value: 15.0 },
+                Coefficient { name: x3_id, value: 20.0 },
             ],
         };
         problem.add_objective(objective);
 
         // Add constraints
         let constraint1 = Constraint::Standard {
-            name: Cow::Borrowed("resource1"),
+            name: resource1_id,
             coefficients: vec![
-                Coefficient { name: "x1", value: 1.0 },
-                Coefficient { name: "x2", value: 2.0 },
-                Coefficient { name: "x3", value: 1.0 },
+                Coefficient { name: x1_id, value: 1.0 },
+                Coefficient { name: x2_id, value: 2.0 },
+                Coefficient { name: x3_id, value: 1.0 },
             ],
             operator: ComparisonOp::LTE,
             rhs: 100.0,
@@ -561,14 +567,19 @@ End";
     fn test_write_with_sos_constraints() {
         let mut problem = LpProblem::new();
 
+        let sos1_id = problem.intern("sos1");
+        let x1_id = problem.intern("x1");
+        let x2_id = problem.intern("x2");
+        let x3_id = problem.intern("x3");
+
         // Add SOS constraint
         let sos_constraint = Constraint::SOS {
-            name: Cow::Borrowed("sos1"),
+            name: sos1_id,
             sos_type: crate::model::SOSType::S1,
             weights: vec![
-                Coefficient { name: "x1", value: 1.0 },
-                Coefficient { name: "x2", value: 2.0 },
-                Coefficient { name: "x3", value: 3.0 },
+                Coefficient { name: x1_id, value: 1.0 },
+                Coefficient { name: x2_id, value: 2.0 },
+                Coefficient { name: x3_id, value: 3.0 },
             ],
             byte_offset: None,
         };

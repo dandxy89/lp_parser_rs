@@ -16,6 +16,8 @@ path = "src/main.rs"
 lp_parser_rs = { path = "../rust", features = ["diff", "serde"] }
 
 arboard = "3.6.1"
+chrono = "0.4.43"
+csv = "1.4.0"
 clap = { version = "4.5.60", features = ["derive"] }
 crossterm = "0.29.0"
 frizbee = "0.8.2"

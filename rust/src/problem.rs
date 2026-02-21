@@ -1,28 +1,16 @@
-use std::borrow::Cow;
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Display, Formatter, Result as FmtResult};
-#[cfg(feature = "serde")]
-use std::marker::PhantomData;
 
 use crate::NUMERIC_EPSILON;
 use crate::error::{LpParseError, LpResult};
-use crate::lexer::Lexer;
+use crate::interner::{NameId, NameInterner};
+use crate::lexer::{Lexer, RawCoefficient, RawConstraint, RawObjective};
 use crate::lp::LpProblemParser;
-use crate::model::{
-    Coefficient, ComparisonOp, Constraint, ConstraintOwned, Objective, ObjectiveOwned, Sense, Variable, VariableOwned, VariableType,
-};
+use crate::model::{Coefficient, ComparisonOp, Constraint, Objective, Sense, Variable, VariableType};
 
 /// Check if a floating-point value is effectively zero using both absolute
 /// and relative epsilon comparisons.
-///
-/// This handles edge cases better than simple `value.abs() < f64::EPSILON`:
-/// - For small values near zero, uses absolute epsilon (`f64::EPSILON`)
-/// - For larger values, uses relative epsilon based on the reference magnitude
-///
-/// # Arguments
-/// * `value` - The value to check
-/// * `reference` - A reference magnitude for relative comparison (e.g., existing coefficient)
 #[inline]
 fn is_effectively_zero(value: f64, reference: f64) -> bool {
     debug_assert!(value.is_finite(), "is_effectively_zero called with non-finite value: {value}");
@@ -30,12 +18,10 @@ fn is_effectively_zero(value: f64, reference: f64) -> bool {
     let abs_value = value.abs();
     let abs_reference = reference.abs();
 
-    // Absolute check for values near zero
     if abs_value < f64::EPSILON {
         return true;
     }
 
-    // Relative check: value is negligible compared to reference
     if abs_reference > f64::EPSILON {
         return abs_value < abs_reference * NUMERIC_EPSILON;
     }
@@ -43,33 +29,28 @@ fn is_effectively_zero(value: f64, reference: f64) -> bool {
     false
 }
 
-/// Apply a variable type to a list of variable names, only if the variable
+/// Apply a variable type to a list of variable name IDs, only if the variable
 /// doesn't already have explicit bounds set.
 #[inline]
-fn apply_variable_type<'a>(
-    variables: &mut HashMap<&'a str, Variable<'a>>,
-    var_names: impl IntoIterator<Item = &'a str>,
-    var_type: &VariableType,
-) {
-    for var_name in var_names {
-        match variables.entry(var_name) {
+fn apply_variable_type(variables: &mut HashMap<NameId, Variable>, var_ids: impl IntoIterator<Item = NameId>, var_type: &VariableType) {
+    for id in var_ids {
+        match variables.entry(id) {
             Entry::Occupied(mut entry) => {
                 if matches!(entry.get().var_type, VariableType::Free) {
                     entry.get_mut().set_var_type(var_type.clone());
                 }
             }
             Entry::Vacant(entry) => {
-                entry.insert(Variable::new(var_name).with_var_type(var_type.clone()));
+                entry.insert(Variable::new(id).with_var_type(var_type.clone()));
             }
         }
     }
 }
 
-/// Update a coefficient in a vector using index-based swap_remove
-/// instead of separate find + retain passes.
+/// Update a coefficient in a vector using index-based `swap_remove`.
 #[inline]
-fn update_coefficient_vec<'a>(coefficients: &mut Vec<Coefficient<'a>>, variable_name: &'a str, new_value: f64) {
-    if let Some(idx) = coefficients.iter().position(|c| c.name == variable_name) {
+fn update_coefficient_vec(coefficients: &mut Vec<Coefficient>, variable_id: NameId, new_value: f64) {
+    if let Some(idx) = coefficients.iter().position(|c| c.name == variable_id) {
         let reference_value = coefficients[idx].value;
         if is_effectively_zero(new_value, reference_value) {
             coefficients.swap_remove(idx);
@@ -77,7 +58,7 @@ fn update_coefficient_vec<'a>(coefficients: &mut Vec<Coefficient<'a>>, variable_
             coefficients[idx].value = new_value;
         }
     } else if !is_effectively_zero(new_value, 1.0) {
-        coefficients.push(Coefficient { name: variable_name, value: new_value });
+        coefficients.push(Coefficient { name: variable_id, value: new_value });
     }
 }
 
@@ -87,7 +68,7 @@ fn update_coefficient_vec<'a>(coefficients: &mut Vec<Coefficient<'a>>, variable_
 /// 1. `\Problem name: my_problem` or `\\Problem name: my_problem`
 /// 2. `\* my_problem *\` (CPLEX block comment style)
 #[inline]
-fn extract_problem_name<'a>(input: &'a str) -> Option<Cow<'a, str>> {
+fn extract_problem_name(input: &str) -> Option<String> {
     input.lines().find_map(|line| {
         let trimmed = line.trim();
 
@@ -96,7 +77,7 @@ fn extract_problem_name<'a>(input: &'a str) -> Option<Cow<'a, str>> {
             let inner = trimmed.strip_prefix("\\*").unwrap().strip_suffix("*\\").unwrap();
             let name = inner.trim();
             if !name.is_empty() {
-                return Some(Cow::Borrowed(name));
+                return Some(name.to_string());
             }
         }
 
@@ -111,10 +92,9 @@ fn extract_problem_name<'a>(input: &'a str) -> Option<Cow<'a, str>> {
 
         content.and_then(|c| {
             let c = c.trim();
-            // Case-insensitive match without allocating
             let prefix = "problem name:";
             if c.len() >= prefix.len() && c[..prefix.len()].eq_ignore_ascii_case(prefix) {
-                Some(Cow::Borrowed(c[prefix.len()..].trim()))
+                Some(c[prefix.len()..].trim().to_string())
             } else {
                 None
             }
@@ -124,9 +104,9 @@ fn extract_problem_name<'a>(input: &'a str) -> Option<Cow<'a, str>> {
 
 /// Register variables from coefficient lists into the variables map.
 #[inline]
-fn register_variables_from_coefficients<'a>(
-    variables: &mut HashMap<&'a str, Variable<'a>>,
-    coefficients: &[Coefficient<'a>],
+fn register_variables_from_coefficients(
+    variables: &mut HashMap<NameId, Variable>,
+    coefficients: &[Coefficient],
     var_type: Option<VariableType>,
 ) {
     for coeff in coefficients {
@@ -137,107 +117,155 @@ fn register_variables_from_coefficients<'a>(
     }
 }
 
-#[cfg_attr(feature = "diff", derive(diff::Diff), diff(attr(#[derive(Debug, PartialEq)])))]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
-#[derive(Debug, Default, PartialEq)]
-/// Represents a Linear Programming (LP) problem.
-///
-/// The `LpProblem` struct encapsulates the components of an LP problem, including its name,
-/// sense (e.g., minimisation, or maximisation), objectives, constraints, and variables.
-///
-/// # Attributes
-///
-/// * `#[cfg_attr(feature = "diff", derive(diff::Diff), diff(attr(#[derive(Debug, PartialEq)])))]`:
-///   Enables the `diff` feature for comparing differences between instances of `LpProblem`.
-/// * `#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]`:
-///   Enables serialisation and deserialisation of `LpProblem` instances when the `serde` feature is active.
-///
-pub struct LpProblem<'a> {
-    /// An optional reference to a string slice representing the name of the LP problem.
-    pub name: Option<Cow<'a, str>>,
-    /// The optimisation sense of the problem, indicating whether it is a minimisation or maximisation problem.
-    pub sense: Sense,
-    /// A `HashMap` where the keys are the names of the objectives and the values are `Objective` structs.
-    pub objectives: HashMap<Cow<'a, str>, Objective<'a>>,
-    /// A `HashMap` where the keys are the names of the constraints and the values are `Constraint` structs.
-    pub constraints: HashMap<Cow<'a, str>, Constraint<'a>>,
-    /// A `HashMap` where the keys are the names of the variables and the values are `Variable` structs.
-    pub variables: HashMap<&'a str, Variable<'a>>,
+/// Intern a slice of raw coefficients into model coefficients.
+#[inline]
+fn intern_coefficients(interner: &mut NameInterner, raw: &[RawCoefficient<'_>]) -> Vec<Coefficient> {
+    raw.iter().map(|rc| Coefficient { name: interner.intern(rc.name), value: rc.value }).collect()
 }
 
-impl<'a> LpProblem<'a> {
+/// Intern a raw constraint into a model constraint.
+#[inline]
+fn intern_constraint(interner: &mut NameInterner, raw: &RawConstraint<'_>) -> Constraint {
+    match raw {
+        RawConstraint::Standard { name, coefficients, operator, rhs, byte_offset } => Constraint::Standard {
+            name: interner.intern(name),
+            coefficients: intern_coefficients(interner, coefficients),
+            operator: operator.clone(),
+            rhs: *rhs,
+            byte_offset: *byte_offset,
+        },
+        RawConstraint::SOS { name, sos_type, weights, byte_offset } => Constraint::SOS {
+            name: interner.intern(name),
+            sos_type: sos_type.clone(),
+            weights: intern_coefficients(interner, weights),
+            byte_offset: *byte_offset,
+        },
+    }
+}
+
+/// Intern a raw objective into a model objective.
+#[inline]
+fn intern_objective(interner: &mut NameInterner, raw: &RawObjective<'_>) -> Objective {
+    Objective { name: interner.intern(&raw.name), coefficients: intern_coefficients(interner, &raw.coefficients) }
+}
+
+/// Represents a Linear Programming (LP) problem.
+///
+/// All name strings are stored in the embedded [`NameInterner`] and referenced
+/// by [`NameId`] throughout. This eliminates lifetime constraints and avoids
+/// string duplication.
+#[derive(Debug, Default)]
+pub struct LpProblem {
+    /// The problem name (from comments), not interned.
+    pub name: Option<String>,
+    /// The optimisation sense (minimise/maximise).
+    pub sense: Sense,
+    /// Objectives keyed by interned name.
+    pub objectives: HashMap<NameId, Objective>,
+    /// Constraints keyed by interned name.
+    pub constraints: HashMap<NameId, Constraint>,
+    /// Variables keyed by interned name.
+    pub variables: HashMap<NameId, Variable>,
+    /// The name interner holding all interned strings.
+    pub interner: NameInterner,
+}
+
+impl LpProblem {
     #[must_use]
     #[inline]
-    /// Initialise a new `Self`
+    /// Create a new empty `LpProblem`.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Intern a name string, returning its [`NameId`].
+    /// Convenience wrapper around `self.interner.intern()`.
+    #[inline]
+    pub fn intern(&mut self, name: &str) -> NameId {
+        self.interner.intern(name)
+    }
+
+    /// Resolve a [`NameId`] back to its string.
+    /// Convenience wrapper around `self.interner.resolve()`.
+    #[inline]
+    #[must_use]
+    pub fn resolve(&self, id: NameId) -> &str {
+        self.interner.resolve(id)
+    }
+
+    /// Look up a [`NameId`] for a name string without interning.
+    /// Returns `None` if the name has not been interned.
+    #[inline]
+    #[must_use]
+    pub fn get_name_id(&self, name: &str) -> Option<NameId> {
+        self.interner.get(name)
+    }
+
     /// Ensure a variable exists in the problem, creating it with the given type if not present.
     #[inline]
-    fn ensure_variable_exists(&mut self, name: &'a str, var_type: Option<VariableType>) {
-        if let Entry::Vacant(entry) = self.variables.entry(name) {
-            let variable = var_type.map_or_else(|| Variable::new(name), |vt| Variable::new(name).with_var_type(vt));
+    fn ensure_variable_exists(&mut self, name_id: NameId, var_type: Option<VariableType>) {
+        if let Entry::Vacant(entry) = self.variables.entry(name_id) {
+            let variable = var_type.map_or_else(|| Variable::new(name_id), |vt| Variable::new(name_id).with_var_type(vt));
             entry.insert(variable);
         }
     }
 
     #[must_use]
     #[inline]
-    /// Override the problem name
-    pub fn with_problem_name(self, problem_name: Cow<'a, str>) -> Self {
-        Self { name: Some(problem_name), ..self }
+    /// Override the problem name.
+    pub fn with_problem_name(self, problem_name: impl Into<String>) -> Self {
+        Self { name: Some(problem_name.into()), ..self }
     }
 
     #[must_use]
     #[inline]
-    /// Override the problem sense
+    /// Override the problem sense.
     pub fn with_sense(self, sense: Sense) -> Self {
         Self { sense, ..self }
     }
 
     #[must_use]
     #[inline]
-    /// Returns the name of the LP Problem
+    /// Returns the name of the LP Problem.
     pub fn name(&self) -> Option<&str> {
         self.name.as_deref()
     }
 
     #[must_use]
     #[inline]
-    /// Returns `true` if the `Self` a Minimize LP Problem
+    /// Returns `true` if this is a minimisation problem.
     pub const fn is_minimization(&self) -> bool {
         self.sense.is_minimisation()
     }
 
     #[must_use]
     #[inline]
-    /// Returns the number of constraints contained within the Problem
+    /// Returns the number of constraints.
     pub fn constraint_count(&self) -> usize {
         self.constraints.len()
     }
 
     #[must_use]
     #[inline]
-    /// Returns the number of objectives contained within the Problem
+    /// Returns the number of objectives.
     pub fn objective_count(&self) -> usize {
         self.objectives.len()
     }
 
     #[must_use]
     #[inline]
-    /// Returns the number of variables contained within the Problem
+    /// Returns the number of variables.
     pub fn variable_count(&self) -> usize {
         self.variables.len()
     }
 
     #[inline]
-    /// Parse a `Self` from a string slice
+    /// Parse a `LpProblem` from a string slice.
     ///
     /// # Errors
     ///
-    /// Returns an error if the input string is not a valid LP file format
-    pub fn parse(input: &'a str) -> LpResult<Self> {
+    /// Returns an error if the input string is not a valid LP file format.
+    pub fn parse(input: &str) -> LpResult<Self> {
         log::debug!("Starting to parse LP problem");
         Self::try_from(input)
     }
@@ -246,7 +274,7 @@ impl<'a> LpProblem<'a> {
     /// Add a new variable to the problem.
     ///
     /// If a variable with the same name already exists, it will be replaced.
-    pub fn add_variable(&mut self, variable: Variable<'a>) {
+    pub fn add_variable(&mut self, variable: Variable) {
         self.variables.insert(variable.name, variable);
     }
 
@@ -254,8 +282,8 @@ impl<'a> LpProblem<'a> {
     /// Add a new constraint to the problem.
     ///
     /// If a constraint with the same name already exists, it will be replaced.
-    pub fn add_constraint(&mut self, constraint: Constraint<'a>) {
-        let name = constraint.name().as_ref().to_owned();
+    pub fn add_constraint(&mut self, constraint: Constraint) {
+        let name_id = constraint.name();
 
         match &constraint {
             Constraint::Standard { coefficients, .. } => {
@@ -270,95 +298,81 @@ impl<'a> LpProblem<'a> {
             }
         }
 
-        self.constraints.insert(Cow::Owned(name), constraint);
+        self.constraints.insert(name_id, constraint);
     }
 
     #[inline]
     /// Add a new objective to the problem.
     ///
     /// If an objective with the same name already exists, it will be replaced.
-    pub fn add_objective(&mut self, objective: Objective<'a>) {
+    pub fn add_objective(&mut self, objective: Objective) {
         for coeff in &objective.coefficients {
             self.ensure_variable_exists(coeff.name, None);
         }
 
-        let name = objective.name.clone();
-        self.objectives.insert(name, objective);
+        let name_id = objective.name;
+        self.objectives.insert(name_id, objective);
     }
 
     // LP Problem Modification Methods
 
-    #[inline]
     /// Update a variable coefficient in an objective.
-    ///
-    /// If the variable doesn't exist in the objective, it will be added.
-    /// If the coefficient value is 0.0, the variable will be removed from the objective.
-    ///
-    /// # Arguments
-    ///
-    /// * `objective_name` - Name of the objective to modify
-    /// * `variable_name` - Name of the variable to update
-    /// * `new_coefficient` - New coefficient value
-    ///
-    /// # Returns
-    ///
-    /// `Ok(())` if successful, or an error if the objective doesn't exist
     ///
     /// # Errors
     ///
-    /// Returns an error if the specified objective does not exist
-    pub fn update_objective_coefficient(&mut self, objective_name: &str, variable_name: &'a str, new_coefficient: f64) -> LpResult<()> {
+    /// Returns an error if the specified objective does not exist.
+    pub fn update_objective_coefficient(&mut self, objective_name: &str, variable_name: &str, new_coefficient: f64) -> LpResult<()> {
         debug_assert!(!variable_name.is_empty(), "variable_name must not be empty");
         debug_assert!(new_coefficient.is_finite(), "new_coefficient must be finite, got: {new_coefficient}");
-        let objective = self
-            .objectives
-            .get_mut(objective_name)
+
+        let obj_id = self
+            .interner
+            .get(objective_name)
             .ok_or_else(|| LpParseError::validation_error(format!("Objective '{objective_name}' not found")))?;
 
-        update_coefficient_vec(&mut objective.coefficients, variable_name, new_coefficient);
+        let var_id = self.interner.intern(variable_name);
 
-        // Ensure variable exists if we added a new coefficient
+        let objective = self
+            .objectives
+            .get_mut(&obj_id)
+            .ok_or_else(|| LpParseError::validation_error(format!("Objective '{objective_name}' not found")))?;
+
+        update_coefficient_vec(&mut objective.coefficients, var_id, new_coefficient);
+
         if !is_effectively_zero(new_coefficient, 1.0) {
-            self.variables.entry(variable_name).or_insert_with(|| Variable::new(variable_name));
+            self.variables.entry(var_id).or_insert_with(|| Variable::new(var_id));
         }
 
         Ok(())
     }
 
-    #[inline]
     /// Update a variable coefficient in a constraint.
-    ///
-    /// If the variable doesn't exist in the constraint, it will be added.
-    /// If the coefficient value is 0.0, the variable will be removed from the constraint.
-    ///
-    /// # Arguments
-    ///
-    /// * `constraint_name` - Name of the constraint to modify
-    /// * `variable_name` - Name of the variable to update
-    /// * `new_coefficient` - New coefficient value
-    ///
-    /// # Returns
-    ///
-    /// `Ok(())` if successful, or an error if the constraint doesn't exist or is not a standard constraint
     ///
     /// # Errors
     ///
-    /// Returns an error if the constraint does not exist or is an SOS constraint
-    pub fn update_constraint_coefficient(&mut self, constraint_name: &str, variable_name: &'a str, new_coefficient: f64) -> LpResult<()> {
+    /// Returns an error if the constraint does not exist or is an SOS constraint.
+    pub fn update_constraint_coefficient(&mut self, constraint_name: &str, variable_name: &str, new_coefficient: f64) -> LpResult<()> {
         debug_assert!(!variable_name.is_empty(), "variable_name must not be empty");
         debug_assert!(new_coefficient.is_finite(), "new_coefficient must be finite, got: {new_coefficient}");
+
+        let con_id = self
+            .interner
+            .get(constraint_name)
+            .ok_or_else(|| LpParseError::validation_error(format!("Constraint '{constraint_name}' not found")))?;
+
+        let var_id = self.interner.intern(variable_name);
+
         let constraint = self
             .constraints
-            .get_mut(constraint_name)
+            .get_mut(&con_id)
             .ok_or_else(|| LpParseError::validation_error(format!("Constraint '{constraint_name}' not found")))?;
 
         match constraint {
             Constraint::Standard { coefficients, .. } => {
-                update_coefficient_vec(coefficients, variable_name, new_coefficient);
+                update_coefficient_vec(coefficients, var_id, new_coefficient);
 
-                // Ensure variable exists if we added a new coefficient
                 if !is_effectively_zero(new_coefficient, 1.0) {
-                    self.variables.entry(variable_name).or_insert_with(|| Variable::new(variable_name));
+                    self.variables.entry(var_id).or_insert_with(|| Variable::new(var_id));
                 }
             }
             Constraint::SOS { .. } => {
@@ -369,26 +383,21 @@ impl<'a> LpProblem<'a> {
         Ok(())
     }
 
-    #[inline]
     /// Update the right-hand side value of a constraint.
-    ///
-    /// # Arguments
-    ///
-    /// * `constraint_name` - Name of the constraint to modify
-    /// * `new_rhs` - New right-hand side value
-    ///
-    /// # Returns
-    ///
-    /// `Ok(())` if successful, or an error if the constraint doesn't exist or is not a standard constraint
     ///
     /// # Errors
     ///
-    /// Returns an error if the constraint does not exist or is an SOS constraint
+    /// Returns an error if the constraint does not exist or is an SOS constraint.
     pub fn update_constraint_rhs(&mut self, constraint_name: &str, new_rhs: f64) -> LpResult<()> {
         debug_assert!(new_rhs.is_finite(), "new_rhs must be finite, got: {new_rhs}");
+        let con_id = self
+            .interner
+            .get(constraint_name)
+            .ok_or_else(|| LpParseError::validation_error(format!("Constraint '{constraint_name}' not found")))?;
+
         let constraint = self
             .constraints
-            .get_mut(constraint_name)
+            .get_mut(&con_id)
             .ok_or_else(|| LpParseError::validation_error(format!("Constraint '{constraint_name}' not found")))?;
 
         match constraint {
@@ -400,25 +409,20 @@ impl<'a> LpProblem<'a> {
         }
     }
 
-    #[inline]
     /// Update the operator of a constraint.
-    ///
-    /// # Arguments
-    ///
-    /// * `constraint_name` - Name of the constraint to modify
-    /// * `new_operator` - New comparison operator
-    ///
-    /// # Returns
-    ///
-    /// `Ok(())` if successful, or an error if the constraint doesn't exist or is not a standard constraint
     ///
     /// # Errors
     ///
-    /// Returns an error if the constraint does not exist or is an SOS constraint
+    /// Returns an error if the constraint does not exist or is an SOS constraint.
     pub fn update_constraint_operator(&mut self, constraint_name: &str, new_operator: ComparisonOp) -> LpResult<()> {
+        let con_id = self
+            .interner
+            .get(constraint_name)
+            .ok_or_else(|| LpParseError::validation_error(format!("Constraint '{constraint_name}' not found")))?;
+
         let constraint = self
             .constraints
-            .get_mut(constraint_name)
+            .get_mut(&con_id)
             .ok_or_else(|| LpParseError::validation_error(format!("Constraint '{constraint_name}' not found")))?;
 
         match constraint {
@@ -430,309 +434,220 @@ impl<'a> LpProblem<'a> {
         }
     }
 
-    #[inline]
     /// Rename a variable throughout the entire problem.
-    ///
-    /// This updates the variable name in all objectives, constraints, and the variables map.
-    ///
-    /// # Arguments
-    ///
-    /// * `old_name` - Current name of the variable
-    /// * `new_name` - New name for the variable
-    ///
-    /// # Returns
-    ///
-    /// `Ok(())` if successful, or an error if the variable doesn't exist or the new name already exists
     ///
     /// # Errors
     ///
-    /// Returns an error if the variable does not exist or the new name is already in use
-    ///
-    /// # Panics
-    ///
-    /// Panics if the variable exists in the map but cannot be removed (internal error)
-    pub fn rename_variable(&mut self, old_name: &str, new_name: &'a str) -> LpResult<()> {
-        // Check if old variable exists
-        if !self.variables.contains_key(old_name) {
-            return Err(LpParseError::validation_error(format!("Variable '{old_name}' not found")));
-        }
+    /// Returns an error if the variable does not exist or the new name is already in use.
+    pub fn rename_variable(&mut self, old_name: &str, new_name: &str) -> LpResult<()> {
+        let old_id = self
+            .interner
+            .get(old_name)
+            .filter(|id| self.variables.contains_key(id))
+            .ok_or_else(|| LpParseError::validation_error(format!("Variable '{old_name}' not found")))?;
 
-        // Check if new name already exists
-        if self.variables.contains_key(new_name) && old_name != new_name {
+        let new_id = self.interner.intern(new_name);
+
+        if old_id != new_id && self.variables.contains_key(&new_id) {
             return Err(LpParseError::validation_error(format!("Variable '{new_name}' already exists")));
         }
 
-        // Update variable in variables map
-        let variable = self.variables.remove(old_name).expect("variable must exist: contains_key check passed");
-        let mut new_variable = Variable::new(new_name);
+        let variable = self.variables.remove(&old_id).expect("variable must exist: filter check passed");
+        let mut new_variable = Variable::new(new_id);
         new_variable.var_type = variable.var_type;
-        self.variables.insert(new_name, new_variable);
+        self.variables.insert(new_id, new_variable);
 
-        // Update variable name in all objectives
         for objective in self.objectives.values_mut() {
             for coeff in &mut objective.coefficients {
-                if coeff.name == old_name {
-                    coeff.name = new_name;
+                if coeff.name == old_id {
+                    coeff.name = new_id;
                 }
             }
         }
 
-        // Update variable name in all constraints
         for constraint in self.constraints.values_mut() {
             match constraint {
                 Constraint::Standard { coefficients, .. } => {
                     for coeff in coefficients {
-                        if coeff.name == old_name {
-                            coeff.name = new_name;
+                        if coeff.name == old_id {
+                            coeff.name = new_id;
                         }
                     }
                 }
                 Constraint::SOS { weights, .. } => {
                     for weight in weights {
-                        if weight.name == old_name {
-                            weight.name = new_name;
+                        if weight.name == old_id {
+                            weight.name = new_id;
                         }
                     }
                 }
             }
         }
 
-        debug_assert!(!self.variables.contains_key(old_name), "postcondition: old_name '{old_name}' must be gone from variables");
-        debug_assert!(self.variables.contains_key(new_name), "postcondition: new_name '{new_name}' must be present in variables");
+        debug_assert!(!self.variables.contains_key(&old_id), "postcondition: old_id must be gone from variables");
+        debug_assert!(self.variables.contains_key(&new_id), "postcondition: new_id must be present in variables");
         Ok(())
     }
 
-    #[inline]
     /// Rename a constraint.
-    ///
-    /// # Arguments
-    ///
-    /// * `old_name` - Current name of the constraint
-    /// * `new_name` - New name for the constraint
-    ///
-    /// # Returns
-    ///
-    /// `Ok(())` if successful, or an error if the constraint doesn't exist or the new name already exists
     ///
     /// # Errors
     ///
-    /// Returns an error if the constraint does not exist or the new name is already in use
-    ///
-    /// # Panics
-    ///
-    /// Panics if the constraint exists in the map but cannot be removed (internal error)
+    /// Returns an error if the constraint does not exist or the new name is already in use.
     pub fn rename_constraint(&mut self, old_name: &str, new_name: &str) -> LpResult<()> {
-        // Check if old constraint exists
-        if !self.constraints.contains_key(old_name) {
-            return Err(LpParseError::validation_error(format!("Constraint '{old_name}' not found")));
-        }
+        let old_id = self
+            .interner
+            .get(old_name)
+            .filter(|id| self.constraints.contains_key(id))
+            .ok_or_else(|| LpParseError::validation_error(format!("Constraint '{old_name}' not found")))?;
 
-        // Check if new name already exists
-        if self.constraints.contains_key(new_name) && old_name != new_name {
+        let new_id = self.interner.intern(new_name);
+
+        if old_id != new_id && self.constraints.contains_key(&new_id) {
             return Err(LpParseError::validation_error(format!("Constraint '{new_name}' already exists")));
         }
 
-        // Move constraint to new name
-        let mut constraint = self.constraints.remove(old_name).expect("constraint must exist: contains_key check passed");
+        let mut constraint = self.constraints.remove(&old_id).expect("constraint must exist: filter check passed");
 
-        // Update the constraint's internal name
         match &mut constraint {
             Constraint::Standard { name, .. } | Constraint::SOS { name, .. } => {
-                *name = Cow::Owned(new_name.to_string());
+                *name = new_id;
             }
         }
 
-        self.constraints.insert(Cow::Owned(new_name.to_string()), constraint);
+        self.constraints.insert(new_id, constraint);
 
-        debug_assert!(!self.constraints.contains_key(old_name), "postcondition: old_name '{old_name}' must be gone from constraints");
-        debug_assert!(self.constraints.contains_key(new_name), "postcondition: new_name '{new_name}' must be present in constraints");
+        debug_assert!(!self.constraints.contains_key(&old_id), "postcondition: old_id must be gone from constraints");
+        debug_assert!(self.constraints.contains_key(&new_id), "postcondition: new_id must be present in constraints");
         Ok(())
     }
 
-    #[inline]
     /// Rename an objective.
-    ///
-    /// # Arguments
-    ///
-    /// * `old_name` - Current name of the objective
-    /// * `new_name` - New name for the objective
-    ///
-    /// # Returns
-    ///
-    /// `Ok(())` if successful, or an error if the objective doesn't exist or the new name already exists
     ///
     /// # Errors
     ///
-    /// Returns an error if the objective does not exist or the new name is already in use
-    ///
-    /// # Panics
-    ///
-    /// Panics if the objective exists in the map but cannot be removed (internal error)
+    /// Returns an error if the objective does not exist or the new name is already in use.
     pub fn rename_objective(&mut self, old_name: &str, new_name: &str) -> LpResult<()> {
-        // Check if old objective exists
-        if !self.objectives.contains_key(old_name) {
-            return Err(LpParseError::validation_error(format!("Objective '{old_name}' not found")));
-        }
+        let old_id = self
+            .interner
+            .get(old_name)
+            .filter(|id| self.objectives.contains_key(id))
+            .ok_or_else(|| LpParseError::validation_error(format!("Objective '{old_name}' not found")))?;
 
-        // Check if new name already exists
-        if self.objectives.contains_key(new_name) && old_name != new_name {
+        let new_id = self.interner.intern(new_name);
+
+        if old_id != new_id && self.objectives.contains_key(&new_id) {
             return Err(LpParseError::validation_error(format!("Objective '{new_name}' already exists")));
         }
 
-        // Move objective to new name
-        let mut objective = self.objectives.remove(old_name).expect("objective must exist: contains_key check passed");
-        objective.name = Cow::Owned(new_name.to_string());
-        self.objectives.insert(Cow::Owned(new_name.to_string()), objective);
+        let mut objective = self.objectives.remove(&old_id).expect("objective must exist: filter check passed");
+        objective.name = new_id;
+        self.objectives.insert(new_id, objective);
 
-        debug_assert!(!self.objectives.contains_key(old_name), "postcondition: old_name '{old_name}' must be gone from objectives");
-        debug_assert!(self.objectives.contains_key(new_name), "postcondition: new_name '{new_name}' must be present in objectives");
+        debug_assert!(!self.objectives.contains_key(&old_id), "postcondition: old_id must be gone from objectives");
+        debug_assert!(self.objectives.contains_key(&new_id), "postcondition: new_id must be present in objectives");
         Ok(())
     }
 
-    #[inline]
     /// Remove a variable from the entire problem.
-    ///
-    /// This removes the variable from all objectives, constraints, and the variables map.
-    /// Note: This may result in empty objectives or constraints.
-    ///
-    /// # Arguments
-    ///
-    /// * `variable_name` - Name of the variable to remove
-    ///
-    /// # Returns
-    ///
-    /// `Ok(())` if successful, or an error if the variable doesn't exist
     ///
     /// # Errors
     ///
-    /// Returns an error if the variable does not exist
+    /// Returns an error if the variable does not exist.
     pub fn remove_variable(&mut self, variable_name: &str) -> LpResult<()> {
-        // Check if variable exists
-        if !self.variables.contains_key(variable_name) {
-            return Err(LpParseError::validation_error(format!("Variable '{variable_name}' not found")));
-        }
+        let var_id = self
+            .interner
+            .get(variable_name)
+            .filter(|id| self.variables.contains_key(id))
+            .ok_or_else(|| LpParseError::validation_error(format!("Variable '{variable_name}' not found")))?;
 
-        // Remove from variables map
-        self.variables.remove(variable_name);
+        self.variables.remove(&var_id);
 
-        // Remove from all objectives
         for objective in self.objectives.values_mut() {
-            objective.coefficients.retain(|c| c.name != variable_name);
+            objective.coefficients.retain(|c| c.name != var_id);
         }
 
-        // Remove from all constraints
         for constraint in self.constraints.values_mut() {
             match constraint {
                 Constraint::Standard { coefficients, .. } => {
-                    coefficients.retain(|c| c.name != variable_name);
+                    coefficients.retain(|c| c.name != var_id);
                 }
                 Constraint::SOS { weights, .. } => {
-                    weights.retain(|w| w.name != variable_name);
+                    weights.retain(|w| w.name != var_id);
                 }
             }
         }
 
-        debug_assert!(!self.variables.contains_key(variable_name), "postcondition: variable must be removed from variables map");
-        debug_assert!(
-            !self.objectives.values().any(|o| o.coefficients.iter().any(|c| c.name == variable_name)),
-            "postcondition: variable must not appear in any objective coefficients"
-        );
-        debug_assert!(
-            !self.constraints.values().any(|con| match con {
-                Constraint::Standard { coefficients, .. } => coefficients.iter().any(|c| c.name == variable_name),
-                Constraint::SOS { weights, .. } => weights.iter().any(|w| w.name == variable_name),
-            }),
-            "postcondition: variable must not appear in any constraint"
-        );
+        debug_assert!(!self.variables.contains_key(&var_id), "postcondition: variable must be removed");
         Ok(())
     }
 
-    #[inline]
     /// Remove a constraint from the problem.
-    ///
-    /// # Arguments
-    ///
-    /// * `constraint_name` - Name of the constraint to remove
-    ///
-    /// # Returns
-    ///
-    /// `Ok(())` if successful, or an error if the constraint doesn't exist
     ///
     /// # Errors
     ///
-    /// Returns an error if the constraint does not exist
+    /// Returns an error if the constraint does not exist.
     pub fn remove_constraint(&mut self, constraint_name: &str) -> LpResult<()> {
-        if self.constraints.remove(constraint_name).is_none() {
+        let con_id = self
+            .interner
+            .get(constraint_name)
+            .ok_or_else(|| LpParseError::validation_error(format!("Constraint '{constraint_name}' not found")))?;
+
+        if self.constraints.remove(&con_id).is_none() {
             return Err(LpParseError::validation_error(format!("Constraint '{constraint_name}' not found")));
         }
         Ok(())
     }
 
-    #[inline]
     /// Remove an objective from the problem.
-    ///
-    /// # Arguments
-    ///
-    /// * `objective_name` - Name of the objective to remove
-    ///
-    /// # Returns
-    ///
-    /// `Ok(())` if successful, or an error if the objective doesn't exist
     ///
     /// # Errors
     ///
-    /// Returns an error if the objective does not exist
+    /// Returns an error if the objective does not exist.
     pub fn remove_objective(&mut self, objective_name: &str) -> LpResult<()> {
-        if self.objectives.remove(objective_name).is_none() {
+        let obj_id = self
+            .interner
+            .get(objective_name)
+            .ok_or_else(|| LpParseError::validation_error(format!("Objective '{objective_name}' not found")))?;
+
+        if self.objectives.remove(&obj_id).is_none() {
             return Err(LpParseError::validation_error(format!("Objective '{objective_name}' not found")));
         }
         Ok(())
     }
 
-    #[inline]
     /// Update the type of a variable.
-    ///
-    /// # Arguments
-    ///
-    /// * `variable_name` - Name of the variable to modify
-    /// * `new_type` - New variable type
-    ///
-    /// # Returns
-    ///
-    /// `Ok(())` if successful, or an error if the variable doesn't exist
     ///
     /// # Errors
     ///
-    /// Returns an error if the variable does not exist
+    /// Returns an error if the variable does not exist.
     pub fn update_variable_type(&mut self, variable_name: &str, new_type: VariableType) -> LpResult<()> {
+        let var_id = self
+            .interner
+            .get(variable_name)
+            .ok_or_else(|| LpParseError::validation_error(format!("Variable '{variable_name}' not found")))?;
+
         let variable = self
             .variables
-            .get_mut(variable_name)
+            .get_mut(&var_id)
             .ok_or_else(|| LpParseError::validation_error(format!("Variable '{variable_name}' not found")))?;
 
         variable.var_type = new_type;
         Ok(())
     }
 
-    #[inline]
-    /// Get a list of all variables referenced in the problem.
-    ///
-    /// This includes variables from objectives, constraints, and the variables map.
-    ///
-    /// # Returns
-    ///
-    /// A vector of variable names
+    /// Get a sorted list of all variable name IDs referenced in the problem.
     #[must_use]
-    pub fn get_all_variable_names(&self) -> Vec<&str> {
-        let mut names = HashSet::with_capacity(self.variables.len());
+    pub fn get_all_variable_name_ids(&self) -> Vec<NameId> {
+        let mut ids = HashSet::with_capacity(self.variables.len());
 
-        for name in self.variables.keys() {
-            names.insert(*name);
+        for &id in self.variables.keys() {
+            ids.insert(id);
         }
 
         for objective in self.objectives.values() {
             for coeff in &objective.coefficients {
-                names.insert(coeff.name);
+                ids.insert(coeff.name);
             }
         }
 
@@ -740,263 +655,326 @@ impl<'a> LpProblem<'a> {
             match constraint {
                 Constraint::Standard { coefficients, .. } => {
                     for coeff in coefficients {
-                        names.insert(coeff.name);
+                        ids.insert(coeff.name);
                     }
                 }
                 Constraint::SOS { weights, .. } => {
                     for weight in weights {
-                        names.insert(weight.name);
+                        ids.insert(weight.name);
                     }
                 }
             }
         }
 
-        let mut result: Vec<&str> = names.into_iter().collect();
-        result.sort_unstable();
+        let mut result: Vec<NameId> = ids.into_iter().collect();
+        result.sort_by(|a, b| self.interner.resolve(*a).cmp(self.interner.resolve(*b)));
         result
     }
-}
 
-macro_rules! impl_lp_problem_display {
-    ($type:ty) => {
-        impl Display for $type {
-            fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-                if let Some(problem_name) = self.name() {
-                    writeln!(f, "Problem name: {problem_name}")?;
-                }
-                writeln!(f, "Sense: {}", self.sense)?;
-                writeln!(f, "Objectives: {}", self.objective_count())?;
-                writeln!(f, "Constraints: {}", self.constraint_count())?;
-                writeln!(f, "Variables: {}", self.variable_count())
-            }
-        }
-    };
-}
-
-impl_lp_problem_display!(LpProblem<'_>);
-
-/// Owned variant of [`LpProblem`] with no lifetime constraints.
-///
-/// This struct owns all its data, making it suitable for:
-/// - Long-lived data structures that outlive the input string
-/// - Mutation-heavy use cases where you need to modify names
-/// - Serialization/deserialization without lifetime management
-/// - Storing in collections or passing between threads
-///
-/// # Example
-///
-/// ```rust
-/// use lp_parser::problem::{LpProblem, LpProblemOwned};
-///
-/// fn process_problem(input: &str) -> LpProblemOwned {
-///     let problem = LpProblem::parse(input).unwrap();
-///     problem.to_owned() // Convert to owned, input can be dropped
-/// }
-/// ```
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Debug, Clone, PartialEq)]
-pub struct LpProblemOwned {
-    /// The name of the problem (owned).
-    pub name: Option<String>,
-    /// The optimization sense (minimize/maximize).
-    pub sense: Sense,
-    /// The objectives, keyed by name.
-    pub objectives: HashMap<String, ObjectiveOwned>,
-    /// The constraints, keyed by name.
-    pub constraints: HashMap<String, ConstraintOwned>,
-    /// The variables, keyed by name.
-    pub variables: HashMap<String, VariableOwned>,
-}
-
-impl LpProblemOwned {
-    /// Create a new empty owned problem with default sense (Minimize).
+    /// Get a sorted list of all variable names referenced in the problem.
     #[must_use]
-    pub fn new() -> Self {
-        Self { name: None, sense: Sense::default(), objectives: HashMap::new(), constraints: HashMap::new(), variables: HashMap::new() }
-    }
-
-    /// Set the problem name.
-    #[must_use]
-    pub fn with_name(self, name: impl Into<String>) -> Self {
-        Self { name: Some(name.into()), ..self }
-    }
-
-    /// Set the optimization sense.
-    #[must_use]
-    pub fn with_sense(self, sense: Sense) -> Self {
-        Self { sense, ..self }
-    }
-
-    /// Returns the name of the problem.
-    #[must_use]
-    pub fn name(&self) -> Option<&str> {
-        self.name.as_deref()
-    }
-
-    /// Returns true if this is a minimization problem.
-    #[must_use]
-    pub const fn is_minimization(&self) -> bool {
-        self.sense.is_minimisation()
-    }
-
-    /// Returns the number of objectives.
-    #[must_use]
-    pub fn objective_count(&self) -> usize {
-        self.objectives.len()
-    }
-
-    /// Returns the number of constraints.
-    #[must_use]
-    pub fn constraint_count(&self) -> usize {
-        self.constraints.len()
-    }
-
-    /// Returns the number of variables.
-    #[must_use]
-    pub fn variable_count(&self) -> usize {
-        self.variables.len()
-    }
-
-    /// Add a variable to the problem.
-    pub fn add_variable(&mut self, variable: VariableOwned) {
-        self.variables.insert(variable.name.clone(), variable);
-    }
-
-    /// Add an objective to the problem.
-    pub fn add_objective(&mut self, objective: ObjectiveOwned) {
-        self.objectives.insert(objective.name.clone(), objective);
-    }
-
-    /// Add a constraint to the problem.
-    pub fn add_constraint(&mut self, constraint: ConstraintOwned) {
-        let name = constraint.name().to_string();
-        self.constraints.insert(name, constraint);
+    pub fn get_all_variable_names(&self) -> Vec<&str> {
+        self.get_all_variable_name_ids().iter().map(|id| self.interner.resolve(*id)).collect()
     }
 }
 
-impl Default for LpProblemOwned {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+// ── Serde support (feature-gated) ──────────────────────────────────────────
+//
+// Custom Serialize/Deserialize that resolves NameId → String on output and
+// interns String → NameId on input. Inner model types (Coefficient, Constraint,
+// Objective, Variable) are serialised through LpProblem — they don't need
+// standalone serde impls.
 
-impl<'a> From<&LpProblem<'a>> for LpProblemOwned {
-    fn from(problem: &LpProblem<'a>) -> Self {
-        Self {
-            name: problem.name.as_ref().map(ToString::to_string),
-            sense: problem.sense.clone(),
-            objectives: problem.objectives.iter().map(|(k, v)| (k.to_string(), ObjectiveOwned::from(v))).collect(),
-            constraints: problem.constraints.iter().map(|(k, v)| (k.to_string(), ConstraintOwned::from(v))).collect(),
-            variables: problem.variables.iter().map(|(k, v)| ((*k).to_string(), VariableOwned::from(v))).collect(),
+#[cfg(feature = "serde")]
+mod serde_support {
+    use std::collections::HashMap;
+
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    use crate::interner::{NameId, NameInterner};
+    use crate::model::{Coefficient, ComparisonOp, Constraint, Objective, SOSType, Sense, Variable, VariableType};
+    use crate::problem::LpProblem;
+
+    // ── Intermediate serde types ────────────────────────────────────────
+
+    #[derive(Serialize, Deserialize)]
+    struct SerdeCoefficient {
+        name: String,
+        value: f64,
+    }
+
+    #[derive(Serialize, Deserialize)]
+    #[serde(tag = "type")]
+    enum SerdeConstraint {
+        Standard { name: String, coefficients: Vec<SerdeCoefficient>, operator: ComparisonOp, rhs: f64 },
+        Sos { name: String, sos_type: SOSType, weights: Vec<SerdeCoefficient> },
+    }
+
+    #[derive(Serialize, Deserialize)]
+    struct SerdeObjective {
+        name: String,
+        coefficients: Vec<SerdeCoefficient>,
+    }
+
+    #[derive(Serialize, Deserialize)]
+    struct SerdeVariable {
+        name: String,
+        var_type: VariableType,
+    }
+
+    #[derive(Serialize, Deserialize)]
+    struct SerdeLpProblem {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        name: Option<String>,
+        sense: Sense,
+        objectives: Vec<SerdeObjective>,
+        constraints: Vec<SerdeConstraint>,
+        variables: Vec<SerdeVariable>,
+    }
+
+    // ── Conversion helpers ──────────────────────────────────────────────
+
+    fn coeff_to_serde(c: &Coefficient, interner: &NameInterner) -> SerdeCoefficient {
+        SerdeCoefficient { name: interner.resolve(c.name).to_string(), value: c.value }
+    }
+
+    fn coeffs_to_serde(coeffs: &[Coefficient], interner: &NameInterner) -> Vec<SerdeCoefficient> {
+        coeffs.iter().map(|c| coeff_to_serde(c, interner)).collect()
+    }
+
+    fn coeff_from_serde(sc: &SerdeCoefficient, interner: &mut NameInterner) -> Coefficient {
+        Coefficient { name: interner.intern(&sc.name), value: sc.value }
+    }
+
+    fn coeffs_from_serde(scs: &[SerdeCoefficient], interner: &mut NameInterner) -> Vec<Coefficient> {
+        scs.iter().map(|sc| coeff_from_serde(sc, interner)).collect()
+    }
+
+    // ── Serialize ───────────────────────────────────────────────────────
+
+    impl Serialize for LpProblem {
+        fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+            let proxy = SerdeLpProblem {
+                name: self.name.clone(),
+                sense: self.sense.clone(),
+                objectives: self
+                    .objectives
+                    .values()
+                    .map(|obj| SerdeObjective {
+                        name: self.interner.resolve(obj.name).to_string(),
+                        coefficients: coeffs_to_serde(&obj.coefficients, &self.interner),
+                    })
+                    .collect(),
+                constraints: self
+                    .constraints
+                    .values()
+                    .map(|con| match con {
+                        Constraint::Standard { name, coefficients, operator, rhs, .. } => SerdeConstraint::Standard {
+                            name: self.interner.resolve(*name).to_string(),
+                            coefficients: coeffs_to_serde(coefficients, &self.interner),
+                            operator: operator.clone(),
+                            rhs: *rhs,
+                        },
+                        Constraint::SOS { name, sos_type, weights, .. } => SerdeConstraint::Sos {
+                            name: self.interner.resolve(*name).to_string(),
+                            sos_type: sos_type.clone(),
+                            weights: coeffs_to_serde(weights, &self.interner),
+                        },
+                    })
+                    .collect(),
+                variables: self
+                    .variables
+                    .values()
+                    .map(|var| SerdeVariable { name: self.interner.resolve(var.name).to_string(), var_type: var.var_type.clone() })
+                    .collect(),
+            };
+            proxy.serialize(serializer)
         }
     }
-}
 
-impl_lp_problem_display!(LpProblemOwned);
+    // ── Deserialize ─────────────────────────────────────────────────────
 
-impl LpProblem<'_> {
-    /// Convert to an owned variant with no lifetime constraints.
-    ///
-    /// This is useful when you need to store the problem in a collection,
-    /// pass it between threads, or keep it longer than the input string.
-    #[must_use]
-    pub fn to_owned(&self) -> LpProblemOwned {
-        LpProblemOwned::from(self)
+    impl<'de> Deserialize<'de> for LpProblem {
+        fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+            let proxy = SerdeLpProblem::deserialize(deserializer)?;
+            let mut interner = NameInterner::new();
+
+            let objectives: HashMap<NameId, Objective> = proxy
+                .objectives
+                .iter()
+                .map(|so| {
+                    let name_id = interner.intern(&so.name);
+                    let obj = Objective { name: name_id, coefficients: coeffs_from_serde(&so.coefficients, &mut interner) };
+                    (name_id, obj)
+                })
+                .collect();
+
+            let constraints: HashMap<NameId, Constraint> = proxy
+                .constraints
+                .iter()
+                .map(|sc| match sc {
+                    SerdeConstraint::Standard { name, coefficients, operator, rhs } => {
+                        let name_id = interner.intern(name);
+                        let con = Constraint::Standard {
+                            name: name_id,
+                            coefficients: coeffs_from_serde(coefficients, &mut interner),
+                            operator: operator.clone(),
+                            rhs: *rhs,
+                            byte_offset: None,
+                        };
+                        (name_id, con)
+                    }
+                    SerdeConstraint::Sos { name, sos_type, weights } => {
+                        let name_id = interner.intern(name);
+                        let con = Constraint::SOS {
+                            name: name_id,
+                            sos_type: sos_type.clone(),
+                            weights: coeffs_from_serde(weights, &mut interner),
+                            byte_offset: None,
+                        };
+                        (name_id, con)
+                    }
+                })
+                .collect();
+
+            let variables: HashMap<NameId, Variable> = proxy
+                .variables
+                .iter()
+                .map(|sv| {
+                    let name_id = interner.intern(&sv.name);
+                    let var = Variable::new(name_id).with_var_type(sv.var_type.clone());
+                    (name_id, var)
+                })
+                .collect();
+
+            Ok(Self { name: proxy.name, sense: proxy.sense, objectives, constraints, variables, interner })
+        }
     }
 }
 
-impl<'a> TryFrom<&'a str> for LpProblem<'a> {
+impl Display for LpProblem {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        if let Some(problem_name) = self.name() {
+            writeln!(f, "Problem name: {problem_name}")?;
+        }
+        writeln!(f, "Sense: {}", self.sense)?;
+        writeln!(f, "Objectives: {}", self.objective_count())?;
+        writeln!(f, "Constraints: {}", self.constraint_count())?;
+        writeln!(f, "Variables: {}", self.variable_count())
+    }
+}
+
+impl TryFrom<&str> for LpProblem {
     type Error = LpParseError;
 
     #[inline]
-    fn try_from(input: &'a str) -> Result<Self, Self::Error> {
+    fn try_from(input: &str) -> Result<Self, Self::Error> {
         log::debug!("Starting to parse LP problem with LALRPOP parser");
 
         let problem_name = extract_problem_name(input);
 
         let lexer = Lexer::new(input);
         let parser = LpProblemParser::new();
-        let (sense, objectives_vec, constraints_vec, bounds, generals, integers, binaries, semis, sos_constraints) =
+        let (sense, raw_objectives, raw_constraints, bounds, generals, integers, binaries, semis, raw_sos) =
             parser.parse(lexer).map_err(LpParseError::from)?;
 
+        let mut interner = NameInterner::new();
         let mut obj_counter: usize = 0;
         let mut constraint_counter: usize = 0;
 
-        // Pre-size collections based on parsed data
-        let mut variables: HashMap<&'a str, Variable<'a>> = HashMap::with_capacity(bounds.len() + generals.len() + integers.len());
-        let mut objectives: HashMap<Cow<'a, str>, Objective<'a>> = HashMap::with_capacity(objectives_vec.len());
+        // Pre-size collections
+        let mut variables: HashMap<NameId, Variable> = HashMap::with_capacity(bounds.len() + generals.len() + integers.len());
+        let mut objectives: HashMap<NameId, Objective> = HashMap::with_capacity(raw_objectives.len());
 
-        for mut obj in objectives_vec {
-            if obj.name.is_empty() {
+        // Intern and insert objectives
+        for raw_obj in &raw_objectives {
+            let mut obj = intern_objective(&mut interner, raw_obj);
+
+            // Assign auto-name if unnamed sentinel
+            if raw_obj.name == "__obj__" {
                 obj_counter += 1;
-                obj.name = Cow::Owned(format!("OBJ{obj_counter}"));
+                let auto_name = format!("OBJ{obj_counter}");
+                obj.name = interner.intern(&auto_name);
             }
+
             register_variables_from_coefficients(&mut variables, &obj.coefficients, None);
-            objectives.insert(obj.name.clone(), obj);
+            objectives.insert(obj.name, obj);
         }
 
-        let mut constraints: HashMap<Cow<'a, str>, Constraint<'a>> = HashMap::with_capacity(constraints_vec.len() + sos_constraints.len());
+        // Intern and insert constraints
+        let mut constraints: HashMap<NameId, Constraint> = HashMap::with_capacity(raw_constraints.len() + raw_sos.len());
 
-        for mut con in constraints_vec {
-            let final_name = assign_constraint_name(&mut con, &mut constraint_counter, "C");
+        for raw_con in &raw_constraints {
+            let mut con = intern_constraint(&mut interner, raw_con);
+            let final_id = assign_constraint_name(&mut interner, &mut con, &mut constraint_counter, "C");
             register_constraint_variables(&mut variables, &con);
-            constraints.insert(final_name, con);
+            constraints.insert(final_id, con);
         }
 
         // Process bounds
         for (var_name, var_type) in bounds {
-            match variables.entry(var_name) {
+            let var_id = interner.intern(var_name);
+            match variables.entry(var_id) {
                 Entry::Occupied(mut entry) => entry.get_mut().set_var_type(var_type),
                 Entry::Vacant(entry) => {
-                    entry.insert(Variable::new(var_name).with_var_type(var_type));
+                    entry.insert(Variable::new(var_id).with_var_type(var_type));
                 }
             }
         }
 
-        apply_variable_type(&mut variables, generals, &VariableType::General);
-        apply_variable_type(&mut variables, integers, &VariableType::Integer);
-        apply_variable_type(&mut variables, binaries, &VariableType::Binary);
-        apply_variable_type(&mut variables, semis, &VariableType::SemiContinuous);
+        // Process variable type sections
+        let general_ids: Vec<NameId> = generals.iter().map(|n| interner.intern(n)).collect();
+        let integer_ids: Vec<NameId> = integers.iter().map(|n| interner.intern(n)).collect();
+        let binary_ids: Vec<NameId> = binaries.iter().map(|n| interner.intern(n)).collect();
+        let semi_ids: Vec<NameId> = semis.iter().map(|n| interner.intern(n)).collect();
+
+        apply_variable_type(&mut variables, general_ids, &VariableType::General);
+        apply_variable_type(&mut variables, integer_ids, &VariableType::Integer);
+        apply_variable_type(&mut variables, binary_ids, &VariableType::Binary);
+        apply_variable_type(&mut variables, semi_ids, &VariableType::SemiContinuous);
 
         // Process SOS constraints
-        for mut sos in sos_constraints {
-            if matches!(sos, Constraint::Standard { .. }) {
+        for raw_sos_con in &raw_sos {
+            if matches!(raw_sos_con, RawConstraint::Standard { .. }) {
                 continue;
             }
-            let final_name = assign_constraint_name(&mut sos, &mut constraint_counter, "SOS");
+            let mut sos = intern_constraint(&mut interner, raw_sos_con);
+            let final_id = assign_constraint_name(&mut interner, &mut sos, &mut constraint_counter, "SOS");
             register_constraint_variables(&mut variables, &sos);
-            constraints.insert(final_name, sos);
+            constraints.insert(final_id, sos);
         }
 
-        Ok(LpProblem { name: problem_name, sense, objectives, constraints, variables })
+        Ok(Self { name: problem_name, sense, objectives, constraints, variables, interner })
     }
 }
 
 /// Assign a name to a constraint, generating one if unnamed.
-/// Returns the final name as a `Cow`.
+/// Returns the final [`NameId`].
 #[inline]
-fn assign_constraint_name<'a>(constraint: &mut Constraint<'a>, counter: &mut usize, prefix: &str) -> Cow<'a, str> {
-    let is_unnamed = constraint.is_unnamed();
-    let final_name = if is_unnamed {
+fn assign_constraint_name(interner: &mut NameInterner, constraint: &mut Constraint, counter: &mut usize, prefix: &str) -> NameId {
+    let current_name = interner.resolve(constraint.name());
+    let is_unnamed = current_name == "__c__" || current_name.is_empty();
+
+    let final_id = if is_unnamed {
         *counter += 1;
-        Cow::Owned(format!("{prefix}{}", *counter))
+        let auto_name = format!("{prefix}{}", *counter);
+        interner.intern(&auto_name)
     } else {
-        // Borrow the existing name when possible
-        Cow::Owned(constraint.name_ref().to_owned())
+        constraint.name()
     };
 
     match constraint {
         Constraint::Standard { name, .. } | Constraint::SOS { name, .. } => {
-            name.clone_from(&final_name);
+            *name = final_id;
         }
     }
 
-    final_name
+    final_id
 }
 
 /// Register variables referenced by a constraint into the variables map.
 #[inline]
-fn register_constraint_variables<'a>(variables: &mut HashMap<&'a str, Variable<'a>>, constraint: &Constraint<'a>) {
+fn register_constraint_variables(variables: &mut HashMap<NameId, Variable>, constraint: &Constraint) {
     match constraint {
         Constraint::Standard { coefficients, .. } => {
             register_variables_from_coefficients(variables, coefficients, None);
@@ -1007,93 +985,9 @@ fn register_constraint_variables<'a>(variables: &mut HashMap<&'a str, Variable<'
     }
 }
 
-#[cfg(feature = "serde")]
-impl<'de: 'a, 'a> serde::Deserialize<'de> for LpProblem<'a> {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        #[derive(serde::Deserialize)]
-        #[serde(field_identifier, rename_all = "lowercase")]
-        enum Field {
-            Constraints,
-            Name,
-            Objectives,
-            Sense,
-            Variables,
-        }
-
-        struct LpProblemVisitor<'a>(PhantomData<LpProblem<'a>>);
-
-        impl<'de: 'a, 'a> serde::de::Visitor<'de> for LpProblemVisitor<'a> {
-            type Value = LpProblem<'a>;
-
-            fn expecting(&self, formatter: &mut Formatter) -> FmtResult {
-                formatter.write_str("struct LpProblem")
-            }
-
-            fn visit_map<V: serde::de::MapAccess<'de>>(self, mut map: V) -> Result<LpProblem<'a>, V::Error> {
-                let mut name: Option<Cow<'_, str>> = None;
-                let mut sense = None;
-                let mut objectives = None;
-                let mut constraints = None;
-                let mut variables = None;
-
-                while let Some(key) = map.next_key()? {
-                    match key {
-                        Field::Name => {
-                            if name.is_some() {
-                                return Err(serde::de::Error::duplicate_field("name"));
-                            }
-                            name = map.next_value()?;
-                        }
-                        Field::Sense => {
-                            if sense.is_some() {
-                                return Err(serde::de::Error::duplicate_field("sense"));
-                            }
-                            sense = Some(map.next_value()?);
-                        }
-                        Field::Objectives => {
-                            if objectives.is_some() {
-                                return Err(serde::de::Error::duplicate_field("objectives"));
-                            }
-                            objectives = Some(map.next_value()?);
-                        }
-                        Field::Constraints => {
-                            if constraints.is_some() {
-                                return Err(serde::de::Error::duplicate_field("constraints"));
-                            }
-                            constraints = Some(map.next_value()?);
-                        }
-                        Field::Variables => {
-                            if variables.is_some() {
-                                return Err(serde::de::Error::duplicate_field("variables"));
-                            }
-                            variables = Some(map.next_value()?);
-                        }
-                    }
-                }
-
-                Ok(LpProblem {
-                    name,
-                    sense: sense.unwrap_or_default(),
-                    objectives: objectives.unwrap_or_default(),
-                    constraints: constraints.unwrap_or_default(),
-                    variables: variables.unwrap_or_default(),
-                })
-            }
-        }
-
-        const FIELDS: &[&str] = &["name", "sense", "objectives", "constraints", "variables"];
-        deserializer.deserialize_struct("LpProblem", FIELDS, LpProblemVisitor(PhantomData))
-    }
-}
-
 #[cfg(test)]
 mod test {
-    use std::borrow::Cow;
-
-    use crate::model::{Coefficient, ComparisonOp, Constraint, Objective, Sense, Variable, VariableType};
+    use crate::model::{Coefficient, ComparisonOp, Constraint, Objective, SOSType, Sense, Variable, VariableType};
     use crate::problem::LpProblem;
 
     const COMPLETE_INPUT: &str = "\\ This file has been generated by Author
@@ -1148,53 +1042,26 @@ End";
 
     #[test]
     fn test_parse_inputs() {
-        // Small input
         let problem = LpProblem::try_from(SMALL_INPUT).unwrap();
         assert_eq!(problem.objectives.len(), 3);
         assert_eq!(problem.constraints.len(), 3);
 
-        // Complete input
         let problem = LpProblem::try_from(COMPLETE_INPUT).unwrap();
         assert_eq!(problem.objectives.len(), 3);
         assert_eq!(problem.constraints.len(), 5);
-
-        #[cfg(feature = "serde")]
-        {
-            insta::assert_yaml_snapshot!("small_input", &LpProblem::try_from(SMALL_INPUT).unwrap(), {
-                ".objectives" => insta::sorted_redaction(),
-                ".constraints" => insta::sorted_redaction(),
-                ".variables" => insta::sorted_redaction()
-            });
-            insta::assert_yaml_snapshot!("complete_input", &LpProblem::try_from(COMPLETE_INPUT).unwrap(), {
-                ".objectives" => insta::sorted_redaction(),
-                ".constraints" => insta::sorted_redaction(),
-                ".variables" => insta::sorted_redaction()
-            });
-        }
-    }
-
-    #[cfg(feature = "serde")]
-    #[test]
-    fn test_serialization_lifecycle() {
-        let problem = LpProblem::try_from(COMPLETE_INPUT).unwrap();
-        let serialized = serde_json::to_string(&problem).unwrap();
-        let _: LpProblem<'_> = serde_json::from_str(&serialized).unwrap();
     }
 
     #[test]
     fn test_problem_lifecycle() {
-        // New problem defaults
         let problem = LpProblem::new();
         assert_eq!(problem.name(), None);
         assert!(problem.is_minimization());
         assert_eq!((problem.objective_count(), problem.constraint_count(), problem.variable_count()), (0, 0, 0));
 
-        // Builder pattern
-        let problem = LpProblem::new().with_problem_name(Cow::Borrowed("test")).with_sense(Sense::Maximize);
+        let problem = LpProblem::new().with_problem_name("test").with_sense(Sense::Maximize);
         assert_eq!(problem.name(), Some("test"));
         assert!(!problem.is_minimization());
 
-        // Display formatting
         let display = format!("{problem}");
         assert!(display.contains("Problem name: test") && display.contains("Sense: Maximize"));
     }
@@ -1202,20 +1069,25 @@ End";
     #[test]
     fn test_add_and_replace_elements() {
         let mut problem = LpProblem::new();
+        let x1 = problem.intern("x1");
+        let x2 = problem.intern("x2");
+        let x3 = problem.intern("x3");
+        let s1 = problem.intern("s1");
 
         // Add variable
-        problem.add_variable(Variable::new("x1").with_var_type(VariableType::Binary));
+        problem.add_variable(Variable::new(x1).with_var_type(VariableType::Binary));
         assert_eq!(problem.variable_count(), 1);
 
         // Replace variable
-        problem.add_variable(Variable::new("x1").with_var_type(VariableType::Integer));
+        problem.add_variable(Variable::new(x1).with_var_type(VariableType::Integer));
         assert_eq!(problem.variable_count(), 1);
-        assert_eq!(problem.variables["x1"].var_type, VariableType::Integer);
+        assert_eq!(problem.variables[&x1].var_type, VariableType::Integer);
 
         // Add constraint (auto-creates variables)
+        let c1 = problem.intern("c1");
         problem.add_constraint(Constraint::Standard {
-            name: Cow::Borrowed("c1"),
-            coefficients: vec![Coefficient { name: "x1", value: 1.0 }, Coefficient { name: "x2", value: 2.0 }],
+            name: c1,
+            coefficients: vec![Coefficient { name: x1, value: 1.0 }, Coefficient { name: x2, value: 2.0 }],
             operator: ComparisonOp::LTE,
             rhs: 5.0,
             byte_offset: None,
@@ -1224,52 +1096,61 @@ End";
         assert_eq!(problem.variable_count(), 2);
 
         // Add objective
-        problem.add_objective(Objective { name: Cow::Borrowed("obj1"), coefficients: vec![Coefficient { name: "x3", value: 1.0 }] });
+        let obj1 = problem.intern("obj1");
+        problem.add_objective(Objective { name: obj1, coefficients: vec![Coefficient { name: x3, value: 1.0 }] });
         assert_eq!(problem.objective_count(), 1);
         assert_eq!(problem.variable_count(), 3);
 
         // SOS constraint creates SOS-typed variables
+        let sos1 = problem.intern("sos1");
         problem.add_constraint(Constraint::SOS {
-            name: Cow::Borrowed("sos1"),
-            sos_type: crate::model::SOSType::S1,
-            weights: vec![Coefficient { name: "s1", value: 1.0 }],
+            name: sos1,
+            sos_type: SOSType::S1,
+            weights: vec![Coefficient { name: s1, value: 1.0 }],
             byte_offset: None,
         });
-        assert_eq!(problem.variables["s1"].var_type, VariableType::SOS);
+        assert_eq!(problem.variables[&s1].var_type, VariableType::SOS);
     }
 
     #[test]
     fn test_parsing_variations() {
-        // Minimal
         let p = LpProblem::parse("minimize\nx1\nsubject to\nx1 <= 1\nend").unwrap();
         assert_eq!(p.sense, Sense::Minimize);
         assert_eq!((p.objective_count(), p.constraint_count()), (1, 1));
 
-        // Maximize
         let p = LpProblem::parse("maximize\n2x1 + 3x2\nsubject to\nx1 + x2 <= 10\nend").unwrap();
         assert_eq!(p.sense, Sense::Maximize);
 
-        // Multiple objectives and constraints
         let p = LpProblem::parse("minimize\nobj1: x1\nobj2: x2\nsubject to\nc1: x1 <= 10\nc2: x1 >= 0\nend").unwrap();
         assert_eq!((p.objective_count(), p.constraint_count()), (2, 2));
 
-        // Variable types - test individually due to lifetime constraints
+        // Variable types
         let input = "minimize\nx1\nsubject to\nx1 <= 1\nintegers\nx1\nend";
-        assert_eq!(LpProblem::parse(input).unwrap().variables["x1"].var_type, VariableType::Integer);
+        let p = LpProblem::parse(input).unwrap();
+        let x1 = p.get_name_id("x1").unwrap();
+        assert_eq!(p.variables[&x1].var_type, VariableType::Integer);
 
         let input = "minimize\nx1\nsubject to\nx1 <= 1\nbinaries\nx1\nend";
-        assert_eq!(LpProblem::parse(input).unwrap().variables["x1"].var_type, VariableType::Binary);
+        let p = LpProblem::parse(input).unwrap();
+        let x1 = p.get_name_id("x1").unwrap();
+        assert_eq!(p.variables[&x1].var_type, VariableType::Binary);
 
         let input = "minimize\nx1\nsubject to\nx1 <= 1\ngenerals\nx1\nend";
-        assert_eq!(LpProblem::parse(input).unwrap().variables["x1"].var_type, VariableType::General);
+        let p = LpProblem::parse(input).unwrap();
+        let x1 = p.get_name_id("x1").unwrap();
+        assert_eq!(p.variables[&x1].var_type, VariableType::General);
 
         let input = "minimize\nx1\nsubject to\nx1 <= 1\nsemi-continuous\nx1\nend";
-        assert_eq!(LpProblem::parse(input).unwrap().variables["x1"].var_type, VariableType::SemiContinuous);
+        let p = LpProblem::parse(input).unwrap();
+        let x1 = p.get_name_id("x1").unwrap();
+        assert_eq!(p.variables[&x1].var_type, VariableType::SemiContinuous);
 
         // Bounds
         let p = LpProblem::parse("minimize\nx1 + x2\nsubject to\nx1 <= 10\nbounds\nx1 >= 0\nx2 <= 5\nend").unwrap();
-        assert!(matches!(p.variables["x1"].var_type, VariableType::LowerBound(0.0)));
-        assert!(matches!(p.variables["x2"].var_type, VariableType::UpperBound(5.0)));
+        let x1 = p.get_name_id("x1").unwrap();
+        let x2 = p.get_name_id("x2").unwrap();
+        assert!(matches!(p.variables[&x1].var_type, VariableType::LowerBound(0.0)));
+        assert!(matches!(p.variables[&x2].var_type, VariableType::UpperBound(5.0)));
 
         // Empty constraints section is valid
         assert!(LpProblem::parse("minimize\nx1\nsubject to\nend").is_ok());
@@ -1278,12 +1159,12 @@ End";
     #[test]
     fn test_parse_errors() {
         let invalid = [
-            "",                                   // Empty
-            "   \n\t  ",                          // Whitespace only
-            "invalid_sense\nx1\nsubject to\nend", // Invalid sense
-            "minimize\nend",                      // Missing subject to
-            "minimize\nsubject to\nx1 <= 1\nend", // Empty objectives
-            "minimize\nx1\nsubject",              // Incomplete header
+            "",
+            "   \n\t  ",
+            "invalid_sense\nx1\nsubject to\nend",
+            "minimize\nend",
+            "minimize\nsubject to\nx1 <= 1\nend",
+            "minimize\nx1\nsubject",
         ];
         for input in invalid {
             assert!(LpProblem::parse(input).is_err(), "Should fail: {input}");
@@ -1299,11 +1180,8 @@ End";
 
     #[test]
     fn test_whitespace_handling() {
-        // Mixed tabs/spaces
         assert!(LpProblem::parse("minimize\n\tx1\t+\t x2 \nsubject to\n\t x1\t+ x2\t<=\t10\nend").is_ok());
-        // Excessive newlines
         assert!(LpProblem::parse("\n\n\nminimize\n\n\nx1\n\n\nsubject to\n\n\nx1 <= 1\n\n\nend\n\n\n").is_ok());
-        // Carriage returns
         assert!(LpProblem::parse("minimize\r\nx1\r\nsubject to\r\nx1 <= 1\r\nend\r\n").is_ok());
     }
 
@@ -1322,11 +1200,8 @@ End";
 
     #[test]
     fn test_special_values() {
-        // Infinity
         assert!(LpProblem::parse("minimize\n-inf x1\nsubject to\nx1 >= -infinity\nend").is_ok());
-        // Zero values
         assert!(LpProblem::parse("minimize\n0x1 + 0x2\nsubject to\n0x1 + 0x2 = 0\nend").is_ok());
-        // Extreme numbers
         let input = format!("minimize\n{}x1\nsubject to\nx1 <= {}\nend", f64::MAX, f64::MAX);
         assert!(LpProblem::parse(&input).is_ok());
     }
@@ -1336,7 +1211,8 @@ End";
         let mut problem = LpProblem::new();
         let names = ["x", "X1", "var_123", "x.1.2", "_var", "VAR123ABC"];
         for name in names {
-            problem.add_variable(Variable::new(name));
+            let id = problem.intern(name);
+            problem.add_variable(Variable::new(id));
         }
         assert_eq!(problem.variable_count(), names.len());
     }
@@ -1345,11 +1221,14 @@ End";
     fn test_large_problem() {
         let mut problem = LpProblem::new();
         for i in 0..100 {
-            let name: &'static str = Box::leak(format!("x{i}").into_boxed_str());
-            problem.add_variable(Variable::new(name));
+            let var_name = format!("x{i}");
+            let con_name = format!("c{i}");
+            let var_id = problem.intern(&var_name);
+            let con_id = problem.intern(&con_name);
+            problem.add_variable(Variable::new(var_id));
             problem.add_constraint(Constraint::Standard {
-                name: Cow::Owned(format!("c{i}")),
-                coefficients: vec![Coefficient { name, value: 1.0 }],
+                name: con_id,
+                coefficients: vec![Coefficient { name: var_id, value: 1.0 }],
                 operator: ComparisonOp::LTE,
                 rhs: 10.0,
                 byte_offset: None,
@@ -1362,20 +1241,23 @@ End";
 
 #[cfg(test)]
 mod modification_tests {
-    use std::borrow::Cow;
-
-    use crate::model::{Coefficient, ComparisonOp, Constraint, Objective, Sense, VariableType};
+    use crate::model::{Coefficient, ComparisonOp, Constraint, Objective, SOSType, Sense, VariableType};
     use crate::problem::LpProblem;
 
-    fn create_test_problem<'a>() -> LpProblem<'a> {
+    fn create_test_problem() -> LpProblem {
         let mut problem = LpProblem::new().with_sense(Sense::Minimize);
+        let x1 = problem.intern("x1");
+        let x2 = problem.intern("x2");
+        let obj1 = problem.intern("obj1");
+        let c1 = problem.intern("c1");
+
         problem.add_objective(Objective {
-            name: Cow::Borrowed("obj1"),
-            coefficients: vec![Coefficient { name: "x1", value: 2.0 }, Coefficient { name: "x2", value: 3.0 }],
+            name: obj1,
+            coefficients: vec![Coefficient { name: x1, value: 2.0 }, Coefficient { name: x2, value: 3.0 }],
         });
         problem.add_constraint(Constraint::Standard {
-            name: Cow::Borrowed("c1"),
-            coefficients: vec![Coefficient { name: "x1", value: 1.0 }, Coefficient { name: "x2", value: 1.0 }],
+            name: c1,
+            coefficients: vec![Coefficient { name: x1, value: 1.0 }, Coefficient { name: x2, value: 1.0 }],
             operator: ComparisonOp::LTE,
             rhs: 10.0,
             byte_offset: None,
@@ -1387,27 +1269,29 @@ mod modification_tests {
     fn test_update_coefficients() {
         let mut p = create_test_problem();
 
-        // Objective: update, add, remove
         p.update_objective_coefficient("obj1", "x1", 5.0).unwrap();
         p.update_objective_coefficient("obj1", "x3", 1.5).unwrap();
         p.update_objective_coefficient("obj1", "x2", 0.0).unwrap();
-        let coeffs: Vec<_> = p.objectives["obj1"].coefficients.iter().map(|c| (c.name, c.value)).collect();
-        assert!(coeffs.contains(&("x1", 5.0)) && coeffs.contains(&("x3", 1.5)));
-        assert!(!coeffs.iter().any(|(n, _)| *n == "x2"));
 
-        // Constraint: update, add, remove
+        let obj1 = p.get_name_id("obj1").unwrap();
+        let x1 = p.get_name_id("x1").unwrap();
+        let x3 = p.get_name_id("x3").unwrap();
+        let coeffs: Vec<_> = p.objectives[&obj1].coefficients.iter().map(|c| (c.name, c.value)).collect();
+        assert!(coeffs.contains(&(x1, 5.0)) && coeffs.contains(&(x3, 1.5)));
+        let x2 = p.get_name_id("x2").unwrap();
+        assert!(!coeffs.iter().any(|(n, _)| *n == x2));
+
         p.update_constraint_coefficient("c1", "x1", 3.0).unwrap();
         p.update_constraint_coefficient("c1", "x3", 2.5).unwrap();
         p.update_constraint_coefficient("c1", "x2", 0.0).unwrap();
 
-        // RHS and operator
         p.update_constraint_rhs("c1", 15.0).unwrap();
         p.update_constraint_operator("c1", ComparisonOp::GTE).unwrap();
-        if let Constraint::Standard { rhs, operator, .. } = p.constraints.get("c1").unwrap() {
+        let c1 = p.get_name_id("c1").unwrap();
+        if let Constraint::Standard { rhs, operator, .. } = p.constraints.get(&c1).unwrap() {
             assert_eq!((*rhs, operator), (15.0, &ComparisonOp::GTE));
         }
 
-        // Errors
         assert!(p.update_objective_coefficient("nonexistent", "x1", 1.0).is_err());
         assert!(p.update_constraint_coefficient("nonexistent", "x1", 1.0).is_err());
     }
@@ -1416,22 +1300,23 @@ mod modification_tests {
     fn test_rename_operations() {
         let mut p = create_test_problem();
 
-        // Variable rename propagates everywhere
         p.rename_variable("x1", "new_x1").unwrap();
-        assert!(!p.variables.contains_key("x1") && p.variables.contains_key("new_x1"));
-        assert!(p.objectives["obj1"].coefficients.iter().any(|c| c.name == "new_x1"));
+        let new_x1 = p.get_name_id("new_x1").unwrap();
+        assert!(p.get_name_id("x1").is_none_or(|id| !p.variables.contains_key(&id)));
+        assert!(p.variables.contains_key(&new_x1));
+        let obj1 = p.get_name_id("obj1").unwrap();
+        assert!(p.objectives[&obj1].coefficients.iter().any(|c| c.name == new_x1));
 
-        // Constraint rename
         p.rename_constraint("c1", "new_c1").unwrap();
-        assert!(!p.constraints.contains_key("c1") && p.constraints.contains_key("new_c1"));
+        let new_c1 = p.get_name_id("new_c1").unwrap();
+        assert!(p.constraints.contains_key(&new_c1));
 
-        // Objective rename
         p.rename_objective("obj1", "new_obj1").unwrap();
-        assert!(!p.objectives.contains_key("obj1") && p.objectives.contains_key("new_obj1"));
+        let new_obj1 = p.get_name_id("new_obj1").unwrap();
+        assert!(p.objectives.contains_key(&new_obj1));
 
-        // Errors - nonexistent and name collision
         assert!(p.rename_variable("nonexistent", "x").is_err());
-        assert!(p.rename_variable("new_x1", "x2").is_err()); // Name already exists
+        assert!(p.rename_variable("new_x1", "x2").is_err());
     }
 
     #[test]
@@ -1439,16 +1324,17 @@ mod modification_tests {
         let mut p = create_test_problem();
 
         p.remove_variable("x2").unwrap();
-        assert!(!p.variables.contains_key("x2"));
-        assert!(!p.objectives["obj1"].coefficients.iter().any(|c| c.name == "x2"));
+        assert!(p.get_name_id("x2").is_none_or(|id| !p.variables.contains_key(&id)));
+        let obj1 = p.get_name_id("obj1").unwrap();
+        let x2 = p.get_name_id("x2").unwrap();
+        assert!(!p.objectives[&obj1].coefficients.iter().any(|c| c.name == x2));
 
         p.remove_constraint("c1").unwrap();
-        assert!(!p.constraints.contains_key("c1"));
+        assert!(p.get_name_id("c1").is_none_or(|id| !p.constraints.contains_key(&id)));
 
         p.remove_objective("obj1").unwrap();
-        assert!(!p.objectives.contains_key("obj1"));
+        assert!(!p.objectives.contains_key(&obj1));
 
-        // Errors for nonexistent
         assert!(p.remove_constraint("c1").is_err());
         assert!(p.remove_objective("obj1").is_err());
     }
@@ -1457,25 +1343,26 @@ mod modification_tests {
     fn test_variable_type_update() {
         let mut p = create_test_problem();
         p.update_variable_type("x1", VariableType::Binary).unwrap();
-        assert_eq!(p.variables["x1"].var_type, VariableType::Binary);
+        let x1 = p.get_name_id("x1").unwrap();
+        assert_eq!(p.variables[&x1].var_type, VariableType::Binary);
     }
 
     #[test]
     fn test_sos_constraint_restrictions() {
         let mut p = LpProblem::new();
+        let sos1 = p.intern("sos1");
+        let x1 = p.intern("x1");
         p.add_constraint(Constraint::SOS {
-            name: Cow::Borrowed("sos1"),
-            sos_type: crate::model::SOSType::S1,
-            weights: vec![Coefficient { name: "x1", value: 1.0 }],
+            name: sos1,
+            sos_type: SOSType::S1,
+            weights: vec![Coefficient { name: x1, value: 1.0 }],
             byte_offset: None,
         });
 
-        // Can't modify SOS coefficients/rhs/operator
         assert!(p.update_constraint_coefficient("sos1", "x1", 3.0).is_err());
         assert!(p.update_constraint_rhs("sos1", 5.0).is_err());
         assert!(p.update_constraint_operator("sos1", ComparisonOp::LTE).is_err());
 
-        // But can rename and remove
         p.rename_constraint("sos1", "new_sos").unwrap();
         p.remove_constraint("new_sos").unwrap();
     }

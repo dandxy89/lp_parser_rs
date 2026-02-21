@@ -480,6 +480,28 @@ impl App {
                     self.set_yank_flash("Yanked solve comparison", &text);
                 }
             }
+            KeyCode::Char('w') => {
+                if let SolveState::DoneBoth(diff) = &self.solver.state {
+                    let dir = match std::env::current_dir() {
+                        Ok(d) => d,
+                        Err(e) => {
+                            self.yank.message = format!("CSV write failed: {e}");
+                            self.yank.flash = Some(std::time::Instant::now());
+                            return;
+                        }
+                    };
+                    match crate::solver::write_diff_csv(diff, &dir) {
+                        Ok((var_file, con_file)) => {
+                            self.yank.message = format!("Wrote {var_file} and {con_file}");
+                            self.yank.flash = Some(std::time::Instant::now());
+                        }
+                        Err(e) => {
+                            self.yank.message = format!("CSV write failed: {e}");
+                            self.yank.flash = Some(std::time::Instant::now());
+                        }
+                    }
+                }
+            }
             _ => {}
         }
     }

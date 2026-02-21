@@ -4,7 +4,10 @@ use std::fmt::Write;
 
 use crate::app::App;
 use crate::detail_model::{CoefficientRow, build_coeff_rows};
-use crate::diff_model::{CoefficientChange, ConstraintDiffDetail, ConstraintDiffEntry, DiffKind, ObjectiveDiffEntry, VariableDiffEntry};
+use crate::diff_model::{
+    CoefficientChange, ConstraintDiffDetail, ConstraintDiffEntry, DiffKind, ObjectiveDiffEntry, ResolvedCoefficient, ResolvedConstraint,
+    VariableDiffEntry,
+};
 use crate::solver::{SolveDiffResult, SolveResult};
 use crate::state::Section;
 use crate::widgets::detail::{fmt_bound, variable_bounds};
@@ -159,28 +162,25 @@ fn render_constraint_plain(entry: &ConstraintDiffEntry, cached_rows: Option<&[Co
             w!(out, "  Was:  {old_summary}");
             w!(out, "  Now:  {new_summary}");
         }
-        ConstraintDiffDetail::AddedOrRemoved(constraint) => {
-            use lp_parser_rs::model::ConstraintOwned;
-            match constraint {
-                ConstraintOwned::Standard { coefficients, operator, rhs, .. } => {
-                    w!(out, "  Operator: {operator}");
-                    w!(out, "  RHS:      {rhs}");
-                    w!(out);
-                    w!(out, "  Coefficients:");
-                    for c in coefficients {
-                        w!(out, "    {:<20}{}", c.name, c.value);
-                    }
-                }
-                ConstraintOwned::SOS { sos_type, weights, .. } => {
-                    w!(out, "  SOS Type: {sos_type}");
-                    w!(out);
-                    w!(out, "  Weights:");
-                    for w_entry in weights {
-                        w!(out, "    {:<20}{}", w_entry.name, w_entry.value);
-                    }
+        ConstraintDiffDetail::AddedOrRemoved(constraint) => match constraint {
+            ResolvedConstraint::Standard { coefficients, operator, rhs } => {
+                w!(out, "  Operator: {operator}");
+                w!(out, "  RHS:      {rhs}");
+                w!(out);
+                w!(out, "  Coefficients:");
+                for c in coefficients {
+                    w!(out, "    {:<20}{}", c.name, c.value);
                 }
             }
-        }
+            ResolvedConstraint::Sos { sos_type, weights } => {
+                w!(out, "  SOS Type: {sos_type}");
+                w!(out);
+                w!(out, "  Weights:");
+                for w_entry in weights {
+                    w!(out, "    {:<20}{}", w_entry.name, w_entry.value);
+                }
+            }
+        },
     }
     out
 }
@@ -208,8 +208,8 @@ const VAL_WIDTH: usize = 12;
 fn write_coeff_changes(
     out: &mut String,
     changes: &[CoefficientChange],
-    old_coefficients: &[lp_parser_rs::model::CoefficientOwned],
-    new_coefficients: &[lp_parser_rs::model::CoefficientOwned],
+    old_coefficients: &[ResolvedCoefficient],
+    new_coefficients: &[ResolvedCoefficient],
     cached_rows: Option<&[CoefficientRow]>,
 ) {
     let built;

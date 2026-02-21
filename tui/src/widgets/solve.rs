@@ -552,7 +552,7 @@ fn build_diff_summary_tab(lines: &mut Vec<Line<'static>>, diff: &SolveDiffResult
 }
 
 /// Render the diff-only toggle label for tabs with filtering.
-fn diff_filter_label(diff_only: bool) -> &'static str {
+const fn diff_filter_label(diff_only: bool) -> &'static str {
     if diff_only { " (showing changed only, press d for all)" } else { " (showing all, press d for changed only)" }
 }
 

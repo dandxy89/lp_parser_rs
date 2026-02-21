@@ -1,10 +1,12 @@
-//! `HiGHS` solver integration — converts an `LpProblemOwned` to a `HiGHS` problem and solves it.
+//! `HiGHS` solver integration — converts an `LpProblem` to a `HiGHS` problem and solves it.
 
 use std::collections::BTreeMap;
+use std::error::Error;
+use std::fmt::Write as _;
 use std::path::Path;
 use std::time::Instant;
 
-use lp_parser_rs::model::{ComparisonOp, ConstraintOwned, VariableType};
+use lp_parser_rs::model::{ComparisonOp, Constraint, VariableType};
 use lp_parser_rs::parser::parse_file;
 use lp_parser_rs::problem::LpProblem;
 
@@ -81,8 +83,6 @@ fn diff_variables(r1: &SolveResult, r2: &SolveResult) -> Vec<VarDiffRow> {
     debug_assert_eq!(r1.variables.len(), r1.reduced_costs.len(), "variables and reduced_costs must have equal length for result 1");
     debug_assert_eq!(r2.variables.len(), r2.reduced_costs.len(), "variables and reduced_costs must have equal length for result 2");
 
-    // Both variable lists are already sorted by name (from BTreeMap iteration in build_highs_model).
-    // Use a merge-join to avoid HashMap allocation.
     let mut i = 0;
     let mut j = 0;
     let mut rows = Vec::new();
@@ -128,8 +128,6 @@ fn diff_constraints(r1: &SolveResult, r2: &SolveResult) -> Vec<ConstraintDiffRow
     debug_assert_eq!(r1.row_values.len(), r1.shadow_prices.len(), "row_values and shadow_prices must have equal length for result 1");
     debug_assert_eq!(r2.row_values.len(), r2.shadow_prices.len(), "row_values and shadow_prices must have equal length for result 2");
 
-    // Both row_values lists are already sorted by name (from sorted constraint iteration).
-    // Use a merge-join to avoid HashMap allocation.
     let mut i = 0;
     let mut j = 0;
     let mut rows = Vec::new();
@@ -205,12 +203,11 @@ fn opt_diff(a: Option<f64>, b: Option<f64>) -> bool {
 pub fn solve_file(path: &Path) -> Result<SolveResult, String> {
     let content = parse_file(path).map_err(|e| format!("failed to read '{}': {e}", path.display()))?;
     let problem = LpProblem::parse(&content).map_err(|e| format!("failed to parse '{}': {e}", path.display()))?;
-    let owned = problem.to_owned();
 
-    solve_problem(&owned)
+    solve_problem(&problem)
 }
 
-/// Intermediate model built from an `LpProblemOwned` before solving.
+/// Intermediate model built from an `LpProblem` before solving.
 struct BuiltModel {
     row_problem: highs::RowProblem,
     variable_names: Vec<String>,
@@ -229,27 +226,24 @@ struct SolveMetadata {
     skipped_sos: usize,
 }
 
-/// Build a `HiGHS` `RowProblem` from an `LpProblemOwned`.
-fn build_highs_model(problem: &lp_parser_rs::problem::LpProblemOwned) -> BuiltModel {
+/// Build a `HiGHS` `RowProblem` from an `LpProblem`.
+fn build_highs_model(problem: &LpProblem) -> BuiltModel {
     debug_assert!(!problem.variables.is_empty(), "cannot build a HiGHS model with no variables");
 
-    let variable_names: Vec<&String> = {
-        let mut names: Vec<&String> = problem.variables.keys().collect();
-        names.sort();
-        names
-    };
+    // Resolve variable names and sort them for deterministic ordering.
+    let mut variable_names: Vec<String> = problem.variables.keys().map(|id| problem.resolve(*id).to_string()).collect();
+    variable_names.sort();
 
     let variable_index: BTreeMap<&str, usize> = variable_names.iter().enumerate().map(|(i, name)| (name.as_str(), i)).collect();
 
     let objective_coefficients: BTreeMap<String, f64> = {
         let mut map = BTreeMap::new();
-        let mut objective_names: Vec<&String> = problem.objectives.keys().collect();
-        objective_names.sort();
-        if let Some(objective_name) = objective_names.first()
-            && let Some(objective) = problem.objectives.get(*objective_name)
-        {
+        // Sort objective names and take the first one (primary objective).
+        let mut obj_names: Vec<(&lp_parser_rs::interner::NameId, &lp_parser_rs::model::Objective)> = problem.objectives.iter().collect();
+        obj_names.sort_by_key(|(id, _)| problem.resolve(**id));
+        if let Some((_, objective)) = obj_names.first() {
             for coefficient in &objective.coefficients {
-                map.insert(coefficient.name.clone(), coefficient.value);
+                map.insert(problem.resolve(coefficient.name).to_string(), coefficient.value);
             }
         }
         map
@@ -260,7 +254,8 @@ fn build_highs_model(problem: &lp_parser_rs::problem::LpProblemOwned) -> BuiltMo
 
     for name in &variable_names {
         let objective_coefficient = objective_coefficients.get(name.as_str()).copied().unwrap_or(0.0);
-        let variable = problem.variables.get(name.as_str());
+        let var_id = problem.get_name_id(name);
+        let variable = var_id.and_then(|id| problem.variables.get(&id));
 
         let (is_integer, lower, upper) = match variable.map(|v| &v.var_type) {
             Some(VariableType::Binary) => (true, 0.0, 1.0),
@@ -276,20 +271,25 @@ fn build_highs_model(problem: &lp_parser_rs::problem::LpProblemOwned) -> BuiltMo
         columns.push(col);
     }
 
-    let mut constraint_names: Vec<&String> = problem.constraints.keys().collect();
-    constraint_names.sort();
+    // Sort constraints by resolved name for deterministic ordering.
+    let mut sorted_constraints: Vec<_> = problem.constraints.iter().collect();
+    sorted_constraints.sort_by_key(|(id, _)| problem.resolve(**id));
 
     let mut skipped_sos: usize = 0;
+    let mut row_constraint_names = Vec::new();
 
-    for constraint_name in &constraint_names {
-        let Some(constraint) = problem.constraints.get(constraint_name.as_str()) else {
-            continue;
-        };
+    for (name_id, constraint) in &sorted_constraints {
+        let constraint_name = problem.resolve(**name_id);
 
         match constraint {
-            ConstraintOwned::Standard { coefficients, operator, rhs, .. } => {
-                let row_factors: Vec<(highs::Col, f64)> =
-                    coefficients.iter().filter_map(|c| variable_index.get(c.name.as_str()).map(|&idx| (columns[idx], c.value))).collect();
+            Constraint::Standard { coefficients, operator, rhs, .. } => {
+                let row_factors: Vec<(highs::Col, f64)> = coefficients
+                    .iter()
+                    .filter_map(|c| {
+                        let var_name = problem.resolve(c.name);
+                        variable_index.get(var_name).map(|&idx| (columns[idx], c.value))
+                    })
+                    .collect();
 
                 match operator {
                     ComparisonOp::LTE | ComparisonOp::LT => {
@@ -302,18 +302,13 @@ fn build_highs_model(problem: &lp_parser_rs::problem::LpProblemOwned) -> BuiltMo
                         row_problem.add_row(*rhs..=*rhs, &row_factors);
                     }
                 }
+                row_constraint_names.push(constraint_name.to_string());
             }
-            ConstraintOwned::SOS { .. } => {
+            Constraint::SOS { .. } => {
                 skipped_sos += 1;
             }
         }
     }
-
-    let row_constraint_names: Vec<String> = constraint_names
-        .iter()
-        .filter(|name| problem.constraints.get(name.as_str()).is_some_and(|c| matches!(c, ConstraintOwned::Standard { .. })))
-        .map(|name| (*name).clone())
-        .collect();
 
     let sense = match problem.sense {
         lp_parser_rs::model::Sense::Minimize => highs::Sense::Minimise,
@@ -322,14 +317,7 @@ fn build_highs_model(problem: &lp_parser_rs::problem::LpProblemOwned) -> BuiltMo
 
     debug_assert_eq!(columns.len(), variable_names.len(), "column count must match variable count");
 
-    BuiltModel {
-        row_problem,
-        variable_names: variable_names.into_iter().cloned().collect(),
-        objective_coefficients,
-        row_constraint_names,
-        skipped_sos,
-        sense,
-    }
+    BuiltModel { row_problem, variable_names, objective_coefficients, row_constraint_names, skipped_sos, sense }
 }
 
 /// Extract the solution from a solved `HiGHS` model into a `SolveResult`.
@@ -389,8 +377,8 @@ fn extract_solution(
     }
 }
 
-/// Convert an `LpProblemOwned` to a `HiGHS` `RowProblem` and solve it.
-fn solve_problem(problem: &lp_parser_rs::problem::LpProblemOwned) -> Result<SolveResult, String> {
+/// Convert an `LpProblem` to a `HiGHS` `RowProblem` and solve it.
+fn solve_problem(problem: &LpProblem) -> Result<SolveResult, String> {
     debug_assert!(!problem.variables.is_empty(), "cannot solve a problem with no variables");
 
     let model = build_highs_model(problem);
@@ -398,8 +386,6 @@ fn solve_problem(problem: &lp_parser_rs::problem::LpProblemOwned) -> Result<Solv
     let log_file = tempfile::NamedTempFile::new().map_err(|e| format!("failed to create solver log temp file: {e}"))?;
     let log_path = log_file.path().to_owned();
 
-    // Destructure to separate the consumed `row_problem` from the
-    // metadata fields that `extract_solution` needs by reference.
     let BuiltModel { row_problem, sense, variable_names, objective_coefficients, row_constraint_names, skipped_sos } = model;
 
     let metadata = SolveMetadata { variable_names, objective_coefficients, row_constraint_names, skipped_sos };
@@ -415,4 +401,88 @@ fn solve_problem(problem: &lp_parser_rs::problem::LpProblemOwned) -> Result<Solv
     let solver_log = std::fs::read_to_string(&log_path).map_err(|e| format!("failed to read solver log: {e}"))?;
 
     Ok(extract_solution(&metadata, &solved, solve_time, solver_log))
+}
+
+/// Write an f64 into a reusable string buffer and return it as bytes.
+/// Clears the buffer before writing to avoid stale data.
+#[inline]
+fn write_f64_to_buf(buf: &mut String, value: f64) -> &[u8] {
+    debug_assert!(value.is_finite(), "write_f64_to_buf called with non-finite value: {value}");
+    buf.clear();
+    write!(buf, "{value}").expect("writing f64 to String cannot fail");
+    buf.as_bytes()
+}
+
+/// Write an `Option<f64>` into a reusable string buffer, returning empty bytes for `None`.
+#[inline]
+fn write_opt_f64_to_buf(buf: &mut String, value: Option<f64>) -> Vec<u8> {
+    match value {
+        Some(v) => write_f64_to_buf(buf, v).to_owned(),
+        None => Vec::new(),
+    }
+}
+
+/// Write the diff results to two timestamped CSV files in `dir`.
+///
+/// Returns the filenames of the two written files on success.
+///
+/// # Errors
+///
+/// Returns an error if the CSV files cannot be created or written to.
+pub fn write_diff_csv(diff: &SolveDiffResult, dir: &Path) -> Result<(String, String), Box<dyn Error>> {
+    debug_assert!(dir.is_dir(), "write_diff_csv: dir must be an existing directory");
+
+    let ts = chrono::Local::now().format("%Y%m%d_%H%M%S");
+    let var_filename = format!("variable_diff_{ts}.csv");
+    let con_filename = format!("constraint_diff_{ts}.csv");
+
+    // Variable diff
+    {
+        let mut wtr = csv::Writer::from_path(dir.join(&var_filename))?;
+        wtr.write_record(["name", "value_1", "value_2", "delta", "reduced_cost_1", "reduced_cost_2"])?;
+
+        let mut buf = String::with_capacity(24);
+
+        for row in &diff.variable_diff {
+            if row.val1.is_none() && row.val2.is_none() {
+                continue;
+            }
+
+            let val1_bytes = write_opt_f64_to_buf(&mut buf, row.val1);
+            let val2_bytes = write_opt_f64_to_buf(&mut buf, row.val2);
+            let delta_bytes = match (row.val1, row.val2) {
+                (Some(v1), Some(v2)) => write_f64_to_buf(&mut buf, v2 - v1).to_owned(),
+                _ => Vec::new(),
+            };
+            let rc1_bytes = write_opt_f64_to_buf(&mut buf, row.reduced_cost1);
+            let rc2_bytes = write_opt_f64_to_buf(&mut buf, row.reduced_cost2);
+
+            wtr.write_record([row.name.as_bytes(), &val1_bytes, &val2_bytes, &delta_bytes, &rc1_bytes, &rc2_bytes])?;
+        }
+        wtr.flush()?;
+    }
+
+    // Constraint diff
+    {
+        let mut wtr = csv::Writer::from_path(dir.join(&con_filename))?;
+        wtr.write_record(["name", "activity_1", "activity_2", "shadow_price_1", "shadow_price_2"])?;
+
+        let mut buf = String::with_capacity(24);
+
+        for row in &diff.constraint_diff {
+            if row.activity1.is_none() && row.activity2.is_none() {
+                continue;
+            }
+
+            let a1_bytes = write_opt_f64_to_buf(&mut buf, row.activity1);
+            let a2_bytes = write_opt_f64_to_buf(&mut buf, row.activity2);
+            let sp1_bytes = write_opt_f64_to_buf(&mut buf, row.shadow_price1);
+            let sp2_bytes = write_opt_f64_to_buf(&mut buf, row.shadow_price2);
+
+            wtr.write_record([row.name.as_bytes(), &a1_bytes, &a2_bytes, &sp1_bytes, &sp2_bytes])?;
+        }
+        wtr.flush()?;
+    }
+
+    Ok((var_filename, con_filename))
 }

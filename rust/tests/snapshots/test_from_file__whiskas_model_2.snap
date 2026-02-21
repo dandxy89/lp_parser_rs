@@ -5,8 +5,7 @@ expression: parsed
 name: The_Whiskas_Problem
 sense: Minimize
 objectives:
-  Total_Cost_of_Ingredients_per_can:
-    name: Total_Cost_of_Ingredients_per_can
+  - name: Total_Cost_of_Ingredients_per_can
     coefficients:
       - name: Ingr_BEEF
         value: 0.008
@@ -21,8 +20,7 @@ objectives:
       - name: Ingr_WHEAT
         value: 0.005
 constraints:
-  FatRequirement:
-    type: Standard
+  - type: Standard
     name: FatRequirement
     coefficients:
       - name: Ingr_BEEF
@@ -37,8 +35,7 @@ constraints:
         value: 0.01
     operator: GTE
     rhs: 6
-  FibreRequirement:
-    type: Standard
+  - type: Standard
     name: FibreRequirement
     coefficients:
       - name: Ingr_BEEF
@@ -53,8 +50,7 @@ constraints:
         value: 0.15
     operator: LTE
     rhs: 2
-  PercentagesSum:
-    type: Standard
+  - type: Standard
     name: PercentagesSum
     coefficients:
       - name: Ingr_BEEF
@@ -71,8 +67,7 @@ constraints:
         value: 1
     operator: EQ
     rhs: 100
-  ProteinRequirement:
-    type: Standard
+  - type: Standard
     name: ProteinRequirement
     coefficients:
       - name: Ingr_BEEF
@@ -85,8 +80,7 @@ constraints:
         value: 0.04
     operator: GTE
     rhs: 8
-  SaltRequirement:
-    type: Standard
+  - type: Standard
     name: SaltRequirement
     coefficients:
       - name: Ingr_BEEF
@@ -102,21 +96,15 @@ constraints:
     operator: LTE
     rhs: 0.4
 variables:
-  Ingr_BEEF:
-    name: Ingr_BEEF
+  - name: Ingr_BEEF
     var_type: Free
-  Ingr_CHICKEN:
-    name: Ingr_CHICKEN
+  - name: Ingr_CHICKEN
     var_type: Free
-  Ingr_GEL:
-    name: Ingr_GEL
+  - name: Ingr_GEL
     var_type: Free
-  Ingr_MUTTON:
-    name: Ingr_MUTTON
+  - name: Ingr_MUTTON
     var_type: Free
-  Ingr_RICE:
-    name: Ingr_RICE
+  - name: Ingr_RICE
     var_type: Free
-  Ingr_WHEAT:
-    name: Ingr_WHEAT
+  - name: Ingr_WHEAT
     var_type: Free

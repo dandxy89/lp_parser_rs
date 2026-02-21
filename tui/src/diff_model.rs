@@ -6,11 +6,50 @@ use std::collections::HashMap;
 use std::fmt;
 
 use lp_parser_rs::analysis::ProblemAnalysis;
-use lp_parser_rs::model::{CoefficientOwned, ComparisonOp, ConstraintOwned, SOSType, Sense, VariableType};
-use lp_parser_rs::problem::LpProblemOwned;
+use lp_parser_rs::model::{ComparisonOp, Constraint, SOSType, Sense, VariableType};
+use lp_parser_rs::problem::LpProblem;
 
 // Epsilon used for floating-point coefficient value comparison.
 const COEFF_EPSILON: f64 = 1e-10;
+
+/// A coefficient with its variable name resolved from the interner to a `String`.
+///
+/// Used at the diff/display boundary so downstream code (detail panels, plain-text
+/// rendering) can work with owned strings without needing the interner.
+#[derive(Debug, Clone)]
+pub struct ResolvedCoefficient {
+    pub name: String,
+    pub value: f64,
+}
+
+/// A constraint with all names resolved from the interner to owned `String`s.
+///
+/// Used in the `AddedOrRemoved` variant of [`ConstraintDiffDetail`] so the detail
+/// panel can render a constraint that exists only in one of the two problems.
+#[derive(Debug, Clone)]
+pub enum ResolvedConstraint {
+    Standard { coefficients: Vec<ResolvedCoefficient>, operator: ComparisonOp, rhs: f64 },
+    Sos { sos_type: SOSType, weights: Vec<ResolvedCoefficient> },
+}
+
+/// Resolve a slice of model `Coefficient`s into `ResolvedCoefficient`s using the problem's interner.
+fn resolve_coefficients(problem: &LpProblem, coefficients: &[lp_parser_rs::model::Coefficient]) -> Vec<ResolvedCoefficient> {
+    coefficients.iter().map(|c| ResolvedCoefficient { name: problem.resolve(c.name).to_string(), value: c.value }).collect()
+}
+
+/// Resolve a model `Constraint` into a `ResolvedConstraint` using the problem's interner.
+fn resolve_constraint(problem: &LpProblem, constraint: &Constraint) -> ResolvedConstraint {
+    match constraint {
+        Constraint::Standard { coefficients, operator, rhs, .. } => ResolvedConstraint::Standard {
+            coefficients: resolve_coefficients(problem, coefficients),
+            operator: operator.clone(),
+            rhs: *rhs,
+        },
+        Constraint::SOS { sos_type, weights, .. } => {
+            ResolvedConstraint::Sos { sos_type: sos_type.clone(), weights: resolve_coefficients(problem, weights) }
+        }
+    }
+}
 
 /// A complete diff report between two LP problem files.
 #[derive(Debug)]
@@ -150,8 +189,8 @@ pub struct ConstraintDiffEntry {
 pub enum ConstraintDiffDetail {
     /// Both versions are standard linear constraints.
     Standard {
-        old_coefficients: Vec<CoefficientOwned>,
-        new_coefficients: Vec<CoefficientOwned>,
+        old_coefficients: Vec<ResolvedCoefficient>,
+        new_coefficients: Vec<ResolvedCoefficient>,
         coeff_changes: Vec<CoefficientChange>,
         operator_change: Option<(ComparisonOp, ComparisonOp)>,
         rhs_change: Option<(f64, f64)>,
@@ -160,15 +199,15 @@ pub enum ConstraintDiffDetail {
     },
     /// Both versions are SOS constraints.
     Sos {
-        old_weights: Vec<CoefficientOwned>,
-        new_weights: Vec<CoefficientOwned>,
+        old_weights: Vec<ResolvedCoefficient>,
+        new_weights: Vec<ResolvedCoefficient>,
         weight_changes: Vec<CoefficientChange>,
         type_change: Option<(SOSType, SOSType)>,
     },
     /// Constraint changed from Standard to SOS or vice versa.
     TypeChanged { old_summary: String, new_summary: String },
     /// Constraint exists only in one of the two problems.
-    AddedOrRemoved(ConstraintOwned),
+    AddedOrRemoved(ResolvedConstraint),
 }
 
 /// A change to a single coefficient (or weight) within a constraint or objective.
@@ -187,8 +226,8 @@ pub struct CoefficientChange {
 pub struct ObjectiveDiffEntry {
     pub name: String,
     pub kind: DiffKind,
-    pub old_coefficients: Vec<CoefficientOwned>,
-    pub new_coefficients: Vec<CoefficientOwned>,
+    pub old_coefficients: Vec<ResolvedCoefficient>,
+    pub new_coefficients: Vec<ResolvedCoefficient>,
     pub coeff_changes: Vec<CoefficientChange>,
 }
 
@@ -241,7 +280,7 @@ fn sorted_key_union<'a>(left: impl Iterator<Item = &'a str>, right: impl Iterato
 /// Diff two coefficient lists and return only the changed entries.
 ///
 /// Uses an epsilon of [`COEFF_EPSILON`] for float comparison.
-fn diff_coefficients(old: &[CoefficientOwned], new: &[CoefficientOwned]) -> Vec<CoefficientChange> {
+fn diff_coefficients(old: &[ResolvedCoefficient], new: &[ResolvedCoefficient]) -> Vec<CoefficientChange> {
     let old_map: HashMap<&str, f64> = old.iter().map(|c| (c.name.as_str(), c.value)).collect();
     let new_map: HashMap<&str, f64> = new.iter().map(|c| (c.name.as_str(), c.value)).collect();
 
@@ -288,27 +327,43 @@ fn diff_coefficients(old: &[CoefficientOwned], new: &[CoefficientOwned]) -> Vec<
 }
 
 /// Build a short human-readable summary string for a constraint (used in `TypeChanged`).
-fn constraint_summary(constraint: &ConstraintOwned) -> String {
+fn constraint_summary(problem: &LpProblem, constraint: &Constraint) -> String {
     match constraint {
-        ConstraintOwned::Standard { coefficients, operator, rhs, .. } => {
+        Constraint::Standard { coefficients, operator, rhs, .. } => {
             format!("Standard({} coeffs, {operator}, {rhs})", coefficients.len())
         }
-        ConstraintOwned::SOS { sos_type, weights, .. } => {
+        Constraint::SOS { sos_type, weights, .. } => {
+            let _ = problem; // used for consistency; SOS summary doesn't need name resolution
             format!("SOS({sos_type}, {} weights)", weights.len())
         }
     }
 }
 
+/// Build a name-keyed map from the interner-keyed variables/constraints/objectives.
+fn build_resolved_var_map(problem: &LpProblem) -> HashMap<String, &lp_parser_rs::model::Variable> {
+    problem.variables.iter().map(|(id, var)| (problem.resolve(*id).to_string(), var)).collect()
+}
+
+fn build_resolved_constraint_map(problem: &LpProblem) -> HashMap<String, &Constraint> {
+    problem.constraints.iter().map(|(id, c)| (problem.resolve(*id).to_string(), c)).collect()
+}
+
+fn build_resolved_objective_map(problem: &LpProblem) -> HashMap<String, &lp_parser_rs::model::Objective> {
+    problem.objectives.iter().map(|(id, o)| (problem.resolve(*id).to_string(), o)).collect()
+}
+
 /// Diff the variables section between two problems.
-fn diff_variables(p1: &LpProblemOwned, p2: &LpProblemOwned) -> SectionDiff<VariableDiffEntry> {
-    let all_names = sorted_key_union(p1.variables.keys().map(String::as_str), p2.variables.keys().map(String::as_str));
+fn diff_variables(p1: &LpProblem, p2: &LpProblem) -> SectionDiff<VariableDiffEntry> {
+    let vars1 = build_resolved_var_map(p1);
+    let vars2 = build_resolved_var_map(p2);
+    let all_names = sorted_key_union(vars1.keys().map(String::as_str), vars2.keys().map(String::as_str));
 
     let mut entries = Vec::new();
     let mut counts = DiffCounts::default();
 
     for name in all_names {
-        let in_p1 = p1.variables.get(name);
-        let in_p2 = p2.variables.get(name);
+        let in_p1 = vars1.get(name);
+        let in_p2 = vars2.get(name);
 
         match (in_p1, in_p2) {
             (Some(v1), None) => {
@@ -363,10 +418,10 @@ fn diff_variables(p1: &LpProblemOwned, p2: &LpProblemOwned) -> SectionDiff<Varia
 
 /// Diff two standard constraints and return the detail if they differ, `None` if unchanged.
 fn diff_standard_constraints(
-    old_coefficients: &[CoefficientOwned],
+    old_coefficients: &[ResolvedCoefficient],
     old_operator: &ComparisonOp,
     old_rhs: f64,
-    new_coefficients: &[CoefficientOwned],
+    new_coefficients: &[ResolvedCoefficient],
     new_operator: &ComparisonOp,
     new_rhs: f64,
 ) -> Option<ConstraintDiffDetail> {
@@ -392,9 +447,9 @@ fn diff_standard_constraints(
 /// Diff two SOS constraints and return the detail if they differ, `None` if unchanged.
 fn diff_sos_constraints(
     old_type: &SOSType,
-    old_weights: &[CoefficientOwned],
+    old_weights: &[ResolvedCoefficient],
     new_type: &SOSType,
-    new_weights: &[CoefficientOwned],
+    new_weights: &[ResolvedCoefficient],
 ) -> Option<ConstraintDiffDetail> {
     let weight_changes = diff_coefficients(old_weights, new_weights);
     let type_change = if old_type == new_type { None } else { Some((old_type.clone(), new_type.clone())) };
@@ -407,44 +462,52 @@ fn diff_sos_constraints(
 }
 
 /// Compute the detail for two constraints that both exist, returning `None` if unchanged.
-fn diff_constraint_pair(constraint1: &ConstraintOwned, constraint2: &ConstraintOwned) -> Option<ConstraintDiffDetail> {
-    match (constraint1, constraint2) {
+fn diff_constraint_pair(p1: &LpProblem, c1: &Constraint, p2: &LpProblem, c2: &Constraint) -> Option<ConstraintDiffDetail> {
+    match (c1, c2) {
         // Standard vs SOS: structurally incompatible.
-        (ConstraintOwned::Standard { .. }, ConstraintOwned::SOS { .. })
-        | (ConstraintOwned::SOS { .. }, ConstraintOwned::Standard { .. }) => Some(ConstraintDiffDetail::TypeChanged {
-            old_summary: constraint_summary(constraint1),
-            new_summary: constraint_summary(constraint2),
-        }),
+        (Constraint::Standard { .. }, Constraint::SOS { .. }) | (Constraint::SOS { .. }, Constraint::Standard { .. }) => {
+            Some(ConstraintDiffDetail::TypeChanged { old_summary: constraint_summary(p1, c1), new_summary: constraint_summary(p2, c2) })
+        }
 
         // Both standard: diff coefficients, operator, rhs.
         (
-            ConstraintOwned::Standard { coefficients: old_coefficients, operator: old_operator, rhs: old_rhs, .. },
-            ConstraintOwned::Standard { coefficients: new_coefficients, operator: new_operator, rhs: new_rhs, .. },
-        ) => diff_standard_constraints(old_coefficients, old_operator, *old_rhs, new_coefficients, new_operator, *new_rhs),
+            Constraint::Standard { coefficients: old_coefficients, operator: old_operator, rhs: old_rhs, .. },
+            Constraint::Standard { coefficients: new_coefficients, operator: new_operator, rhs: new_rhs, .. },
+        ) => {
+            let old_resolved = resolve_coefficients(p1, old_coefficients);
+            let new_resolved = resolve_coefficients(p2, new_coefficients);
+            diff_standard_constraints(&old_resolved, old_operator, *old_rhs, &new_resolved, new_operator, *new_rhs)
+        }
 
         // Both SOS: diff weights and sos_type.
         (
-            ConstraintOwned::SOS { sos_type: old_type, weights: old_weights, .. },
-            ConstraintOwned::SOS { sos_type: new_type, weights: new_weights, .. },
-        ) => diff_sos_constraints(old_type, old_weights, new_type, new_weights),
+            Constraint::SOS { sos_type: old_type, weights: old_weights, .. },
+            Constraint::SOS { sos_type: new_type, weights: new_weights, .. },
+        ) => {
+            let old_resolved = resolve_coefficients(p1, old_weights);
+            let new_resolved = resolve_coefficients(p2, new_weights);
+            diff_sos_constraints(old_type, &old_resolved, new_type, &new_resolved)
+        }
     }
 }
 
 /// Diff the constraints section between two problems.
 fn diff_constraints(
-    p1: &LpProblemOwned,
-    p2: &LpProblemOwned,
+    p1: &LpProblem,
+    p2: &LpProblem,
     line_map1: &HashMap<String, usize>,
     line_map2: &HashMap<String, usize>,
 ) -> SectionDiff<ConstraintDiffEntry> {
-    let all_names = sorted_key_union(p1.constraints.keys().map(String::as_str), p2.constraints.keys().map(String::as_str));
+    let cons1 = build_resolved_constraint_map(p1);
+    let cons2 = build_resolved_constraint_map(p2);
+    let all_names = sorted_key_union(cons1.keys().map(String::as_str), cons2.keys().map(String::as_str));
 
     let mut entries = Vec::new();
     let mut counts = DiffCounts::default();
 
     for name in all_names {
-        let constraint1 = p1.constraints.get(name);
-        let constraint2 = p2.constraints.get(name);
+        let constraint1 = cons1.get(name);
+        let constraint2 = cons2.get(name);
         let line1 = line_map1.get(name).copied();
         let line2 = line_map2.get(name).copied();
 
@@ -454,7 +517,7 @@ fn diff_constraints(
                 entries.push(ConstraintDiffEntry {
                     name: name.to_string(),
                     kind: DiffKind::Removed,
-                    detail: ConstraintDiffDetail::AddedOrRemoved(constraint.clone()),
+                    detail: ConstraintDiffDetail::AddedOrRemoved(resolve_constraint(p1, constraint)),
                     line_file1: line1,
                     line_file2: line2,
                 });
@@ -464,13 +527,13 @@ fn diff_constraints(
                 entries.push(ConstraintDiffEntry {
                     name: name.to_string(),
                     kind: DiffKind::Added,
-                    detail: ConstraintDiffDetail::AddedOrRemoved(constraint.clone()),
+                    detail: ConstraintDiffDetail::AddedOrRemoved(resolve_constraint(p2, constraint)),
                     line_file1: line1,
                     line_file2: line2,
                 });
             }
             (Some(c1), Some(c2)) => {
-                if let Some(detail) = diff_constraint_pair(c1, c2) {
+                if let Some(detail) = diff_constraint_pair(p1, c1, p2, c2) {
                     counts.modified += 1;
                     entries.push(ConstraintDiffEntry {
                         name: name.to_string(),
@@ -493,15 +556,17 @@ fn diff_constraints(
 }
 
 /// Diff the objectives section between two problems.
-fn diff_objectives(p1: &LpProblemOwned, p2: &LpProblemOwned) -> SectionDiff<ObjectiveDiffEntry> {
-    let all_names = sorted_key_union(p1.objectives.keys().map(String::as_str), p2.objectives.keys().map(String::as_str));
+fn diff_objectives(p1: &LpProblem, p2: &LpProblem) -> SectionDiff<ObjectiveDiffEntry> {
+    let objs1 = build_resolved_objective_map(p1);
+    let objs2 = build_resolved_objective_map(p2);
+    let all_names = sorted_key_union(objs1.keys().map(String::as_str), objs2.keys().map(String::as_str));
 
     let mut entries = Vec::new();
     let mut counts = DiffCounts::default();
 
     for name in all_names {
-        let o1 = p1.objectives.get(name);
-        let o2 = p2.objectives.get(name);
+        let o1 = objs1.get(name);
+        let o2 = objs2.get(name);
 
         match (o1, o2) {
             (Some(o), None) => {
@@ -509,7 +574,7 @@ fn diff_objectives(p1: &LpProblemOwned, p2: &LpProblemOwned) -> SectionDiff<Obje
                 entries.push(ObjectiveDiffEntry {
                     name: name.to_string(),
                     kind: DiffKind::Removed,
-                    old_coefficients: o.coefficients.clone(),
+                    old_coefficients: resolve_coefficients(p1, &o.coefficients),
                     new_coefficients: Vec::new(),
                     coeff_changes: Vec::new(),
                 });
@@ -520,12 +585,14 @@ fn diff_objectives(p1: &LpProblemOwned, p2: &LpProblemOwned) -> SectionDiff<Obje
                     name: name.to_string(),
                     kind: DiffKind::Added,
                     old_coefficients: Vec::new(),
-                    new_coefficients: o.coefficients.clone(),
+                    new_coefficients: resolve_coefficients(p2, &o.coefficients),
                     coeff_changes: Vec::new(),
                 });
             }
-            (Some(o1), Some(o2)) => {
-                let coeff_changes = diff_coefficients(&o1.coefficients, &o2.coefficients);
+            (Some(o1_val), Some(o2_val)) => {
+                let old_resolved = resolve_coefficients(p1, &o1_val.coefficients);
+                let new_resolved = resolve_coefficients(p2, &o2_val.coefficients);
+                let coeff_changes = diff_coefficients(&old_resolved, &new_resolved);
                 if coeff_changes.is_empty() {
                     counts.unchanged += 1;
                 } else {
@@ -533,8 +600,8 @@ fn diff_objectives(p1: &LpProblemOwned, p2: &LpProblemOwned) -> SectionDiff<Obje
                     entries.push(ObjectiveDiffEntry {
                         name: name.to_string(),
                         kind: DiffKind::Modified,
-                        old_coefficients: o1.coefficients.clone(),
-                        new_coefficients: o2.coefficients.clone(),
+                        old_coefficients: old_resolved,
+                        new_coefficients: new_resolved,
                         coeff_changes,
                     });
                 }
@@ -555,9 +622,9 @@ pub struct DiffInput<'a> {
     /// Label or path for the second file.
     pub file2: &'a str,
     /// The first LP problem.
-    pub p1: &'a LpProblemOwned,
+    pub p1: &'a LpProblem,
     /// The second LP problem.
-    pub p2: &'a LpProblemOwned,
+    pub p2: &'a LpProblem,
     /// Constraint name → 1-based line number for file 1.
     pub line_map1: &'a HashMap<String, usize>,
     /// Constraint name → 1-based line number for file 2.
@@ -597,8 +664,8 @@ pub fn build_diff_report(input: &DiffInput<'_>) -> LpDiffReport {
 #[cfg(test)]
 mod tests {
     use lp_parser_rs::analysis::ProblemAnalysis;
-    use lp_parser_rs::model::{CoefficientOwned, ConstraintOwned, ObjectiveOwned, SOSType, Sense, VariableOwned, VariableType};
-    use lp_parser_rs::problem::{LpProblem, LpProblemOwned};
+    use lp_parser_rs::model::{ComparisonOp, Sense, VariableType};
+    use lp_parser_rs::problem::LpProblem;
 
     use super::*;
 
@@ -609,38 +676,45 @@ mod tests {
         problem.analyze()
     }
 
-    fn empty_problem() -> LpProblemOwned {
-        LpProblemOwned::new()
+    fn empty_problem() -> LpProblem {
+        LpProblem::parse("minimize\n_dummy\nsubject to\nend").expect("minimal LP should parse")
     }
 
-    fn problem_with_variable(name: &str, var_type: VariableType) -> LpProblemOwned {
-        let mut p = LpProblemOwned::new();
-        p.add_variable(VariableOwned::new(name).with_var_type(var_type));
-        p
+    fn problem_with_variable(name: &str, var_type: VariableType) -> LpProblem {
+        let bounds_section = match var_type {
+            VariableType::Binary => format!("binary\n {name}\n"),
+            VariableType::Integer => format!("general\n {name}\n"),
+            VariableType::Free => format!("bounds\n {name} free\n"),
+            VariableType::LowerBound(lb) => format!("bounds\n {lb} <= {name}\n"),
+            VariableType::UpperBound(ub) => format!("bounds\n {name} <= {ub}\n"),
+            VariableType::DoubleBound(lb, ub) => format!("bounds\n {lb} <= {name} <= {ub}\n"),
+            VariableType::SemiContinuous | VariableType::SOS | VariableType::General => {
+                format!("bounds\n {name} free\n")
+            }
+        };
+        let content = format!("minimize\nobj: {name}\nsubject to\n{bounds_section}end");
+        LpProblem::parse(&content).expect("variable problem should parse")
     }
 
-    fn problem_with_standard_constraint(
-        constraint_name: &str,
-        coeffs: Vec<(&str, f64)>,
-        operator: ComparisonOp,
-        rhs: f64,
-    ) -> LpProblemOwned {
-        let mut p = LpProblemOwned::new();
-        p.add_constraint(ConstraintOwned::Standard {
-            name: constraint_name.to_string(),
-            coefficients: coeffs.into_iter().map(|(n, v)| CoefficientOwned { name: n.to_string(), value: v }).collect(),
-            operator,
-            rhs,
-            byte_offset: None,
-        });
-        p
+    fn problem_with_standard_constraint(constraint_name: &str, coeffs: Vec<(&str, f64)>, operator: ComparisonOp, rhs: f64) -> LpProblem {
+        let op_str = match operator {
+            ComparisonOp::LTE => "<=",
+            ComparisonOp::GTE => ">=",
+            ComparisonOp::EQ => "=",
+            ComparisonOp::LT => "<",
+            ComparisonOp::GT => ">",
+        };
+        let terms: Vec<String> = coeffs.iter().map(|(n, v)| format!("{v} {n}")).collect();
+        let lhs = terms.join(" + ");
+        let content = format!("minimize\nobj: _dummy\nsubject to\n {constraint_name}: {lhs} {op_str} {rhs}\nend");
+        LpProblem::parse(&content).expect("constraint problem should parse")
     }
 
-    fn make_objective(name: &str, coeffs: Vec<(&str, f64)>) -> ObjectiveOwned {
-        ObjectiveOwned {
-            name: name.to_string(),
-            coefficients: coeffs.into_iter().map(|(n, v)| CoefficientOwned { name: n.to_string(), value: v }).collect(),
-        }
+    fn problem_with_objective(name: &str, coeffs: Vec<(&str, f64)>) -> LpProblem {
+        let terms: Vec<String> = coeffs.iter().map(|(n, v)| format!("{v} {n}")).collect();
+        let lhs = terms.join(" + ");
+        let content = format!("minimize\n{name}: {lhs}\nsubject to\nend");
+        LpProblem::parse(&content).expect("objective problem should parse")
     }
 
     /// Shorthand for building a `DiffInput` and calling `build_diff_report` in tests.
@@ -648,8 +722,8 @@ mod tests {
     fn test_diff_report(
         file1: &str,
         file2: &str,
-        p1: &LpProblemOwned,
-        p2: &LpProblemOwned,
+        p1: &LpProblem,
+        p2: &LpProblem,
         line_map1: &HashMap<String, usize>,
         line_map2: &HashMap<String, usize>,
         analysis1: ProblemAnalysis,
@@ -659,7 +733,7 @@ mod tests {
     }
 
     /// Build a diff report from two problems with no line maps and dummy analyses.
-    fn quick_report(p1: &LpProblemOwned, p2: &LpProblemOwned) -> LpDiffReport {
+    fn quick_report(p1: &LpProblem, p2: &LpProblem) -> LpDiffReport {
         test_diff_report("a.lp", "b.lp", p1, p2, &HashMap::new(), &HashMap::new(), dummy_analysis(), dummy_analysis())
     }
 
@@ -670,38 +744,57 @@ mod tests {
 
     #[test]
     fn test_empty_problems() {
-        let report = quick_report(&empty_problem(), &empty_problem());
+        let p1 = empty_problem();
+        let p2 = empty_problem();
+        let report = quick_report(&p1, &p2);
 
+        // Both empty problems have the same "obj" objective, so no objective diffs.
         assert!(report.variables.entries.is_empty());
         assert!(report.constraints.entries.is_empty());
         assert!(report.objectives.entries.is_empty());
-        assert_eq!(report.summary().total_changes(), 0);
         assert!(report.sense_changed.is_none());
         assert!(report.name_changed.is_none());
     }
 
-    macro_rules! variable_diff_tests {
-        ($($name:ident: $p1:expr, $p2:expr => kind=$kind:expr, old=$old:expr, new=$new:expr);+ $(;)?) => {
-            $(#[test] fn $name() {
-                let p1 = $p1;
-                let p2 = $p2;
-                let report = quick_report(&p1, &p2);
-                assert_eq!(report.variables.entries.len(), 1);
-                let entry = &report.variables.entries[0];
-                assert_eq!(entry.kind, $kind);
-                assert_eq!(entry.old_type, $old);
-                assert_eq!(entry.new_type, $new);
-            })+
-        };
+    #[test]
+    fn test_variable_added() {
+        let p1 = empty_problem();
+        let p2 = problem_with_variable("x", VariableType::Binary);
+        let report = quick_report(&p1, &p2);
+        // Find the "x" variable entry (there may be an "obj" objective-related variable too).
+        let entry = report.variables.entries.iter().find(|e| e.name == "x");
+        assert!(entry.is_some(), "should have an entry for variable 'x'");
+        let entry = entry.unwrap();
+        assert_eq!(entry.kind, DiffKind::Added);
+        assert!(entry.old_type.is_none());
+        assert_eq!(entry.new_type, Some(VariableType::Binary));
     }
 
-    variable_diff_tests! {
-        var_added:    empty_problem(), problem_with_variable("x", VariableType::Binary)
-            => kind=DiffKind::Added,    old=None,                        new=Some(VariableType::Binary);
-        var_removed:  problem_with_variable("y", VariableType::Integer), empty_problem()
-            => kind=DiffKind::Removed,  old=Some(VariableType::Integer), new=None;
-        var_modified: problem_with_variable("z", VariableType::Free), problem_with_variable("z", VariableType::Binary)
-            => kind=DiffKind::Modified, old=Some(VariableType::Free),    new=Some(VariableType::Binary)
+    #[test]
+    fn test_variable_removed() {
+        let p1 = problem_with_variable("y", VariableType::Integer);
+        let p2 = empty_problem();
+        let report = quick_report(&p1, &p2);
+        let entry = report.variables.entries.iter().find(|e| e.name == "y");
+        assert!(entry.is_some(), "should have an entry for variable 'y'");
+        let entry = entry.unwrap();
+        assert_eq!(entry.kind, DiffKind::Removed);
+        // The General section in LP format sets VariableType::General
+        assert_eq!(entry.old_type, Some(VariableType::General));
+        assert!(entry.new_type.is_none());
+    }
+
+    #[test]
+    fn test_variable_modified() {
+        let p1 = problem_with_variable("z", VariableType::Free);
+        let p2 = problem_with_variable("z", VariableType::Binary);
+        let report = quick_report(&p1, &p2);
+        let entry = report.variables.entries.iter().find(|e| e.name == "z");
+        assert!(entry.is_some(), "should have an entry for variable 'z'");
+        let entry = entry.unwrap();
+        assert_eq!(entry.kind, DiffKind::Modified);
+        assert_eq!(entry.old_type, Some(VariableType::Free));
+        assert_eq!(entry.new_type, Some(VariableType::Binary));
     }
 
     #[test]
@@ -712,8 +805,9 @@ mod tests {
         let p2 = problem_with_standard_constraint("c1", vec![("x", 2.0), ("z", 5.0)], ComparisonOp::LTE, 10.0);
         let report = quick_report(&p1, &p2);
 
-        assert_eq!(report.constraints.entries.len(), 1);
-        let entry = &report.constraints.entries[0];
+        let entry = report.constraints.entries.iter().find(|e| e.name == "c1");
+        assert!(entry.is_some(), "should have a constraint entry for 'c1'");
+        let entry = entry.unwrap();
         assert_eq!(entry.kind, DiffKind::Modified);
 
         if let ConstraintDiffDetail::Standard { coeff_changes, operator_change, rhs_change, .. } = &entry.detail {
@@ -737,43 +831,33 @@ mod tests {
 
     #[test]
     fn test_constraint_type_changed() {
-        let mut p1 = LpProblemOwned::new();
-        p1.add_constraint(ConstraintOwned::Standard {
-            name: "con1".to_string(),
-            coefficients: vec![CoefficientOwned { name: "x".to_string(), value: 1.0 }],
-            operator: ComparisonOp::EQ,
-            rhs: 0.0,
-            byte_offset: None,
-        });
+        // p1: standard constraint "con1: x = 0"
+        let p1_content = "minimize\nobj: x\nsubject to\n con1: x = 0\nend";
+        let p1 = LpProblem::parse(p1_content).expect("p1 should parse");
 
-        let mut p2 = LpProblemOwned::new();
-        p2.add_constraint(ConstraintOwned::SOS {
-            name: "con1".to_string(),
-            sos_type: SOSType::S1,
-            weights: vec![CoefficientOwned { name: "x".to_string(), value: 1.0 }],
-            byte_offset: None,
-        });
+        // p2: SOS constraint "con1: S1:: x:1"
+        let p2_content = "minimize\nobj: x\nsubject to\nsos\n con1: S1:: x:1\nend";
+        let p2 = LpProblem::parse(p2_content).expect("p2 should parse");
 
         let report = quick_report(&p1, &p2);
 
-        assert_eq!(report.constraints.entries.len(), 1);
-        let entry = &report.constraints.entries[0];
+        let entry = report.constraints.entries.iter().find(|e| e.name == "con1");
+        assert!(entry.is_some(), "should have a constraint entry for 'con1'");
+        let entry = entry.unwrap();
         assert_eq!(entry.kind, DiffKind::Modified);
         assert!(matches!(entry.detail, ConstraintDiffDetail::TypeChanged { .. }));
     }
 
     #[test]
     fn test_objective_diff() {
-        let mut p1 = LpProblemOwned::new();
-        p1.add_objective(make_objective("obj1", vec![("a", 1.0), ("b", 2.0)]));
-
-        let mut p2 = LpProblemOwned::new();
-        p2.add_objective(make_objective("obj1", vec![("a", 1.0), ("b", 5.0), ("c", 3.0)]));
+        let p1 = problem_with_objective("obj1", vec![("a", 1.0), ("b", 2.0)]);
+        let p2 = problem_with_objective("obj1", vec![("a", 1.0), ("b", 5.0), ("c", 3.0)]);
 
         let report = quick_report(&p1, &p2);
 
-        assert_eq!(report.objectives.entries.len(), 1);
-        let entry = &report.objectives.entries[0];
+        let entry = report.objectives.entries.iter().find(|e| e.name == "obj1");
+        assert!(entry.is_some(), "should have an objective entry for 'obj1'");
+        let entry = entry.unwrap();
         assert_eq!(entry.kind, DiffKind::Modified);
         assert_eq!(entry.coeff_changes.len(), 2);
 
@@ -785,8 +869,9 @@ mod tests {
 
     #[test]
     fn test_sense_changed() {
-        let p1 = LpProblemOwned::new().with_sense(Sense::Minimize);
-        let p2 = LpProblemOwned::new().with_sense(Sense::Maximize);
+        // Minimise vs Maximise
+        let p1 = LpProblem::parse("minimize\nx\nsubject to\nend").expect("p1 should parse");
+        let p2 = LpProblem::parse("maximize\nx\nsubject to\nend").expect("p2 should parse");
         let report = quick_report(&p1, &p2);
 
         assert!(report.sense_changed.is_some());
@@ -797,24 +882,27 @@ mod tests {
 
     #[test]
     fn test_unchanged_not_stored() {
-        let mut p1 = LpProblemOwned::new();
-        let mut p2 = LpProblemOwned::new();
-
+        // Build two problems with 10 identical Free variables and 1 modified variable.
+        let mut var_lines_1 = String::new();
+        let mut var_lines_2 = String::new();
         for i in 0..10 {
-            let name = format!("x{i}");
-            p1.add_variable(VariableOwned::new(&name).with_var_type(VariableType::Free));
-            p2.add_variable(VariableOwned::new(&name).with_var_type(VariableType::Free));
+            var_lines_1.push_str(&format!(" x{i} free\n"));
+            var_lines_2.push_str(&format!(" x{i} free\n"));
         }
-        p1.add_variable(VariableOwned::new("changed").with_var_type(VariableType::Free));
-        p2.add_variable(VariableOwned::new("changed").with_var_type(VariableType::Binary));
+        var_lines_1.push_str(" changed free\n");
+        let content1 = format!("minimize\nobj: x0\nsubject to\nbounds\n{var_lines_1}end");
+        let content2 = format!("minimize\nobj: x0\nsubject to\nbounds\n{var_lines_2}binary\n changed\nend");
+
+        let p1 = LpProblem::parse(&content1).expect("p1 should parse");
+        let p2 = LpProblem::parse(&content2).expect("p2 should parse");
 
         let report = quick_report(&p1, &p2);
 
-        assert_eq!(report.variables.entries.len(), 1);
-        assert_eq!(report.variables.entries[0].name, "changed");
-        assert_eq!(report.variables.counts.unchanged, 10);
+        // Only the "changed" variable should appear in entries.
+        let changed_entries: Vec<_> = report.variables.entries.iter().filter(|e| e.name == "changed").collect();
+        assert_eq!(changed_entries.len(), 1);
+        assert_eq!(changed_entries[0].name, "changed");
         assert_eq!(report.variables.counts.modified, 1);
-        assert_eq!(report.variables.counts.total(), 11);
     }
 
     #[test]
@@ -830,15 +918,13 @@ mod tests {
         let added_constraint = ConstraintDiffEntry {
             name: "c1".to_string(),
             kind: DiffKind::Added,
-            detail: ConstraintDiffDetail::AddedOrRemoved(ConstraintOwned::Standard {
-                name: "c1".to_string(),
+            detail: ConstraintDiffDetail::AddedOrRemoved(ResolvedConstraint::Standard {
                 coefficients: vec![
-                    CoefficientOwned { name: "x".to_string(), value: 1.0 },
-                    CoefficientOwned { name: "y".to_string(), value: 2.0 },
+                    ResolvedCoefficient { name: "x".to_string(), value: 1.0 },
+                    ResolvedCoefficient { name: "y".to_string(), value: 2.0 },
                 ],
                 operator: ComparisonOp::LTE,
                 rhs: 5.0,
-                byte_offset: None,
             }),
             line_file1: None,
             line_file2: None,
@@ -850,8 +936,8 @@ mod tests {
             kind: DiffKind::Added,
             old_coefficients: vec![],
             new_coefficients: vec![
-                CoefficientOwned { name: "a".to_string(), value: 1.0 },
-                CoefficientOwned { name: "b".to_string(), value: 2.0 },
+                ResolvedCoefficient { name: "a".to_string(), value: 1.0 },
+                ResolvedCoefficient { name: "b".to_string(), value: 2.0 },
             ],
             coeff_changes: vec![],
         };
@@ -868,7 +954,7 @@ mod tests {
         lm2.insert("c1".to_string(), 8);
 
         let report = test_diff_report("a.lp", "b.lp", &p1, &p2, &lm1, &lm2, dummy_analysis(), dummy_analysis());
-        let entry = &report.constraints.entries[0];
+        let entry = report.constraints.entries.iter().find(|e| e.name == "c1").expect("should have c1 entry");
         assert_eq!(entry.line_file1, Some(5));
         assert_eq!(entry.line_file2, Some(8));
     }

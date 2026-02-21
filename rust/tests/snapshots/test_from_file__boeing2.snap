@@ -5,8 +5,7 @@ expression: parsed
 name: boeing2.mps
 sense: Minimize
 objectives:
-  OBJECTIV:
-    name: OBJECTIV
+  - name: OBJECTIV
     coefficients:
       - name: PBOSORD0
         value: -0.075
@@ -295,8 +294,7 @@ objectives:
       - name: N1201AC4
         value: 0.5698
 constraints:
-  ACMILES:
-    type: Standard
+  - type: Standard
     name: ACMILES
     coefficients:
       - name: N1003AC1
@@ -401,8 +399,7 @@ constraints:
         value: 0.18557
     operator: GTE
     rhs: 0
-  ACOCOSTS:
-    type: Standard
+  - type: Standard
     name: ACOCOSTS
     coefficients:
       - name: GRDTIMO1
@@ -519,8 +516,7 @@ constraints:
         value: 0.5698
     operator: GTE
     rhs: 0
-  ASMILES:
-    type: Standard
+  - type: Standard
     name: ASMILES
     coefficients:
       - name: N1003AC1
@@ -575,8 +571,7 @@ constraints:
         value: 24.31007
     operator: GTE
     rhs: 0
-  ATONMILE:
-    type: Standard
+  - type: Standard
     name: ATONMILE
     coefficients:
       - name: N1003AC1
@@ -643,8 +638,7 @@ constraints:
         value: 2.7836
     operator: GTE
     rhs: 0
-  CONTBOS1:
-    type: Standard
+  - type: Standard
     name: CONTBOS1
     coefficients:
       - name: N1003AC1
@@ -657,8 +651,7 @@ constraints:
         value: -1
     operator: GTE
     rhs: 0
-  CONTBOS2:
-    type: Standard
+  - type: Standard
     name: CONTBOS2
     coefficients:
       - name: N1003AC2
@@ -683,8 +676,7 @@ constraints:
         value: -1
     operator: GTE
     rhs: 0
-  CONTBOS3:
-    type: Standard
+  - type: Standard
     name: CONTBOS3
     coefficients:
       - name: N1003AC3
@@ -697,8 +689,7 @@ constraints:
         value: -1
     operator: GTE
     rhs: 0
-  CONTBOS4:
-    type: Standard
+  - type: Standard
     name: CONTBOS4
     coefficients:
       - name: N1003AC4
@@ -723,8 +714,7 @@ constraints:
         value: -1
     operator: GTE
     rhs: 0
-  CONTCLE1:
-    type: Standard
+  - type: Standard
     name: CONTCLE1
     coefficients:
       - name: N1005AC1
@@ -735,8 +725,7 @@ constraints:
         value: -1
     operator: GTE
     rhs: 0
-  CONTCLE2:
-    type: Standard
+  - type: Standard
     name: CONTCLE2
     coefficients:
       - name: N1005AC2
@@ -753,8 +742,7 @@ constraints:
         value: 1
     operator: GTE
     rhs: 0
-  CONTCLE3:
-    type: Standard
+  - type: Standard
     name: CONTCLE3
     coefficients:
       - name: N1005AC3
@@ -765,8 +753,7 @@ constraints:
         value: -1
     operator: GTE
     rhs: 0
-  CONTCLE4:
-    type: Standard
+  - type: Standard
     name: CONTCLE4
     coefficients:
       - name: N1005AC4
@@ -783,8 +770,7 @@ constraints:
         value: 1
     operator: GTE
     rhs: 0
-  CONTLGA2:
-    type: Standard
+  - type: Standard
     name: CONTLGA2
     coefficients:
       - name: N1015AC2
@@ -803,8 +789,7 @@ constraints:
         value: 1
     operator: GTE
     rhs: 0
-  CONTLGA4:
-    type: Standard
+  - type: Standard
     name: CONTLGA4
     coefficients:
       - name: N1015AC4
@@ -823,8 +808,7 @@ constraints:
         value: 1
     operator: GTE
     rhs: 0
-  CONTORD1:
-    type: Standard
+  - type: Standard
     name: CONTORD1
     coefficients:
       - name: N1003AC1
@@ -839,8 +823,7 @@ constraints:
         value: 1
     operator: GTE
     rhs: 0
-  CONTORD2:
-    type: Standard
+  - type: Standard
     name: CONTORD2
     coefficients:
       - name: N1003AC2
@@ -867,8 +850,7 @@ constraints:
         value: 1
     operator: GTE
     rhs: 0
-  CONTORD3:
-    type: Standard
+  - type: Standard
     name: CONTORD3
     coefficients:
       - name: N1003AC3
@@ -883,8 +865,7 @@ constraints:
         value: 1
     operator: GTE
     rhs: 0
-  CONTORD4:
-    type: Standard
+  - type: Standard
     name: CONTORD4
     coefficients:
       - name: N1003AC4
@@ -911,8 +892,7 @@ constraints:
         value: 1
     operator: GTE
     rhs: 0
-  DCBOSCLE:
-    type: Standard
+  - type: Standard
     name: DCBOSCLE
     coefficients:
       - name: BBOSCLE0
@@ -931,8 +911,7 @@ constraints:
         value: -1
     operator: EQ
     rhs: 16
-  DCBOSORD:
-    type: Standard
+  - type: Standard
     name: DCBOSORD
     coefficients:
       - name: BBOSORD0
@@ -953,8 +932,7 @@ constraints:
         value: -1
     operator: EQ
     rhs: 12
-  DCCLELGA:
-    type: Standard
+  - type: Standard
     name: DCCLELGA
     coefficients:
       - name: CCLELGA0
@@ -969,8 +947,7 @@ constraints:
         value: -1
     operator: EQ
     rhs: 5
-  DCLGACLE:
-    type: Standard
+  - type: Standard
     name: DCLGACLE
     coefficients:
       - name: CLGACLE0
@@ -983,8 +960,7 @@ constraints:
         value: -1
     operator: EQ
     rhs: 16
-  DCLGAORD:
-    type: Standard
+  - type: Standard
     name: DCLGAORD
     coefficients:
       - name: CLGAORD0
@@ -999,8 +975,7 @@ constraints:
         value: -1
     operator: EQ
     rhs: 45
-  DCORDBOS:
-    type: Standard
+  - type: Standard
     name: DCORDBOS
     coefficients:
       - name: BORDBOS0
@@ -1019,8 +994,7 @@ constraints:
         value: -1
     operator: EQ
     rhs: 24
-  DCORDLGA:
-    type: Standard
+  - type: Standard
     name: DCORDLGA
     coefficients:
       - name: CORDLGA0
@@ -1035,8 +1009,7 @@ constraints:
         value: -1
     operator: EQ
     rhs: 13
-  DMBOSCLE:
-    type: Standard
+  - type: Standard
     name: DMBOSCLE
     coefficients:
       - name: PBOSCLE0
@@ -1051,8 +1024,7 @@ constraints:
         value: -1
     operator: EQ
     rhs: 142
-  DMBOSLGA:
-    type: Standard
+  - type: Standard
     name: DMBOSLGA
     coefficients:
       - name: PBOSLGA0
@@ -1067,8 +1039,7 @@ constraints:
         value: -1
     operator: EQ
     rhs: 2352
-  DMBOSORD:
-    type: Standard
+  - type: Standard
     name: DMBOSORD
     coefficients:
       - name: PBOSORD0
@@ -1085,8 +1056,7 @@ constraints:
         value: -1
     operator: EQ
     rhs: 302
-  DMCLEBOS:
-    type: Standard
+  - type: Standard
     name: DMCLEBOS
     coefficients:
       - name: PCLEBOS0
@@ -1103,8 +1073,7 @@ constraints:
         value: -1
     operator: EQ
     rhs: 131
-  DMCLELGA:
-    type: Standard
+  - type: Standard
     name: DMCLELGA
     coefficients:
       - name: PCLELGA0
@@ -1119,8 +1088,7 @@ constraints:
         value: -1
     operator: EQ
     rhs: 409
-  DMCLEORD:
-    type: Standard
+  - type: Standard
     name: DMCLEORD
     coefficients:
       - name: PCLEORD0
@@ -1137,8 +1105,7 @@ constraints:
         value: -1
     operator: EQ
     rhs: 712
-  DMLGABOS:
-    type: Standard
+  - type: Standard
     name: DMLGABOS
     coefficients:
       - name: PLGABOS0
@@ -1157,8 +1124,7 @@ constraints:
         value: -1
     operator: EQ
     rhs: 2743
-  DMLGACLE:
-    type: Standard
+  - type: Standard
     name: DMLGACLE
     coefficients:
       - name: PLGACLE0
@@ -1171,8 +1137,7 @@ constraints:
         value: -1
     operator: EQ
     rhs: 517
-  DMLGAORD:
-    type: Standard
+  - type: Standard
     name: DMLGAORD
     coefficients:
       - name: PLGAORD0
@@ -1187,8 +1152,7 @@ constraints:
         value: -1
     operator: EQ
     rhs: 712
-  DMORDBOS:
-    type: Standard
+  - type: Standard
     name: DMORDBOS
     coefficients:
       - name: PORDBOS0
@@ -1205,8 +1169,7 @@ constraints:
         value: -1
     operator: EQ
     rhs: 302
-  DMORDCLE:
-    type: Standard
+  - type: Standard
     name: DMORDCLE
     coefficients:
       - name: PORDCLE0
@@ -1221,8 +1184,7 @@ constraints:
         value: -1
     operator: EQ
     rhs: 619
-  DMORDLGA:
-    type: Standard
+  - type: Standard
     name: DMORDLGA
     coefficients:
       - name: PORDLGA0
@@ -1237,8 +1199,7 @@ constraints:
         value: -1
     operator: EQ
     rhs: 515
-  FLAVa1:
-    type: Standard
+  - type: Standard
     name: FLAVa1
     coefficients:
       - name: GRDTIMO1
@@ -1259,8 +1220,7 @@ constraints:
         value: 3.12813
     operator: EQ
     rhs: 30
-  FLAVa2:
-    type: Standard
+  - type: Standard
     name: FLAVa2
     coefficients:
       - name: GRDTIMO2
@@ -1307,8 +1267,7 @@ constraints:
         value: 0.8063
     operator: EQ
     rhs: 45
-  FLAVa3:
-    type: Standard
+  - type: Standard
     name: FLAVa3
     coefficients:
       - name: GRDTIMN3
@@ -1327,8 +1286,7 @@ constraints:
         value: 2.58202
     operator: EQ
     rhs: 0
-  FLAVa4:
-    type: Standard
+  - type: Standard
     name: FLAVa4
     coefficients:
       - name: GRDTIMN4
@@ -1373,8 +1331,7 @@ constraints:
         value: 0.8063
     operator: EQ
     rhs: 0
-  FUELAVAL:
-    type: Standard
+  - type: Standard
     name: FUELAVAL
     coefficients:
       - name: N1003AC1
@@ -1479,16 +1436,14 @@ constraints:
         value: 0.70359
     operator: LTE
     rhs: 100000
-  LF1002B1:
-    type: Standard
+  - type: Standard
     name: LF1002B1
     coefficients:
       - name: N1002AC1
         value: 12
     operator: GTE
     rhs: 0
-  LF1002C1:
-    type: Standard
+  - type: Standard
     name: LF1002C1
     coefficients:
       - name: N1002AC3
@@ -1497,8 +1452,7 @@ constraints:
         value: 11.25
     operator: GTE
     rhs: 0
-  LF1002S1:
-    type: Standard
+  - type: Standard
     name: LF1002S1
     coefficients:
       - name: PORDCLE0
@@ -1509,8 +1463,7 @@ constraints:
         value: 98
     operator: GTE
     rhs: 0
-  LF1003B1:
-    type: Standard
+  - type: Standard
     name: LF1003B1
     coefficients:
       - name: BBOSORD0
@@ -1519,8 +1472,7 @@ constraints:
         value: 12
     operator: GTE
     rhs: 0
-  LF1003C1:
-    type: Standard
+  - type: Standard
     name: LF1003C1
     coefficients:
       - name: CBOSORD0
@@ -1531,8 +1483,7 @@ constraints:
         value: 11.25
     operator: GTE
     rhs: 0
-  LF1003S1:
-    type: Standard
+  - type: Standard
     name: LF1003S1
     coefficients:
       - name: PBOSORD0
@@ -1543,8 +1494,7 @@ constraints:
         value: 98
     operator: GTE
     rhs: 0
-  LF1004C1:
-    type: Standard
+  - type: Standard
     name: LF1004C1
     coefficients:
       - name: CORDLGA0
@@ -1553,8 +1503,7 @@ constraints:
         value: 11.25
     operator: GTE
     rhs: 0
-  LF1004S1:
-    type: Standard
+  - type: Standard
     name: LF1004S1
     coefficients:
       - name: PORDLGA0
@@ -1563,8 +1512,7 @@ constraints:
         value: 98
     operator: GTE
     rhs: 0
-  LF1005B1:
-    type: Standard
+  - type: Standard
     name: LF1005B1
     coefficients:
       - name: BBOSCLE0
@@ -1573,8 +1521,7 @@ constraints:
         value: 12
     operator: GTE
     rhs: 0
-  LF1005C1:
-    type: Standard
+  - type: Standard
     name: LF1005C1
     coefficients:
       - name: CBOSCLE0
@@ -1585,8 +1532,7 @@ constraints:
         value: 11.25
     operator: GTE
     rhs: 0
-  LF1005S1:
-    type: Standard
+  - type: Standard
     name: LF1005S1
     coefficients:
       - name: PBOSCLE0
@@ -1597,8 +1543,7 @@ constraints:
         value: 98
     operator: GTE
     rhs: 0
-  LF1006B1:
-    type: Standard
+  - type: Standard
     name: LF1006B1
     coefficients:
       - name: BORDBOS0
@@ -1607,8 +1552,7 @@ constraints:
         value: 12
     operator: GTE
     rhs: 0
-  LF1006B2:
-    type: Standard
+  - type: Standard
     name: LF1006B2
     coefficients:
       - name: BORDBOS0
@@ -1617,8 +1561,7 @@ constraints:
         value: 12
     operator: GTE
     rhs: 0
-  LF1006C1:
-    type: Standard
+  - type: Standard
     name: LF1006C1
     coefficients:
       - name: CORDBOS0
@@ -1629,8 +1572,7 @@ constraints:
         value: 11.25
     operator: GTE
     rhs: 0
-  LF1006C2:
-    type: Standard
+  - type: Standard
     name: LF1006C2
     coefficients:
       - name: CORDBOS0
@@ -1641,8 +1583,7 @@ constraints:
         value: 11.25
     operator: GTE
     rhs: 0
-  LF1006S1:
-    type: Standard
+  - type: Standard
     name: LF1006S1
     coefficients:
       - name: PORDBOS0
@@ -1655,8 +1596,7 @@ constraints:
         value: 98
     operator: GTE
     rhs: 0
-  LF1006S2:
-    type: Standard
+  - type: Standard
     name: LF1006S2
     coefficients:
       - name: PORDBOS0
@@ -1669,8 +1609,7 @@ constraints:
         value: 98
     operator: GTE
     rhs: 0
-  LF1008C1:
-    type: Standard
+  - type: Standard
     name: LF1008C1
     coefficients:
       - name: CORDBOS1
@@ -1681,8 +1620,7 @@ constraints:
         value: 11.25
     operator: GTE
     rhs: 0
-  LF1008C2:
-    type: Standard
+  - type: Standard
     name: LF1008C2
     coefficients:
       - name: CORDBOS1
@@ -1691,8 +1629,7 @@ constraints:
         value: 11.25
     operator: GTE
     rhs: 0
-  LF1008S1:
-    type: Standard
+  - type: Standard
     name: LF1008S1
     coefficients:
       - name: PORDBOS1
@@ -1703,8 +1640,7 @@ constraints:
         value: 98
     operator: GTE
     rhs: 0
-  LF1008S2:
-    type: Standard
+  - type: Standard
     name: LF1008S2
     coefficients:
       - name: PORDBOS1
@@ -1715,8 +1651,7 @@ constraints:
         value: 98
     operator: GTE
     rhs: 0
-  LF1010C1:
-    type: Standard
+  - type: Standard
     name: LF1010C1
     coefficients:
       - name: CORDBOS2
@@ -1727,8 +1662,7 @@ constraints:
         value: 11.25
     operator: GTE
     rhs: 0
-  LF1010C2:
-    type: Standard
+  - type: Standard
     name: LF1010C2
     coefficients:
       - name: CORDBOS2
@@ -1741,8 +1675,7 @@ constraints:
         value: 11.25
     operator: GTE
     rhs: 0
-  LF1010C3:
-    type: Standard
+  - type: Standard
     name: LF1010C3
     coefficients:
       - name: CORDBOS2
@@ -1751,8 +1684,7 @@ constraints:
         value: 11.25
     operator: GTE
     rhs: 0
-  LF1010S1:
-    type: Standard
+  - type: Standard
     name: LF1010S1
     coefficients:
       - name: PORDBOS2
@@ -1765,8 +1697,7 @@ constraints:
         value: 98
     operator: GTE
     rhs: 0
-  LF1010S2:
-    type: Standard
+  - type: Standard
     name: LF1010S2
     coefficients:
       - name: PORDBOS2
@@ -1781,8 +1712,7 @@ constraints:
         value: 98
     operator: GTE
     rhs: 0
-  LF1010S3:
-    type: Standard
+  - type: Standard
     name: LF1010S3
     coefficients:
       - name: PORDBOS2
@@ -1795,8 +1725,7 @@ constraints:
         value: 98
     operator: GTE
     rhs: 0
-  LF1011B1:
-    type: Standard
+  - type: Standard
     name: LF1011B1
     coefficients:
       - name: BBOSORD1
@@ -1807,8 +1736,7 @@ constraints:
         value: 12
     operator: GTE
     rhs: 0
-  LF1011B2:
-    type: Standard
+  - type: Standard
     name: LF1011B2
     coefficients:
       - name: BBOSORD1
@@ -1817,8 +1745,7 @@ constraints:
         value: 12
     operator: GTE
     rhs: 0
-  LF1011C1:
-    type: Standard
+  - type: Standard
     name: LF1011C1
     coefficients:
       - name: CBOSORD1
@@ -1831,8 +1758,7 @@ constraints:
         value: 11.25
     operator: GTE
     rhs: 0
-  LF1011C2:
-    type: Standard
+  - type: Standard
     name: LF1011C2
     coefficients:
       - name: CBOSORD1
@@ -1843,8 +1769,7 @@ constraints:
         value: 11.25
     operator: GTE
     rhs: 0
-  LF1011S1:
-    type: Standard
+  - type: Standard
     name: LF1011S1
     coefficients:
       - name: PBOSORD1
@@ -1857,8 +1782,7 @@ constraints:
         value: 98
     operator: GTE
     rhs: 0
-  LF1011S2:
-    type: Standard
+  - type: Standard
     name: LF1011S2
     coefficients:
       - name: PBOSORD1
@@ -1871,8 +1795,7 @@ constraints:
         value: 98
     operator: GTE
     rhs: 0
-  LF1012C1:
-    type: Standard
+  - type: Standard
     name: LF1012C1
     coefficients:
       - name: CCLELGA1
@@ -1881,8 +1804,7 @@ constraints:
         value: 11.25
     operator: GTE
     rhs: 0
-  LF1012S1:
-    type: Standard
+  - type: Standard
     name: LF1012S1
     coefficients:
       - name: PCLELGA1
@@ -1891,8 +1813,7 @@ constraints:
         value: 98
     operator: GTE
     rhs: 0
-  LF1013C1:
-    type: Standard
+  - type: Standard
     name: LF1013C1
     coefficients:
       - name: CBOSORD2
@@ -1901,8 +1822,7 @@ constraints:
         value: 11.25
     operator: GTE
     rhs: 0
-  LF1013C2:
-    type: Standard
+  - type: Standard
     name: LF1013C2
     coefficients:
       - name: CBOSORD2
@@ -1913,8 +1833,7 @@ constraints:
         value: 11.25
     operator: GTE
     rhs: 0
-  LF1013S1:
-    type: Standard
+  - type: Standard
     name: LF1013S1
     coefficients:
       - name: PBOSORD2
@@ -1925,8 +1844,7 @@ constraints:
         value: 98
     operator: GTE
     rhs: 0
-  LF1013S2:
-    type: Standard
+  - type: Standard
     name: LF1013S2
     coefficients:
       - name: PBOSORD2
@@ -1937,8 +1855,7 @@ constraints:
         value: 98
     operator: GTE
     rhs: 0
-  LF1014C1:
-    type: Standard
+  - type: Standard
     name: LF1014C1
     coefficients:
       - name: CCLELGA2
@@ -1947,16 +1864,14 @@ constraints:
         value: 11.25
     operator: GTE
     rhs: 0
-  LF1014C2:
-    type: Standard
+  - type: Standard
     name: LF1014C2
     coefficients:
       - name: N1014AC4
         value: 11.25
     operator: GTE
     rhs: 0
-  LF1014S1:
-    type: Standard
+  - type: Standard
     name: LF1014S1
     coefficients:
       - name: PCLEBOS2
@@ -1967,8 +1882,7 @@ constraints:
         value: 98
     operator: GTE
     rhs: 0
-  LF1014S2:
-    type: Standard
+  - type: Standard
     name: LF1014S2
     coefficients:
       - name: PLGABOS2
@@ -1979,8 +1893,7 @@ constraints:
         value: 98
     operator: GTE
     rhs: 0
-  LF1015C1:
-    type: Standard
+  - type: Standard
     name: LF1015C1
     coefficients:
       - name: CLGACLE0
@@ -1989,8 +1902,7 @@ constraints:
         value: 11.25
     operator: GTE
     rhs: 0
-  LF1015S1:
-    type: Standard
+  - type: Standard
     name: LF1015S1
     coefficients:
       - name: PLGACLE0
@@ -1999,8 +1911,7 @@ constraints:
         value: 98
     operator: GTE
     rhs: 0
-  LF1017C1:
-    type: Standard
+  - type: Standard
     name: LF1017C1
     coefficients:
       - name: CLGAORD1
@@ -2009,8 +1920,7 @@ constraints:
         value: 11.25
     operator: GTE
     rhs: 0
-  LF1017S1:
-    type: Standard
+  - type: Standard
     name: LF1017S1
     coefficients:
       - name: PLGAORD1
@@ -2019,8 +1929,7 @@ constraints:
         value: 98
     operator: GTE
     rhs: 0
-  LF1019C1:
-    type: Standard
+  - type: Standard
     name: LF1019C1
     coefficients:
       - name: CLGAORD2
@@ -2031,8 +1940,7 @@ constraints:
         value: 11.25
     operator: GTE
     rhs: 0
-  LF1019C2:
-    type: Standard
+  - type: Standard
     name: LF1019C2
     coefficients:
       - name: CLGAORD2
@@ -2041,8 +1949,7 @@ constraints:
         value: 11.25
     operator: GTE
     rhs: 0
-  LF1019S1:
-    type: Standard
+  - type: Standard
     name: LF1019S1
     coefficients:
       - name: PLGAORD2
@@ -2053,8 +1960,7 @@ constraints:
         value: 98
     operator: GTE
     rhs: 0
-  LF1019S2:
-    type: Standard
+  - type: Standard
     name: LF1019S2
     coefficients:
       - name: PLGAORD2
@@ -2065,16 +1971,14 @@ constraints:
         value: 98
     operator: GTE
     rhs: 0
-  LF1021B1:
-    type: Standard
+  - type: Standard
     name: LF1021B1
     coefficients:
       - name: N1021AC1
         value: 12
     operator: GTE
     rhs: 0
-  LF1021C1:
-    type: Standard
+  - type: Standard
     name: LF1021C1
     coefficients:
       - name: N1021AC3
@@ -2083,8 +1987,7 @@ constraints:
         value: 11.25
     operator: GTE
     rhs: 0
-  LF1021S1:
-    type: Standard
+  - type: Standard
     name: LF1021S1
     coefficients:
       - name: PCLEORD2
@@ -2095,8 +1998,7 @@ constraints:
         value: 98
     operator: GTE
     rhs: 0
-  LF1100C1:
-    type: Standard
+  - type: Standard
     name: LF1100C1
     coefficients:
       - name: CBOSORD3
@@ -2107,8 +2009,7 @@ constraints:
         value: 11.25
     operator: GTE
     rhs: 0
-  LF1100C2:
-    type: Standard
+  - type: Standard
     name: LF1100C2
     coefficients:
       - name: CBOSORD3
@@ -2123,8 +2024,7 @@ constraints:
         value: 11.25
     operator: GTE
     rhs: 0
-  LF1100C3:
-    type: Standard
+  - type: Standard
     name: LF1100C3
     coefficients:
       - name: CBOSORD3
@@ -2135,8 +2035,7 @@ constraints:
         value: 11.25
     operator: GTE
     rhs: 0
-  LF1100C4:
-    type: Standard
+  - type: Standard
     name: LF1100C4
     coefficients:
       - name: CORDBOS3
@@ -2145,8 +2044,7 @@ constraints:
         value: 11.25
     operator: GTE
     rhs: 0
-  LF1100C5:
-    type: Standard
+  - type: Standard
     name: LF1100C5
     coefficients:
       - name: CORDBOS3
@@ -2155,8 +2053,7 @@ constraints:
         value: 11.25
     operator: GTE
     rhs: 0
-  LF1100S1:
-    type: Standard
+  - type: Standard
     name: LF1100S1
     coefficients:
       - name: PBOSORD3
@@ -2169,8 +2066,7 @@ constraints:
         value: 98
     operator: GTE
     rhs: 0
-  LF1100S2:
-    type: Standard
+  - type: Standard
     name: LF1100S2
     coefficients:
       - name: PBOSORD3
@@ -2187,8 +2083,7 @@ constraints:
         value: 98
     operator: GTE
     rhs: 0
-  LF1100S3:
-    type: Standard
+  - type: Standard
     name: LF1100S3
     coefficients:
       - name: PBOSORD3
@@ -2203,8 +2098,7 @@ constraints:
         value: 98
     operator: GTE
     rhs: 0
-  LF1100S4:
-    type: Standard
+  - type: Standard
     name: LF1100S4
     coefficients:
       - name: PORDBOS3
@@ -2217,8 +2111,7 @@ constraints:
         value: 98
     operator: GTE
     rhs: 0
-  LF1100S5:
-    type: Standard
+  - type: Standard
     name: LF1100S5
     coefficients:
       - name: PORDBOS3
@@ -2231,8 +2124,7 @@ constraints:
         value: 98
     operator: GTE
     rhs: 0
-  LF1102C1:
-    type: Standard
+  - type: Standard
     name: LF1102C1
     coefficients:
       - name: CBOSORD4
@@ -2243,8 +2135,7 @@ constraints:
         value: 11.25
     operator: GTE
     rhs: 0
-  LF1102C2:
-    type: Standard
+  - type: Standard
     name: LF1102C2
     coefficients:
       - name: CBOSORD4
@@ -2255,8 +2146,7 @@ constraints:
         value: 11.25
     operator: GTE
     rhs: 0
-  LF1102C3:
-    type: Standard
+  - type: Standard
     name: LF1102C3
     coefficients:
       - name: CORDBOS4
@@ -2269,8 +2159,7 @@ constraints:
         value: 11.25
     operator: GTE
     rhs: 0
-  LF1102C4:
-    type: Standard
+  - type: Standard
     name: LF1102C4
     coefficients:
       - name: CORDBOS4
@@ -2279,8 +2168,7 @@ constraints:
         value: 11.25
     operator: GTE
     rhs: 0
-  LF1102S1:
-    type: Standard
+  - type: Standard
     name: LF1102S1
     coefficients:
       - name: PBOSORD4
@@ -2293,8 +2181,7 @@ constraints:
         value: 98
     operator: GTE
     rhs: 0
-  LF1102S2:
-    type: Standard
+  - type: Standard
     name: LF1102S2
     coefficients:
       - name: PBOSORD4
@@ -2311,8 +2198,7 @@ constraints:
         value: 98
     operator: GTE
     rhs: 0
-  LF1102S3:
-    type: Standard
+  - type: Standard
     name: LF1102S3
     coefficients:
       - name: PBOSLGA2
@@ -2329,8 +2215,7 @@ constraints:
         value: 98
     operator: GTE
     rhs: 0
-  LF1102S4:
-    type: Standard
+  - type: Standard
     name: LF1102S4
     coefficients:
       - name: PORDBOS4
@@ -2343,16 +2228,14 @@ constraints:
         value: 98
     operator: GTE
     rhs: 0
-  LF1200C1:
-    type: Standard
+  - type: Standard
     name: LF1200C1
     coefficients:
       - name: N1200AC4
         value: 11.25
     operator: GTE
     rhs: 0
-  LF1200S1:
-    type: Standard
+  - type: Standard
     name: LF1200S1
     coefficients:
       - name: PBOSLGA3
@@ -2361,16 +2244,14 @@ constraints:
         value: 98
     operator: GTE
     rhs: 0
-  LF1201C1:
-    type: Standard
+  - type: Standard
     name: LF1201C1
     coefficients:
       - name: N1201AC4
         value: 11.25
     operator: GTE
     rhs: 0
-  LF1201S1:
-    type: Standard
+  - type: Standard
     name: LF1201S1
     coefficients:
       - name: PLGABOS5
@@ -2379,8 +2260,7 @@ constraints:
         value: 98
     operator: GTE
     rhs: 0
-  LFRPMASM:
-    type: Standard
+  - type: Standard
     name: LFRPMASM
     coefficients:
       - name: PBOSORD0
@@ -2541,8 +2421,7 @@ constraints:
         value: 14.586042
     operator: GTE
     rhs: 0
-  LFTNMILE:
-    type: Standard
+  - type: Standard
     name: LFTNMILE
     coefficients:
       - name: BBOSORD0
@@ -2677,8 +2556,7 @@ constraints:
         value: 1.3918
     operator: GTE
     rhs: 0
-  MCLGAORD:
-    type: Standard
+  - type: Standard
     name: MCLGAORD
     coefficients:
       - name: N1013AC4
@@ -2691,8 +2569,7 @@ constraints:
         value: 1
     operator: GTE
     rhs: 2
-  MCORDBOS:
-    type: Standard
+  - type: Standard
     name: MCORDBOS
     coefficients:
       - name: N1006AC3
@@ -2709,8 +2586,7 @@ constraints:
         value: 1
     operator: GTE
     rhs: 1
-  MSBOSCLE:
-    type: Standard
+  - type: Standard
     name: MSBOSCLE
     coefficients:
       - name: N1005AC1
@@ -2727,8 +2603,7 @@ constraints:
         value: 1
     operator: GTE
     rhs: 1
-  MSBOSLGA:
-    type: Standard
+  - type: Standard
     name: MSBOSLGA
     coefficients:
       - name: N1013AC2
@@ -2741,8 +2616,7 @@ constraints:
         value: 1
     operator: GTE
     rhs: 7
-  MSBOSORD:
-    type: Standard
+  - type: Standard
     name: MSBOSORD
     coefficients:
       - name: N1003AC1
@@ -2761,8 +2635,7 @@ constraints:
         value: 1
     operator: GTE
     rhs: 3
-  MSCLEBOS:
-    type: Standard
+  - type: Standard
     name: MSCLEBOS
     coefficients:
       - name: N1006AC1
@@ -2779,8 +2652,7 @@ constraints:
         value: 1
     operator: GTE
     rhs: 1
-  MSCLELGA:
-    type: Standard
+  - type: Standard
     name: MSCLELGA
     coefficients:
       - name: N1010AC2
@@ -2793,8 +2665,7 @@ constraints:
         value: 1
     operator: GTE
     rhs: 3
-  MSCLEORD:
-    type: Standard
+  - type: Standard
     name: MSCLEORD
     coefficients:
       - name: N1011AC1
@@ -2813,8 +2684,7 @@ constraints:
         value: 1
     operator: GTE
     rhs: 6
-  MSLGABOS:
-    type: Standard
+  - type: Standard
     name: MSLGABOS
     coefficients:
       - name: N1008AC2
@@ -2831,8 +2701,7 @@ constraints:
         value: 1
     operator: GTE
     rhs: 7
-  MSLGACLE:
-    type: Standard
+  - type: Standard
     name: MSLGACLE
     coefficients:
       - name: N1015AC2
@@ -2843,8 +2712,7 @@ constraints:
         value: 1
     operator: GTE
     rhs: 4
-  MSLGAORD:
-    type: Standard
+  - type: Standard
     name: MSLGAORD
     coefficients:
       - name: N1013AC2
@@ -2857,8 +2725,7 @@ constraints:
         value: 1
     operator: GTE
     rhs: 5
-  MSORDBOS:
-    type: Standard
+  - type: Standard
     name: MSORDBOS
     coefficients:
       - name: N1006AC1
@@ -2875,8 +2742,7 @@ constraints:
         value: 1
     operator: GTE
     rhs: 3
-  MSORDCLE:
-    type: Standard
+  - type: Standard
     name: MSORDCLE
     coefficients:
       - name: N1002AC1
@@ -2893,8 +2759,7 @@ constraints:
         value: 1
     operator: GTE
     rhs: 5
-  MSORDLGA:
-    type: Standard
+  - type: Standard
     name: MSORDLGA
     coefficients:
       - name: N1004AC2
@@ -2907,8 +2772,7 @@ constraints:
         value: 1
     operator: GTE
     rhs: 4
-  NOPTCLE0:
-    type: Standard
+  - type: Standard
     name: NOPTCLE0
     coefficients:
       - name: N1005AC1
@@ -2981,8 +2845,7 @@ constraints:
         value: 2
     operator: GTE
     rhs: 24
-  PASSNGRS:
-    type: Standard
+  - type: Standard
     name: PASSNGRS
     coefficients:
       - name: PBOSORD0
@@ -3093,8 +2956,7 @@ constraints:
         value: 1
     operator: GTE
     rhs: 9431
-  REVENUES:
-    type: Standard
+  - type: Standard
     name: REVENUES
     coefficients:
       - name: PBOSORD0
@@ -3273,8 +3135,7 @@ constraints:
         value: 0.37
     operator: GTE
     rhs: 0
-  RPMILES:
-    type: Standard
+  - type: Standard
     name: RPMILES
     coefficients:
       - name: PBOSORD0
@@ -3385,8 +3246,7 @@ constraints:
         value: 1.0453
     operator: GTE
     rhs: 0
-  RTONMILE:
-    type: Standard
+  - type: Standard
     name: RTONMILE
     coefficients:
       - name: BBOSORD0
@@ -3459,8 +3319,7 @@ constraints:
         value: 1.0453
     operator: GTE
     rhs: 0
-  SYSTDEPT:
-    type: Standard
+  - type: Standard
     name: SYSTDEPT
     coefficients:
       - name: N1003AC1
@@ -3566,707 +3425,545 @@ constraints:
     operator: GTE
     rhs: 50
 variables:
-  BBOSCLE0:
-    name: BBOSCLE0
+  - name: BBOSCLE0
     var_type: Free
-  BBOSCLE1:
-    name: BBOSCLE1
+  - name: BBOSCLE1
     var_type: Free
-  BBOSORD0:
-    name: BBOSORD0
+  - name: BBOSORD0
     var_type: Free
-  BBOSORD1:
-    name: BBOSORD1
+  - name: BBOSORD1
     var_type: Free
-  BORDBOS0:
-    name: BORDBOS0
+  - name: BORDBOS0
     var_type: Free
-  CBOSCLE0:
-    name: CBOSCLE0
+  - name: CBOSCLE0
     var_type: Free
-  CBOSCLE1:
-    name: CBOSCLE1
+  - name: CBOSCLE1
     var_type: Free
-  CBOSCLE2:
-    name: CBOSCLE2
+  - name: CBOSCLE2
     var_type: Free
-  CBOSCLE3:
-    name: CBOSCLE3
+  - name: CBOSCLE3
     var_type: Free
-  CBOSORD0:
-    name: CBOSORD0
+  - name: CBOSORD0
     var_type: Free
-  CBOSORD1:
-    name: CBOSORD1
+  - name: CBOSORD1
     var_type: Free
-  CBOSORD2:
-    name: CBOSORD2
+  - name: CBOSORD2
     var_type: Free
-  CBOSORD3:
-    name: CBOSORD3
+  - name: CBOSORD3
     var_type: Free
-  CBOSORD4:
-    name: CBOSORD4
+  - name: CBOSORD4
     var_type: Free
-  CCLELGA0:
-    name: CCLELGA0
+  - name: CCLELGA0
     var_type: Free
-  CCLELGA1:
-    name: CCLELGA1
+  - name: CCLELGA1
     var_type: Free
-  CCLELGA2:
-    name: CCLELGA2
+  - name: CCLELGA2
     var_type: Free
-  CCLELGA3:
-    name: CCLELGA3
+  - name: CCLELGA3
     var_type: Free
-  CLGACLE0:
-    name: CLGACLE0
+  - name: CLGACLE0
     var_type: Free
-  CLGACLE1:
-    name: CLGACLE1
+  - name: CLGACLE1
     var_type: Free
-  CLGACLE2:
-    name: CLGACLE2
+  - name: CLGACLE2
     var_type: Free
-  CLGAORD0:
-    name: CLGAORD0
+  - name: CLGAORD0
     var_type: Free
-  CLGAORD1:
-    name: CLGAORD1
+  - name: CLGAORD1
     var_type: Free
-  CLGAORD2:
-    name: CLGAORD2
+  - name: CLGAORD2
     var_type: Free
-  CLGAORD3:
-    name: CLGAORD3
+  - name: CLGAORD3
     var_type: Free
-  CORDBOS0:
-    name: CORDBOS0
+  - name: CORDBOS0
     var_type: Free
-  CORDBOS1:
-    name: CORDBOS1
+  - name: CORDBOS1
     var_type: Free
-  CORDBOS2:
-    name: CORDBOS2
+  - name: CORDBOS2
     var_type: Free
-  CORDBOS3:
-    name: CORDBOS3
+  - name: CORDBOS3
     var_type: Free
-  CORDBOS4:
-    name: CORDBOS4
+  - name: CORDBOS4
     var_type: Free
-  CORDLGA0:
-    name: CORDLGA0
+  - name: CORDLGA0
     var_type: Free
-  CORDLGA1:
-    name: CORDLGA1
+  - name: CORDLGA1
     var_type: Free
-  CORDLGA2:
-    name: CORDLGA2
+  - name: CORDLGA2
     var_type: Free
-  CORDLGA3:
-    name: CORDLGA3
+  - name: CORDLGA3
     var_type: Free
-  GRDTIMN1:
-    name: GRDTIMN1
+  - name: GRDTIMN1
     var_type:
       DoubleBound:
         - -100
         - 0
-  GRDTIMN2:
-    name: GRDTIMN2
+  - name: GRDTIMN2
     var_type:
       DoubleBound:
         - -90
         - 0
-  GRDTIMN3:
-    name: GRDTIMN3
+  - name: GRDTIMN3
     var_type:
       DoubleBound:
         - -45
         - 0
-  GRDTIMN4:
-    name: GRDTIMN4
+  - name: GRDTIMN4
     var_type:
       DoubleBound:
         - -45
         - 0
-  GRDTIMO1:
-    name: GRDTIMO1
+  - name: GRDTIMO1
     var_type: Free
-  GRDTIMO2:
-    name: GRDTIMO2
+  - name: GRDTIMO2
     var_type: Free
-  N1002AC1:
-    name: N1002AC1
+  - name: N1002AC1
     var_type:
       DoubleBound:
         - 0
         - 7
-  N1002AC2:
-    name: N1002AC2
+  - name: N1002AC2
     var_type:
       DoubleBound:
         - 0
         - 7
-  N1002AC3:
-    name: N1002AC3
+  - name: N1002AC3
     var_type:
       DoubleBound:
         - 0
         - 2
-  N1002AC4:
-    name: N1002AC4
+  - name: N1002AC4
     var_type:
       DoubleBound:
         - 0
         - 2
-  N1003AC1:
-    name: N1003AC1
+  - name: N1003AC1
     var_type:
       DoubleBound:
         - 0
         - 7
-  N1003AC2:
-    name: N1003AC2
+  - name: N1003AC2
     var_type:
       DoubleBound:
         - 0
         - 7
-  N1003AC3:
-    name: N1003AC3
+  - name: N1003AC3
     var_type:
       DoubleBound:
         - 0
         - 2
-  N1003AC4:
-    name: N1003AC4
+  - name: N1003AC4
     var_type:
       DoubleBound:
         - 0
         - 2
-  N1004AC2:
-    name: N1004AC2
+  - name: N1004AC2
     var_type:
       DoubleBound:
         - 0
         - 7
-  N1004AC4:
-    name: N1004AC4
+  - name: N1004AC4
     var_type:
       DoubleBound:
         - 0
         - 2
-  N1005AC1:
-    name: N1005AC1
+  - name: N1005AC1
     var_type:
       DoubleBound:
         - 0
         - 7
-  N1005AC2:
-    name: N1005AC2
+  - name: N1005AC2
     var_type:
       DoubleBound:
         - 0
         - 7
-  N1005AC3:
-    name: N1005AC3
+  - name: N1005AC3
     var_type:
       DoubleBound:
         - 0
         - 2
-  N1005AC4:
-    name: N1005AC4
+  - name: N1005AC4
     var_type:
       DoubleBound:
         - 0
         - 2
-  N1006AC1:
-    name: N1006AC1
+  - name: N1006AC1
     var_type:
       DoubleBound:
         - 0
         - 7
-  N1006AC2:
-    name: N1006AC2
+  - name: N1006AC2
     var_type:
       DoubleBound:
         - 0
         - 7
-  N1006AC3:
-    name: N1006AC3
+  - name: N1006AC3
     var_type:
       DoubleBound:
         - 0
         - 2
-  N1006AC4:
-    name: N1006AC4
+  - name: N1006AC4
     var_type:
       DoubleBound:
         - 0
         - 2
-  N1008AC2:
-    name: N1008AC2
+  - name: N1008AC2
     var_type:
       DoubleBound:
         - 0
         - 14
-  N1008AC4:
-    name: N1008AC4
+  - name: N1008AC4
     var_type:
       DoubleBound:
         - 0
         - 2
-  N1010AC2:
-    name: N1010AC2
+  - name: N1010AC2
     var_type:
       DoubleBound:
         - 0
         - 14
-  N1010AC4:
-    name: N1010AC4
+  - name: N1010AC4
     var_type:
       DoubleBound:
         - 0
         - 2
-  N1011AC1:
-    name: N1011AC1
+  - name: N1011AC1
     var_type:
       DoubleBound:
         - 0
         - 7
-  N1011AC2:
-    name: N1011AC2
+  - name: N1011AC2
     var_type:
       DoubleBound:
         - 0
         - 7
-  N1011AC3:
-    name: N1011AC3
+  - name: N1011AC3
     var_type:
       DoubleBound:
         - 0
         - 2
-  N1011AC4:
-    name: N1011AC4
+  - name: N1011AC4
     var_type:
       DoubleBound:
         - 0
         - 2
-  N1012AC2:
-    name: N1012AC2
+  - name: N1012AC2
     var_type:
       DoubleBound:
         - 0
         - 7
-  N1012AC4:
-    name: N1012AC4
+  - name: N1012AC4
     var_type:
       DoubleBound:
         - 0
         - 2
-  N1013AC2:
-    name: N1013AC2
+  - name: N1013AC2
     var_type:
       DoubleBound:
         - 0
         - 14
-  N1013AC4:
-    name: N1013AC4
+  - name: N1013AC4
     var_type:
       DoubleBound:
         - 0
         - 2
-  N1014AC2:
-    name: N1014AC2
+  - name: N1014AC2
     var_type:
       DoubleBound:
         - 0
         - 14
-  N1014AC4:
-    name: N1014AC4
+  - name: N1014AC4
     var_type:
       DoubleBound:
         - 0
         - 2
-  N1015AC2:
-    name: N1015AC2
+  - name: N1015AC2
     var_type:
       DoubleBound:
         - 0
         - 7
-  N1015AC4:
-    name: N1015AC4
+  - name: N1015AC4
     var_type:
       DoubleBound:
         - 0
         - 2
-  N1017AC2:
-    name: N1017AC2
+  - name: N1017AC2
     var_type:
       DoubleBound:
         - 0
         - 7
-  N1017AC4:
-    name: N1017AC4
+  - name: N1017AC4
     var_type:
       DoubleBound:
         - 0
         - 2
-  N1019AC2:
-    name: N1019AC2
+  - name: N1019AC2
     var_type:
       DoubleBound:
         - 0
         - 7
-  N1019AC4:
-    name: N1019AC4
+  - name: N1019AC4
     var_type:
       DoubleBound:
         - 0
         - 2
-  N1021AC1:
-    name: N1021AC1
+  - name: N1021AC1
     var_type:
       DoubleBound:
         - 0
         - 7
-  N1021AC2:
-    name: N1021AC2
+  - name: N1021AC2
     var_type:
       DoubleBound:
         - 0
         - 7
-  N1021AC3:
-    name: N1021AC3
+  - name: N1021AC3
     var_type:
       DoubleBound:
         - 0
         - 2
-  N1021AC4:
-    name: N1021AC4
+  - name: N1021AC4
     var_type:
       DoubleBound:
         - 0
         - 2
-  N1100AC2:
-    name: N1100AC2
+  - name: N1100AC2
     var_type:
       DoubleBound:
         - 0
         - 7
-  N1100AC4:
-    name: N1100AC4
+  - name: N1100AC4
     var_type:
       DoubleBound:
         - 0
         - 7
-  N1102AC2:
-    name: N1102AC2
+  - name: N1102AC2
     var_type:
       DoubleBound:
         - 0
         - 7
-  N1102AC4:
-    name: N1102AC4
+  - name: N1102AC4
     var_type:
       DoubleBound:
         - 0
         - 7
-  N1200AC2:
-    name: N1200AC2
+  - name: N1200AC2
     var_type:
       DoubleBound:
         - 0
         - 14
-  N1200AC4:
-    name: N1200AC4
+  - name: N1200AC4
     var_type:
       DoubleBound:
         - 0
         - 7
-  N1201AC2:
-    name: N1201AC2
+  - name: N1201AC2
     var_type:
       DoubleBound:
         - 0
         - 14
-  N1201AC4:
-    name: N1201AC4
+  - name: N1201AC4
     var_type:
       DoubleBound:
         - 0
         - 7
-  PBOSCLE0:
-    name: PBOSCLE0
+  - name: PBOSCLE0
     var_type: Free
-  PBOSCLE1:
-    name: PBOSCLE1
+  - name: PBOSCLE1
     var_type: Free
-  PBOSCLE2:
-    name: PBOSCLE2
+  - name: PBOSCLE2
     var_type: Free
-  PBOSCLE3:
-    name: PBOSCLE3
+  - name: PBOSCLE3
     var_type: Free
-  PBOSLGA0:
-    name: PBOSLGA0
+  - name: PBOSLGA0
     var_type: Free
-  PBOSLGA1:
-    name: PBOSLGA1
+  - name: PBOSLGA1
     var_type: Free
-  PBOSLGA2:
-    name: PBOSLGA2
+  - name: PBOSLGA2
     var_type: Free
-  PBOSLGA3:
-    name: PBOSLGA3
+  - name: PBOSLGA3
     var_type: Free
-  PBOSORD0:
-    name: PBOSORD0
+  - name: PBOSORD0
     var_type: Free
-  PBOSORD1:
-    name: PBOSORD1
+  - name: PBOSORD1
     var_type: Free
-  PBOSORD2:
-    name: PBOSORD2
+  - name: PBOSORD2
     var_type: Free
-  PBOSORD3:
-    name: PBOSORD3
+  - name: PBOSORD3
     var_type: Free
-  PBOSORD4:
-    name: PBOSORD4
+  - name: PBOSORD4
     var_type: Free
-  PCLEBOS0:
-    name: PCLEBOS0
+  - name: PCLEBOS0
     var_type: Free
-  PCLEBOS1:
-    name: PCLEBOS1
+  - name: PCLEBOS1
     var_type: Free
-  PCLEBOS2:
-    name: PCLEBOS2
+  - name: PCLEBOS2
     var_type: Free
-  PCLEBOS3:
-    name: PCLEBOS3
+  - name: PCLEBOS3
     var_type: Free
-  PCLEBOS4:
-    name: PCLEBOS4
+  - name: PCLEBOS4
     var_type: Free
-  PCLELGA0:
-    name: PCLELGA0
+  - name: PCLELGA0
     var_type: Free
-  PCLELGA1:
-    name: PCLELGA1
+  - name: PCLELGA1
     var_type: Free
-  PCLELGA2:
-    name: PCLELGA2
+  - name: PCLELGA2
     var_type: Free
-  PCLELGA3:
-    name: PCLELGA3
+  - name: PCLELGA3
     var_type: Free
-  PCLEORD0:
-    name: PCLEORD0
+  - name: PCLEORD0
     var_type: Free
-  PCLEORD1:
-    name: PCLEORD1
+  - name: PCLEORD1
     var_type: Free
-  PCLEORD2:
-    name: PCLEORD2
+  - name: PCLEORD2
     var_type: Free
-  PCLEORD3:
-    name: PCLEORD3
+  - name: PCLEORD3
     var_type: Free
-  PCLEORD4:
-    name: PCLEORD4
+  - name: PCLEORD4
     var_type: Free
-  PLGABOS0:
-    name: PLGABOS0
+  - name: PLGABOS0
     var_type: Free
-  PLGABOS1:
-    name: PLGABOS1
+  - name: PLGABOS1
     var_type: Free
-  PLGABOS2:
-    name: PLGABOS2
+  - name: PLGABOS2
     var_type: Free
-  PLGABOS3:
-    name: PLGABOS3
+  - name: PLGABOS3
     var_type: Free
-  PLGABOS4:
-    name: PLGABOS4
+  - name: PLGABOS4
     var_type: Free
-  PLGABOS5:
-    name: PLGABOS5
+  - name: PLGABOS5
     var_type: Free
-  PLGACLE0:
-    name: PLGACLE0
+  - name: PLGACLE0
     var_type: Free
-  PLGACLE1:
-    name: PLGACLE1
+  - name: PLGACLE1
     var_type: Free
-  PLGACLE2:
-    name: PLGACLE2
+  - name: PLGACLE2
     var_type: Free
-  PLGAORD0:
-    name: PLGAORD0
+  - name: PLGAORD0
     var_type: Free
-  PLGAORD1:
-    name: PLGAORD1
+  - name: PLGAORD1
     var_type: Free
-  PLGAORD2:
-    name: PLGAORD2
+  - name: PLGAORD2
     var_type: Free
-  PLGAORD3:
-    name: PLGAORD3
+  - name: PLGAORD3
     var_type: Free
-  PORDBOS0:
-    name: PORDBOS0
+  - name: PORDBOS0
     var_type: Free
-  PORDBOS1:
-    name: PORDBOS1
+  - name: PORDBOS1
     var_type: Free
-  PORDBOS2:
-    name: PORDBOS2
+  - name: PORDBOS2
     var_type: Free
-  PORDBOS3:
-    name: PORDBOS3
+  - name: PORDBOS3
     var_type: Free
-  PORDBOS4:
-    name: PORDBOS4
+  - name: PORDBOS4
     var_type: Free
-  PORDCLE0:
-    name: PORDCLE0
+  - name: PORDCLE0
     var_type: Free
-  PORDCLE1:
-    name: PORDCLE1
+  - name: PORDCLE1
     var_type: Free
-  PORDCLE2:
-    name: PORDCLE2
+  - name: PORDCLE2
     var_type: Free
-  PORDCLE3:
-    name: PORDCLE3
+  - name: PORDCLE3
     var_type: Free
-  PORDLGA0:
-    name: PORDLGA0
+  - name: PORDLGA0
     var_type: Free
-  PORDLGA1:
-    name: PORDLGA1
+  - name: PORDLGA1
     var_type: Free
-  PORDLGA2:
-    name: PORDLGA2
+  - name: PORDLGA2
     var_type: Free
-  PORDLGA3:
-    name: PORDLGA3
+  - name: PORDLGA3
     var_type: Free
-  RgDCBOSCLE:
-    name: RgDCBOSCLE
+  - name: RgDCBOSCLE
     var_type:
       DoubleBound:
         - -3.2
         - 0
-  RgDCBOSORD:
-    name: RgDCBOSORD
+  - name: RgDCBOSORD
     var_type:
       DoubleBound:
         - -12
         - 0
-  RgDCCLELGA:
-    name: RgDCCLELGA
+  - name: RgDCCLELGA
     var_type:
       DoubleBound:
         - -5
         - 0
-  RgDCLGACLE:
-    name: RgDCLGACLE
+  - name: RgDCLGACLE
     var_type:
       DoubleBound:
         - -3.2
         - 0
-  RgDCLGAORD:
-    name: RgDCLGAORD
+  - name: RgDCLGAORD
     var_type:
       DoubleBound:
         - -9
         - 0
-  RgDCORDBOS:
-    name: RgDCORDBOS
+  - name: RgDCORDBOS
     var_type:
       DoubleBound:
         - -4.8
         - 0
-  RgDCORDLGA:
-    name: RgDCORDLGA
+  - name: RgDCORDLGA
     var_type:
       DoubleBound:
         - -2.6
         - 0
-  RgDMBOSCLE:
-    name: RgDMBOSCLE
+  - name: RgDMBOSCLE
     var_type:
       DoubleBound:
         - -29
         - 0
-  RgDMBOSLGA:
-    name: RgDMBOSLGA
+  - name: RgDMBOSLGA
     var_type:
       DoubleBound:
         - -471
         - 0
-  RgDMBOSORD:
-    name: RgDMBOSORD
+  - name: RgDMBOSORD
     var_type:
       DoubleBound:
         - -61
         - 0
-  RgDMCLEBOS:
-    name: RgDMCLEBOS
+  - name: RgDMCLEBOS
     var_type:
       DoubleBound:
         - -27
         - 0
-  RgDMCLELGA:
-    name: RgDMCLELGA
+  - name: RgDMCLELGA
     var_type:
       DoubleBound:
         - -82
         - 0
-  RgDMCLEORD:
-    name: RgDMCLEORD
+  - name: RgDMCLEORD
     var_type:
       DoubleBound:
         - -143
         - 0
-  RgDMLGABOS:
-    name: RgDMLGABOS
+  - name: RgDMLGABOS
     var_type:
       DoubleBound:
         - -549
         - 0
-  RgDMLGACLE:
-    name: RgDMLGACLE
+  - name: RgDMLGACLE
     var_type:
       DoubleBound:
         - -104
         - 0
-  RgDMLGAORD:
-    name: RgDMLGAORD
+  - name: RgDMLGAORD
     var_type:
       DoubleBound:
         - -143
         - 0
-  RgDMORDBOS:
-    name: RgDMORDBOS
+  - name: RgDMORDBOS
     var_type:
       DoubleBound:
         - -61
         - 0
-  RgDMORDCLE:
-    name: RgDMORDCLE
+  - name: RgDMORDCLE
     var_type:
       DoubleBound:
         - -124
         - 0
-  RgDMORDLGA:
-    name: RgDMORDLGA
+  - name: RgDMORDLGA
     var_type:
       DoubleBound:
         - -103

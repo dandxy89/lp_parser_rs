@@ -5,8 +5,7 @@ expression: parsed
 name: kb2.mps
 sense: Minimize
 objectives:
-  FAT7..J.:
-    name: FAT7..J.
+  - name: FAT7..J.
     coefficients:
       - name: D3T...BW
         value: -16.5
@@ -19,8 +18,7 @@ objectives:
       - name: QPB73RBW
         value: 0.08757
 constraints:
-  B3E...BW:
-    type: Standard
+  - type: Standard
     name: B3E...BW
     coefficients:
       - name: M3..3TBW
@@ -29,8 +27,7 @@ constraints:
         value: 1
     operator: EQ
     rhs: 0
-  B3E.VOBW:
-    type: Standard
+  - type: Standard
     name: B3E.VOBW
     coefficients:
       - name: BAL.3EBW
@@ -51,8 +48,7 @@ constraints:
         value: -1
     operator: EQ
     rhs: 0
-  B3P...BW:
-    type: Standard
+  - type: Standard
     name: B3P...BW
     coefficients:
       - name: M3..3TBW
@@ -61,8 +57,7 @@ constraints:
         value: 1
     operator: EQ
     rhs: 0
-  B3P.VOBW:
-    type: Standard
+  - type: Standard
     name: B3P.VOBW
     coefficients:
       - name: BAL.3PBW
@@ -83,8 +78,7 @@ constraints:
         value: -1
     operator: EQ
     rhs: 0
-  B3R...BW:
-    type: Standard
+  - type: Standard
     name: B3R...BW
     coefficients:
       - name: M3..3TBW
@@ -93,8 +87,7 @@ constraints:
         value: 1
     operator: EQ
     rhs: 0
-  B3R.VOBW:
-    type: Standard
+  - type: Standard
     name: B3R.VOBW
     coefficients:
       - name: BAL.3RBW
@@ -115,8 +108,7 @@ constraints:
         value: -1
     operator: EQ
     rhs: 0
-  B3T...BW:
-    type: Standard
+  - type: Standard
     name: B3T...BW
     coefficients:
       - name: D3T...BW
@@ -125,8 +117,7 @@ constraints:
         value: 1
     operator: EQ
     rhs: 0
-  BAL...BW:
-    type: Standard
+  - type: Standard
     name: BAL...BW
     coefficients:
       - name: BAL.3EBW
@@ -139,8 +130,7 @@ constraints:
         value: 1
     operator: EQ
     rhs: 0
-  BHC...BW:
-    type: Standard
+  - type: Standard
     name: BHC...BW
     coefficients:
       - name: BHC.3EBW
@@ -153,8 +143,7 @@ constraints:
         value: 1
     operator: EQ
     rhs: 0
-  BLC...BW:
-    type: Standard
+  - type: Standard
     name: BLC...BW
     coefficients:
       - name: BLC.3EBW
@@ -167,8 +156,7 @@ constraints:
         value: 1
     operator: EQ
     rhs: 0
-  BLV...BW:
-    type: Standard
+  - type: Standard
     name: BLV...BW
     coefficients:
       - name: BLV.3EBW
@@ -181,8 +169,7 @@ constraints:
         value: 1
     operator: EQ
     rhs: 0
-  BN4...BW:
-    type: Standard
+  - type: Standard
     name: BN4...BW
     coefficients:
       - name: BN4.3EBW
@@ -195,8 +182,7 @@ constraints:
         value: 1
     operator: EQ
     rhs: 0
-  BP8...BW:
-    type: Standard
+  - type: Standard
     name: BP8...BW
     coefficients:
       - name: BP8.3EBW
@@ -209,8 +195,7 @@ constraints:
         value: 1
     operator: EQ
     rhs: 0
-  BTO...BW:
-    type: Standard
+  - type: Standard
     name: BTO...BW
     coefficients:
       - name: BTO.3EBW
@@ -223,8 +208,7 @@ constraints:
         value: 1
     operator: EQ
     rhs: 0
-  HMH.3EBW:
-    type: Standard
+  - type: Standard
     name: HMH.3EBW
     coefficients:
       - name: BAL.3EBW
@@ -249,8 +233,7 @@ constraints:
         value: -1
     operator: GTE
     rhs: 0
-  HMH.3RBW:
-    type: Standard
+  - type: Standard
     name: HMH.3RBW
     coefficients:
       - name: BAL.3RBW
@@ -275,8 +258,7 @@ constraints:
         value: -1
     operator: GTE
     rhs: 0
-  HML.3EBW:
-    type: Standard
+  - type: Standard
     name: HML.3EBW
     coefficients:
       - name: BAL.3EBW
@@ -301,8 +283,7 @@ constraints:
         value: -1
     operator: GTE
     rhs: 0
-  HML.3RBW:
-    type: Standard
+  - type: Standard
     name: HML.3RBW
     coefficients:
       - name: BAL.3RBW
@@ -327,8 +308,7 @@ constraints:
         value: -1
     operator: GTE
     rhs: 0
-  HMM.3EBW:
-    type: Standard
+  - type: Standard
     name: HMM.3EBW
     coefficients:
       - name: BAL.3EBW
@@ -353,8 +333,7 @@ constraints:
         value: -1
     operator: GTE
     rhs: 0
-  HMM.3RBW:
-    type: Standard
+  - type: Standard
     name: HMM.3RBW
     coefficients:
       - name: BAL.3RBW
@@ -379,8 +358,7 @@ constraints:
         value: -1
     operator: GTE
     rhs: 0
-  HRH.3EBW:
-    type: Standard
+  - type: Standard
     name: HRH.3EBW
     coefficients:
       - name: BAL.3EBW
@@ -405,8 +383,7 @@ constraints:
         value: -1
     operator: GTE
     rhs: 0
-  HRH.3RBW:
-    type: Standard
+  - type: Standard
     name: HRH.3RBW
     coefficients:
       - name: BAL.3RBW
@@ -431,8 +408,7 @@ constraints:
         value: -1
     operator: GTE
     rhs: 0
-  HRL.3EBW:
-    type: Standard
+  - type: Standard
     name: HRL.3EBW
     coefficients:
       - name: BAL.3EBW
@@ -457,8 +433,7 @@ constraints:
         value: -1
     operator: GTE
     rhs: 0
-  HRL.3RBW:
-    type: Standard
+  - type: Standard
     name: HRL.3RBW
     coefficients:
       - name: BAL.3RBW
@@ -483,8 +458,7 @@ constraints:
         value: -1
     operator: GTE
     rhs: 0
-  HRM.3EBW:
-    type: Standard
+  - type: Standard
     name: HRM.3EBW
     coefficients:
       - name: BAL.3EBW
@@ -509,8 +483,7 @@ constraints:
         value: -1
     operator: GTE
     rhs: 0
-  HRM.3RBW:
-    type: Standard
+  - type: Standard
     name: HRM.3RBW
     coefficients:
       - name: BAL.3RBW
@@ -535,8 +508,7 @@ constraints:
         value: -1
     operator: GTE
     rhs: 0
-  NOI.3EBW:
-    type: Standard
+  - type: Standard
     name: NOI.3EBW
     coefficients:
       - name: QVO73EBW
@@ -547,8 +519,7 @@ constraints:
         value: 0.41
     operator: GTE
     rhs: 0
-  NOI.3PBW:
-    type: Standard
+  - type: Standard
     name: NOI.3PBW
     coefficients:
       - name: QVO73PBW
@@ -559,8 +530,7 @@ constraints:
         value: 0.27
     operator: GTE
     rhs: 0
-  NOI.3RBW:
-    type: Standard
+  - type: Standard
     name: NOI.3RBW
     coefficients:
       - name: QVO73RBW
@@ -571,8 +541,7 @@ constraints:
         value: 0.31
     operator: GTE
     rhs: 0
-  WMO.3PBW:
-    type: Standard
+  - type: Standard
     name: WMO.3PBW
     coefficients:
       - name: BAL.3PBW
@@ -593,8 +562,7 @@ constraints:
         value: -1
     operator: EQ
     rhs: 0
-  WRO.3PBW:
-    type: Standard
+  - type: Standard
     name: WRO.3PBW
     coefficients:
       - name: BAL.3PBW
@@ -615,8 +583,7 @@ constraints:
         value: -1
     operator: EQ
     rhs: 0
-  X12.3EBW:
-    type: Standard
+  - type: Standard
     name: X12.3EBW
     coefficients:
       - name: BAL.3EBW
@@ -637,8 +604,7 @@ constraints:
         value: -61
     operator: LTE
     rhs: 0
-  X12.3PBW:
-    type: Standard
+  - type: Standard
     name: X12.3PBW
     coefficients:
       - name: BAL.3PBW
@@ -659,8 +625,7 @@ constraints:
         value: -61
     operator: LTE
     rhs: 0
-  X12.3RBW:
-    type: Standard
+  - type: Standard
     name: X12.3RBW
     coefficients:
       - name: BAL.3RBW
@@ -681,8 +646,7 @@ constraints:
         value: -61
     operator: LTE
     rhs: 0
-  XCV.3EBW:
-    type: Standard
+  - type: Standard
     name: XCV.3EBW
     coefficients:
       - name: BAL.3EBW
@@ -703,8 +667,7 @@ constraints:
         value: -16
     operator: LTE
     rhs: 0
-  XCV.3PBW:
-    type: Standard
+  - type: Standard
     name: XCV.3PBW
     coefficients:
       - name: BAL.3PBW
@@ -725,8 +688,7 @@ constraints:
         value: -16
     operator: LTE
     rhs: 0
-  XCV.3RBW:
-    type: Standard
+  - type: Standard
     name: XCV.3RBW
     coefficients:
       - name: BAL.3RBW
@@ -747,8 +709,7 @@ constraints:
         value: -16
     operator: LTE
     rhs: 0
-  XPB.3ABW:
-    type: Standard
+  - type: Standard
     name: XPB.3ABW
     coefficients:
       - name: QPB73EBW
@@ -763,8 +724,7 @@ constraints:
         value: -1.5
     operator: LTE
     rhs: 0
-  XPB.3EBW:
-    type: Standard
+  - type: Standard
     name: XPB.3EBW
     coefficients:
       - name: QPB73EBW
@@ -773,8 +733,7 @@ constraints:
         value: -1.7
     operator: LTE
     rhs: 0
-  XPB.3RBW:
-    type: Standard
+  - type: Standard
     name: XPB.3RBW
     coefficients:
       - name: QPB73RBW
@@ -783,8 +742,7 @@ constraints:
         value: -1.7
     operator: LTE
     rhs: 0
-  XRV.3EBW:
-    type: Standard
+  - type: Standard
     name: XRV.3EBW
     coefficients:
       - name: BAL.3EBW
@@ -805,8 +763,7 @@ constraints:
         value: -12
     operator: LTE
     rhs: 0
-  XRV.3PBW:
-    type: Standard
+  - type: Standard
     name: XRV.3PBW
     coefficients:
       - name: BAL.3PBW
@@ -827,8 +784,7 @@ constraints:
         value: -12
     operator: LTE
     rhs: 0
-  XRV.3RBW:
-    type: Standard
+  - type: Standard
     name: XRV.3RBW
     coefficients:
       - name: BAL.3RBW
@@ -850,152 +806,111 @@ constraints:
     operator: LTE
     rhs: 0
 variables:
-  BAL.3EBW:
-    name: BAL.3EBW
+  - name: BAL.3EBW
     var_type: Free
-  BAL.3PBW:
-    name: BAL.3PBW
+  - name: BAL.3PBW
     var_type: Free
-  BAL.3RBW:
-    name: BAL.3RBW
+  - name: BAL.3RBW
     var_type: Free
-  BHC.3EBW:
-    name: BHC.3EBW
+  - name: BHC.3EBW
     var_type:
       DoubleBound:
         - 0
         - 10
-  BHC.3PBW:
-    name: BHC.3PBW
+  - name: BHC.3PBW
     var_type: Free
-  BHC.3RBW:
-    name: BHC.3RBW
+  - name: BHC.3RBW
     var_type: Free
-  BLC.3EBW:
-    name: BLC.3EBW
+  - name: BLC.3EBW
     var_type: Free
-  BLC.3PBW:
-    name: BLC.3PBW
+  - name: BLC.3PBW
     var_type: Free
-  BLC.3RBW:
-    name: BLC.3RBW
+  - name: BLC.3RBW
     var_type: Free
-  BLV.3EBW:
-    name: BLV.3EBW
+  - name: BLV.3EBW
     var_type: Free
-  BLV.3PBW:
-    name: BLV.3PBW
+  - name: BLV.3PBW
     var_type: Free
-  BLV.3RBW:
-    name: BLV.3RBW
+  - name: BLV.3RBW
     var_type: Free
-  BN4.3EBW:
-    name: BN4.3EBW
+  - name: BN4.3EBW
     var_type: Free
-  BN4.3PBW:
-    name: BN4.3PBW
+  - name: BN4.3PBW
     var_type: Free
-  BN4.3RBW:
-    name: BN4.3RBW
+  - name: BN4.3RBW
     var_type: Free
-  BP8.3EBW:
-    name: BP8.3EBW
+  - name: BP8.3EBW
     var_type: Free
-  BP8.3PBW:
-    name: BP8.3PBW
+  - name: BP8.3PBW
     var_type: Free
-  BP8.3RBW:
-    name: BP8.3RBW
+  - name: BP8.3RBW
     var_type: Free
-  BTO.3EBW:
-    name: BTO.3EBW
+  - name: BTO.3EBW
     var_type: Free
-  BTO.3PBW:
-    name: BTO.3PBW
+  - name: BTO.3PBW
     var_type: Free
-  BTO.3RBW:
-    name: BTO.3RBW
+  - name: BTO.3RBW
     var_type: Free
-  D3T...BW:
-    name: D3T...BW
+  - name: D3T...BW
     var_type:
       DoubleBound:
         - 0
         - 200
-  M3..3TBW:
-    name: M3..3TBW
+  - name: M3..3TBW
     var_type: Free
-  QPB73EBW:
-    name: QPB73EBW
+  - name: QPB73EBW
     var_type: Free
-  QPB73RBW:
-    name: QPB73RBW
+  - name: QPB73RBW
     var_type: Free
-  QVO73EBW:
-    name: QVO73EBW
+  - name: QVO73EBW
     var_type: Free
-  QVO73PBW:
-    name: QVO73PBW
+  - name: QVO73PBW
     var_type: Free
-  QVO73RBW:
-    name: QVO73RBW
+  - name: QVO73RBW
     var_type: Free
-  WMO73EBW:
-    name: WMO73EBW
+  - name: WMO73EBW
     var_type: Free
-  WMO73PBW:
-    name: WMO73PBW
+  - name: WMO73PBW
     var_type: Free
-  WMO73RBW:
-    name: WMO73RBW
+  - name: WMO73RBW
     var_type: Free
-  WRO73EBW:
-    name: WRO73EBW
+  - name: WRO73EBW
     var_type: Free
-  WRO73PBW:
-    name: WRO73PBW
+  - name: WRO73PBW
     var_type: Free
-  WRO73RBW:
-    name: WRO73RBW
+  - name: WRO73RBW
     var_type: Free
-  _EAL...BW:
-    name: _EAL...BW
+  - name: _EAL...BW
     var_type:
       DoubleBound:
         - 0
         - 10
-  _EHC...BW:
-    name: _EHC...BW
+  - name: _EHC...BW
     var_type:
       DoubleBound:
         - 0
         - 20
-  _ELC...BW:
-    name: _ELC...BW
+  - name: _ELC...BW
     var_type:
       DoubleBound:
         - 0
         - 25
-  _ELV...BW:
-    name: _ELV...BW
+  - name: _ELV...BW
     var_type:
       DoubleBound:
         - 0
         - 12
-  _EN4...BW:
-    name: _EN4...BW
+  - name: _EN4...BW
     var_type:
       DoubleBound:
         - 0
         - 100
-  _EP8...BW:
-    name: _EP8...BW
+  - name: _EP8...BW
     var_type:
       DoubleBound:
         - 0
         - 35
-  _ETO...BW:
-    name: _ETO...BW
+  - name: _ETO...BW
     var_type:
       DoubleBound:
         - 0

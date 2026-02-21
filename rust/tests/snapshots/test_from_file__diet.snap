@@ -5,8 +5,7 @@ expression: parsed
 name: diet
 sense: Minimize
 objectives:
-  obj:
-    name: obj
+  - name: obj
     coefficients:
       - name: Roasted_Chicken
         value: 0.84
@@ -27,8 +26,7 @@ objectives:
       - name: Hotdog
         value: 0.31
 constraints:
-  c1:
-    type: Standard
+  - type: Standard
     name: c1
     coefficients:
       - name: Roasted_Chicken
@@ -53,8 +51,7 @@ constraints:
         value: -1
     operator: EQ
     rhs: 2500
-  c2:
-    type: Standard
+  - type: Standard
     name: c2
     coefficients:
       - name: Roasted_Chicken
@@ -79,8 +76,7 @@ constraints:
         value: -1
     operator: EQ
     rhs: 1600
-  c3:
-    type: Standard
+  - type: Standard
     name: c3
     coefficients:
       - name: Roasted_Chicken
@@ -105,8 +101,7 @@ constraints:
         value: -1
     operator: EQ
     rhs: 30
-  c4:
-    type: Standard
+  - type: Standard
     name: c4
     coefficients:
       - name: Roasted_Chicken
@@ -129,8 +124,7 @@ constraints:
         value: -1
     operator: EQ
     rhs: 50000
-  c5:
-    type: Standard
+  - type: Standard
     name: c5
     coefficients:
       - name: Spaghetti_W__Sauce
@@ -147,8 +141,7 @@ constraints:
         value: -1
     operator: EQ
     rhs: 100
-  c6:
-    type: Standard
+  - type: Standard
     name: c6
     coefficients:
       - name: Spaghetti_W__Sauce
@@ -171,8 +164,7 @@ constraints:
         value: -1
     operator: EQ
     rhs: 300
-  c7:
-    type: Standard
+  - type: Standard
     name: c7
     coefficients:
       - name: Roasted_Chicken
@@ -198,81 +190,65 @@ constraints:
     operator: EQ
     rhs: 100
 variables:
-  "Apple,Raw,W_Skin":
-    name: "Apple,Raw,W_Skin"
+  - name: "Apple,Raw,W_Skin"
     var_type:
       UpperBound: 10
-  Chocolate_Chip_Cookies:
-    name: Chocolate_Chip_Cookies
+  - name: Chocolate_Chip_Cookies
     var_type:
       UpperBound: 10
-  Grapes:
-    name: Grapes
+  - name: Grapes
     var_type:
       UpperBound: 10
-  Hotdog:
-    name: Hotdog
+  - name: Hotdog
     var_type:
       UpperBound: 10
-  Lowfat_Milk:
-    name: Lowfat_Milk
+  - name: Lowfat_Milk
     var_type:
       UpperBound: 10
-  Raisin_Brn:
-    name: Raisin_Brn
+  - name: Raisin_Brn
     var_type:
       UpperBound: 10
-  Rgc1:
-    name: Rgc1
+  - name: Rgc1
     var_type:
       DoubleBound:
         - -500
         - 0
-  Rgc2:
-    name: Rgc2
+  - name: Rgc2
     var_type:
       DoubleBound:
         - -800
         - 0
-  Rgc3:
-    name: Rgc3
+  - name: Rgc3
     var_type:
       DoubleBound:
         - -20
         - 0
-  Rgc4:
-    name: Rgc4
+  - name: Rgc4
     var_type:
       DoubleBound:
         - -45000
         - 0
-  Rgc5:
-    name: Rgc5
+  - name: Rgc5
     var_type:
       DoubleBound:
         - -75
         - 0
-  Rgc6:
-    name: Rgc6
+  - name: Rgc6
     var_type:
       DoubleBound:
         - -300
         - 0
-  Rgc7:
-    name: Rgc7
+  - name: Rgc7
     var_type:
       DoubleBound:
         - -50
         - 0
-  Roasted_Chicken:
-    name: Roasted_Chicken
+  - name: Roasted_Chicken
     var_type:
       UpperBound: 10
-  Spaghetti_W__Sauce:
-    name: Spaghetti_W__Sauce
+  - name: Spaghetti_W__Sauce
     var_type:
       UpperBound: 10
-  "Tomato,Red,Ripe,Raw":
-    name: "Tomato,Red,Ripe,Raw"
+  - name: "Tomato,Red,Ripe,Raw"
     var_type:
       UpperBound: 10

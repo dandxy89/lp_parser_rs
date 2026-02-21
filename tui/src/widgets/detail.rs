@@ -11,7 +11,10 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Paragraph};
 
 use crate::detail_model::build_coeff_rows;
-use crate::diff_model::{CoefficientChange, ConstraintDiffDetail, ConstraintDiffEntry, DiffKind, ObjectiveDiffEntry, VariableDiffEntry};
+use crate::diff_model::{
+    CoefficientChange, ConstraintDiffDetail, ConstraintDiffEntry, DiffKind, ObjectiveDiffEntry, ResolvedCoefficient, ResolvedConstraint,
+    VariableDiffEntry,
+};
 use crate::theme::theme;
 use crate::widgets::{ARROW, bold_text, kind_colour, muted};
 
@@ -265,11 +268,10 @@ pub fn render_constraint_detail(
         }
 
         ConstraintDiffDetail::AddedOrRemoved(constraint) => {
-            use lp_parser_rs::model::ConstraintOwned;
             let entry_colour = kind_colour(entry.kind);
 
             match constraint {
-                ConstraintOwned::Standard { coefficients, operator, rhs, .. } => {
+                ResolvedConstraint::Standard { coefficients, operator, rhs } => {
                     lines.push(Line::from(vec![
                         Span::styled("  Operator: ", muted()),
                         Span::styled(format!("{operator}"), Style::default().fg(t.text)),
@@ -287,7 +289,7 @@ pub fn render_constraint_detail(
                         ]));
                     }
                 }
-                ConstraintOwned::SOS { sos_type, weights, .. } => {
+                ResolvedConstraint::Sos { sos_type, weights } => {
                     lines.push(Line::from(vec![
                         Span::styled("  SOS Type: ", muted()),
                         Span::styled(format!("{sos_type}"), Style::default().fg(t.text)),
@@ -349,8 +351,8 @@ fn render_constraint_side_by_side(
     area: Rect,
     header_lines: Vec<Line<'_>>,
     coeff_changes: &[CoefficientChange],
-    old_coefficients: &[lp_parser_rs::model::CoefficientOwned],
-    new_coefficients: &[lp_parser_rs::model::CoefficientOwned],
+    old_coefficients: &[ResolvedCoefficient],
+    new_coefficients: &[ResolvedCoefficient],
     border_style: Style,
     scroll: u16,
     cached_rows: Option<&[crate::detail_model::CoefficientRow]>,
@@ -421,8 +423,8 @@ fn render_constraint_side_by_side(
 fn render_coeff_changes(
     lines: &mut Vec<Line<'_>>,
     changes: &[CoefficientChange],
-    old_coefficients: &[lp_parser_rs::model::CoefficientOwned],
-    new_coefficients: &[lp_parser_rs::model::CoefficientOwned],
+    old_coefficients: &[ResolvedCoefficient],
+    new_coefficients: &[ResolvedCoefficient],
     cached_rows: Option<&[crate::detail_model::CoefficientRow]>,
 ) {
     // Column width for value formatting — wide enough for typical LP coefficients.

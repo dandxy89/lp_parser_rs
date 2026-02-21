@@ -5,8 +5,7 @@ expression: parsed
 name: ClpDefaultName
 sense: Minimize
 objectives:
-  obj:
-    name: obj
+  - name: obj
     coefficients:
       - name: x0
         value: 5
@@ -19,8 +18,7 @@ objectives:
       - name: x4
         value: 4
 constraints:
-  cons0:
-    type: Standard
+  - type: Standard
     name: cons0
     coefficients:
       - name: x0
@@ -31,8 +29,7 @@ constraints:
         value: 4
     operator: LTE
     rhs: 10
-  cons1:
-    type: Standard
+  - type: Standard
     name: cons1
     coefficients:
       - name: x3
@@ -42,32 +39,27 @@ constraints:
     operator: LTE
     rhs: 11
 variables:
-  x0:
-    name: x0
+  - name: x0
     var_type:
       DoubleBound:
         - 0
         - 1
-  x1:
-    name: x1
+  - name: x1
     var_type:
       DoubleBound:
         - 0
         - 1
-  x2:
-    name: x2
+  - name: x2
     var_type:
       DoubleBound:
         - 0
         - 1
-  x3:
-    name: x3
+  - name: x3
     var_type:
       DoubleBound:
         - 0
         - 1
-  x4:
-    name: x4
+  - name: x4
     var_type:
       DoubleBound:
         - 0

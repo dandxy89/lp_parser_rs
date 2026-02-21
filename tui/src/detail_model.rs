@@ -3,9 +3,7 @@
 
 use std::collections::BTreeMap;
 
-use lp_parser_rs::model::CoefficientOwned;
-
-use crate::diff_model::{CoefficientChange, DiffKind};
+use crate::diff_model::{CoefficientChange, DiffKind, ResolvedCoefficient};
 
 /// A single row in the unified coefficient diff table.
 #[derive(Debug)]
@@ -23,8 +21,8 @@ pub struct CoefficientRow {
 /// with no entry in `changes` are treated as unchanged.
 pub fn build_coeff_rows(
     changes: &[CoefficientChange],
-    old_coefficients: &[CoefficientOwned],
-    new_coefficients: &[CoefficientOwned],
+    old_coefficients: &[ResolvedCoefficient],
+    new_coefficients: &[ResolvedCoefficient],
 ) -> Vec<CoefficientRow> {
     debug_assert!(
         changes.iter().all(|c| matches!(c.kind, DiffKind::Added | DiffKind::Removed | DiffKind::Modified)),

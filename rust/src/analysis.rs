@@ -449,14 +449,16 @@ impl Display for ProblemAnalysis {
 
 /// Collect coefficient statistics from a slice of coefficients, classifying
 /// each as normal, large, or small based on the analysis configuration.
+#[allow(clippy::too_many_arguments)]
 fn collect_coeff_stats(
-    coefficients: &[crate::model::Coefficient<'_>],
+    coefficients: &[crate::model::Coefficient],
     location_name: &str,
     is_objective: bool,
     config: &AnalysisConfig,
     abs_values: &mut Vec<f64>,
     large: &mut Vec<CoefficientLocation>,
     small: &mut Vec<CoefficientLocation>,
+    interner: &crate::interner::NameInterner,
 ) {
     for coeff in coefficients {
         let abs_value = coeff.value.abs();
@@ -466,14 +468,14 @@ fn collect_coeff_stats(
             large.push(CoefficientLocation {
                 location: location_name.to_string(),
                 is_objective,
-                variable: coeff.name.to_string(),
+                variable: interner.resolve(coeff.name).to_string(),
                 value: coeff.value,
             });
         } else if abs_value > 0.0 && abs_value < config.small_coefficient_threshold {
             small.push(CoefficientLocation {
                 location: location_name.to_string(),
                 is_objective,
-                variable: coeff.name.to_string(),
+                variable: interner.resolve(coeff.name).to_string(),
                 value: coeff.value,
             });
         }
@@ -503,7 +505,7 @@ fn compute_coefficient_ratio(constraint_coeffs: &[f64], objective_coeffs: &[f64]
     ratio
 }
 
-impl LpProblem<'_> {
+impl LpProblem {
     /// Perform comprehensive analysis on the LP problem with default configuration.
     #[must_use]
     pub fn analyze(&self) -> ProblemAnalysis {
@@ -580,16 +582,19 @@ impl LpProblem<'_> {
 
     /// Analyze variables.
     fn analyze_variables(&self) -> VariableAnalysis {
+        use crate::interner::NameId;
+
         let mut type_distribution = VariableTypeDistribution::default();
         let mut free_variables = Vec::new();
         let mut fixed_variables = Vec::new();
         let mut invalid_bounds = Vec::new();
 
-        for (name, variable) in &self.variables {
+        for (name_id, variable) in &self.variables {
+            let name_str = self.interner.resolve(*name_id);
             match &variable.var_type {
                 VariableType::Free => {
                     type_distribution.free += 1;
-                    free_variables.push((*name).to_string());
+                    free_variables.push(name_str.to_string());
                 }
                 VariableType::General => type_distribution.general += 1,
                 VariableType::LowerBound(_) => type_distribution.lower_bounded += 1,
@@ -597,9 +602,9 @@ impl LpProblem<'_> {
                 VariableType::DoubleBound(lower, upper) => {
                     type_distribution.double_bounded += 1;
                     if (lower - upper).abs() < f64::EPSILON {
-                        fixed_variables.push(FixedVariable { name: (*name).to_string(), value: *lower });
+                        fixed_variables.push(FixedVariable { name: name_str.to_string(), value: *lower });
                     } else if lower > upper {
-                        invalid_bounds.push(InvalidBound { name: (*name).to_string(), lower: *lower, upper: *upper });
+                        invalid_bounds.push(InvalidBound { name: name_str.to_string(), lower: *lower, upper: *upper });
                     }
                 }
                 VariableType::Binary => type_distribution.binary += 1,
@@ -610,7 +615,7 @@ impl LpProblem<'_> {
         }
 
         // Find unused variables
-        let mut used_variables: HashSet<&str> = HashSet::new();
+        let mut used_variables: HashSet<NameId> = HashSet::new();
 
         for objective in self.objectives.values() {
             for coeff in &objective.coefficients {
@@ -633,8 +638,12 @@ impl LpProblem<'_> {
             }
         }
 
-        let unused_variables: Vec<String> =
-            self.variables.keys().filter(|name| !used_variables.contains(*name)).map(|s| (*s).to_string()).collect();
+        let unused_variables: Vec<String> = self
+            .variables
+            .keys()
+            .filter(|name_id| !used_variables.contains(name_id))
+            .map(|id| self.interner.resolve(*id).to_string())
+            .collect();
 
         let discrete_variable_count = type_distribution.binary + type_distribution.integer;
 
@@ -663,7 +672,8 @@ impl LpProblem<'_> {
         let mut rhs_values = Vec::new();
         let mut sos_summary = SOSSummary::default();
 
-        for (name, constraint) in &self.constraints {
+        for (name_id, constraint) in &self.constraints {
+            let name_str = self.interner.resolve(*name_id);
             match constraint {
                 Constraint::Standard { coefficients, operator, rhs, .. } => {
                     match operator {
@@ -677,12 +687,12 @@ impl LpProblem<'_> {
                     rhs_values.push(*rhs);
 
                     if coefficients.is_empty() {
-                        empty_constraints.push(name.to_string());
+                        empty_constraints.push(name_str.to_string());
                     } else if coefficients.len() == 1 {
                         let coeff = &coefficients[0];
                         singleton_constraints.push(SingletonConstraint {
-                            name: name.to_string(),
-                            variable: coeff.name.to_string(),
+                            name: name_str.to_string(),
+                            variable: self.interner.resolve(coeff.name).to_string(),
                             coefficient: coeff.value,
                             operator: operator.to_string(),
                             rhs: *rhs,
@@ -721,29 +731,33 @@ impl LpProblem<'_> {
         let mut large_coefficients = Vec::new();
         let mut small_coefficients = Vec::new();
 
-        for (name, constraint) in &self.constraints {
+        for (name_id, constraint) in &self.constraints {
             if let Constraint::Standard { coefficients, .. } = constraint {
+                let name_str = self.interner.resolve(*name_id);
                 collect_coeff_stats(
                     coefficients,
-                    name,
+                    name_str,
                     false,
                     config,
                     &mut constraint_coeffs,
                     &mut large_coefficients,
                     &mut small_coefficients,
+                    &self.interner,
                 );
             }
         }
 
-        for (name, objective) in &self.objectives {
+        for (name_id, objective) in &self.objectives {
+            let name_str = self.interner.resolve(*name_id);
             collect_coeff_stats(
                 &objective.coefficients,
-                name,
+                name_str,
                 true,
                 config,
                 &mut objective_coeffs,
                 &mut large_coefficients,
                 &mut small_coefficients,
+                &self.interner,
             );
         }
 

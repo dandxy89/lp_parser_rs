@@ -5,8 +5,7 @@ expression: parsed
 name: ClpDefaultName
 sense: Minimize
 objectives:
-  obj:
-    name: obj
+  - name: obj
     coefficients:
       - name: x0
         value: 2.1
@@ -33,8 +32,7 @@ objectives:
       - name: x14
         value: 1000
 constraints:
-  cons0:
-    type: Standard
+  - type: Standard
     name: cons0
     coefficients:
       - name: x0
@@ -43,8 +41,7 @@ constraints:
         value: 1
     operator: LTE
     rhs: 21.1
-  cons1:
-    type: Standard
+  - type: Standard
     name: cons1
     coefficients:
       - name: x2
@@ -53,8 +50,7 @@ constraints:
         value: 1
     operator: LTE
     rhs: 22.2
-  cons10:
-    type: Standard
+  - type: Standard
     name: cons10
     coefficients:
       - name: x3
@@ -63,8 +59,7 @@ constraints:
         value: 1
     operator: LTE
     rhs: 0
-  cons11:
-    type: Standard
+  - type: Standard
     name: cons11
     coefficients:
       - name: x5
@@ -73,8 +68,7 @@ constraints:
         value: 1
     operator: LTE
     rhs: 0
-  cons12:
-    type: Standard
+  - type: Standard
     name: cons12
     coefficients:
       - name: x1
@@ -83,8 +77,7 @@ constraints:
         value: 1
     operator: LTE
     rhs: 0
-  cons13:
-    type: Standard
+  - type: Standard
     name: cons13
     coefficients:
       - name: x3
@@ -93,8 +86,7 @@ constraints:
         value: 1
     operator: LTE
     rhs: 0
-  cons14:
-    type: Standard
+  - type: Standard
     name: cons14
     coefficients:
       - name: x5
@@ -103,8 +95,7 @@ constraints:
         value: 1
     operator: LTE
     rhs: 0
-  cons2:
-    type: Standard
+  - type: Standard
     name: cons2
     coefficients:
       - name: x4
@@ -113,16 +104,14 @@ constraints:
         value: 1
     operator: LTE
     rhs: 23.3
-  cons3:
-    type: Standard
+  - type: Standard
     name: cons3
     coefficients:
       - name: x6
         value: 1
     operator: LTE
     rhs: 11.1
-  cons4:
-    type: Standard
+  - type: Standard
     name: cons4
     coefficients:
       - name: x1
@@ -131,16 +120,14 @@ constraints:
         value: 1
     operator: LTE
     rhs: 0
-  cons5:
-    type: Standard
+  - type: Standard
     name: cons5
     coefficients:
       - name: x8
         value: 1
     operator: LTE
     rhs: 12.2
-  cons6:
-    type: Standard
+  - type: Standard
     name: cons6
     coefficients:
       - name: x3
@@ -149,16 +136,14 @@ constraints:
         value: 1
     operator: LTE
     rhs: 0
-  cons7:
-    type: Standard
+  - type: Standard
     name: cons7
     coefficients:
       - name: x10
         value: 1
     operator: LTE
     rhs: 13.3
-  cons8:
-    type: Standard
+  - type: Standard
     name: cons8
     coefficients:
       - name: x5
@@ -167,8 +152,7 @@ constraints:
         value: 1
     operator: LTE
     rhs: 0
-  cons9:
-    type: Standard
+  - type: Standard
     name: cons9
     coefficients:
       - name: x1
@@ -178,66 +162,51 @@ constraints:
     operator: LTE
     rhs: 0
 variables:
-  x0:
-    name: x0
+  - name: x0
     var_type:
       DoubleBound:
         - 0
         - 21.1
-  x1:
-    name: x1
+  - name: x1
     var_type: Free
-  x10:
-    name: x10
+  - name: x10
     var_type: Free
-  x11:
-    name: x11
+  - name: x11
     var_type: Free
-  x12:
-    name: x12
+  - name: x12
     var_type: Free
-  x13:
-    name: x13
+  - name: x13
     var_type: Free
-  x14:
-    name: x14
+  - name: x14
     var_type: Free
-  x2:
-    name: x2
+  - name: x2
     var_type:
       DoubleBound:
         - 0
         - 22.2
-  x3:
-    name: x3
+  - name: x3
     var_type: Free
-  x4:
-    name: x4
+  - name: x4
     var_type:
       DoubleBound:
         - 0
         - 23.3
-  x5:
-    name: x5
+  - name: x5
     var_type: Free
-  x6:
-    name: x6
+  - name: x6
     var_type:
       DoubleBound:
         - 0
         - 11.1
-  x7:
-    name: x7
+  - name: x7
     var_type:
       DoubleBound:
         - 0
         - 12.2
-  x8:
-    name: x8
+  - name: x8
     var_type:
       DoubleBound:
         - 0
         - 13.3
-  x9:
-    name: x9
+  - name: x9
     var_type: Free
