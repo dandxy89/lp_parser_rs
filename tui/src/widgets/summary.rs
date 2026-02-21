@@ -12,6 +12,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 
 use crate::diff_model::{DiffCounts, DiffSummary, LpDiffReport};
+use crate::widgets::{ARROW, MUTED};
 
 /// Draw the summary content into `area` (no border — caller provides the border).
 /// Returns the total content line count.
@@ -33,7 +34,7 @@ pub fn draw_summary(
     build_separator(&mut lines);
     build_totals_row(&mut lines, summary);
 
-    // --- Comparative Analysis ---
+    // Comparative Analysis
     lines.push(Line::from(""));
     section_heading(&mut lines, "Problem Dimensions");
     build_dimensions_table(&mut lines, analysis1, analysis2);
@@ -63,7 +64,7 @@ fn build_header(lines: &mut Vec<Line<'static>>, report: &LpDiffReport) {
     lines.push(Line::from(vec![
         Span::styled("  ", Style::default()),
         Span::styled(report.file1.clone(), Style::default()),
-        Span::styled("  \u{2192}  ", Style::default().fg(Color::DarkGray)),
+        Span::styled(ARROW, MUTED),
         Span::styled(report.file2.clone(), Style::default()),
     ]));
 
@@ -73,7 +74,7 @@ fn build_header(lines: &mut Vec<Line<'static>>, report: &LpDiffReport) {
         lines.push(Line::from(vec![
             Span::styled("  Name:   ", Style::default().fg(Color::DarkGray)),
             Span::styled(format!("\"{old_name}\""), Style::default().fg(Color::Red)),
-            Span::styled("  \u{2192}  ", Style::default().fg(Color::DarkGray)),
+            Span::styled(ARROW, MUTED),
             Span::styled(format!("\"{new_name}\""), Style::default().fg(Color::Green)),
         ]));
     }
@@ -82,7 +83,7 @@ fn build_header(lines: &mut Vec<Line<'static>>, report: &LpDiffReport) {
         lines.push(Line::from(vec![
             Span::styled("  Sense:  ", Style::default().fg(Color::DarkGray)),
             Span::styled(format!("{old_sense}"), Style::default().fg(Color::Red)),
-            Span::styled("  \u{2192}  ", Style::default().fg(Color::DarkGray)),
+            Span::styled(ARROW, MUTED),
             Span::styled(format!("{new_sense}"), Style::default().fg(Color::Green)),
         ]));
     }

@@ -22,6 +22,26 @@ lp_diff base.lp modified.lp
 
 The viewer parses both LP files, computes a rich diff report, and launches an interactive TUI.
 
+### Summary Mode
+
+For non-interactive output, use the `--summary` flag to print a structured text report to stdout and exit:
+
+```sh
+lp_diff base.lp modified.lp --summary
+```
+
+Output format:
+
+```
+LP Diff: base.lp vs modified.lp
+
+Variables:    +3   -1   ~2   (42 unchanged)
+Constraints:  +0   -5   ~12  (300 unchanged)
+Objectives:   +0   -0   ~1   (0 unchanged)
+
+Total: 24 changes
+```
+
 ## Layout
 
 The interface is a three-panel layout:
@@ -32,16 +52,22 @@ The interface is a three-panel layout:
 | Name List | Left sidebar — filterable list of changed entries for the selected section |
 | Detail | Right panel — full diff detail for the selected entry |
 
+The status bar at the bottom shows total changes, per-section diff statistics (`+N -N ~N`), the active filter, and scroll position.
+
 Press `?` at any time to open the key bindings pop up.
 
 ### Sections
 
 | # | Section | Description |
 |---|---------|-------------|
-| 1 | Summary | Overview of change counts |
+| 1 | Summary | Overview of change counts, problem dimensions, and structural analysis |
 | 2 | Variables | Variable type changes |
-| 3 | Constraints | Constraint changes with coefficient-level detail |
+| 3 | Constraints | Constraint changes with coefficient-level detail (side-by-side view for modified) |
 | 4 | Objectives | Objective function changes |
+
+### Side-by-Side Constraint View
+
+Modified standard constraints are displayed in a two-column layout showing old and new coefficients side by side. Added coefficients are highlighted in green, removed in red, and modified in yellow. Unchanged coefficients appear in grey.
 
 ### Key Bindings
 
@@ -59,6 +85,8 @@ Press `?` at any time to open the key bindings pop up.
 | `Ctrl+u` | Half page up |
 | `Ctrl+f` | Full page down |
 | `Ctrl+b` | Full page up |
+| `Ctrl+o` | Jump back (jumplist) |
+| `Ctrl+i` | Jump forward (jumplist) |
 | `Tab` | Next panel |
 | `Shift+Tab` | Previous panel |
 | `Enter` | Go to detail panel |
@@ -82,6 +110,7 @@ Press `?` at any time to open the key bindings pop up.
 | `/` | Open search pop-up (searches across all sections) |
 | `j` / `↓` | Next result (in pop-up) |
 | `k` / `↑` | Previous result (in pop-up) |
+| `Tab` | Complete query with selected result's name |
 | `Enter` | Jump to selected entry |
 | `Esc` | Cancel search |
 | `n` / `N` | Next / previous match (main view, when search was committed) |
@@ -101,6 +130,16 @@ Search mode prefixes (type in the pop-up input):
 | `y` | Yank selected entry name to clipboard |
 | `Y` | Yank full detail panel content to clipboard |
 
+**Solver**
+
+| Key | Action |
+|-----|--------|
+| `S` | Solve an LP file with HiGHS |
+| `1` / `2` | Select file 1 or file 2 (in picker) |
+| `j` / `k` | Scroll results (in results view) |
+| `y` | Yank solve results to clipboard |
+| `Esc` | Close solver overlay |
+
 **Other**
 
 | Key | Action |
@@ -108,6 +147,14 @@ Search mode prefixes (type in the pop-up input):
 | `?` | Toggle help pop-up |
 | `q` | Quit |
 | `Ctrl+C` | Force quit |
+
+## HiGHS Solver
+
+Press `S` to solve either LP file on demand using the [HiGHS](https://highs.dev) solver. Pick file 1 or 2, and the solver runs in a background thread. Results show the optimisation status, objective value, solve time, and a scrollable variable table.
+
+## Jumplist
+
+Navigation positions are recorded automatically when you change sections, apply filters, or jump to a search result. Use `Ctrl+o` to go back and `Ctrl+i` to go forward through your navigation history (up to 100 positions).
 
 ## Colour Scheme
 

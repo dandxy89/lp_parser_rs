@@ -9,11 +9,9 @@ use crossterm::event::{self, Event as CrosstermEvent, KeyEvent, MouseEvent};
 pub enum Event {
     Key(KeyEvent),
     Mouse(MouseEvent),
-    /// Terminal resize event. The dimensions are forwarded from crossterm but
-    /// ratatui re-queries the terminal size automatically, so the values are
-    /// intentionally unused here.
-    #[allow(dead_code)]
-    Resize(u16, u16),
+    /// Terminal resize event. Ratatui re-queries the terminal size automatically,
+    /// so no data is needed — this variant just triggers a redraw.
+    Resize,
     Tick,
     /// An I/O error from the event polling thread.
     Error(io::Error),
@@ -32,6 +30,8 @@ impl EventHandler {
     /// Spawn the event polling thread and return an `EventHandler` whose `next` method
     /// blocks until the next event arrives.
     pub fn new(tick_rate: Duration) -> Self {
+        debug_assert!(!tick_rate.is_zero(), "tick_rate must be non-zero");
+
         let (tx, rx) = mpsc::channel();
         let event_tx = tx.clone();
         let shutdown = Arc::new(AtomicBool::new(false));
@@ -75,8 +75,8 @@ impl EventHandler {
                                 return;
                             }
                         }
-                        CrosstermEvent::Resize(w, h) => {
-                            if event_tx.send(Event::Resize(w, h)).is_err() {
+                        CrosstermEvent::Resize(_, _) => {
+                            if event_tx.send(Event::Resize).is_err() {
                                 return;
                             }
                         }

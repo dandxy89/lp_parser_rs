@@ -1,7 +1,28 @@
 use ratatui::widgets::ListState;
 
 use crate::diff_model::{DiffEntry, DiffKind};
-use crate::search::CompiledSearch;
+use crate::solver::SolveResult;
+
+/// State machine for the LP solver overlay.
+#[derive(Debug)]
+pub enum SolveState {
+    /// No solver activity.
+    Idle,
+    /// Showing the file picker popup (choose file 1 or 2).
+    Picking,
+    /// Solver is running in a background thread.
+    Running { file: String },
+    /// Solve completed successfully.
+    Done(Box<SolveResult>),
+    /// Solve failed with an error message.
+    Failed(String),
+}
+
+/// Scroll state for the solve results panel.
+#[derive(Debug, Default)]
+pub struct SolveViewState {
+    pub scroll: u16,
+}
 
 /// A single result from the search pop-up, spanning all sections.
 #[derive(Debug, Clone)]
@@ -14,8 +35,8 @@ pub struct SearchResult {
     pub score: u16,
     /// Character positions in the name that matched (for highlighting).
     pub match_indices: Vec<usize>,
-    /// Cached entry name for display.
-    pub name: String,
+    /// Index into the pre-built `search_haystack` for name/kind resolution.
+    pub haystack_index: usize,
     /// Diff kind for badge rendering.
     pub kind: DiffKind,
 }
@@ -114,6 +135,72 @@ impl DiffFilter {
     }
 }
 
+/// Maximum number of entries in the jumplist before oldest entries are dropped.
+const JUMPLIST_CAPACITY: usize = 100;
+
+/// A recorded navigation position in the jumplist.
+#[derive(Debug, Clone)]
+pub struct JumpEntry {
+    pub section: Section,
+    pub entry_index: Option<usize>,
+    pub detail_scroll: u16,
+    pub filter: DiffFilter,
+}
+
+/// A vi-style jumplist for recording and navigating navigation positions.
+///
+/// Entries are appended when the user changes section, confirms a search selection,
+/// or changes filter. `Ctrl+o` goes back, `Ctrl+i` goes forward.
+#[derive(Debug)]
+pub struct JumpList {
+    entries: Vec<JumpEntry>,
+    /// Points to the current position in the jumplist.
+    /// When navigating back, cursor decreases; forward, it increases.
+    cursor: usize,
+}
+
+impl JumpList {
+    pub const fn new() -> Self {
+        Self { entries: Vec::new(), cursor: 0 }
+    }
+
+    /// Push a new jump entry, discarding any forward history.
+    pub fn push(&mut self, entry: JumpEntry) {
+        // Truncate forward history.
+        self.entries.truncate(self.cursor);
+        self.entries.push(entry);
+
+        // Drop oldest if over capacity.
+        if self.entries.len() > JUMPLIST_CAPACITY {
+            let excess = self.entries.len() - JUMPLIST_CAPACITY;
+            self.entries.drain(..excess);
+        }
+
+        self.cursor = self.entries.len();
+    }
+
+    /// Move cursor back and return the entry to restore, if any.
+    pub fn go_back(&mut self) -> Option<&JumpEntry> {
+        if self.cursor > 0 {
+            self.cursor -= 1;
+            self.entries.get(self.cursor)
+        } else {
+            None
+        }
+    }
+
+    /// Move cursor forward and return the entry to restore, if any.
+    pub fn go_forward(&mut self) -> Option<&JumpEntry> {
+        if self.cursor < self.entries.len() {
+            let entry = self.entries.get(self.cursor);
+            self.cursor += 1;
+            entry
+        } else {
+            None
+        }
+    }
+}
+
 /// Per-section view state: list selection and cached filtered indices.
 #[derive(Debug)]
 pub struct SectionViewState {
@@ -137,17 +224,11 @@ impl SectionViewState {
         self.dirty
     }
 
-    /// Recompute the filtered indices from the given entries/filter/search.
-    pub(crate) fn recompute<T: DiffEntry>(&mut self, entries: &[T], filter: DiffFilter, compiled: &CompiledSearch, query_empty: bool) {
+    /// Recompute the filtered indices from the given entries and filter.
+    pub(crate) fn recompute<T: DiffEntry>(&mut self, entries: &[T], filter: DiffFilter) {
         debug_assert!(self.dirty, "recompute called on non-dirty SectionViewState");
         self.filtered_indices.clear();
-        self.filtered_indices.extend(
-            entries
-                .iter()
-                .enumerate()
-                .filter(|(_, e)| filter.matches(e.kind()) && (query_empty || compiled.matches(e.searchable_text())))
-                .map(|(i, _)| i),
-        );
+        self.filtered_indices.extend(entries.iter().enumerate().filter(|(_, e)| filter.matches(e.kind())).map(|(i, _)| i));
         self.dirty = false;
     }
 

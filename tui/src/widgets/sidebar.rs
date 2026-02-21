@@ -6,15 +6,11 @@ use ratatui::widgets::{Block, Borders, List, ListItem, Paragraph, Scrollbar, Scr
 
 use crate::app::{App, Focus, Section};
 use crate::diff_model::DiffEntry;
-use crate::widgets::{kind_prefix, kind_style};
+use crate::widgets::{focus_border_style, kind_prefix, kind_style};
 
 /// Draw the section selector as a bordered list in the top-left.
 pub fn draw_section_selector(frame: &mut Frame, area: Rect, app: &mut App) {
-    let border_style = if app.focus == Focus::SectionSelector {
-        Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)
-    } else {
-        Style::default().fg(Color::Reset)
-    };
+    let border_style = focus_border_style(app.focus, Focus::SectionSelector);
 
     let items: Vec<ListItem> = Section::ALL
         .iter()
@@ -39,11 +35,7 @@ pub fn draw_section_selector(frame: &mut Frame, area: Rect, app: &mut App) {
 
 /// Draw the name list below the section selector.
 pub fn draw_name_list(frame: &mut Frame, area: Rect, app: &mut App) {
-    let border_style = if app.focus == Focus::NameList {
-        Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)
-    } else {
-        Style::default().fg(Color::Reset)
-    };
+    let border_style = focus_border_style(app.focus, Focus::NameList);
 
     match app.active_section {
         Section::Summary => {

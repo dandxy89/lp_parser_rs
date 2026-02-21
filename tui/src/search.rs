@@ -87,12 +87,14 @@ impl CompiledSearch {
                 if lower.is_empty() {
                     return true;
                 }
-                searchable_text.to_lowercase().contains(lower.as_str())
+                // Use ASCII case-insensitive comparison to avoid per-call allocation.
+                searchable_text.as_bytes().windows(lower.len()).any(|w| w.eq_ignore_ascii_case(lower.as_bytes()))
             }
         }
     }
 
     /// Whether the compiled regex is invalid (for UI highlighting).
+    #[cfg(test)]
     pub const fn has_regex_error(&self) -> bool {
         matches!(self, Self::Regex(Err(_)))
     }

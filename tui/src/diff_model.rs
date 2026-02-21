@@ -9,22 +9,6 @@ use lp_parser_rs::analysis::ProblemAnalysis;
 use lp_parser_rs::model::{CoefficientOwned, ComparisonOp, ConstraintOwned, SOSType, Sense, VariableType};
 use lp_parser_rs::problem::LpProblemOwned;
 
-/// Separator used between fields in searchable text strings.
-/// NUL cannot appear in valid LP identifiers, avoiding false substring matches.
-const SEARCH_FIELD_SEP: char = '\0';
-
-/// Build a searchable text string from an entry name and extra field names
-/// (e.g. coefficient variable names). Fields are separated by [`SEARCH_FIELD_SEP`]
-/// so they won't collide with valid LP identifiers.
-fn build_searchable_text(name: &str, extra: impl Iterator<Item = impl AsRef<str>>) -> String {
-    let mut text = String::from(name);
-    for field in extra {
-        text.push(SEARCH_FIELD_SEP);
-        text.push_str(field.as_ref());
-    }
-    text
-}
-
 // Epsilon used for floating-point coefficient value comparison.
 const COEFF_EPSILON: f64 = 1e-10;
 
@@ -136,8 +120,6 @@ pub struct VariableDiffEntry {
     pub old_type: Option<VariableType>,
     /// Type in the second file; None when the variable was removed.
     pub new_type: Option<VariableType>,
-    /// Pre-built text for search matching (name only for variables).
-    pub searchable_text: String,
 }
 
 /// Diff entry for a single constraint.
@@ -146,8 +128,6 @@ pub struct ConstraintDiffEntry {
     pub name: String,
     pub kind: DiffKind,
     pub detail: ConstraintDiffDetail,
-    /// Pre-built text for search matching (name + coefficient/weight variable names).
-    pub searchable_text: String,
     /// 1-based line number in the first file, if known.
     pub line_file1: Option<usize>,
     /// 1-based line number in the second file, if known.
@@ -186,16 +166,8 @@ pub struct CoefficientChange {
     pub variable: String,
     pub kind: DiffKind,
     /// Value in the first problem; `None` when the coefficient was added.
-    ///
-    /// Used by tests to verify diff correctness; part of the public diff API
-    /// for future consumers (e.g. non-TUI formatters).
-    #[allow(dead_code)]
     pub old_value: Option<f64>,
     /// Value in the second problem; `None` when the coefficient was removed.
-    ///
-    /// Used by tests to verify diff correctness; part of the public diff API
-    /// for future consumers (e.g. non-TUI formatters).
-    #[allow(dead_code)]
     pub new_value: Option<f64>,
 }
 
@@ -207,22 +179,12 @@ pub struct ObjectiveDiffEntry {
     pub old_coefficients: Vec<CoefficientOwned>,
     pub new_coefficients: Vec<CoefficientOwned>,
     pub coeff_changes: Vec<CoefficientChange>,
-    /// Pre-built text for search matching (name + coefficient variable names).
-    pub searchable_text: String,
 }
 
 /// Trait implemented by all diff entry types so the TUI can render them uniformly.
 pub trait DiffEntry {
     fn name(&self) -> &str;
     fn kind(&self) -> DiffKind;
-    /// Pre-built text for search matching (name + variable names from coefficients/weights).
-    fn searchable_text(&self) -> &str;
-    /// A single-line human-readable summary of what changed.
-    ///
-    /// Used by tests to verify diff correctness; part of the public diff API
-    /// for future consumers (e.g. non-TUI formatters).
-    #[allow(dead_code)]
-    fn summary_line(&self) -> String;
 }
 
 impl DiffEntry for VariableDiffEntry {
@@ -232,28 +194,6 @@ impl DiffEntry for VariableDiffEntry {
 
     fn kind(&self) -> DiffKind {
         self.kind
-    }
-
-    fn searchable_text(&self) -> &str {
-        &self.searchable_text
-    }
-
-    fn summary_line(&self) -> String {
-        match self.kind {
-            DiffKind::Added => {
-                let var_type = self.new_type.as_ref().expect("invariant: Added entry must have new_type");
-                format!("{var_type}")
-            }
-            DiffKind::Removed => {
-                let var_type = self.old_type.as_ref().expect("invariant: Removed entry must have old_type");
-                format!("{var_type}")
-            }
-            DiffKind::Modified => {
-                let old = self.old_type.as_ref().expect("invariant: Modified entry must have old_type");
-                let new = self.new_type.as_ref().expect("invariant: Modified entry must have new_type");
-                format!("{old} \u{2192} {new}")
-            }
-        }
     }
 }
 
@@ -265,43 +205,6 @@ impl DiffEntry for ConstraintDiffEntry {
     fn kind(&self) -> DiffKind {
         self.kind
     }
-
-    fn searchable_text(&self) -> &str {
-        &self.searchable_text
-    }
-
-    fn summary_line(&self) -> String {
-        match &self.detail {
-            ConstraintDiffDetail::AddedOrRemoved(constraint) => match constraint {
-                ConstraintOwned::Standard { coefficients, .. } => {
-                    format!("Standard, {} coefficient(s)", coefficients.len())
-                }
-                ConstraintOwned::SOS { sos_type, weights, .. } => {
-                    format!("{sos_type}, {} weight(s)", weights.len())
-                }
-            },
-            ConstraintDiffDetail::Standard { coeff_changes, operator_change, rhs_change, .. } => {
-                let mut parts = vec![format!("{} coeff change(s)", coeff_changes.len())];
-                if let Some((old_op, new_op)) = operator_change {
-                    parts.push(format!("op {old_op}\u{2192}{new_op}"));
-                }
-                if let Some((old_rhs, new_rhs)) = rhs_change {
-                    parts.push(format!("rhs {old_rhs}\u{2192}{new_rhs}"));
-                }
-                parts.join(", ")
-            }
-            ConstraintDiffDetail::Sos { weight_changes, type_change, .. } => {
-                let mut parts = vec![format!("{} weight change(s)", weight_changes.len())];
-                if let Some((old_type, new_type)) = type_change {
-                    parts.push(format!("type {old_type}\u{2192}{new_type}"));
-                }
-                parts.join(", ")
-            }
-            ConstraintDiffDetail::TypeChanged { old_summary, new_summary } => {
-                format!("{old_summary} \u{2192} {new_summary}")
-            }
-        }
-    }
 }
 
 impl DiffEntry for ObjectiveDiffEntry {
@@ -311,45 +214,6 @@ impl DiffEntry for ObjectiveDiffEntry {
 
     fn kind(&self) -> DiffKind {
         self.kind
-    }
-
-    fn searchable_text(&self) -> &str {
-        &self.searchable_text
-    }
-
-    fn summary_line(&self) -> String {
-        match self.kind {
-            DiffKind::Added => format!("{} coefficient(s)", self.new_coefficients.len()),
-            DiffKind::Removed => format!("{} coefficient(s)", self.old_coefficients.len()),
-            DiffKind::Modified => format!("{} coeff change(s)", self.coeff_changes.len()),
-        }
-    }
-}
-
-/// Collect deduplicated variable names from a constraint (union of old + new coefficients/weights).
-fn constraint_variable_names(c: &ConstraintOwned) -> Vec<&str> {
-    match c {
-        ConstraintOwned::Standard { coefficients, .. } => coefficients.iter().map(|c| c.name.as_str()).collect(),
-        ConstraintOwned::SOS { weights, .. } => weights.iter().map(|w| w.name.as_str()).collect(),
-    }
-}
-
-/// Build searchable text for a constraint entry from its detail.
-fn constraint_searchable_text(name: &str, detail: &ConstraintDiffDetail) -> String {
-    match detail {
-        ConstraintDiffDetail::Standard { old_coefficients, new_coefficients, .. } => {
-            let vars = sorted_key_union(old_coefficients.iter().map(|c| c.name.as_str()), new_coefficients.iter().map(|c| c.name.as_str()));
-            build_searchable_text(name, vars.into_iter())
-        }
-        ConstraintDiffDetail::Sos { old_weights, new_weights, .. } => {
-            let vars = sorted_key_union(old_weights.iter().map(|w| w.name.as_str()), new_weights.iter().map(|w| w.name.as_str()));
-            build_searchable_text(name, vars.into_iter())
-        }
-        ConstraintDiffDetail::TypeChanged { .. } => build_searchable_text(name, std::iter::empty::<&str>()),
-        ConstraintDiffDetail::AddedOrRemoved(c) => {
-            let vars = constraint_variable_names(c);
-            build_searchable_text(name, vars.into_iter())
-        }
     }
 }
 
@@ -436,13 +300,11 @@ fn diff_variables(p1: &LpProblemOwned, p2: &LpProblemOwned) -> SectionDiff<Varia
         match (in_p1, in_p2) {
             (Some(v1), None) => {
                 counts.removed += 1;
-                let searchable_text = build_searchable_text(name, std::iter::empty::<&str>());
                 let entry = VariableDiffEntry {
                     name: name.to_string(),
                     kind: DiffKind::Removed,
                     old_type: Some(v1.var_type.clone()),
                     new_type: None,
-                    searchable_text,
                 };
                 debug_assert!(entry.old_type.is_some(), "Removed variable must have old_type");
                 debug_assert!(entry.new_type.is_none(), "Removed variable must not have new_type");
@@ -450,13 +312,11 @@ fn diff_variables(p1: &LpProblemOwned, p2: &LpProblemOwned) -> SectionDiff<Varia
             }
             (None, Some(v2)) => {
                 counts.added += 1;
-                let searchable_text = build_searchable_text(name, std::iter::empty::<&str>());
                 let entry = VariableDiffEntry {
                     name: name.to_string(),
                     kind: DiffKind::Added,
                     old_type: None,
                     new_type: Some(v2.var_type.clone()),
-                    searchable_text,
                 };
                 debug_assert!(entry.new_type.is_some(), "Added variable must have new_type");
                 debug_assert!(entry.old_type.is_none(), "Added variable must not have old_type");
@@ -467,13 +327,11 @@ fn diff_variables(p1: &LpProblemOwned, p2: &LpProblemOwned) -> SectionDiff<Varia
                     counts.unchanged += 1;
                 } else {
                     counts.modified += 1;
-                    let searchable_text = build_searchable_text(name, std::iter::empty::<&str>());
                     let entry = VariableDiffEntry {
                         name: name.to_string(),
                         kind: DiffKind::Modified,
                         old_type: Some(v1.var_type.clone()),
                         new_type: Some(v2.var_type.clone()),
-                        searchable_text,
                     };
                     debug_assert!(entry.old_type.is_some(), "Modified variable must have old_type");
                     debug_assert!(entry.new_type.is_some(), "Modified variable must have new_type");
@@ -512,26 +370,20 @@ fn diff_constraints(
         match (c1, c2) {
             (Some(c), None) => {
                 counts.removed += 1;
-                let detail = ConstraintDiffDetail::AddedOrRemoved(c.clone());
-                let searchable_text = constraint_searchable_text(name, &detail);
                 entries.push(ConstraintDiffEntry {
                     name: name.to_string(),
                     kind: DiffKind::Removed,
-                    detail,
-                    searchable_text,
+                    detail: ConstraintDiffDetail::AddedOrRemoved(c.clone()),
                     line_file1: l1,
                     line_file2: l2,
                 });
             }
             (None, Some(c)) => {
                 counts.added += 1;
-                let detail = ConstraintDiffDetail::AddedOrRemoved(c.clone());
-                let searchable_text = constraint_searchable_text(name, &detail);
                 entries.push(ConstraintDiffEntry {
                     name: name.to_string(),
                     kind: DiffKind::Added,
-                    detail,
-                    searchable_text,
+                    detail: ConstraintDiffDetail::AddedOrRemoved(c.clone()),
                     line_file1: l1,
                     line_file2: l2,
                 });
@@ -592,12 +444,10 @@ fn diff_constraints(
 
                 if let Some(d) = detail {
                     counts.modified += 1;
-                    let searchable_text = constraint_searchable_text(name, &d);
                     entries.push(ConstraintDiffEntry {
                         name: name.to_string(),
                         kind: DiffKind::Modified,
                         detail: d,
-                        searchable_text,
                         line_file1: l1,
                         line_file2: l2,
                     });
@@ -628,26 +478,22 @@ fn diff_objectives(p1: &LpProblemOwned, p2: &LpProblemOwned) -> SectionDiff<Obje
         match (o1, o2) {
             (Some(o), None) => {
                 counts.removed += 1;
-                let searchable_text = build_searchable_text(name, o.coefficients.iter().map(|c| &c.name));
                 entries.push(ObjectiveDiffEntry {
                     name: name.to_string(),
                     kind: DiffKind::Removed,
                     old_coefficients: o.coefficients.clone(),
                     new_coefficients: Vec::new(),
                     coeff_changes: Vec::new(),
-                    searchable_text,
                 });
             }
             (None, Some(o)) => {
                 counts.added += 1;
-                let searchable_text = build_searchable_text(name, o.coefficients.iter().map(|c| &c.name));
                 entries.push(ObjectiveDiffEntry {
                     name: name.to_string(),
                     kind: DiffKind::Added,
                     old_coefficients: Vec::new(),
                     new_coefficients: o.coefficients.clone(),
                     coeff_changes: Vec::new(),
-                    searchable_text,
                 });
             }
             (Some(o1), Some(o2)) => {
@@ -656,16 +502,12 @@ fn diff_objectives(p1: &LpProblemOwned, p2: &LpProblemOwned) -> SectionDiff<Obje
                     counts.unchanged += 1;
                 } else {
                     counts.modified += 1;
-                    let vars =
-                        sorted_key_union(o1.coefficients.iter().map(|c| c.name.as_str()), o2.coefficients.iter().map(|c| c.name.as_str()));
-                    let searchable_text = build_searchable_text(name, vars.into_iter());
                     entries.push(ObjectiveDiffEntry {
                         name: name.to_string(),
                         kind: DiffKind::Modified,
                         old_coefficients: o1.coefficients.clone(),
                         new_coefficients: o2.coefficients.clone(),
                         coeff_changes,
-                        searchable_text,
                     });
                 }
             }
@@ -968,37 +810,17 @@ mod tests {
 
     #[test]
     fn test_diff_entry_trait() {
-        // VariableDiffEntry — Added
-        let added_var = VariableDiffEntry {
-            name: "x".to_string(),
-            kind: DiffKind::Added,
-            old_type: None,
-            new_type: Some(VariableType::Binary),
-            searchable_text: "x".to_string(),
-        };
-        assert_eq!(added_var.summary_line(), "Binary");
+        // Verify DiffEntry trait basics (name + kind).
+        let added_var =
+            VariableDiffEntry { name: "x".to_string(), kind: DiffKind::Added, old_type: None, new_type: Some(VariableType::Binary) };
+        assert_eq!(added_var.name(), "x");
+        assert_eq!(added_var.kind(), DiffKind::Added);
 
-        // VariableDiffEntry — Removed
-        let removed_var = VariableDiffEntry {
-            name: "y".to_string(),
-            kind: DiffKind::Removed,
-            old_type: Some(VariableType::Integer),
-            new_type: None,
-            searchable_text: "y".to_string(),
-        };
-        assert_eq!(removed_var.summary_line(), "Integer");
+        let removed_var =
+            VariableDiffEntry { name: "y".to_string(), kind: DiffKind::Removed, old_type: Some(VariableType::Integer), new_type: None };
+        assert_eq!(removed_var.name(), "y");
+        assert_eq!(removed_var.kind(), DiffKind::Removed);
 
-        // VariableDiffEntry — Modified
-        let modified_var = VariableDiffEntry {
-            name: "z".to_string(),
-            kind: DiffKind::Modified,
-            old_type: Some(VariableType::Free),
-            new_type: Some(VariableType::General),
-            searchable_text: "z".to_string(),
-        };
-        assert!(modified_var.summary_line().contains('\u{2192}'));
-
-        // ConstraintDiffEntry — AddedOrRemoved (Standard)
         let added_constraint = ConstraintDiffEntry {
             name: "c1".to_string(),
             kind: DiffKind::Added,
@@ -1012,40 +834,12 @@ mod tests {
                 rhs: 5.0,
                 byte_offset: None,
             }),
-            searchable_text: "c1\0x\0y".to_string(),
             line_file1: None,
             line_file2: None,
         };
-        assert_eq!(added_constraint.summary_line(), "Standard, 2 coefficient(s)");
+        assert_eq!(added_constraint.name(), "c1");
+        assert_eq!(added_constraint.kind(), DiffKind::Added);
 
-        // ConstraintDiffEntry — Standard Modified
-        let modified_constraint = ConstraintDiffEntry {
-            name: "c2".to_string(),
-            kind: DiffKind::Modified,
-            detail: ConstraintDiffDetail::Standard {
-                old_coefficients: vec![],
-                new_coefficients: vec![],
-                coeff_changes: vec![CoefficientChange {
-                    variable: "a".to_string(),
-                    kind: DiffKind::Modified,
-                    old_value: Some(1.0),
-                    new_value: Some(2.0),
-                }],
-                operator_change: Some((ComparisonOp::LTE, ComparisonOp::GTE)),
-                rhs_change: Some((10.0, 20.0)),
-                old_rhs: 10.0,
-                new_rhs: 20.0,
-            },
-            searchable_text: "c2".to_string(),
-            line_file1: None,
-            line_file2: None,
-        };
-        let summary = modified_constraint.summary_line();
-        assert!(summary.contains("1 coeff change(s)"), "summary was: {summary}");
-        assert!(summary.contains("op"), "summary was: {summary}");
-        assert!(summary.contains("rhs"), "summary was: {summary}");
-
-        // ObjectiveDiffEntry — Added
         let added_obj = ObjectiveDiffEntry {
             name: "obj".to_string(),
             kind: DiffKind::Added,
@@ -1055,76 +849,9 @@ mod tests {
                 CoefficientOwned { name: "b".to_string(), value: 2.0 },
             ],
             coeff_changes: vec![],
-            searchable_text: "obj\0a\0b".to_string(),
         };
-        assert_eq!(added_obj.summary_line(), "2 coefficient(s)");
-
-        // ObjectiveDiffEntry — Modified
-        let modified_obj = ObjectiveDiffEntry {
-            name: "obj2".to_string(),
-            kind: DiffKind::Modified,
-            old_coefficients: vec![],
-            new_coefficients: vec![],
-            coeff_changes: vec![
-                CoefficientChange { variable: "a".to_string(), kind: DiffKind::Added, old_value: None, new_value: Some(3.0) },
-                CoefficientChange { variable: "b".to_string(), kind: DiffKind::Removed, old_value: Some(1.0), new_value: None },
-            ],
-            searchable_text: "obj2\0a\0b".to_string(),
-        };
-        assert_eq!(modified_obj.summary_line(), "2 coeff change(s)");
-    }
-
-    #[test]
-    fn test_searchable_text_variable() {
-        let p1 = empty_problem();
-        let p2 = problem_with_variable("flow_x", VariableType::Binary);
-        let report = test_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new(), dummy_analysis(), dummy_analysis());
-
-        let entry = &report.variables.entries[0];
-        // Variables have no extra fields, so searchable_text is just the name.
-        assert_eq!(entry.searchable_text, "flow_x");
-    }
-
-    #[test]
-    fn test_searchable_text_constraint_with_coefficients() {
-        let p1 = empty_problem();
-        let p2 = problem_with_standard_constraint("c1", vec![("alpha", 1.0), ("beta", 2.0)], ComparisonOp::LTE, 10.0);
-        let report = test_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new(), dummy_analysis(), dummy_analysis());
-
-        let entry = &report.constraints.entries[0];
-        // Should contain name + variable names separated by \0.
-        assert!(entry.searchable_text.contains("c1"), "searchable_text: {}", entry.searchable_text);
-        assert!(entry.searchable_text.contains("alpha"), "searchable_text: {}", entry.searchable_text);
-        assert!(entry.searchable_text.contains("beta"), "searchable_text: {}", entry.searchable_text);
-        assert!(entry.searchable_text.contains('\0'), "searchable_text should use \\0 separator");
-    }
-
-    #[test]
-    fn test_searchable_text_objective_with_coefficients() {
-        let mut p1 = LpProblemOwned::new();
-        p1.add_objective(make_objective("obj1", vec![("x", 1.0), ("y", 2.0)]));
-        let p2 = empty_problem();
-        let report = test_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new(), dummy_analysis(), dummy_analysis());
-
-        let entry = &report.objectives.entries[0];
-        assert!(entry.searchable_text.contains("obj1"), "searchable_text: {}", entry.searchable_text);
-        assert!(entry.searchable_text.contains('x'), "searchable_text: {}", entry.searchable_text);
-        assert!(entry.searchable_text.contains('y'), "searchable_text: {}", entry.searchable_text);
-    }
-
-    #[test]
-    fn test_searchable_text_modified_constraint_union_of_variables() {
-        // p1: c1: 2x + 3y <= 10
-        // p2: c1: 2x + 5z <= 10   (y removed, z added)
-        let p1 = problem_with_standard_constraint("c1", vec![("x", 2.0), ("y", 3.0)], ComparisonOp::LTE, 10.0);
-        let p2 = problem_with_standard_constraint("c1", vec![("x", 2.0), ("z", 5.0)], ComparisonOp::LTE, 10.0);
-        let report = test_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new(), dummy_analysis(), dummy_analysis());
-
-        let entry = &report.constraints.entries[0];
-        // Should contain all variables from both versions (union).
-        assert!(entry.searchable_text.contains('x'), "searchable_text: {}", entry.searchable_text);
-        assert!(entry.searchable_text.contains('y'), "searchable_text: {}", entry.searchable_text);
-        assert!(entry.searchable_text.contains('z'), "searchable_text: {}", entry.searchable_text);
+        assert_eq!(added_obj.name(), "obj");
+        assert_eq!(added_obj.kind(), DiffKind::Added);
     }
 
     #[test]

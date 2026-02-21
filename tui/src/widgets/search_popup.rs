@@ -7,12 +7,12 @@
 //! - Bottom bar: hint line showing mode prefixes and Esc to cancel
 
 use ratatui::Frame;
-use ratatui::layout::{Constraint, Flex, Layout, Rect};
+use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState};
 
-use crate::app::App;
+use crate::app::{App, HaystackEntry};
 use crate::search;
 use crate::state::{SearchResult, Section};
 use crate::widgets::{detail, kind_prefix, kind_style, sidebar, summary};
@@ -34,9 +34,9 @@ pub fn draw_search_popup(frame: &mut Frame, area: Rect, app: &App) {
     // Clear the background behind the pop-up.
     frame.render_widget(Clear, popup);
 
-    let (mode, _) = search::parse_query(&app.search_popup_query);
+    let (mode, _) = search::parse_query(&app.search_popup.query);
     let mode_label = mode.label();
-    let match_count = app.search_popup_results.len();
+    let match_count = app.search_popup.results.len();
 
     // Vertical layout: top input (3 rows with border), main content, bottom hints (3 rows with border).
     let v_chunks = Layout::vertical([
@@ -47,7 +47,7 @@ pub fn draw_search_popup(frame: &mut Frame, area: Rect, app: &App) {
     .split(popup);
 
     // Top bar: search input
-    draw_search_input(frame, v_chunks[0], &app.search_popup_query, mode_label, match_count);
+    draw_search_input(frame, v_chunks[0], &app.search_popup.query, mode_label, match_count);
 
     // Main area: horizontal split into results list + detail preview
     let h_chunks = Layout::horizontal([
@@ -56,7 +56,7 @@ pub fn draw_search_popup(frame: &mut Frame, area: Rect, app: &App) {
     ])
     .split(v_chunks[1]);
 
-    draw_results_list(frame, h_chunks[0], &app.search_popup_results, app.search_popup_selected);
+    draw_results_list(frame, h_chunks[0], &app.search_popup.results, &app.search_haystack, app.search_popup.selected);
     draw_detail_preview(frame, h_chunks[1], app);
 
     // Bottom bar: hints
@@ -92,7 +92,7 @@ fn draw_search_input(frame: &mut Frame, area: Rect, query: &str, mode_label: &st
 }
 
 /// Draw the ranked results list on the left side.
-fn draw_results_list(frame: &mut Frame, area: Rect, results: &[SearchResult], selected: usize) {
+fn draw_results_list(frame: &mut Frame, area: Rect, results: &[SearchResult], haystack: &[HaystackEntry], selected: usize) {
     let items: Vec<ListItem> = results
         .iter()
         .map(|r| {
@@ -100,8 +100,12 @@ fn draw_results_list(frame: &mut Frame, area: Rect, results: &[SearchResult], se
             let prefix = kind_prefix(r.kind);
             let style = kind_style(r.kind);
 
+            // Resolve name from haystack.
+            debug_assert!(r.haystack_index < haystack.len(), "haystack_index {} out of bounds (len {})", r.haystack_index, haystack.len());
+            let name = &haystack[r.haystack_index].name;
+
             // Build name with match highlighting.
-            let name_spans = build_highlighted_name(&r.name, &r.match_indices, style);
+            let name_spans = build_highlighted_name(name, &r.match_indices, style);
 
             let mut spans =
                 vec![Span::styled(format!("{tag} "), Style::default().fg(Color::DarkGray)), Span::styled(format!("{prefix} "), style)];
@@ -143,6 +147,7 @@ fn draw_results_list(frame: &mut Frame, area: Rect, results: &[SearchResult], se
 
 /// Build spans for a name with fuzzy match positions highlighted.
 fn build_highlighted_name<'a>(name: &str, match_indices: &[usize], base_style: Style) -> Vec<Span<'a>> {
+    debug_assert!(name.is_ascii(), "fuzzy match highlighting assumes ASCII names");
     if match_indices.is_empty() {
         return vec![Span::styled(name.to_owned(), base_style)];
     }
@@ -177,14 +182,14 @@ fn build_highlighted_name<'a>(name: &str, match_indices: &[usize], base_style: S
 fn draw_detail_preview(frame: &mut Frame, area: Rect, app: &App) {
     let border_style = Style::default().fg(Color::DarkGray);
 
-    if app.search_popup_results.is_empty() {
+    if app.search_popup.results.is_empty() {
         sidebar::draw_empty_detail(frame, area, "No results", border_style);
         return;
     }
 
-    let selected = app.search_popup_selected.min(app.search_popup_results.len().saturating_sub(1));
-    let result = &app.search_popup_results[selected];
-    let scroll = app.search_popup_scroll;
+    let selected = app.search_popup.selected.min(app.search_popup.results.len().saturating_sub(1));
+    let result = &app.search_popup.results[selected];
+    let scroll = app.search_popup.scroll;
 
     match result.section {
         Section::Variables => {
@@ -246,8 +251,5 @@ fn centred_rect(area: Rect) -> Rect {
     let width = ((area.width * 4) / 5).max(40).min(area.width);
     let height = ((area.height * 4) / 5).max(15).min(area.height);
 
-    let vertical = Layout::vertical([Constraint::Length(height)]).flex(Flex::Center).split(area);
-    let horizontal = Layout::horizontal([Constraint::Length(width)]).flex(Flex::Center).split(vertical[0]);
-
-    horizontal[0]
+    super::centred_rect(area, width, height)
 }

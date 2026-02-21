@@ -1,4 +1,6 @@
 mod app;
+mod cli_output;
+mod detail_model;
 mod detail_text;
 mod diff_model;
 mod event;
@@ -6,6 +8,7 @@ mod input;
 mod line_index;
 mod parse;
 mod search;
+mod solver;
 mod state;
 mod ui;
 mod widgets;
@@ -34,6 +37,9 @@ struct Cli {
     file1: PathBuf,
     /// Second LP file (compare against)
     file2: PathBuf,
+    /// Print a structured summary to stdout and exit without launching the TUI
+    #[arg(long)]
+    summary: bool,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -87,9 +93,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
     eprintln!("done ({:.1}s, {} changes found)", diff_start.elapsed().as_secs_f64(), report.summary().total_changes(),);
 
-    // Free parsed problems — only the (small) diff report is needed for the TUI
-    drop(owned1);
-    drop(owned2);
+    // Non-interactive summary mode: print and exit.
+    if args.summary {
+        cli_output::print_summary(&report);
+        return Ok(());
+    }
 
     eprintln!("Launching viewer...");
 
@@ -115,7 +123,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }));
 
     // Create app and event handler
-    let mut app = App::new(report);
+    let mut app = App::new(report, args.file1, args.file2);
     let events = EventHandler::new(Duration::from_millis(50));
 
     // Main loop — draw then process the next event
@@ -123,17 +131,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         terminal.draw(|frame| ui::draw(frame, &mut app))?;
 
         // Clear yank flash after 1.5 seconds.
-        if let Some(flash_time) = app.yank_flash
+        if let Some(flash_time) = app.yank.flash
             && flash_time.elapsed() >= Duration::from_millis(1500)
         {
-            app.yank_flash = None;
-            app.yank_message.clear();
+            app.yank.flash = None;
+            app.yank.message.clear();
         }
 
         match events.next()? {
             Event::Key(key) => app.handle_key(key),
             Event::Mouse(mouse) => app.handle_mouse(mouse),
-            Event::Resize(_, _) | Event::Tick => {} // ratatui handles resize automatically
+            Event::Resize => {} // ratatui handles resize automatically
+            Event::Tick => {
+                app.poll_solve();
+            }
             Event::Error(e) => return Err(e.into()),
         }
     }

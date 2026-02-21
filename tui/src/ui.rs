@@ -16,13 +16,10 @@
 
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout};
-use ratatui::style::{Color, Modifier, Style};
 use ratatui::widgets::{Block, Borders};
 
 use crate::app::{App, Focus, Section};
-use crate::search;
-use crate::widgets::status_bar::SearchState;
-use crate::widgets::{detail, help, search as search_widget, search_popup, sidebar, status_bar, summary};
+use crate::widgets::{detail, focus_border_style, help, search_popup, sidebar, solve, status_bar, summary};
 
 /// Minimum width for the sidebar panel in columns.
 const SIDEBAR_MIN_WIDTH: u16 = 20;
@@ -38,13 +35,9 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     // Ensure the active section's filter cache is fresh before reading it.
     app.ensure_active_section_cache();
 
-    let filter_count = app.current_filter_count();
-    let has_regex_error = app.has_search_regex_error();
+    let filter_count = app.name_list_len();
     let report_summary = app.report.summary();
     let total_changes = report_summary.total_changes();
-
-    let (search_mode, _) = search::parse_query(&app.search_query);
-    let search_mode_label = search_mode.label();
 
     let outer = Layout::vertical([
         Constraint::Min(0),    // main area
@@ -65,11 +58,11 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     let sidebar_chunks = Layout::vertical([Constraint::Length(SECTION_SELECTOR_HEIGHT), Constraint::Min(0)]).split(sidebar_area);
 
     // Store layout rects and heights on app for mouse hit-testing and page scrolling.
-    app.section_selector_rect = sidebar_chunks[0];
-    app.name_list_rect = sidebar_chunks[1];
-    app.detail_rect = detail_area;
-    app.name_list_height = sidebar_chunks[1].height;
-    app.detail_height = detail_area.height;
+    app.layout.section_selector = sidebar_chunks[0];
+    app.layout.name_list = sidebar_chunks[1];
+    app.layout.detail = detail_area;
+    app.layout.name_list_height = sidebar_chunks[1].height;
+    app.layout.detail_height = detail_area.height;
 
     // Section Selector
     sidebar::draw_section_selector(frame, sidebar_chunks[0], app);
@@ -81,27 +74,47 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     draw_detail_panel(frame, detail_area, app, &report_summary);
 
     // Status bar (drawn after detail so detail_content_lines is populated).
-    let search_state = SearchState { active: app.search_active, query: &app.search_query, mode_label: search_mode_label, has_regex_error };
-    let detail_pos = if app.focus == Focus::Detail && app.detail_content_lines > 0 {
-        Some(status_bar::DetailPosition { scroll: app.detail_scroll, content_lines: app.detail_content_lines })
+    let detail_pos = if app.focus == Focus::Detail && app.layout.detail_content_lines > 0 {
+        Some(status_bar::DetailPosition { scroll: app.detail_scroll, content_lines: app.layout.detail_content_lines })
     } else {
         None
     };
-    let yank_flash = if app.yank_flash.is_some() { Some(status_bar::YankFlash { message: &app.yank_message }) } else { None };
+    let yank_flash = if app.yank.flash.is_some() { Some(status_bar::YankFlash { message: &app.yank.message }) } else { None };
+    // Compute section-specific diff counts for the status bar.
+    let section_counts = match app.active_section {
+        Section::Summary => {
+            // Aggregate across all sections.
+            let s = &report_summary;
+            crate::diff_model::DiffCounts {
+                added: s.variables.added + s.constraints.added + s.objectives.added,
+                removed: s.variables.removed + s.constraints.removed + s.objectives.removed,
+                modified: s.variables.modified + s.constraints.modified + s.objectives.modified,
+                unchanged: s.variables.unchanged + s.constraints.unchanged + s.objectives.unchanged,
+            }
+        }
+        Section::Variables => app.report.variables.counts,
+        Section::Constraints => app.report.constraints.counts,
+        Section::Objectives => app.report.objectives.counts,
+    };
     status_bar::draw_status_bar(
         frame,
         outer[1],
         total_changes,
+        &section_counts,
         app.filter.label(),
         filter_count,
-        &search_state,
         detail_pos.as_ref(),
         yank_flash.as_ref(),
     );
 
     // Search pop-up overlay — rendered on top of main content.
-    if app.show_search_popup {
+    if app.search_popup.visible {
         search_popup::draw_search_popup(frame, frame.area(), app);
+    }
+
+    // Solve overlay — rendered on top of main content.
+    if !matches!(app.solve_state, crate::state::SolveState::Idle) {
+        solve::draw_solve_overlay(frame, frame.area(), app);
     }
 
     // Help overlay — rendered last so it draws on top of everything.
@@ -112,29 +125,13 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
 
 /// Draw the detail panel on the right side.
 fn draw_detail_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App, report_summary: &crate::diff_model::DiffSummary) {
-    let border_style = if app.focus == Focus::Detail {
-        Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)
-    } else {
-        Style::default().fg(Color::Reset)
-    };
-
-    // If there's a committed search query, show an indicator at the top.
-    let content_area = if !app.search_query.is_empty() && !app.search_active {
-        let chunks = Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).split(area);
-        let filter_count = app.current_filter_count();
-        let selected_index = app.selected_name_index();
-        let (mode, _) = search::parse_query(&app.search_query);
-        search_widget::draw_search_indicator(frame, chunks[0], &app.search_query, filter_count, mode.label(), selected_index);
-        chunks[1]
-    } else {
-        area
-    };
+    let border_style = focus_border_style(app.focus, Focus::Detail);
 
     let content_lines = match app.active_section {
         Section::Summary => {
             let block = Block::default().borders(Borders::ALL).border_style(border_style).title(" Summary ");
-            let inner = block.inner(content_area);
-            frame.render_widget(block, content_area);
+            let inner = block.inner(area);
+            frame.render_widget(block, area);
             summary::draw_summary(
                 frame,
                 inner,
@@ -151,9 +148,9 @@ fn draw_detail_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut A
 
             if let Some(idx) = selected_entry_idx {
                 debug_assert!(idx < app.report.variables.entries.len(), "variable entry_idx {idx} out of bounds");
-                detail::render_variable_detail(frame, content_area, &app.report.variables.entries[idx], border_style, app.detail_scroll)
+                detail::render_variable_detail(frame, area, &app.report.variables.entries[idx], border_style, app.detail_scroll)
             } else {
-                sidebar::draw_empty_detail(frame, content_area, "Select a variable from the list", border_style);
+                sidebar::draw_empty_detail(frame, area, "Select a variable from the list", border_style);
                 0
             }
         }
@@ -163,9 +160,9 @@ fn draw_detail_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut A
 
             if let Some(idx) = selected_entry_idx {
                 debug_assert!(idx < app.report.constraints.entries.len(), "constraint entry_idx {idx} out of bounds");
-                detail::render_constraint_detail(frame, content_area, &app.report.constraints.entries[idx], border_style, app.detail_scroll)
+                detail::render_constraint_detail(frame, area, &app.report.constraints.entries[idx], border_style, app.detail_scroll)
             } else {
-                sidebar::draw_empty_detail(frame, content_area, "Select a constraint from the list", border_style);
+                sidebar::draw_empty_detail(frame, area, "Select a constraint from the list", border_style);
                 0
             }
         }
@@ -175,13 +172,13 @@ fn draw_detail_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut A
 
             if let Some(idx) = selected_entry_idx {
                 debug_assert!(idx < app.report.objectives.entries.len(), "objective entry_idx {idx} out of bounds");
-                detail::render_objective_detail(frame, content_area, &app.report.objectives.entries[idx], border_style, app.detail_scroll)
+                detail::render_objective_detail(frame, area, &app.report.objectives.entries[idx], border_style, app.detail_scroll)
             } else {
-                sidebar::draw_empty_detail(frame, content_area, "Select an objective from the list", border_style);
+                sidebar::draw_empty_detail(frame, area, "Select an objective from the list", border_style);
                 0
             }
         }
     };
 
-    app.detail_content_lines = content_lines;
+    app.layout.detail_content_lines = content_lines;
 }

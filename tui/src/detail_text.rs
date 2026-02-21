@@ -1,12 +1,23 @@
 //! Plain-text rendering of detail panel content for clipboard yanking.
 
-use std::collections::BTreeMap;
 use std::fmt::Write;
 
 use crate::app::App;
+use crate::detail_model::build_coeff_rows;
 use crate::diff_model::{CoefficientChange, ConstraintDiffDetail, ConstraintDiffEntry, DiffKind, ObjectiveDiffEntry, VariableDiffEntry};
 use crate::state::Section;
-use crate::widgets::detail::variable_bounds;
+use crate::widgets::detail::{fmt_bound, variable_bounds};
+
+/// Writing to a `String` via `fmt::Write` is infallible. This macro replaces
+/// `let _ = writeln!(...)` with an asserting version that satisfies Tiger Style.
+macro_rules! w {
+    ($dst:expr, $($arg:tt)*) => {
+        writeln!($dst, $($arg)*).expect("writing to String is infallible")
+    };
+    ($dst:expr) => {
+        writeln!($dst).expect("writing to String is infallible")
+    };
+}
 
 /// Render the currently selected detail panel as plain text.
 /// Returns `None` if no entry is selected or the section is Summary.
@@ -32,45 +43,35 @@ pub fn render_detail_plain(app: &App) -> Option<String> {
     }
 }
 
-fn fmt_bound(val: Option<f64>) -> String {
-    val.map_or_else(|| "\u{2014}".to_owned(), |v| format!("{v}"))
+/// Write type/bounds lines for a single-side variable (added or removed).
+fn write_variable_type_info(out: &mut String, vt: &lp_parser_rs::model::VariableType) {
+    let label = std::str::from_utf8(vt.as_ref()).unwrap_or("?");
+    w!(out, "  Type:   {label}");
+    let (lb, ub) = variable_bounds(vt);
+    if let Some(l) = lb {
+        w!(out, "  Lower:  {l}");
+    }
+    if let Some(u) = ub {
+        w!(out, "  Upper:  {u}");
+    }
+    if let (Some(l), Some(u)) = (lb, ub) {
+        w!(out, "  Range:  {}", u - l);
+    }
 }
 
 fn render_variable_plain(entry: &VariableDiffEntry) -> String {
     let mut out = String::new();
-    let _ = writeln!(out, "Variable: {} [{}]", entry.name, entry.kind);
-    let _ = writeln!(out, "{}", "\u{2500}".repeat(38));
+    w!(out, "Variable: {} [{}]", entry.name, entry.kind);
+    w!(out, "{}", "\u{2500}".repeat(38));
 
     match entry.kind {
         DiffKind::Added => {
             let vt = entry.new_type.as_ref().expect("invariant: Added entry must have new_type");
-            let label = std::str::from_utf8(vt.as_ref()).unwrap_or("?");
-            let _ = writeln!(out, "  Type:   {label}");
-            let (lb, ub) = variable_bounds(vt);
-            if let Some(l) = lb {
-                let _ = writeln!(out, "  Lower:  {l}");
-            }
-            if let Some(u) = ub {
-                let _ = writeln!(out, "  Upper:  {u}");
-            }
-            if let (Some(l), Some(u)) = (lb, ub) {
-                let _ = writeln!(out, "  Range:  {}", u - l);
-            }
+            write_variable_type_info(&mut out, vt);
         }
         DiffKind::Removed => {
             let vt = entry.old_type.as_ref().expect("invariant: Removed entry must have old_type");
-            let label = std::str::from_utf8(vt.as_ref()).unwrap_or("?");
-            let _ = writeln!(out, "  Type:   {label}");
-            let (lb, ub) = variable_bounds(vt);
-            if let Some(l) = lb {
-                let _ = writeln!(out, "  Lower:  {l}");
-            }
-            if let Some(u) = ub {
-                let _ = writeln!(out, "  Upper:  {u}");
-            }
-            if let (Some(l), Some(u)) = (lb, ub) {
-                let _ = writeln!(out, "  Range:  {}", u - l);
-            }
+            write_variable_type_info(&mut out, vt);
         }
         DiffKind::Modified => {
             let old = entry.old_type.as_ref().expect("invariant: Modified entry must have old_type");
@@ -79,9 +80,9 @@ fn render_variable_plain(entry: &VariableDiffEntry) -> String {
             let new_label = std::str::from_utf8(new.as_ref()).unwrap_or("?");
 
             if old_label == new_label {
-                let _ = writeln!(out, "  Type:   {old_label} (unchanged)");
+                w!(out, "  Type:   {old_label} (unchanged)");
             } else {
-                let _ = writeln!(out, "  Type:   {old_label}  \u{2192}  {new_label}");
+                w!(out, "  Type:   {old_label}  \u{2192}  {new_label}");
             }
 
             #[allow(clippy::similar_names)]
@@ -90,15 +91,15 @@ fn render_variable_plain(entry: &VariableDiffEntry) -> String {
             let (new_lb, new_ub) = variable_bounds(new);
 
             if old_lb.is_some() || new_lb.is_some() {
-                let _ = writeln!(out, "  Lower:  {}  \u{2192}  {}", fmt_bound(old_lb), fmt_bound(new_lb));
+                w!(out, "  Lower:  {}  \u{2192}  {}", fmt_bound(old_lb), fmt_bound(new_lb));
             }
             if old_ub.is_some() || new_ub.is_some() {
-                let _ = writeln!(out, "  Upper:  {}  \u{2192}  {}", fmt_bound(old_ub), fmt_bound(new_ub));
+                w!(out, "  Upper:  {}  \u{2192}  {}", fmt_bound(old_ub), fmt_bound(new_ub));
             }
             let old_range = old_lb.zip(old_ub).map(|(l, u)| u - l);
             let new_range = new_lb.zip(new_ub).map(|(l, u)| u - l);
             if old_range.is_some() || new_range.is_some() {
-                let _ = writeln!(out, "  Range:  {}  \u{2192}  {}", fmt_bound(old_range), fmt_bound(new_range));
+                w!(out, "  Range:  {}  \u{2192}  {}", fmt_bound(old_range), fmt_bound(new_range));
             }
         }
     }
@@ -107,19 +108,19 @@ fn render_variable_plain(entry: &VariableDiffEntry) -> String {
 
 fn render_constraint_plain(entry: &ConstraintDiffEntry) -> String {
     let mut out = String::new();
-    let _ = writeln!(out, "Constraint: {} [{}]", entry.name, entry.kind);
-    let _ = writeln!(out, "{}", "\u{2500}".repeat(38));
+    w!(out, "Constraint: {} [{}]", entry.name, entry.kind);
+    w!(out, "{}", "\u{2500}".repeat(38));
 
     if entry.line_file1.is_some() || entry.line_file2.is_some() {
         match (entry.line_file1, entry.line_file2) {
             (Some(l1), Some(l2)) => {
-                let _ = writeln!(out, "  Location: L{l1} / L{l2}");
+                w!(out, "  Location: L{l1} / L{l2}");
             }
             (Some(l1), None) => {
-                let _ = writeln!(out, "  Location: L{l1} (removed)");
+                w!(out, "  Location: L{l1} (removed)");
             }
             (None, Some(l2)) => {
-                let _ = writeln!(out, "  Location: L{l2} (added)");
+                w!(out, "  Location: L{l2} (added)");
             }
             (None, None) => unreachable!("guarded by outer if"),
         }
@@ -136,47 +137,47 @@ fn render_constraint_plain(entry: &ConstraintDiffEntry) -> String {
             new_rhs,
         } => {
             if let Some((old_op, new_op)) = operator_change {
-                let _ = writeln!(out, "  Operator: {old_op}  \u{2192}  {new_op}");
+                w!(out, "  Operator: {old_op}  \u{2192}  {new_op}");
             }
             if rhs_change.is_some() {
-                let _ = writeln!(out, "  RHS:      {old_rhs}  \u{2192}  {new_rhs}");
+                w!(out, "  RHS:      {old_rhs}  \u{2192}  {new_rhs}");
             } else {
-                let _ = writeln!(out, "  RHS:      {old_rhs} (unchanged)");
+                w!(out, "  RHS:      {old_rhs} (unchanged)");
             }
-            let _ = writeln!(out);
-            let _ = writeln!(out, "  Coefficients:");
+            w!(out);
+            w!(out, "  Coefficients:");
             write_coeff_changes(&mut out, coeff_changes, old_coefficients, new_coefficients);
         }
         ConstraintDiffDetail::Sos { old_weights, new_weights, weight_changes, type_change } => {
             if let Some((old_type, new_type)) = type_change {
-                let _ = writeln!(out, "  SOS Type: {old_type}  \u{2192}  {new_type}");
+                w!(out, "  SOS Type: {old_type}  \u{2192}  {new_type}");
             }
-            let _ = writeln!(out);
-            let _ = writeln!(out, "  Weights:");
+            w!(out);
+            w!(out, "  Weights:");
             write_coeff_changes(&mut out, weight_changes, old_weights, new_weights);
         }
         ConstraintDiffDetail::TypeChanged { old_summary, new_summary } => {
-            let _ = writeln!(out, "  Was:  {old_summary}");
-            let _ = writeln!(out, "  Now:  {new_summary}");
+            w!(out, "  Was:  {old_summary}");
+            w!(out, "  Now:  {new_summary}");
         }
         ConstraintDiffDetail::AddedOrRemoved(constraint) => {
             use lp_parser_rs::model::ConstraintOwned;
             match constraint {
                 ConstraintOwned::Standard { coefficients, operator, rhs, .. } => {
-                    let _ = writeln!(out, "  Operator: {operator}");
-                    let _ = writeln!(out, "  RHS:      {rhs}");
-                    let _ = writeln!(out);
-                    let _ = writeln!(out, "  Coefficients:");
+                    w!(out, "  Operator: {operator}");
+                    w!(out, "  RHS:      {rhs}");
+                    w!(out);
+                    w!(out, "  Coefficients:");
                     for c in coefficients {
-                        let _ = writeln!(out, "    {:<20}{}", c.name, c.value);
+                        w!(out, "    {:<20}{}", c.name, c.value);
                     }
                 }
                 ConstraintOwned::SOS { sos_type, weights, .. } => {
-                    let _ = writeln!(out, "  SOS Type: {sos_type}");
-                    let _ = writeln!(out);
-                    let _ = writeln!(out, "  Weights:");
-                    for w in weights {
-                        let _ = writeln!(out, "    {:<20}{}", w.name, w.value);
+                    w!(out, "  SOS Type: {sos_type}");
+                    w!(out);
+                    w!(out, "  Weights:");
+                    for w_entry in weights {
+                        w!(out, "    {:<20}{}", w_entry.name, w_entry.value);
                     }
                 }
             }
@@ -187,16 +188,16 @@ fn render_constraint_plain(entry: &ConstraintDiffEntry) -> String {
 
 fn render_objective_plain(entry: &ObjectiveDiffEntry) -> String {
     let mut out = String::new();
-    let _ = writeln!(out, "Objective: {} [{}]", entry.name, entry.kind);
-    let _ = writeln!(out, "{}", "\u{2500}".repeat(38));
-    let _ = writeln!(out, "  Coefficients:");
+    w!(out, "Objective: {} [{}]", entry.name, entry.kind);
+    w!(out, "{}", "\u{2500}".repeat(38));
+    w!(out, "  Coefficients:");
 
     if entry.kind == DiffKind::Modified {
         write_coeff_changes(&mut out, &entry.coeff_changes, &entry.old_coefficients, &entry.new_coefficients);
     } else {
         let coeffs = if entry.kind == DiffKind::Added { &entry.new_coefficients } else { &entry.old_coefficients };
         for c in coeffs {
-            let _ = writeln!(out, "    {:<20}{}", c.name, c.value);
+            w!(out, "    {:<20}{}", c.name, c.value);
         }
     }
     out
@@ -211,37 +212,24 @@ fn write_coeff_changes(
     old_coefficients: &[lp_parser_rs::model::CoefficientOwned],
     new_coefficients: &[lp_parser_rs::model::CoefficientOwned],
 ) {
-    type CoeffEntry = (Option<f64>, Option<f64>, Option<DiffKind>);
+    let rows = build_coeff_rows(changes, old_coefficients, new_coefficients);
 
-    let mut all_vars: BTreeMap<String, CoeffEntry> = BTreeMap::new();
-    for c in old_coefficients {
-        all_vars.entry(c.name.clone()).or_default().0 = Some(c.value);
-    }
-    for c in new_coefficients {
-        all_vars.entry(c.name.clone()).or_default().1 = Some(c.value);
-    }
-    for change in changes {
-        if let Some(entry) = all_vars.get_mut(&change.variable) {
-            entry.2 = Some(change.kind);
-        }
-    }
+    for row in &rows {
+        let old_str = row.old_value.map_or_else(String::new, |v| format!("{v}"));
+        let new_str = row.new_value.map_or_else(String::new, |v| format!("{v}"));
 
-    for (var_name, (old_val, new_val, change_kind)) in &all_vars {
-        let old_str = old_val.map_or_else(String::new, |v| format!("{v}"));
-        let new_str = new_val.map_or_else(String::new, |v| format!("{v}"));
-
-        match change_kind {
+        match row.change_kind {
             Some(DiffKind::Added) => {
-                let _ = writeln!(out, "    {var_name:<20}{:>VAL_WIDTH$}  \u{2192}  {new_str:<VAL_WIDTH$} [added]", "");
+                w!(out, "    {:<20}{:>VAL_WIDTH$}  \u{2192}  {new_str:<VAL_WIDTH$} [added]", row.variable, "");
             }
             Some(DiffKind::Removed) => {
-                let _ = writeln!(out, "    {var_name:<20}{old_str:>VAL_WIDTH$}  \u{2192}  {:VAL_WIDTH$} [removed]", "");
+                w!(out, "    {:<20}{old_str:>VAL_WIDTH$}  \u{2192}  {:VAL_WIDTH$} [removed]", row.variable, "");
             }
             Some(DiffKind::Modified) => {
-                let _ = writeln!(out, "    {var_name:<20}{old_str:>VAL_WIDTH$}  \u{2192}  {new_str:<VAL_WIDTH$} [modified]");
+                w!(out, "    {:<20}{old_str:>VAL_WIDTH$}  \u{2192}  {new_str:<VAL_WIDTH$} [modified]", row.variable);
             }
             None => {
-                let _ = writeln!(out, "    {var_name:<20}{old_str:>VAL_WIDTH$} (unchanged)");
+                w!(out, "    {:<20}{old_str:>VAL_WIDTH$} (unchanged)", row.variable);
             }
         }
     }
