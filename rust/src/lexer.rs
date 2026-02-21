@@ -190,7 +190,7 @@ pub enum Token<'input> {
     // === Identifiers ===
     /// Variable/constraint name identifier
     /// Allowed characters: alphanumeric and !#$%&()_,.;?@\{}~'
-    #[regex(r"[a-zA-Z_!#$%&(),.;?@\\{}~'][a-zA-Z0-9_!#$%&(),.;?@\\{}~']*", |lex| lex.slice(), priority = 5)]
+    #[regex(r"[a-zA-Z_!#$%&(),.;?@\\{}~']([a-zA-Z0-9_!#$%&(),.;?@\\{}~'|>]|-[a-zA-Z0-9_!#$%&(),.;?@\\{}~'|>])*", |lex| lex.slice(), priority = 5)]
     Identifier(&'input str),
 }
 
