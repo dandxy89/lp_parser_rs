@@ -44,7 +44,7 @@ pub struct YankState {
 }
 
 /// A single entry in the pre-built flat search haystack.
-pub(crate) struct HaystackEntry {
+pub struct HaystackEntry {
     pub section: Section,
     pub index: usize,
     pub name: String,
@@ -82,7 +82,7 @@ pub struct App {
     /// Navigation jumplist for Ctrl+o / Ctrl+i.
     pub jumplist: JumpList,
 
-    /// HiGHS solver state.
+    /// `HiGHS` solver state.
     pub solve_state: SolveState,
 
     /// Scroll state for the solve results panel.
@@ -100,8 +100,8 @@ pub struct App {
     /// Pre-built flat haystack for the search pop-up (built once in `App::new`).
     pub(crate) search_haystack: Vec<HaystackEntry>,
 
-    /// Re-usable buffer for fuzzy search name references, avoiding per-keystroke allocation.
-    /// Rebuilt once when the search pop-up opens (indices correspond 1:1 with `search_haystack`).
+    /// Re-usable buffer for fuzzy search name references, avoiding per-keystroke `Vec` allocation.
+    /// Rebuilt when the haystack changes (indices correspond 1:1 with `search_haystack`).
     pub(crate) search_name_buf: Vec<String>,
 }
 
@@ -229,44 +229,42 @@ impl App {
                 self.detail_scroll = 0;
             }
             Focus::Detail => {
-                debug_assert!(n <= u16::MAX as usize, "page scroll step {n} exceeds u16::MAX");
-                self.detail_scroll = self.detail_scroll.saturating_add(n as u16);
+                debug_assert!(u16::try_from(n).is_ok(), "page scroll step {n} exceeds u16::MAX");
+                #[allow(clippy::cast_possible_truncation)]
+                let step = n as u16;
+                self.detail_scroll = self.detail_scroll.saturating_add(step);
+            }
+        }
+    }
+
+    /// Copy `text` to the system clipboard and show a flash message in the status bar.
+    ///
+    /// `label` is a short description shown on success (e.g. "Yanked: x1").
+    pub(crate) fn set_yank_flash(&mut self, label: &str, text: &str) {
+        match arboard::Clipboard::new().and_then(|mut cb| cb.set_text(text)) {
+            Ok(()) => {
+                label.clone_into(&mut self.yank.message);
+                self.yank.flash = Some(Instant::now());
+            }
+            Err(e) => {
+                self.yank.message = format!("Yank failed: {e}");
+                self.yank.flash = Some(Instant::now());
             }
         }
     }
 
     /// Yank the selected entry's name to the system clipboard.
     pub fn yank_name(&mut self) {
-        let name = self.selected_entry_name();
-        let Some(name) = name else { return };
+        let Some(name) = self.selected_entry_name() else { return };
         let name = name.to_owned();
-        match arboard::Clipboard::new().and_then(|mut cb| cb.set_text(&name)) {
-            Ok(()) => {
-                self.yank.message = format!("Yanked: {name}");
-                self.yank.flash = Some(Instant::now());
-            }
-            Err(e) => {
-                self.yank.message = format!("Yank failed: {e}");
-                self.yank.flash = Some(Instant::now());
-            }
-        }
+        self.set_yank_flash(&format!("Yanked: {name}"), &name);
     }
 
     /// Yank the full detail panel content as plain text to the system clipboard.
     pub fn yank_detail(&mut self) {
-        let text = crate::detail_text::render_detail_plain(self);
-        let Some(text) = text else { return };
+        let Some(text) = crate::detail_text::render_detail_plain(self) else { return };
         let label = self.selected_entry_name().unwrap_or("detail").to_owned();
-        match arboard::Clipboard::new().and_then(|mut cb| cb.set_text(&text)) {
-            Ok(()) => {
-                self.yank.message = format!("Yanked detail: {label}");
-                self.yank.flash = Some(Instant::now());
-            }
-            Err(e) => {
-                self.yank.message = format!("Yank failed: {e}");
-                self.yank.flash = Some(Instant::now());
-            }
-        }
+        self.set_yank_flash(&format!("Yanked detail: {label}"), &text);
     }
 
     /// Return the name of the currently selected entry, if any.
@@ -466,8 +464,10 @@ impl App {
                 self.detail_scroll = 0;
             }
             Focus::Detail => {
-                debug_assert!(n <= u16::MAX as usize, "page scroll step {n} exceeds u16::MAX");
-                self.detail_scroll = self.detail_scroll.saturating_sub(n as u16);
+                debug_assert!(u16::try_from(n).is_ok(), "page scroll step {n} exceeds u16::MAX");
+                #[allow(clippy::cast_possible_truncation)]
+                let step = n as u16;
+                self.detail_scroll = self.detail_scroll.saturating_sub(step);
             }
         }
     }

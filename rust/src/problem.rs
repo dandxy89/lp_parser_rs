@@ -52,7 +52,7 @@ fn is_effectively_zero(value: f64, reference: f64) -> bool {
 fn apply_variable_type<'a>(
     variables: &mut HashMap<&'a str, Variable<'a>>,
     var_names: impl IntoIterator<Item = &'a str>,
-    var_type: VariableType,
+    var_type: &VariableType,
 ) {
     for var_name in var_names {
         match variables.entry(var_name) {
@@ -967,10 +967,10 @@ impl<'a> TryFrom<&'a str> for LpProblem<'a> {
         }
 
         // Process variable type sections (only set type if variable doesn't already have explicit bounds)
-        apply_variable_type(&mut variables, generals, VariableType::General);
-        apply_variable_type(&mut variables, integers, VariableType::Integer);
-        apply_variable_type(&mut variables, binaries, VariableType::Binary);
-        apply_variable_type(&mut variables, semis, VariableType::SemiContinuous);
+        apply_variable_type(&mut variables, generals, &VariableType::General);
+        apply_variable_type(&mut variables, integers, &VariableType::Integer);
+        apply_variable_type(&mut variables, binaries, &VariableType::Binary);
+        apply_variable_type(&mut variables, semis, &VariableType::SemiContinuous);
 
         // Process SOS constraints
         for mut sos in sos_constraints {

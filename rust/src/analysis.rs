@@ -473,6 +473,7 @@ impl LpProblem<'_> {
         let constraint_count = self.constraint_count();
         let variable_count = self.variable_count();
 
+        #[allow(clippy::cast_precision_loss)]
         let density = if constraint_count > 0 && variable_count > 0 {
             total_nonzeros as f64 / (constraint_count as f64 * variable_count as f64)
         } else {
@@ -739,6 +740,7 @@ impl LpProblem<'_> {
     }
 
     /// Detect issues and generate warnings.
+    #[allow(clippy::unused_self)]
     fn detect_issues(
         &self,
         summary: &ProblemSummary,

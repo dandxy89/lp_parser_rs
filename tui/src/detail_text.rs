@@ -5,6 +5,7 @@ use std::fmt::Write;
 use crate::app::App;
 use crate::detail_model::build_coeff_rows;
 use crate::diff_model::{CoefficientChange, ConstraintDiffDetail, ConstraintDiffEntry, DiffKind, ObjectiveDiffEntry, VariableDiffEntry};
+use crate::solver::SolveResult;
 use crate::state::Section;
 use crate::widgets::detail::{fmt_bound, variable_bounds};
 
@@ -59,6 +60,7 @@ fn write_variable_type_info(out: &mut String, vt: &lp_parser_rs::model::Variable
     }
 }
 
+#[allow(clippy::similar_names)] // lb/ub are standard abbreviations for lower/upper bound
 fn render_variable_plain(entry: &VariableDiffEntry) -> String {
     let mut out = String::new();
     w!(out, "Variable: {} [{}]", entry.name, entry.kind);
@@ -85,9 +87,7 @@ fn render_variable_plain(entry: &VariableDiffEntry) -> String {
                 w!(out, "  Type:   {old_label}  \u{2192}  {new_label}");
             }
 
-            #[allow(clippy::similar_names)]
             let (old_lb, old_ub) = variable_bounds(old);
-            #[allow(clippy::similar_names)]
             let (new_lb, new_ub) = variable_bounds(new);
 
             if old_lb.is_some() || new_lb.is_some() {
@@ -233,4 +233,32 @@ fn write_coeff_changes(
             }
         }
     }
+}
+
+/// Format a solve result as plain text for clipboard yanking.
+pub fn format_solve_result(result: &SolveResult) -> String {
+    let mut text = String::new();
+    w!(text, "Status: {}", result.status);
+    if let Some(obj) = result.objective_value {
+        w!(text, "Objective: {obj}");
+    }
+    w!(text, "Solve time: {:.3}s", result.solve_time.as_secs_f64());
+    if result.skipped_sos > 0 {
+        w!(text, "Warning: {} SOS constraint(s) skipped (not supported by solver)", result.skipped_sos);
+    }
+    if !result.solver_log.is_empty() {
+        w!(text);
+        w!(text, "Solver Log:");
+        for line in result.solver_log.lines() {
+            w!(text, "  {line}");
+        }
+    }
+    if !result.variables.is_empty() {
+        w!(text);
+        w!(text, "Variables:");
+        for (name, val) in &result.variables {
+            w!(text, "  {name:<30} {val}");
+        }
+    }
+    text
 }

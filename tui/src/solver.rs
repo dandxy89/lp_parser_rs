@@ -1,7 +1,7 @@
-//! HiGHS solver integration — converts an `LpProblemOwned` to a HiGHS problem and solves it.
+//! `HiGHS` solver integration — converts an `LpProblemOwned` to a `HiGHS` problem and solves it.
 
 use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::path::Path;
 use std::time::Instant;
 
 use lp_parser_rs::model::{ComparisonOp, ConstraintOwned, VariableType};
@@ -11,7 +11,7 @@ use lp_parser_rs::problem::LpProblem;
 /// Result returned after a successful solve.
 #[derive(Debug, Clone)]
 pub struct SolveResult {
-    /// HiGHS model status as a string (e.g. "Optimal", "Infeasible").
+    /// `HiGHS` model status as a string (e.g. "Optimal", "Infeasible").
     pub status: String,
     /// Objective function value (if a solution exists).
     pub objective_value: Option<f64>,
@@ -21,18 +21,20 @@ pub struct SolveResult {
     pub solve_time: std::time::Duration,
     /// Captured solver log output (presolve info, iteration counts, etc.).
     pub solver_log: String,
+    /// Number of SOS constraints that were skipped (not supported by `RowProblem`).
+    pub skipped_sos: usize,
 }
 
 /// Parse and solve an LP file, returning a `SolveResult` or an error message.
-pub fn solve_file(path: PathBuf) -> Result<SolveResult, String> {
-    let content = parse_file(&path).map_err(|e| format!("failed to read '{}': {e}", path.display()))?;
+pub fn solve_file(path: &Path) -> Result<SolveResult, String> {
+    let content = parse_file(path).map_err(|e| format!("failed to read '{}': {e}", path.display()))?;
     let problem = LpProblem::parse(&content).map_err(|e| format!("failed to parse '{}': {e}", path.display()))?;
     let owned = problem.to_owned();
 
     solve_problem(&owned)
 }
 
-/// Convert an `LpProblemOwned` to a HiGHS `RowProblem` and solve it.
+/// Convert an `LpProblemOwned` to a `HiGHS` `RowProblem` and solve it.
 fn solve_problem(problem: &lp_parser_rs::problem::LpProblemOwned) -> Result<SolveResult, String> {
     // Collect all variable names in sorted order for deterministic column indices.
     let var_names: Vec<&String> = {
@@ -70,13 +72,10 @@ fn solve_problem(problem: &lp_parser_rs::problem::LpProblemOwned) -> Result<Solv
             Some(VariableType::Binary) => (true, 0.0, 1.0),
             Some(VariableType::Integer) => (true, 0.0, f64::INFINITY),
             Some(VariableType::Free) => (false, f64::NEG_INFINITY, f64::INFINITY),
-            Some(VariableType::General) => (false, 0.0, f64::INFINITY),
             Some(VariableType::LowerBound(l)) => (false, *l, f64::INFINITY),
             Some(VariableType::UpperBound(u)) => (false, 0.0, *u),
             Some(VariableType::DoubleBound(l, u)) => (false, *l, *u),
-            Some(VariableType::SemiContinuous) => (false, 0.0, f64::INFINITY),
-            Some(VariableType::SOS) => (false, 0.0, f64::INFINITY),
-            None => (false, 0.0, f64::INFINITY),
+            Some(VariableType::General | VariableType::SemiContinuous | VariableType::SOS) | None => (false, 0.0, f64::INFINITY),
         };
 
         let col = pb.add_column_with_integrality(obj_coeff, lb..=ub, is_integer);
@@ -86,6 +85,8 @@ fn solve_problem(problem: &lp_parser_rs::problem::LpProblemOwned) -> Result<Solv
     // Add constraints.
     let mut constraint_names: Vec<&String> = problem.constraints.keys().collect();
     constraint_names.sort();
+
+    let mut skipped_sos: usize = 0;
 
     for con_name in &constraint_names {
         let Some(constraint) = problem.constraints.get(con_name.as_str()) else {
@@ -98,15 +99,13 @@ fn solve_problem(problem: &lp_parser_rs::problem::LpProblemOwned) -> Result<Solv
                     coefficients.iter().filter_map(|c| var_index.get(c.name.as_str()).map(|&idx| (cols[idx], c.value))).collect();
 
                 match operator {
-                    ComparisonOp::LTE => pb.add_row(..=*rhs, &row_factors),
-                    ComparisonOp::GTE => pb.add_row(*rhs.., &row_factors),
+                    ComparisonOp::LTE | ComparisonOp::LT => pb.add_row(..=*rhs, &row_factors),
+                    ComparisonOp::GTE | ComparisonOp::GT => pb.add_row(*rhs.., &row_factors),
                     ComparisonOp::EQ => pb.add_row(*rhs..=*rhs, &row_factors),
-                    ComparisonOp::LT => pb.add_row(..=*rhs, &row_factors), // approximate < as <=
-                    ComparisonOp::GT => pb.add_row(*rhs.., &row_factors),  // approximate > as >=
-                };
+                }
             }
             ConstraintOwned::SOS { .. } => {
-                // SOS constraints are not directly supported via RowProblem — skip.
+                skipped_sos += 1;
             }
         }
     }
@@ -154,5 +153,5 @@ fn solve_problem(problem: &lp_parser_rs::problem::LpProblemOwned) -> Result<Solv
         _ => (None, Vec::new()),
     };
 
-    Ok(SolveResult { status, objective_value, variables, solve_time, solver_log })
+    Ok(SolveResult { status, objective_value, variables, solve_time, solver_log, skipped_sos })
 }

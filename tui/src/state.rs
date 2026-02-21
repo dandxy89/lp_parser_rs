@@ -139,7 +139,7 @@ impl DiffFilter {
 const JUMPLIST_CAPACITY: usize = 100;
 
 /// A recorded navigation position in the jumplist.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct JumpEntry {
     pub section: Section,
     pub entry_index: Option<usize>,

@@ -107,12 +107,7 @@ fn build_separator(lines: &mut Vec<Line<'static>>) {
 }
 
 fn build_totals_row(lines: &mut Vec<Line<'static>>, summary: &DiffSummary) {
-    let totals = DiffCounts {
-        added: summary.variables.added + summary.constraints.added + summary.objectives.added,
-        removed: summary.variables.removed + summary.constraints.removed + summary.objectives.removed,
-        modified: summary.variables.modified + summary.constraints.modified + summary.objectives.modified,
-        unchanged: summary.variables.unchanged + summary.constraints.unchanged + summary.objectives.unchanged,
-    };
+    let totals = summary.aggregate_counts();
     lines.push(format_count_row("TOTAL", &totals, true));
 }
 

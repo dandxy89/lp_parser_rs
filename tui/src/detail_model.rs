@@ -32,6 +32,7 @@ pub fn build_coeff_rows(
     );
 
     // (old_value, new_value, change_kind)
+    #[allow(clippy::items_after_statements)]
     type Entry = (Option<f64>, Option<f64>, Option<DiffKind>);
 
     let mut all_vars: BTreeMap<&str, Entry> = BTreeMap::new();

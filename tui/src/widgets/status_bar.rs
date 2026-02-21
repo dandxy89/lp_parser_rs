@@ -68,13 +68,16 @@ pub fn draw_status_bar(
     frame.render_widget(filter_widget, chunks[2]);
 
     // Right: yank flash or key hints.
-    let hints_widget = if let Some(flash) = yank_flash {
-        Paragraph::new(Line::from(vec![Span::styled(flash.message, Style::default().fg(Color::Green).add_modifier(Modifier::BOLD))]))
-    } else {
-        Paragraph::new(Line::from(vec![Span::styled(
-            "Tab:panel  Enter:detail  j/k:nav  y:yank  /:search  ?:help  q:quit",
-            Style::default().fg(Color::DarkGray),
-        )]))
-    };
+    let hints_widget = yank_flash.map_or_else(
+        || {
+            Paragraph::new(Line::from(vec![Span::styled(
+                "Tab:panel  Enter:detail  j/k:nav  y:yank  /:search  ?:help  q:quit",
+                Style::default().fg(Color::DarkGray),
+            )]))
+        },
+        |flash| {
+            Paragraph::new(Line::from(vec![Span::styled(flash.message, Style::default().fg(Color::Green).add_modifier(Modifier::BOLD))]))
+        },
+    );
     frame.render_widget(hints_widget, chunks[3]);
 }

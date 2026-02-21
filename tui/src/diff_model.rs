@@ -91,6 +91,17 @@ impl DiffSummary {
     pub const fn total_changes(&self) -> usize {
         self.variables.changed() + self.constraints.changed() + self.objectives.changed()
     }
+
+    /// Aggregate counts across all three sections into a single `DiffCounts`.
+    #[must_use]
+    pub const fn aggregate_counts(&self) -> DiffCounts {
+        DiffCounts {
+            added: self.variables.added + self.constraints.added + self.objectives.added,
+            removed: self.variables.removed + self.constraints.removed + self.objectives.removed,
+            modified: self.variables.modified + self.constraints.modified + self.objectives.modified,
+            unchanged: self.variables.unchanged + self.constraints.unchanged + self.objectives.unchanged,
+        }
+    }
 }
 
 /// The kind of change represented by a diff entry.
@@ -630,11 +641,19 @@ mod tests {
         build_diff_report(&DiffInput { file1, file2, p1, p2, line_map1, line_map2, analysis1, analysis2 })
     }
 
+    /// Build a diff report from two problems with no line maps and dummy analyses.
+    fn quick_report(p1: &LpProblemOwned, p2: &LpProblemOwned) -> LpDiffReport {
+        test_diff_report("a.lp", "b.lp", p1, p2, &HashMap::new(), &HashMap::new(), dummy_analysis(), dummy_analysis())
+    }
+
+    fn assert_diff_entry(entry: &impl DiffEntry, name: &str, kind: DiffKind) {
+        assert_eq!(entry.name(), name);
+        assert_eq!(entry.kind(), kind);
+    }
+
     #[test]
     fn test_empty_problems() {
-        let p1 = empty_problem();
-        let p2 = empty_problem();
-        let report = test_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new(), dummy_analysis(), dummy_analysis());
+        let report = quick_report(&empty_problem(), &empty_problem());
 
         assert!(report.variables.entries.is_empty());
         assert!(report.constraints.entries.is_empty());
@@ -644,49 +663,28 @@ mod tests {
         assert!(report.name_changed.is_none());
     }
 
-    #[test]
-    fn test_variable_added() {
-        let p1 = empty_problem();
-        let p2 = problem_with_variable("x", VariableType::Binary);
-        let report = test_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new(), dummy_analysis(), dummy_analysis());
-
-        assert_eq!(report.variables.entries.len(), 1);
-        let entry = &report.variables.entries[0];
-        assert_eq!(entry.name, "x");
-        assert_eq!(entry.kind, DiffKind::Added);
-        assert!(entry.old_type.is_none());
-        assert_eq!(entry.new_type, Some(VariableType::Binary));
-        assert_eq!(report.variables.counts.added, 1);
-        assert_eq!(report.variables.counts.removed, 0);
+    macro_rules! variable_diff_tests {
+        ($($name:ident: $p1:expr, $p2:expr => kind=$kind:expr, old=$old:expr, new=$new:expr);+ $(;)?) => {
+            $(#[test] fn $name() {
+                let p1 = $p1;
+                let p2 = $p2;
+                let report = quick_report(&p1, &p2);
+                assert_eq!(report.variables.entries.len(), 1);
+                let entry = &report.variables.entries[0];
+                assert_eq!(entry.kind, $kind);
+                assert_eq!(entry.old_type, $old);
+                assert_eq!(entry.new_type, $new);
+            })+
+        };
     }
 
-    #[test]
-    fn test_variable_removed() {
-        let p1 = problem_with_variable("y", VariableType::Integer);
-        let p2 = empty_problem();
-        let report = test_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new(), dummy_analysis(), dummy_analysis());
-
-        assert_eq!(report.variables.entries.len(), 1);
-        let entry = &report.variables.entries[0];
-        assert_eq!(entry.kind, DiffKind::Removed);
-        assert_eq!(entry.old_type, Some(VariableType::Integer));
-        assert!(entry.new_type.is_none());
-        assert_eq!(report.variables.counts.removed, 1);
-    }
-
-    #[test]
-    fn test_variable_modified() {
-        let p1 = problem_with_variable("z", VariableType::Free);
-        let p2 = problem_with_variable("z", VariableType::Binary);
-        let report = test_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new(), dummy_analysis(), dummy_analysis());
-
-        assert_eq!(report.variables.entries.len(), 1);
-        let entry = &report.variables.entries[0];
-        assert_eq!(entry.kind, DiffKind::Modified);
-        assert_eq!(entry.old_type, Some(VariableType::Free));
-        assert_eq!(entry.new_type, Some(VariableType::Binary));
-        assert_eq!(report.variables.counts.modified, 1);
-        assert_eq!(report.variables.counts.unchanged, 0);
+    variable_diff_tests! {
+        var_added:    empty_problem(), problem_with_variable("x", VariableType::Binary)
+            => kind=DiffKind::Added,    old=None,                        new=Some(VariableType::Binary);
+        var_removed:  problem_with_variable("y", VariableType::Integer), empty_problem()
+            => kind=DiffKind::Removed,  old=Some(VariableType::Integer), new=None;
+        var_modified: problem_with_variable("z", VariableType::Free), problem_with_variable("z", VariableType::Binary)
+            => kind=DiffKind::Modified, old=Some(VariableType::Free),    new=Some(VariableType::Binary)
     }
 
     #[test]
@@ -695,14 +693,13 @@ mod tests {
         // p2: c1: 2x + 5z <= 10   (y removed, z added, x unchanged)
         let p1 = problem_with_standard_constraint("c1", vec![("x", 2.0), ("y", 3.0)], ComparisonOp::LTE, 10.0);
         let p2 = problem_with_standard_constraint("c1", vec![("x", 2.0), ("z", 5.0)], ComparisonOp::LTE, 10.0);
-        let report = test_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new(), dummy_analysis(), dummy_analysis());
+        let report = quick_report(&p1, &p2);
 
         assert_eq!(report.constraints.entries.len(), 1);
         let entry = &report.constraints.entries[0];
         assert_eq!(entry.kind, DiffKind::Modified);
 
         if let ConstraintDiffDetail::Standard { coeff_changes, operator_change, rhs_change, .. } = &entry.detail {
-            // y removed, z added; x unchanged (not in coeff_changes).
             assert_eq!(coeff_changes.len(), 2);
             assert!(operator_change.is_none());
             assert!(rhs_change.is_none());
@@ -740,7 +737,7 @@ mod tests {
             byte_offset: None,
         });
 
-        let report = test_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new(), dummy_analysis(), dummy_analysis());
+        let report = quick_report(&p1, &p2);
 
         assert_eq!(report.constraints.entries.len(), 1);
         let entry = &report.constraints.entries[0];
@@ -754,15 +751,13 @@ mod tests {
         p1.add_objective(make_objective("obj1", vec![("a", 1.0), ("b", 2.0)]));
 
         let mut p2 = LpProblemOwned::new();
-        // b changed from 2.0 to 5.0; a unchanged; c added.
         p2.add_objective(make_objective("obj1", vec![("a", 1.0), ("b", 5.0), ("c", 3.0)]));
 
-        let report = test_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new(), dummy_analysis(), dummy_analysis());
+        let report = quick_report(&p1, &p2);
 
         assert_eq!(report.objectives.entries.len(), 1);
         let entry = &report.objectives.entries[0];
         assert_eq!(entry.kind, DiffKind::Modified);
-        // b modified, c added.
         assert_eq!(entry.coeff_changes.len(), 2);
 
         let b_change = entry.coeff_changes.iter().find(|c| c.variable == "b").expect("b should be modified");
@@ -775,7 +770,7 @@ mod tests {
     fn test_sense_changed() {
         let p1 = LpProblemOwned::new().with_sense(Sense::Minimize);
         let p2 = LpProblemOwned::new().with_sense(Sense::Maximize);
-        let report = test_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new(), dummy_analysis(), dummy_analysis());
+        let report = quick_report(&p1, &p2);
 
         assert!(report.sense_changed.is_some());
         let (old, new) = report.sense_changed.unwrap();
@@ -785,7 +780,6 @@ mod tests {
 
     #[test]
     fn test_unchanged_not_stored() {
-        // Ten identical variables plus one that differs.
         let mut p1 = LpProblemOwned::new();
         let mut p2 = LpProblemOwned::new();
 
@@ -794,13 +788,11 @@ mod tests {
             p1.add_variable(VariableOwned::new(&name).with_var_type(VariableType::Free));
             p2.add_variable(VariableOwned::new(&name).with_var_type(VariableType::Free));
         }
-        // One changed variable.
         p1.add_variable(VariableOwned::new("changed").with_var_type(VariableType::Free));
         p2.add_variable(VariableOwned::new("changed").with_var_type(VariableType::Binary));
 
-        let report = test_diff_report("a.lp", "b.lp", &p1, &p2, &HashMap::new(), &HashMap::new(), dummy_analysis(), dummy_analysis());
+        let report = quick_report(&p1, &p2);
 
-        // Only the changed variable should be stored.
         assert_eq!(report.variables.entries.len(), 1);
         assert_eq!(report.variables.entries[0].name, "changed");
         assert_eq!(report.variables.counts.unchanged, 10);
@@ -810,16 +802,13 @@ mod tests {
 
     #[test]
     fn test_diff_entry_trait() {
-        // Verify DiffEntry trait basics (name + kind).
         let added_var =
             VariableDiffEntry { name: "x".to_string(), kind: DiffKind::Added, old_type: None, new_type: Some(VariableType::Binary) };
-        assert_eq!(added_var.name(), "x");
-        assert_eq!(added_var.kind(), DiffKind::Added);
+        assert_diff_entry(&added_var, "x", DiffKind::Added);
 
         let removed_var =
             VariableDiffEntry { name: "y".to_string(), kind: DiffKind::Removed, old_type: Some(VariableType::Integer), new_type: None };
-        assert_eq!(removed_var.name(), "y");
-        assert_eq!(removed_var.kind(), DiffKind::Removed);
+        assert_diff_entry(&removed_var, "y", DiffKind::Removed);
 
         let added_constraint = ConstraintDiffEntry {
             name: "c1".to_string(),
@@ -837,8 +826,7 @@ mod tests {
             line_file1: None,
             line_file2: None,
         };
-        assert_eq!(added_constraint.name(), "c1");
-        assert_eq!(added_constraint.kind(), DiffKind::Added);
+        assert_diff_entry(&added_constraint, "c1", DiffKind::Added);
 
         let added_obj = ObjectiveDiffEntry {
             name: "obj".to_string(),
@@ -850,13 +838,11 @@ mod tests {
             ],
             coeff_changes: vec![],
         };
-        assert_eq!(added_obj.name(), "obj");
-        assert_eq!(added_obj.kind(), DiffKind::Added);
+        assert_diff_entry(&added_obj, "obj", DiffKind::Added);
     }
 
     #[test]
     fn test_line_numbers_in_constraint_diff() {
-        // Build two problems with line maps that simulate real offsets.
         let p1 = problem_with_standard_constraint("c1", vec![("x", 1.0)], ComparisonOp::LTE, 10.0);
         let p2 = problem_with_standard_constraint("c1", vec![("x", 2.0)], ComparisonOp::LTE, 10.0);
         let mut lm1 = HashMap::new();

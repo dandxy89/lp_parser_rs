@@ -94,6 +94,16 @@ fn draw_done(frame: &mut Frame, area: Rect, result: &crate::solver::SolveResult,
         Span::styled(format!("{:.3}s", result.solve_time.as_secs_f64()), Style::default().fg(Color::Cyan)),
     ]));
 
+    if result.skipped_sos > 0 {
+        lines.push(Line::from(vec![
+            Span::styled("  Warning:   ", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                format!("{} SOS constraint(s) skipped (not supported by solver)", result.skipped_sos),
+                Style::default().fg(Color::Yellow),
+            ),
+        ]));
+    }
+
     if !result.variables.is_empty() {
         lines.push(Line::from(""));
         lines.push(Line::from(Span::styled(

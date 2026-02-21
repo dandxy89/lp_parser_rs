@@ -1,36 +1,10 @@
-use std::fmt::Write as _;
 use std::sync::mpsc;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 
 use crate::app::App;
-use crate::solver::SolveResult;
+use crate::detail_text::format_solve_result;
 use crate::state::{DiffFilter, Focus, Section, SolveState};
-
-/// Format a solve result as plain text for clipboard yanking.
-fn format_solve_result(result: &SolveResult) -> String {
-    let mut text = String::new();
-    writeln!(text, "Status: {}", result.status).expect("write to String is infallible");
-    if let Some(obj) = result.objective_value {
-        writeln!(text, "Objective: {obj}").expect("write to String is infallible");
-    }
-    writeln!(text, "Solve time: {:.3}s", result.solve_time.as_secs_f64()).expect("write to String is infallible");
-    if !result.variables.is_empty() {
-        writeln!(text).expect("write to String is infallible");
-        writeln!(text, "Variables:").expect("write to String is infallible");
-        for (name, val) in &result.variables {
-            writeln!(text, "  {name:<30} {val}").expect("write to String is infallible");
-        }
-    }
-    if !result.solver_log.is_empty() {
-        writeln!(text).expect("write to String is infallible");
-        writeln!(text, "Solver Log:").expect("write to String is infallible");
-        for line in result.solver_log.lines() {
-            writeln!(text, "  {line}").expect("write to String is infallible");
-        }
-    }
-    text
-}
 
 impl App {
     pub fn handle_key(&mut self, key: KeyEvent) {
@@ -126,7 +100,7 @@ impl App {
                 KeyCode::Char('o') => {
                     // Jump back in the jumplist.
                     if let Some(entry) = self.jumplist.go_back() {
-                        let entry = entry.clone();
+                        let entry = *entry;
                         self.restore_jump(entry);
                     }
                     return;
@@ -134,7 +108,7 @@ impl App {
                 KeyCode::Char('i') => {
                     // Jump forward in the jumplist.
                     if let Some(entry) = self.jumplist.go_forward() {
-                        let entry = entry.clone();
+                        let entry = *entry;
                         self.restore_jump(entry);
                     }
                     return;
@@ -157,12 +131,8 @@ impl App {
             KeyCode::Char('4') => self.set_section(Section::Objectives),
 
             // Navigation (vi-style and arrow keys).
-            KeyCode::Char('j') | KeyCode::Down => self.navigate_down(),
-            KeyCode::Char('k') | KeyCode::Up => self.navigate_up(),
-
-            // n/N are simple aliases for down/up navigation.
-            KeyCode::Char('n') => self.navigate_down(),
-            KeyCode::Char('N') => self.navigate_up(),
+            KeyCode::Char('j' | 'n') | KeyCode::Down => self.navigate_down(),
+            KeyCode::Char('k' | 'N') | KeyCode::Up => self.navigate_up(),
 
             KeyCode::Char('g') | KeyCode::Home => self.jump_to_top(),
             KeyCode::Char('G') | KeyCode::End => self.jump_to_bottom(),
@@ -464,16 +434,7 @@ impl App {
                     // Yank solve results to clipboard.
                     if let SolveState::Done(result) = &self.solve_state {
                         let text = format_solve_result(result);
-                        match arboard::Clipboard::new().and_then(|mut cb| cb.set_text(&text)) {
-                            Ok(()) => {
-                                self.yank.message = "Yanked solve results".to_owned();
-                                self.yank.flash = Some(std::time::Instant::now());
-                            }
-                            Err(e) => {
-                                self.yank.message = format!("Yank failed: {e}");
-                                self.yank.flash = Some(std::time::Instant::now());
-                            }
-                        }
+                        self.set_yank_flash("Yanked solve results", &text);
                     }
                 }
                 _ => {}
@@ -496,10 +457,9 @@ impl App {
         self.solve_rx = Some(rx);
 
         std::thread::spawn(move || {
-            let result = crate::solver::solve_file(path);
-            if let Err(e) = tx.send(result) {
-                eprintln!("warning: solver channel send failed (receiver dropped): {e}");
-            }
+            let result = crate::solver::solve_file(&path);
+            // The receiver is dropped when the user dismisses the solve overlay — benign.
+            debug_assert!(tx.send(result).is_ok(), "solver channel send failed: receiver dropped");
         });
     }
 

@@ -43,7 +43,7 @@ pub const fn variable_bounds(vt: &VariableType) -> (Option<f64>, Option<f64>) {
 }
 
 /// Format an optional bound value as a string for display.
-pub(crate) fn fmt_bound(val: Option<f64>) -> String {
+pub fn fmt_bound(val: Option<f64>) -> String {
     val.map_or_else(|| "\u{2014}".to_owned(), |v| format!("{v}"))
 }
 
@@ -66,6 +66,7 @@ fn render_variable_type_info(lines: &mut Vec<Line<'static>>, vt: &VariableType, 
 
 /// Render a variable detail panel. Returns the total content line count.
 #[allow(clippy::too_many_lines)]
+#[allow(clippy::similar_names)] // lb/ub are standard abbreviations for lower/upper bound
 pub fn render_variable_detail(frame: &mut Frame, area: Rect, entry: &VariableDiffEntry, border_style: Style, scroll: u16) -> usize {
     let mut lines = detail_header("Variable", &entry.name, entry.kind);
 
@@ -100,9 +101,7 @@ pub fn render_variable_detail(frame: &mut Frame, area: Rect, entry: &VariableDif
             }
 
             // Bounds comparison.
-            #[allow(clippy::similar_names)] // lb/ub are standard abbreviations for lower/upper bound
             let (old_lb, old_ub) = variable_bounds(old);
-            #[allow(clippy::similar_names)]
             let (new_lb, new_ub) = variable_bounds(new);
 
             if old_lb.is_some() || new_lb.is_some() {
@@ -217,6 +216,7 @@ pub fn render_constraint_detail(frame: &mut Frame, area: Rect, entry: &Constrain
                 frame.render_widget(block, area);
 
                 // Header paragraph (above the two columns).
+                #[allow(clippy::cast_possible_truncation)]
                 let header_height = header_line_count as u16;
                 let v_chunks = Layout::vertical([Constraint::Length(header_height), Constraint::Min(0)]).split(inner);
 

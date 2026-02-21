@@ -82,16 +82,7 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     let yank_flash = if app.yank.flash.is_some() { Some(status_bar::YankFlash { message: &app.yank.message }) } else { None };
     // Compute section-specific diff counts for the status bar.
     let section_counts = match app.active_section {
-        Section::Summary => {
-            // Aggregate across all sections.
-            let s = &report_summary;
-            crate::diff_model::DiffCounts {
-                added: s.variables.added + s.constraints.added + s.objectives.added,
-                removed: s.variables.removed + s.constraints.removed + s.objectives.removed,
-                modified: s.variables.modified + s.constraints.modified + s.objectives.modified,
-                unchanged: s.variables.unchanged + s.constraints.unchanged + s.objectives.unchanged,
-            }
-        }
+        Section::Summary => report_summary.aggregate_counts(),
         Section::Variables => app.report.variables.counts,
         Section::Constraints => app.report.constraints.counts,
         Section::Objectives => app.report.objectives.counts,

@@ -115,68 +115,47 @@ impl std::fmt::Debug for CompiledSearch {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_parse_query_fuzzy() {
-        let (mode, pattern) = parse_query("hello");
-        assert_eq!(mode, SearchMode::Fuzzy);
-        assert_eq!(pattern, "hello");
+    macro_rules! parse_query_tests {
+        ($($name:ident: $input:expr => $mode:expr, $pattern:expr);+ $(;)?) => {
+            $(#[test] fn $name() {
+                let (mode, pattern) = parse_query($input);
+                assert_eq!(mode, $mode);
+                assert_eq!(pattern, $pattern);
+            })+
+        };
     }
 
-    #[test]
-    fn test_parse_query_regex() {
-        let (mode, pattern) = parse_query("r:^con.*");
-        assert_eq!(mode, SearchMode::Regex);
-        assert_eq!(pattern, "^con.*");
+    parse_query_tests! {
+        parse_fuzzy:           "hello"    => SearchMode::Fuzzy,     "hello";
+        parse_regex:           "r:^con.*" => SearchMode::Regex,     "^con.*";
+        parse_substring:       "s:exact"  => SearchMode::Substring, "exact";
+        parse_regex_empty:     "r:"       => SearchMode::Regex,     "";
+        parse_substring_empty: "s:"       => SearchMode::Substring, ""
     }
 
-    #[test]
-    fn test_parse_query_substring() {
-        let (mode, pattern) = parse_query("s:exact");
-        assert_eq!(mode, SearchMode::Substring);
-        assert_eq!(pattern, "exact");
+    macro_rules! match_tests {
+        ($($name:ident: $query:expr, $haystack:expr => $expected:expr);+ $(;)?) => {
+            $(#[test] fn $name() {
+                let search = CompiledSearch::compile($query);
+                assert_eq!(search.matches($haystack), $expected,
+                    "compile({:?}).matches({:?}) expected {}", $query, $haystack, $expected);
+            })+
+        };
     }
 
-    #[test]
-    fn test_parse_query_empty_prefix() {
-        let (mode, pattern) = parse_query("r:");
-        assert_eq!(mode, SearchMode::Regex);
-        assert_eq!(pattern, "");
-
-        let (mode, pattern) = parse_query("s:");
-        assert_eq!(mode, SearchMode::Substring);
-        assert_eq!(pattern, "");
-    }
-
-    #[test]
-    fn test_fuzzy_match_basic() {
-        let search = CompiledSearch::compile("constr");
-        assert!(search.matches("my_constraint_1"));
-        assert!(search.matches("constraint_abc"));
-    }
-
-    #[test]
-    fn test_fuzzy_match_empty_query() {
-        let search = CompiledSearch::compile("");
-        assert!(search.matches("anything"));
-    }
-
-    #[test]
-    fn test_fuzzy_match_no_match() {
-        let search = CompiledSearch::compile("zzzzz");
-        assert!(!search.matches("constraint"));
-    }
-
-    #[test]
-    fn test_regex_match() {
-        let search = CompiledSearch::compile("r:^con.*nt$");
-        assert!(search.matches("constraint"));
-        assert!(!search.matches("objective"));
-    }
-
-    #[test]
-    fn test_regex_case_insensitive() {
-        let search = CompiledSearch::compile("r:CONSTRAINT");
-        assert!(search.matches("my_constraint"));
+    match_tests! {
+        fuzzy_basic_hit:         "constr",       "my_constraint_1"  => true;
+        fuzzy_basic_hit2:        "constr",       "constraint_abc"   => true;
+        fuzzy_empty:             "",             "anything"         => true;
+        fuzzy_miss:              "zzzzz",        "constraint"       => false;
+        regex_hit:               "r:^con.*nt$",  "constraint"       => true;
+        regex_miss:              "r:^con.*nt$",  "objective"        => false;
+        regex_case_insensitive:  "r:CONSTRAINT", "my_constraint"    => true;
+        regex_empty:             "r:",           "anything"         => true;
+        substr_hit:              "s:exact",      "some_exact_match" => true;
+        substr_miss:             "s:exact",      "something_else"   => false;
+        substr_case_insensitive: "s:EXACT",      "some_exact_match" => true;
+        substr_empty:            "s:",           "anything"         => true
     }
 
     #[test]
@@ -187,35 +166,7 @@ mod tests {
     }
 
     #[test]
-    fn test_regex_empty_pattern() {
-        let search = CompiledSearch::compile("r:");
-        assert!(!search.has_regex_error());
-        // Empty regex matches everything.
-        assert!(search.matches("anything"));
-    }
-
-    #[test]
-    fn test_substring_match() {
-        let search = CompiledSearch::compile("s:exact");
-        assert!(search.matches("some_exact_match"));
-        assert!(!search.matches("something_else"));
-    }
-
-    #[test]
-    fn test_substring_case_insensitive() {
-        let search = CompiledSearch::compile("s:EXACT");
-        assert!(search.matches("some_exact_match"));
-    }
-
-    #[test]
-    fn test_substring_empty_query() {
-        let search = CompiledSearch::compile("s:");
-        assert!(search.matches("anything"));
-    }
-
-    #[test]
     fn test_matches_variable_names_in_searchable_text() {
-        // Simulates a constraint with name "c1" and variables "x", "flow_var"
         let searchable = "c1\0x\0flow_var";
 
         let fuzzy = CompiledSearch::compile("flow");
