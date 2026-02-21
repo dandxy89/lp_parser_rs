@@ -1,7 +1,7 @@
 use ratatui::widgets::ListState;
 
 use crate::diff_model::{DiffEntry, DiffKind};
-use crate::solver::SolveResult;
+use crate::solver::{SolveDiffResult, SolveResult};
 
 /// State machine for the LP solver overlay.
 #[derive(Debug)]
@@ -14,14 +14,74 @@ pub enum SolveState {
     Running { file: String },
     /// Solve completed successfully.
     Done(Box<SolveResult>),
+    /// Both solvers running in parallel; optional results filled as they complete.
+    RunningBoth { file1: String, file2: String, result1: Option<Box<SolveResult>>, result2: Option<Box<SolveResult>> },
+    /// Both solves completed; showing comparison view.
+    DoneBoth(Box<SolveDiffResult>),
     /// Solve failed with an error message.
     Failed(String),
+}
+
+/// Active tab in the solve results popup.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SolveTab {
+    #[default]
+    Summary,
+    Variables,
+    Constraints,
+    Log,
+}
+
+impl SolveTab {
+    pub const ALL: [Self; 4] = [Self::Summary, Self::Variables, Self::Constraints, Self::Log];
+
+    pub const fn index(self) -> usize {
+        match self {
+            Self::Summary => 0,
+            Self::Variables => 1,
+            Self::Constraints => 2,
+            Self::Log => 3,
+        }
+    }
+
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Summary => "Summary",
+            Self::Variables => "Variables",
+            Self::Constraints => "Constraints",
+            Self::Log => "Log",
+        }
+    }
+
+    /// Cycle to the next tab, wrapping around.
+    pub const fn next(self) -> Self {
+        match self {
+            Self::Summary => Self::Variables,
+            Self::Variables => Self::Constraints,
+            Self::Constraints => Self::Log,
+            Self::Log => Self::Summary,
+        }
+    }
+
+    /// Cycle to the previous tab, wrapping around.
+    pub const fn prev(self) -> Self {
+        match self {
+            Self::Summary => Self::Log,
+            Self::Variables => Self::Summary,
+            Self::Constraints => Self::Variables,
+            Self::Log => Self::Constraints,
+        }
+    }
 }
 
 /// Scroll state for the solve results panel.
 #[derive(Debug, Default)]
 pub struct SolveViewState {
-    pub scroll: u16,
+    pub tab: SolveTab,
+    /// Per-tab scroll offsets, indexed by `SolveTab::index()`.
+    pub scroll: [u16; 4],
+    /// When `true`, the Variables and Constraints tabs in diff view show only changed rows.
+    pub diff_only: bool,
 }
 
 /// A single result from the search pop-up, spanning all sections.
@@ -51,9 +111,6 @@ pub enum Section {
 
 impl Section {
     pub const ALL: [Self; 4] = [Self::Summary, Self::Variables, Self::Constraints, Self::Objectives];
-
-    /// Sections with name lists (i.e. everything except Summary).
-    pub(crate) const LIST_SECTIONS: [Self; 3] = [Self::Variables, Self::Constraints, Self::Objectives];
 
     pub const fn index(self) -> usize {
         match self {
@@ -166,6 +223,7 @@ impl JumpList {
 
     /// Push a new jump entry, discarding any forward history.
     pub fn push(&mut self, entry: JumpEntry) {
+        debug_assert!(self.cursor <= self.entries.len(), "jumplist cursor {} exceeds entries len {}", self.cursor, self.entries.len());
         // Truncate forward history.
         self.entries.truncate(self.cursor);
         self.entries.push(entry);

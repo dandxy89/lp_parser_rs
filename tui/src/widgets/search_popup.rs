@@ -29,6 +29,7 @@ const fn section_tag(section: Section) -> &'static str {
 
 /// Draw the search pop-up overlay on top of the current frame.
 pub fn draw_search_popup(frame: &mut Frame, area: Rect, app: &App) {
+    debug_assert!(area.width > 0 && area.height > 0, "search popup area must be non-zero");
     let popup = centred_rect(area);
 
     // Clear the background behind the pop-up.
@@ -201,14 +202,14 @@ fn draw_detail_preview(frame: &mut Frame, area: Rect, app: &App) {
         }
         Section::Constraints => {
             if let Some(entry) = app.report.constraints.entries.get(result.entry_index) {
-                detail::render_constraint_detail(frame, area, entry, border_style, scroll);
+                detail::render_constraint_detail(frame, area, entry, border_style, scroll, None);
             } else {
                 sidebar::draw_empty_detail(frame, area, "Entry not found", border_style);
             }
         }
         Section::Objectives => {
             if let Some(entry) = app.report.objectives.entries.get(result.entry_index) {
-                detail::render_objective_detail(frame, area, entry, border_style, scroll);
+                detail::render_objective_detail(frame, area, entry, border_style, scroll, None);
             } else {
                 sidebar::draw_empty_detail(frame, area, "Entry not found", border_style);
             }

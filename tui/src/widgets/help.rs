@@ -55,6 +55,7 @@ const POPUP_HEIGHT: u16 = 43;
 
 /// Draw a centred help pop-up overlay on top of the current frame.
 pub fn draw_help(frame: &mut Frame, area: Rect) {
+    debug_assert!(area.width > 0 && area.height > 0, "help overlay area must be non-zero");
     let popup = super::centred_rect(area, POPUP_WIDTH, POPUP_HEIGHT);
 
     let lines: Vec<Line<'_>> = HELP_TEXT.iter().map(|&s| Line::from(Span::styled(s, Style::default().fg(Color::White)))).collect();

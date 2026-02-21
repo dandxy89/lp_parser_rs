@@ -5,6 +5,7 @@ use std::time::Instant;
 use ratatui::layout::Rect;
 use ratatui::widgets::ListState;
 
+use crate::detail_model::{CoefficientRow, build_coeff_rows};
 use crate::diff_model::{DiffEntry, DiffKind, LpDiffReport};
 use crate::search::{self, CompiledSearch, SearchMode};
 use crate::solver::SolveResult;
@@ -51,6 +52,24 @@ pub struct HaystackEntry {
     pub kind: DiffKind,
 }
 
+/// Bundles solver-related state: lifecycle, view, and result channel.
+pub struct SolverSession {
+    /// `HiGHS` solver state machine.
+    pub state: SolveState,
+    /// Scroll state for the solve results panel.
+    pub view: SolveViewState,
+    /// Channel for receiving solve results from the background thread.
+    pub receive: Option<mpsc::Receiver<Result<SolveResult, String>>>,
+    /// Second channel for the "both" solve mode.
+    pub receive2: Option<mpsc::Receiver<Result<SolveResult, String>>>,
+}
+
+impl SolverSession {
+    fn new() -> Self {
+        Self { state: SolveState::Idle, view: SolveViewState::default(), receive: None, receive2: None }
+    }
+}
+
 pub struct App {
     pub report: LpDiffReport,
     pub active_section: Section,
@@ -82,14 +101,8 @@ pub struct App {
     /// Navigation jumplist for Ctrl+o / Ctrl+i.
     pub jumplist: JumpList,
 
-    /// `HiGHS` solver state.
-    pub solve_state: SolveState,
-
-    /// Scroll state for the solve results panel.
-    pub solve_view: SolveViewState,
-
-    /// Channel for receiving solve results from the background thread.
-    pub solve_rx: Option<mpsc::Receiver<Result<SolveResult, String>>>,
+    /// `HiGHS` solver session (state + view + channel).
+    pub solver: SolverSession,
 
     /// Path to the first LP file.
     pub file1_path: PathBuf,
@@ -102,7 +115,37 @@ pub struct App {
 
     /// Re-usable buffer for fuzzy search name references, avoiding per-keystroke `Vec` allocation.
     /// Rebuilt when the haystack changes (indices correspond 1:1 with `search_haystack`).
-    pub(crate) search_name_buf: Vec<String>,
+    pub(crate) search_name_buffer: Vec<String>,
+
+    /// Cached coefficient rows for the detail panel, avoiding per-frame BTreeMap + String allocations.
+    /// Invalidated when the selected entry changes.
+    pub(crate) coeff_row_cache: Option<CoeffRowCache>,
+}
+
+/// Cached coefficient rows keyed on (section, entry_index).
+pub(crate) struct CoeffRowCache {
+    pub section: Section,
+    pub entry_index: usize,
+    pub rows: Vec<CoefficientRow>,
+}
+
+/// Append entries from a single section into the haystack.
+fn append_section_haystack<T: DiffEntry>(haystack: &mut Vec<HaystackEntry>, section: Section, entries: &[T]) {
+    for (index, entry) in entries.iter().enumerate() {
+        haystack.push(HaystackEntry { section, index, name: entry.name().to_owned(), kind: entry.kind() });
+    }
+}
+
+/// Build the flat search haystack from all three sections of the report.
+fn build_haystack(report: &LpDiffReport) -> Vec<HaystackEntry> {
+    let total = report.variables.entries.len() + report.constraints.entries.len() + report.objectives.entries.len();
+    let mut haystack = Vec::with_capacity(total);
+
+    append_section_haystack(&mut haystack, Section::Variables, &report.variables.entries);
+    append_section_haystack(&mut haystack, Section::Constraints, &report.constraints.entries);
+    append_section_haystack(&mut haystack, Section::Objectives, &report.objectives.entries);
+
+    haystack
 }
 
 impl App {
@@ -110,17 +153,7 @@ impl App {
         let mut section_selector_state = ListState::default();
         section_selector_state.select(Some(0));
 
-        // Pre-build the flat search haystack from all three sections.
-        let mut haystack = Vec::new();
-        for (i, e) in report.variables.entries.iter().enumerate() {
-            haystack.push(HaystackEntry { section: Section::Variables, index: i, name: e.name().to_owned(), kind: e.kind() });
-        }
-        for (i, e) in report.constraints.entries.iter().enumerate() {
-            haystack.push(HaystackEntry { section: Section::Constraints, index: i, name: e.name().to_owned(), kind: e.kind() });
-        }
-        for (i, e) in report.objectives.entries.iter().enumerate() {
-            haystack.push(HaystackEntry { section: Section::Objectives, index: i, name: e.name().to_owned(), kind: e.kind() });
-        }
+        let haystack = build_haystack(&report);
 
         Self {
             report,
@@ -143,60 +176,117 @@ impl App {
             yank: YankState { flash: None, message: String::new() },
             search_popup: SearchPopupState { visible: false, query: String::new(), results: Vec::new(), selected: 0, scroll: 0 },
             jumplist: JumpList::new(),
-            solve_state: SolveState::Idle,
-            solve_view: SolveViewState::default(),
-            solve_rx: None,
+            solver: SolverSession::new(),
             file1_path,
             file2_path,
+            search_name_buffer: haystack.iter().map(|entry| entry.name.clone()).collect(),
             search_haystack: haystack,
-            search_name_buf: Vec::new(),
+            coeff_row_cache: None,
         }
     }
 
-    /// Invalidate cached filtered indices for all sections.
+    /// Invalidate cached filtered indices for all sections and the coefficient row cache.
     pub(crate) fn invalidate_cache(&mut self) {
         for state in &mut self.section_states {
             state.invalidate();
+        }
+        self.coeff_row_cache = None;
+    }
+
+    /// Recompute filtered indices for a given list section.
+    /// Panics (in debug) if `section` is `Summary`.
+    fn recompute_section_cache(&mut self, section: Section) {
+        debug_assert!(section != Section::Summary, "Summary has no list entries to recompute");
+        let index = section.list_index().expect("non-Summary section has list_index");
+        let filter = self.filter;
+        match section {
+            Section::Variables => self.section_states[index].recompute(&self.report.variables.entries, filter),
+            Section::Constraints => self.section_states[index].recompute(&self.report.constraints.entries, filter),
+            Section::Objectives => self.section_states[index].recompute(&self.report.objectives.entries, filter),
+            Section::Summary => unreachable!("Summary has no list_index"),
         }
     }
 
     /// Ensure the active section's cache is fresh. Call once per frame before drawing.
     pub fn ensure_active_section_cache(&mut self) {
-        let Some(idx) = self.active_section.list_index() else {
+        let Some(index) = self.active_section.list_index() else {
             return;
         };
-        if !self.section_states[idx].is_dirty() {
+        if self.section_states[index].is_dirty() {
+            self.recompute_section_cache(self.active_section);
+        }
+    }
+
+    /// Ensure the coefficient row cache is fresh for the currently selected entry.
+    /// Call once per frame before drawing the detail panel.
+    pub fn ensure_coeff_row_cache(&mut self) {
+        let section = self.active_section;
+        let Some(entry_index) = self.selected_entry_index() else {
+            return;
+        };
+
+        // Check if the cache is already valid for this selection.
+        if let Some(cache) = &self.coeff_row_cache
+            && cache.section == section
+            && cache.entry_index == entry_index
+        {
             return;
         }
 
-        let filter = self.filter;
-        let section = Section::LIST_SECTIONS[idx];
-        match section {
-            Section::Variables => {
-                self.section_states[idx].recompute(&self.report.variables.entries, filter);
-            }
+        // Build coefficient rows based on the active section and entry.
+        let rows = match section {
             Section::Constraints => {
-                self.section_states[idx].recompute(&self.report.constraints.entries, filter);
+                let entry = &self.report.constraints.entries[entry_index];
+                match &entry.detail {
+                    crate::diff_model::ConstraintDiffDetail::Standard { coeff_changes, old_coefficients, new_coefficients, .. } => {
+                        build_coeff_rows(coeff_changes, old_coefficients, new_coefficients)
+                    }
+                    crate::diff_model::ConstraintDiffDetail::Sos { weight_changes, old_weights, new_weights, .. } => {
+                        build_coeff_rows(weight_changes, old_weights, new_weights)
+                    }
+                    _ => return,
+                }
             }
             Section::Objectives => {
-                self.section_states[idx].recompute(&self.report.objectives.entries, filter);
+                let entry = &self.report.objectives.entries[entry_index];
+                build_coeff_rows(&entry.coeff_changes, &entry.old_coefficients, &entry.new_coefficients)
             }
-            Section::Summary => unreachable!("Summary has no list_index"),
-        }
+            _ => return,
+        };
+
+        self.coeff_row_cache = Some(CoeffRowCache { section, entry_index, rows });
+    }
+
+    /// Return cached coefficient rows for the currently selected entry, if available.
+    pub(crate) fn cached_coeff_rows(&self) -> Option<&[CoefficientRow]> {
+        let section = self.active_section;
+        let entry_index = self.selected_entry_index()?;
+        let cache = self.coeff_row_cache.as_ref()?;
+        if cache.section == section && cache.entry_index == entry_index { Some(&cache.rows) } else { None }
     }
 
     /// Return the number of items in the name list for the current section.
     /// Must be called after `ensure_active_section_cache()`.
     pub fn name_list_len(&self) -> usize {
-        self.active_section.list_index().map_or(0, |idx| self.section_states[idx].cached_indices().len())
+        self.active_section.list_index().map_or(0, |index| self.section_states[index].cached_indices().len())
     }
 
     /// Return a mutable reference to the `ListState` for the active section's name list.
     pub const fn active_name_list_state_mut(&mut self) -> &mut ListState {
         match self.active_section.list_index() {
-            Some(idx) => &mut self.section_states[idx].list_state,
+            Some(index) => &mut self.section_states[index].list_state,
             None => &mut self.section_selector_state,
         }
+    }
+
+    /// Return the report-level entry index for the currently selected name list item.
+    ///
+    /// Returns `None` if the active section is Summary or nothing is selected.
+    pub(crate) fn selected_entry_index(&self) -> Option<usize> {
+        let section_index = self.active_section.list_index()?;
+        let state = &self.section_states[section_index];
+        let selected = state.list_state.selected()?;
+        state.cached_indices().get(selected).copied()
     }
 
     /// Whether the name list panel has selectable content for the current section.
@@ -205,8 +295,8 @@ impl App {
     }
 
     pub(crate) const fn reset_name_list_selection(&mut self) {
-        if let Some(idx) = self.active_section.list_index() {
-            self.section_states[idx].list_state.select(None);
+        if let Some(index) = self.active_section.list_index() {
+            self.section_states[index].list_state.select(None);
         }
     }
 
@@ -237,17 +327,44 @@ impl App {
         }
     }
 
+    /// Move up by `n` steps in the focused panel. No-op for `SectionSelector`.
+    pub fn page_up(&mut self, n: usize) {
+        if n == 0 {
+            return;
+        }
+        match self.focus {
+            Focus::SectionSelector => {}
+            Focus::NameList => {
+                let len = self.name_list_len();
+                if len == 0 {
+                    return;
+                }
+                let state = self.active_name_list_state_mut();
+                let current = state.selected().unwrap_or(0);
+                let new = current.saturating_sub(n);
+                state.select(Some(new));
+                self.detail_scroll = 0;
+            }
+            Focus::Detail => {
+                debug_assert!(u16::try_from(n).is_ok(), "page scroll step {n} exceeds u16::MAX");
+                #[allow(clippy::cast_possible_truncation)]
+                let step = n as u16;
+                self.detail_scroll = self.detail_scroll.saturating_sub(step);
+            }
+        }
+    }
+
     /// Copy `text` to the system clipboard and show a flash message in the status bar.
     ///
     /// `label` is a short description shown on success (e.g. "Yanked: x1").
     pub(crate) fn set_yank_flash(&mut self, label: &str, text: &str) {
-        match arboard::Clipboard::new().and_then(|mut cb| cb.set_text(text)) {
+        match arboard::Clipboard::new().and_then(|mut clipboard| clipboard.set_text(text)) {
             Ok(()) => {
                 label.clone_into(&mut self.yank.message);
                 self.yank.flash = Some(Instant::now());
             }
-            Err(e) => {
-                self.yank.message = format!("Yank failed: {e}");
+            Err(error) => {
+                self.yank.message = format!("Yank failed: {error}");
                 self.yank.flash = Some(Instant::now());
             }
         }
@@ -267,22 +384,27 @@ impl App {
         self.set_yank_flash(&format!("Yanked detail: {label}"), &text);
     }
 
-    /// Return the name of the currently selected entry, if any.
-    fn selected_entry_name(&self) -> Option<&str> {
-        let idx = self.active_section.list_index()?;
-        let sel = self.section_states[idx].list_state.selected()?;
-        let entry_idx = *self.section_states[idx].cached_indices().get(sel)?;
-        match self.active_section {
-            Section::Variables => self.report.variables.entries.get(entry_idx).map(|e| e.name.as_str()),
-            Section::Constraints => self.report.constraints.entries.get(entry_idx).map(|e| e.name.as_str()),
-            Section::Objectives => self.report.objectives.entries.get(entry_idx).map(|e| e.name.as_str()),
+    /// Return the name of an entry given section and entry index.
+    ///
+    /// Returns `None` if `section` is `Summary` or the index is out of bounds.
+    fn entry_name(&self, section: Section, entry_index: usize) -> Option<&str> {
+        match section {
+            Section::Variables => self.report.variables.entries.get(entry_index).map(|e| e.name.as_str()),
+            Section::Constraints => self.report.constraints.entries.get(entry_index).map(|e| e.name.as_str()),
+            Section::Objectives => self.report.objectives.entries.get(entry_index).map(|e| e.name.as_str()),
             Section::Summary => None,
         }
     }
 
+    /// Return the name of the currently selected entry, if any.
+    fn selected_entry_name(&self) -> Option<&str> {
+        let entry_index = self.selected_entry_index()?;
+        self.entry_name(self.active_section, entry_index)
+    }
+
     /// Record the current navigation position in the jumplist.
     pub(crate) fn record_jump(&mut self) {
-        let entry_index = self.active_section.list_index().and_then(|idx| self.section_states[idx].list_state.selected());
+        let entry_index = self.active_section.list_index().and_then(|index| self.section_states[index].list_state.selected());
         self.jumplist.push(JumpEntry { section: self.active_section, entry_index, detail_scroll: self.detail_scroll, filter: self.filter });
     }
 
@@ -295,18 +417,18 @@ impl App {
         self.ensure_active_section_cache();
         self.detail_scroll = entry.detail_scroll;
 
-        if let Some(idx) = entry.section.list_index() {
-            if let Some(sel) = entry.entry_index {
-                let len = self.section_states[idx].cached_indices().len();
-                if sel < len {
-                    self.section_states[idx].list_state.select(Some(sel));
+        if let Some(index) = entry.section.list_index() {
+            if let Some(selection) = entry.entry_index {
+                let len = self.section_states[index].cached_indices().len();
+                if selection < len {
+                    self.section_states[index].list_state.select(Some(selection));
                 } else if len > 0 {
-                    self.section_states[idx].list_state.select(Some(len - 1));
+                    self.section_states[index].list_state.select(Some(len - 1));
                 } else {
-                    self.section_states[idx].list_state.select(None);
+                    self.section_states[index].list_state.select(None);
                 }
             } else {
-                self.section_states[idx].list_state.select(None);
+                self.section_states[index].list_state.select(None);
             }
         }
 
@@ -314,25 +436,96 @@ impl App {
             if entry.entry_index.is_some() && entry.section != Section::Summary { Focus::NameList } else { Focus::SectionSelector };
     }
 
-    /// Poll the solver channel for a result, transitioning state if available.
+    /// Poll the solver channel(s) for results, transitioning state when complete.
     pub fn poll_solve(&mut self) {
-        if let Some(rx) = &self.solve_rx {
-            match rx.try_recv() {
-                Ok(Ok(result)) => {
-                    self.solve_state = SolveState::Done(Box::new(result));
-                    self.solve_view.scroll = 0;
-                    self.solve_rx = None;
-                }
-                Ok(Err(err)) => {
-                    self.solve_state = SolveState::Failed(err);
-                    self.solve_rx = None;
-                }
-                Err(mpsc::TryRecvError::Empty) => {} // still running
-                Err(mpsc::TryRecvError::Disconnected) => {
-                    self.solve_state = SolveState::Failed("Solver thread disconnected".to_owned());
-                    self.solve_rx = None;
-                }
+        if matches!(self.solver.state, SolveState::RunningBoth { .. }) {
+            self.poll_solve_both();
+        } else {
+            self.poll_solve_single();
+        }
+    }
+
+    /// Poll a single solver channel (`Running` state).
+    fn poll_solve_single(&mut self) {
+        let Some(receive) = &self.solver.receive else {
+            return;
+        };
+        match receive.try_recv() {
+            Ok(Ok(result)) => {
+                self.solver.state = SolveState::Done(Box::new(result));
+                self.solver.view = SolveViewState::default();
+                self.solver.receive = None;
             }
+            Ok(Err(error)) => {
+                self.solver.state = SolveState::Failed(error);
+                self.solver.receive = None;
+            }
+            Err(mpsc::TryRecvError::Empty) => {} // still running
+            Err(mpsc::TryRecvError::Disconnected) => {
+                self.solver.state = SolveState::Failed("Solver thread disconnected".to_owned());
+                self.solver.receive = None;
+            }
+        }
+    }
+
+    /// Poll both solver channels (`RunningBoth` state).
+    fn poll_solve_both(&mut self) {
+        // Poll channel 1.
+        let got1 = self.solver.receive.as_ref().and_then(|rx| match rx.try_recv() {
+            Ok(result) => Some(result),
+            Err(mpsc::TryRecvError::Empty) => None,
+            Err(mpsc::TryRecvError::Disconnected) => Some(Err("Solver thread 1 disconnected".to_owned())),
+        });
+
+        // Poll channel 2.
+        let got2 = self.solver.receive2.as_ref().and_then(|rx| match rx.try_recv() {
+            Ok(result) => Some(result),
+            Err(mpsc::TryRecvError::Empty) => None,
+            Err(mpsc::TryRecvError::Disconnected) => Some(Err("Solver thread 2 disconnected".to_owned())),
+        });
+
+        // Handle errors first.
+        if let Some(Err(error)) = got1 {
+            self.solver.state = SolveState::Failed(error);
+            self.solver.receive = None;
+            self.solver.receive2 = None;
+            return;
+        }
+        if let Some(Err(error)) = got2 {
+            self.solver.state = SolveState::Failed(error);
+            self.solver.receive = None;
+            self.solver.receive2 = None;
+            return;
+        }
+
+        // Store successful results into the state variant.
+        let SolveState::RunningBoth { result1, result2, .. } = &mut self.solver.state else {
+            return;
+        };
+
+        if let Some(Ok(r)) = got1 {
+            *result1 = Some(Box::new(r));
+            self.solver.receive = None;
+        }
+        if let Some(Ok(r)) = got2 {
+            *result2 = Some(Box::new(r));
+            self.solver.receive2 = None;
+        }
+
+        // Check if both are done.
+        let SolveState::RunningBoth { file1, file2, result1, result2 } = &mut self.solver.state else {
+            return;
+        };
+        if result1.is_some() && result2.is_some() {
+            let r1 = *result1.take().expect("checked Some above");
+            let r2 = *result2.take().expect("checked Some above");
+            let label1 = file1.clone();
+            let label2 = file2.clone();
+            let diff = crate::solver::diff_results(label1, label2, r1, r2);
+            self.solver.state = SolveState::DoneBoth(Box::new(diff));
+            self.solver.view = SolveViewState { diff_only: true, ..SolveViewState::default() };
+            self.solver.receive = None;
+            self.solver.receive2 = None;
         }
     }
 
@@ -340,67 +533,100 @@ impl App {
     ///
     /// References the pre-built haystack rather than rebuilding it each time.
     pub fn recompute_search_popup(&mut self) {
+        debug_assert!(self.search_popup.visible, "recompute_search_popup called while popup is not visible");
+        debug_assert!(
+            !self.search_haystack.is_empty()
+                || self.report.variables.entries.is_empty()
+                    && self.report.constraints.entries.is_empty()
+                    && self.report.objectives.entries.is_empty(),
+            "haystack must be populated when report has entries"
+        );
+
         self.search_popup.results.clear();
         self.search_popup.selected = 0;
         self.search_popup.scroll = 0;
 
-        let (mode, pattern) = search::parse_query(&self.search_popup.query);
-
         if self.search_popup.query.is_empty() {
-            // Show all entries, no scoring.
-            for (hi, entry) in self.search_haystack.iter().enumerate() {
+            self.populate_all_search_results();
+            return;
+        }
+
+        // Parse mode and pattern. For fuzzy mode, the pattern is always the full
+        // query (no prefix), so we can use the query length to detect that case
+        // without holding a borrow across mutable calls.
+        let mode = search::parse_query(&self.search_popup.query).0;
+
+        match mode {
+            SearchMode::Fuzzy => {
+                // Fuzzy mode has no prefix — pattern is the entire query.
+                self.populate_fuzzy_results();
+            }
+            SearchMode::Regex | SearchMode::Substring => self.populate_filtered_results(),
+        }
+    }
+
+    /// Populate search results with all entries (no query filter).
+    fn populate_all_search_results(&mut self) {
+        for (haystack_index, entry) in self.search_haystack.iter().enumerate() {
+            self.search_popup.results.push(SearchResult {
+                section: entry.section,
+                entry_index: entry.index,
+                score: 0,
+                match_indices: Vec::new(),
+                haystack_index,
+                kind: entry.kind,
+            });
+        }
+    }
+
+    /// Populate search results using fuzzy matching.
+    /// For fuzzy mode the pattern is always the full query (no prefix).
+    fn populate_fuzzy_results(&mut self) {
+        debug_assert!(
+            self.search_name_buffer.len() == self.search_haystack.len(),
+            "search_name_buffer out of sync with search_haystack ({} != {})",
+            self.search_name_buffer.len(),
+            self.search_haystack.len(),
+        );
+        let config = frizbee::Config { sort: true, ..Default::default() };
+        let matches = frizbee::match_list_indices(&self.search_popup.query, &self.search_name_buffer, &config);
+
+        for matched in matches {
+            let haystack_index = matched.index as usize;
+            let entry = &self.search_haystack[haystack_index];
+            // frizbee returns indices in reverse order; sort ascending for highlighting.
+            let mut indices = matched.indices;
+            indices.sort_unstable();
+            self.search_popup.results.push(SearchResult {
+                section: entry.section,
+                entry_index: entry.index,
+                score: matched.score,
+                match_indices: indices,
+                haystack_index,
+                kind: entry.kind,
+            });
+        }
+    }
+
+    /// Populate search results using regex or substring matching.
+    ///
+    /// Must not be called for fuzzy mode — that uses `populate_fuzzy_results` instead.
+    fn populate_filtered_results(&mut self) {
+        let compiled = CompiledSearch::compile(&self.search_popup.query);
+        debug_assert!(
+            !matches!(compiled, CompiledSearch::Fuzzy(..)),
+            "populate_filtered_results called with Fuzzy query; use populate_fuzzy_results instead"
+        );
+        for (haystack_index, entry) in self.search_haystack.iter().enumerate() {
+            if compiled.matches(&entry.name) {
                 self.search_popup.results.push(SearchResult {
                     section: entry.section,
                     entry_index: entry.index,
                     score: 0,
                     match_indices: Vec::new(),
-                    haystack_index: hi,
+                    haystack_index,
                     kind: entry.kind,
                 });
-            }
-            return;
-        }
-
-        match mode {
-            SearchMode::Fuzzy => {
-                // Lazily populate the reusable name buffer on first fuzzy search.
-                if self.search_name_buf.len() != self.search_haystack.len() {
-                    self.search_name_buf = self.search_haystack.iter().map(|e| e.name.clone()).collect();
-                }
-                let names: Vec<&str> = self.search_name_buf.iter().map(String::as_str).collect();
-                let config = frizbee::Config { sort: true, ..Default::default() };
-                let matches = frizbee::match_list_indices(pattern, &names, &config);
-
-                for m in matches {
-                    let hi = m.index as usize;
-                    let entry = &self.search_haystack[hi];
-                    // frizbee returns indices in reverse order; sort ascending for highlighting.
-                    let mut indices = m.indices;
-                    indices.sort_unstable();
-                    self.search_popup.results.push(SearchResult {
-                        section: entry.section,
-                        entry_index: entry.index,
-                        score: m.score,
-                        match_indices: indices,
-                        haystack_index: hi,
-                        kind: entry.kind,
-                    });
-                }
-            }
-            SearchMode::Regex | SearchMode::Substring => {
-                let compiled = CompiledSearch::compile(&self.search_popup.query);
-                for (hi, entry) in self.search_haystack.iter().enumerate() {
-                    if compiled.matches(&entry.name) {
-                        self.search_popup.results.push(SearchResult {
-                            section: entry.section,
-                            entry_index: entry.index,
-                            score: 0,
-                            match_indices: Vec::new(),
-                            haystack_index: hi,
-                            kind: entry.kind,
-                        });
-                    }
-                }
             }
         }
     }
@@ -433,42 +659,15 @@ impl App {
         self.ensure_active_section_cache();
 
         // Find the position of `entry_index` within the filtered indices and select it.
-        let Some(list_idx) = section.list_index() else {
+        let Some(list_index) = section.list_index() else {
             return;
         };
-        let filtered = self.section_states[list_idx].cached_indices();
-        if let Some(pos) = filtered.iter().position(|&i| i == entry_index) {
-            self.section_states[list_idx].list_state.select(Some(pos));
+        let filtered = self.section_states[list_index].cached_indices();
+        if let Some(position) = filtered.iter().position(|&i| i == entry_index) {
+            self.section_states[list_index].list_state.select(Some(position));
         }
 
         self.focus = Focus::NameList;
         self.detail_scroll = 0;
-    }
-
-    /// Move up by `n` steps in the focused panel. No-op for `SectionSelector`.
-    pub fn page_up(&mut self, n: usize) {
-        if n == 0 {
-            return;
-        }
-        match self.focus {
-            Focus::SectionSelector => {}
-            Focus::NameList => {
-                let len = self.name_list_len();
-                if len == 0 {
-                    return;
-                }
-                let state = self.active_name_list_state_mut();
-                let current = state.selected().unwrap_or(0);
-                let new = current.saturating_sub(n);
-                state.select(Some(new));
-                self.detail_scroll = 0;
-            }
-            Focus::Detail => {
-                debug_assert!(u16::try_from(n).is_ok(), "page scroll step {n} exceeds u16::MAX");
-                #[allow(clippy::cast_possible_truncation)]
-                let step = n as u16;
-                self.detail_scroll = self.detail_scroll.saturating_sub(step);
-            }
-        }
     }
 }

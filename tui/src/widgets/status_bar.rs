@@ -21,54 +21,56 @@ pub struct YankFlash<'a> {
     pub message: &'a str,
 }
 
+/// Parameters for rendering the status bar.
+pub struct StatusBarParams<'a> {
+    pub total_changes: usize,
+    pub section_counts: &'a DiffCounts,
+    pub filter_label: &'a str,
+    pub filter_count: usize,
+    pub detail_position: Option<&'a DetailPosition>,
+    pub yank_flash: Option<&'a YankFlash<'a>>,
+}
+
 /// Draw the status bar across the given area.
-#[allow(clippy::too_many_arguments)]
-pub fn draw_status_bar(
-    frame: &mut Frame,
-    area: Rect,
-    total_changes: usize,
-    section_counts: &DiffCounts,
-    filter_label: &str,
-    filter_count: usize,
-    detail_pos: Option<&DetailPosition>,
-    yank_flash: Option<&YankFlash<'_>>,
-) {
+pub fn draw_status_bar(frame: &mut Frame, area: Rect, params: &StatusBarParams<'_>) {
+    debug_assert!(area.width > 0 && area.height > 0, "status bar area must be non-zero");
+
     let chunks =
         Layout::horizontal([Constraint::Length(20), Constraint::Length(20), Constraint::Length(30), Constraint::Min(0)]).split(area);
 
     // Left: total number of changes across all sections.
     let changes_widget = Paragraph::new(Line::from(vec![Span::styled(
-        format!(" {total_changes} changes"),
+        format!(" {} changes", params.total_changes),
         Style::default().fg(Color::Green).add_modifier(Modifier::BOLD),
     )]));
     frame.render_widget(changes_widget, chunks[0]);
 
     // Section diff counts: +N -N ~N
     let counts_widget = Paragraph::new(Line::from(vec![
-        Span::styled(format!("+{}", section_counts.added), Style::default().fg(Color::Green)),
+        Span::styled(format!("+{}", params.section_counts.added), Style::default().fg(Color::Green)),
         Span::raw(" "),
-        Span::styled(format!("-{}", section_counts.removed), Style::default().fg(Color::Red)),
+        Span::styled(format!("-{}", params.section_counts.removed), Style::default().fg(Color::Red)),
         Span::raw(" "),
-        Span::styled(format!("~{}", section_counts.modified), Style::default().fg(Color::Yellow)),
+        Span::styled(format!("~{}", params.section_counts.modified), Style::default().fg(Color::Yellow)),
     ]));
     frame.render_widget(counts_widget, chunks[1]);
 
     // Centre: active filter name + optional scroll position.
     let mut centre_spans = vec![
         Span::styled("Filter: ", Style::default().fg(Color::DarkGray)),
-        Span::styled(format!("{filter_label} ({filter_count})"), Style::default().fg(Color::Yellow)),
+        Span::styled(format!("{} ({})", params.filter_label, params.filter_count), Style::default().fg(Color::Yellow)),
     ];
-    if let Some(pos) = detail_pos
-        && pos.content_lines > 0
+    if let Some(position) = params.detail_position
+        && position.content_lines > 0
     {
-        let top_line = (pos.scroll as usize).min(pos.content_lines) + 1;
-        centre_spans.push(Span::styled(format!("  L{top_line}/{}", pos.content_lines), Style::default().fg(Color::Cyan)));
+        let top_line = (position.scroll as usize).min(position.content_lines) + 1;
+        centre_spans.push(Span::styled(format!("  L{top_line}/{}", position.content_lines), Style::default().fg(Color::Cyan)));
     }
     let filter_widget = Paragraph::new(Line::from(centre_spans));
     frame.render_widget(filter_widget, chunks[2]);
 
     // Right: yank flash or key hints.
-    let hints_widget = yank_flash.map_or_else(
+    let hints_widget = params.yank_flash.map_or_else(
         || {
             Paragraph::new(Line::from(vec![Span::styled(
                 "Tab:panel  Enter:detail  j/k:nav  y:yank  /:search  ?:help  q:quit",

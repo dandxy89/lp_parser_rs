@@ -25,6 +25,7 @@ pub fn draw_summary(
     analysis2: &ProblemAnalysis,
     scroll: u16,
 ) -> usize {
+    debug_assert!(area.width > 0 && area.height > 0, "summary area must be non-zero");
     let mut lines: Vec<Line<'static>> = Vec::with_capacity(64);
 
     build_header(&mut lines, report);

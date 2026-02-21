@@ -33,11 +33,11 @@ fn detail_header(entity_label: &str, name: &str, kind: DiffKind) -> Vec<Line<'st
 
 /// Extract (lower, upper) bounds from a `VariableType`, returning `None` for
 /// bounds that don't apply to that type.
-pub const fn variable_bounds(vt: &VariableType) -> (Option<f64>, Option<f64>) {
-    match *vt {
-        VariableType::LowerBound(lb) => (Some(lb), None),
-        VariableType::UpperBound(ub) => (None, Some(ub)),
-        VariableType::DoubleBound(lb, ub) => (Some(lb), Some(ub)),
+pub const fn variable_bounds(variable_type: &VariableType) -> (Option<f64>, Option<f64>) {
+    match *variable_type {
+        VariableType::LowerBound(lower) => (Some(lower), None),
+        VariableType::UpperBound(upper) => (None, Some(upper)),
+        VariableType::DoubleBound(lower, upper) => (Some(lower), Some(upper)),
         _ => (None, None),
     }
 }
@@ -48,36 +48,40 @@ pub fn fmt_bound(val: Option<f64>) -> String {
 }
 
 /// Render type/bounds lines for an added or removed variable (single-side view).
-fn render_variable_type_info(lines: &mut Vec<Line<'static>>, vt: &VariableType, colour: Color) {
-    let label = std::str::from_utf8(vt.as_ref()).unwrap_or("?");
+fn render_variable_type_info(lines: &mut Vec<Line<'static>>, variable_type: &VariableType, colour: Color) {
+    let label = std::str::from_utf8(variable_type.as_ref()).unwrap_or("?");
     lines.push(Line::from(vec![Span::styled("  Type:   ", MUTED), Span::styled(label.to_owned(), Style::default().fg(colour))]));
 
-    let (lb, ub) = variable_bounds(vt);
-    if let Some(l) = lb {
-        lines.push(Line::from(vec![Span::styled("  Lower:  ", MUTED), Span::styled(format!("{l}"), Style::default().fg(colour))]));
+    let (lower_bound, upper_bound) = variable_bounds(variable_type);
+    if let Some(lower) = lower_bound {
+        lines.push(Line::from(vec![Span::styled("  Lower:  ", MUTED), Span::styled(format!("{lower}"), Style::default().fg(colour))]));
     }
-    if let Some(u) = ub {
-        lines.push(Line::from(vec![Span::styled("  Upper:  ", MUTED), Span::styled(format!("{u}"), Style::default().fg(colour))]));
+    if let Some(upper) = upper_bound {
+        lines.push(Line::from(vec![Span::styled("  Upper:  ", MUTED), Span::styled(format!("{upper}"), Style::default().fg(colour))]));
     }
-    if let (Some(l), Some(u)) = (lb, ub) {
-        lines.push(Line::from(vec![Span::styled("  Range:  ", MUTED), Span::styled(format!("{}", u - l), Style::default().fg(colour))]));
+    if let (Some(lower), Some(upper)) = (lower_bound, upper_bound) {
+        lines.push(Line::from(vec![
+            Span::styled("  Range:  ", MUTED),
+            Span::styled(format!("{}", upper - lower), Style::default().fg(colour)),
+        ]));
     }
 }
 
 /// Render a variable detail panel. Returns the total content line count.
 #[allow(clippy::too_many_lines)]
-#[allow(clippy::similar_names)] // lb/ub are standard abbreviations for lower/upper bound
+#[allow(clippy::similar_names)] // lower_bound/upper_bound share prefixes
 pub fn render_variable_detail(frame: &mut Frame, area: Rect, entry: &VariableDiffEntry, border_style: Style, scroll: u16) -> usize {
+    debug_assert!(area.width > 0 && area.height > 0, "variable detail area must be non-zero");
     let mut lines = detail_header("Variable", &entry.name, entry.kind);
 
     match entry.kind {
         DiffKind::Added => {
-            let vt = entry.new_type.as_ref().expect("invariant: Added entry must have new_type");
-            render_variable_type_info(&mut lines, vt, Color::Green);
+            let variable_type = entry.new_type.as_ref().expect("invariant: Added entry must have new_type");
+            render_variable_type_info(&mut lines, variable_type, Color::Green);
         }
         DiffKind::Removed => {
-            let vt = entry.old_type.as_ref().expect("invariant: Removed entry must have old_type");
-            render_variable_type_info(&mut lines, vt, Color::Red);
+            let variable_type = entry.old_type.as_ref().expect("invariant: Removed entry must have old_type");
+            render_variable_type_info(&mut lines, variable_type, Color::Red);
         }
         DiffKind::Modified => {
             let old = entry.old_type.as_ref().expect("invariant: Modified entry must have old_type");
@@ -101,29 +105,29 @@ pub fn render_variable_detail(frame: &mut Frame, area: Rect, entry: &VariableDif
             }
 
             // Bounds comparison.
-            let (old_lb, old_ub) = variable_bounds(old);
-            let (new_lb, new_ub) = variable_bounds(new);
+            let (old_lower, old_upper) = variable_bounds(old);
+            let (new_lower, new_upper) = variable_bounds(new);
 
-            if old_lb.is_some() || new_lb.is_some() {
+            if old_lower.is_some() || new_lower.is_some() {
                 lines.push(Line::from(vec![
                     Span::styled("  Lower:  ", MUTED),
-                    Span::styled(fmt_bound(old_lb), Style::default().fg(Color::Red)),
+                    Span::styled(fmt_bound(old_lower), Style::default().fg(Color::Red)),
                     Span::styled(ARROW, MUTED),
-                    Span::styled(fmt_bound(new_lb), Style::default().fg(Color::Green)),
+                    Span::styled(fmt_bound(new_lower), Style::default().fg(Color::Green)),
                 ]));
             }
 
-            if old_ub.is_some() || new_ub.is_some() {
+            if old_upper.is_some() || new_upper.is_some() {
                 lines.push(Line::from(vec![
                     Span::styled("  Upper:  ", MUTED),
-                    Span::styled(fmt_bound(old_ub), Style::default().fg(Color::Red)),
+                    Span::styled(fmt_bound(old_upper), Style::default().fg(Color::Red)),
                     Span::styled(ARROW, MUTED),
-                    Span::styled(fmt_bound(new_ub), Style::default().fg(Color::Green)),
+                    Span::styled(fmt_bound(new_upper), Style::default().fg(Color::Green)),
                 ]));
             }
 
-            let old_range = old_lb.zip(old_ub).map(|(l, u)| u - l);
-            let new_range = new_lb.zip(new_ub).map(|(l, u)| u - l);
+            let old_range = old_lower.zip(old_upper).map(|(lower, upper)| upper - lower);
+            let new_range = new_lower.zip(new_upper).map(|(lower, upper)| upper - lower);
             if old_range.is_some() || new_range.is_some() {
                 lines.push(Line::from(vec![
                     Span::styled("  Range:  ", MUTED),
@@ -139,8 +143,19 @@ pub fn render_variable_detail(frame: &mut Frame, area: Rect, entry: &VariableDif
 }
 
 /// Render a constraint detail panel. Returns the total content line count.
+///
+/// When `cached_rows` is `Some`, pre-built coefficient rows are reused instead of
+/// rebuilding them each frame.
 #[allow(clippy::too_many_lines)]
-pub fn render_constraint_detail(frame: &mut Frame, area: Rect, entry: &ConstraintDiffEntry, border_style: Style, scroll: u16) -> usize {
+pub fn render_constraint_detail(
+    frame: &mut Frame,
+    area: Rect,
+    entry: &ConstraintDiffEntry,
+    border_style: Style,
+    scroll: u16,
+    cached_rows: Option<&[crate::detail_model::CoefficientRow]>,
+) -> usize {
+    debug_assert!(area.width > 0 && area.height > 0, "constraint detail area must be non-zero");
     let mut lines = detail_header("Constraint", &entry.name, entry.kind);
 
     // Render line number location if available.
@@ -207,73 +222,20 @@ pub fn render_constraint_detail(frame: &mut Frame, area: Rect, entry: &Constrain
             lines.push(Line::from(Span::styled("  Coefficients:", MUTED.add_modifier(Modifier::BOLD))));
 
             if entry.kind == DiffKind::Modified {
-                // Side-by-side rendering for modified standard constraints.
-                // Render header + operator/RHS in a single Paragraph, then split
-                // the remaining area into two columns for old/new coefficients.
-                let header_line_count = lines.len();
-                let block = Block::default().borders(Borders::ALL).border_style(border_style).title(" Constraint Detail ");
-                let inner = block.inner(area);
-                frame.render_widget(block, area);
-
-                // Header paragraph (above the two columns).
-                #[allow(clippy::cast_possible_truncation)]
-                let header_height = header_line_count as u16;
-                let v_chunks = Layout::vertical([Constraint::Length(header_height), Constraint::Min(0)]).split(inner);
-
-                let header_para = Paragraph::new(lines).scroll((scroll, 0));
-                frame.render_widget(header_para, v_chunks[0]);
-
-                // Build the unified coefficient rows.
-                let rows = build_coeff_rows(coeff_changes, old_coefficients, new_coefficients);
-
-                // Build left (old) and right (new) line lists.
-                let mut left_lines: Vec<Line<'_>> = vec![Line::from(Span::styled(
-                    " Old",
-                    Style::default().fg(Color::Red).add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
-                ))];
-                let mut right_lines: Vec<Line<'_>> = vec![Line::from(Span::styled(
-                    " New",
-                    Style::default().fg(Color::Green).add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
-                ))];
-
-                for row in &rows {
-                    let (left_style, right_style, badge) = match row.change_kind {
-                        Some(DiffKind::Added) => (Style::default().fg(Color::DarkGray), Style::default().fg(Color::Green), " [+]"),
-                        Some(DiffKind::Removed) => (Style::default().fg(Color::Red), Style::default().fg(Color::DarkGray), " [-]"),
-                        Some(DiffKind::Modified) => (Style::default().fg(Color::Red), Style::default().fg(Color::Green), " [~]"),
-                        None => (Style::default().fg(Color::DarkGray), Style::default().fg(Color::DarkGray), ""),
-                    };
-
-                    let old_str = row.old_value.map_or_else(String::new, |v| format!("{v}"));
-                    let new_str = row.new_value.map_or_else(String::new, |v| format!("{v}"));
-
-                    left_lines.push(Line::from(vec![
-                        Span::styled(format!(" {:<18}", row.variable), left_style),
-                        Span::styled(format!("{old_str:>10}"), left_style),
-                        Span::styled(badge, left_style),
-                    ]));
-                    right_lines.push(Line::from(vec![
-                        Span::styled(format!(" {:<18}", row.variable), right_style),
-                        Span::styled(format!("{new_str:>10}"), right_style),
-                        Span::styled(badge, right_style),
-                    ]));
-                }
-
-                // Scroll the coefficient area if the header is scrolled past.
-                let coeff_scroll = scroll.saturating_sub(header_height);
-
-                let h_chunks = Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]).split(v_chunks[1]);
-
-                let left_para = Paragraph::new(left_lines).scroll((coeff_scroll, 0));
-                let right_para = Paragraph::new(right_lines).scroll((coeff_scroll, 0));
-                frame.render_widget(left_para, h_chunks[0]);
-                frame.render_widget(right_para, h_chunks[1]);
-
-                // Return total content lines (header + 1 header line + coeff rows).
-                return header_line_count + 1 + rows.len();
+                return render_constraint_side_by_side(
+                    frame,
+                    area,
+                    lines,
+                    coeff_changes,
+                    old_coefficients,
+                    new_coefficients,
+                    border_style,
+                    scroll,
+                    cached_rows,
+                );
             }
 
-            render_coeff_changes(&mut lines, coeff_changes, old_coefficients, new_coefficients);
+            render_coeff_changes(&mut lines, coeff_changes, old_coefficients, new_coefficients, cached_rows);
         }
 
         ConstraintDiffDetail::Sos { old_weights, new_weights, weight_changes, type_change } => {
@@ -289,7 +251,7 @@ pub fn render_constraint_detail(frame: &mut Frame, area: Rect, entry: &Constrain
             lines.push(Line::from(""));
             lines.push(Line::from(Span::styled("  Weights:", MUTED.add_modifier(Modifier::BOLD))));
 
-            render_coeff_changes(&mut lines, weight_changes, old_weights, new_weights);
+            render_coeff_changes(&mut lines, weight_changes, old_weights, new_weights, cached_rows);
         }
 
         ConstraintDiffDetail::TypeChanged { old_summary, new_summary } => {
@@ -348,13 +310,24 @@ pub fn render_constraint_detail(frame: &mut Frame, area: Rect, entry: &Constrain
 }
 
 /// Render an objective detail panel. Returns the total content line count.
-pub fn render_objective_detail(frame: &mut Frame, area: Rect, entry: &ObjectiveDiffEntry, border_style: Style, scroll: u16) -> usize {
+///
+/// When `cached_rows` is `Some`, pre-built coefficient rows are reused instead of
+/// rebuilding them each frame.
+pub fn render_objective_detail(
+    frame: &mut Frame,
+    area: Rect,
+    entry: &ObjectiveDiffEntry,
+    border_style: Style,
+    scroll: u16,
+    cached_rows: Option<&[crate::detail_model::CoefficientRow]>,
+) -> usize {
+    debug_assert!(area.width > 0 && area.height > 0, "objective detail area must be non-zero");
     let mut lines = detail_header("Objective", &entry.name, entry.kind);
 
     lines.push(Line::from(Span::styled("  Coefficients:", MUTED.add_modifier(Modifier::BOLD))));
 
     if entry.kind == DiffKind::Modified {
-        render_coeff_changes(&mut lines, &entry.coeff_changes, &entry.old_coefficients, &entry.new_coefficients);
+        render_coeff_changes(&mut lines, &entry.coeff_changes, &entry.old_coefficients, &entry.new_coefficients, cached_rows);
     } else {
         let coeffs = if entry.kind == DiffKind::Added { &entry.new_coefficients } else { &entry.old_coefficients };
         let colour = kind_colour(entry.kind);
@@ -369,6 +342,80 @@ pub fn render_objective_detail(frame: &mut Frame, area: Rect, entry: &ObjectiveD
     render_panel(frame, area, " Objective Detail ", lines, border_style, scroll)
 }
 
+/// Render a side-by-side old/new coefficient comparison for modified
+/// standard constraints. Returns the total content line count.
+#[allow(clippy::too_many_arguments)]
+fn render_constraint_side_by_side(
+    frame: &mut Frame,
+    area: Rect,
+    header_lines: Vec<Line<'_>>,
+    coeff_changes: &[CoefficientChange],
+    old_coefficients: &[lp_parser_rs::model::CoefficientOwned],
+    new_coefficients: &[lp_parser_rs::model::CoefficientOwned],
+    border_style: Style,
+    scroll: u16,
+    cached_rows: Option<&[crate::detail_model::CoefficientRow]>,
+) -> usize {
+    let header_line_count = header_lines.len();
+    let block = Block::default().borders(Borders::ALL).border_style(border_style).title(" Constraint Detail ");
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    #[allow(clippy::cast_possible_truncation)]
+    let header_height = header_line_count as u16;
+    let v_chunks = Layout::vertical([Constraint::Length(header_height), Constraint::Min(0)]).split(inner);
+
+    let header_paragraph = Paragraph::new(header_lines).scroll((scroll, 0));
+    frame.render_widget(header_paragraph, v_chunks[0]);
+
+    let owned_rows;
+    let rows = if let Some(cached) = cached_rows {
+        cached
+    } else {
+        owned_rows = build_coeff_rows(coeff_changes, old_coefficients, new_coefficients);
+        &owned_rows
+    };
+
+    let mut left_lines: Vec<Line<'_>> =
+        vec![Line::from(Span::styled(" Old", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD | Modifier::UNDERLINED)))];
+    let mut right_lines: Vec<Line<'_>> =
+        vec![Line::from(Span::styled(" New", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD | Modifier::UNDERLINED)))];
+
+    for row in rows {
+        let (left_style, right_style, badge) = match row.change_kind {
+            Some(DiffKind::Added) => (Style::default().fg(Color::DarkGray), Style::default().fg(Color::Green), " [+]"),
+            Some(DiffKind::Removed) => (Style::default().fg(Color::Red), Style::default().fg(Color::DarkGray), " [-]"),
+            Some(DiffKind::Modified) => (Style::default().fg(Color::Red), Style::default().fg(Color::Green), " [~]"),
+            None => (Style::default().fg(Color::DarkGray), Style::default().fg(Color::DarkGray), ""),
+        };
+
+        let old_str = row.old_value.map_or_else(String::new, |v| format!("{v}"));
+        let new_str = row.new_value.map_or_else(String::new, |v| format!("{v}"));
+
+        left_lines.push(Line::from(vec![
+            Span::styled(format!(" {:<18}", row.variable), left_style),
+            Span::styled(format!("{old_str:>10}"), left_style),
+            Span::styled(badge, left_style),
+        ]));
+        right_lines.push(Line::from(vec![
+            Span::styled(format!(" {:<18}", row.variable), right_style),
+            Span::styled(format!("{new_str:>10}"), right_style),
+            Span::styled(badge, right_style),
+        ]));
+    }
+
+    let coefficient_scroll = scroll.saturating_sub(header_height);
+
+    let h_chunks = Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]).split(v_chunks[1]);
+
+    let left_paragraph = Paragraph::new(left_lines).scroll((coefficient_scroll, 0));
+    let right_paragraph = Paragraph::new(right_lines).scroll((coefficient_scroll, 0));
+    frame.render_widget(left_paragraph, h_chunks[0]);
+    frame.render_widget(right_paragraph, h_chunks[1]);
+
+    header_line_count + 1 + rows.len()
+}
+
 /// Render a combined view of old and new coefficient lists, annotating each
 /// variable with its change status.
 fn render_coeff_changes(
@@ -376,13 +423,20 @@ fn render_coeff_changes(
     changes: &[CoefficientChange],
     old_coefficients: &[lp_parser_rs::model::CoefficientOwned],
     new_coefficients: &[lp_parser_rs::model::CoefficientOwned],
+    cached_rows: Option<&[crate::detail_model::CoefficientRow]>,
 ) {
     // Column width for value formatting — wide enough for typical LP coefficients.
     const VAL_WIDTH: usize = 12;
 
-    let rows = build_coeff_rows(changes, old_coefficients, new_coefficients);
+    let owned_rows;
+    let rows = if let Some(cached) = cached_rows {
+        cached
+    } else {
+        owned_rows = build_coeff_rows(changes, old_coefficients, new_coefficients);
+        &owned_rows
+    };
 
-    for row in &rows {
+    for row in rows {
         let old_str = row.old_value.map_or_else(String::new, |v| format!("{v}"));
         let new_str = row.new_value.map_or_else(String::new, |v| format!("{v}"));
 

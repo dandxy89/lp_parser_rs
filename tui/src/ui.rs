@@ -80,22 +80,25 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
         None
     };
     let yank_flash = if app.yank.flash.is_some() { Some(status_bar::YankFlash { message: &app.yank.message }) } else { None };
-    // Compute section-specific diff counts for the status bar.
+    // Compute section-specific diff counts for the status bar using the
+    // already-derived report_summary to avoid re-accessing report fields.
     let section_counts = match app.active_section {
         Section::Summary => report_summary.aggregate_counts(),
-        Section::Variables => app.report.variables.counts,
-        Section::Constraints => app.report.constraints.counts,
-        Section::Objectives => app.report.objectives.counts,
+        Section::Variables => report_summary.variables,
+        Section::Constraints => report_summary.constraints,
+        Section::Objectives => report_summary.objectives,
     };
     status_bar::draw_status_bar(
         frame,
         outer[1],
-        total_changes,
-        &section_counts,
-        app.filter.label(),
-        filter_count,
-        detail_pos.as_ref(),
-        yank_flash.as_ref(),
+        &status_bar::StatusBarParams {
+            total_changes,
+            section_counts: &section_counts,
+            filter_label: app.filter.label(),
+            filter_count,
+            detail_position: detail_pos.as_ref(),
+            yank_flash: yank_flash.as_ref(),
+        },
     );
 
     // Search pop-up overlay — rendered on top of main content.
@@ -104,7 +107,7 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     }
 
     // Solve overlay — rendered on top of main content.
-    if !matches!(app.solve_state, crate::state::SolveState::Idle) {
+    if !matches!(app.solver.state, crate::state::SolveState::Idle) {
         solve::draw_solve_overlay(frame, frame.area(), app);
     }
 
@@ -118,57 +121,46 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
 fn draw_detail_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App, report_summary: &crate::diff_model::DiffSummary) {
     let border_style = focus_border_style(app.focus, Focus::Detail);
 
-    let content_lines = match app.active_section {
-        Section::Summary => {
-            let block = Block::default().borders(Borders::ALL).border_style(border_style).title(" Summary ");
-            let inner = block.inner(area);
-            frame.render_widget(block, area);
-            summary::draw_summary(
-                frame,
-                inner,
-                &app.report,
-                report_summary,
-                &app.report.analysis1,
-                &app.report.analysis2,
-                app.detail_scroll,
-            )
-        }
-        Section::Variables => {
-            let (filtered, state) = app.section_states[0].indices_and_state_mut();
-            let selected_entry_idx = state.selected().and_then(|sel| filtered.get(sel).copied());
-
-            if let Some(idx) = selected_entry_idx {
-                debug_assert!(idx < app.report.variables.entries.len(), "variable entry_idx {idx} out of bounds");
-                detail::render_variable_detail(frame, area, &app.report.variables.entries[idx], border_style, app.detail_scroll)
-            } else {
-                sidebar::draw_empty_detail(frame, area, "Select a variable from the list", border_style);
-                0
+    let content_lines = if app.active_section == Section::Summary {
+        let block = Block::default().borders(Borders::ALL).border_style(border_style).title(" Summary ");
+        let inner = block.inner(area);
+        frame.render_widget(block, area);
+        summary::draw_summary(frame, inner, &app.report, report_summary, &app.report.analysis1, &app.report.analysis2, app.detail_scroll)
+    } else if let Some(entry_index) = app.selected_entry_index() {
+        app.ensure_coeff_row_cache();
+        let scroll = app.detail_scroll;
+        let cached_rows = app.cached_coeff_rows();
+        match app.active_section {
+            Section::Variables => {
+                debug_assert!(entry_index < app.report.variables.entries.len(), "variable entry_index {entry_index} out of bounds");
+                detail::render_variable_detail(frame, area, &app.report.variables.entries[entry_index], border_style, scroll)
             }
-        }
-        Section::Constraints => {
-            let (filtered, state) = app.section_states[1].indices_and_state_mut();
-            let selected_entry_idx = state.selected().and_then(|sel| filtered.get(sel).copied());
-
-            if let Some(idx) = selected_entry_idx {
-                debug_assert!(idx < app.report.constraints.entries.len(), "constraint entry_idx {idx} out of bounds");
-                detail::render_constraint_detail(frame, area, &app.report.constraints.entries[idx], border_style, app.detail_scroll)
-            } else {
-                sidebar::draw_empty_detail(frame, area, "Select a constraint from the list", border_style);
-                0
+            Section::Constraints => {
+                debug_assert!(entry_index < app.report.constraints.entries.len(), "constraint entry_index {entry_index} out of bounds");
+                detail::render_constraint_detail(
+                    frame,
+                    area,
+                    &app.report.constraints.entries[entry_index],
+                    border_style,
+                    scroll,
+                    cached_rows,
+                )
             }
-        }
-        Section::Objectives => {
-            let (filtered, state) = app.section_states[2].indices_and_state_mut();
-            let selected_entry_idx = state.selected().and_then(|sel| filtered.get(sel).copied());
-
-            if let Some(idx) = selected_entry_idx {
-                debug_assert!(idx < app.report.objectives.entries.len(), "objective entry_idx {idx} out of bounds");
-                detail::render_objective_detail(frame, area, &app.report.objectives.entries[idx], border_style, app.detail_scroll)
-            } else {
-                sidebar::draw_empty_detail(frame, area, "Select an objective from the list", border_style);
-                0
+            Section::Objectives => {
+                debug_assert!(entry_index < app.report.objectives.entries.len(), "objective entry_index {entry_index} out of bounds");
+                detail::render_objective_detail(frame, area, &app.report.objectives.entries[entry_index], border_style, scroll, cached_rows)
             }
+            Section::Summary => unreachable!("handled above"),
         }
+    } else {
+        let label = match app.active_section {
+            Section::Variables => "Select a variable from the list",
+            Section::Constraints => "Select a constraint from the list",
+            Section::Objectives => "Select an objective from the list",
+            Section::Summary => unreachable!("handled above"),
+        };
+        sidebar::draw_empty_detail(frame, area, label, border_style);
+        0
     };
 
     app.layout.detail_content_lines = content_lines;

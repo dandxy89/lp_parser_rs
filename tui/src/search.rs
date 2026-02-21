@@ -44,8 +44,9 @@ pub fn parse_query(raw: &str) -> (SearchMode, &str) {
 
 /// A compiled search, built once per query change and reused across all entries.
 pub enum CompiledSearch {
-    /// Fuzzy match via `frizbee`. Stores the needle pattern for per-entry matching.
-    Fuzzy(String),
+    /// Fuzzy match via `frizbee`. Stores the needle pattern and a cached config
+    /// to avoid recreating it per match call.
+    Fuzzy(String, frizbee::Config),
     /// Compiled case-insensitive regex.
     Regex(Result<Regex, regex::Error>),
     /// Lowercased substring for case-insensitive contains check.
@@ -57,7 +58,7 @@ impl CompiledSearch {
     pub fn compile(raw: &str) -> Self {
         let (mode, pattern) = parse_query(raw);
         match mode {
-            SearchMode::Fuzzy => Self::Fuzzy(pattern.to_string()),
+            SearchMode::Fuzzy => Self::Fuzzy(pattern.to_string(), frizbee::Config::default()),
             SearchMode::Regex => {
                 let result = regex::RegexBuilder::new(pattern).case_insensitive(true).build();
                 Self::Regex(result)
@@ -69,13 +70,12 @@ impl CompiledSearch {
     /// Test whether `searchable_text` matches this compiled search.
     pub fn matches(&self, searchable_text: &str) -> bool {
         match self {
-            Self::Fuzzy(needle) => {
+            Self::Fuzzy(needle, config) => {
                 if needle.is_empty() {
                     return true;
                 }
-                let config = frizbee::Config::default();
                 let haystacks = [searchable_text];
-                let results = frizbee::match_list(needle, &haystacks, &config);
+                let results = frizbee::match_list(needle, &haystacks, config);
                 !results.is_empty()
             }
             Self::Regex(Ok(re)) => re.is_match(searchable_text),
@@ -103,7 +103,7 @@ impl CompiledSearch {
 impl std::fmt::Debug for CompiledSearch {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Fuzzy(needle) => write!(f, "CompiledSearch::Fuzzy({needle:?})"),
+            Self::Fuzzy(needle, _) => write!(f, "CompiledSearch::Fuzzy({needle:?})"),
             Self::Regex(Ok(re)) => write!(f, "CompiledSearch::Regex({re})"),
             Self::Regex(Err(e)) => write!(f, "CompiledSearch::Regex(Err({e}))"),
             Self::Substring(s) => write!(f, "CompiledSearch::Substring({s:?})"),

@@ -359,8 +359,76 @@ fn diff_variables(p1: &LpProblemOwned, p2: &LpProblemOwned) -> SectionDiff<Varia
     SectionDiff { entries, counts }
 }
 
+/// Diff two standard constraints and return the detail if they differ, `None` if unchanged.
+fn diff_standard_constraints(
+    old_coefficients: &[CoefficientOwned],
+    old_operator: &ComparisonOp,
+    old_rhs: f64,
+    new_coefficients: &[CoefficientOwned],
+    new_operator: &ComparisonOp,
+    new_rhs: f64,
+) -> Option<ConstraintDiffDetail> {
+    let coeff_changes = diff_coefficients(old_coefficients, new_coefficients);
+    let operator_change = if old_operator == new_operator { None } else { Some((old_operator.clone(), new_operator.clone())) };
+    let rhs_change = if (old_rhs - new_rhs).abs() > COEFF_EPSILON { Some((old_rhs, new_rhs)) } else { None };
+
+    if coeff_changes.is_empty() && operator_change.is_none() && rhs_change.is_none() {
+        return None;
+    }
+
+    Some(ConstraintDiffDetail::Standard {
+        old_coefficients: old_coefficients.to_vec(),
+        new_coefficients: new_coefficients.to_vec(),
+        coeff_changes,
+        operator_change,
+        rhs_change,
+        old_rhs,
+        new_rhs,
+    })
+}
+
+/// Diff two SOS constraints and return the detail if they differ, `None` if unchanged.
+fn diff_sos_constraints(
+    old_type: &SOSType,
+    old_weights: &[CoefficientOwned],
+    new_type: &SOSType,
+    new_weights: &[CoefficientOwned],
+) -> Option<ConstraintDiffDetail> {
+    let weight_changes = diff_coefficients(old_weights, new_weights);
+    let type_change = if old_type == new_type { None } else { Some((old_type.clone(), new_type.clone())) };
+
+    if weight_changes.is_empty() && type_change.is_none() {
+        return None;
+    }
+
+    Some(ConstraintDiffDetail::Sos { old_weights: old_weights.to_vec(), new_weights: new_weights.to_vec(), weight_changes, type_change })
+}
+
+/// Compute the detail for two constraints that both exist, returning `None` if unchanged.
+fn diff_constraint_pair(constraint1: &ConstraintOwned, constraint2: &ConstraintOwned) -> Option<ConstraintDiffDetail> {
+    match (constraint1, constraint2) {
+        // Standard vs SOS: structurally incompatible.
+        (ConstraintOwned::Standard { .. }, ConstraintOwned::SOS { .. })
+        | (ConstraintOwned::SOS { .. }, ConstraintOwned::Standard { .. }) => Some(ConstraintDiffDetail::TypeChanged {
+            old_summary: constraint_summary(constraint1),
+            new_summary: constraint_summary(constraint2),
+        }),
+
+        // Both standard: diff coefficients, operator, rhs.
+        (
+            ConstraintOwned::Standard { coefficients: old_coefficients, operator: old_operator, rhs: old_rhs, .. },
+            ConstraintOwned::Standard { coefficients: new_coefficients, operator: new_operator, rhs: new_rhs, .. },
+        ) => diff_standard_constraints(old_coefficients, old_operator, *old_rhs, new_coefficients, new_operator, *new_rhs),
+
+        // Both SOS: diff weights and sos_type.
+        (
+            ConstraintOwned::SOS { sos_type: old_type, weights: old_weights, .. },
+            ConstraintOwned::SOS { sos_type: new_type, weights: new_weights, .. },
+        ) => diff_sos_constraints(old_type, old_weights, new_type, new_weights),
+    }
+}
+
 /// Diff the constraints section between two problems.
-#[allow(clippy::too_many_lines)]
 fn diff_constraints(
     p1: &LpProblemOwned,
     p2: &LpProblemOwned,
@@ -373,94 +441,41 @@ fn diff_constraints(
     let mut counts = DiffCounts::default();
 
     for name in all_names {
-        let c1 = p1.constraints.get(name);
-        let c2 = p2.constraints.get(name);
-        let l1 = line_map1.get(name).copied();
-        let l2 = line_map2.get(name).copied();
+        let constraint1 = p1.constraints.get(name);
+        let constraint2 = p2.constraints.get(name);
+        let line1 = line_map1.get(name).copied();
+        let line2 = line_map2.get(name).copied();
 
-        match (c1, c2) {
-            (Some(c), None) => {
+        match (constraint1, constraint2) {
+            (Some(constraint), None) => {
                 counts.removed += 1;
                 entries.push(ConstraintDiffEntry {
                     name: name.to_string(),
                     kind: DiffKind::Removed,
-                    detail: ConstraintDiffDetail::AddedOrRemoved(c.clone()),
-                    line_file1: l1,
-                    line_file2: l2,
+                    detail: ConstraintDiffDetail::AddedOrRemoved(constraint.clone()),
+                    line_file1: line1,
+                    line_file2: line2,
                 });
             }
-            (None, Some(c)) => {
+            (None, Some(constraint)) => {
                 counts.added += 1;
                 entries.push(ConstraintDiffEntry {
                     name: name.to_string(),
                     kind: DiffKind::Added,
-                    detail: ConstraintDiffDetail::AddedOrRemoved(c.clone()),
-                    line_file1: l1,
-                    line_file2: l2,
+                    detail: ConstraintDiffDetail::AddedOrRemoved(constraint.clone()),
+                    line_file1: line1,
+                    line_file2: line2,
                 });
             }
             (Some(c1), Some(c2)) => {
-                let detail = match (c1, c2) {
-                    // Standard vs SOS: structurally incompatible.
-                    (ConstraintOwned::Standard { .. }, ConstraintOwned::SOS { .. })
-                    | (ConstraintOwned::SOS { .. }, ConstraintOwned::Standard { .. }) => {
-                        Some(ConstraintDiffDetail::TypeChanged { old_summary: constraint_summary(c1), new_summary: constraint_summary(c2) })
-                    }
-
-                    // Both standard: diff coefficients, operator, rhs.
-                    (
-                        ConstraintOwned::Standard { coefficients: old_coeffs, operator: old_op, rhs: old_rhs, .. },
-                        ConstraintOwned::Standard { coefficients: new_coeffs, operator: new_op, rhs: new_rhs, .. },
-                    ) => {
-                        let coeff_changes = diff_coefficients(old_coeffs, new_coeffs);
-                        let operator_change = if old_op == new_op { None } else { Some((old_op.clone(), new_op.clone())) };
-                        let rhs_change = if (old_rhs - new_rhs).abs() > COEFF_EPSILON { Some((*old_rhs, *new_rhs)) } else { None };
-
-                        if coeff_changes.is_empty() && operator_change.is_none() && rhs_change.is_none() {
-                            // No change at all.
-                            None
-                        } else {
-                            Some(ConstraintDiffDetail::Standard {
-                                old_coefficients: old_coeffs.clone(),
-                                new_coefficients: new_coeffs.clone(),
-                                coeff_changes,
-                                operator_change,
-                                rhs_change,
-                                old_rhs: *old_rhs,
-                                new_rhs: *new_rhs,
-                            })
-                        }
-                    }
-
-                    // Both SOS: diff weights and sos_type.
-                    (
-                        ConstraintOwned::SOS { sos_type: old_type, weights: old_weights, .. },
-                        ConstraintOwned::SOS { sos_type: new_type, weights: new_weights, .. },
-                    ) => {
-                        let weight_changes = diff_coefficients(old_weights, new_weights);
-                        let type_change = if old_type == new_type { None } else { Some((old_type.clone(), new_type.clone())) };
-
-                        if weight_changes.is_empty() && type_change.is_none() {
-                            None
-                        } else {
-                            Some(ConstraintDiffDetail::Sos {
-                                old_weights: old_weights.clone(),
-                                new_weights: new_weights.clone(),
-                                weight_changes,
-                                type_change,
-                            })
-                        }
-                    }
-                };
-
-                if let Some(d) = detail {
+                if let Some(detail) = diff_constraint_pair(c1, c2) {
                     counts.modified += 1;
                     entries.push(ConstraintDiffEntry {
                         name: name.to_string(),
                         kind: DiffKind::Modified,
-                        detail: d,
-                        line_file1: l1,
-                        line_file2: l2,
+                        detail,
+                        line_file1: line1,
+                        line_file2: line2,
                     });
                 } else {
                     counts.unchanged += 1;
