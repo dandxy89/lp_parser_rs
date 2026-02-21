@@ -265,7 +265,7 @@ fn build_highs_model(problem: &lp_parser_rs::problem::LpProblemOwned) -> BuiltMo
         let (is_integer, lower, upper) = match variable.map(|v| &v.var_type) {
             Some(VariableType::Binary) => (true, 0.0, 1.0),
             Some(VariableType::Integer) => (true, 0.0, f64::INFINITY),
-            Some(VariableType::Free) => (false, f64::NEG_INFINITY, f64::INFINITY),
+            Some(VariableType::Free) => (false, 0.0, f64::INFINITY),
             Some(VariableType::LowerBound(lb)) => (false, *lb, f64::INFINITY),
             Some(VariableType::UpperBound(ub)) => (false, 0.0, *ub),
             Some(VariableType::DoubleBound(lb, ub)) => (false, *lb, *ub),
