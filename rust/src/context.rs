@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::fmt::{Display, Formatter, Result as FmtResult};
+use std::fmt::{Display, Formatter, Result as FmtResult, Write as _};
 use std::time::Instant;
 
 use crate::error::{LpParseError, LpResult};
@@ -339,20 +339,17 @@ impl<'a> ParseContext<'a> {
     #[must_use]
     /// Get summary of the parsing context
     pub fn summary(&self) -> String {
-        let mut parts = Vec::new();
-
-        parts.push(format!("Position: {}:{}", self.line, self.column));
-        parts.push(format!("Section: {}", self.current_section));
+        let mut out = format!("Position: {}:{}, Section: {}", self.line, self.column, self.current_section);
 
         if !self.warnings.is_empty() {
-            parts.push(format!("Warnings: {}", self.warnings.len()));
+            write!(out, ", Warnings: {}", self.warnings.len()).expect("writing to String cannot fail");
         }
 
         if self.config.collect_metrics {
-            parts.push(self.metrics.summary());
+            write!(out, ", {}", self.metrics.summary()).expect("writing to String cannot fail");
         }
 
-        parts.join(", ")
+        out
     }
 }
 

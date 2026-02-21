@@ -40,7 +40,6 @@ serde = { version = "1.0.228", features = ["derive"], optional = true }
 serde_json = { version = "1.0", optional = true }
 serde_yaml = { version = "0.9", optional = true }
 thiserror = "2.0.18"
-unique_id = { version = "0.1.7", features = ["sequence"] }
 
 [build-dependencies]
 lalrpop = { version = "0.23.0" }

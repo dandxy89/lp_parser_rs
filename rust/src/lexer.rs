@@ -195,7 +195,13 @@ pub enum Token<'input> {
 }
 
 fn parse_number<'input>(lex: &logos::Lexer<'input, Token<'input>>) -> Option<f64> {
-    lex.slice().parse().ok()
+    let slice = lex.slice();
+    let value = slice.parse::<f64>().unwrap_or_else(|_| {
+        debug_assert!(false, "Logos regex matched '{slice}' but f64 parse failed - regex and parser are out of sync");
+        f64::NAN
+    });
+    debug_assert!(value.is_finite() || value == 0.0, "parse_number produced non-finite value from '{slice}': {value}");
+    Some(value)
 }
 
 impl Token<'_> {

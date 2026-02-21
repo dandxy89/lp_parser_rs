@@ -331,23 +331,26 @@ fn format_coefficient(coeff: &Coefficient, is_first: bool, precision: usize) -> 
     }
 }
 
-/// Format a number with specified precision, removing trailing zeros
+/// Format a number with specified precision, removing trailing zeros.
+/// Uses a single `String` allocation by truncating in-place.
 #[allow(clippy::uninlined_format_args, clippy::cast_precision_loss, clippy::cast_possible_truncation)]
 fn format_number(value: f64, precision: usize) -> String {
     debug_assert!(value.is_finite(), "format_number called with non-finite value: {value}");
-    // Check if value is a whole number and within safe i64 range for integer formatting
     let is_whole_number = value.fract().abs() < f64::EPSILON;
     let is_safe_for_i64 = value >= (i64::MIN as f64) && value <= (i64::MAX as f64);
 
     if is_whole_number && is_safe_for_i64 && value.abs() < 1e10 {
-        // Integer value within safe range - format as integer
         let cast = value as i64;
         debug_assert!((cast as f64 - value).abs() < 1.0, "i64 cast lost precision: {value} -> {cast}");
         format!("{}", cast)
     } else {
-        // Decimal value or out of i64 range - format with precision and remove trailing zeros
-        let formatted = format!("{:.precision$}", value, precision = precision);
-        formatted.trim_end_matches('0').trim_end_matches('.').to_string()
+        let mut formatted = format!("{:.precision$}", value, precision = precision);
+        // Truncate trailing zeros in-place instead of allocating a second String
+        if formatted.contains('.') {
+            let trimmed_len = formatted.trim_end_matches('0').trim_end_matches('.').len();
+            formatted.truncate(trimmed_len);
+        }
+        formatted
     }
 }
 

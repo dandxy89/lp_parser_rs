@@ -1,12 +1,9 @@
 use std::borrow::Cow;
 use std::collections::hash_map::Entry;
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{HashMap, HashSet};
 use std::fmt::{Display, Formatter, Result as FmtResult};
 #[cfg(feature = "serde")]
 use std::marker::PhantomData;
-
-use unique_id::Generator;
-use unique_id::sequence::SequenceGenerator;
 
 use crate::NUMERIC_EPSILON;
 use crate::error::{LpParseError, LpResult};
@@ -65,6 +62,78 @@ fn apply_variable_type<'a>(
                 entry.insert(Variable::new(var_name).with_var_type(var_type.clone()));
             }
         }
+    }
+}
+
+/// Update a coefficient in a vector using index-based swap_remove
+/// instead of separate find + retain passes.
+#[inline]
+fn update_coefficient_vec<'a>(coefficients: &mut Vec<Coefficient<'a>>, variable_name: &'a str, new_value: f64) {
+    if let Some(idx) = coefficients.iter().position(|c| c.name == variable_name) {
+        let reference_value = coefficients[idx].value;
+        if is_effectively_zero(new_value, reference_value) {
+            coefficients.swap_remove(idx);
+        } else {
+            coefficients[idx].value = new_value;
+        }
+    } else if !is_effectively_zero(new_value, 1.0) {
+        coefficients.push(Coefficient { name: variable_name, value: new_value });
+    }
+}
+
+/// Extract the problem name from LP file comments.
+///
+/// Supports multiple formats:
+/// 1. `\Problem name: my_problem` or `\\Problem name: my_problem`
+/// 2. `\* my_problem *\` (CPLEX block comment style)
+#[inline]
+fn extract_problem_name<'a>(input: &'a str) -> Option<Cow<'a, str>> {
+    input.lines().find_map(|line| {
+        let trimmed = line.trim();
+
+        // Handle block comment format: \* name *\
+        if trimmed.starts_with("\\*") && trimmed.ends_with("*\\") {
+            let inner = trimmed.strip_prefix("\\*").unwrap().strip_suffix("*\\").unwrap();
+            let name = inner.trim();
+            if !name.is_empty() {
+                return Some(Cow::Borrowed(name));
+            }
+        }
+
+        // Handle single/double backslash prefix
+        let content = if trimmed.starts_with("\\\\") {
+            trimmed.strip_prefix("\\\\")
+        } else if trimmed.starts_with('\\') {
+            trimmed.strip_prefix('\\')
+        } else {
+            None
+        };
+
+        content.and_then(|c| {
+            let c = c.trim();
+            // Case-insensitive match without allocating
+            let prefix = "problem name:";
+            if c.len() >= prefix.len() && c[..prefix.len()].eq_ignore_ascii_case(prefix) {
+                Some(Cow::Borrowed(c[prefix.len()..].trim()))
+            } else {
+                None
+            }
+        })
+    })
+}
+
+/// Register variables from coefficient lists into the variables map.
+#[inline]
+fn register_variables_from_coefficients<'a>(
+    variables: &mut HashMap<&'a str, Variable<'a>>,
+    coefficients: &[Coefficient<'a>],
+    var_type: Option<VariableType>,
+) {
+    for coeff in coefficients {
+        variables.entry(coeff.name).or_insert_with(|| {
+            let v = Variable::new(coeff.name);
+            if let Some(ref vt) = var_type { v.with_var_type(vt.clone()) } else { v }
+        });
     }
 }
 
@@ -246,20 +315,10 @@ impl<'a> LpProblem<'a> {
             .get_mut(objective_name)
             .ok_or_else(|| LpParseError::validation_error(format!("Objective '{objective_name}' not found")))?;
 
-        // Find existing coefficient
-        if let Some(coeff) = objective.coefficients.iter_mut().find(|c| c.name == variable_name) {
-            let reference_value = coeff.value;
-            if is_effectively_zero(new_coefficient, reference_value) {
-                // Remove coefficient if value is effectively zero
-                objective.coefficients.retain(|c| c.name != variable_name);
-            } else {
-                coeff.value = new_coefficient;
-            }
-        } else if !is_effectively_zero(new_coefficient, 1.0) {
-            // Add new coefficient if it doesn't exist and value is non-zero
-            objective.coefficients.push(Coefficient { name: variable_name, value: new_coefficient });
+        update_coefficient_vec(&mut objective.coefficients, variable_name, new_coefficient);
 
-            // Ensure variable exists using Entry API
+        // Ensure variable exists if we added a new coefficient
+        if !is_effectively_zero(new_coefficient, 1.0) {
             self.variables.entry(variable_name).or_insert_with(|| Variable::new(variable_name));
         }
 
@@ -295,20 +354,10 @@ impl<'a> LpProblem<'a> {
 
         match constraint {
             Constraint::Standard { coefficients, .. } => {
-                // Find existing coefficient
-                if let Some(coeff) = coefficients.iter_mut().find(|c| c.name == variable_name) {
-                    let reference_value = coeff.value;
-                    if is_effectively_zero(new_coefficient, reference_value) {
-                        // Remove coefficient if value is effectively zero
-                        coefficients.retain(|c| c.name != variable_name);
-                    } else {
-                        coeff.value = new_coefficient;
-                    }
-                } else if !is_effectively_zero(new_coefficient, 1.0) {
-                    // Add new coefficient if it doesn't exist and value is non-zero
-                    coefficients.push(Coefficient { name: variable_name, value: new_coefficient });
+                update_coefficient_vec(coefficients, variable_name, new_coefficient);
 
-                    // Ensure variable exists using Entry API
+                // Ensure variable exists if we added a new coefficient
+                if !is_effectively_zero(new_coefficient, 1.0) {
                     self.variables.entry(variable_name).or_insert_with(|| Variable::new(variable_name));
                 }
             }
@@ -675,21 +724,18 @@ impl<'a> LpProblem<'a> {
     /// A vector of variable names
     #[must_use]
     pub fn get_all_variable_names(&self) -> Vec<&str> {
-        let mut names = BTreeSet::new();
+        let mut names = HashSet::with_capacity(self.variables.len());
 
-        // Add from variables map
         for name in self.variables.keys() {
             names.insert(*name);
         }
 
-        // Add from objectives
         for objective in self.objectives.values() {
             for coeff in &objective.coefficients {
                 names.insert(coeff.name);
             }
         }
 
-        // Add from constraints
         for constraint in self.constraints.values() {
             match constraint {
                 Constraint::Standard { coefficients, .. } => {
@@ -705,7 +751,9 @@ impl<'a> LpProblem<'a> {
             }
         }
 
-        names.into_iter().collect()
+        let mut result: Vec<&str> = names.into_iter().collect();
+        result.sort_unstable();
+        result
     }
 }
 
@@ -861,112 +909,50 @@ impl<'a> TryFrom<&'a str> for LpProblem<'a> {
     type Error = LpParseError;
 
     #[inline]
-    #[allow(clippy::too_many_lines)]
     fn try_from(input: &'a str) -> Result<Self, Self::Error> {
         log::debug!("Starting to parse LP problem with LALRPOP parser");
 
-        // Extract problem name from comments before parsing
-        // Supports multiple formats:
-        // 1. "\Problem name: my_problem" or "\\Problem name: my_problem"
-        // 2. "\* my_problem *\" (CPLEX block comment style)
-        let problem_name: Option<Cow<'a, str>> = input.lines().find_map(|line| {
-            let trimmed = line.trim();
+        let problem_name = extract_problem_name(input);
 
-            // Handle block comment format: \* name *\
-            if trimmed.starts_with("\\*") && trimmed.ends_with("*\\") {
-                let inner = trimmed.strip_prefix("\\*").unwrap().strip_suffix("*\\").unwrap();
-                let name = inner.trim();
-                if !name.is_empty() {
-                    return Some(Cow::Borrowed(name));
-                }
-            }
-
-            // Handle single/double backslash prefix
-            let content = if trimmed.starts_with("\\\\") {
-                trimmed.strip_prefix("\\\\")
-            } else if trimmed.starts_with('\\') {
-                trimmed.strip_prefix('\\')
-            } else {
-                None
-            };
-
-            content.and_then(|c| {
-                let c = c.trim();
-                // Case-insensitive "Problem name:" match
-                if c.to_lowercase().starts_with("problem name:") { Some(Cow::Borrowed(c["problem name:".len()..].trim())) } else { None }
-            })
-        });
-
-        // Create lexer and parser
         let lexer = Lexer::new(input);
         let parser = LpProblemParser::new();
-
-        // Parse the LP problem
         let (sense, objectives_vec, constraints_vec, bounds, generals, integers, binaries, semis, sos_constraints) =
             parser.parse(lexer).map_err(LpParseError::from)?;
 
-        // ID generators for unnamed objectives and constraints
-        let obj_gen = SequenceGenerator;
-        let constraint_gen = SequenceGenerator;
+        let mut obj_counter: usize = 0;
+        let mut constraint_counter: usize = 0;
 
-        // Build objectives HashMap and collect variables
-        let mut variables: HashMap<&'a str, Variable<'a>> = HashMap::new();
-        let mut objectives: HashMap<Cow<'a, str>, Objective<'a>> = HashMap::new();
+        // Pre-size collections based on parsed data
+        let mut variables: HashMap<&'a str, Variable<'a>> = HashMap::with_capacity(bounds.len() + generals.len() + integers.len());
+        let mut objectives: HashMap<Cow<'a, str>, Objective<'a>> = HashMap::with_capacity(objectives_vec.len());
 
         for mut obj in objectives_vec {
-            // Generate name if empty
             if obj.name.is_empty() {
-                obj.name = Cow::Owned(format!("OBJ{}", obj_gen.next_id()));
+                obj_counter += 1;
+                obj.name = Cow::Owned(format!("OBJ{obj_counter}"));
             }
-
-            // Extract variables from coefficients using Entry API
-            for coeff in &obj.coefficients {
-                variables.entry(coeff.name).or_insert_with(|| Variable::new(coeff.name));
-            }
-
+            register_variables_from_coefficients(&mut variables, &obj.coefficients, None);
             objectives.insert(obj.name.clone(), obj);
         }
 
-        // Build constraints HashMap and collect variables
-        let mut constraints: HashMap<Cow<'a, str>, Constraint<'a>> = HashMap::new();
+        let mut constraints: HashMap<Cow<'a, str>, Constraint<'a>> = HashMap::with_capacity(constraints_vec.len() + sos_constraints.len());
 
         for mut con in constraints_vec {
-            // Generate name if unnamed, otherwise clone existing name
-            let final_name =
-                if con.is_unnamed() { Cow::Owned(format!("C{}", constraint_gen.next_id())) } else { Cow::Owned(con.name_ref().to_owned()) };
-
-            // Update constraint with final name and extract variables using Entry API
-            match &mut con {
-                Constraint::Standard { name, coefficients, .. } => {
-                    name.clone_from(&final_name);
-                    for coeff in coefficients.iter() {
-                        variables.entry(coeff.name).or_insert_with(|| Variable::new(coeff.name));
-                    }
-                }
-                Constraint::SOS { name, weights, .. } => {
-                    name.clone_from(&final_name);
-                    for coeff in weights.iter() {
-                        variables.entry(coeff.name).or_insert_with(|| Variable::new(coeff.name).with_var_type(VariableType::SOS));
-                    }
-                }
-            }
-
+            let final_name = assign_constraint_name(&mut con, &mut constraint_counter, "C");
+            register_constraint_variables(&mut variables, &con);
             constraints.insert(final_name, con);
         }
 
         // Process bounds
         for (var_name, var_type) in bounds {
             match variables.entry(var_name) {
-                Entry::Occupied(mut entry) => {
-                    entry.get_mut().set_var_type(var_type);
-                }
+                Entry::Occupied(mut entry) => entry.get_mut().set_var_type(var_type),
                 Entry::Vacant(entry) => {
                     entry.insert(Variable::new(var_name).with_var_type(var_type));
                 }
             }
         }
 
-        // Process variable type sections (only set type if variable doesn't already have explicit bounds)
         apply_variable_type(&mut variables, generals, &VariableType::General);
         apply_variable_type(&mut variables, integers, &VariableType::Integer);
         apply_variable_type(&mut variables, binaries, &VariableType::Binary);
@@ -977,24 +963,47 @@ impl<'a> TryFrom<&'a str> for LpProblem<'a> {
             if matches!(sos, Constraint::Standard { .. }) {
                 continue;
             }
-
-            let final_name = if sos.is_unnamed() {
-                Cow::Owned(format!("SOS{}", constraint_gen.next_id()))
-            } else {
-                Cow::Owned(sos.name_ref().to_owned())
-            };
-
-            if let Constraint::SOS { name, weights, .. } = &mut sos {
-                name.clone_from(&final_name);
-                for coeff in weights.iter() {
-                    variables.entry(coeff.name).or_insert_with(|| Variable::new(coeff.name).with_var_type(VariableType::SOS));
-                }
-            }
-
+            let final_name = assign_constraint_name(&mut sos, &mut constraint_counter, "SOS");
+            register_constraint_variables(&mut variables, &sos);
             constraints.insert(final_name, sos);
         }
 
         Ok(LpProblem { name: problem_name, sense, objectives, constraints, variables })
+    }
+}
+
+/// Assign a name to a constraint, generating one if unnamed.
+/// Returns the final name as a `Cow`.
+#[inline]
+fn assign_constraint_name<'a>(constraint: &mut Constraint<'a>, counter: &mut usize, prefix: &str) -> Cow<'a, str> {
+    let is_unnamed = constraint.is_unnamed();
+    let final_name = if is_unnamed {
+        *counter += 1;
+        Cow::Owned(format!("{prefix}{}", *counter))
+    } else {
+        // Borrow the existing name when possible
+        Cow::Owned(constraint.name_ref().to_owned())
+    };
+
+    match constraint {
+        Constraint::Standard { name, .. } | Constraint::SOS { name, .. } => {
+            name.clone_from(&final_name);
+        }
+    }
+
+    final_name
+}
+
+/// Register variables referenced by a constraint into the variables map.
+#[inline]
+fn register_constraint_variables<'a>(variables: &mut HashMap<&'a str, Variable<'a>>, constraint: &Constraint<'a>) {
+    match constraint {
+        Constraint::Standard { coefficients, .. } => {
+            register_variables_from_coefficients(variables, coefficients, None);
+        }
+        Constraint::SOS { weights, .. } => {
+            register_variables_from_coefficients(variables, weights, Some(VariableType::SOS));
+        }
     }
 }
 

@@ -447,6 +447,62 @@ impl Display for ProblemAnalysis {
     }
 }
 
+/// Collect coefficient statistics from a slice of coefficients, classifying
+/// each as normal, large, or small based on the analysis configuration.
+fn collect_coeff_stats(
+    coefficients: &[crate::model::Coefficient<'_>],
+    location_name: &str,
+    is_objective: bool,
+    config: &AnalysisConfig,
+    abs_values: &mut Vec<f64>,
+    large: &mut Vec<CoefficientLocation>,
+    small: &mut Vec<CoefficientLocation>,
+) {
+    for coeff in coefficients {
+        let abs_value = coeff.value.abs();
+        abs_values.push(abs_value);
+
+        if abs_value > config.large_coefficient_threshold {
+            large.push(CoefficientLocation {
+                location: location_name.to_string(),
+                is_objective,
+                variable: coeff.name.to_string(),
+                value: coeff.value,
+            });
+        } else if abs_value > 0.0 && abs_value < config.small_coefficient_threshold {
+            small.push(CoefficientLocation {
+                location: location_name.to_string(),
+                is_objective,
+                variable: coeff.name.to_string(),
+                value: coeff.value,
+            });
+        }
+    }
+}
+
+/// Compute the ratio of max to min absolute coefficient across all coefficients.
+fn compute_coefficient_ratio(constraint_coeffs: &[f64], objective_coeffs: &[f64]) -> f64 {
+    let mut min = f64::INFINITY;
+    let mut max: f64 = 0.0;
+    let mut has_positive = false;
+
+    for &v in constraint_coeffs.iter().chain(objective_coeffs.iter()) {
+        if v > 0.0 {
+            has_positive = true;
+            if v < min {
+                min = v;
+            }
+            if v > max {
+                max = v;
+            }
+        }
+    }
+
+    let ratio = if has_positive && min > 0.0 { max / min } else { 1.0 };
+    debug_assert!(!has_positive || ratio >= 1.0, "postcondition: coefficient_ratio must be >= 1.0 when coefficients exist, got: {ratio}");
+    ratio
+}
+
 impl LpProblem<'_> {
     /// Perform comprehensive analysis on the LP problem with default configuration.
     #[must_use]
@@ -665,70 +721,33 @@ impl LpProblem<'_> {
         let mut large_coefficients = Vec::new();
         let mut small_coefficients = Vec::new();
 
-        // Collect constraint coefficients
         for (name, constraint) in &self.constraints {
             if let Constraint::Standard { coefficients, .. } = constraint {
-                for coeff in coefficients {
-                    let abs_value = coeff.value.abs();
-                    constraint_coeffs.push(abs_value);
-
-                    if abs_value > config.large_coefficient_threshold {
-                        large_coefficients.push(CoefficientLocation {
-                            location: name.to_string(),
-                            is_objective: false,
-                            variable: coeff.name.to_string(),
-                            value: coeff.value,
-                        });
-                    } else if abs_value > 0.0 && abs_value < config.small_coefficient_threshold {
-                        small_coefficients.push(CoefficientLocation {
-                            location: name.to_string(),
-                            is_objective: false,
-                            variable: coeff.name.to_string(),
-                            value: coeff.value,
-                        });
-                    }
-                }
+                collect_coeff_stats(
+                    coefficients,
+                    name,
+                    false,
+                    config,
+                    &mut constraint_coeffs,
+                    &mut large_coefficients,
+                    &mut small_coefficients,
+                );
             }
         }
 
-        // Collect objective coefficients
         for (name, objective) in &self.objectives {
-            for coeff in &objective.coefficients {
-                let abs_value = coeff.value.abs();
-                objective_coeffs.push(abs_value);
-
-                if abs_value > config.large_coefficient_threshold {
-                    large_coefficients.push(CoefficientLocation {
-                        location: name.to_string(),
-                        is_objective: true,
-                        variable: coeff.name.to_string(),
-                        value: coeff.value,
-                    });
-                } else if abs_value > 0.0 && abs_value < config.small_coefficient_threshold {
-                    small_coefficients.push(CoefficientLocation {
-                        location: name.to_string(),
-                        is_objective: true,
-                        variable: coeff.name.to_string(),
-                        value: coeff.value,
-                    });
-                }
-            }
+            collect_coeff_stats(
+                &objective.coefficients,
+                name,
+                true,
+                config,
+                &mut objective_coeffs,
+                &mut large_coefficients,
+                &mut small_coefficients,
+            );
         }
 
-        // Calculate coefficient ratio
-        let all_coeffs: Vec<f64> = constraint_coeffs.iter().chain(objective_coeffs.iter()).copied().filter(|v| *v > 0.0).collect();
-        let coefficient_ratio = if all_coeffs.is_empty() {
-            1.0
-        } else {
-            let min = all_coeffs.iter().copied().fold(f64::INFINITY, f64::min);
-            let max = all_coeffs.iter().copied().fold(0.0, f64::max);
-            if min > 0.0 { max / min } else { 1.0 }
-        };
-
-        debug_assert!(
-            all_coeffs.is_empty() || coefficient_ratio >= 1.0,
-            "postcondition: coefficient_ratio must be >= 1.0 when coefficients exist, got: {coefficient_ratio}"
-        );
+        let coefficient_ratio = compute_coefficient_ratio(&constraint_coeffs, &objective_coeffs);
 
         CoefficientAnalysis {
             constraint_coeff_range: RangeStats::from_values(&constraint_coeffs),

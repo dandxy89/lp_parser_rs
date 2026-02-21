@@ -137,16 +137,23 @@ pub struct Coefficient<'a> {
     pub value: f64,
 }
 
+/// Format a coefficient value with a variable name for display.
+/// Uses `NUMERIC_EPSILON` for consistent tolerance across the crate.
+#[inline]
+fn fmt_coefficient(name: &str, value: f64, f: &mut Formatter<'_>) -> FmtResult {
+    if (value - 1.0).abs() < crate::NUMERIC_EPSILON {
+        write!(f, "{name}")
+    } else if (value - (-1.0)).abs() < crate::NUMERIC_EPSILON {
+        write!(f, "-{name}")
+    } else {
+        write!(f, "{value} {name}")
+    }
+}
+
 impl Display for Coefficient<'_> {
     #[inline]
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        if (self.value - 1.0).abs() < f64::EPSILON {
-            write!(f, "{}", self.name)
-        } else if (self.value - (-1.0)).abs() < f64::EPSILON {
-            write!(f, "-{}", self.name)
-        } else {
-            write!(f, "{} {}", self.value, self.name)
-        }
+        fmt_coefficient(self.name, self.value, f)
     }
 }
 
@@ -543,14 +550,9 @@ impl<'a> From<&Coefficient<'a>> for CoefficientOwned {
 }
 
 impl Display for CoefficientOwned {
+    #[inline]
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        if (self.value - 1.0).abs() < f64::EPSILON {
-            write!(f, "{}", self.name)
-        } else if (self.value - (-1.0)).abs() < f64::EPSILON {
-            write!(f, "-{}", self.name)
-        } else {
-            write!(f, "{} {}", self.value, self.name)
-        }
+        fmt_coefficient(&self.name, self.value, f)
     }
 }
 
