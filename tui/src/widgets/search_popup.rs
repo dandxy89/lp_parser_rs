@@ -8,13 +8,14 @@
 
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState};
 
 use crate::app::{App, HaystackEntry};
 use crate::search;
 use crate::state::{SearchResult, Section};
+use crate::theme::theme;
 use crate::widgets::{detail, kind_prefix, kind_style, sidebar, summary};
 
 /// Section tag prefix for display in results list.
@@ -66,11 +67,12 @@ pub fn draw_search_popup(frame: &mut Frame, area: Rect, app: &App) {
 
 /// Draw the search input bar at the top of the pop-up.
 fn draw_search_input(frame: &mut Frame, area: Rect, query: &str, mode_label: &str, match_count: usize) {
+    let t = theme();
     let input_spans = vec![
-        Span::styled(" > ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-        Span::styled(query, Style::default().fg(Color::White)),
+        Span::styled(" > ", Style::default().fg(t.accent).add_modifier(Modifier::BOLD)),
+        Span::styled(query, Style::default().fg(t.text)),
         // Blinking cursor block
-        Span::styled("\u{2588}", Style::default().fg(Color::Cyan)),
+        Span::styled("\u{2588}", Style::default().fg(t.accent)),
     ];
 
     let right_text = format!("[{mode_label}] {match_count} matches");
@@ -81,12 +83,12 @@ fn draw_search_input(frame: &mut Frame, area: Rect, query: &str, mode_label: &st
 
     let mut spans = input_spans;
     spans.push(Span::raw(" ".repeat(padding)));
-    spans.push(Span::styled(right_text, Style::default().fg(Color::DarkGray)));
+    spans.push(Span::styled(right_text, Style::default().fg(t.muted)));
 
     let block = Block::default()
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Cyan))
-        .title(Span::styled(" Search ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)));
+        .border_style(Style::default().fg(t.accent))
+        .title(Span::styled(" Search ", Style::default().fg(t.accent).add_modifier(Modifier::BOLD)));
 
     let paragraph = Paragraph::new(Line::from(spans)).block(block);
     frame.render_widget(paragraph, area);
@@ -94,6 +96,7 @@ fn draw_search_input(frame: &mut Frame, area: Rect, query: &str, mode_label: &st
 
 /// Draw the ranked results list on the left side.
 fn draw_results_list(frame: &mut Frame, area: Rect, results: &[SearchResult], haystack: &[HaystackEntry], selected: usize) {
+    let t = theme();
     let items: Vec<ListItem> = results
         .iter()
         .map(|r| {
@@ -108,20 +111,19 @@ fn draw_results_list(frame: &mut Frame, area: Rect, results: &[SearchResult], ha
             // Build name with match highlighting.
             let name_spans = build_highlighted_name(name, &r.match_indices, style);
 
-            let mut spans =
-                vec![Span::styled(format!("{tag} "), Style::default().fg(Color::DarkGray)), Span::styled(format!("{prefix} "), style)];
+            let mut spans = vec![Span::styled(format!("{tag} "), Style::default().fg(t.muted)), Span::styled(format!("{prefix} "), style)];
             spans.extend(name_spans);
 
             // Show fuzzy score when available.
             if r.score > 0 {
-                spans.push(Span::styled(format!(" ({})", r.score), Style::default().fg(Color::DarkGray)));
+                spans.push(Span::styled(format!(" ({})", r.score), Style::default().fg(t.muted)));
             }
 
             ListItem::new(Line::from(spans))
         })
         .collect();
 
-    let block = Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::DarkGray)).title(" Results ");
+    let block = Block::default().borders(Borders::ALL).border_style(Style::default().fg(t.muted)).title(" Results ");
 
     let mut state = ListState::default();
     if !results.is_empty() {
@@ -130,7 +132,7 @@ fn draw_results_list(frame: &mut Frame, area: Rect, results: &[SearchResult], ha
 
     let list = List::new(items)
         .block(block)
-        .highlight_style(Style::default().bg(Color::Blue).add_modifier(Modifier::BOLD))
+        .highlight_style(Style::default().bg(t.highlight_bg).add_modifier(Modifier::BOLD))
         .highlight_symbol("\u{25b6} ");
 
     frame.render_stateful_widget(list, area, &mut state);
@@ -147,10 +149,10 @@ fn draw_results_list(frame: &mut Frame, area: Rect, results: &[SearchResult], ha
 }
 
 /// Build spans for a name with fuzzy match positions highlighted.
-fn build_highlighted_name<'a>(name: &str, match_indices: &[usize], base_style: Style) -> Vec<Span<'a>> {
+fn build_highlighted_name<'a>(name: &'a str, match_indices: &[usize], base_style: Style) -> Vec<Span<'a>> {
     debug_assert!(name.is_ascii(), "fuzzy match highlighting assumes ASCII names");
     if match_indices.is_empty() {
-        return vec![Span::styled(name.to_owned(), base_style)];
+        return vec![Span::styled(name, base_style)];
     }
 
     let highlight_style = base_style.add_modifier(Modifier::BOLD | Modifier::UNDERLINED);
@@ -163,17 +165,17 @@ fn build_highlighted_name<'a>(name: &str, match_indices: &[usize], base_style: S
         }
         // Add non-highlighted segment before this match.
         if idx > last_end {
-            spans.push(Span::styled(name[last_end..idx].to_owned(), base_style));
+            spans.push(Span::styled(&name[last_end..idx], base_style));
         }
         // Add highlighted character.
         let end = (idx + 1).min(name.len());
-        spans.push(Span::styled(name[idx..end].to_owned(), highlight_style));
+        spans.push(Span::styled(&name[idx..end], highlight_style));
         last_end = end;
     }
 
     // Remaining non-highlighted tail.
     if last_end < name.len() {
-        spans.push(Span::styled(name[last_end..].to_owned(), base_style));
+        spans.push(Span::styled(&name[last_end..], base_style));
     }
 
     spans
@@ -181,7 +183,8 @@ fn build_highlighted_name<'a>(name: &str, match_indices: &[usize], base_style: S
 
 /// Draw the detail preview on the right side of the pop-up.
 fn draw_detail_preview(frame: &mut Frame, area: Rect, app: &App) {
-    let border_style = Style::default().fg(Color::DarkGray);
+    let t = theme();
+    let border_style = Style::default().fg(t.muted);
 
     if app.search_popup.results.is_empty() {
         sidebar::draw_empty_detail(frame, area, "No results", border_style);
@@ -227,21 +230,22 @@ fn draw_detail_preview(frame: &mut Frame, area: Rect, app: &App) {
 
 /// Draw the hint bar at the bottom of the pop-up.
 fn draw_hints(frame: &mut Frame, area: Rect) {
+    let t = theme();
     let hints = Line::from(vec![
-        Span::styled("  r:", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-        Span::styled("regex  ", Style::default().fg(Color::DarkGray)),
-        Span::styled("s:", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-        Span::styled("substring  ", Style::default().fg(Color::DarkGray)),
-        Span::styled("(default: fuzzy)  ", Style::default().fg(Color::DarkGray)),
-        Span::styled("j/k", Style::default().fg(Color::Cyan)),
-        Span::styled(" navigate  ", Style::default().fg(Color::DarkGray)),
-        Span::styled("Enter", Style::default().fg(Color::Cyan)),
-        Span::styled(" select  ", Style::default().fg(Color::DarkGray)),
-        Span::styled("Esc", Style::default().fg(Color::Cyan)),
-        Span::styled(" cancel", Style::default().fg(Color::DarkGray)),
+        Span::styled("  r:", Style::default().fg(t.accent).add_modifier(Modifier::BOLD)),
+        Span::styled("regex  ", Style::default().fg(t.muted)),
+        Span::styled("s:", Style::default().fg(t.accent).add_modifier(Modifier::BOLD)),
+        Span::styled("substring  ", Style::default().fg(t.muted)),
+        Span::styled("(default: fuzzy)  ", Style::default().fg(t.muted)),
+        Span::styled("j/k", Style::default().fg(t.accent)),
+        Span::styled(" navigate  ", Style::default().fg(t.muted)),
+        Span::styled("Enter", Style::default().fg(t.accent)),
+        Span::styled(" select  ", Style::default().fg(t.muted)),
+        Span::styled("Esc", Style::default().fg(t.accent)),
+        Span::styled(" cancel", Style::default().fg(t.muted)),
     ]);
 
-    let block = Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::DarkGray));
+    let block = Block::default().borders(Borders::ALL).border_style(Style::default().fg(t.muted));
 
     let paragraph = Paragraph::new(hints).block(block);
     frame.render_widget(paragraph, area);

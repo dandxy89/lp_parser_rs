@@ -4,6 +4,7 @@ use std::time::Instant;
 
 use ratatui::layout::Rect;
 use ratatui::widgets::ListState;
+use smallvec::SmallVec;
 
 use crate::detail_model::{CoefficientRow, build_coeff_rows};
 use crate::diff_model::{DiffEntry, DiffKind, LpDiffReport};
@@ -358,7 +359,21 @@ impl App {
     ///
     /// `label` is a short description shown on success (e.g. "Yanked: x1").
     pub(crate) fn set_yank_flash(&mut self, label: &str, text: &str) {
-        match arboard::Clipboard::new().and_then(|mut clipboard| clipboard.set_text(text)) {
+        thread_local! {
+            static CLIPBOARD: std::cell::RefCell<Option<arboard::Clipboard>> = const { std::cell::RefCell::new(None) };
+        }
+
+        let result = CLIPBOARD.with_borrow_mut(|cb| {
+            if cb.is_none() {
+                *cb = arboard::Clipboard::new().ok();
+            }
+            match cb.as_mut() {
+                Some(clipboard) => clipboard.set_text(text),
+                None => Err(arboard::Error::ClipboardNotSupported),
+            }
+        });
+
+        match result {
             Ok(()) => {
                 label.clone_into(&mut self.yank.message);
                 self.yank.flash = Some(Instant::now());
@@ -572,7 +587,7 @@ impl App {
                 section: entry.section,
                 entry_index: entry.index,
                 score: 0,
-                match_indices: Vec::new(),
+                match_indices: SmallVec::new(),
                 haystack_index,
                 kind: entry.kind,
             });
@@ -601,7 +616,7 @@ impl App {
                 section: entry.section,
                 entry_index: entry.index,
                 score: matched.score,
-                match_indices: indices,
+                match_indices: SmallVec::from_vec(indices),
                 haystack_index,
                 kind: entry.kind,
             });
@@ -623,7 +638,7 @@ impl App {
                     section: entry.section,
                     entry_index: entry.index,
                     score: 0,
-                    match_indices: Vec::new(),
+                    match_indices: SmallVec::new(),
                     haystack_index,
                     kind: entry.kind,
                 });

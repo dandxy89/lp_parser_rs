@@ -10,6 +10,7 @@ mod parse;
 mod search;
 mod solver;
 mod state;
+mod theme;
 mod ui;
 mod widgets;
 

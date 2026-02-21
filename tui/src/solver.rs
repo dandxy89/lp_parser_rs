@@ -1,6 +1,6 @@
 //! `HiGHS` solver integration — converts an `LpProblemOwned` to a `HiGHS` problem and solves it.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::path::Path;
 use std::time::Instant;
 
@@ -81,96 +81,115 @@ fn diff_variables(r1: &SolveResult, r2: &SolveResult) -> Vec<VarDiffRow> {
     debug_assert_eq!(r1.variables.len(), r1.reduced_costs.len(), "variables and reduced_costs must have equal length for result 1");
     debug_assert_eq!(r2.variables.len(), r2.reduced_costs.len(), "variables and reduced_costs must have equal length for result 2");
 
-    let map1: HashMap<&str, (f64, Option<f64>)> = r1
-        .variables
-        .iter()
-        .enumerate()
-        .map(|(i, (name, val))| {
-            let rc = r1.reduced_costs.get(i).map(|(_, v)| *v);
-            (name.as_str(), (*val, rc))
-        })
-        .collect();
+    // Both variable lists are already sorted by name (from BTreeMap iteration in build_highs_model).
+    // Use a merge-join to avoid HashMap allocation.
+    let mut i = 0;
+    let mut j = 0;
+    let mut rows = Vec::new();
 
-    let map2: HashMap<&str, (f64, Option<f64>)> = r2
-        .variables
-        .iter()
-        .enumerate()
-        .map(|(i, (name, val))| {
-            let rc = r2.reduced_costs.get(i).map(|(_, v)| *v);
-            (name.as_str(), (*val, rc))
-        })
-        .collect();
+    while i < r1.variables.len() || j < r2.variables.len() {
+        let cmp = match (r1.variables.get(i), r2.variables.get(j)) {
+            (Some((n1, _)), Some((n2, _))) => n1.cmp(n2),
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (None, None) => break,
+        };
 
-    let mut all_names: Vec<&str> = map1.keys().chain(map2.keys()).copied().collect();
-    all_names.sort_unstable();
-    all_names.dedup();
-
-    all_names
-        .into_iter()
-        .map(|name| {
-            let v1 = map1.get(name);
-            let v2 = map2.get(name);
-            let val1 = v1.map(|(v, _)| *v);
-            let val2 = v2.map(|(v, _)| *v);
-            let rc1 = v1.and_then(|(_, rc)| *rc);
-            let rc2 = v2.and_then(|(_, rc)| *rc);
-            let changed = match (val1, val2) {
-                (Some(a), Some(b)) => (a - b).abs() > EPSILON || opt_diff(rc1, rc2),
-                _ => true, // added or removed
-            };
-            VarDiffRow { name: name.to_owned(), val1, val2, reduced_cost1: rc1, reduced_cost2: rc2, changed }
-        })
-        .collect()
+        let row = match cmp {
+            std::cmp::Ordering::Less => {
+                let (name, val) = &r1.variables[i];
+                let rc1 = r1.reduced_costs.get(i).map(|(_, v)| *v);
+                i += 1;
+                VarDiffRow { name: name.clone(), val1: Some(*val), val2: None, reduced_cost1: rc1, reduced_cost2: None, changed: true }
+            }
+            std::cmp::Ordering::Greater => {
+                let (name, val) = &r2.variables[j];
+                let rc2 = r2.reduced_costs.get(j).map(|(_, v)| *v);
+                j += 1;
+                VarDiffRow { name: name.clone(), val1: None, val2: Some(*val), reduced_cost1: None, reduced_cost2: rc2, changed: true }
+            }
+            std::cmp::Ordering::Equal => {
+                let (name, val1) = &r1.variables[i];
+                let val2 = r2.variables[j].1;
+                let rc1 = r1.reduced_costs.get(i).map(|(_, v)| *v);
+                let rc2 = r2.reduced_costs.get(j).map(|(_, v)| *v);
+                let changed = (*val1 - val2).abs() > EPSILON || opt_diff(rc1, rc2);
+                i += 1;
+                j += 1;
+                VarDiffRow { name: name.clone(), val1: Some(*val1), val2: Some(val2), reduced_cost1: rc1, reduced_cost2: rc2, changed }
+            }
+        };
+        rows.push(row);
+    }
+    rows
 }
 
 fn diff_constraints(r1: &SolveResult, r2: &SolveResult) -> Vec<ConstraintDiffRow> {
     debug_assert_eq!(r1.row_values.len(), r1.shadow_prices.len(), "row_values and shadow_prices must have equal length for result 1");
     debug_assert_eq!(r2.row_values.len(), r2.shadow_prices.len(), "row_values and shadow_prices must have equal length for result 2");
 
-    let map1: HashMap<&str, (f64, f64)> = r1
-        .row_values
-        .iter()
-        .enumerate()
-        .map(|(i, (name, activity))| {
-            let sp = r1.shadow_prices[i].1;
-            (name.as_str(), (*activity, sp))
-        })
-        .collect();
+    // Both row_values lists are already sorted by name (from sorted constraint iteration).
+    // Use a merge-join to avoid HashMap allocation.
+    let mut i = 0;
+    let mut j = 0;
+    let mut rows = Vec::new();
 
-    let map2: HashMap<&str, (f64, f64)> = r2
-        .row_values
-        .iter()
-        .enumerate()
-        .map(|(i, (name, activity))| {
-            let sp = r2.shadow_prices[i].1;
-            (name.as_str(), (*activity, sp))
-        })
-        .collect();
+    while i < r1.row_values.len() || j < r2.row_values.len() {
+        let cmp = match (r1.row_values.get(i), r2.row_values.get(j)) {
+            (Some((n1, _)), Some((n2, _))) => n1.cmp(n2),
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (None, None) => break,
+        };
 
-    let mut all_names: Vec<&str> = map1.keys().chain(map2.keys()).copied().collect();
-    all_names.sort_unstable();
-    all_names.dedup();
-
-    all_names
-        .into_iter()
-        .map(|name| {
-            let c1 = map1.get(name);
-            let c2 = map2.get(name);
-            let (activity1, sp1) = match c1 {
-                Some(&(a, s)) => (Some(a), Some(s)),
-                None => (None, None),
-            };
-            let (activity2, sp2) = match c2 {
-                Some(&(a, s)) => (Some(a), Some(s)),
-                None => (None, None),
-            };
-            let changed = match (activity1, activity2) {
-                (Some(a1), Some(a2)) => (a1 - a2).abs() > EPSILON || opt_diff(sp1, sp2),
-                _ => true,
-            };
-            ConstraintDiffRow { name: name.to_owned(), activity1, activity2, shadow_price1: sp1, shadow_price2: sp2, changed }
-        })
-        .collect()
+        let row = match cmp {
+            std::cmp::Ordering::Less => {
+                let (name, activity) = &r1.row_values[i];
+                let sp = r1.shadow_prices[i].1;
+                i += 1;
+                ConstraintDiffRow {
+                    name: name.clone(),
+                    activity1: Some(*activity),
+                    activity2: None,
+                    shadow_price1: Some(sp),
+                    shadow_price2: None,
+                    changed: true,
+                }
+            }
+            std::cmp::Ordering::Greater => {
+                let (name, activity) = &r2.row_values[j];
+                let sp = r2.shadow_prices[j].1;
+                j += 1;
+                ConstraintDiffRow {
+                    name: name.clone(),
+                    activity1: None,
+                    activity2: Some(*activity),
+                    shadow_price1: None,
+                    shadow_price2: Some(sp),
+                    changed: true,
+                }
+            }
+            std::cmp::Ordering::Equal => {
+                let (name, a1) = &r1.row_values[i];
+                let a2 = r2.row_values[j].1;
+                let sp1 = r1.shadow_prices[i].1;
+                let sp2 = r2.shadow_prices[j].1;
+                let changed = (*a1 - a2).abs() > EPSILON || (sp1 - sp2).abs() > EPSILON;
+                i += 1;
+                j += 1;
+                ConstraintDiffRow {
+                    name: name.clone(),
+                    activity1: Some(*a1),
+                    activity2: Some(a2),
+                    shadow_price1: Some(sp1),
+                    shadow_price2: Some(sp2),
+                    changed,
+                }
+            }
+        };
+        rows.push(row);
+    }
+    rows
 }
 
 /// Return `true` if two optional f64 values differ beyond epsilon.

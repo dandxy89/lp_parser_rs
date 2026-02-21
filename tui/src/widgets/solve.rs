@@ -2,17 +2,18 @@
 
 use ratatui::Frame;
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, Paragraph};
 
 use crate::app::App;
 use crate::solver::{ConstraintDiffRow, SolveDiffResult, VarDiffRow};
 use crate::state::{SolveState, SolveTab, SolveViewState};
+use crate::theme::theme;
 
 /// Pre-computed horizontal rule strings to avoid per-frame heap allocations from `repeat()`.
 const RULE_60: &str = "──────────────────────────────────────────────────────────────";
-const RULE_30: &str = "──────────────────────────────────";
+const RULE_30: &str = "──────────────────────────────────────";
 // Variables tab: name_w(24) + value_w(14)*3 + 4 = 70
 const RULE_70: &str = "────────────────────────────────────────────────────────────────────────";
 // Constraints tab: name_w(22) + value_w(13)*4 + 6 = 80
@@ -35,30 +36,31 @@ pub fn draw_solve_overlay(frame: &mut Frame, area: Rect, app: &App) {
 }
 
 fn draw_picker(frame: &mut Frame, area: Rect, app: &App) {
+    let t = theme();
     let popup = super::centred_rect(area, 60, 10);
     let lines = vec![
         Line::from(""),
-        Line::from(Span::styled("  Choose a file to solve:", Style::default().fg(Color::White).add_modifier(Modifier::BOLD))),
+        Line::from(Span::styled("  Choose a file to solve:", Style::default().fg(t.text).add_modifier(Modifier::BOLD))),
         Line::from(""),
         Line::from(vec![
-            Span::styled("  [1] ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-            Span::styled(app.file1_path.display().to_string(), Style::default().fg(Color::White)),
+            Span::styled("  [1] ", Style::default().fg(t.accent).add_modifier(Modifier::BOLD)),
+            Span::styled(app.file1_path.display().to_string(), Style::default().fg(t.text)),
         ]),
         Line::from(vec![
-            Span::styled("  [2] ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-            Span::styled(app.file2_path.display().to_string(), Style::default().fg(Color::White)),
+            Span::styled("  [2] ", Style::default().fg(t.accent).add_modifier(Modifier::BOLD)),
+            Span::styled(app.file2_path.display().to_string(), Style::default().fg(t.text)),
         ]),
         Line::from(vec![
-            Span::styled("  [3] ", Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)),
-            Span::styled("Both (diff)", Style::default().fg(Color::White)),
+            Span::styled("  [3] ", Style::default().fg(t.secondary_accent).add_modifier(Modifier::BOLD)),
+            Span::styled("Both (diff)", Style::default().fg(t.text)),
         ]),
         Line::from(""),
     ];
 
     let block = Block::default()
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
-        .title(Span::styled(" Solve LP ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)));
+        .border_style(Style::default().fg(t.accent).add_modifier(Modifier::BOLD))
+        .title(Span::styled(" Solve LP ", Style::default().fg(t.accent).add_modifier(Modifier::BOLD)));
 
     let paragraph = Paragraph::new(lines).block(block);
     frame.render_widget(Clear, popup);
@@ -66,21 +68,22 @@ fn draw_picker(frame: &mut Frame, area: Rect, app: &App) {
 }
 
 fn draw_running(frame: &mut Frame, area: Rect, file: &str) {
+    let t = theme();
     let popup = super::centred_rect(area, 50, 5);
     let lines = vec![
         Line::from(""),
         Line::from(vec![
-            Span::styled("  Solving ", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
-            Span::styled(file.to_owned(), Style::default().fg(Color::White)),
-            Span::styled("...", Style::default().fg(Color::Yellow)),
+            Span::styled("  Solving ", Style::default().fg(t.warning).add_modifier(Modifier::BOLD)),
+            Span::styled(file.to_owned(), Style::default().fg(t.text)),
+            Span::styled("...", Style::default().fg(t.warning)),
         ]),
         Line::from(""),
     ];
 
     let block = Block::default()
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
-        .title(Span::styled(" Solver ", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)));
+        .border_style(Style::default().fg(t.warning).add_modifier(Modifier::BOLD))
+        .title(Span::styled(" Solver ", Style::default().fg(t.warning).add_modifier(Modifier::BOLD)));
 
     let paragraph = Paragraph::new(lines).block(block);
     frame.render_widget(Clear, popup);
@@ -88,6 +91,7 @@ fn draw_running(frame: &mut Frame, area: Rect, file: &str) {
 }
 
 fn draw_done(frame: &mut Frame, area: Rect, result: &crate::solver::SolveResult, view: &crate::state::SolveViewState) {
+    let t = theme();
     let popup_width = (area.width * 4 / 5).max(60).min(area.width);
     let popup_height = (area.height * 4 / 5).max(20).min(area.height);
     let popup = super::centred_rect(area, popup_width, popup_height);
@@ -109,15 +113,12 @@ fn draw_done(frame: &mut Frame, area: Rect, result: &crate::solver::SolveResult,
     }
 
     lines.push(Line::from(""));
-    lines.push(Line::from(Span::styled(
-        "  1-4: tabs  Tab/S-Tab: cycle  j/k: scroll  y: yank  Esc: close",
-        Style::default().fg(Color::DarkGray),
-    )));
+    lines.push(Line::from(Span::styled("  1-4: tabs  Tab/S-Tab: cycle  j/k: scroll  y: yank  Esc: close", Style::default().fg(t.muted))));
 
     let block = Block::default()
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Green).add_modifier(Modifier::BOLD))
-        .title(Span::styled(" Solve Results ", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)));
+        .border_style(Style::default().fg(t.added).add_modifier(Modifier::BOLD))
+        .title(Span::styled(" Solve Results ", Style::default().fg(t.added).add_modifier(Modifier::BOLD)));
 
     let paragraph = Paragraph::new(lines).block(block).scroll((scroll, 0));
     frame.render_widget(Clear, popup);
@@ -126,45 +127,47 @@ fn draw_done(frame: &mut Frame, area: Rect, result: &crate::solver::SolveResult,
 
 /// Build the tab bar line with the active tab highlighted.
 fn build_tab_bar(active: SolveTab) -> Line<'static> {
+    let t = theme();
     let mut spans = vec![Span::raw("  ")];
     for (i, tab) in SolveTab::ALL.iter().enumerate() {
         if i > 0 {
-            spans.push(Span::styled("  ", Style::default().fg(Color::DarkGray)));
+            spans.push(Span::styled("  ", Style::default().fg(t.muted)));
         }
         let label = format!("[{}] {}", i + 1, tab.label());
         if *tab == active {
-            spans.push(Span::styled(label, Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD | Modifier::UNDERLINED)));
+            spans.push(Span::styled(label, Style::default().fg(t.accent).add_modifier(Modifier::BOLD | Modifier::UNDERLINED)));
         } else {
-            spans.push(Span::styled(label, Style::default().fg(Color::DarkGray)));
+            spans.push(Span::styled(label, Style::default().fg(t.muted)));
         }
     }
     Line::from(spans)
 }
 
 fn build_summary_tab<'a>(lines: &mut Vec<Line<'a>>, result: &'a crate::solver::SolveResult) {
+    let t = theme();
     lines.push(Line::from(vec![
-        Span::styled("  Status:    ", Style::default().fg(Color::DarkGray)),
+        Span::styled("  Status:    ", Style::default().fg(t.muted)),
         Span::styled(&result.status, status_style(&result.status)),
     ]));
 
     if let Some(obj) = result.objective_value {
         lines.push(Line::from(vec![
-            Span::styled("  Objective: ", Style::default().fg(Color::DarkGray)),
-            Span::styled(format!("{obj}"), Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+            Span::styled("  Objective: ", Style::default().fg(t.muted)),
+            Span::styled(format!("{obj}"), Style::default().fg(t.text).add_modifier(Modifier::BOLD)),
         ]));
     }
 
     lines.push(Line::from(vec![
-        Span::styled("  Time:      ", Style::default().fg(Color::DarkGray)),
-        Span::styled(format!("{:.3}s", result.solve_time.as_secs_f64()), Style::default().fg(Color::Cyan)),
+        Span::styled("  Time:      ", Style::default().fg(t.muted)),
+        Span::styled(format!("{:.3}s", result.solve_time.as_secs_f64()), Style::default().fg(t.accent)),
     ]));
 
     if result.skipped_sos > 0 {
         lines.push(Line::from(vec![
-            Span::styled("  Warning:   ", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+            Span::styled("  Warning:   ", Style::default().fg(t.warning).add_modifier(Modifier::BOLD)),
             Span::styled(
                 format!("{} SOS constraint(s) skipped (not supported by solver)", result.skipped_sos),
-                Style::default().fg(Color::Yellow),
+                Style::default().fg(t.warning),
             ),
         ]));
     }
@@ -172,48 +175,48 @@ fn build_summary_tab<'a>(lines: &mut Vec<Line<'a>>, result: &'a crate::solver::S
     if !result.variables.is_empty() {
         lines.push(Line::from(""));
         lines.push(Line::from(vec![
-            Span::styled("  Variables:    ", Style::default().fg(Color::DarkGray)),
-            Span::styled(format!("{}", result.variables.len()), Style::default().fg(Color::White)),
+            Span::styled("  Variables:    ", Style::default().fg(t.muted)),
+            Span::styled(format!("{}", result.variables.len()), Style::default().fg(t.text)),
         ]));
     }
 
     if !result.shadow_prices.is_empty() {
         lines.push(Line::from(vec![
-            Span::styled("  Constraints:  ", Style::default().fg(Color::DarkGray)),
-            Span::styled(format!("{}", result.shadow_prices.len()), Style::default().fg(Color::White)),
+            Span::styled("  Constraints:  ", Style::default().fg(t.muted)),
+            Span::styled(format!("{}", result.shadow_prices.len()), Style::default().fg(t.text)),
         ]));
     }
 }
 
 fn build_variables_tab<'a>(lines: &mut Vec<Line<'a>>, result: &'a crate::solver::SolveResult) {
+    let t = theme();
     if result.variables.is_empty() {
-        lines.push(Line::from(Span::styled("  No variable values available.", Style::default().fg(Color::DarkGray))));
+        lines.push(Line::from(Span::styled("  No variable values available.", Style::default().fg(t.muted))));
         return;
     }
 
     lines.push(Line::from(Span::styled(
         format!("  Variables ({})", result.variables.len()),
-        Style::default().fg(Color::DarkGray).add_modifier(Modifier::BOLD),
+        Style::default().fg(t.muted).add_modifier(Modifier::BOLD),
     )));
 
     // Header
     lines.push(Line::from(vec![
-        Span::styled(format!("  {:<30}", "Name"), Style::default().fg(Color::DarkGray).add_modifier(Modifier::BOLD)),
-        Span::styled(format!("{:>12}", "Value"), Style::default().fg(Color::DarkGray).add_modifier(Modifier::BOLD)),
-        Span::styled(format!("{:>14}", "Reduced Cost"), Style::default().fg(Color::DarkGray).add_modifier(Modifier::BOLD)),
+        Span::styled(format!("  {:<30}", "Name"), Style::default().fg(t.muted).add_modifier(Modifier::BOLD)),
+        Span::styled(format!("{:>12}", "Value"), Style::default().fg(t.muted).add_modifier(Modifier::BOLD)),
+        Span::styled(format!("{:>14}", "Reduced Cost"), Style::default().fg(t.muted).add_modifier(Modifier::BOLD)),
     ]));
-    lines
-        .push(Line::from(Span::styled("  ────────────────────────────────────────────────────────", Style::default().fg(Color::DarkGray))));
+    lines.push(Line::from(Span::styled("  ────────────────────────────────────────────────────────", Style::default().fg(t.muted))));
 
     let has_reduced_costs = !result.reduced_costs.is_empty();
     for (i, (name, val)) in result.variables.iter().enumerate() {
-        let val_style = if val.abs() < 1e-10 { Style::default().fg(Color::DarkGray) } else { Style::default().fg(Color::White) };
+        let val_style = if val.abs() < 1e-10 { Style::default().fg(t.muted) } else { Style::default().fg(t.text) };
         let mut spans =
-            vec![Span::styled(format!("  {name:<30}"), Style::default().fg(Color::White)), Span::styled(format!("{val:>12.6}"), val_style)];
+            vec![Span::styled(format!("  {name:<30}"), Style::default().fg(t.text)), Span::styled(format!("{val:>12.6}"), val_style)];
         if has_reduced_costs {
             let reduced_cost = result.reduced_costs.get(i).map_or(0.0, |(_, v)| *v);
             let reduced_cost_style =
-                if reduced_cost.abs() < 1e-10 { Style::default().fg(Color::DarkGray) } else { Style::default().fg(Color::Yellow) };
+                if reduced_cost.abs() < 1e-10 { Style::default().fg(t.muted) } else { Style::default().fg(t.modified) };
             spans.push(Span::styled(format!("{reduced_cost:>14.6}"), reduced_cost_style));
         }
         lines.push(Line::from(spans));
@@ -221,33 +224,31 @@ fn build_variables_tab<'a>(lines: &mut Vec<Line<'a>>, result: &'a crate::solver:
 }
 
 fn build_constraints_tab<'a>(lines: &mut Vec<Line<'a>>, result: &'a crate::solver::SolveResult) {
+    let t = theme();
     if result.shadow_prices.is_empty() && result.row_values.is_empty() {
-        lines.push(Line::from(Span::styled("  No constraint data available.", Style::default().fg(Color::DarkGray))));
+        lines.push(Line::from(Span::styled("  No constraint data available.", Style::default().fg(t.muted))));
         return;
     }
 
     lines.push(Line::from(Span::styled(
         format!("  Constraints ({})", result.shadow_prices.len()),
-        Style::default().fg(Color::DarkGray).add_modifier(Modifier::BOLD),
+        Style::default().fg(t.muted).add_modifier(Modifier::BOLD),
     )));
 
     // Header
     lines.push(Line::from(vec![
-        Span::styled(format!("  {:<30}", "Name"), Style::default().fg(Color::DarkGray).add_modifier(Modifier::BOLD)),
-        Span::styled(format!("{:>12}", "Activity"), Style::default().fg(Color::DarkGray).add_modifier(Modifier::BOLD)),
-        Span::styled(format!("{:>14}", "Shadow Price"), Style::default().fg(Color::DarkGray).add_modifier(Modifier::BOLD)),
+        Span::styled(format!("  {:<30}", "Name"), Style::default().fg(t.muted).add_modifier(Modifier::BOLD)),
+        Span::styled(format!("{:>12}", "Activity"), Style::default().fg(t.muted).add_modifier(Modifier::BOLD)),
+        Span::styled(format!("{:>14}", "Shadow Price"), Style::default().fg(t.muted).add_modifier(Modifier::BOLD)),
     ]));
-    lines
-        .push(Line::from(Span::styled("  ────────────────────────────────────────────────────────", Style::default().fg(Color::DarkGray))));
+    lines.push(Line::from(Span::styled("  ────────────────────────────────────────────────────────", Style::default().fg(t.muted))));
 
     for (i, (name, shadow_price)) in result.shadow_prices.iter().enumerate() {
         let row_value = result.row_values.get(i).map_or(0.0, |(_, v)| *v);
-        let row_value_style =
-            if row_value.abs() < 1e-10 { Style::default().fg(Color::DarkGray) } else { Style::default().fg(Color::White) };
-        let shadow_price_style =
-            if shadow_price.abs() < 1e-10 { Style::default().fg(Color::DarkGray) } else { Style::default().fg(Color::Yellow) };
+        let row_value_style = if row_value.abs() < 1e-10 { Style::default().fg(t.muted) } else { Style::default().fg(t.text) };
+        let shadow_price_style = if shadow_price.abs() < 1e-10 { Style::default().fg(t.muted) } else { Style::default().fg(t.modified) };
         lines.push(Line::from(vec![
-            Span::styled(format!("  {name:<30}"), Style::default().fg(Color::White)),
+            Span::styled(format!("  {name:<30}"), Style::default().fg(t.text)),
             Span::styled(format!("{row_value:>12.6}"), row_value_style),
             Span::styled(format!("{shadow_price:>14.6}"), shadow_price_style),
         ]));
@@ -255,49 +256,53 @@ fn build_constraints_tab<'a>(lines: &mut Vec<Line<'a>>, result: &'a crate::solve
 }
 
 fn build_log_tab<'a>(lines: &mut Vec<Line<'a>>, result: &'a crate::solver::SolveResult) {
+    let t = theme();
     if result.solver_log.is_empty() {
-        lines.push(Line::from(Span::styled("  No solver log available.", Style::default().fg(Color::DarkGray))));
+        lines.push(Line::from(Span::styled("  No solver log available.", Style::default().fg(t.muted))));
         return;
     }
 
     const MAX_LOG_LINES: usize = 200;
 
-    lines.push(Line::from(Span::styled("  Solver Log:", Style::default().fg(Color::DarkGray).add_modifier(Modifier::BOLD))));
-    lines.push(Line::from(Span::styled("  ────────────────────────────────────────", Style::default().fg(Color::DarkGray))));
+    lines.push(Line::from(Span::styled("  Solver Log:", Style::default().fg(t.muted).add_modifier(Modifier::BOLD))));
+    lines.push(Line::from(Span::styled("  ────────────────────────────────────────", Style::default().fg(t.muted))));
 
-    let total = result.solver_log.lines().count();
+    // Single-pass: collect lines once, then slice.
+    let log_lines: Vec<&str> = result.solver_log.lines().collect();
+    let start = log_lines.len().saturating_sub(MAX_LOG_LINES);
 
-    if total > MAX_LOG_LINES {
+    if log_lines.len() > MAX_LOG_LINES {
         lines.push(Line::from(Span::styled(
-            format!("  ... ({} lines truncated)", total - MAX_LOG_LINES),
-            Style::default().fg(Color::Yellow),
+            format!("  ... ({} lines truncated)", log_lines.len() - MAX_LOG_LINES),
+            Style::default().fg(t.warning),
         )));
     }
 
-    for log_line in result.solver_log.lines().skip(total.saturating_sub(MAX_LOG_LINES)) {
-        lines.push(Line::from(Span::styled(format!("  {log_line}"), Style::default().fg(Color::DarkGray))));
+    for log_line in &log_lines[start..] {
+        lines.push(Line::from(Span::styled(format!("  {log_line}"), Style::default().fg(t.muted))));
     }
 }
 
 fn draw_running_both(frame: &mut Frame, area: Rect, file1: &str, file2: &str, done1: bool, done2: bool) {
+    let t = theme();
     let popup = super::centred_rect(area, 60, 7);
     let icon1 = if done1 { "\u{2713}" } else { "\u{22ef}" };
     let status1 = if done1 { "done" } else { "solving..." };
     let icon2 = if done2 { "\u{2713}" } else { "\u{22ef}" };
     let status2 = if done2 { "done" } else { "solving..." };
-    let style_done = Style::default().fg(Color::Green).add_modifier(Modifier::BOLD);
-    let style_running = Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD);
+    let style_done = Style::default().fg(t.added).add_modifier(Modifier::BOLD);
+    let style_running = Style::default().fg(t.warning).add_modifier(Modifier::BOLD);
 
     let lines = vec![
         Line::from(""),
         Line::from(vec![
             Span::styled(format!("  {icon1} "), if done1 { style_done } else { style_running }),
-            Span::styled(format!("{file1:<30}"), Style::default().fg(Color::White)),
+            Span::styled(format!("{file1:<30}"), Style::default().fg(t.text)),
             Span::styled(status1, if done1 { style_done } else { style_running }),
         ]),
         Line::from(vec![
             Span::styled(format!("  {icon2} "), if done2 { style_done } else { style_running }),
-            Span::styled(format!("{file2:<30}"), Style::default().fg(Color::White)),
+            Span::styled(format!("{file2:<30}"), Style::default().fg(t.text)),
             Span::styled(status2, if done2 { style_done } else { style_running }),
         ]),
         Line::from(""),
@@ -305,8 +310,8 @@ fn draw_running_both(frame: &mut Frame, area: Rect, file1: &str, file2: &str, do
 
     let block = Block::default()
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD))
-        .title(Span::styled(" Solver ", Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)));
+        .border_style(Style::default().fg(t.secondary_accent).add_modifier(Modifier::BOLD))
+        .title(Span::styled(" Solver ", Style::default().fg(t.secondary_accent).add_modifier(Modifier::BOLD)));
 
     let paragraph = Paragraph::new(lines).block(block);
     frame.render_widget(Clear, popup);
@@ -314,6 +319,7 @@ fn draw_running_both(frame: &mut Frame, area: Rect, file1: &str, file2: &str, do
 }
 
 fn draw_done_both(frame: &mut Frame, area: Rect, diff: &SolveDiffResult, view: &SolveViewState) {
+    let t = theme();
     let popup_width = (area.width * 4 / 5).max(60).min(area.width);
     let popup_height = (area.height * 4 / 5).max(20).min(area.height);
     let popup = super::centred_rect(area, popup_width, popup_height);
@@ -334,13 +340,13 @@ fn draw_done_both(frame: &mut Frame, area: Rect, diff: &SolveDiffResult, view: &
     lines.push(Line::from(""));
     lines.push(Line::from(Span::styled(
         "  1-4: tabs  Tab/S-Tab: cycle  j/k: scroll  d: toggle diff  y: yank  Esc: close",
-        Style::default().fg(Color::DarkGray),
+        Style::default().fg(t.muted),
     )));
 
     let block = Block::default()
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD))
-        .title(Span::styled(" Solve Comparison ", Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)));
+        .border_style(Style::default().fg(t.secondary_accent).add_modifier(Modifier::BOLD))
+        .title(Span::styled(" Solve Comparison ", Style::default().fg(t.secondary_accent).add_modifier(Modifier::BOLD)));
 
     let paragraph = Paragraph::new(lines).block(block).scroll((scroll, 0));
     frame.render_widget(Clear, popup);
@@ -349,6 +355,7 @@ fn draw_done_both(frame: &mut Frame, area: Rect, diff: &SolveDiffResult, view: &
 
 /// Format a delta string. Returns empty spans if no delta.
 fn delta_spans(v1: Option<f64>, v2: Option<f64>) -> Vec<Span<'static>> {
+    let t = theme();
     let (a, b) = match (v1, v2) {
         (Some(a), Some(b)) => (a, b),
         _ => return Vec::new(),
@@ -358,7 +365,7 @@ fn delta_spans(v1: Option<f64>, v2: Option<f64>) -> Vec<Span<'static>> {
         return Vec::new();
     }
     let sign = if d > 0.0 { "+" } else { "" };
-    let colour = if d > 0.0 { Color::Green } else { Color::Red };
+    let colour = if d > 0.0 { t.added } else { t.removed };
     vec![Span::styled(format!("  \u{0394} {sign}{d:.6}"), Style::default().fg(colour))]
 }
 
@@ -434,18 +441,20 @@ fn count_constraint_diffs(diff: &SolveDiffResult) -> DiffTabCounts {
 
 /// Format a count delta span for the diff summary comparison rows.
 fn count_delta_span(count1: usize, count2: usize) -> Option<Span<'static>> {
+    let t = theme();
     if count1 == count2 {
         return None;
     }
     #[allow(clippy::cast_possible_wrap)]
     let delta = count2 as i64 - count1 as i64;
     let sign = if delta > 0 { "+" } else { "" };
-    let colour = if delta > 0 { Color::Green } else { Color::Red };
+    let colour = if delta > 0 { t.added } else { t.removed };
     Some(Span::styled(format!("  \u{0394} {sign}{delta}"), Style::default().fg(colour)))
 }
 
 /// Render the comparison table header and metrics rows for the diff summary.
 fn build_diff_summary_metrics(lines: &mut Vec<Line<'static>>, diff: &SolveDiffResult) {
+    let t = theme();
     let r1 = &diff.result1;
     let r2 = &diff.result2;
 
@@ -453,14 +462,14 @@ fn build_diff_summary_metrics(lines: &mut Vec<Line<'static>>, diff: &SolveDiffRe
     let col_w = 20;
     lines.push(Line::from(vec![
         Span::styled(format!("  {:<label_w$}", ""), Style::default()),
-        Span::styled(format!("{:<col_w$}", "File 1"), Style::default().fg(Color::DarkGray).add_modifier(Modifier::BOLD)),
-        Span::styled(format!("{:<col_w$}", "File 2"), Style::default().fg(Color::DarkGray).add_modifier(Modifier::BOLD)),
+        Span::styled(format!("{:<col_w$}", "File 1"), Style::default().fg(t.muted).add_modifier(Modifier::BOLD)),
+        Span::styled(format!("{:<col_w$}", "File 2"), Style::default().fg(t.muted).add_modifier(Modifier::BOLD)),
     ]));
-    lines.push(Line::from(Span::styled(format!("  {RULE_60}"), Style::default().fg(Color::DarkGray))));
+    lines.push(Line::from(Span::styled(format!("  {RULE_60}"), Style::default().fg(t.muted))));
 
     // Status.
     lines.push(Line::from(vec![
-        Span::styled(format!("  {:<label_w$}", "Status:"), Style::default().fg(Color::DarkGray)),
+        Span::styled(format!("  {:<label_w$}", "Status:"), Style::default().fg(t.muted)),
         Span::styled(format!("{:<col_w$}", &r1.status), status_style(&r1.status)),
         Span::styled(format!("{:<col_w$}", &r2.status), status_style(&r2.status)),
     ]));
@@ -469,9 +478,9 @@ fn build_diff_summary_metrics(lines: &mut Vec<Line<'static>>, diff: &SolveDiffRe
     let obj1_str = r1.objective_value.map_or_else(|| "N/A".to_owned(), |v| format!("{v:.6}"));
     let obj2_str = r2.objective_value.map_or_else(|| "N/A".to_owned(), |v| format!("{v:.6}"));
     let mut objective_spans = vec![
-        Span::styled(format!("  {:<label_w$}", "Objective:"), Style::default().fg(Color::DarkGray)),
-        Span::styled(format!("{obj1_str:<col_w$}"), Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
-        Span::styled(format!("{obj2_str:<col_w$}"), Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+        Span::styled(format!("  {:<label_w$}", "Objective:"), Style::default().fg(t.muted)),
+        Span::styled(format!("{obj1_str:<col_w$}"), Style::default().fg(t.text).add_modifier(Modifier::BOLD)),
+        Span::styled(format!("{obj2_str:<col_w$}"), Style::default().fg(t.text).add_modifier(Modifier::BOLD)),
     ];
     objective_spans.extend(delta_spans(r1.objective_value, r2.objective_value));
     lines.push(Line::from(objective_spans));
@@ -480,18 +489,18 @@ fn build_diff_summary_metrics(lines: &mut Vec<Line<'static>>, diff: &SolveDiffRe
     let time1 = format!("{:.3}s", r1.solve_time.as_secs_f64());
     let time2 = format!("{:.3}s", r2.solve_time.as_secs_f64());
     lines.push(Line::from(vec![
-        Span::styled(format!("  {:<label_w$}", "Time:"), Style::default().fg(Color::DarkGray)),
-        Span::styled(format!("{time1:<col_w$}"), Style::default().fg(Color::Cyan)),
-        Span::styled(format!("{time2:<col_w$}"), Style::default().fg(Color::Cyan)),
+        Span::styled(format!("  {:<label_w$}", "Time:"), Style::default().fg(t.muted)),
+        Span::styled(format!("{time1:<col_w$}"), Style::default().fg(t.accent)),
+        Span::styled(format!("{time2:<col_w$}"), Style::default().fg(t.accent)),
     ]));
 
     // Variable counts.
     let variable_count1 = r1.variables.len();
     let variable_count2 = r2.variables.len();
     let mut variable_spans = vec![
-        Span::styled(format!("  {:<label_w$}", "Variables:"), Style::default().fg(Color::DarkGray)),
-        Span::styled(format!("{variable_count1:<col_w$}"), Style::default().fg(Color::White)),
-        Span::styled(format!("{variable_count2:<col_w$}"), Style::default().fg(Color::White)),
+        Span::styled(format!("  {:<label_w$}", "Variables:"), Style::default().fg(t.muted)),
+        Span::styled(format!("{variable_count1:<col_w$}"), Style::default().fg(t.text)),
+        Span::styled(format!("{variable_count2:<col_w$}"), Style::default().fg(t.text)),
     ];
     if let Some(delta) = count_delta_span(variable_count1, variable_count2) {
         variable_spans.push(delta);
@@ -502,9 +511,9 @@ fn build_diff_summary_metrics(lines: &mut Vec<Line<'static>>, diff: &SolveDiffRe
     let constraint_count1 = r1.shadow_prices.len();
     let constraint_count2 = r2.shadow_prices.len();
     let mut constraint_spans = vec![
-        Span::styled(format!("  {:<label_w$}", "Constraints:"), Style::default().fg(Color::DarkGray)),
-        Span::styled(format!("{constraint_count1:<col_w$}"), Style::default().fg(Color::White)),
-        Span::styled(format!("{constraint_count2:<col_w$}"), Style::default().fg(Color::White)),
+        Span::styled(format!("  {:<label_w$}", "Constraints:"), Style::default().fg(t.muted)),
+        Span::styled(format!("{constraint_count1:<col_w$}"), Style::default().fg(t.text)),
+        Span::styled(format!("{constraint_count2:<col_w$}"), Style::default().fg(t.text)),
     ];
     if let Some(delta) = count_delta_span(constraint_count1, constraint_count2) {
         constraint_spans.push(delta);
@@ -514,14 +523,15 @@ fn build_diff_summary_metrics(lines: &mut Vec<Line<'static>>, diff: &SolveDiffRe
     // Skipped SOS.
     if r1.skipped_sos > 0 || r2.skipped_sos > 0 {
         lines.push(Line::from(vec![
-            Span::styled(format!("  {:<label_w$}", "Skipped SOS:"), Style::default().fg(Color::DarkGray)),
-            Span::styled(format!("{:<col_w$}", r1.skipped_sos), Style::default().fg(Color::White)),
-            Span::styled(format!("{:<col_w$}", r2.skipped_sos), Style::default().fg(Color::White)),
+            Span::styled(format!("  {:<label_w$}", "Skipped SOS:"), Style::default().fg(t.muted)),
+            Span::styled(format!("{:<col_w$}", r1.skipped_sos), Style::default().fg(t.text)),
+            Span::styled(format!("{:<col_w$}", r2.skipped_sos), Style::default().fg(t.text)),
         ]));
     }
 }
 
 fn build_diff_summary_tab(lines: &mut Vec<Line<'static>>, diff: &SolveDiffResult) {
+    let t = theme();
     build_diff_summary_metrics(lines, diff);
 
     // Summary of differences.
@@ -536,8 +546,8 @@ fn build_diff_summary_tab(lines: &mut Vec<Line<'static>>, diff: &SolveDiffResult
     let label_w = 18;
     let summary = if parts.is_empty() { "No differences".to_owned() } else { parts.join(", ") };
     lines.push(Line::from(vec![
-        Span::styled(format!("  {:<label_w$}", "Differences:"), Style::default().fg(Color::DarkGray)),
-        Span::styled(summary, Style::default().fg(Color::Yellow)),
+        Span::styled(format!("  {:<label_w$}", "Differences:"), Style::default().fg(t.muted)),
+        Span::styled(summary, Style::default().fg(t.modified)),
     ]));
 }
 
@@ -547,25 +557,26 @@ fn diff_filter_label(diff_only: bool) -> &'static str {
 }
 
 fn build_diff_variables_tab(lines: &mut Vec<Line<'static>>, diff: &SolveDiffResult, diff_only: bool) {
+    let t = theme();
     let counts = count_variable_diffs(diff);
     let summary = counts.summary_label();
     let filter_label = diff_filter_label(diff_only);
 
     lines.push(Line::from(Span::styled(
         format!("  Variables: {summary} (of {} total){filter_label}", counts.total),
-        Style::default().fg(Color::DarkGray).add_modifier(Modifier::BOLD),
+        Style::default().fg(t.muted).add_modifier(Modifier::BOLD),
     )));
     lines.push(Line::from(""));
 
     let name_w = 24;
     let value_w = 14;
     lines.push(Line::from(vec![
-        Span::styled(format!("  {:<name_w$}", "Name"), Style::default().fg(Color::DarkGray).add_modifier(Modifier::BOLD)),
-        Span::styled(format!("{:>value_w$}", "File 1"), Style::default().fg(Color::DarkGray).add_modifier(Modifier::BOLD)),
-        Span::styled(format!("{:>value_w$}", "File 2"), Style::default().fg(Color::DarkGray).add_modifier(Modifier::BOLD)),
-        Span::styled(format!("{:>value_w$}", "\u{0394}"), Style::default().fg(Color::DarkGray).add_modifier(Modifier::BOLD)),
+        Span::styled(format!("  {:<name_w$}", "Name"), Style::default().fg(t.muted).add_modifier(Modifier::BOLD)),
+        Span::styled(format!("{:>value_w$}", "File 1"), Style::default().fg(t.muted).add_modifier(Modifier::BOLD)),
+        Span::styled(format!("{:>value_w$}", "File 2"), Style::default().fg(t.muted).add_modifier(Modifier::BOLD)),
+        Span::styled(format!("{:>value_w$}", "\u{0394}"), Style::default().fg(t.muted).add_modifier(Modifier::BOLD)),
     ]));
-    lines.push(Line::from(Span::styled(format!("  {RULE_70}"), Style::default().fg(Color::DarkGray))));
+    lines.push(Line::from(Span::styled(format!("  {RULE_70}"), Style::default().fg(t.muted))));
 
     for row in &diff.variable_diff {
         if diff_only && !row.changed {
@@ -576,18 +587,15 @@ fn build_diff_variables_tab(lines: &mut Vec<Line<'static>>, diff: &SolveDiffResu
 }
 
 fn build_variable_diff_line(lines: &mut Vec<Line<'static>>, row: &VarDiffRow, name_w: usize, value_w: usize) {
+    let t = theme();
     let dash = "\u{2014}";
 
     let (name_style, value1_str, value2_str, delta_str, marker) = match (row.val1, row.val2) {
-        (None, Some(v2)) => (
-            Style::default().fg(Color::Green),
-            format!("{dash:>value_w$}"),
-            format!("{v2:>value_w$.6}"),
-            format!("{:>value_w$}", "(added)"),
-            "",
-        ),
+        (None, Some(v2)) => {
+            (Style::default().fg(t.added), format!("{dash:>value_w$}"), format!("{v2:>value_w$.6}"), format!("{:>value_w$}", "(added)"), "")
+        }
         (Some(v1), None) => (
-            Style::default().fg(Color::Red),
+            Style::default().fg(t.removed),
             format!("{v1:>value_w$.6}"),
             format!("{dash:>value_w$}"),
             format!("{:>value_w$}", "(removed)"),
@@ -597,15 +605,9 @@ fn build_variable_diff_line(lines: &mut Vec<Line<'static>>, row: &VarDiffRow, na
             if row.changed {
                 let d = v2 - v1;
                 let sign = if d >= 0.0 { "+" } else { "" };
-                (
-                    Style::default().fg(Color::Yellow),
-                    format!("{v1:>value_w$.6}"),
-                    format!("{v2:>value_w$.6}"),
-                    format!("{sign}{d:>.6}"),
-                    " *",
-                )
+                (Style::default().fg(t.modified), format!("{v1:>value_w$.6}"), format!("{v2:>value_w$.6}"), format!("{sign}{d:>.6}"), " *")
             } else {
-                let base = if v1.abs() < 1e-10 { Style::default().fg(Color::DarkGray) } else { Style::default().fg(Color::White) };
+                let base = if v1.abs() < 1e-10 { Style::default().fg(t.muted) } else { Style::default().fg(t.text) };
                 (base, format!("{v1:>value_w$.6}"), format!("{v2:>value_w$.6}"), String::new(), "")
             }
         }
@@ -621,32 +623,33 @@ fn build_variable_diff_line(lines: &mut Vec<Line<'static>>, row: &VarDiffRow, na
         spans.push(Span::styled(format!("  {delta_str}"), name_style));
     }
     if !marker.is_empty() {
-        spans.push(Span::styled(marker.to_owned(), Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)));
+        spans.push(Span::styled(marker.to_owned(), Style::default().fg(t.modified).add_modifier(Modifier::BOLD)));
     }
     lines.push(Line::from(spans));
 }
 
 fn build_diff_constraints_tab(lines: &mut Vec<Line<'static>>, diff: &SolveDiffResult, diff_only: bool) {
+    let t = theme();
     let counts = count_constraint_diffs(diff);
     let summary = counts.summary_label();
     let filter_label = diff_filter_label(diff_only);
 
     lines.push(Line::from(Span::styled(
         format!("  Constraints: {summary} (of {} total){filter_label}", counts.total),
-        Style::default().fg(Color::DarkGray).add_modifier(Modifier::BOLD),
+        Style::default().fg(t.muted).add_modifier(Modifier::BOLD),
     )));
     lines.push(Line::from(""));
 
     let name_w = 22;
     let value_w = 13;
     lines.push(Line::from(vec![
-        Span::styled(format!("  {:<name_w$}", "Name"), Style::default().fg(Color::DarkGray).add_modifier(Modifier::BOLD)),
-        Span::styled(format!("{:>value_w$}", "Activity 1"), Style::default().fg(Color::DarkGray).add_modifier(Modifier::BOLD)),
-        Span::styled(format!("{:>value_w$}", "Activity 2"), Style::default().fg(Color::DarkGray).add_modifier(Modifier::BOLD)),
-        Span::styled(format!("{:>value_w$}", "Shadow 1"), Style::default().fg(Color::DarkGray).add_modifier(Modifier::BOLD)),
-        Span::styled(format!("{:>value_w$}", "Shadow 2"), Style::default().fg(Color::DarkGray).add_modifier(Modifier::BOLD)),
+        Span::styled(format!("  {:<name_w$}", "Name"), Style::default().fg(t.muted).add_modifier(Modifier::BOLD)),
+        Span::styled(format!("{:>value_w$}", "Activity 1"), Style::default().fg(t.muted).add_modifier(Modifier::BOLD)),
+        Span::styled(format!("{:>value_w$}", "Activity 2"), Style::default().fg(t.muted).add_modifier(Modifier::BOLD)),
+        Span::styled(format!("{:>value_w$}", "Shadow 1"), Style::default().fg(t.muted).add_modifier(Modifier::BOLD)),
+        Span::styled(format!("{:>value_w$}", "Shadow 2"), Style::default().fg(t.muted).add_modifier(Modifier::BOLD)),
     ]));
-    lines.push(Line::from(Span::styled(format!("  {RULE_80}"), Style::default().fg(Color::DarkGray))));
+    lines.push(Line::from(Span::styled(format!("  {RULE_80}"), Style::default().fg(t.muted))));
 
     for row in &diff.constraint_diff {
         if diff_only && !row.changed {
@@ -657,11 +660,12 @@ fn build_diff_constraints_tab(lines: &mut Vec<Line<'static>>, diff: &SolveDiffRe
 }
 
 fn build_constraint_diff_line(lines: &mut Vec<Line<'static>>, row: &ConstraintDiffRow, name_w: usize, val_w: usize) {
+    let t = theme();
     let dash = "\u{2014}";
 
     let (name_style, a1, a2, s1, s2, marker) = match (row.activity1, row.activity2) {
         (None, Some(_)) => {
-            let style = Style::default().fg(Color::Green);
+            let style = Style::default().fg(t.added);
             (
                 style,
                 format!("{dash:>val_w$}"),
@@ -672,7 +676,7 @@ fn build_constraint_diff_line(lines: &mut Vec<Line<'static>>, row: &ConstraintDi
             )
         }
         (Some(_), None) => {
-            let style = Style::default().fg(Color::Red);
+            let style = Style::default().fg(t.removed);
             (
                 style,
                 row.activity1.map_or_else(String::new, |v| format!("{v:>val_w$.4}")),
@@ -685,7 +689,7 @@ fn build_constraint_diff_line(lines: &mut Vec<Line<'static>>, row: &ConstraintDi
         (Some(act1), Some(act2)) => {
             if row.changed {
                 (
-                    Style::default().fg(Color::Yellow),
+                    Style::default().fg(t.modified),
                     format!("{act1:>val_w$.4}"),
                     format!("{act2:>val_w$.4}"),
                     row.shadow_price1.map_or_else(String::new, |v| format!("{v:>val_w$.4}")),
@@ -693,7 +697,7 @@ fn build_constraint_diff_line(lines: &mut Vec<Line<'static>>, row: &ConstraintDi
                     " *",
                 )
             } else {
-                let base = if act1.abs() < 1e-10 { Style::default().fg(Color::DarkGray) } else { Style::default().fg(Color::White) };
+                let base = if act1.abs() < 1e-10 { Style::default().fg(t.muted) } else { Style::default().fg(t.text) };
                 (
                     base,
                     format!("{act1:>val_w$.4}"),
@@ -715,66 +719,70 @@ fn build_constraint_diff_line(lines: &mut Vec<Line<'static>>, row: &ConstraintDi
         Span::styled(format!("  {s2}"), name_style),
     ];
     if !marker.is_empty() {
-        spans.push(Span::styled(marker.to_owned(), Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)));
+        spans.push(Span::styled(marker.to_owned(), Style::default().fg(t.modified).add_modifier(Modifier::BOLD)));
     }
     lines.push(Line::from(spans));
 }
 
 fn build_diff_log_tab(lines: &mut Vec<Line<'static>>, diff: &SolveDiffResult) {
+    let t = theme();
     const MAX_LOG_LINES: usize = 100;
 
-    // File 1 log.
+    // File 1 log — single-pass: collect then slice.
     lines.push(Line::from(Span::styled(
         format!("  \u{2500}\u{2500} File 1: {} \u{2500}{RULE_30}", diff.file1_label),
-        Style::default().fg(Color::DarkGray).add_modifier(Modifier::BOLD),
+        Style::default().fg(t.muted).add_modifier(Modifier::BOLD),
     )));
 
-    let total1 = diff.result1.solver_log.lines().count();
-    if total1 > MAX_LOG_LINES {
+    let log_lines1: Vec<&str> = diff.result1.solver_log.lines().collect();
+    let start1 = log_lines1.len().saturating_sub(MAX_LOG_LINES);
+    if log_lines1.len() > MAX_LOG_LINES {
         lines.push(Line::from(Span::styled(
-            format!("  ... ({} lines truncated)", total1 - MAX_LOG_LINES),
-            Style::default().fg(Color::Yellow),
+            format!("  ... ({} lines truncated)", log_lines1.len() - MAX_LOG_LINES),
+            Style::default().fg(t.warning),
         )));
     }
-    for log_line in diff.result1.solver_log.lines().skip(total1.saturating_sub(MAX_LOG_LINES)) {
-        lines.push(Line::from(Span::styled(format!("  {log_line}"), Style::default().fg(Color::DarkGray))));
+    for log_line in &log_lines1[start1..] {
+        lines.push(Line::from(Span::styled(format!("  {log_line}"), Style::default().fg(t.muted))));
     }
 
     lines.push(Line::from(""));
 
-    // File 2 log.
+    // File 2 log — single-pass: collect then slice.
     lines.push(Line::from(Span::styled(
         format!("  \u{2500}\u{2500} File 2: {} \u{2500}{RULE_30}", diff.file2_label),
-        Style::default().fg(Color::DarkGray).add_modifier(Modifier::BOLD),
+        Style::default().fg(t.muted).add_modifier(Modifier::BOLD),
     )));
 
-    let total2 = diff.result2.solver_log.lines().count();
-    if total2 > MAX_LOG_LINES {
+    let log_lines2: Vec<&str> = diff.result2.solver_log.lines().collect();
+    let start2 = log_lines2.len().saturating_sub(MAX_LOG_LINES);
+    if log_lines2.len() > MAX_LOG_LINES {
         lines.push(Line::from(Span::styled(
-            format!("  ... ({} lines truncated)", total2 - MAX_LOG_LINES),
-            Style::default().fg(Color::Yellow),
+            format!("  ... ({} lines truncated)", log_lines2.len() - MAX_LOG_LINES),
+            Style::default().fg(t.warning),
         )));
     }
-    for log_line in diff.result2.solver_log.lines().skip(total2.saturating_sub(MAX_LOG_LINES)) {
-        lines.push(Line::from(Span::styled(format!("  {log_line}"), Style::default().fg(Color::DarkGray))));
+    for log_line in &log_lines2[start2..] {
+        lines.push(Line::from(Span::styled(format!("  {log_line}"), Style::default().fg(t.muted))));
     }
 }
 
 fn draw_failed(frame: &mut Frame, area: Rect, err: &str) {
+    let t = theme();
     let popup = super::centred_rect(area, 60, 8);
     let lines = vec![
         Line::from(""),
-        Line::from(Span::styled("  Solve failed:", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD))),
+        Line::from(Span::styled("  Solve failed:", Style::default().fg(t.error).add_modifier(Modifier::BOLD))),
         Line::from(""),
-        Line::from(Span::styled(format!("  {err}"), Style::default().fg(Color::Red))),
+        Line::from(Span::styled(format!("  {err}"), Style::default().fg(t.error))),
         Line::from(""),
-        Line::from(Span::styled("  Press Esc to close", Style::default().fg(Color::DarkGray))),
+        Line::from(Span::styled("  Press Esc to close", Style::default().fg(t.muted))),
     ];
 
     let block = Block::default()
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Red).add_modifier(Modifier::BOLD))
-        .title(Span::styled(" Solver Error ", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)));
+        .border_style(Style::default().fg(t.error).add_modifier(Modifier::BOLD))
+        .title(Span::styled(" Solver Error ", Style::default().fg(t.error).add_modifier(Modifier::BOLD)));
 
     let paragraph = Paragraph::new(lines).block(block);
     frame.render_widget(Clear, popup);
@@ -783,11 +791,12 @@ fn draw_failed(frame: &mut Frame, area: Rect, err: &str) {
 
 /// Pick a style colour based on the status string.
 fn status_style(status: &str) -> Style {
+    let t = theme();
     if status.contains("Optimal") {
-        Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)
+        Style::default().fg(t.added).add_modifier(Modifier::BOLD)
     } else if status.contains("Infeasible") || status.contains("Unbounded") {
-        Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)
+        Style::default().fg(t.error).add_modifier(Modifier::BOLD)
     } else {
-        Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+        Style::default().fg(t.warning).add_modifier(Modifier::BOLD)
     }
 }

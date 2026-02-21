@@ -229,6 +229,8 @@ impl DiffEntry for ObjectiveDiffEntry {
 }
 
 /// Collect the sorted, deduplicated union of keys from two iterators.
+///
+/// Inputs need not be sorted — `HashMap::keys()` iteration order is arbitrary.
 fn sorted_key_union<'a>(left: impl Iterator<Item = &'a str>, right: impl Iterator<Item = &'a str>) -> Vec<&'a str> {
     let mut keys: Vec<&str> = left.chain(right).collect();
     keys.sort_unstable();

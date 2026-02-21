@@ -6,11 +6,13 @@ use ratatui::widgets::{Block, Borders, List, ListItem, Paragraph, Scrollbar, Scr
 
 use crate::app::{App, Focus, Section};
 use crate::diff_model::DiffEntry;
+use crate::theme::theme;
 use crate::widgets::{focus_border_style, kind_prefix, kind_style};
 
 /// Draw the section selector as a bordered list in the top-left.
 pub fn draw_section_selector(frame: &mut Frame, area: Rect, app: &mut App) {
     debug_assert!(area.width > 0 && area.height > 0, "section selector area must be non-zero");
+    let t = theme();
     let border_style = focus_border_style(app.focus, Focus::SectionSelector);
 
     let items: Vec<ListItem> = Section::ALL
@@ -18,9 +20,9 @@ pub fn draw_section_selector(frame: &mut Frame, area: Rect, app: &mut App) {
         .map(|section| {
             let marker = if *section == app.active_section { "\u{25b6} " } else { "  " };
             let style = if *section == app.active_section {
-                Style::default().fg(Color::White).add_modifier(Modifier::BOLD)
+                Style::default().fg(t.text).add_modifier(Modifier::BOLD)
             } else {
-                Style::default().fg(Color::DarkGray)
+                Style::default().fg(t.muted)
             };
             ListItem::new(Line::from(Span::styled(format!("{marker}{}", section.label()), style)))
         })
@@ -28,8 +30,10 @@ pub fn draw_section_selector(frame: &mut Frame, area: Rect, app: &mut App) {
 
     let block = Block::default().borders(Borders::ALL).border_style(border_style).title(" Sections ");
 
-    let list =
-        List::new(items).block(block).highlight_style(Style::default().bg(Color::Blue).add_modifier(Modifier::BOLD)).highlight_symbol("");
+    let list = List::new(items)
+        .block(block)
+        .highlight_style(Style::default().bg(t.highlight_bg).add_modifier(Modifier::BOLD))
+        .highlight_symbol("");
 
     frame.render_stateful_widget(list, area, &mut app.section_selector_state);
 }
@@ -37,6 +41,7 @@ pub fn draw_section_selector(frame: &mut Frame, area: Rect, app: &mut App) {
 /// Draw the name list below the section selector.
 pub fn draw_name_list(frame: &mut Frame, area: Rect, app: &mut App) {
     debug_assert!(area.width > 0 && area.height > 0, "name list area must be non-zero");
+    let t = theme();
     let border_style = focus_border_style(app.focus, Focus::NameList);
 
     match app.active_section {
@@ -46,15 +51,15 @@ pub fn draw_name_list(frame: &mut Frame, area: Rect, app: &mut App) {
             let items: Vec<ListItem> = vec![
                 ListItem::new(Line::from(Span::styled(
                     format!("  Variables    ({})", counts.variables.changed()),
-                    Style::default().fg(Color::DarkGray),
+                    Style::default().fg(t.muted),
                 ))),
                 ListItem::new(Line::from(Span::styled(
                     format!("  Constraints  ({})", counts.constraints.changed()),
-                    Style::default().fg(Color::DarkGray),
+                    Style::default().fg(t.muted),
                 ))),
                 ListItem::new(Line::from(Span::styled(
                     format!("  Objectives   ({})", counts.objectives.changed()),
-                    Style::default().fg(Color::DarkGray),
+                    Style::default().fg(t.muted),
                 ))),
             ];
 
@@ -139,6 +144,8 @@ fn draw_entry_name_list<T: DiffEntry>(
         params.section_label,
     );
 
+    let t = theme();
+
     let items: Vec<ListItem> = params
         .filtered_indices
         .iter()
@@ -147,8 +154,8 @@ fn draw_entry_name_list<T: DiffEntry>(
             let kind = entry.kind();
             let line = Line::from(vec![
                 Span::styled(kind_prefix(kind), kind_style(kind)),
-                Span::styled(" ", Style::default()),
-                Span::styled(entry.name().to_owned(), kind_style(kind)),
+                Span::raw(" "),
+                Span::styled(entry.name(), kind_style(kind)),
             ]);
             ListItem::new(line)
         })
@@ -162,7 +169,7 @@ fn draw_entry_name_list<T: DiffEntry>(
 
     let list = List::new(items)
         .block(block)
-        .highlight_style(Style::default().bg(Color::Blue).add_modifier(Modifier::BOLD))
+        .highlight_style(Style::default().bg(t.highlight_bg).add_modifier(Modifier::BOLD))
         .highlight_symbol("\u{25b6} ");
 
     frame.render_stateful_widget(list, area, state);
@@ -181,7 +188,8 @@ fn draw_entry_name_list<T: DiffEntry>(
 /// Render an empty detail panel with a hint message.
 pub fn draw_empty_detail(frame: &mut Frame, area: Rect, message: &str, border_style: Style) {
     debug_assert!(area.width > 0 && area.height > 0, "empty detail area must be non-zero");
+    let t = theme();
     let block = Block::default().borders(Borders::ALL).border_style(border_style).title(" Detail ");
-    let paragraph = Paragraph::new(Line::from(Span::styled(format!("  {message}"), Style::default().fg(Color::DarkGray)))).block(block);
+    let paragraph = Paragraph::new(Line::from(Span::styled(format!("  {message}"), Style::default().fg(t.muted)))).block(block);
     frame.render_widget(paragraph, area);
 }

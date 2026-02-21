@@ -3,7 +3,7 @@
 use std::fmt::Write;
 
 use crate::app::App;
-use crate::detail_model::build_coeff_rows;
+use crate::detail_model::{CoefficientRow, build_coeff_rows};
 use crate::diff_model::{CoefficientChange, ConstraintDiffDetail, ConstraintDiffEntry, DiffKind, ObjectiveDiffEntry, VariableDiffEntry};
 use crate::solver::{SolveDiffResult, SolveResult};
 use crate::state::Section;
@@ -24,6 +24,7 @@ macro_rules! w {
 /// Returns `None` if no entry is selected or the section is Summary.
 pub fn render_detail_plain(app: &App) -> Option<String> {
     let entry_index = app.selected_entry_index()?;
+    let cached_rows = app.cached_coeff_rows();
 
     match app.active_section {
         Section::Variables => {
@@ -32,11 +33,11 @@ pub fn render_detail_plain(app: &App) -> Option<String> {
         }
         Section::Constraints => {
             let entry = app.report.constraints.entries.get(entry_index)?;
-            Some(render_constraint_plain(entry))
+            Some(render_constraint_plain(entry, cached_rows))
         }
         Section::Objectives => {
             let entry = app.report.objectives.entries.get(entry_index)?;
-            Some(render_objective_plain(entry))
+            Some(render_objective_plain(entry, cached_rows))
         }
         Section::Summary => None,
     }
@@ -104,7 +105,7 @@ fn render_variable_plain(entry: &VariableDiffEntry) -> String {
     out
 }
 
-fn render_constraint_plain(entry: &ConstraintDiffEntry) -> String {
+fn render_constraint_plain(entry: &ConstraintDiffEntry, cached_rows: Option<&[CoefficientRow]>) -> String {
     let mut out = String::new();
     w!(out, "Constraint: {} [{}]", entry.name, entry.kind);
     w!(out, "{}", "\u{2500}".repeat(38));
@@ -144,7 +145,7 @@ fn render_constraint_plain(entry: &ConstraintDiffEntry) -> String {
             }
             w!(out);
             w!(out, "  Coefficients:");
-            write_coeff_changes(&mut out, coeff_changes, old_coefficients, new_coefficients);
+            write_coeff_changes(&mut out, coeff_changes, old_coefficients, new_coefficients, cached_rows);
         }
         ConstraintDiffDetail::Sos { old_weights, new_weights, weight_changes, type_change } => {
             if let Some((old_type, new_type)) = type_change {
@@ -152,7 +153,7 @@ fn render_constraint_plain(entry: &ConstraintDiffEntry) -> String {
             }
             w!(out);
             w!(out, "  Weights:");
-            write_coeff_changes(&mut out, weight_changes, old_weights, new_weights);
+            write_coeff_changes(&mut out, weight_changes, old_weights, new_weights, None);
         }
         ConstraintDiffDetail::TypeChanged { old_summary, new_summary } => {
             w!(out, "  Was:  {old_summary}");
@@ -184,14 +185,14 @@ fn render_constraint_plain(entry: &ConstraintDiffEntry) -> String {
     out
 }
 
-fn render_objective_plain(entry: &ObjectiveDiffEntry) -> String {
+fn render_objective_plain(entry: &ObjectiveDiffEntry, cached_rows: Option<&[CoefficientRow]>) -> String {
     let mut out = String::new();
     w!(out, "Objective: {} [{}]", entry.name, entry.kind);
     w!(out, "{}", "\u{2500}".repeat(38));
     w!(out, "  Coefficients:");
 
     if entry.kind == DiffKind::Modified {
-        write_coeff_changes(&mut out, &entry.coeff_changes, &entry.old_coefficients, &entry.new_coefficients);
+        write_coeff_changes(&mut out, &entry.coeff_changes, &entry.old_coefficients, &entry.new_coefficients, cached_rows);
     } else {
         let coeffs = if entry.kind == DiffKind::Added { &entry.new_coefficients } else { &entry.old_coefficients };
         for c in coeffs {
@@ -209,10 +210,18 @@ fn write_coeff_changes(
     changes: &[CoefficientChange],
     old_coefficients: &[lp_parser_rs::model::CoefficientOwned],
     new_coefficients: &[lp_parser_rs::model::CoefficientOwned],
+    cached_rows: Option<&[CoefficientRow]>,
 ) {
-    let rows = build_coeff_rows(changes, old_coefficients, new_coefficients);
+    let built;
+    let rows = match cached_rows {
+        Some(cached) => cached,
+        None => {
+            built = build_coeff_rows(changes, old_coefficients, new_coefficients);
+            &built
+        }
+    };
 
-    for row in &rows {
+    for row in rows {
         let old_str = row.old_value.map_or_else(String::new, |v| format!("{v}"));
         let new_str = row.new_value.map_or_else(String::new, |v| format!("{v}"));
 

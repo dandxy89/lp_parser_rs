@@ -22,4 +22,5 @@ frizbee = "0.8.2"
 highs = "2.0.0"
 ratatui = { version = "0.30.0", default-features = false, features = ["crossterm"] }
 regex = "1.12.3"
+smallvec = "1.15.1"
 tempfile = "3.25.0"

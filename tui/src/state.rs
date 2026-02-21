@@ -1,4 +1,5 @@
 use ratatui::widgets::ListState;
+use smallvec::SmallVec;
 
 use crate::diff_model::{DiffEntry, DiffKind};
 use crate::solver::{SolveDiffResult, SolveResult};
@@ -94,7 +95,7 @@ pub struct SearchResult {
     /// Fuzzy match score (0 for regex/substring modes).
     pub score: u16,
     /// Character positions in the name that matched (for highlighting).
-    pub match_indices: Vec<usize>,
+    pub match_indices: SmallVec<[usize; 8]>,
     /// Index into the pre-built `search_haystack` for name/kind resolution.
     pub haystack_index: usize,
     /// Diff kind for badge rendering.
