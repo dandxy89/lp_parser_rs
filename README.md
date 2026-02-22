@@ -17,9 +17,6 @@ An interactive terminal-based diff viewer for LP files, built with [ratatui](htt
 git clone https://github.com/dandxy89/lp_parser_rs.git
 cd lp_parser_rs
 cargo install --path tui
-
-# Or directly from GitHub
-cargo install --git https://github.com/dandxy89/lp_parser_rs.git --path tui
 ```
 
 ### Quick Start
