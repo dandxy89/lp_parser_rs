@@ -130,6 +130,10 @@ pub struct Coefficient {
 
 /// Format a coefficient value with a resolved variable name for display.
 /// Uses `NUMERIC_EPSILON` for consistent tolerance across the crate.
+///
+/// # Errors
+///
+/// Returns `fmt::Error` if the underlying write fails.
 #[inline]
 pub fn fmt_coefficient(name: &str, value: f64, f: &mut Formatter<'_>) -> FmtResult {
     if (value - 1.0).abs() < crate::NUMERIC_EPSILON {
@@ -269,7 +273,7 @@ impl Display for VariableType {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 /// Represents a variable in a Linear Programming problem.
 pub struct Variable {
     /// Interned name of the variable.
@@ -348,6 +352,8 @@ mod tests {
 
     #[test]
     fn test_coefficient() {
+        use std::fmt::Write;
+
         let mut interner = NameInterner::new();
         let x1 = interner.intern("x1");
         let x = interner.intern("x");
@@ -359,7 +365,6 @@ mod tests {
 
         // fmt_coefficient display special cases
         let mut buf = String::new();
-        use std::fmt::Write;
         write!(buf, "{}", FmtCoeff { name: "x", value: 1.0 }).unwrap();
         assert_eq!(buf, "x");
         buf.clear();

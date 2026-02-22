@@ -58,9 +58,9 @@
 //!   with a warning.
 
 use std::cmp::Ordering;
-use std::collections::hash_map::Values;
 use std::fmt;
 
+use indexmap::map::Values;
 use lp_solvers::lp_format::{AsVariable, LpObjective, WriteToLpFileFormat};
 
 use crate::NUMERIC_EPSILON;
@@ -513,6 +513,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::many_single_char_names)]
     fn test_expression_formatting() {
         let mut p = LpProblem::new();
         let x = p.intern("x");

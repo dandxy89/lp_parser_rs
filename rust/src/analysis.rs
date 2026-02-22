@@ -258,7 +258,25 @@ pub struct RangeStats {
 }
 
 impl RangeStats {
+    /// Create a new empty `RangeStats` ready for incremental updates.
+    const fn new() -> Self {
+        Self { min: f64::INFINITY, max: f64::NEG_INFINITY, count: 0 }
+    }
+
+    /// Update the stats with a single value, avoiding intermediate allocations.
+    const fn update(&mut self, value: f64) {
+        self.min = self.min.min(value);
+        self.max = self.max.max(value);
+        self.count += 1;
+    }
+
+    /// Finalise the stats, normalising the sentinel values for empty sets.
+    fn finalise(self) -> Self {
+        if self.count == 0 { Self::default() } else { self }
+    }
+
     /// Create range stats from a collection of values.
+    #[cfg(test)]
     fn from_values(values: &[f64]) -> Self {
         if values.is_empty() {
             return Self::default();
@@ -455,14 +473,14 @@ fn collect_coeff_stats(
     location_name: &str,
     is_objective: bool,
     config: &AnalysisConfig,
-    abs_values: &mut Vec<f64>,
+    range: &mut RangeStats,
     large: &mut Vec<CoefficientLocation>,
     small: &mut Vec<CoefficientLocation>,
     interner: &crate::interner::NameInterner,
 ) {
     for coeff in coefficients {
         let abs_value = coeff.value.abs();
-        abs_values.push(abs_value);
+        range.update(abs_value);
 
         if abs_value > config.large_coefficient_threshold {
             large.push(CoefficientLocation {
@@ -483,25 +501,37 @@ fn collect_coeff_stats(
 }
 
 /// Compute the ratio of max to min absolute coefficient across all coefficients.
-fn compute_coefficient_ratio(constraint_coeffs: &[f64], objective_coeffs: &[f64]) -> f64 {
-    let mut min = f64::INFINITY;
-    let mut max: f64 = 0.0;
+fn compute_coefficient_ratio(constraint_range: &RangeStats, objective_range: &RangeStats) -> f64 {
+    // Combine the two ranges to find global min/max of positive abs values.
+    let has_values = constraint_range.count > 0 || objective_range.count > 0;
+
+    if !has_values {
+        return 1.0;
+    }
+
+    // Both ranges track abs values, so min is the smallest positive and max is the largest.
+    let mut global_min = f64::INFINITY;
+    let mut global_max: f64 = 0.0;
     let mut has_positive = false;
 
-    for &v in constraint_coeffs.iter().chain(objective_coeffs.iter()) {
-        if v > 0.0 {
+    for range in [constraint_range, objective_range] {
+        if range.count > 0 && range.max > 0.0 {
             has_positive = true;
-            if v < min {
-                min = v;
+            // range.min could be 0.0 (abs of a zero coeff); skip zeros for ratio.
+            if range.min > 0.0 && range.min < global_min {
+                global_min = range.min;
             }
-            if v > max {
-                max = v;
+            if range.max > global_max {
+                global_max = range.max;
             }
         }
     }
 
-    let ratio = if has_positive && min > 0.0 { max / min } else { 1.0 };
-    debug_assert!(!has_positive || ratio >= 1.0, "postcondition: coefficient_ratio must be >= 1.0 when coefficients exist, got: {ratio}");
+    let ratio = if has_positive && global_min > 0.0 && global_min < f64::INFINITY { global_max / global_min } else { 1.0 };
+    debug_assert!(
+        !has_positive || ratio >= 1.0 || global_min == f64::INFINITY,
+        "postcondition: coefficient_ratio must be >= 1.0 when coefficients exist, got: {ratio}"
+    );
     ratio
 }
 
@@ -564,20 +594,14 @@ impl LpProblem {
 
     /// Compute sparsity metrics.
     fn compute_sparsity_metrics(&self) -> SparsityMetrics {
-        let mut vars_per_constraint: Vec<usize> = Vec::new();
-
-        for constraint in self.constraints.values() {
-            let var_count = match constraint {
+        let (min_v, max_v) = self.constraints.values().fold((usize::MAX, 0usize), |(min_v, max_v), c| {
+            let n = match c {
                 Constraint::Standard { coefficients, .. } => coefficients.len(),
                 Constraint::SOS { weights, .. } => weights.len(),
             };
-            vars_per_constraint.push(var_count);
-        }
-
-        SparsityMetrics {
-            min_vars_per_constraint: vars_per_constraint.iter().copied().min().unwrap_or(0),
-            max_vars_per_constraint: vars_per_constraint.iter().copied().max().unwrap_or(0),
-        }
+            (min_v.min(n), max_v.max(n))
+        });
+        SparsityMetrics { min_vars_per_constraint: if min_v == usize::MAX { 0 } else { min_v }, max_vars_per_constraint: max_v }
     }
 
     /// Analyze variables.
@@ -669,7 +693,7 @@ impl LpProblem {
         let mut type_distribution = ConstraintTypeDistribution::default();
         let mut empty_constraints = Vec::new();
         let mut singleton_constraints = Vec::new();
-        let mut rhs_values = Vec::new();
+        let mut rhs_range = RangeStats::new();
         let mut sos_summary = SOSSummary::default();
 
         for (name_id, constraint) in &self.constraints {
@@ -684,7 +708,7 @@ impl LpProblem {
                         ComparisonOp::GT => type_distribution.greater_than += 1,
                     }
 
-                    rhs_values.push(*rhs);
+                    rhs_range.update(*rhs);
 
                     if coefficients.is_empty() {
                         empty_constraints.push(name_str.to_string());
@@ -715,19 +739,13 @@ impl LpProblem {
             }
         }
 
-        ConstraintAnalysis {
-            type_distribution,
-            empty_constraints,
-            singleton_constraints,
-            rhs_range: RangeStats::from_values(&rhs_values),
-            sos_summary,
-        }
+        ConstraintAnalysis { type_distribution, empty_constraints, singleton_constraints, rhs_range: rhs_range.finalise(), sos_summary }
     }
 
     /// Analyze coefficients.
     fn analyze_coefficients(&self, config: &AnalysisConfig) -> CoefficientAnalysis {
-        let mut constraint_coeffs = Vec::new();
-        let mut objective_coeffs = Vec::new();
+        let mut constraint_range = RangeStats::new();
+        let mut objective_range = RangeStats::new();
         let mut large_coefficients = Vec::new();
         let mut small_coefficients = Vec::new();
 
@@ -739,7 +757,7 @@ impl LpProblem {
                     name_str,
                     false,
                     config,
-                    &mut constraint_coeffs,
+                    &mut constraint_range,
                     &mut large_coefficients,
                     &mut small_coefficients,
                     &self.interner,
@@ -754,22 +772,18 @@ impl LpProblem {
                 name_str,
                 true,
                 config,
-                &mut objective_coeffs,
+                &mut objective_range,
                 &mut large_coefficients,
                 &mut small_coefficients,
                 &self.interner,
             );
         }
 
-        let coefficient_ratio = compute_coefficient_ratio(&constraint_coeffs, &objective_coeffs);
+        let constraint_coeff_range = constraint_range.finalise();
+        let objective_coeff_range = objective_range.finalise();
+        let coefficient_ratio = compute_coefficient_ratio(&constraint_coeff_range, &objective_coeff_range);
 
-        CoefficientAnalysis {
-            constraint_coeff_range: RangeStats::from_values(&constraint_coeffs),
-            objective_coeff_range: RangeStats::from_values(&objective_coeffs),
-            large_coefficients,
-            small_coefficients,
-            coefficient_ratio,
-        }
+        CoefficientAnalysis { constraint_coeff_range, objective_coeff_range, large_coefficients, small_coefficients, coefficient_ratio }
     }
 
     /// Detect issues and generate warnings.
@@ -900,6 +914,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::float_cmp)]
     fn test_range_stats_single() {
         let stats = RangeStats::from_values(&[5.0]);
         assert_eq!(stats.count, 1);
@@ -908,6 +923,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::float_cmp)]
     fn test_range_stats_multiple() {
         let stats = RangeStats::from_values(&[1.0, 2.0, 3.0, 4.0, 5.0]);
         assert_eq!(stats.count, 5);
@@ -943,6 +959,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::float_cmp)]
     fn test_default_config() {
         let config = AnalysisConfig::default();
         assert_eq!(config.large_coefficient_threshold, 1e9);

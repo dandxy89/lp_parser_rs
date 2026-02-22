@@ -287,16 +287,15 @@ fn write_variable_type_section(output: &mut String, section_name: &str, variable
     // Write variables, potentially wrapping lines
     let mut current_line_length = 0;
     for (i, &var_name) in variables.iter().enumerate() {
-        let separator = " ";
-        let var_text = format!("{separator}{var_name}");
+        let var_len = 1 + var_name.len(); // " " + name
 
-        if current_line_length + var_text.len() > options.max_line_length && i > 0 {
+        if current_line_length + var_len > options.max_line_length && i > 0 {
             writeln!(output).map_err(|err| LpParseError::io_error(format!("Failed to write newline: {err}")))?;
             write!(output, " {var_name}").map_err(|err| LpParseError::io_error(format!("Failed to write variable: {err}")))?;
-            current_line_length = var_name.len() + 1;
+            current_line_length = var_len;
         } else {
-            write!(output, "{var_text}").map_err(|err| LpParseError::io_error(format!("Failed to write variable: {err}")))?;
-            current_line_length += var_text.len();
+            write!(output, " {var_name}").map_err(|err| LpParseError::io_error(format!("Failed to write variable: {err}")))?;
+            current_line_length += var_len;
         }
     }
     writeln!(output).map_err(|err| LpParseError::io_error(format!("Failed to write newline: {err}")))?;
@@ -311,17 +310,43 @@ fn write_coefficients_line(
     interner: &NameInterner,
     options: &LpWriterOptions,
 ) -> LpResult<()> {
+    const CONTINUATION_INDENT: &str = "        ";
+    let mut current_line_length: usize = 0;
+
     for (i, coeff) in coefficients.iter().enumerate() {
         let var_name = interner.resolve(coeff.name);
-        let formatted_coeff = format_coefficient(var_name, coeff.value, i == 0, options.decimal_precision);
-        write!(output, "{formatted_coeff}").map_err(|err| LpParseError::io_error(format!("Failed to write coefficient: {err}")))?;
+
+        // Estimate the length of the formatted coefficient to decide on line wrapping.
+        let estimated_len = estimate_coefficient_len(var_name, coeff.value, i == 0);
+
+        if current_line_length + estimated_len > options.max_line_length && i > 0 {
+            writeln!(output).map_err(|err| LpParseError::io_error(format!("Failed to write newline: {err}")))?;
+            write!(output, "{CONTINUATION_INDENT}").map_err(|err| LpParseError::io_error(format!("Failed to write indent: {err}")))?;
+            current_line_length = CONTINUATION_INDENT.len();
+        }
+
+        let len_before = output.len();
+        write_formatted_coefficient(output, var_name, coeff.value, i == 0, options.decimal_precision)
+            .map_err(|err| LpParseError::io_error(format!("Failed to write coefficient: {err}")))?;
+        current_line_length += output.len() - len_before;
     }
 
     Ok(())
 }
 
-/// Format a coefficient with proper sign handling
-fn format_coefficient(name: &str, value: f64, is_first: bool, precision: usize) -> String {
+/// Estimate the display length of a formatted coefficient (for line-wrapping decisions).
+fn estimate_coefficient_len(name: &str, value: f64, is_first: bool) -> usize {
+    let abs_value = value.abs();
+    let is_one = (abs_value - 1.0).abs() < NUMERIC_EPSILON;
+    // " + " or " - " prefix = 3 chars, number ~= up to 12 chars, space + name
+    let number_len = if is_one { 0 } else { 12 };
+    let prefix_len = if is_first { if value < 0.0 { 2 } else { 0 } } else { 3 };
+    let space_before_name = if is_one && is_first && value >= 0.0 { 0 } else { 1 };
+    prefix_len + number_len + space_before_name + name.len()
+}
+
+/// Write a formatted coefficient directly to the output buffer, avoiding intermediate `String` allocation.
+fn write_formatted_coefficient(output: &mut String, name: &str, value: f64, is_first: bool, precision: usize) -> std::fmt::Result {
     debug_assert!(!name.is_empty(), "coefficient name must not be empty");
     debug_assert!(value.is_finite(), "coefficient value must be finite, got: {value}");
     let abs_value = value.abs();
@@ -330,16 +355,16 @@ fn format_coefficient(name: &str, value: f64, is_first: bool, precision: usize) 
 
     if is_first {
         if value < 0.0 {
-            if is_one { format!("- {name}") } else { format!("- {} {name}", format_number(abs_value, precision)) }
+            if is_one { write!(output, "- {name}") } else { write!(output, "- {} {name}", format_number(abs_value, precision)) }
         } else if is_one {
-            name.to_string()
+            write!(output, "{name}")
         } else {
-            format!("{} {name}", format_number(abs_value, precision))
+            write!(output, "{} {name}", format_number(abs_value, precision))
         }
     } else if is_one {
-        format!(" {sign} {name}")
+        write!(output, " {sign} {name}")
     } else {
-        format!(" {sign} {} {name}", format_number(abs_value, precision))
+        write!(output, " {sign} {} {name}", format_number(abs_value, precision))
     }
 }
 
@@ -384,10 +409,15 @@ mod tests {
 
     #[test]
     fn test_format_coefficient() {
-        assert_eq!(format_coefficient("x1", 1.0, true, 6), "x1");
-        assert_eq!(format_coefficient("x2", -1.0, true, 6), "- x2");
-        assert_eq!(format_coefficient("x3", 2.5, false, 6), " + 2.5 x3");
-        assert_eq!(format_coefficient("x4", -3.7, false, 6), " - 3.7 x4");
+        fn fmt(name: &str, value: f64, is_first: bool, precision: usize) -> String {
+            let mut buf = String::new();
+            write_formatted_coefficient(&mut buf, name, value, is_first, precision).unwrap();
+            buf
+        }
+        assert_eq!(fmt("x1", 1.0, true, 6), "x1");
+        assert_eq!(fmt("x2", -1.0, true, 6), "- x2");
+        assert_eq!(fmt("x3", 2.5, false, 6), " + 2.5 x3");
+        assert_eq!(fmt("x4", -3.7, false, 6), " - 3.7 x4");
     }
 
     #[test]

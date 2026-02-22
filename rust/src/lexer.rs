@@ -103,6 +103,29 @@ pub enum OptionalSection<'input> {
     SOS(Vec<RawConstraint<'input>>),
 }
 
+/// Structured result from the LALRPOP parser, replacing the previous 9-tuple.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ParseResult<'input> {
+    /// Optimisation sense (minimise/maximise).
+    pub sense: Sense,
+    /// Raw objectives from the grammar.
+    pub objectives: Vec<RawObjective<'input>>,
+    /// Raw constraints from the grammar.
+    pub constraints: Vec<RawConstraint<'input>>,
+    /// Variable bounds declarations.
+    pub bounds: Vec<(&'input str, VariableType)>,
+    /// General variable names.
+    pub generals: Vec<&'input str>,
+    /// Integer variable names.
+    pub integers: Vec<&'input str>,
+    /// Binary variable names.
+    pub binaries: Vec<&'input str>,
+    /// Semi-continuous variable names.
+    pub semi_continuous: Vec<&'input str>,
+    /// Raw SOS constraints.
+    pub sos: Vec<RawConstraint<'input>>,
+}
+
 impl Display for LexerError {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         write!(f, "lexer error")
@@ -233,6 +256,7 @@ pub enum Token<'input> {
     Identifier(&'input str),
 }
 
+#[allow(clippy::unnecessary_wraps)] // logos callback signature requires Option return
 fn parse_number<'input>(lex: &logos::Lexer<'input, Token<'input>>) -> Option<f64> {
     let slice = lex.slice();
     let value = slice.parse::<f64>().unwrap_or_else(|_| {

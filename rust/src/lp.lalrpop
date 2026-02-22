@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use crate::lexer::{Token, LexerError, RawCoefficient, RawConstraint, RawObjective, SosEntryKind, ConstraintCont, OptionalSection};
+use crate::lexer::{Token, LexerError, RawCoefficient, RawConstraint, RawObjective, SosEntryKind, ConstraintCont, OptionalSection, ParseResult};
 use crate::model::{
     ComparisonOp, SOSType, Sense, VariableType,
 };
@@ -43,19 +43,18 @@ extern {
     }
 }
 
-pub LpProblem: (Sense, Vec<RawObjective<'input>>, Vec<RawConstraint<'input>>, Vec<(&'input str, VariableType)>, Vec<&'input str>, Vec<&'input str>, Vec<&'input str>, Vec<&'input str>, Vec<RawConstraint<'input>>) = {
+pub LpProblem: ParseResult<'input> = {
     <sense:"sense">
     <objectives:ObjectivesSection>
     <constraints:ConstraintsSection>
     <sections:AnySection*>
     "end"?
     => {
-        // Extract each section type from the flexible order list
         let mut bounds: Vec<(&'input str, VariableType)> = Vec::new();
         let mut generals: Vec<&'input str> = Vec::new();
         let mut integers: Vec<&'input str> = Vec::new();
         let mut binaries: Vec<&'input str> = Vec::new();
-        let mut semis: Vec<&'input str> = Vec::new();
+        let mut semi_continuous: Vec<&'input str> = Vec::new();
         let mut sos: Vec<RawConstraint<'input>> = Vec::new();
 
         for section in sections {
@@ -64,12 +63,12 @@ pub LpProblem: (Sense, Vec<RawObjective<'input>>, Vec<RawConstraint<'input>>, Ve
                 OptionalSection::Generals(g) => generals.extend(g),
                 OptionalSection::Integers(i) => integers.extend(i),
                 OptionalSection::Binaries(b) => binaries.extend(b),
-                OptionalSection::SemiContinuous(s) => semis.extend(s),
+                OptionalSection::SemiContinuous(s) => semi_continuous.extend(s),
                 OptionalSection::SOS(s) => sos.extend(s),
             }
         }
 
-        (sense, objectives, constraints, bounds, generals, integers, binaries, semis, sos)
+        ParseResult { sense, objectives, constraints, bounds, generals, integers, binaries, semi_continuous, sos }
     }
 };
 

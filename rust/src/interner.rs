@@ -29,6 +29,10 @@ impl NameInterner {
     }
 
     /// Create an interner pre-sized for the expected number of names.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the computed byte capacity overflows (should not happen in practice).
     #[must_use]
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
