@@ -46,7 +46,7 @@ check-python: ## Run check on Python
 	uv run ty check
 
 .PHONY: unit-test
-unit-test: install ## Run unit test
+unit-test: develop ## Run unit test
 	$(info --- Run Python unit-test ---)
 	uv run --no-sync pytest --doctest-modules
 

@@ -555,6 +555,7 @@ impl LpParser {
         )
     }
 
+    #[allow(clippy::unused_self, clippy::too_many_lines)]
     fn analysis_to_dict(&self, py: Python, analysis: &lp_parser_rs::analysis::ProblemAnalysis) -> PyResult<Py<PyAny>> {
         let result = PyDict::new(py);
 
