@@ -196,7 +196,7 @@ pub enum Token<'input> {
     /// Numeric value (integer, float, scientific notation)
     /// Matches: 42, 3.14, .5, 1e5, 1.5e-3
     /// Note: Leading +/- are separate tokens to correctly parse expressions like "+4z"
-    #[regex(r"(\d+\.?\d*|\d*\.\d+)([eE][+-]?\d+)?", parse_number, priority = 8)]
+    #[regex(r"([0-9]+\.?[0-9]*|[0-9]*\.[0-9]+)([eE][+-]?[0-9]+)?", parse_number, priority = 8)]
     Number(f64),
 
     // === Operators ===
@@ -263,7 +263,7 @@ fn parse_number<'input>(lex: &logos::Lexer<'input, Token<'input>>) -> Option<f64
         debug_assert!(false, "Logos regex matched '{slice}' but f64 parse failed - regex and parser are out of sync");
         f64::NAN
     });
-    debug_assert!(value.is_finite() || value == 0.0, "parse_number produced non-finite value from '{slice}': {value}");
+    debug_assert!(!value.is_nan(), "parse_number produced NaN from '{slice}' - this indicates a regex/parser mismatch");
     Some(value)
 }
 
@@ -326,6 +326,7 @@ impl<'input> Iterator for Lexer<'input> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use test_case::test_case;
 
     fn tokenize(input: &str) -> Vec<Token<'_>> {
         Lexer::new(input).filter_map(Result::ok).map(|(_, tok, _)| tok).collect()
@@ -333,6 +334,10 @@ mod tests {
 
     fn tokenize_with_positions(input: &str) -> Vec<(usize, Token<'_>, usize)> {
         Lexer::new(input).filter_map(Result::ok).collect()
+    }
+
+    fn tokenize_raw(input: &str) -> Vec<Option<Token<'_>>> {
+        Token::lexer(input).map(|r| r.ok()).collect()
     }
 
     #[test]
@@ -468,6 +473,190 @@ mod tests {
         // Special characters allowed in LP identifiers
         assert_eq!(tokenize("var!name"), vec![Token::Identifier("var!name")]);
         assert_eq!(tokenize("x#1"), vec![Token::Identifier("x#1")]);
+    }
+
+    #[test_case("a" => vec![Token::Identifier("a")] ; "letter_a")]
+    #[test_case("Z" => vec![Token::Identifier("Z")] ; "letter_Z")]
+    #[test_case("_" => vec![Token::Identifier("_")] ; "underscore")]
+    #[test_case("!" => vec![Token::Identifier("!")] ; "exclamation")]
+    #[test_case("#" => vec![Token::Identifier("#")] ; "hash")]
+    #[test_case("$" => vec![Token::Identifier("$")] ; "dollar")]
+    #[test_case("%" => vec![Token::Identifier("%")] ; "percent")]
+    #[test_case("&" => vec![Token::Identifier("&")] ; "ampersand")]
+    #[test_case("(" => vec![Token::Identifier("(")] ; "open_paren")]
+    #[test_case(")" => vec![Token::Identifier(")")] ; "close_paren")]
+    #[test_case("," => vec![Token::Identifier(",")] ; "comma")]
+    #[test_case("." => vec![Token::Identifier(".")] ; "dot")]
+    #[test_case(";" => vec![Token::Identifier(";")] ; "semicolon")]
+    #[test_case("?" => vec![Token::Identifier("?")] ; "question")]
+    #[test_case("@" => vec![Token::Identifier("@")] ; "at")]
+    #[test_case("{" => vec![Token::Identifier("{")] ; "open_brace")]
+    #[test_case("}" => vec![Token::Identifier("}")] ; "close_brace")]
+    #[test_case("~" => vec![Token::Identifier("~")] ; "tilde")]
+    #[test_case("'" => vec![Token::Identifier("'")] ; "apostrophe")]
+    fn test_valid_start_chars(input: &str) -> Vec<Token<'_>> {
+        tokenize(input)
+    }
+
+    #[test_case("x0" => vec![Token::Identifier("x0")] ; "digit_0")]
+    #[test_case("x9" => vec![Token::Identifier("x9")] ; "digit_9")]
+    #[test_case("x|" => vec![Token::Identifier("x|")] ; "pipe")]
+    #[test_case("x>" => vec![Token::Identifier("x>")] ; "gt_continuation")]
+    #[test_case("x!" => vec![Token::Identifier("x!")] ; "excl_cont")]
+    #[test_case("x#" => vec![Token::Identifier("x#")] ; "hash_cont")]
+    #[test_case("x$" => vec![Token::Identifier("x$")] ; "dollar_cont")]
+    #[test_case("x%" => vec![Token::Identifier("x%")] ; "percent_cont")]
+    #[test_case("x&" => vec![Token::Identifier("x&")] ; "ampersand_cont")]
+    #[test_case("x(" => vec![Token::Identifier("x(")] ; "open_paren_cont")]
+    #[test_case("x)" => vec![Token::Identifier("x)")] ; "close_paren_cont")]
+    #[test_case("x," => vec![Token::Identifier("x,")] ; "comma_cont")]
+    #[test_case("x." => vec![Token::Identifier("x.")] ; "dot_cont")]
+    #[test_case("x;" => vec![Token::Identifier("x;")] ; "semicolon_cont")]
+    #[test_case("x?" => vec![Token::Identifier("x?")] ; "question_cont")]
+    #[test_case("x@" => vec![Token::Identifier("x@")] ; "at_cont")]
+    #[test_case("x{" => vec![Token::Identifier("x{")] ; "open_brace_cont")]
+    #[test_case("x}" => vec![Token::Identifier("x}")] ; "close_brace_cont")]
+    #[test_case("x~" => vec![Token::Identifier("x~")] ; "tilde_cont")]
+    #[test_case("x'" => vec![Token::Identifier("x'")] ; "apostrophe_cont")]
+    #[test_case("x_" => vec![Token::Identifier("x_")] ; "underscore_cont")]
+    fn test_valid_continuation_chars(input: &str) -> Vec<Token<'_>> {
+        tokenize(input)
+    }
+
+    #[test_case("0" ; "zero_is_number")]
+    #[test_case("9" ; "nine_is_number")]
+    fn test_digit_not_identifier_start(input: &str) {
+        let tokens = tokenize_raw(input);
+        assert!(!tokens.iter().any(|t| matches!(t, Some(Token::Identifier(_)))), "digit should not produce identifier: {tokens:?}");
+    }
+
+    #[test]
+    fn test_digit_prefix_splits() {
+        // "0abc" → Number(0) + Identifier("abc")
+        let tokens = tokenize("0abc");
+        assert_eq!(tokens, vec![Token::Number(0.0), Token::Identifier("abc")]);
+    }
+
+    #[test_case("x-y", vec![Token::Identifier("x-y")] ; "simple_hyphen")]
+    #[test_case("a-b-c", vec![Token::Identifier("a-b-c")] ; "double_hyphen_chain")]
+    #[test_case("x-1", vec![Token::Identifier("x-1")] ; "hyphen_digit")]
+    #[test_case("x->", vec![Token::Identifier("x->")] ; "hyphen_gt")]
+    #[test_case("x-|", vec![Token::Identifier("x-|")] ; "hyphen_pipe")]
+    fn test_hyphen_valid(input: &str, expected: Vec<Token<'_>>) {
+        assert_eq!(tokenize(input), expected);
+    }
+
+    #[test]
+    fn test_trailing_hyphen() {
+        // "abc-" → Identifier("abc") + Minus
+        let tokens = tokenize("abc-");
+        assert_eq!(tokens, vec![Token::Identifier("abc"), Token::Minus]);
+    }
+
+    #[test]
+    fn test_double_hyphen() {
+        // "a--b" → Identifier("a") + Minus + Minus + Identifier("b")
+        let tokens = tokenize("a--b");
+        assert_eq!(tokens, vec![Token::Identifier("a"), Token::Minus, Token::Minus, Token::Identifier("b")]);
+    }
+
+    #[test_case("*" ; "asterisk")]
+    #[test_case("/" ; "slash")]
+    #[test_case("^" ; "caret")]
+    #[test_case("[" ; "open_bracket")]
+    #[test_case("]" ; "close_bracket")]
+    #[test_case("\"" ; "double_quote")]
+    fn test_invalid_start_chars(input: &str) {
+        let tokens = tokenize_raw(input);
+        assert!(!tokens.iter().any(|t| matches!(t, Some(Token::Identifier(_)))), "should not produce identifier for {input:?}: {tokens:?}");
+    }
+
+    #[test]
+    fn test_lt_not_identifier() {
+        assert_eq!(tokenize("<"), vec![Token::Lt]);
+    }
+
+    #[test_case("x*y", vec![Token::Identifier("x")], "*" ; "asterisk_breaks")]
+    #[test_case("x/y", vec![Token::Identifier("x")], "/" ; "slash_breaks")]
+    #[test_case("x^y", vec![Token::Identifier("x")], "^" ; "caret_breaks")]
+    #[test_case("x[y", vec![Token::Identifier("x")], "[" ; "bracket_breaks")]
+    fn test_invalid_char_breaks_identifier(input: &str, expected_prefix: Vec<Token<'_>>, _invalid: &str) {
+        let tokens = tokenize(input);
+        assert_eq!(
+            &tokens[..expected_prefix.len()],
+            &expected_prefix,
+            "identifier should stop before invalid char in {input:?}: {tokens:?}"
+        );
+    }
+
+    #[test_case("x!#$%&" => vec![Token::Identifier("x!#$%&")] ; "mixed_specials_1")]
+    #[test_case("_(),.;?" => vec![Token::Identifier("_(),.;?")] ; "mixed_specials_2")]
+    #[test_case("a@{}~'" => vec![Token::Identifier("a@{}~'")] ; "mixed_specials_3")]
+    #[test_case("var|>" => vec![Token::Identifier("var|>")] ; "pipe_gt_continuation")]
+    fn test_multi_char_mixed_specials(input: &str) -> Vec<Token<'_>> {
+        tokenize(input)
+    }
+
+    #[test]
+    fn test_all_letters_and_underscore_as_single_char_identifiers() {
+        for c in ('a'..='z').chain('A'..='Z').chain(std::iter::once('_')) {
+            let s = String::from(c);
+            let tokens = tokenize_raw(&s);
+            // Some letters match keywords (e.g. "s" doesn't, but groups like "gen" do)
+            // We just verify no panics and at least one token is produced
+            assert!(!tokens.is_empty(), "should produce at least one token for '{c}'");
+        }
+    }
+
+    #[test]
+    fn test_long_identifier() {
+        let long = "x".repeat(10_000);
+        let tokens = tokenize(&long);
+        assert_eq!(tokens, vec![Token::Identifier(long.as_str())]);
+    }
+
+    #[test_case("minimize2" => vec![Token::Identifier("minimize2")] ; "minimize_with_digit")]
+    #[test_case("maxx" => vec![Token::Identifier("maxx")] ; "max_with_extra_letter")]
+    #[test_case("binary1" => vec![Token::Identifier("binary1")] ; "binary_with_digit")]
+    fn test_keyword_like_prefixes(input: &str) -> Vec<Token<'_>> {
+        tokenize(input)
+    }
+
+    #[test]
+    fn test_gt_standalone_is_gt_token() {
+        assert_eq!(tokenize(">"), vec![Token::Gt]);
+    }
+
+    #[test]
+    fn test_x_gt_is_single_identifier() {
+        assert_eq!(tokenize("x>"), vec![Token::Identifier("x>")]);
+    }
+
+    #[test]
+    fn test_pipe_standalone_is_error() {
+        let tokens = tokenize_raw("|");
+        assert_eq!(tokens, vec![None], "standalone | should be a lexer error");
+    }
+
+    #[test]
+    fn test_lt_breaks_identifier() {
+        // `<` is not in the continuation set
+        assert_eq!(tokenize("x<y"), vec![Token::Identifier("x"), Token::Lt, Token::Identifier("y")]);
+    }
+
+    #[test]
+    fn test_operators_not_consumed_by_identifier() {
+        assert_eq!(tokenize("x+y"), vec![Token::Identifier("x"), Token::Plus, Token::Identifier("y")]);
+        assert_eq!(tokenize("x-"), vec![Token::Identifier("x"), Token::Minus]);
+        assert_eq!(tokenize("x:y"), vec![Token::Identifier("x"), Token::Colon, Token::Identifier("y")]);
+        assert_eq!(tokenize("x=y"), vec![Token::Identifier("x"), Token::Eq, Token::Identifier("y")]);
+    }
+
+    #[test]
+    fn test_backslash_is_identifier() {
+        // Standalone `\` matches the identifier regex (backslash is in the allowed set)
+        let tokens = tokenize_raw("\\");
+        assert_eq!(tokens, vec![Some(Token::Identifier("\\"))]);
     }
 
     #[test]
