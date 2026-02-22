@@ -4,9 +4,11 @@
 
 use ratatui::Frame;
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, Paragraph};
+
+use crate::theme::theme;
 
 const HELP_TEXT: &[&str] = &[
     "",
@@ -66,12 +68,12 @@ pub fn draw_help(frame: &mut Frame, area: Rect) {
     debug_assert!(area.width > 0 && area.height > 0, "help overlay area must be non-zero");
     let popup = super::centred_rect(area, POPUP_WIDTH, POPUP_HEIGHT);
 
-    let lines: Vec<Line<'_>> = HELP_TEXT.iter().map(|&s| Line::from(Span::styled(s, Style::default().fg(Color::White)))).collect();
+    let t = theme();
+    let text_style = Style::default().fg(t.text);
+    let lines: Vec<Line<'_>> = HELP_TEXT.iter().map(|&s| Line::from(Span::styled(s, text_style))).collect();
 
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Green).add_modifier(Modifier::BOLD))
-        .title(Span::styled(" Keybindings ", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)));
+    let border_style = Style::default().fg(t.added).add_modifier(Modifier::BOLD);
+    let block = Block::default().borders(Borders::ALL).border_style(border_style).title(Span::styled(" Keybindings ", border_style));
 
     let paragraph = Paragraph::new(lines).block(block);
 

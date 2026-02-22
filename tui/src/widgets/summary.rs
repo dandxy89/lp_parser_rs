@@ -202,12 +202,10 @@ fn format_delta_i64(delta: i64) -> String {
 
 fn delta_colour_i64(delta: i64) -> Color {
     let t = theme();
-    if delta == 0 {
-        t.muted
-    } else if delta > 0 {
-        t.added
-    } else {
-        t.removed
+    match delta.cmp(&0) {
+        std::cmp::Ordering::Equal => t.muted,
+        std::cmp::Ordering::Greater => t.added,
+        std::cmp::Ordering::Less => t.removed,
     }
 }
 
@@ -261,8 +259,9 @@ fn format_range(r: &lp_parser_rs::analysis::RangeStats) -> String {
 }
 
 fn build_coefficient_table(lines: &mut Vec<Line<'static>>, a: &ProblemAnalysis, b: &ProblemAnalysis) {
-    let t = theme();
     const W: usize = 18;
+
+    let t = theme();
     // Two-column header (ranges don't have a meaningful delta)
     lines.push(Line::from(vec![Span::styled(
         format!("  {:<W$}{:>16}{:>16}", "", "File A", "File B"),

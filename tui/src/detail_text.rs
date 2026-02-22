@@ -12,6 +12,13 @@ use crate::solver::{SolveDiffResult, SolveResult};
 use crate::state::Section;
 use crate::widgets::detail::{fmt_bound, variable_bounds};
 
+/// Pre-computed horizontal rules to avoid heap allocations from `repeat()`.
+const RULE_30: &str = "──────────────────────────────────";
+const RULE_38: &str = "──────────────────────────────────────";
+const RULE_60: &str = "──────────────────────────────────────────────────────────────";
+const RULE_78: &str = "──────────────────────────────────────────────────────────────────────────────────";
+const RULE_98: &str = "──────────────────────────────────────────────────────────────────────────────────────────────────────────";
+
 /// Writing to a `String` via `fmt::Write` is infallible. This macro replaces
 /// `let _ = writeln!(...)` with an asserting version that satisfies Tiger Style.
 macro_rules! w {
@@ -66,7 +73,7 @@ fn write_variable_type_info(out: &mut String, variable_type: &lp_parser_rs::mode
 fn render_variable_plain(entry: &VariableDiffEntry) -> String {
     let mut out = String::new();
     w!(out, "Variable: {} [{}]", entry.name, entry.kind);
-    w!(out, "{}", "\u{2500}".repeat(38));
+    w!(out, "{}", RULE_38);
 
     match entry.kind {
         DiffKind::Added => {
@@ -111,7 +118,7 @@ fn render_variable_plain(entry: &VariableDiffEntry) -> String {
 fn render_constraint_plain(entry: &ConstraintDiffEntry, cached_rows: Option<&[CoefficientRow]>) -> String {
     let mut out = String::new();
     w!(out, "Constraint: {} [{}]", entry.name, entry.kind);
-    w!(out, "{}", "\u{2500}".repeat(38));
+    w!(out, "{}", RULE_38);
 
     if entry.line_file1.is_some() || entry.line_file2.is_some() {
         match (entry.line_file1, entry.line_file2) {
@@ -188,7 +195,7 @@ fn render_constraint_plain(entry: &ConstraintDiffEntry, cached_rows: Option<&[Co
 fn render_objective_plain(entry: &ObjectiveDiffEntry, cached_rows: Option<&[CoefficientRow]>) -> String {
     let mut out = String::new();
     w!(out, "Objective: {} [{}]", entry.name, entry.kind);
-    w!(out, "{}", "\u{2500}".repeat(38));
+    w!(out, "{}", RULE_38);
     w!(out, "  Coefficients:");
 
     if entry.kind == DiffKind::Modified {
@@ -213,12 +220,11 @@ fn write_coeff_changes(
     cached_rows: Option<&[CoefficientRow]>,
 ) {
     let built;
-    let rows = match cached_rows {
-        Some(cached) => cached,
-        None => {
-            built = build_coeff_rows(changes, old_coefficients, new_coefficients);
-            &built
-        }
+    let rows = if let Some(cached) = cached_rows {
+        cached
+    } else {
+        built = build_coeff_rows(changes, old_coefficients, new_coefficients);
+        &built
     };
 
     for row in rows {
@@ -311,7 +317,7 @@ fn write_diff_summary(text: &mut String, diff: &SolveDiffResult) {
     let r2 = &diff.result2;
 
     w!(text, "{:<18} {:<20} {:<20}", "", "File 1", "File 2");
-    w!(text, "{}", "\u{2500}".repeat(60));
+    w!(text, "{RULE_60}");
     w!(text, "{:<18} {:<20} {:<20}", "Status:", r1.status, r2.status);
 
     let obj1 = r1.objective_value.map_or_else(|| "N/A".to_owned(), |v| format!("{v:.6}"));
@@ -336,7 +342,7 @@ fn write_diff_variables(text: &mut String, diff: &SolveDiffResult) {
     w!(text);
     w!(text, "Variables:");
     w!(text, "  {:<24} {:>14} {:>14} {:>14} {:>14} {:>14}", "Name", "File 1", "File 2", "\u{0394}", "RC 1", "RC 2");
-    w!(text, "  {}", "\u{2500}".repeat(98));
+    w!(text, "  {RULE_98}");
     for row in &diff.variable_diff {
         let v1 = row.val1.map_or_else(|| "\u{2014}".to_owned(), |v| format!("{v:.6}"));
         let v2 = row.val2.map_or_else(|| "\u{2014}".to_owned(), |v| format!("{v:.6}"));
@@ -365,7 +371,7 @@ fn write_diff_constraints(text: &mut String, diff: &SolveDiffResult) {
     w!(text);
     w!(text, "Constraints:");
     w!(text, "  {:<22} {:>13} {:>13} {:>13} {:>13}", "Name", "Activity 1", "Activity 2", "Shadow 1", "Shadow 2");
-    w!(text, "  {}", "\u{2500}".repeat(78));
+    w!(text, "  {RULE_78}");
     for row in &diff.constraint_diff {
         let a1 = row.activity1.map_or_else(|| "\u{2014}".to_owned(), |v| format!("{v:.4}"));
         let a2 = row.activity2.map_or_else(|| "\u{2014}".to_owned(), |v| format!("{v:.4}"));
@@ -386,13 +392,13 @@ fn write_diff_solver_logs(text: &mut String, diff: &SolveDiffResult) {
     w!(text);
     w!(text, "Solver Logs:");
     if !r1.solver_log.is_empty() {
-        w!(text, "\u{2500}\u{2500} File 1: {} \u{2500}{}", diff.file1_label, "\u{2500}".repeat(30));
+        w!(text, "\u{2500}\u{2500} File 1: {} \u{2500}{RULE_30}", diff.file1_label);
         for line in r1.solver_log.lines() {
             w!(text, "  {line}");
         }
     }
     if !r2.solver_log.is_empty() {
-        w!(text, "\u{2500}\u{2500} File 2: {} \u{2500}{}", diff.file2_label, "\u{2500}".repeat(30));
+        w!(text, "\u{2500}\u{2500} File 2: {} \u{2500}{RULE_30}", diff.file2_label);
         for line in r2.solver_log.lines() {
             w!(text, "  {line}");
         }

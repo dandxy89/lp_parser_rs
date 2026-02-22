@@ -36,6 +36,15 @@ pub struct SolveResult {
 /// Tolerance for floating-point comparison in diff results.
 const EPSILON: f64 = 1e-10;
 
+/// Pre-computed diff counts, avoiding per-frame iteration.
+#[derive(Debug, Clone, Copy)]
+pub struct DiffCounts {
+    pub total: usize,
+    pub added: usize,
+    pub removed: usize,
+    pub modified: usize,
+}
+
 /// Comparison of two solve results.
 #[derive(Debug, Clone)]
 pub struct SolveDiffResult {
@@ -45,6 +54,10 @@ pub struct SolveDiffResult {
     pub result2: SolveResult,
     pub variable_diff: Vec<VarDiffRow>,
     pub constraint_diff: Vec<ConstraintDiffRow>,
+    /// Pre-computed variable diff counts (computed once in `diff_results`).
+    pub variable_counts: DiffCounts,
+    /// Pre-computed constraint diff counts (computed once in `diff_results`).
+    pub constraint_counts: DiffCounts,
 }
 
 /// A single variable row in a solve diff comparison.
@@ -76,7 +89,39 @@ pub struct ConstraintDiffRow {
 pub fn diff_results(file1_label: String, file2_label: String, result1: SolveResult, result2: SolveResult) -> SolveDiffResult {
     let variable_diff = diff_variables(&result1, &result2);
     let constraint_diff = diff_constraints(&result1, &result2);
-    SolveDiffResult { file1_label, file2_label, result1, result2, variable_diff, constraint_diff }
+    let variable_counts = count_var_diffs(&variable_diff);
+    let constraint_counts = count_constraint_diffs_from_rows(&constraint_diff);
+    SolveDiffResult { file1_label, file2_label, result1, result2, variable_diff, constraint_diff, variable_counts, constraint_counts }
+}
+
+/// Count variable-level diff statistics in a single pass.
+fn count_var_diffs(rows: &[VarDiffRow]) -> DiffCounts {
+    let mut counts = DiffCounts { total: rows.len(), added: 0, removed: 0, modified: 0 };
+    for row in rows {
+        if row.val1.is_none() {
+            counts.added += 1;
+        } else if row.val2.is_none() {
+            counts.removed += 1;
+        } else if row.changed {
+            counts.modified += 1;
+        }
+    }
+    counts
+}
+
+/// Count constraint-level diff statistics in a single pass.
+fn count_constraint_diffs_from_rows(rows: &[ConstraintDiffRow]) -> DiffCounts {
+    let mut counts = DiffCounts { total: rows.len(), added: 0, removed: 0, modified: 0 };
+    for row in rows {
+        if row.activity1.is_none() {
+            counts.added += 1;
+        } else if row.activity2.is_none() {
+            counts.removed += 1;
+        } else if row.changed {
+            counts.modified += 1;
+        }
+    }
+    counts
 }
 
 fn diff_variables(r1: &SolveResult, r2: &SolveResult) -> Vec<VarDiffRow> {
@@ -260,11 +305,12 @@ fn build_highs_model(problem: &LpProblem) -> BuiltModel {
         let (is_integer, lower, upper) = match variable.map(|v| &v.var_type) {
             Some(VariableType::Binary) => (true, 0.0, 1.0),
             Some(VariableType::Integer) => (true, 0.0, f64::INFINITY),
-            Some(VariableType::Free) => (false, 0.0, f64::INFINITY),
+            Some(VariableType::Free | VariableType::General | VariableType::SemiContinuous | VariableType::SOS) | None => {
+                (false, 0.0, f64::INFINITY)
+            }
             Some(VariableType::LowerBound(lb)) => (false, *lb, f64::INFINITY),
             Some(VariableType::UpperBound(ub)) => (false, 0.0, *ub),
             Some(VariableType::DoubleBound(lb, ub)) => (false, *lb, *ub),
-            Some(VariableType::General | VariableType::SemiContinuous | VariableType::SOS) | None => (false, 0.0, f64::INFINITY),
         };
 
         let col = row_problem.add_column_with_integrality(objective_coefficient, lower..=upper, is_integer);
@@ -403,22 +449,13 @@ fn solve_problem(problem: &LpProblem) -> Result<SolveResult, String> {
     Ok(extract_solution(&metadata, &solved, solve_time, solver_log))
 }
 
-/// Write an f64 into a reusable string buffer and return it as bytes.
-/// Clears the buffer before writing to avoid stale data.
+/// Write an `Option<f64>` into a reusable string buffer (cleared first), leaving it empty for `None`.
 #[inline]
-fn write_f64_to_buf(buf: &mut String, value: f64) -> &[u8] {
-    debug_assert!(value.is_finite(), "write_f64_to_buf called with non-finite value: {value}");
+fn write_opt_f64_to_buf(buf: &mut String, value: Option<f64>) {
     buf.clear();
-    write!(buf, "{value}").expect("writing f64 to String cannot fail");
-    buf.as_bytes()
-}
-
-/// Write an `Option<f64>` into a reusable string buffer, returning empty bytes for `None`.
-#[inline]
-fn write_opt_f64_to_buf(buf: &mut String, value: Option<f64>) -> Vec<u8> {
-    match value {
-        Some(v) => write_f64_to_buf(buf, v).to_owned(),
-        None => Vec::new(),
+    if let Some(v) = value {
+        debug_assert!(v.is_finite(), "write_opt_f64_to_buf called with non-finite value: {v}");
+        write!(buf, "{v}").expect("writing f64 to String cannot fail");
     }
 }
 
@@ -436,50 +473,57 @@ pub fn write_diff_csv(diff: &SolveDiffResult, dir: &Path) -> Result<(String, Str
     let var_filename = format!("variable_diff_{ts}.csv");
     let con_filename = format!("constraint_diff_{ts}.csv");
 
-    // Variable diff
+    // Variable diff — one String buffer per field, reused across rows.
     {
         let mut wtr = csv::Writer::from_path(dir.join(&var_filename))?;
         wtr.write_record(["name", "value_1", "value_2", "delta", "reduced_cost_1", "reduced_cost_2"])?;
 
-        let mut buf = String::with_capacity(24);
+        let mut buf_v1 = String::with_capacity(24);
+        let mut buf_v2 = String::with_capacity(24);
+        let mut buf_delta = String::with_capacity(24);
+        let mut buf_rc1 = String::with_capacity(24);
+        let mut buf_rc2 = String::with_capacity(24);
 
         for row in &diff.variable_diff {
             if row.val1.is_none() && row.val2.is_none() {
                 continue;
             }
 
-            let val1_bytes = write_opt_f64_to_buf(&mut buf, row.val1);
-            let val2_bytes = write_opt_f64_to_buf(&mut buf, row.val2);
-            let delta_bytes = match (row.val1, row.val2) {
-                (Some(v1), Some(v2)) => write_f64_to_buf(&mut buf, v2 - v1).to_owned(),
-                _ => Vec::new(),
-            };
-            let rc1_bytes = write_opt_f64_to_buf(&mut buf, row.reduced_cost1);
-            let rc2_bytes = write_opt_f64_to_buf(&mut buf, row.reduced_cost2);
+            write_opt_f64_to_buf(&mut buf_v1, row.val1);
+            write_opt_f64_to_buf(&mut buf_v2, row.val2);
+            buf_delta.clear();
+            if let (Some(v1), Some(v2)) = (row.val1, row.val2) {
+                write!(buf_delta, "{}", v2 - v1).expect("writing f64 to String cannot fail");
+            }
+            write_opt_f64_to_buf(&mut buf_rc1, row.reduced_cost1);
+            write_opt_f64_to_buf(&mut buf_rc2, row.reduced_cost2);
 
-            wtr.write_record([row.name.as_bytes(), &val1_bytes, &val2_bytes, &delta_bytes, &rc1_bytes, &rc2_bytes])?;
+            wtr.write_record([&row.name, &buf_v1, &buf_v2, &buf_delta, &buf_rc1, &buf_rc2])?;
         }
         wtr.flush()?;
     }
 
-    // Constraint diff
+    // Constraint diff — one String buffer per field, reused across rows.
     {
         let mut wtr = csv::Writer::from_path(dir.join(&con_filename))?;
         wtr.write_record(["name", "activity_1", "activity_2", "shadow_price_1", "shadow_price_2"])?;
 
-        let mut buf = String::with_capacity(24);
+        let mut buf_a1 = String::with_capacity(24);
+        let mut buf_a2 = String::with_capacity(24);
+        let mut buf_sp1 = String::with_capacity(24);
+        let mut buf_sp2 = String::with_capacity(24);
 
         for row in &diff.constraint_diff {
             if row.activity1.is_none() && row.activity2.is_none() {
                 continue;
             }
 
-            let a1_bytes = write_opt_f64_to_buf(&mut buf, row.activity1);
-            let a2_bytes = write_opt_f64_to_buf(&mut buf, row.activity2);
-            let sp1_bytes = write_opt_f64_to_buf(&mut buf, row.shadow_price1);
-            let sp2_bytes = write_opt_f64_to_buf(&mut buf, row.shadow_price2);
+            write_opt_f64_to_buf(&mut buf_a1, row.activity1);
+            write_opt_f64_to_buf(&mut buf_a2, row.activity2);
+            write_opt_f64_to_buf(&mut buf_sp1, row.shadow_price1);
+            write_opt_f64_to_buf(&mut buf_sp2, row.shadow_price2);
 
-            wtr.write_record([row.name.as_bytes(), &a1_bytes, &a2_bytes, &sp1_bytes, &sp2_bytes])?;
+            wtr.write_record([&row.name, &buf_a1, &buf_a2, &buf_sp1, &buf_sp2])?;
         }
         wtr.flush()?;
     }

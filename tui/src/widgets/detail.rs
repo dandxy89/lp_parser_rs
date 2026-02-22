@@ -239,7 +239,8 @@ pub fn render_constraint_detail(
                 );
             }
 
-            render_coeff_changes(&mut lines, coeff_changes, old_coefficients, new_coefficients, cached_rows);
+            let visible = coeff_visible_range(scroll, area, lines.len());
+            render_coeff_changes(&mut lines, coeff_changes, old_coefficients, new_coefficients, cached_rows, Some(visible));
         }
 
         ConstraintDiffDetail::Sos { old_weights, new_weights, weight_changes, type_change } => {
@@ -255,7 +256,8 @@ pub fn render_constraint_detail(
             lines.push(Line::from(""));
             lines.push(Line::from(Span::styled("  Weights:", muted().add_modifier(Modifier::BOLD))));
 
-            render_coeff_changes(&mut lines, weight_changes, old_weights, new_weights, cached_rows);
+            let visible = coeff_visible_range(scroll, area, lines.len());
+            render_coeff_changes(&mut lines, weight_changes, old_weights, new_weights, cached_rows, Some(visible));
         }
 
         ConstraintDiffDetail::TypeChanged { old_summary, new_summary } => {
@@ -328,7 +330,15 @@ pub fn render_objective_detail(
     lines.push(Line::from(Span::styled("  Coefficients:", muted().add_modifier(Modifier::BOLD))));
 
     if entry.kind == DiffKind::Modified {
-        render_coeff_changes(&mut lines, &entry.coeff_changes, &entry.old_coefficients, &entry.new_coefficients, cached_rows);
+        let visible = coeff_visible_range(scroll, area, lines.len());
+        render_coeff_changes(
+            &mut lines,
+            &entry.coeff_changes,
+            &entry.old_coefficients,
+            &entry.new_coefficients,
+            cached_rows,
+            Some(visible),
+        );
     } else {
         let coeffs = if entry.kind == DiffKind::Added { &entry.new_coefficients } else { &entry.old_coefficients };
         let colour = kind_colour(entry.kind);
@@ -345,6 +355,9 @@ pub fn render_objective_detail(
 
 /// Render a side-by-side old/new coefficient comparison for modified
 /// standard constraints. Returns the total content line count.
+///
+/// Uses windowed rendering: only builds `Line` objects for coefficient rows
+/// visible in the viewport, avoiding O(total_rows) allocations per frame.
 #[allow(clippy::too_many_arguments)]
 fn render_constraint_side_by_side(
     frame: &mut Frame,
@@ -378,12 +391,28 @@ fn render_constraint_side_by_side(
         &owned_rows
     };
 
+    let coefficient_scroll = scroll.saturating_sub(header_height);
+    let visible_height = v_chunks[1].height as usize;
+
+    // Windowed rendering: only build Lines for visible coefficient rows.
+    // The "Old"/"New" column header occupies the first line of the coefficient area.
+    let column_header_lines: usize = 1;
+    let data_skip = (coefficient_scroll as usize).saturating_sub(column_header_lines);
+    let data_take = if coefficient_scroll == 0 { visible_height.saturating_sub(column_header_lines) } else { visible_height };
+
     let mut left_lines: Vec<Line<'_>> =
         vec![Line::from(Span::styled(" Old", Style::default().fg(t.removed).add_modifier(Modifier::BOLD | Modifier::UNDERLINED)))];
     let mut right_lines: Vec<Line<'_>> =
         vec![Line::from(Span::styled(" New", Style::default().fg(t.added).add_modifier(Modifier::BOLD | Modifier::UNDERLINED)))];
 
-    for row in rows {
+    // Placeholder lines for data rows scrolled above the viewport.
+    for _ in 0..data_skip.min(rows.len()) {
+        left_lines.push(Line::default());
+        right_lines.push(Line::default());
+    }
+
+    // Build styled Lines only for the visible window.
+    for row in rows.iter().skip(data_skip).take(data_take) {
         let (left_style, right_style, badge) = match row.change_kind {
             Some(DiffKind::Added) => (Style::default().fg(t.muted), Style::default().fg(t.added), " [+]"),
             Some(DiffKind::Removed) => (Style::default().fg(t.removed), Style::default().fg(t.muted), " [-]"),
@@ -406,7 +435,12 @@ fn render_constraint_side_by_side(
         ]));
     }
 
-    let coefficient_scroll = scroll.saturating_sub(header_height);
+    // Placeholder lines for data rows below the viewport.
+    let built_data = data_skip.min(rows.len()) + rows.len().saturating_sub(data_skip).min(data_take);
+    for _ in built_data..rows.len() {
+        left_lines.push(Line::default());
+        right_lines.push(Line::default());
+    }
 
     let h_chunks = Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]).split(v_chunks[1]);
 
@@ -418,14 +452,34 @@ fn render_constraint_side_by_side(
     header_line_count + 1 + rows.len()
 }
 
+/// Compute the visible range of coefficient rows for windowed rendering.
+///
+/// Returns `(first_visible_row, max_visible_rows)`. When the scroll position
+/// is within the header area, `first_visible_row` is 0 and `max_visible_rows`
+/// accounts for header lines still occupying the viewport.
+const fn coeff_visible_range(scroll: u16, area: Rect, header_line_count: usize) -> (usize, usize) {
+    let inner_height = area.height.saturating_sub(2) as usize; // subtract borders
+    let scroll_usize = scroll as usize;
+    let first_visible = scroll_usize.saturating_sub(header_line_count);
+    let visible_space =
+        if scroll_usize >= header_line_count { inner_height } else { inner_height.saturating_sub(header_line_count - scroll_usize) };
+    // +1 for partially visible lines at the bottom edge.
+    (first_visible, visible_space + 1)
+}
+
 /// Render a combined view of old and new coefficient lists, annotating each
 /// variable with its change status.
+///
+/// When `visible_range` is `Some((first, count))`, only builds `Line` objects
+/// for the visible window, inserting cheap placeholder lines for rows above and
+/// below the viewport. This avoids `O(total_rows)` `format!` allocations per frame.
 fn render_coeff_changes(
     lines: &mut Vec<Line<'_>>,
     changes: &[CoefficientChange],
     old_coefficients: &[ResolvedCoefficient],
     new_coefficients: &[ResolvedCoefficient],
     cached_rows: Option<&[crate::detail_model::CoefficientRow]>,
+    visible_range: Option<(usize, usize)>,
 ) {
     // Column width for value formatting — wide enough for typical LP coefficients.
     const VAL_WIDTH: usize = 12;
@@ -440,7 +494,17 @@ fn render_coeff_changes(
         &owned_rows
     };
 
-    for row in rows {
+    let (skip, take) = visible_range.unwrap_or((0, rows.len()));
+
+    // Placeholder lines for coefficient rows scrolled above the viewport.
+    let placeholder_before = skip.min(rows.len());
+    for _ in 0..placeholder_before {
+        lines.push(Line::default());
+    }
+
+    // Build styled Lines only for the visible window.
+    let visible_count = rows.len().saturating_sub(skip).min(take);
+    for row in rows.iter().skip(skip).take(take) {
         let old_str = row.old_value.map_or_else(String::new, |v| format!("{v}"));
         let new_str = row.new_value.map_or_else(String::new, |v| format!("{v}"));
 
@@ -480,6 +544,12 @@ fn render_coeff_changes(
                 ]));
             }
         }
+    }
+
+    // Placeholder lines for coefficient rows below the viewport.
+    let after_count = rows.len().saturating_sub(placeholder_before + visible_count);
+    for _ in 0..after_count {
+        lines.push(Line::default());
     }
 }
 

@@ -46,10 +46,12 @@ pub struct YankState {
 }
 
 /// A single entry in the pre-built flat search haystack.
+///
+/// Names are stored separately in `search_name_buffer` at the same index
+/// to avoid duplicating every entry name as an owned `String`.
 pub struct HaystackEntry {
     pub section: Section,
     pub index: usize,
-    pub name: String,
     pub kind: DiffKind,
 }
 
@@ -118,35 +120,41 @@ pub struct App {
     /// Rebuilt when the haystack changes (indices correspond 1:1 with `search_haystack`).
     pub(crate) search_name_buffer: Vec<String>,
 
-    /// Cached coefficient rows for the detail panel, avoiding per-frame BTreeMap + String allocations.
+    /// Cached coefficient rows for the detail panel, avoiding per-frame `BTreeMap` + String allocations.
     /// Invalidated when the selected entry changes.
     pub(crate) coeff_row_cache: Option<CoeffRowCache>,
 }
 
-/// Cached coefficient rows keyed on (section, entry_index).
-pub(crate) struct CoeffRowCache {
+/// Cached coefficient rows keyed on (section, `entry_index`).
+pub struct CoeffRowCache {
     pub section: Section,
     pub entry_index: usize,
     pub rows: Vec<CoefficientRow>,
 }
 
-/// Append entries from a single section into the haystack.
-fn append_section_haystack<T: DiffEntry>(haystack: &mut Vec<HaystackEntry>, section: Section, entries: &[T]) {
+/// Append entries from a single section into the haystack and name buffer.
+fn append_section_haystack<T: DiffEntry>(haystack: &mut Vec<HaystackEntry>, names: &mut Vec<String>, section: Section, entries: &[T]) {
     for (index, entry) in entries.iter().enumerate() {
-        haystack.push(HaystackEntry { section, index, name: entry.name().to_owned(), kind: entry.kind() });
+        haystack.push(HaystackEntry { section, index, kind: entry.kind() });
+        names.push(entry.name().to_owned());
     }
 }
 
-/// Build the flat search haystack from all three sections of the report.
-fn build_haystack(report: &LpDiffReport) -> Vec<HaystackEntry> {
+/// Build the flat search haystack and name buffer from all three sections of the report.
+///
+/// The haystack and name buffer are built in lockstep so that `names[i]` is the
+/// display name for `haystack[i]`. This avoids cloning each name twice.
+fn build_haystack(report: &LpDiffReport) -> (Vec<HaystackEntry>, Vec<String>) {
     let total = report.variables.entries.len() + report.constraints.entries.len() + report.objectives.entries.len();
     let mut haystack = Vec::with_capacity(total);
+    let mut names = Vec::with_capacity(total);
 
-    append_section_haystack(&mut haystack, Section::Variables, &report.variables.entries);
-    append_section_haystack(&mut haystack, Section::Constraints, &report.constraints.entries);
-    append_section_haystack(&mut haystack, Section::Objectives, &report.objectives.entries);
+    append_section_haystack(&mut haystack, &mut names, Section::Variables, &report.variables.entries);
+    append_section_haystack(&mut haystack, &mut names, Section::Constraints, &report.constraints.entries);
+    append_section_haystack(&mut haystack, &mut names, Section::Objectives, &report.objectives.entries);
 
-    haystack
+    debug_assert_eq!(haystack.len(), names.len(), "haystack and name buffer must have equal length");
+    (haystack, names)
 }
 
 impl App {
@@ -154,7 +162,7 @@ impl App {
         let mut section_selector_state = ListState::default();
         section_selector_state.select(Some(0));
 
-        let haystack = build_haystack(&report);
+        let (haystack, names) = build_haystack(&report);
 
         Self {
             report,
@@ -180,7 +188,7 @@ impl App {
             solver: SolverSession::new(),
             file1_path,
             file2_path,
-            search_name_buffer: haystack.iter().map(|entry| entry.name.clone()).collect(),
+            search_name_buffer: names,
             search_haystack: haystack,
             coeff_row_cache: None,
         }
@@ -367,10 +375,7 @@ impl App {
             if cb.is_none() {
                 *cb = arboard::Clipboard::new().ok();
             }
-            match cb.as_mut() {
-                Some(clipboard) => clipboard.set_text(text),
-                None => Err(arboard::Error::ClipboardNotSupported),
-            }
+            cb.as_mut().map_or(Err(arboard::Error::ClipboardNotSupported), |clipboard| clipboard.set_text(text))
         });
 
         match result {
@@ -633,7 +638,7 @@ impl App {
             "populate_filtered_results called with Fuzzy query; use populate_fuzzy_results instead"
         );
         for (haystack_index, entry) in self.search_haystack.iter().enumerate() {
-            if compiled.matches(&entry.name) {
+            if compiled.matches(&self.search_name_buffer[haystack_index]) {
                 self.search_popup.results.push(SearchResult {
                     section: entry.section,
                     entry_index: entry.index,
@@ -678,6 +683,10 @@ impl App {
             return;
         };
         let filtered = self.section_states[list_index].cached_indices();
+        debug_assert!(
+            filtered.contains(&entry_index),
+            "search result entry_index {entry_index} not found in filtered indices for section {section:?}",
+        );
         if let Some(position) = filtered.iter().position(|&i| i == entry_index) {
             self.section_states[list_index].list_state.select(Some(position));
         }

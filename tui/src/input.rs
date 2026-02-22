@@ -59,7 +59,7 @@ impl App {
             KeyCode::Tab => {
                 // Replace query with the selected result's full name.
                 if let Some(result) = self.search_popup.results.get(self.search_popup.selected) {
-                    self.search_popup.query = self.search_haystack[result.haystack_index].name.clone();
+                    self.search_popup.query = self.search_name_buffer[result.haystack_index].clone();
                     self.recompute_search_popup();
                 }
             }
@@ -410,7 +410,7 @@ impl App {
         }
     }
 
-    /// Handle shared navigation keys for solve results views (Done and DoneBoth).
+    /// Handle shared navigation keys for solve results views (Done and `DoneBoth`).
     /// Returns `true` if the key was consumed by shared navigation.
     fn handle_solve_results_nav(&mut self, key: KeyEvent) -> bool {
         match key.code {

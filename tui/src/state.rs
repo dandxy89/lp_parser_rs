@@ -253,6 +253,12 @@ impl JumpList {
         if self.cursor < self.entries.len() {
             let entry = self.entries.get(self.cursor);
             self.cursor += 1;
+            debug_assert!(
+                self.cursor <= self.entries.len(),
+                "jumplist cursor {} exceeds entries len {} after go_forward",
+                self.cursor,
+                self.entries.len(),
+            );
             entry
         } else {
             None

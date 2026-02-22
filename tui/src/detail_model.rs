@@ -54,7 +54,7 @@ pub fn build_coeff_rows(
         }
     }
 
-    all_vars
+    let rows: Vec<CoefficientRow> = all_vars
         .into_iter()
         .map(|(var_name, (old_value, new_value, change_kind))| CoefficientRow {
             variable: var_name.to_owned(),
@@ -62,5 +62,15 @@ pub fn build_coeff_rows(
             new_value,
             change_kind,
         })
-        .collect()
+        .collect();
+
+    debug_assert!(
+        rows.len() >= old_coefficients.len().max(new_coefficients.len()),
+        "output rows ({}) must cover the union of old ({}) and new ({}) variables",
+        rows.len(),
+        old_coefficients.len(),
+        new_coefficients.len(),
+    );
+
+    rows
 }

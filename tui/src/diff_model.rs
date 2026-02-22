@@ -267,46 +267,55 @@ impl DiffEntry for ObjectiveDiffEntry {
     }
 }
 
-/// Collect the sorted, deduplicated union of keys from two iterators.
+/// Diff two coefficient lists using sorted merge-join and return only the changed entries.
 ///
-/// Inputs need not be sorted — `HashMap::keys()` iteration order is arbitrary.
-fn sorted_key_union<'a>(left: impl Iterator<Item = &'a str>, right: impl Iterator<Item = &'a str>) -> Vec<&'a str> {
-    let mut keys: Vec<&str> = left.chain(right).collect();
-    keys.sort_unstable();
-    keys.dedup();
-    keys
-}
-
-/// Diff two coefficient lists and return only the changed entries.
-///
-/// Uses an epsilon of [`COEFF_EPSILON`] for float comparison.
+/// Both slices are sorted by name before merging. Uses an epsilon of [`COEFF_EPSILON`]
+/// for floating-point comparison.
 fn diff_coefficients(old: &[ResolvedCoefficient], new: &[ResolvedCoefficient]) -> Vec<CoefficientChange> {
-    let old_map: HashMap<&str, f64> = old.iter().map(|c| (c.name.as_str(), c.value)).collect();
-    let new_map: HashMap<&str, f64> = new.iter().map(|c| (c.name.as_str(), c.value)).collect();
-
-    let all_names = sorted_key_union(old_map.keys().copied(), new_map.keys().copied());
+    let mut old_sorted: Vec<(&str, f64)> = old.iter().map(|c| (c.name.as_str(), c.value)).collect();
+    let mut new_sorted: Vec<(&str, f64)> = new.iter().map(|c| (c.name.as_str(), c.value)).collect();
+    old_sorted.sort_unstable_by(|a, b| a.0.cmp(b.0));
+    new_sorted.sort_unstable_by(|a, b| a.0.cmp(b.0));
 
     let mut changes = Vec::new();
+    let mut i = 0;
+    let mut j = 0;
 
-    for name in all_names {
-        match (old_map.get(name), new_map.get(name)) {
-            (Some(&old_val), None) => {
+    while i < old_sorted.len() || j < new_sorted.len() {
+        debug_assert!(i <= old_sorted.len(), "old index out of bounds");
+        debug_assert!(j <= new_sorted.len(), "new index out of bounds");
+
+        let cmp = match (old_sorted.get(i), new_sorted.get(j)) {
+            (Some((n1, _)), Some((n2, _))) => n1.cmp(n2),
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (None, None) => break,
+        };
+
+        match cmp {
+            std::cmp::Ordering::Less => {
+                let (name, old_val) = old_sorted[i];
                 changes.push(CoefficientChange {
                     variable: name.to_string(),
                     kind: DiffKind::Removed,
                     old_value: Some(old_val),
                     new_value: None,
                 });
+                i += 1;
             }
-            (None, Some(&new_val)) => {
+            std::cmp::Ordering::Greater => {
+                let (name, new_val) = new_sorted[j];
                 changes.push(CoefficientChange {
                     variable: name.to_string(),
                     kind: DiffKind::Added,
                     old_value: None,
                     new_value: Some(new_val),
                 });
+                j += 1;
             }
-            (Some(&old_val), Some(&new_val)) => {
+            std::cmp::Ordering::Equal => {
+                let (name, old_val) = old_sorted[i];
+                let new_val = new_sorted[j].1;
                 if (old_val - new_val).abs() > COEFF_EPSILON {
                     changes.push(CoefficientChange {
                         variable: name.to_string(),
@@ -316,9 +325,8 @@ fn diff_coefficients(old: &[ResolvedCoefficient], new: &[ResolvedCoefficient]) -
                     });
                 }
                 // Unchanged coefficients are skipped.
-            }
-            (None, None) => {
-                unreachable!("name in union but absent from both maps");
+                i += 1;
+                j += 1;
             }
         }
     }
@@ -339,64 +347,78 @@ fn constraint_summary(problem: &LpProblem, constraint: &Constraint) -> String {
     }
 }
 
-/// Build a name-keyed map from the interner-keyed variables/constraints/objectives.
-fn build_resolved_var_map(problem: &LpProblem) -> HashMap<String, &lp_parser_rs::model::Variable> {
-    problem.variables.iter().map(|(id, var)| (problem.resolve(*id).to_string(), var)).collect()
+/// Build a sorted vec of (name, &Variable) pairs from the interner-keyed variables.
+fn build_sorted_vars(problem: &LpProblem) -> Vec<(String, &lp_parser_rs::model::Variable)> {
+    let mut pairs: Vec<_> = problem.variables.iter().map(|(id, var)| (problem.resolve(*id).to_string(), var)).collect();
+    pairs.sort_unstable_by(|a, b| a.0.cmp(&b.0));
+    pairs
 }
 
-fn build_resolved_constraint_map(problem: &LpProblem) -> HashMap<String, &Constraint> {
-    problem.constraints.iter().map(|(id, c)| (problem.resolve(*id).to_string(), c)).collect()
+/// Build a sorted vec of (name, &Constraint) pairs from the interner-keyed constraints.
+fn build_sorted_constraints(problem: &LpProblem) -> Vec<(String, &Constraint)> {
+    let mut pairs: Vec<_> = problem.constraints.iter().map(|(id, c)| (problem.resolve(*id).to_string(), c)).collect();
+    pairs.sort_unstable_by(|a, b| a.0.cmp(&b.0));
+    pairs
 }
 
-fn build_resolved_objective_map(problem: &LpProblem) -> HashMap<String, &lp_parser_rs::model::Objective> {
-    problem.objectives.iter().map(|(id, o)| (problem.resolve(*id).to_string(), o)).collect()
+/// Build a sorted vec of (name, &Objective) pairs from the interner-keyed objectives.
+fn build_sorted_objectives(problem: &LpProblem) -> Vec<(String, &lp_parser_rs::model::Objective)> {
+    let mut pairs: Vec<_> = problem.objectives.iter().map(|(id, o)| (problem.resolve(*id).to_string(), o)).collect();
+    pairs.sort_unstable_by(|a, b| a.0.cmp(&b.0));
+    pairs
 }
 
-/// Diff the variables section between two problems.
+/// Diff the variables section between two problems using sorted merge-join.
 fn diff_variables(p1: &LpProblem, p2: &LpProblem) -> SectionDiff<VariableDiffEntry> {
-    let vars1 = build_resolved_var_map(p1);
-    let vars2 = build_resolved_var_map(p2);
-    let all_names = sorted_key_union(vars1.keys().map(String::as_str), vars2.keys().map(String::as_str));
+    let vars1 = build_sorted_vars(p1);
+    let vars2 = build_sorted_vars(p2);
 
     let mut entries = Vec::new();
     let mut counts = DiffCounts::default();
+    let mut i = 0;
+    let mut j = 0;
 
-    for name in all_names {
-        let in_p1 = vars1.get(name);
-        let in_p2 = vars2.get(name);
+    while i < vars1.len() || j < vars2.len() {
+        debug_assert!(i <= vars1.len(), "vars1 index out of bounds");
+        debug_assert!(j <= vars2.len(), "vars2 index out of bounds");
 
-        match (in_p1, in_p2) {
-            (Some(v1), None) => {
+        let cmp = match (vars1.get(i), vars2.get(j)) {
+            (Some((n1, _)), Some((n2, _))) => n1.cmp(n2),
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (None, None) => break,
+        };
+
+        match cmp {
+            std::cmp::Ordering::Less => {
+                let (name, v1) = &vars1[i];
                 counts.removed += 1;
-                let entry = VariableDiffEntry {
-                    name: name.to_string(),
-                    kind: DiffKind::Removed,
-                    old_type: Some(v1.var_type.clone()),
-                    new_type: None,
-                };
+                let entry =
+                    VariableDiffEntry { name: name.clone(), kind: DiffKind::Removed, old_type: Some(v1.var_type.clone()), new_type: None };
                 debug_assert!(entry.old_type.is_some(), "Removed variable must have old_type");
                 debug_assert!(entry.new_type.is_none(), "Removed variable must not have new_type");
                 entries.push(entry);
+                i += 1;
             }
-            (None, Some(v2)) => {
+            std::cmp::Ordering::Greater => {
+                let (name, v2) = &vars2[j];
                 counts.added += 1;
-                let entry = VariableDiffEntry {
-                    name: name.to_string(),
-                    kind: DiffKind::Added,
-                    old_type: None,
-                    new_type: Some(v2.var_type.clone()),
-                };
+                let entry =
+                    VariableDiffEntry { name: name.clone(), kind: DiffKind::Added, old_type: None, new_type: Some(v2.var_type.clone()) };
                 debug_assert!(entry.new_type.is_some(), "Added variable must have new_type");
                 debug_assert!(entry.old_type.is_none(), "Added variable must not have old_type");
                 entries.push(entry);
+                j += 1;
             }
-            (Some(v1), Some(v2)) => {
+            std::cmp::Ordering::Equal => {
+                let (name, v1) = &vars1[i];
+                let v2 = vars2[j].1;
                 if v1.var_type == v2.var_type {
                     counts.unchanged += 1;
                 } else {
                     counts.modified += 1;
                     let entry = VariableDiffEntry {
-                        name: name.to_string(),
+                        name: name.clone(),
                         kind: DiffKind::Modified,
                         old_type: Some(v1.var_type.clone()),
                         new_type: Some(v2.var_type.clone()),
@@ -405,14 +427,13 @@ fn diff_variables(p1: &LpProblem, p2: &LpProblem) -> SectionDiff<VariableDiffEnt
                     debug_assert!(entry.new_type.is_some(), "Modified variable must have new_type");
                     entries.push(entry);
                 }
-            }
-            (None, None) => {
-                unreachable!("name in union but absent from both problems");
+                i += 1;
+                j += 1;
             }
         }
     }
 
-    // Entries are already sorted by name because we sorted all_names above.
+    // Entries are already sorted by name from the merge-join.
     SectionDiff { entries, counts }
 }
 
@@ -491,52 +512,70 @@ fn diff_constraint_pair(p1: &LpProblem, c1: &Constraint, p2: &LpProblem, c2: &Co
     }
 }
 
-/// Diff the constraints section between two problems.
+/// Diff the constraints section between two problems using sorted merge-join.
 fn diff_constraints(
     p1: &LpProblem,
     p2: &LpProblem,
     line_map1: &HashMap<String, usize>,
     line_map2: &HashMap<String, usize>,
 ) -> SectionDiff<ConstraintDiffEntry> {
-    let cons1 = build_resolved_constraint_map(p1);
-    let cons2 = build_resolved_constraint_map(p2);
-    let all_names = sorted_key_union(cons1.keys().map(String::as_str), cons2.keys().map(String::as_str));
+    let cons1 = build_sorted_constraints(p1);
+    let cons2 = build_sorted_constraints(p2);
 
     let mut entries = Vec::new();
     let mut counts = DiffCounts::default();
+    let mut i = 0;
+    let mut j = 0;
 
-    for name in all_names {
-        let constraint1 = cons1.get(name);
-        let constraint2 = cons2.get(name);
-        let line1 = line_map1.get(name).copied();
-        let line2 = line_map2.get(name).copied();
+    while i < cons1.len() || j < cons2.len() {
+        debug_assert!(i <= cons1.len(), "cons1 index out of bounds");
+        debug_assert!(j <= cons2.len(), "cons2 index out of bounds");
 
-        match (constraint1, constraint2) {
-            (Some(constraint), None) => {
+        let cmp = match (cons1.get(i), cons2.get(j)) {
+            (Some((n1, _)), Some((n2, _))) => n1.cmp(n2),
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (None, None) => break,
+        };
+
+        match cmp {
+            std::cmp::Ordering::Less => {
+                let (name, constraint) = &cons1[i];
+                let line1 = line_map1.get(name.as_str()).copied();
+                let line2 = line_map2.get(name.as_str()).copied();
                 counts.removed += 1;
                 entries.push(ConstraintDiffEntry {
-                    name: name.to_string(),
+                    name: name.clone(),
                     kind: DiffKind::Removed,
                     detail: ConstraintDiffDetail::AddedOrRemoved(resolve_constraint(p1, constraint)),
                     line_file1: line1,
                     line_file2: line2,
                 });
+                i += 1;
             }
-            (None, Some(constraint)) => {
+            std::cmp::Ordering::Greater => {
+                let (name, constraint) = &cons2[j];
+                let line1 = line_map1.get(name.as_str()).copied();
+                let line2 = line_map2.get(name.as_str()).copied();
                 counts.added += 1;
                 entries.push(ConstraintDiffEntry {
-                    name: name.to_string(),
+                    name: name.clone(),
                     kind: DiffKind::Added,
                     detail: ConstraintDiffDetail::AddedOrRemoved(resolve_constraint(p2, constraint)),
                     line_file1: line1,
                     line_file2: line2,
                 });
+                j += 1;
             }
-            (Some(c1), Some(c2)) => {
+            std::cmp::Ordering::Equal => {
+                let (name, c1) = &cons1[i];
+                let c2 = cons2[j].1;
+                let line1 = line_map1.get(name.as_str()).copied();
+                let line2 = line_map2.get(name.as_str()).copied();
                 if let Some(detail) = diff_constraint_pair(p1, c1, p2, c2) {
                     counts.modified += 1;
                     entries.push(ConstraintDiffEntry {
-                        name: name.to_string(),
+                        name: name.clone(),
                         kind: DiffKind::Modified,
                         detail,
                         line_file1: line1,
@@ -545,9 +584,8 @@ fn diff_constraints(
                 } else {
                     counts.unchanged += 1;
                 }
-            }
-            (None, None) => {
-                unreachable!("name in union but absent from both problems");
+                i += 1;
+                j += 1;
             }
         }
     }
@@ -555,41 +593,55 @@ fn diff_constraints(
     SectionDiff { entries, counts }
 }
 
-/// Diff the objectives section between two problems.
+/// Diff the objectives section between two problems using sorted merge-join.
 fn diff_objectives(p1: &LpProblem, p2: &LpProblem) -> SectionDiff<ObjectiveDiffEntry> {
-    let objs1 = build_resolved_objective_map(p1);
-    let objs2 = build_resolved_objective_map(p2);
-    let all_names = sorted_key_union(objs1.keys().map(String::as_str), objs2.keys().map(String::as_str));
+    let objs1 = build_sorted_objectives(p1);
+    let objs2 = build_sorted_objectives(p2);
 
     let mut entries = Vec::new();
     let mut counts = DiffCounts::default();
+    let mut i = 0;
+    let mut j = 0;
 
-    for name in all_names {
-        let o1 = objs1.get(name);
-        let o2 = objs2.get(name);
+    while i < objs1.len() || j < objs2.len() {
+        debug_assert!(i <= objs1.len(), "objs1 index out of bounds");
+        debug_assert!(j <= objs2.len(), "objs2 index out of bounds");
 
-        match (o1, o2) {
-            (Some(o), None) => {
+        let cmp = match (objs1.get(i), objs2.get(j)) {
+            (Some((n1, _)), Some((n2, _))) => n1.cmp(n2),
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (None, None) => break,
+        };
+
+        match cmp {
+            std::cmp::Ordering::Less => {
+                let (name, o) = &objs1[i];
                 counts.removed += 1;
                 entries.push(ObjectiveDiffEntry {
-                    name: name.to_string(),
+                    name: name.clone(),
                     kind: DiffKind::Removed,
                     old_coefficients: resolve_coefficients(p1, &o.coefficients),
                     new_coefficients: Vec::new(),
                     coeff_changes: Vec::new(),
                 });
+                i += 1;
             }
-            (None, Some(o)) => {
+            std::cmp::Ordering::Greater => {
+                let (name, o) = &objs2[j];
                 counts.added += 1;
                 entries.push(ObjectiveDiffEntry {
-                    name: name.to_string(),
+                    name: name.clone(),
                     kind: DiffKind::Added,
                     old_coefficients: Vec::new(),
                     new_coefficients: resolve_coefficients(p2, &o.coefficients),
                     coeff_changes: Vec::new(),
                 });
+                j += 1;
             }
-            (Some(o1_val), Some(o2_val)) => {
+            std::cmp::Ordering::Equal => {
+                let (name, o1_val) = &objs1[i];
+                let o2_val = objs2[j].1;
                 let old_resolved = resolve_coefficients(p1, &o1_val.coefficients);
                 let new_resolved = resolve_coefficients(p2, &o2_val.coefficients);
                 let coeff_changes = diff_coefficients(&old_resolved, &new_resolved);
@@ -598,16 +650,15 @@ fn diff_objectives(p1: &LpProblem, p2: &LpProblem) -> SectionDiff<ObjectiveDiffE
                 } else {
                     counts.modified += 1;
                     entries.push(ObjectiveDiffEntry {
-                        name: name.to_string(),
+                        name: name.clone(),
                         kind: DiffKind::Modified,
                         old_coefficients: old_resolved,
                         new_coefficients: new_resolved,
                         coeff_changes,
                     });
                 }
-            }
-            (None, None) => {
-                unreachable!("name in union but absent from both problems");
+                i += 1;
+                j += 1;
             }
         }
     }
@@ -680,7 +731,7 @@ mod tests {
         LpProblem::parse("minimize\n_dummy\nsubject to\nend").expect("minimal LP should parse")
     }
 
-    fn problem_with_variable(name: &str, var_type: VariableType) -> LpProblem {
+    fn problem_with_variable(name: &str, var_type: &VariableType) -> LpProblem {
         let bounds_section = match var_type {
             VariableType::Binary => format!("binary\n {name}\n"),
             VariableType::Integer => format!("general\n {name}\n"),
@@ -696,8 +747,8 @@ mod tests {
         LpProblem::parse(&content).expect("variable problem should parse")
     }
 
-    fn problem_with_standard_constraint(constraint_name: &str, coeffs: Vec<(&str, f64)>, operator: ComparisonOp, rhs: f64) -> LpProblem {
-        let op_str = match operator {
+    fn problem_with_standard_constraint(constraint_name: &str, coeffs: &[(&str, f64)], operator: &ComparisonOp, rhs: f64) -> LpProblem {
+        let op_str = match *operator {
             ComparisonOp::LTE => "<=",
             ComparisonOp::GTE => ">=",
             ComparisonOp::EQ => "=",
@@ -710,7 +761,7 @@ mod tests {
         LpProblem::parse(&content).expect("constraint problem should parse")
     }
 
-    fn problem_with_objective(name: &str, coeffs: Vec<(&str, f64)>) -> LpProblem {
+    fn problem_with_objective(name: &str, coeffs: &[(&str, f64)]) -> LpProblem {
         let terms: Vec<String> = coeffs.iter().map(|(n, v)| format!("{v} {n}")).collect();
         let lhs = terms.join(" + ");
         let content = format!("minimize\n{name}: {lhs}\nsubject to\nend");
@@ -759,7 +810,7 @@ mod tests {
     #[test]
     fn test_variable_added() {
         let p1 = empty_problem();
-        let p2 = problem_with_variable("x", VariableType::Binary);
+        let p2 = problem_with_variable("x", &VariableType::Binary);
         let report = quick_report(&p1, &p2);
         // Find the "x" variable entry (there may be an "obj" objective-related variable too).
         let entry = report.variables.entries.iter().find(|e| e.name == "x");
@@ -772,7 +823,7 @@ mod tests {
 
     #[test]
     fn test_variable_removed() {
-        let p1 = problem_with_variable("y", VariableType::Integer);
+        let p1 = problem_with_variable("y", &VariableType::Integer);
         let p2 = empty_problem();
         let report = quick_report(&p1, &p2);
         let entry = report.variables.entries.iter().find(|e| e.name == "y");
@@ -786,8 +837,8 @@ mod tests {
 
     #[test]
     fn test_variable_modified() {
-        let p1 = problem_with_variable("z", VariableType::Free);
-        let p2 = problem_with_variable("z", VariableType::Binary);
+        let p1 = problem_with_variable("z", &VariableType::Free);
+        let p2 = problem_with_variable("z", &VariableType::Binary);
         let report = quick_report(&p1, &p2);
         let entry = report.variables.entries.iter().find(|e| e.name == "z");
         assert!(entry.is_some(), "should have an entry for variable 'z'");
@@ -801,8 +852,8 @@ mod tests {
     fn test_constraint_coeff_diff() {
         // p1: c1: 2x + 3y <= 10
         // p2: c1: 2x + 5z <= 10   (y removed, z added, x unchanged)
-        let p1 = problem_with_standard_constraint("c1", vec![("x", 2.0), ("y", 3.0)], ComparisonOp::LTE, 10.0);
-        let p2 = problem_with_standard_constraint("c1", vec![("x", 2.0), ("z", 5.0)], ComparisonOp::LTE, 10.0);
+        let p1 = problem_with_standard_constraint("c1", &[("x", 2.0), ("y", 3.0)], &ComparisonOp::LTE, 10.0);
+        let p2 = problem_with_standard_constraint("c1", &[("x", 2.0), ("z", 5.0)], &ComparisonOp::LTE, 10.0);
         let report = quick_report(&p1, &p2);
 
         let entry = report.constraints.entries.iter().find(|e| e.name == "c1");
@@ -850,8 +901,8 @@ mod tests {
 
     #[test]
     fn test_objective_diff() {
-        let p1 = problem_with_objective("obj1", vec![("a", 1.0), ("b", 2.0)]);
-        let p2 = problem_with_objective("obj1", vec![("a", 1.0), ("b", 5.0), ("c", 3.0)]);
+        let p1 = problem_with_objective("obj1", &[("a", 1.0), ("b", 2.0)]);
+        let p2 = problem_with_objective("obj1", &[("a", 1.0), ("b", 5.0), ("c", 3.0)]);
 
         let report = quick_report(&p1, &p2);
 
@@ -883,11 +934,12 @@ mod tests {
     #[test]
     fn test_unchanged_not_stored() {
         // Build two problems with 10 identical Free variables and 1 modified variable.
+        use std::fmt::Write;
         let mut var_lines_1 = String::new();
         let mut var_lines_2 = String::new();
         for i in 0..10 {
-            var_lines_1.push_str(&format!(" x{i} free\n"));
-            var_lines_2.push_str(&format!(" x{i} free\n"));
+            writeln!(var_lines_1, " x{i} free").unwrap();
+            writeln!(var_lines_2, " x{i} free").unwrap();
         }
         var_lines_1.push_str(" changed free\n");
         let content1 = format!("minimize\nobj: x0\nsubject to\nbounds\n{var_lines_1}end");
@@ -946,8 +998,8 @@ mod tests {
 
     #[test]
     fn test_line_numbers_in_constraint_diff() {
-        let p1 = problem_with_standard_constraint("c1", vec![("x", 1.0)], ComparisonOp::LTE, 10.0);
-        let p2 = problem_with_standard_constraint("c1", vec![("x", 2.0)], ComparisonOp::LTE, 10.0);
+        let p1 = problem_with_standard_constraint("c1", &[("x", 1.0)], &ComparisonOp::LTE, 10.0);
+        let p2 = problem_with_standard_constraint("c1", &[("x", 2.0)], &ComparisonOp::LTE, 10.0);
         let mut lm1 = HashMap::new();
         lm1.insert("c1".to_string(), 5);
         let mut lm2 = HashMap::new();

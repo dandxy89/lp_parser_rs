@@ -7,7 +7,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, Paragraph};
 
 use crate::app::App;
-use crate::solver::{ConstraintDiffRow, SolveDiffResult, VarDiffRow};
+use crate::solver::{ConstraintDiffRow, DiffCounts, SolveDiffResult, VarDiffRow};
 use crate::state::{SolveState, SolveTab, SolveViewState};
 use crate::theme::theme;
 
@@ -256,29 +256,29 @@ fn build_constraints_tab<'a>(lines: &mut Vec<Line<'a>>, result: &'a crate::solve
 }
 
 fn build_log_tab<'a>(lines: &mut Vec<Line<'a>>, result: &'a crate::solver::SolveResult) {
+    const MAX_LOG_LINES: usize = 200;
+
     let t = theme();
     if result.solver_log.is_empty() {
         lines.push(Line::from(Span::styled("  No solver log available.", Style::default().fg(t.muted))));
         return;
     }
 
-    const MAX_LOG_LINES: usize = 200;
-
     lines.push(Line::from(Span::styled("  Solver Log:", Style::default().fg(t.muted).add_modifier(Modifier::BOLD))));
-    lines.push(Line::from(Span::styled("  ────────────────────────────────────────", Style::default().fg(t.muted))));
+    lines.push(Line::from(Span::styled(format!("  {RULE_30}"), Style::default().fg(t.muted))));
 
-    // Single-pass: collect lines once, then slice.
-    let log_lines: Vec<&str> = result.solver_log.lines().collect();
-    let start = log_lines.len().saturating_sub(MAX_LOG_LINES);
+    // Count total lines first, then skip/take to avoid collecting into a Vec.
+    let total_lines = result.solver_log.lines().count();
+    let skip = total_lines.saturating_sub(MAX_LOG_LINES);
 
-    if log_lines.len() > MAX_LOG_LINES {
+    if total_lines > MAX_LOG_LINES {
         lines.push(Line::from(Span::styled(
-            format!("  ... ({} lines truncated)", log_lines.len() - MAX_LOG_LINES),
+            format!("  ... ({} lines truncated)", total_lines - MAX_LOG_LINES),
             Style::default().fg(t.warning),
         )));
     }
 
-    for log_line in &log_lines[start..] {
+    for log_line in result.solver_log.lines().skip(skip) {
         lines.push(Line::from(Span::styled(format!("  {log_line}"), Style::default().fg(t.muted))));
     }
 }
@@ -332,8 +332,8 @@ fn draw_done_both(frame: &mut Frame, area: Rect, diff: &SolveDiffResult, view: &
 
     match active {
         SolveTab::Summary => build_diff_summary_tab(&mut lines, diff),
-        SolveTab::Variables => build_diff_variables_tab(&mut lines, diff, view.diff_only),
-        SolveTab::Constraints => build_diff_constraints_tab(&mut lines, diff, view.diff_only),
+        SolveTab::Variables => build_diff_variables_tab(&mut lines, diff, view.diff_only, scroll, popup_height),
+        SolveTab::Constraints => build_diff_constraints_tab(&mut lines, diff, view.diff_only, scroll, popup_height),
         SolveTab::Log => build_diff_log_tab(&mut lines, diff),
     }
 
@@ -356,9 +356,8 @@ fn draw_done_both(frame: &mut Frame, area: Rect, diff: &SolveDiffResult, view: &
 /// Format a delta string. Returns empty spans if no delta.
 fn delta_spans(v1: Option<f64>, v2: Option<f64>) -> Vec<Span<'static>> {
     let t = theme();
-    let (a, b) = match (v1, v2) {
-        (Some(a), Some(b)) => (a, b),
-        _ => return Vec::new(),
+    let (Some(a), Some(b)) = (v1, v2) else {
+        return Vec::new();
     };
     let d = b - a;
     if d.abs() < 1e-10 {
@@ -369,74 +368,34 @@ fn delta_spans(v1: Option<f64>, v2: Option<f64>) -> Vec<Span<'static>> {
     vec![Span::styled(format!("  \u{0394} {sign}{d:.6}"), Style::default().fg(colour))]
 }
 
-/// Counts for a diff tab summary (shared between variables and constraints).
-struct DiffTabCounts {
-    total: usize,
-    added: usize,
-    removed: usize,
-    modified: usize,
+/// Format the cached diff counts as a human-readable summary string.
+fn diff_counts_summary_label(counts: &DiffCounts) -> String {
+    let mut parts = Vec::new();
+    if counts.modified > 0 {
+        parts.push(format!("{} changed", counts.modified));
+    }
+    if counts.added > 0 {
+        parts.push(format!("{} added", counts.added));
+    }
+    if counts.removed > 0 {
+        parts.push(format!("{} removed", counts.removed));
+    }
+    if parts.is_empty() { "no differences".to_owned() } else { parts.join(", ") }
 }
 
-impl DiffTabCounts {
-    /// Format the counts as a human-readable summary string.
-    fn summary_label(&self) -> String {
-        let mut parts = Vec::new();
-        if self.modified > 0 {
-            parts.push(format!("{} changed", self.modified));
-        }
-        if self.added > 0 {
-            parts.push(format!("{} added", self.added));
-        }
-        if self.removed > 0 {
-            parts.push(format!("{} removed", self.removed));
-        }
-        if parts.is_empty() { "no differences".to_owned() } else { parts.join(", ") }
+/// Format cached diff counts as description parts for the summary tab.
+fn diff_counts_description_parts(counts: &DiffCounts, entity: &str) -> Vec<String> {
+    let mut parts = Vec::new();
+    if counts.modified > 0 {
+        parts.push(format!("{} {entity} changed", counts.modified));
     }
-
-    /// Format as a description for the differences row in the summary tab.
-    fn description_parts(&self, entity: &str) -> Vec<String> {
-        let mut parts = Vec::new();
-        if self.modified > 0 {
-            parts.push(format!("{} {entity} changed", self.modified));
-        }
-        if self.added > 0 {
-            parts.push(format!("{} {entity} added", self.added));
-        }
-        if self.removed > 0 {
-            parts.push(format!("{} {entity} removed", self.removed));
-        }
-        parts
+    if counts.added > 0 {
+        parts.push(format!("{} {entity} added", counts.added));
     }
-}
-
-/// Count variable-level diff statistics from a solve diff result in a single pass.
-fn count_variable_diffs(diff: &SolveDiffResult) -> DiffTabCounts {
-    let mut counts = DiffTabCounts { total: diff.variable_diff.len(), added: 0, removed: 0, modified: 0 };
-    for row in &diff.variable_diff {
-        if row.val1.is_none() {
-            counts.added += 1;
-        } else if row.val2.is_none() {
-            counts.removed += 1;
-        } else if row.changed {
-            counts.modified += 1;
-        }
+    if counts.removed > 0 {
+        parts.push(format!("{} {entity} removed", counts.removed));
     }
-    counts
-}
-
-/// Count constraint-level diff statistics from a solve diff result in a single pass.
-fn count_constraint_diffs(diff: &SolveDiffResult) -> DiffTabCounts {
-    let mut counts = DiffTabCounts { total: diff.constraint_diff.len(), added: 0, removed: 0, modified: 0 };
-    for row in &diff.constraint_diff {
-        if row.activity1.is_none() {
-            counts.added += 1;
-        } else if row.activity2.is_none() {
-            counts.removed += 1;
-        } else if row.changed {
-            counts.modified += 1;
-        }
-    }
-    counts
+    parts
 }
 
 /// Format a count delta span for the diff summary comparison rows.
@@ -537,11 +496,8 @@ fn build_diff_summary_tab(lines: &mut Vec<Line<'static>>, diff: &SolveDiffResult
     // Summary of differences.
     lines.push(Line::from(""));
 
-    let variable_counts = count_variable_diffs(diff);
-    let constraint_counts = count_constraint_diffs(diff);
-
-    let mut parts = variable_counts.description_parts("variables");
-    parts.extend(constraint_counts.description_parts("constraints"));
+    let mut parts = diff_counts_description_parts(&diff.variable_counts, "variables");
+    parts.extend(diff_counts_description_parts(&diff.constraint_counts, "constraints"));
 
     let label_w = 18;
     let summary = if parts.is_empty() { "No differences".to_owned() } else { parts.join(", ") };
@@ -556,10 +512,10 @@ const fn diff_filter_label(diff_only: bool) -> &'static str {
     if diff_only { " (showing changed only, press d for all)" } else { " (showing all, press d for changed only)" }
 }
 
-fn build_diff_variables_tab(lines: &mut Vec<Line<'static>>, diff: &SolveDiffResult, diff_only: bool) {
+fn build_diff_variables_tab(lines: &mut Vec<Line<'static>>, diff: &SolveDiffResult, diff_only: bool, scroll: u16, visible_height: u16) {
     let t = theme();
-    let counts = count_variable_diffs(diff);
-    let summary = counts.summary_label();
+    let counts = &diff.variable_counts;
+    let summary = diff_counts_summary_label(counts);
     let filter_label = diff_filter_label(diff_only);
 
     lines.push(Line::from(Span::styled(
@@ -578,11 +534,24 @@ fn build_diff_variables_tab(lines: &mut Vec<Line<'static>>, diff: &SolveDiffResu
     ]));
     lines.push(Line::from(Span::styled(format!("  {RULE_70}"), Style::default().fg(t.muted))));
 
+    // Windowed rendering: only build styled Lines for visible data rows.
+    let header_count = lines.len();
+    let scroll_usize = scroll as usize;
+    let visible = visible_height as usize;
+    let first_visible_data = scroll_usize.saturating_sub(header_count);
+    let visible_data_count = if scroll_usize >= header_count { visible } else { visible.saturating_sub(header_count - scroll_usize) };
+
+    let mut data_index: usize = 0;
     for row in &diff.variable_diff {
         if diff_only && !row.changed {
             continue;
         }
-        build_variable_diff_line(lines, row, name_w, value_w);
+        if data_index >= first_visible_data && data_index < first_visible_data + visible_data_count {
+            build_variable_diff_line(lines, row, name_w, value_w);
+        } else {
+            lines.push(Line::default());
+        }
+        data_index += 1;
     }
 }
 
@@ -628,10 +597,10 @@ fn build_variable_diff_line(lines: &mut Vec<Line<'static>>, row: &VarDiffRow, na
     lines.push(Line::from(spans));
 }
 
-fn build_diff_constraints_tab(lines: &mut Vec<Line<'static>>, diff: &SolveDiffResult, diff_only: bool) {
+fn build_diff_constraints_tab(lines: &mut Vec<Line<'static>>, diff: &SolveDiffResult, diff_only: bool, scroll: u16, visible_height: u16) {
     let t = theme();
-    let counts = count_constraint_diffs(diff);
-    let summary = counts.summary_label();
+    let counts = &diff.constraint_counts;
+    let summary = diff_counts_summary_label(counts);
     let filter_label = diff_filter_label(diff_only);
 
     lines.push(Line::from(Span::styled(
@@ -651,11 +620,24 @@ fn build_diff_constraints_tab(lines: &mut Vec<Line<'static>>, diff: &SolveDiffRe
     ]));
     lines.push(Line::from(Span::styled(format!("  {RULE_80}"), Style::default().fg(t.muted))));
 
+    // Windowed rendering: only build styled Lines for visible data rows.
+    let header_count = lines.len();
+    let scroll_usize = scroll as usize;
+    let visible = visible_height as usize;
+    let first_visible_data = scroll_usize.saturating_sub(header_count);
+    let visible_data_count = if scroll_usize >= header_count { visible } else { visible.saturating_sub(header_count - scroll_usize) };
+
+    let mut data_index: usize = 0;
     for row in &diff.constraint_diff {
         if diff_only && !row.changed {
             continue;
         }
-        build_constraint_diff_line(lines, row, name_w, value_w);
+        if data_index >= first_visible_data && data_index < first_visible_data + visible_data_count {
+            build_constraint_diff_line(lines, row, name_w, value_w);
+        } else {
+            lines.push(Line::default());
+        }
+        data_index += 1;
     }
 }
 
@@ -725,44 +707,37 @@ fn build_constraint_diff_line(lines: &mut Vec<Line<'static>>, row: &ConstraintDi
 }
 
 fn build_diff_log_tab(lines: &mut Vec<Line<'static>>, diff: &SolveDiffResult) {
-    let t = theme();
     const MAX_LOG_LINES: usize = 100;
 
-    // File 1 log — single-pass: collect then slice.
+    let t = theme();
+
+    // File 1 log — iterator skip/take to avoid per-frame Vec.
     lines.push(Line::from(Span::styled(
         format!("  \u{2500}\u{2500} File 1: {} \u{2500}{RULE_30}", diff.file1_label),
         Style::default().fg(t.muted).add_modifier(Modifier::BOLD),
     )));
-
-    let log_lines1: Vec<&str> = diff.result1.solver_log.lines().collect();
-    let start1 = log_lines1.len().saturating_sub(MAX_LOG_LINES);
-    if log_lines1.len() > MAX_LOG_LINES {
-        lines.push(Line::from(Span::styled(
-            format!("  ... ({} lines truncated)", log_lines1.len() - MAX_LOG_LINES),
-            Style::default().fg(t.warning),
-        )));
-    }
-    for log_line in &log_lines1[start1..] {
-        lines.push(Line::from(Span::styled(format!("  {log_line}"), Style::default().fg(t.muted))));
-    }
+    append_truncated_log(lines, &diff.result1.solver_log, MAX_LOG_LINES, t);
 
     lines.push(Line::from(""));
 
-    // File 2 log — single-pass: collect then slice.
+    // File 2 log — iterator skip/take to avoid per-frame Vec.
     lines.push(Line::from(Span::styled(
         format!("  \u{2500}\u{2500} File 2: {} \u{2500}{RULE_30}", diff.file2_label),
         Style::default().fg(t.muted).add_modifier(Modifier::BOLD),
     )));
+    append_truncated_log(lines, &diff.result2.solver_log, MAX_LOG_LINES, t);
+}
 
-    let log_lines2: Vec<&str> = diff.result2.solver_log.lines().collect();
-    let start2 = log_lines2.len().saturating_sub(MAX_LOG_LINES);
-    if log_lines2.len() > MAX_LOG_LINES {
-        lines.push(Line::from(Span::styled(
-            format!("  ... ({} lines truncated)", log_lines2.len() - MAX_LOG_LINES),
-            Style::default().fg(t.warning),
-        )));
+/// Append the last `max_lines` of a log string to the output, with a truncation notice if needed.
+fn append_truncated_log(lines: &mut Vec<Line<'static>>, log: &str, max_lines: usize, t: &crate::theme::Theme) {
+    let total = log.lines().count();
+    let skip = total.saturating_sub(max_lines);
+
+    if total > max_lines {
+        lines.push(Line::from(Span::styled(format!("  ... ({} lines truncated)", total - max_lines), Style::default().fg(t.warning))));
     }
-    for log_line in &log_lines2[start2..] {
+
+    for log_line in log.lines().skip(skip) {
         lines.push(Line::from(Span::styled(format!("  {log_line}"), Style::default().fg(t.muted))));
     }
 }

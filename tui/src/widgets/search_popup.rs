@@ -12,7 +12,7 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState};
 
-use crate::app::{App, HaystackEntry};
+use crate::app::App;
 use crate::search;
 use crate::state::{SearchResult, Section};
 use crate::theme::theme;
@@ -58,7 +58,7 @@ pub fn draw_search_popup(frame: &mut Frame, area: Rect, app: &App) {
     ])
     .split(v_chunks[1]);
 
-    draw_results_list(frame, h_chunks[0], &app.search_popup.results, &app.search_haystack, app.search_popup.selected);
+    draw_results_list(frame, h_chunks[0], &app.search_popup.results, &app.search_name_buffer, app.search_popup.selected);
     draw_detail_preview(frame, h_chunks[1], app);
 
     // Bottom bar: hints
@@ -95,7 +95,7 @@ fn draw_search_input(frame: &mut Frame, area: Rect, query: &str, mode_label: &st
 }
 
 /// Draw the ranked results list on the left side.
-fn draw_results_list(frame: &mut Frame, area: Rect, results: &[SearchResult], haystack: &[HaystackEntry], selected: usize) {
+fn draw_results_list(frame: &mut Frame, area: Rect, results: &[SearchResult], names: &[String], selected: usize) {
     let t = theme();
     let items: Vec<ListItem> = results
         .iter()
@@ -104,9 +104,9 @@ fn draw_results_list(frame: &mut Frame, area: Rect, results: &[SearchResult], ha
             let prefix = kind_prefix(r.kind);
             let style = kind_style(r.kind);
 
-            // Resolve name from haystack.
-            debug_assert!(r.haystack_index < haystack.len(), "haystack_index {} out of bounds (len {})", r.haystack_index, haystack.len());
-            let name = &haystack[r.haystack_index].name;
+            // Resolve name from the name buffer.
+            debug_assert!(r.haystack_index < names.len(), "haystack_index {} out of bounds (len {})", r.haystack_index, names.len());
+            let name = &names[r.haystack_index];
 
             // Build name with match highlighting.
             let name_spans = build_highlighted_name(name, &r.match_indices, style);
