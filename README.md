@@ -6,6 +6,47 @@
 [![PyPI version](https://badge.fury.io/py/parse-lp.svg)](https://badge.fury.io/py/parse-lp)
 [![PyPI Downloads](https://static.pepy.tech/personalized-badge/parse-lp?period=total&units=NONE&left_color=BLACK&right_color=GREEN&left_text=downloads)](https://pepy.tech/projects/parse-lp)
 
+## Interactive TUI Diff Viewer (`lp_diff`)
+
+An interactive terminal-based diff viewer for LP files, built with [ratatui](https://ratatui.rs). Compare two LP files with coefficient-level detail, fuzzy search, filtering, and integrated solving via [HiGHS](https://highs.dev).
+
+### Install
+
+```bash
+# From a cloned repo
+git clone https://github.com/dandxy89/lp_parser_rs.git
+cd lp_parser_rs
+cargo install --path tui
+
+# Or directly from GitHub
+cargo install --git https://github.com/dandxy89/lp_parser_rs.git --path tui
+```
+
+### Quick Start
+
+```bash
+lp_diff base.lp modified.lp
+```
+
+For a non interactive summary:
+
+```bash
+lp_diff base.lp modified.lp --summary
+```
+
+### Features
+
+- **Three-panel layout** — section selector, name list, and detail panel with coefficient-level side-by-side diffs
+- **Four sections** — Summary, Variables, Constraints, and Objectives
+- **Filtering** — show all (`a`), added (`+`), removed (`-`), or modified (`m`) entries
+- **Telescope-style search** — fuzzy (default), regex (`r:`), or substring (`s:`) across all sections
+- **HiGHS solver** — press `S` to solve either or both files and compare results
+- **Vim-style navigation** — `j`/`k`, `g`/`G`, `Ctrl+d`/`Ctrl+u`, jumplist (`Ctrl+o`/`Ctrl+i`)
+- **Clipboard & export** — yank names/details (`y`/`Y`), write solve diffs to CSV (`w`)
+- **Built-in help** — press `?` for full keybindings reference
+
+See [`tui/README.md`](tui/README.md) for the complete keybindings reference and detailed documentation.
+
 ## Overview
 
 A robust Rust library for parsing, modifying, and writing Linear Programming (LP) files. Built on the [LALRPOP](https://github.com/lalrpop/lalrpop) parser generator, this crate provides comprehensive support for the LP file format with the ability to parse, programmatically modify, and regenerate LP files according to major industry specifications.
