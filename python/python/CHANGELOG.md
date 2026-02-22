@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.3.0](https://github.com/dandxy89/lp_parser_rs/compare/parse_lp-v3.2.0...parse_lp-v3.3.0) (2026-02-22)
+
+
+### Features
+
+* Adding a dedicated TUI for solving, viewing and comparing LP files ([#160](https://github.com/dandxy89/lp_parser_rs/issues/160)) ([8b6c455](https://github.com/dandxy89/lp_parser_rs/commit/8b6c455133f4bc226796fd166d577d57e8b26871))
+
 ## [3.2.0](https://github.com/dandxy89/lp_parser_rs/compare/parse_lp-v3.1.0...parse_lp-v3.2.0) (2026-02-12)
 
 

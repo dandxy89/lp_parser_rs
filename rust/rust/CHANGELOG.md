@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.2.0](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v3.1.1...lp_parser_rs-v3.2.0) (2026-02-22)
+
+
+### Miscellaneous Chores
+
+* **deps:** bump the cargo-dependencies group with 2 updates ([#158](https://github.com/dandxy89/lp_parser_rs/issues/158)) ([5ef1efd](https://github.com/dandxy89/lp_parser_rs/commit/5ef1efd784a8c8419d871ccf3ad8e37049cfde6a))
+
+
+### Features
+
+* Adding a dedicated TUI for solving, viewing and comparing LP files ([#160](https://github.com/dandxy89/lp_parser_rs/issues/160)) ([8b6c455](https://github.com/dandxy89/lp_parser_rs/commit/8b6c455133f4bc226796fd166d577d57e8b26871))
+
 ## [3.1.1](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v3.1.0...lp_parser_rs-v3.1.1) (2026-02-12)
 
 
