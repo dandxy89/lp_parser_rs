@@ -49,6 +49,7 @@ lalrpop = { version = "0.23.0" }
 [dev-dependencies]
 insta = { version = "1.46.3", features = ["yaml", "redactions"] }
 serde_json = "1.0.149"
+test-case = "3.3.1"
 
 [features]
 csv = ["dep:csv"]
