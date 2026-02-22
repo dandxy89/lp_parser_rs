@@ -2,19 +2,16 @@
 source: rust/tests/test_from_file.rs
 expression: parsed
 ---
-name: ~
 sense: Minimize
 objectives:
-  obj:
-    name: obj
+  - name: obj
     coefficients:
       - name: x
         value: 1
       - name: y
         value: 10
 constraints:
-  r01:
-    type: Standard
+  - type: Standard
     name: r01
     coefficients:
       - name: x
@@ -24,12 +21,9 @@ constraints:
     operator: GTE
     rhs: 1
 variables:
-  x:
-    name: x
+  - name: x
     var_type: Binary
-  y:
-    name: y
+  - name: y
     var_type: Binary
-  z:
-    name: z
+  - name: z
     var_type: Binary

@@ -8,50 +8,91 @@ use std::fmt::{Display, Formatter, Result as FmtResult};
 
 use logos::Logos;
 
-use crate::model::{Coefficient, ComparisonOp, Constraint, SOSType, Sense, VariableType};
+use crate::model::{ComparisonOp, SOSType, Sense, VariableType};
 
 /// Lexer error type
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct LexerError;
 
-/// Helper enum for parsing SOS entries in the grammar
+// === Raw intermediate types ===
+//
+// These types are produced by the LALRPOP grammar during parsing and use
+// `&'input str` for zero-copy name references. They are converted to the
+// final interned model types in `problem.rs`.
+
+/// Raw coefficient produced by the grammar (zero-copy).
 #[derive(Debug, Clone, PartialEq)]
-pub enum SosEntryKind<'input> {
-    /// SOS constraint header: name and type
-    Header(&'input str, SOSType),
-    /// SOS weight: variable and weight value
-    Weight(Coefficient<'input>),
+pub struct RawCoefficient<'input> {
+    /// Variable name as a borrowed slice from the input.
+    pub name: &'input str,
+    /// The coefficient value.
+    pub value: f64,
 }
 
-/// Helper enum for constraint continuation parsing
+/// Raw constraint produced by the grammar (zero-copy).
+#[derive(Debug, Clone, PartialEq)]
+pub enum RawConstraint<'input> {
+    /// A standard linear constraint.
+    Standard {
+        name: Cow<'input, str>,
+        coefficients: Vec<RawCoefficient<'input>>,
+        operator: ComparisonOp,
+        rhs: f64,
+        byte_offset: Option<usize>,
+    },
+    /// A special ordered set constraint.
+    SOS { name: Cow<'input, str>, sos_type: SOSType, weights: Vec<RawCoefficient<'input>>, byte_offset: Option<usize> },
+}
+
+/// Raw objective produced by the grammar (zero-copy).
+#[derive(Debug, Clone, PartialEq)]
+pub struct RawObjective<'input> {
+    /// Objective name (may be a sentinel like `"__obj__"` if unnamed).
+    pub name: Cow<'input, str>,
+    /// Coefficients of the objective function.
+    pub coefficients: Vec<RawCoefficient<'input>>,
+}
+
+/// Helper enum for parsing SOS entries in the grammar.
+#[derive(Debug, Clone, PartialEq)]
+pub enum SosEntryKind<'input> {
+    /// SOS constraint header: name, type, and byte offset.
+    Header(&'input str, SOSType, usize),
+    /// SOS weight: variable and weight value.
+    Weight(RawCoefficient<'input>),
+}
+
+/// Helper enum for constraint continuation parsing.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ConstraintCont<'input> {
-    /// Named constraint: the leading identifier was the constraint name
-    Named(Vec<Coefficient<'input>>, ComparisonOp, f64),
-    /// Unnamed constraint: the leading identifier was the first variable
-    Unnamed(Vec<(f64, Coefficient<'input>)>, ComparisonOp, f64),
+    /// Named constraint: the leading identifier was the constraint name.
+    Named(Vec<RawCoefficient<'input>>, ComparisonOp, f64),
+    /// Unnamed constraint: the leading identifier was the first variable.
+    Unnamed(Vec<(f64, RawCoefficient<'input>)>, ComparisonOp, f64),
 }
 
 impl<'input> ConstraintCont<'input> {
-    /// Convert to a Constraint, using the given identifier as either name or first variable
+    /// Convert to a `RawConstraint`, using the given identifier as either name or first variable.
+    ///
+    /// `byte_offset` is the position of the constraint in the source text.
     #[must_use]
-    pub fn into_constraint(self, id: &'input str) -> Constraint<'input> {
+    pub fn into_constraint(self, id: &'input str, byte_offset: Option<usize>) -> RawConstraint<'input> {
         match self {
             ConstraintCont::Named(coeffs, op, rhs) => {
-                Constraint::Standard { name: Cow::Borrowed(id), coefficients: coeffs, operator: op, rhs }
+                RawConstraint::Standard { name: Cow::Borrowed(id), coefficients: coeffs, operator: op, rhs, byte_offset }
             }
             ConstraintCont::Unnamed(rest, op, rhs) => {
-                let mut coeffs = vec![Coefficient { name: id, value: 1.0 }];
+                let mut coeffs = vec![RawCoefficient { name: id, value: 1.0 }];
                 for (s, c) in rest {
-                    coeffs.push(Coefficient { name: c.name, value: s * c.value });
+                    coeffs.push(RawCoefficient { name: c.name, value: s * c.value });
                 }
-                Constraint::Standard { name: Cow::Borrowed("__c__"), coefficients: coeffs, operator: op, rhs }
+                RawConstraint::Standard { name: Cow::Borrowed("__c__"), coefficients: coeffs, operator: op, rhs, byte_offset }
             }
         }
     }
 }
 
-/// Helper enum for optional sections that can appear in any order
+/// Helper enum for optional sections that can appear in any order.
 #[derive(Debug, Clone, PartialEq)]
 pub enum OptionalSection<'input> {
     Bounds(Vec<(&'input str, VariableType)>),
@@ -59,7 +100,30 @@ pub enum OptionalSection<'input> {
     Integers(Vec<&'input str>),
     Binaries(Vec<&'input str>),
     SemiContinuous(Vec<&'input str>),
-    SOS(Vec<Constraint<'input>>),
+    SOS(Vec<RawConstraint<'input>>),
+}
+
+/// Structured result from the LALRPOP parser, replacing the previous 9-tuple.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ParseResult<'input> {
+    /// Optimisation sense (minimise/maximise).
+    pub sense: Sense,
+    /// Raw objectives from the grammar.
+    pub objectives: Vec<RawObjective<'input>>,
+    /// Raw constraints from the grammar.
+    pub constraints: Vec<RawConstraint<'input>>,
+    /// Variable bounds declarations.
+    pub bounds: Vec<(&'input str, VariableType)>,
+    /// General variable names.
+    pub generals: Vec<&'input str>,
+    /// Integer variable names.
+    pub integers: Vec<&'input str>,
+    /// Binary variable names.
+    pub binaries: Vec<&'input str>,
+    /// Semi-continuous variable names.
+    pub semi_continuous: Vec<&'input str>,
+    /// Raw SOS constraints.
+    pub sos: Vec<RawConstraint<'input>>,
 }
 
 impl Display for LexerError {
@@ -188,12 +252,19 @@ pub enum Token<'input> {
     // === Identifiers ===
     /// Variable/constraint name identifier
     /// Allowed characters: alphanumeric and !#$%&()_,.;?@\{}~'
-    #[regex(r"[a-zA-Z_!#$%&(),.;?@\\{}~'][a-zA-Z0-9_!#$%&(),.;?@\\{}~']*", |lex| lex.slice(), priority = 5)]
+    #[regex(r"[a-zA-Z_!#$%&(),.;?@\\{}~']([a-zA-Z0-9_!#$%&(),.;?@\\{}~'|>]|-[a-zA-Z0-9_!#$%&(),.;?@\\{}~'|>])*", |lex| lex.slice(), priority = 5)]
     Identifier(&'input str),
 }
 
+#[allow(clippy::unnecessary_wraps)] // logos callback signature requires Option return
 fn parse_number<'input>(lex: &logos::Lexer<'input, Token<'input>>) -> Option<f64> {
-    lex.slice().parse().ok()
+    let slice = lex.slice();
+    let value = slice.parse::<f64>().unwrap_or_else(|_| {
+        debug_assert!(false, "Logos regex matched '{slice}' but f64 parse failed - regex and parser are out of sync");
+        f64::NAN
+    });
+    debug_assert!(value.is_finite() || value == 0.0, "parse_number produced non-finite value from '{slice}': {value}");
+    Some(value)
 }
 
 impl Token<'_> {

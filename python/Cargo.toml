@@ -1,9 +1,9 @@
 [package]
 name = "parse_lp"
 version = "3.2.0"
-edition = "2021"
+edition = "2024"
 authors = ["Dan Dixey", "Dan Dixey <dan@functorml.co.uk>"]
-rust-version = "1.74.0"
+rust-version = "1.85.0"
 license = "MIT OR Apache-2.0"
 description = "A Rust parser for the LP file format."
 keywords = [
@@ -22,7 +22,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 lp_parser_rs = { path = "../rust", features = ["csv", "diff", "serde"] }
-pyo3 = { version = "0.28.0", features = [
+pyo3 = { version = "0.28.2", features = [
     "extension-module",
     "abi3",
     "abi3-py39",

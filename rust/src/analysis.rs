@@ -258,7 +258,25 @@ pub struct RangeStats {
 }
 
 impl RangeStats {
+    /// Create a new empty `RangeStats` ready for incremental updates.
+    const fn new() -> Self {
+        Self { min: f64::INFINITY, max: f64::NEG_INFINITY, count: 0 }
+    }
+
+    /// Update the stats with a single value, avoiding intermediate allocations.
+    const fn update(&mut self, value: f64) {
+        self.min = self.min.min(value);
+        self.max = self.max.max(value);
+        self.count += 1;
+    }
+
+    /// Finalise the stats, normalising the sentinel values for empty sets.
+    fn finalise(self) -> Self {
+        if self.count == 0 { Self::default() } else { self }
+    }
+
     /// Create range stats from a collection of values.
+    #[cfg(test)]
     fn from_values(values: &[f64]) -> Self {
         if values.is_empty() {
             return Self::default();
@@ -447,7 +465,77 @@ impl Display for ProblemAnalysis {
     }
 }
 
-impl LpProblem<'_> {
+/// Collect coefficient statistics from a slice of coefficients, classifying
+/// each as normal, large, or small based on the analysis configuration.
+#[allow(clippy::too_many_arguments)]
+fn collect_coeff_stats(
+    coefficients: &[crate::model::Coefficient],
+    location_name: &str,
+    is_objective: bool,
+    config: &AnalysisConfig,
+    range: &mut RangeStats,
+    large: &mut Vec<CoefficientLocation>,
+    small: &mut Vec<CoefficientLocation>,
+    interner: &crate::interner::NameInterner,
+) {
+    for coeff in coefficients {
+        let abs_value = coeff.value.abs();
+        range.update(abs_value);
+
+        if abs_value > config.large_coefficient_threshold {
+            large.push(CoefficientLocation {
+                location: location_name.to_string(),
+                is_objective,
+                variable: interner.resolve(coeff.name).to_string(),
+                value: coeff.value,
+            });
+        } else if abs_value > 0.0 && abs_value < config.small_coefficient_threshold {
+            small.push(CoefficientLocation {
+                location: location_name.to_string(),
+                is_objective,
+                variable: interner.resolve(coeff.name).to_string(),
+                value: coeff.value,
+            });
+        }
+    }
+}
+
+/// Compute the ratio of max to min absolute coefficient across all coefficients.
+fn compute_coefficient_ratio(constraint_range: &RangeStats, objective_range: &RangeStats) -> f64 {
+    // Combine the two ranges to find global min/max of positive abs values.
+    let has_values = constraint_range.count > 0 || objective_range.count > 0;
+
+    if !has_values {
+        return 1.0;
+    }
+
+    // Both ranges track abs values, so min is the smallest positive and max is the largest.
+    let mut global_min = f64::INFINITY;
+    let mut global_max: f64 = 0.0;
+    let mut has_positive = false;
+
+    for range in [constraint_range, objective_range] {
+        if range.count > 0 && range.max > 0.0 {
+            has_positive = true;
+            // range.min could be 0.0 (abs of a zero coeff); skip zeros for ratio.
+            if range.min > 0.0 && range.min < global_min {
+                global_min = range.min;
+            }
+            if range.max > global_max {
+                global_max = range.max;
+            }
+        }
+    }
+
+    let ratio = if has_positive && global_min > 0.0 && global_min < f64::INFINITY { global_max / global_min } else { 1.0 };
+    debug_assert!(
+        !has_positive || ratio >= 1.0 || global_min == f64::INFINITY,
+        "postcondition: coefficient_ratio must be >= 1.0 when coefficients exist, got: {ratio}"
+    );
+    ratio
+}
+
+impl LpProblem {
     /// Perform comprehensive analysis on the LP problem with default configuration.
     #[must_use]
     pub fn analyze(&self) -> ProblemAnalysis {
@@ -473,6 +561,7 @@ impl LpProblem<'_> {
         let constraint_count = self.constraint_count();
         let variable_count = self.variable_count();
 
+        #[allow(clippy::cast_precision_loss)]
         let density = if constraint_count > 0 && variable_count > 0 {
             total_nonzeros as f64 / (constraint_count as f64 * variable_count as f64)
         } else {
@@ -505,34 +594,31 @@ impl LpProblem<'_> {
 
     /// Compute sparsity metrics.
     fn compute_sparsity_metrics(&self) -> SparsityMetrics {
-        let mut vars_per_constraint: Vec<usize> = Vec::new();
-
-        for constraint in self.constraints.values() {
-            let var_count = match constraint {
+        let (min_v, max_v) = self.constraints.values().fold((usize::MAX, 0usize), |(min_v, max_v), c| {
+            let n = match c {
                 Constraint::Standard { coefficients, .. } => coefficients.len(),
                 Constraint::SOS { weights, .. } => weights.len(),
             };
-            vars_per_constraint.push(var_count);
-        }
-
-        SparsityMetrics {
-            min_vars_per_constraint: vars_per_constraint.iter().copied().min().unwrap_or(0),
-            max_vars_per_constraint: vars_per_constraint.iter().copied().max().unwrap_or(0),
-        }
+            (min_v.min(n), max_v.max(n))
+        });
+        SparsityMetrics { min_vars_per_constraint: if min_v == usize::MAX { 0 } else { min_v }, max_vars_per_constraint: max_v }
     }
 
     /// Analyze variables.
     fn analyze_variables(&self) -> VariableAnalysis {
+        use crate::interner::NameId;
+
         let mut type_distribution = VariableTypeDistribution::default();
         let mut free_variables = Vec::new();
         let mut fixed_variables = Vec::new();
         let mut invalid_bounds = Vec::new();
 
-        for (name, variable) in &self.variables {
+        for (name_id, variable) in &self.variables {
+            let name_str = self.interner.resolve(*name_id);
             match &variable.var_type {
                 VariableType::Free => {
                     type_distribution.free += 1;
-                    free_variables.push((*name).to_string());
+                    free_variables.push(name_str.to_string());
                 }
                 VariableType::General => type_distribution.general += 1,
                 VariableType::LowerBound(_) => type_distribution.lower_bounded += 1,
@@ -540,9 +626,9 @@ impl LpProblem<'_> {
                 VariableType::DoubleBound(lower, upper) => {
                     type_distribution.double_bounded += 1;
                     if (lower - upper).abs() < f64::EPSILON {
-                        fixed_variables.push(FixedVariable { name: (*name).to_string(), value: *lower });
+                        fixed_variables.push(FixedVariable { name: name_str.to_string(), value: *lower });
                     } else if lower > upper {
-                        invalid_bounds.push(InvalidBound { name: (*name).to_string(), lower: *lower, upper: *upper });
+                        invalid_bounds.push(InvalidBound { name: name_str.to_string(), lower: *lower, upper: *upper });
                     }
                 }
                 VariableType::Binary => type_distribution.binary += 1,
@@ -553,7 +639,7 @@ impl LpProblem<'_> {
         }
 
         // Find unused variables
-        let mut used_variables: HashSet<&str> = HashSet::new();
+        let mut used_variables: HashSet<NameId> = HashSet::new();
 
         for objective in self.objectives.values() {
             for coeff in &objective.coefficients {
@@ -576,8 +662,12 @@ impl LpProblem<'_> {
             }
         }
 
-        let unused_variables: Vec<String> =
-            self.variables.keys().filter(|name| !used_variables.contains(*name)).map(|s| (*s).to_string()).collect();
+        let unused_variables: Vec<String> = self
+            .variables
+            .keys()
+            .filter(|name_id| !used_variables.contains(name_id))
+            .map(|id| self.interner.resolve(*id).to_string())
+            .collect();
 
         let discrete_variable_count = type_distribution.binary + type_distribution.integer;
 
@@ -603,10 +693,11 @@ impl LpProblem<'_> {
         let mut type_distribution = ConstraintTypeDistribution::default();
         let mut empty_constraints = Vec::new();
         let mut singleton_constraints = Vec::new();
-        let mut rhs_values = Vec::new();
+        let mut rhs_range = RangeStats::new();
         let mut sos_summary = SOSSummary::default();
 
-        for (name, constraint) in &self.constraints {
+        for (name_id, constraint) in &self.constraints {
+            let name_str = self.interner.resolve(*name_id);
             match constraint {
                 Constraint::Standard { coefficients, operator, rhs, .. } => {
                     match operator {
@@ -617,15 +708,15 @@ impl LpProblem<'_> {
                         ComparisonOp::GT => type_distribution.greater_than += 1,
                     }
 
-                    rhs_values.push(*rhs);
+                    rhs_range.update(*rhs);
 
                     if coefficients.is_empty() {
-                        empty_constraints.push(name.to_string());
+                        empty_constraints.push(name_str.to_string());
                     } else if coefficients.len() == 1 {
                         let coeff = &coefficients[0];
                         singleton_constraints.push(SingletonConstraint {
-                            name: name.to_string(),
-                            variable: coeff.name.to_string(),
+                            name: name_str.to_string(),
+                            variable: self.interner.resolve(coeff.name).to_string(),
                             coefficient: coeff.value,
                             operator: operator.to_string(),
                             rhs: *rhs,
@@ -648,97 +739,55 @@ impl LpProblem<'_> {
             }
         }
 
-        ConstraintAnalysis {
-            type_distribution,
-            empty_constraints,
-            singleton_constraints,
-            rhs_range: RangeStats::from_values(&rhs_values),
-            sos_summary,
-        }
+        ConstraintAnalysis { type_distribution, empty_constraints, singleton_constraints, rhs_range: rhs_range.finalise(), sos_summary }
     }
 
     /// Analyze coefficients.
     fn analyze_coefficients(&self, config: &AnalysisConfig) -> CoefficientAnalysis {
-        let mut constraint_coeffs = Vec::new();
-        let mut objective_coeffs = Vec::new();
+        let mut constraint_range = RangeStats::new();
+        let mut objective_range = RangeStats::new();
         let mut large_coefficients = Vec::new();
         let mut small_coefficients = Vec::new();
 
-        // Collect constraint coefficients
-        for (name, constraint) in &self.constraints {
+        for (name_id, constraint) in &self.constraints {
             if let Constraint::Standard { coefficients, .. } = constraint {
-                for coeff in coefficients {
-                    let abs_value = coeff.value.abs();
-                    constraint_coeffs.push(abs_value);
-
-                    if abs_value > config.large_coefficient_threshold {
-                        large_coefficients.push(CoefficientLocation {
-                            location: name.to_string(),
-                            is_objective: false,
-                            variable: coeff.name.to_string(),
-                            value: coeff.value,
-                        });
-                    } else if abs_value > 0.0 && abs_value < config.small_coefficient_threshold {
-                        small_coefficients.push(CoefficientLocation {
-                            location: name.to_string(),
-                            is_objective: false,
-                            variable: coeff.name.to_string(),
-                            value: coeff.value,
-                        });
-                    }
-                }
+                let name_str = self.interner.resolve(*name_id);
+                collect_coeff_stats(
+                    coefficients,
+                    name_str,
+                    false,
+                    config,
+                    &mut constraint_range,
+                    &mut large_coefficients,
+                    &mut small_coefficients,
+                    &self.interner,
+                );
             }
         }
 
-        // Collect objective coefficients
-        for (name, objective) in &self.objectives {
-            for coeff in &objective.coefficients {
-                let abs_value = coeff.value.abs();
-                objective_coeffs.push(abs_value);
-
-                if abs_value > config.large_coefficient_threshold {
-                    large_coefficients.push(CoefficientLocation {
-                        location: name.to_string(),
-                        is_objective: true,
-                        variable: coeff.name.to_string(),
-                        value: coeff.value,
-                    });
-                } else if abs_value > 0.0 && abs_value < config.small_coefficient_threshold {
-                    small_coefficients.push(CoefficientLocation {
-                        location: name.to_string(),
-                        is_objective: true,
-                        variable: coeff.name.to_string(),
-                        value: coeff.value,
-                    });
-                }
-            }
+        for (name_id, objective) in &self.objectives {
+            let name_str = self.interner.resolve(*name_id);
+            collect_coeff_stats(
+                &objective.coefficients,
+                name_str,
+                true,
+                config,
+                &mut objective_range,
+                &mut large_coefficients,
+                &mut small_coefficients,
+                &self.interner,
+            );
         }
 
-        // Calculate coefficient ratio
-        let all_coeffs: Vec<f64> = constraint_coeffs.iter().chain(objective_coeffs.iter()).copied().filter(|v| *v > 0.0).collect();
-        let coefficient_ratio = if all_coeffs.is_empty() {
-            1.0
-        } else {
-            let min = all_coeffs.iter().copied().fold(f64::INFINITY, f64::min);
-            let max = all_coeffs.iter().copied().fold(0.0, f64::max);
-            if min > 0.0 { max / min } else { 1.0 }
-        };
+        let constraint_coeff_range = constraint_range.finalise();
+        let objective_coeff_range = objective_range.finalise();
+        let coefficient_ratio = compute_coefficient_ratio(&constraint_coeff_range, &objective_coeff_range);
 
-        debug_assert!(
-            all_coeffs.is_empty() || coefficient_ratio >= 1.0,
-            "postcondition: coefficient_ratio must be >= 1.0 when coefficients exist, got: {coefficient_ratio}"
-        );
-
-        CoefficientAnalysis {
-            constraint_coeff_range: RangeStats::from_values(&constraint_coeffs),
-            objective_coeff_range: RangeStats::from_values(&objective_coeffs),
-            large_coefficients,
-            small_coefficients,
-            coefficient_ratio,
-        }
+        CoefficientAnalysis { constraint_coeff_range, objective_coeff_range, large_coefficients, small_coefficients, coefficient_ratio }
     }
 
     /// Detect issues and generate warnings.
+    #[allow(clippy::unused_self)]
     fn detect_issues(
         &self,
         summary: &ProblemSummary,
@@ -865,6 +914,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::float_cmp)]
     fn test_range_stats_single() {
         let stats = RangeStats::from_values(&[5.0]);
         assert_eq!(stats.count, 1);
@@ -873,6 +923,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::float_cmp)]
     fn test_range_stats_multiple() {
         let stats = RangeStats::from_values(&[1.0, 2.0, 3.0, 4.0, 5.0]);
         assert_eq!(stats.count, 5);
@@ -908,6 +959,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::float_cmp)]
     fn test_default_config() {
         let config = AnalysisConfig::default();
         assert_eq!(config.large_coefficient_threshold, 1e9);

@@ -2,11 +2,9 @@
 source: rust/tests/test_from_file.rs
 expression: parsed
 ---
-name: ~
 sense: Maximize
 objectives:
-  cost:
-    name: cost
+  - name: cost
     coefficients:
       - name: x
         value: -2
@@ -15,8 +13,7 @@ objectives:
       - name: z
         value: 4
 constraints:
-  cons:
-    type: Standard
+  - type: Standard
     name: cons
     coefficients:
       - name: x
@@ -28,15 +25,12 @@ constraints:
     operator: LTE
     rhs: 120
 variables:
-  x:
-    name: x
+  - name: x
     var_type: Free
-  y:
-    name: y
+  - name: y
     var_type:
       DoubleBound:
         - 10
         - 12
-  z:
-    name: z
+  - name: z
     var_type: Binary

@@ -8,7 +8,6 @@
     clippy::unnecessary_wraps
 )]
 
-use std::borrow::Cow;
 use std::path::{Path, PathBuf};
 
 use lp_parser_rs::csv::LpCsvWriter as _;
@@ -73,12 +72,7 @@ impl LpParser {
         let problem = self.get_problem()?;
         Ok(problem.name.map(|n| {
             // Remove "Problem name: " prefix if present
-            let name_str = n.to_string();
-            if name_str.starts_with("Problem name: ") {
-                name_str.strip_prefix("Problem name: ").unwrap_or(&name_str).to_string()
-            } else {
-                name_str
-            }
+            if n.starts_with("Problem name: ") { n.strip_prefix("Problem name: ").unwrap_or(&n).to_string() } else { n }
         }))
     }
 
@@ -96,14 +90,14 @@ impl LpParser {
         let problem = self.get_problem()?;
         let list = PyList::empty(py);
 
-        for obj in problem.objectives.values() {
+        for (name_id, obj) in &problem.objectives {
             let dict = PyDict::new(py);
-            dict.set_item("name", obj.name.as_ref())?;
+            dict.set_item("name", problem.resolve(*name_id))?;
 
             let coeffs = PyList::empty(py);
             for coef in &obj.coefficients {
                 let coef_dict = PyDict::new(py);
-                coef_dict.set_item("name", coef.name)?;
+                coef_dict.set_item("name", problem.resolve(coef.name))?;
                 coef_dict.set_item("value", coef.value)?;
                 coeffs.append(coef_dict)?;
             }
@@ -119,9 +113,9 @@ impl LpParser {
         let problem = self.get_problem()?;
         let list = PyList::empty(py);
 
-        for (name, constraint) in &problem.constraints {
+        for (name_id, constraint) in &problem.constraints {
             let dict = PyDict::new(py);
-            dict.set_item("name", name.as_ref())?;
+            dict.set_item("name", problem.resolve(*name_id))?;
 
             match constraint {
                 Constraint::Standard { coefficients, operator, rhs, .. } => {
@@ -130,7 +124,7 @@ impl LpParser {
                     let coeffs = PyList::empty(py);
                     for coef in coefficients {
                         let coef_dict = PyDict::new(py);
-                        coef_dict.set_item("name", coef.name)?;
+                        coef_dict.set_item("name", problem.resolve(coef.name))?;
                         coef_dict.set_item("value", coef.value)?;
                         coeffs.append(coef_dict)?;
                     }
@@ -145,7 +139,7 @@ impl LpParser {
                     let weights_list = PyList::empty(py);
                     for weight in weights {
                         let weight_dict = PyDict::new(py);
-                        weight_dict.set_item("name", weight.name)?;
+                        weight_dict.set_item("name", problem.resolve(weight.name))?;
                         weight_dict.set_item("value", weight.value)?;
                         weights_list.append(weight_dict)?;
                     }
@@ -163,11 +157,12 @@ impl LpParser {
         let problem = self.get_problem()?;
         let dict = PyDict::new(py);
 
-        for (name, var) in &problem.variables {
+        for (name_id, var) in &problem.variables {
+            let resolved_name = problem.resolve(*name_id);
             let var_dict = PyDict::new(py);
-            var_dict.set_item("name", var.name)?;
+            var_dict.set_item("name", resolved_name)?;
             var_dict.set_item("var_type", format!("{:?}", var.var_type))?;
-            dict.set_item(name, var_dict)?;
+            dict.set_item(resolved_name, var_dict)?;
         }
 
         Ok(dict.into())
@@ -205,26 +200,30 @@ impl LpParser {
         dict.set_item("objective_count_diff", p1.objective_count() as i32 - p2.objective_count() as i32)?;
 
         // Find added/removed variables
-        let vars1 = &p1.variables;
-        let vars2 = &p2.variables;
-
         let added_vars = PyList::empty(py);
         let removed_vars = PyList::empty(py);
         let modified_vars = PyList::empty(py);
 
-        for (name, var1) in vars1 {
-            if !vars2.contains_key(name) {
-                removed_vars.append(name)?;
-            } else if let Some(var2) = vars2.get(name) {
-                if var1 != var2 {
-                    modified_vars.append(name)?;
+        for (name_id, var1) in &p1.variables {
+            let resolved_name = p1.resolve(*name_id);
+            if let Some(p2_name_id) = p2.get_name_id(resolved_name) {
+                if let Some(var2) = p2.variables.get(&p2_name_id) {
+                    if var1 != var2 {
+                        modified_vars.append(resolved_name)?;
+                    }
+                } else {
+                    removed_vars.append(resolved_name)?;
                 }
+            } else {
+                removed_vars.append(resolved_name)?;
             }
         }
 
-        for name in vars2.keys() {
-            if !vars1.contains_key(name) {
-                added_vars.append(name)?;
+        for name_id in p2.variables.keys() {
+            let resolved_name = p2.resolve(*name_id);
+            let in_p1 = p1.get_name_id(resolved_name).is_some_and(|id| p1.variables.contains_key(&id));
+            if !in_p1 {
+                added_vars.append(resolved_name)?;
             }
         }
 
@@ -233,21 +232,22 @@ impl LpParser {
         dict.set_item("modified_variables", modified_vars)?;
 
         // Find added/removed constraints
-        let constraints1 = &p1.constraints;
-        let constraints2 = &p2.constraints;
-
         let added_constraints = PyList::empty(py);
         let removed_constraints = PyList::empty(py);
 
-        for name in constraints1.keys() {
-            if !constraints2.contains_key(name) {
-                removed_constraints.append(name.as_ref())?;
+        for name_id in p1.constraints.keys() {
+            let resolved_name = p1.resolve(*name_id);
+            let in_p2 = p2.get_name_id(resolved_name).is_some_and(|id| p2.constraints.contains_key(&id));
+            if !in_p2 {
+                removed_constraints.append(resolved_name)?;
             }
         }
 
-        for name in constraints2.keys() {
-            if !constraints1.contains_key(name) {
-                added_constraints.append(name.as_ref())?;
+        for name_id in p2.constraints.keys() {
+            let resolved_name = p2.resolve(*name_id);
+            let in_p1 = p1.get_name_id(resolved_name).is_some_and(|id| p1.constraints.contains_key(&id));
+            if !in_p1 {
+                added_constraints.append(resolved_name)?;
             }
         }
 
@@ -443,7 +443,7 @@ impl LpParser {
     #[pyo3(text_signature = "($self, name)")]
     fn set_problem_name(&mut self, name: String) -> PyResult<()> {
         let mut problem = self.get_mutable_problem()?;
-        problem.name = Some(Cow::Owned(name));
+        problem.name = Some(name);
 
         let updated_content =
             write_lp_string(&problem).map_err(|err| PyRuntimeError::new_err(format!("Failed to serialize updated problem: {err}")))?;
@@ -541,20 +541,21 @@ impl LpParser {
 }
 
 impl LpParser {
-    fn get_problem(&self) -> PyResult<LpProblem<'_>> {
+    fn get_problem(&self) -> PyResult<LpProblem> {
         self.parsed_content.as_ref().map_or_else(
             || Err(PyRuntimeError::new_err("Must call parse() first")),
             |content| LpProblem::parse(content).map_err(|_| PyRuntimeError::new_err("Unable to parse LpProblem")),
         )
     }
 
-    fn get_mutable_problem(&self) -> PyResult<LpProblem<'_>> {
+    fn get_mutable_problem(&self) -> PyResult<LpProblem> {
         self.parsed_content.as_ref().map_or_else(
             || Err(PyRuntimeError::new_err("Must call parse() first")),
             |content| LpProblem::parse(content).map_err(|_| PyRuntimeError::new_err("Unable to parse LpProblem")),
         )
     }
 
+    #[allow(clippy::unused_self, clippy::too_many_lines)]
     fn analysis_to_dict(&self, py: Python, analysis: &lp_parser_rs::analysis::ProblemAnalysis) -> PyResult<Py<PyAny>> {
         let result = PyDict::new(py);
 

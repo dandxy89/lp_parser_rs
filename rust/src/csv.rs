@@ -1,4 +1,5 @@
 use std::error::Error;
+use std::fmt::Write as _;
 use std::path::Path;
 
 use crate::model::{Constraint, VariableType};
@@ -41,29 +42,41 @@ pub trait LpCsvWriter {
     }
 }
 
+/// Write an f64 into a reusable string buffer and return it as bytes.
+/// Clears the buffer before writing to avoid stale data.
 #[inline]
-fn f64_to_bytes(value: f64) -> Vec<u8> {
-    debug_assert!(value.is_finite(), "f64_to_bytes called with non-finite value: {value}");
-    format!("{value}").into_bytes()
+fn write_f64_to_buf(buf: &mut String, value: f64) -> &[u8] {
+    debug_assert!(value.is_finite(), "write_f64_to_buf called with non-finite value: {value}");
+    buf.clear();
+    write!(buf, "{value}").expect("writing f64 to String cannot fail");
+    buf.as_bytes()
 }
 
-impl LpCsvWriter for LpProblem<'_> {
+impl LpCsvWriter for LpProblem {
     fn write_constraints(&self, base_path: &Path) -> Result<(), Box<dyn Error>> {
         let headers = ["constraint_name", "constraint_type", "variable_name", "coefficient", "operator", "rhs", "sos_type"];
         let mut const_writer = csv::Writer::from_path(base_path.join("constraints.csv"))?;
         const_writer.write_record(headers)?;
-        for (name, constraint) in &self.constraints {
-            let name = name.as_bytes();
+        let mut buf_a = String::with_capacity(24);
+        let mut buf_b = String::with_capacity(24);
+        for (name_id, constraint) in &self.constraints {
+            let name = self.interner.resolve(*name_id);
+            let name_bytes = name.as_bytes();
             match constraint {
                 Constraint::Standard { coefficients, operator: op, rhs, .. } => {
                     for c in coefficients {
-                        let vals = [name, b"Standard", c.name.as_bytes(), &f64_to_bytes(c.value), op.as_ref(), &f64_to_bytes(*rhs), b""];
+                        let var_name = self.interner.resolve(c.name);
+                        let coeff_bytes = write_f64_to_buf(&mut buf_a, c.value).to_owned();
+                        let rhs_bytes = write_f64_to_buf(&mut buf_b, *rhs);
+                        let vals: [&[u8]; 7] = [name_bytes, b"Standard", var_name.as_bytes(), &coeff_bytes, op.as_ref(), rhs_bytes, b""];
                         const_writer.write_record(vals)?;
                     }
                 }
                 Constraint::SOS { sos_type, weights, .. } => {
                     for c in weights {
-                        let vals = [name, b"SOS", c.name.as_bytes(), &f64_to_bytes(c.value), b"", b"", sos_type.as_ref()];
+                        let var_name = self.interner.resolve(c.name);
+                        let vals =
+                            [name_bytes, b"SOS", var_name.as_bytes(), write_f64_to_buf(&mut buf_a, c.value), b"", b"", sos_type.as_ref()];
                         const_writer.write_record(vals)?;
                     }
                 }
@@ -77,9 +90,12 @@ impl LpCsvWriter for LpProblem<'_> {
     fn write_objectives(&self, base_path: &Path) -> Result<(), Box<dyn Error>> {
         let mut obj_writer = csv::Writer::from_path(base_path.join("objectives.csv"))?;
         obj_writer.write_record(["objective_name", "variable_name", "coefficient"])?;
-        for (name, objective) in &self.objectives {
+        let mut buf = String::with_capacity(24);
+        for (name_id, objective) in &self.objectives {
+            let name = self.interner.resolve(*name_id);
             for coef in &objective.coefficients {
-                let vals = [name.as_bytes(), coef.name.as_bytes(), &f64_to_bytes(coef.value)];
+                let var_name = self.interner.resolve(coef.name);
+                let vals = [name.as_bytes(), var_name.as_bytes(), write_f64_to_buf(&mut buf, coef.value)];
                 obj_writer.write_record(vals)?;
             }
         }
@@ -91,20 +107,28 @@ impl LpCsvWriter for LpProblem<'_> {
     fn write_variables(&self, base_path: &Path) -> Result<(), Box<dyn Error>> {
         let mut var_writer = csv::Writer::from_path(base_path.join("variables.csv"))?;
         var_writer.write_record(["variable_name", "type", "lower_bound", "upper_bound"])?;
-        for (name, var) in &self.variables {
-            let name = name.as_bytes();
+        let mut buf_a = String::with_capacity(24);
+        let mut buf_b = String::with_capacity(24);
+        for (name_id, var) in &self.variables {
+            let name = self.interner.resolve(*name_id);
+            let name_bytes = name.as_bytes();
             match var.var_type {
                 VariableType::LowerBound(lb) => {
-                    var_writer.write_record([name, var.var_type.as_ref(), &f64_to_bytes(lb), b""])?;
+                    let vals = [name_bytes, var.var_type.as_ref(), write_f64_to_buf(&mut buf_a, lb), b""];
+                    var_writer.write_record(vals)?;
                 }
                 VariableType::UpperBound(ub) => {
-                    var_writer.write_record([name, var.var_type.as_ref(), b"", &f64_to_bytes(ub)])?;
+                    let vals = [name_bytes, var.var_type.as_ref(), b"" as &[u8], write_f64_to_buf(&mut buf_a, ub)];
+                    var_writer.write_record(vals)?;
                 }
                 VariableType::DoubleBound(lb, ub) => {
-                    var_writer.write_record([name, var.var_type.as_ref(), &f64_to_bytes(lb), &f64_to_bytes(ub)])?;
+                    let lb_bytes = write_f64_to_buf(&mut buf_a, lb).to_owned();
+                    let ub_bytes = write_f64_to_buf(&mut buf_b, ub);
+                    let vals: [&[u8]; 4] = [name_bytes, var.var_type.as_ref(), &lb_bytes, ub_bytes];
+                    var_writer.write_record(vals)?;
                 }
                 _ => {
-                    var_writer.write_record([name, var.var_type.as_ref(), b"", b""])?;
+                    var_writer.write_record([name_bytes, var.var_type.as_ref(), b"", b""])?;
                 }
             }
         }

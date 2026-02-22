@@ -1,0 +1,28 @@
+[package]
+name = "lp_parser_tui"
+version = "0.1.0"
+edition = "2024"
+description = "Interactive TUI diff viewer for LP files"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/dandxy89/lp_parser_rs"
+keywords = ["lp", "parser", "tui", "diff"]
+categories = ["command-line-utilities"]
+
+[[bin]]
+name = "lp_diff"
+path = "src/main.rs"
+
+[dependencies]
+lp_parser_rs = { path = "../rust", features = ["diff", "serde"] }
+
+arboard = "3.6.1"
+chrono = "0.4.43"
+csv = "1.4.0"
+clap = { version = "4.5.60", features = ["derive"] }
+crossterm = "0.29.0"
+frizbee = "0.8.2"
+highs = "2.0.0"
+ratatui = { version = "0.30.0", default-features = false, features = ["crossterm"] }
+regex = "1.12.3"
+smallvec = "1.15.1"
+tempfile = "3.25.0"

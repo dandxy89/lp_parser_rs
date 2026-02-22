@@ -1,9 +1,8 @@
 use std::borrow::Cow;
 
-use crate::lexer::{Token, LexerError, SosEntryKind, ConstraintCont, OptionalSection};
+use crate::lexer::{Token, LexerError, RawCoefficient, RawConstraint, RawObjective, SosEntryKind, ConstraintCont, OptionalSection, ParseResult};
 use crate::model::{
-    Coefficient, ComparisonOp, Constraint, Objective,
-    Sense, SOSType, VariableType,
+    ComparisonOp, SOSType, Sense, VariableType,
 };
 
 grammar<'input>;
@@ -44,20 +43,19 @@ extern {
     }
 }
 
-pub LpProblem: (Sense, Vec<Objective<'input>>, Vec<Constraint<'input>>, Vec<(&'input str, VariableType)>, Vec<&'input str>, Vec<&'input str>, Vec<&'input str>, Vec<&'input str>, Vec<Constraint<'input>>) = {
+pub LpProblem: ParseResult<'input> = {
     <sense:"sense">
     <objectives:ObjectivesSection>
     <constraints:ConstraintsSection>
     <sections:AnySection*>
     "end"?
     => {
-        // Extract each section type from the flexible order list
         let mut bounds: Vec<(&'input str, VariableType)> = Vec::new();
         let mut generals: Vec<&'input str> = Vec::new();
         let mut integers: Vec<&'input str> = Vec::new();
         let mut binaries: Vec<&'input str> = Vec::new();
-        let mut semis: Vec<&'input str> = Vec::new();
-        let mut sos: Vec<Constraint<'input>> = Vec::new();
+        let mut semi_continuous: Vec<&'input str> = Vec::new();
+        let mut sos: Vec<RawConstraint<'input>> = Vec::new();
 
         for section in sections {
             match section {
@@ -65,12 +63,12 @@ pub LpProblem: (Sense, Vec<Objective<'input>>, Vec<Constraint<'input>>, Vec<(&'i
                 OptionalSection::Generals(g) => generals.extend(g),
                 OptionalSection::Integers(i) => integers.extend(i),
                 OptionalSection::Binaries(b) => binaries.extend(b),
-                OptionalSection::SemiContinuous(s) => semis.extend(s),
+                OptionalSection::SemiContinuous(s) => semi_continuous.extend(s),
                 OptionalSection::SOS(s) => sos.extend(s),
             }
         }
 
-        (sense, objectives, constraints, bounds, generals, integers, binaries, semis, sos)
+        ParseResult { sense, objectives, constraints, bounds, generals, integers, binaries, semi_continuous, sos }
     }
 };
 
@@ -84,30 +82,30 @@ AnySection: OptionalSection<'input> = {
     <s:SosSection> => OptionalSection::SOS(s),
 };
 
-ObjectivesSection: Vec<Objective<'input>> = {
+ObjectivesSection: Vec<RawObjective<'input>> = {
     // Starts with sign: definitely unnamed objective
     <sign:OptSign> <first:UnsignedCoeff> <rest:CoeffTail*> => {
-        let mut coeffs = vec![Coefficient { name: first.name, value: sign * first.value }];
+        let mut coeffs = vec![RawCoefficient { name: first.name, value: sign * first.value }];
         for (s, c) in rest {
-            coeffs.push(Coefficient { name: c.name, value: s * c.value });
+            coeffs.push(RawCoefficient { name: c.name, value: s * c.value });
         }
-        vec![Objective { name: Cow::Borrowed("__obj__"), coefficients: coeffs }]
+        vec![RawObjective { name: Cow::Borrowed("__obj__"), coefficients: coeffs }]
     },
     // Starts with number: definitely unnamed objective
     <num:"number"> <var:"identifier"> <rest:CoeffTail*> => {
-        let mut coeffs = vec![Coefficient { name: var, value: num }];
+        let mut coeffs = vec![RawCoefficient { name: var, value: num }];
         for (s, c) in rest {
-            coeffs.push(Coefficient { name: c.name, value: s * c.value });
+            coeffs.push(RawCoefficient { name: c.name, value: s * c.value });
         }
-        vec![Objective { name: Cow::Borrowed("__obj__"), coefficients: coeffs }]
+        vec![RawObjective { name: Cow::Borrowed("__obj__"), coefficients: coeffs }]
     },
     // Starts with infinity: definitely unnamed objective (includes sign in token)
     <inf:"infinity"> <var:"identifier"> <rest:CoeffTail*> => {
-        let mut coeffs = vec![Coefficient { name: var, value: inf }];
+        let mut coeffs = vec![RawCoefficient { name: var, value: inf }];
         for (s, c) in rest {
-            coeffs.push(Coefficient { name: c.name, value: s * c.value });
+            coeffs.push(RawCoefficient { name: c.name, value: s * c.value });
         }
-        vec![Objective { name: Cow::Borrowed("__obj__"), coefficients: coeffs }]
+        vec![RawObjective { name: Cow::Borrowed("__obj__"), coefficients: coeffs }]
     },
     // Starts with bare identifier: parse first, then decide
     <first_obj:FirstObjective> <more:NamedObjective*> => {
@@ -118,29 +116,29 @@ ObjectivesSection: Vec<Objective<'input>> = {
 };
 
 // First objective starting with identifier - uses left-factoring
-FirstObjective: Objective<'input> = {
+FirstObjective: RawObjective<'input> = {
     // identifier followed by ":" means named objective
     <name:"identifier"> ":" <coeffs:CoeffList> => {
-        Objective { name: Cow::Borrowed(name), coefficients: coeffs }
+        RawObjective { name: Cow::Borrowed(name), coefficients: coeffs }
     },
     // identifier followed by +/- or end of section means unnamed objective
     <var:"identifier"> <rest:CoeffTail*> => {
-        let mut coeffs = vec![Coefficient { name: var, value: 1.0 }];
+        let mut coeffs = vec![RawCoefficient { name: var, value: 1.0 }];
         for (s, c) in rest {
-            coeffs.push(Coefficient { name: c.name, value: s * c.value });
+            coeffs.push(RawCoefficient { name: c.name, value: s * c.value });
         }
-        Objective { name: Cow::Borrowed("__obj__"), coefficients: coeffs }
+        RawObjective { name: Cow::Borrowed("__obj__"), coefficients: coeffs }
     },
 };
 
-NamedObjective: Objective<'input> = {
+NamedObjective: RawObjective<'input> = {
     <name:"identifier"> ":" <coeffs:CoeffList> => {
-        Objective { name: Cow::Borrowed(name), coefficients: coeffs }
+        RawObjective { name: Cow::Borrowed(name), coefficients: coeffs }
     },
 };
 
 // Tail of coefficient list
-CoeffTail: (f64, Coefficient<'input>) = {
+CoeffTail: (f64, RawCoefficient<'input>) = {
     "+" <c:UnsignedCoeff> => (1.0, c),
     "-" <c:UnsignedCoeff> => (-1.0, c),
 };
@@ -151,53 +149,56 @@ OptSign: f64 = {
     "-" => -1.0,
 };
 
-ConstraintsSection: Vec<Constraint<'input>> = {
+ConstraintsSection: Vec<RawConstraint<'input>> = {
     "subject to" <constraints:ConstraintEntry*> => constraints,
 };
 
 // A constraint entry can be named or unnamed
-ConstraintEntry: Constraint<'input> = {
+ConstraintEntry: RawConstraint<'input> = {
     // Starts with sign: definitely unnamed constraint
-    <sign:OptSign> <first:UnsignedCoeff> <rest:CoeffTail*> <op:CompOp> <rhs:NumericValue> => {
-        let mut coeffs = vec![Coefficient { name: first.name, value: sign * first.value }];
+    <loc:@L> <sign:OptSign> <first:UnsignedCoeff> <rest:CoeffTail*> <op:CompOp> <rhs:NumericValue> => {
+        let mut coeffs = vec![RawCoefficient { name: first.name, value: sign * first.value }];
         for (s, c) in rest {
-            coeffs.push(Coefficient { name: c.name, value: s * c.value });
+            coeffs.push(RawCoefficient { name: c.name, value: s * c.value });
         }
-        Constraint::Standard {
+        RawConstraint::Standard {
             name: Cow::Borrowed("__c__"),
             coefficients: coeffs,
             operator: op,
             rhs: rhs,
+            byte_offset: Some(loc),
         }
     },
     // Starts with number: definitely unnamed constraint
-    <num:"number"> <var:"identifier"> <rest:CoeffTail*> <op:CompOp> <rhs:NumericValue> => {
-        let mut coeffs = vec![Coefficient { name: var, value: num }];
+    <loc:@L> <num:"number"> <var:"identifier"> <rest:CoeffTail*> <op:CompOp> <rhs:NumericValue> => {
+        let mut coeffs = vec![RawCoefficient { name: var, value: num }];
         for (s, c) in rest {
-            coeffs.push(Coefficient { name: c.name, value: s * c.value });
+            coeffs.push(RawCoefficient { name: c.name, value: s * c.value });
         }
-        Constraint::Standard {
+        RawConstraint::Standard {
             name: Cow::Borrowed("__c__"),
             coefficients: coeffs,
             operator: op,
             rhs: rhs,
+            byte_offset: Some(loc),
         }
     },
     // Starts with infinity: definitely unnamed constraint (includes sign in token)
-    <inf:"infinity"> <var:"identifier"> <rest:CoeffTail*> <op:CompOp> <rhs:NumericValue> => {
-        let mut coeffs = vec![Coefficient { name: var, value: inf }];
+    <loc:@L> <inf:"infinity"> <var:"identifier"> <rest:CoeffTail*> <op:CompOp> <rhs:NumericValue> => {
+        let mut coeffs = vec![RawCoefficient { name: var, value: inf }];
         for (s, c) in rest {
-            coeffs.push(Coefficient { name: c.name, value: s * c.value });
+            coeffs.push(RawCoefficient { name: c.name, value: s * c.value });
         }
-        Constraint::Standard {
+        RawConstraint::Standard {
             name: Cow::Borrowed("__c__"),
             coefficients: coeffs,
             operator: op,
             rhs: rhs,
+            byte_offset: Some(loc),
         }
     },
     // Starts with identifier: could be named or unnamed - use left-factoring
-    <id:"identifier"> <cont:ConstraintContinuation> => cont.into_constraint(id),
+    <loc:@L> <id:"identifier"> <cont:ConstraintContinuation> => cont.into_constraint(id, Some(loc)),
 };
 
 // Constraint continuation after initial identifier
@@ -209,30 +210,30 @@ ConstraintContinuation: ConstraintCont<'input> = {
     <rest:CoeffTail*> <op:CompOp> <rhs:NumericValue> => ConstraintCont::Unnamed(rest, op, rhs),
 };
 
-CoeffList: Vec<Coefficient<'input>> = {
+CoeffList: Vec<RawCoefficient<'input>> = {
     <c:Coeff> => vec![c],
     <mut list:CoeffList> "+" <c:UnsignedCoeff> => {
         list.push(c);
         list
     },
     <mut list:CoeffList> "-" <c:UnsignedCoeff> => {
-        list.push(Coefficient { name: c.name, value: -c.value });
+        list.push(RawCoefficient { name: c.name, value: -c.value });
         list
     },
 };
 
 // Single coefficient (optionally signed at the start)
-Coeff: Coefficient<'input> = {
+Coeff: RawCoefficient<'input> = {
     <c:UnsignedCoeff> => c,
     "+" <c:UnsignedCoeff> => c,
-    "-" <c:UnsignedCoeff> => Coefficient { name: c.name, value: -c.value },
+    "-" <c:UnsignedCoeff> => RawCoefficient { name: c.name, value: -c.value },
 };
 
 // Unsigned coefficient
-UnsignedCoeff: Coefficient<'input> = {
-    <var:"identifier"> => Coefficient { name: var, value: 1.0 },
-    <num:"number"> <var:"identifier"> => Coefficient { name: var, value: num },
-    <inf:"infinity"> <var:"identifier"> => Coefficient { name: var, value: inf },
+UnsignedCoeff: RawCoefficient<'input> = {
+    <var:"identifier"> => RawCoefficient { name: var, value: 1.0 },
+    <num:"number"> <var:"identifier"> => RawCoefficient { name: var, value: num },
+    <inf:"infinity"> <var:"identifier"> => RawCoefficient { name: var, value: inf },
 };
 
 BoundsSection: Vec<(&'input str, VariableType)> = {
@@ -286,29 +287,32 @@ SemiSection: Vec<&'input str> = {
     "semi-continuous" <vars:"identifier"*> => vars,
 };
 
-SosSection: Vec<Constraint<'input>> = {
+SosSection: Vec<RawConstraint<'input>> = {
     "sos" <entries:SosEntry*> => {
         // Group entries into constraints
         let mut constraints = Vec::new();
         let mut current_name: Option<&'input str> = None;
         let mut current_type: Option<SOSType> = None;
-        let mut current_weights: Vec<Coefficient<'input>> = Vec::new();
+        let mut current_offset: Option<usize> = None;
+        let mut current_weights: Vec<RawCoefficient<'input>> = Vec::new();
 
         for entry in entries {
             match entry {
-                SosEntryKind::Header(name, sos_type) => {
+                SosEntryKind::Header(name, sos_type, offset) => {
                     // Save previous constraint if exists
                     if let (Some(n), Some(t)) = (current_name.take(), current_type.take()) {
                         if !current_weights.is_empty() {
-                            constraints.push(Constraint::SOS {
+                            constraints.push(RawConstraint::SOS {
                                 name: Cow::Borrowed(n),
                                 sos_type: t,
                                 weights: std::mem::take(&mut current_weights),
+                                byte_offset: current_offset,
                             });
                         }
                     }
                     current_name = Some(name);
                     current_type = Some(sos_type);
+                    current_offset = Some(offset);
                 }
                 SosEntryKind::Weight(coeff) => {
                     current_weights.push(coeff);
@@ -319,10 +323,11 @@ SosSection: Vec<Constraint<'input>> = {
         // Save last constraint
         if let (Some(n), Some(t)) = (current_name, current_type) {
             if !current_weights.is_empty() {
-                constraints.push(Constraint::SOS {
+                constraints.push(RawConstraint::SOS {
                     name: Cow::Borrowed(n),
                     sos_type: t,
                     weights: current_weights,
+                    byte_offset: current_offset,
                 });
             }
         }
@@ -334,9 +339,9 @@ SosSection: Vec<Constraint<'input>> = {
 // Entry in SOS section - either a constraint header or a weight
 SosEntry: SosEntryKind<'input> = {
     // Header: "name: S1::" or "name: S2::"
-    <name:"identifier"> ":" <sos_type:"sos_type"> "::" => SosEntryKind::Header(name, sos_type),
+    <loc:@L> <name:"identifier"> ":" <sos_type:"sos_type"> "::" => SosEntryKind::Header(name, sos_type, loc),
     // Weight: "var:value"
-    <var:"identifier"> ":" <weight:NumericValue> => SosEntryKind::Weight(Coefficient { name: var, value: weight }),
+    <var:"identifier"> ":" <weight:NumericValue> => SosEntryKind::Weight(RawCoefficient { name: var, value: weight }),
 };
 
 CompOp: ComparisonOp = {

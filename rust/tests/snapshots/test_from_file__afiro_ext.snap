@@ -5,8 +5,7 @@ expression: parsed
 name: afiro_ext.mps
 sense: Minimize
 objectives:
-  OBJ1:
-    name: OBJ1
+  - name: OBJ1
     coefficients:
       - name: X02
         value: -0.4
@@ -18,8 +17,7 @@ objectives:
         value: -0.48
       - name: X39
         value: 10
-  OBJ2:
-    name: OBJ2
+  - name: OBJ2
     coefficients:
       - name: X03
         value: 1
@@ -27,8 +25,7 @@ objectives:
         value: 2.5
       - name: X08
         value: -5
-  OBJ3:
-    name: OBJ3
+  - name: OBJ3
     coefficients:
       - name: X03
         value: -10.4
@@ -36,8 +33,7 @@ objectives:
         value: -2.5
       - name: X10
         value: 2.1
-  OBJECTIV:
-    name: OBJECTIV
+  - name: OBJECTIV
     coefficients:
       - name: PBOSHNL0
         value: -0.23519
@@ -70,8 +66,7 @@ objectives:
       - name: PBOSTYO1
         value: 0.04525
 constraints:
-  R09:
-    type: Standard
+  - type: Standard
     name: R09
     coefficients:
       - name: X01
@@ -82,8 +77,7 @@ constraints:
         value: 1
     operator: EQ
     rhs: 0
-  R10:
-    type: Standard
+  - type: Standard
     name: R10
     coefficients:
       - name: X01
@@ -92,8 +86,7 @@ constraints:
         value: 1
     operator: EQ
     rhs: 0
-  R12:
-    type: Standard
+  - type: Standard
     name: R12
     coefficients:
       - name: X06
@@ -110,8 +103,7 @@ constraints:
         value: 1
     operator: EQ
     rhs: 0
-  R13:
-    type: Standard
+  - type: Standard
     name: R13
     coefficients:
       - name: X06
@@ -126,8 +118,7 @@ constraints:
         value: 1
     operator: EQ
     rhs: 0
-  R19:
-    type: Standard
+  - type: Standard
     name: R19
     coefficients:
       - name: X22
@@ -140,8 +131,7 @@ constraints:
         value: 1
     operator: EQ
     rhs: 0
-  R20:
-    type: Standard
+  - type: Standard
     name: R20
     coefficients:
       - name: X22
@@ -150,8 +140,7 @@ constraints:
         value: 1
     operator: EQ
     rhs: 0
-  R22:
-    type: Standard
+  - type: Standard
     name: R22
     coefficients:
       - name: X28
@@ -166,8 +155,7 @@ constraints:
         value: 1
     operator: EQ
     rhs: 0
-  R23:
-    type: Standard
+  - type: Standard
     name: R23
     coefficients:
       - name: X28
@@ -186,16 +174,14 @@ constraints:
         value: 1
     operator: EQ
     rhs: 44
-  X05:
-    type: Standard
+  - type: Standard
     name: X05
     coefficients:
       - name: X01
         value: 1
     operator: LTE
     rhs: 80
-  X17:
-    type: Standard
+  - type: Standard
     name: X17
     coefficients:
       - name: X06
@@ -204,8 +190,7 @@ constraints:
         value: -1
     operator: LTE
     rhs: 80
-  X18:
-    type: Standard
+  - type: Standard
     name: X18
     coefficients:
       - name: X07
@@ -214,8 +199,7 @@ constraints:
         value: -1
     operator: LTE
     rhs: 0
-  X19:
-    type: Standard
+  - type: Standard
     name: X19
     coefficients:
       - name: X08
@@ -224,8 +208,7 @@ constraints:
         value: -1
     operator: LTE
     rhs: 0
-  X20:
-    type: Standard
+  - type: Standard
     name: X20
     coefficients:
       - name: X09
@@ -234,8 +217,7 @@ constraints:
         value: -1
     operator: LTE
     rhs: 0
-  X21:
-    type: Standard
+  - type: Standard
     name: X21
     coefficients:
       - name: X02
@@ -244,16 +226,14 @@ constraints:
         value: 1.4
     operator: LTE
     rhs: 0
-  X27:
-    type: Standard
+  - type: Standard
     name: X27
     coefficients:
       - name: X22
         value: 1
     operator: LTE
     rhs: 500
-  X40:
-    type: Standard
+  - type: Standard
     name: X40
     coefficients:
       - name: X28
@@ -262,8 +242,7 @@ constraints:
         value: -1
     operator: LTE
     rhs: 500
-  X41:
-    type: Standard
+  - type: Standard
     name: X41
     coefficients:
       - name: X29
@@ -272,8 +251,7 @@ constraints:
         value: -1
     operator: LTE
     rhs: 0
-  X42:
-    type: Standard
+  - type: Standard
     name: X42
     coefficients:
       - name: X30
@@ -282,8 +260,7 @@ constraints:
         value: -1
     operator: LTE
     rhs: 0
-  X43:
-    type: Standard
+  - type: Standard
     name: X43
     coefficients:
       - name: X31
@@ -292,8 +269,7 @@ constraints:
         value: -1
     operator: LTE
     rhs: 0
-  X44:
-    type: Standard
+  - type: Standard
     name: X44
     coefficients:
       - name: X23
@@ -302,8 +278,7 @@ constraints:
         value: 1.4
     operator: LTE
     rhs: 0
-  X45:
-    type: Standard
+  - type: Standard
     name: X45
     coefficients:
       - name: X10
@@ -326,8 +301,7 @@ constraints:
         value: 2.279
     operator: LTE
     rhs: 0
-  X46:
-    type: Standard
+  - type: Standard
     name: X46
     coefficients:
       - name: X03
@@ -336,8 +310,7 @@ constraints:
         value: 0.109
     operator: LTE
     rhs: 0
-  X47:
-    type: Standard
+  - type: Standard
     name: X47
     coefficients:
       - name: X15
@@ -352,8 +325,7 @@ constraints:
         value: 0.107
     operator: LTE
     rhs: 0
-  X48:
-    type: Standard
+  - type: Standard
     name: X48
     coefficients:
       - name: X01
@@ -362,8 +334,7 @@ constraints:
         value: -1
     operator: LTE
     rhs: 0
-  X49:
-    type: Standard
+  - type: Standard
     name: X49
     coefficients:
       - name: X06
@@ -378,8 +349,7 @@ constraints:
         value: -1
     operator: LTE
     rhs: 0
-  X50:
-    type: Standard
+  - type: Standard
     name: X50
     coefficients:
       - name: X04
@@ -388,8 +358,7 @@ constraints:
         value: 1
     operator: LTE
     rhs: 310
-  X51:
-    type: Standard
+  - type: Standard
     name: X51
     coefficients:
       - name: X16
@@ -399,150 +368,103 @@ constraints:
     operator: LTE
     rhs: 1300
 variables:
-  PBOSHNL0:
-    name: PBOSHNL0
+  - name: PBOSHNL0
     var_type: Free
-  PBOSHNL1:
-    name: PBOSHNL1
+  - name: PBOSHNL1
     var_type: Free
-  PBOSHNL7:
-    name: PBOSHNL7
+  - name: PBOSHNL7
     var_type: Free
-  PBOSHNL8:
-    name: PBOSHNL8
+  - name: PBOSHNL8
     var_type: Free
-  PBOSLAX0:
-    name: PBOSLAX0
+  - name: PBOSLAX0
     var_type: Free
-  PBOSLAX1:
-    name: PBOSLAX1
+  - name: PBOSLAX1
     var_type: Free
-  PBOSLAX7:
-    name: PBOSLAX7
+  - name: PBOSLAX7
     var_type: Free
-  PBOSSEA0:
-    name: PBOSSEA0
+  - name: PBOSSEA0
     var_type: Free
-  PBOSSEA1:
-    name: PBOSSEA1
+  - name: PBOSSEA1
     var_type: Free
-  PBOSSEA2:
-    name: PBOSSEA2
+  - name: PBOSSEA2
     var_type: Free
-  PBOSSFO0:
-    name: PBOSSFO0
+  - name: PBOSSFO0
     var_type: Free
-  PBOSSFO1:
-    name: PBOSSFO1
+  - name: PBOSSFO1
     var_type: Free
-  PBOSTPE1:
-    name: PBOSTPE1
+  - name: PBOSTPE1
     var_type: Free
-  PBOSTPE2:
-    name: PBOSTPE2
+  - name: PBOSTPE2
     var_type: Free
-  PBOSTYO1:
-    name: PBOSTYO1
+  - name: PBOSTYO1
     var_type: Free
-  X01:
-    name: X01
+  - name: X01
     var_type:
       DoubleBound:
         - 0
         - 1
-  X02:
-    name: X02
+  - name: X02
     var_type:
       UpperBound: 1.2
-  X03:
-    name: X03
+  - name: X03
     var_type: Free
-  X04:
-    name: X04
+  - name: X04
     var_type: Free
-  X06:
-    name: X06
+  - name: X06
     var_type:
       LowerBound: 3
-  X07:
-    name: X07
+  - name: X07
     var_type: Free
-  X08:
-    name: X08
+  - name: X08
     var_type: Free
-  X09:
-    name: X09
+  - name: X09
     var_type:
       LowerBound: -inf
-  X10:
-    name: X10
+  - name: X10
     var_type: Free
-  X11:
-    name: X11
+  - name: X11
     var_type: Free
-  X12:
-    name: X12
+  - name: X12
     var_type: Free
-  X13:
-    name: X13
+  - name: X13
     var_type: Free
-  X14:
-    name: X14
+  - name: X14
     var_type: Free
-  X15:
-    name: X15
+  - name: X15
     var_type: Free
-  X16:
-    name: X16
+  - name: X16
     var_type: General
-  X22:
-    name: X22
+  - name: X22
     var_type: Free
-  X23:
-    name: X23
+  - name: X23
     var_type: Free
-  X24:
-    name: X24
+  - name: X24
     var_type: Free
-  X25:
-    name: X25
+  - name: X25
     var_type: Free
-  X26:
-    name: X26
+  - name: X26
     var_type: Free
-  X28:
-    name: X28
+  - name: X28
     var_type: Free
-  X29:
-    name: X29
+  - name: X29
     var_type: Free
-  X30:
-    name: X30
+  - name: X30
     var_type: Free
-  X31:
-    name: X31
+  - name: X31
     var_type: Integer
-  X32:
-    name: X32
+  - name: X32
     var_type: Integer
-  X33:
-    name: X33
+  - name: X33
     var_type: Free
-  X34:
-    name: X34
+  - name: X34
     var_type: Free
-  X35:
-    name: X35
+  - name: X35
     var_type: Free
-  X36:
-    name: X36
+  - name: X36
     var_type: Free
-  X37:
-    name: X37
+  - name: X37
     var_type: Free
-  X38:
-    name: X38
+  - name: X38
     var_type: Binary
-  X39:
-    name: X39
+  - name: X39
     var_type: Free

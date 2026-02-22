@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::collections::HashMap;
 
 use crate::error::{LpParseError, LpResult};
@@ -7,38 +6,38 @@ use crate::problem::LpProblem;
 
 /// Builder for constructing LP problems with a fluent API
 #[derive(Debug, Default)]
-pub struct LpProblemBuilder<'a> {
-    name: Option<Cow<'a, str>>,
+pub struct LpProblemBuilder {
+    name: Option<String>,
     sense: Option<Sense>,
-    objectives: HashMap<Cow<'a, str>, ObjectiveBuilder<'a>>,
-    constraints: HashMap<Cow<'a, str>, ConstraintBuilder<'a>>,
-    variables: HashMap<&'a str, VariableBuilder<'a>>,
+    objectives: HashMap<String, ObjectiveBuilder>,
+    constraints: HashMap<String, ConstraintBuilder>,
+    variables: HashMap<String, VariableBuilder>,
 }
 
 /// Builder for objectives
 #[derive(Debug, Clone)]
-pub struct ObjectiveBuilder<'a> {
-    name: Cow<'a, str>,
-    coefficients: Vec<Coefficient<'a>>,
+pub struct ObjectiveBuilder {
+    name: String,
+    coefficients: Vec<(String, f64)>,
 }
 
 /// Builder for constraints
 #[derive(Debug, Clone)]
-pub enum ConstraintBuilder<'a> {
+pub enum ConstraintBuilder {
     /// Standard linear constraint builder
-    Standard { name: Cow<'a, str>, coefficients: Vec<Coefficient<'a>>, operator: Option<ComparisonOp>, rhs: Option<f64> },
+    Standard { name: String, coefficients: Vec<(String, f64)>, operator: Option<ComparisonOp>, rhs: Option<f64> },
     /// SOS constraint builder
-    SOS { name: Cow<'a, str>, sos_type: SOSType, weights: Vec<Coefficient<'a>> },
+    SOS { name: String, sos_type: SOSType, weights: Vec<(String, f64)> },
 }
 
 /// Builder for variables
 #[derive(Debug, Clone)]
-pub struct VariableBuilder<'a> {
-    name: &'a str,
+pub struct VariableBuilder {
+    name: String,
     var_type: VariableType,
 }
 
-impl<'a> LpProblemBuilder<'a> {
+impl LpProblemBuilder {
     #[must_use]
     /// Create a new LP problem builder
     pub fn new() -> Self {
@@ -47,7 +46,7 @@ impl<'a> LpProblemBuilder<'a> {
 
     #[must_use]
     /// Set the problem name
-    pub fn name(mut self, name: impl Into<Cow<'a, str>>) -> Self {
+    pub fn name(mut self, name: impl Into<String>) -> Self {
         self.name = Some(name.into());
         self
     }
@@ -73,9 +72,9 @@ impl<'a> LpProblemBuilder<'a> {
 
     #[must_use]
     /// Add an objective to the problem
-    pub fn objective<F>(mut self, name: impl Into<Cow<'a, str>>, f: F) -> Self
+    pub fn objective<F>(mut self, name: impl Into<String>, f: F) -> Self
     where
-        F: FnOnce(ObjectiveBuilder<'a>) -> ObjectiveBuilder<'a>,
+        F: FnOnce(ObjectiveBuilder) -> ObjectiveBuilder,
     {
         let name = name.into();
         let builder = ObjectiveBuilder::new(name.clone());
@@ -86,9 +85,9 @@ impl<'a> LpProblemBuilder<'a> {
 
     #[must_use]
     /// Add a constraint to the problem
-    pub fn constraint<F>(mut self, name: impl Into<Cow<'a, str>>, f: F) -> Self
+    pub fn constraint<F>(mut self, name: impl Into<String>, f: F) -> Self
     where
-        F: FnOnce(ConstraintBuilder<'a>) -> ConstraintBuilder<'a>,
+        F: FnOnce(ConstraintBuilder) -> ConstraintBuilder,
     {
         let name = name.into();
         let builder = ConstraintBuilder::standard(name.clone());
@@ -99,9 +98,9 @@ impl<'a> LpProblemBuilder<'a> {
 
     #[must_use]
     /// Add an SOS constraint to the problem
-    pub fn sos_constraint<F>(mut self, name: impl Into<Cow<'a, str>>, sos_type: SOSType, f: F) -> Self
+    pub fn sos_constraint<F>(mut self, name: impl Into<String>, sos_type: SOSType, f: F) -> Self
     where
-        F: FnOnce(ConstraintBuilder<'a>) -> ConstraintBuilder<'a>,
+        F: FnOnce(ConstraintBuilder) -> ConstraintBuilder,
     {
         let name = name.into();
         let builder = ConstraintBuilder::sos(name.clone(), sos_type);
@@ -112,11 +111,12 @@ impl<'a> LpProblemBuilder<'a> {
 
     #[must_use]
     /// Add a variable to the problem
-    pub fn variable<F>(mut self, name: &'a str, f: F) -> Self
+    pub fn variable<F>(mut self, name: impl Into<String>, f: F) -> Self
     where
-        F: FnOnce(VariableBuilder<'a>) -> VariableBuilder<'a>,
+        F: FnOnce(VariableBuilder) -> VariableBuilder,
     {
-        let builder = VariableBuilder::new(name);
+        let name = name.into();
+        let builder = VariableBuilder::new(name.clone());
         let completed_builder = f(builder);
         self.variables.insert(name, completed_builder);
         self
@@ -124,10 +124,10 @@ impl<'a> LpProblemBuilder<'a> {
 
     #[must_use]
     /// Add multiple variables with the same type
-    pub fn variables(mut self, names: &[&'a str], var_type: &VariableType) -> Self {
+    pub fn variables(mut self, names: &[&str], var_type: &VariableType) -> Self {
         for &name in names {
-            let builder = VariableBuilder::new(name).var_type(var_type.clone());
-            self.variables.insert(name, builder);
+            let builder = VariableBuilder::new(name.to_string()).var_type(var_type.clone());
+            self.variables.insert(name.to_string(), builder);
         }
         self
     }
@@ -137,7 +137,7 @@ impl<'a> LpProblemBuilder<'a> {
     /// # Errors
     ///
     /// Returns an error if any objective or constraint builder fails validation
-    pub fn build(self) -> LpResult<LpProblem<'a>> {
+    pub fn build(self) -> LpResult<LpProblem> {
         let mut problem = LpProblem::new();
 
         // Set name and sense
@@ -146,92 +146,143 @@ impl<'a> LpProblemBuilder<'a> {
         }
         problem = problem.with_sense(self.sense.unwrap_or_default());
 
-        // Add variables first
+        // Add variables first (intern names)
         for (_, var_builder) in self.variables {
-            let variable = var_builder.build()?;
+            let name_id = problem.intern(&var_builder.name);
+            let variable = Variable::new(name_id).with_var_type(var_builder.var_type);
             problem.add_variable(variable);
         }
 
-        // Add objectives
+        // Add objectives (intern names)
         for (_, obj_builder) in self.objectives {
-            let objective = obj_builder.build()?;
+            let name_id = problem.intern(&obj_builder.name);
+            let coefficients: Vec<Coefficient> = obj_builder
+                .coefficients
+                .iter()
+                .map(|(var_name, value)| {
+                    let var_id = problem.intern(var_name);
+                    Coefficient { name: var_id, value: *value }
+                })
+                .collect();
+
+            if coefficients.is_empty() {
+                return Err(LpParseError::validation_error(format!("Objective '{}' has no coefficients", obj_builder.name)));
+            }
+
+            let objective = Objective { name: name_id, coefficients };
+            debug_assert!(!objective.coefficients.is_empty(), "postcondition: built objective must have coefficients");
             problem.add_objective(objective);
         }
 
-        // Add constraints
+        // Add constraints (intern names)
         for (_, constraint_builder) in self.constraints {
-            let constraint = constraint_builder.build()?;
-            problem.add_constraint(constraint);
+            match constraint_builder {
+                ConstraintBuilder::Standard { name, coefficients, operator, rhs } => {
+                    let operator = operator
+                        .ok_or_else(|| LpParseError::constraint_syntax(0, format!("Constraint '{name}' is missing an operator")))?;
+                    let rhs =
+                        rhs.ok_or_else(|| LpParseError::constraint_syntax(0, format!("Constraint '{name}' is missing a right-hand side")))?;
+
+                    let interned_coeffs: Vec<Coefficient> = coefficients
+                        .iter()
+                        .map(|(var_name, value)| {
+                            let var_id = problem.intern(var_name);
+                            Coefficient { name: var_id, value: *value }
+                        })
+                        .collect();
+
+                    if interned_coeffs.is_empty() {
+                        return Err(LpParseError::constraint_syntax(0, format!("Constraint '{name}' has no coefficients")));
+                    }
+
+                    debug_assert!(
+                        interned_coeffs.iter().all(|c| c.value.is_finite()),
+                        "postcondition: all Standard constraint coefficient values must be finite"
+                    );
+
+                    let name_id = problem.intern(&name);
+                    problem.add_constraint(Constraint::Standard {
+                        name: name_id,
+                        coefficients: interned_coeffs,
+                        operator,
+                        rhs,
+                        byte_offset: None,
+                    });
+                }
+                ConstraintBuilder::SOS { name, sos_type, weights } => {
+                    let interned_weights: Vec<Coefficient> = weights
+                        .iter()
+                        .map(|(var_name, value)| {
+                            let var_id = problem.intern(var_name);
+                            Coefficient { name: var_id, value: *value }
+                        })
+                        .collect();
+
+                    if interned_weights.is_empty() {
+                        return Err(LpParseError::invalid_sos_constraint(&name, "No weights specified"));
+                    }
+
+                    debug_assert!(
+                        interned_weights.iter().all(|w| w.value.is_finite()),
+                        "postcondition: all SOS constraint weight values must be finite"
+                    );
+
+                    let name_id = problem.intern(&name);
+                    problem.add_constraint(Constraint::SOS { name: name_id, sos_type, weights: interned_weights, byte_offset: None });
+                }
+            }
         }
 
         Ok(problem)
     }
 }
 
-impl<'a> ObjectiveBuilder<'a> {
+impl ObjectiveBuilder {
     #[must_use]
     /// Create a new objective builder
-    pub const fn new(name: Cow<'a, str>) -> Self {
-        Self { name, coefficients: Vec::new() }
+    pub fn new(name: impl Into<String>) -> Self {
+        Self { name: name.into(), coefficients: Vec::new() }
     }
 
     #[must_use]
     /// Add a coefficient to the objective
-    pub fn coefficient(mut self, name: &'a str, value: f64) -> Self {
-        self.coefficients.push(Coefficient { name, value });
+    pub fn coefficient(mut self, name: impl Into<String>, value: f64) -> Self {
+        self.coefficients.push((name.into(), value));
         self
     }
 
     #[must_use]
     /// Add multiple coefficients at once
-    ///
-    /// Note: This method requires coefficient names to have the same lifetime as the builder.
-    /// For dynamic strings, use individual `coefficient()` calls instead.
-    pub fn coefficients(mut self, coeffs: &[(&'a str, f64)]) -> Self {
+    pub fn coefficients(mut self, coeffs: &[(&str, f64)]) -> Self {
         for &(name, value) in coeffs {
-            self.coefficients.push(Coefficient { name, value });
+            self.coefficients.push((name.to_string(), value));
         }
         self
     }
-
-    /// Build the objective
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the objective has no coefficients
-    pub fn build(self) -> LpResult<Objective<'a>> {
-        if self.coefficients.is_empty() {
-            return Err(LpParseError::validation_error(format!("Objective '{}' has no coefficients", self.name)));
-        }
-
-        let objective = Objective { name: self.name, coefficients: self.coefficients };
-        debug_assert!(!objective.coefficients.is_empty(), "postcondition: built objective must have coefficients");
-        Ok(objective)
-    }
 }
 
-impl<'a> ConstraintBuilder<'a> {
+impl ConstraintBuilder {
     #[must_use]
     /// Create a new standard constraint builder
-    pub const fn standard(name: Cow<'a, str>) -> Self {
-        Self::Standard { name, coefficients: Vec::new(), operator: None, rhs: None }
+    pub fn standard(name: impl Into<String>) -> Self {
+        Self::Standard { name: name.into(), coefficients: Vec::new(), operator: None, rhs: None }
     }
 
     #[must_use]
     /// Create a new SOS constraint builder
-    pub const fn sos(name: Cow<'a, str>, sos_type: SOSType) -> Self {
-        Self::SOS { name, sos_type, weights: Vec::new() }
+    pub fn sos(name: impl Into<String>, sos_type: SOSType) -> Self {
+        Self::SOS { name: name.into(), sos_type, weights: Vec::new() }
     }
 
     #[must_use]
     /// Add a coefficient to the constraint
-    pub fn coefficient(mut self, name: &'a str, value: f64) -> Self {
+    pub fn coefficient(mut self, name: impl Into<String>, value: f64) -> Self {
         match &mut self {
             Self::Standard { coefficients, .. } => {
-                coefficients.push(Coefficient { name, value });
+                coefficients.push((name.into(), value));
             }
             Self::SOS { weights, .. } => {
-                weights.push(Coefficient { name, value });
+                weights.push((name.into(), value));
             }
         }
         self
@@ -239,7 +290,7 @@ impl<'a> ConstraintBuilder<'a> {
 
     #[must_use]
     /// Set the constraint to less than or equal
-    pub fn le(mut self, rhs: f64) -> Self {
+    pub const fn le(mut self, rhs: f64) -> Self {
         if let Self::Standard { operator, rhs: rhs_ref, .. } = &mut self {
             *operator = Some(ComparisonOp::LTE);
             *rhs_ref = Some(rhs);
@@ -249,7 +300,7 @@ impl<'a> ConstraintBuilder<'a> {
 
     #[must_use]
     /// Set the constraint to less than
-    pub fn lt(mut self, rhs: f64) -> Self {
+    pub const fn lt(mut self, rhs: f64) -> Self {
         if let Self::Standard { operator, rhs: rhs_ref, .. } = &mut self {
             *operator = Some(ComparisonOp::LT);
             *rhs_ref = Some(rhs);
@@ -259,7 +310,7 @@ impl<'a> ConstraintBuilder<'a> {
 
     #[must_use]
     /// Set the constraint to greater than or equal
-    pub fn ge(mut self, rhs: f64) -> Self {
+    pub const fn ge(mut self, rhs: f64) -> Self {
         if let Self::Standard { operator, rhs: rhs_ref, .. } = &mut self {
             *operator = Some(ComparisonOp::GTE);
             *rhs_ref = Some(rhs);
@@ -269,7 +320,7 @@ impl<'a> ConstraintBuilder<'a> {
 
     #[must_use]
     /// Set the constraint to greater than
-    pub fn gt(mut self, rhs: f64) -> Self {
+    pub const fn gt(mut self, rhs: f64) -> Self {
         if let Self::Standard { operator, rhs: rhs_ref, .. } = &mut self {
             *operator = Some(ComparisonOp::GT);
             *rhs_ref = Some(rhs);
@@ -279,56 +330,20 @@ impl<'a> ConstraintBuilder<'a> {
 
     #[must_use]
     /// Set the constraint to equal
-    pub fn eq(mut self, rhs: f64) -> Self {
+    pub const fn eq(mut self, rhs: f64) -> Self {
         if let Self::Standard { operator, rhs: rhs_ref, .. } = &mut self {
             *operator = Some(ComparisonOp::EQ);
             *rhs_ref = Some(rhs);
         }
         self
     }
-
-    /// Build the constraint
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the constraint is missing an operator, RHS, or has no coefficients
-    pub fn build(self) -> LpResult<Constraint<'a>> {
-        match self {
-            Self::Standard { name, coefficients, operator, rhs } => {
-                let operator =
-                    operator.ok_or_else(|| LpParseError::constraint_syntax(0, format!("Constraint '{name}' is missing an operator")))?;
-                let rhs =
-                    rhs.ok_or_else(|| LpParseError::constraint_syntax(0, format!("Constraint '{name}' is missing a right-hand side")))?;
-
-                if coefficients.is_empty() {
-                    return Err(LpParseError::constraint_syntax(0, format!("Constraint '{name}' has no coefficients")));
-                }
-
-                debug_assert!(
-                    coefficients.iter().all(|c| c.value.is_finite()),
-                    "postcondition: all Standard constraint coefficient values must be finite"
-                );
-                Ok(Constraint::Standard { name, coefficients, operator, rhs })
-            }
-            Self::SOS { name, sos_type, weights } => {
-                if weights.is_empty() {
-                    return Err(LpParseError::invalid_sos_constraint(name.as_ref(), "No weights specified"));
-                }
-
-                debug_assert!(
-                    weights.iter().all(|w| w.value.is_finite()),
-                    "postcondition: all SOS constraint weight values must be finite"
-                );
-                Ok(Constraint::SOS { name, sos_type, weights })
-            }
-        }
-    }
 }
 
-impl<'a> VariableBuilder<'a> {
+impl VariableBuilder {
     #[must_use]
     /// Create a new variable builder
-    pub fn new(name: &'a str) -> Self {
+    pub fn new(name: impl Into<String>) -> Self {
+        let name = name.into();
         debug_assert!(!name.is_empty(), "variable name must not be empty");
         Self { name, var_type: VariableType::default() }
     }
@@ -387,23 +402,11 @@ impl<'a> VariableBuilder<'a> {
     pub const fn bounds(self, lower: f64, upper: f64) -> Self {
         self.var_type(VariableType::DoubleBound(lower, upper))
     }
-
-    /// Build the variable
-    ///
-    /// # Errors
-    ///
-    /// This method currently never fails, but returns `Result` for API consistency
-    pub fn build(self) -> LpResult<Variable<'a>> {
-        if let VariableType::DoubleBound(lower, upper) = self.var_type {
-            debug_assert!(lower <= upper, "DoubleBound lower ({lower}) must be <= upper ({upper})");
-        }
-        Ok(Variable { name: self.name, var_type: self.var_type })
-    }
 }
 
 #[must_use]
 /// Convenience function to create a new LP problem builder
-pub fn lp_problem() -> LpProblemBuilder<'static> {
+pub fn lp_problem() -> LpProblemBuilder {
     LpProblemBuilder::new()
 }
 
@@ -455,7 +458,6 @@ mod tests {
 
     #[test]
     fn test_override_behavior() {
-        // Name, objective, constraint, variable overrides
         let problem = LpProblemBuilder::new()
             .name("first")
             .name("second")
@@ -470,93 +472,121 @@ mod tests {
 
         assert_eq!(problem.name(), Some("second"));
         assert_eq!(problem.objectives.len(), 1);
-        assert_eq!(problem.objectives.get("obj").unwrap().coefficients[0].name, "y");
+        // Resolve name to check the coefficient variable
+        let obj_id = problem.get_name_id("obj").unwrap();
+        let obj = problem.objectives.get(&obj_id).unwrap();
+        let coeff_name = problem.resolve(obj.coefficients[0].name);
+        assert_eq!(coeff_name, "y");
         assert_eq!(problem.constraints.len(), 1);
-        assert_eq!(problem.variables.get("v").unwrap().var_type, VariableType::Integer);
+        let v_id = problem.get_name_id("v").unwrap();
+        assert_eq!(problem.variables.get(&v_id).unwrap().var_type, VariableType::Integer);
     }
 
     #[test]
     fn test_objective_builder() {
-        // Single and multiple coefficients
-        let obj = ObjectiveBuilder::new("test".into()).coefficient("x", 5.0).build().unwrap();
-        assert_eq!(obj.name, "test");
+        // Single and multiple coefficients — build via LpProblemBuilder to intern
+        let problem = LpProblemBuilder::new().objective("test", |o| o.coefficient("x", 5.0)).build().unwrap();
+        let test_id = problem.get_name_id("test").unwrap();
+        let obj = problem.objectives.get(&test_id).unwrap();
+        assert_eq!(problem.resolve(obj.name), "test");
         assert_eq!(obj.coefficients.len(), 1);
 
-        let obj2 = ObjectiveBuilder::new("m".into()).coefficient("x", 1.0).coefficient("y", 2.0).coefficient("z", -3.0).build().unwrap();
-        assert_eq!(obj2.coefficients.len(), 3);
+        let problem2 = LpProblemBuilder::new()
+            .objective("m", |o| o.coefficient("x", 1.0).coefficient("y", 2.0).coefficient("z", -3.0))
+            .build()
+            .unwrap();
+        let m_id = problem2.get_name_id("m").unwrap();
+        assert_eq!(problem2.objectives.get(&m_id).unwrap().coefficients.len(), 3);
 
         // Empty fails
-        assert!(ObjectiveBuilder::new("e".into()).build().unwrap_err().to_string().contains("no coefficients"));
+        assert!(LpProblemBuilder::new().objective("e", |o| o).build().unwrap_err().to_string().contains("no coefficients"));
     }
 
     #[test]
     fn test_constraint_builder_operators() {
-        // Test all operators
-        let c = ConstraintBuilder::standard("t".into()).coefficient("x", 1.0).le(10.0).build().unwrap();
-        if let Constraint::Standard { operator, rhs, .. } = c {
-            assert_eq!((operator, rhs), (ComparisonOp::LTE, 10.0));
+        // Test all operators via LpProblemBuilder
+        let problem = LpProblemBuilder::new().constraint("t", |c| c.coefficient("x", 1.0).le(10.0)).build().unwrap();
+        let t_id = problem.get_name_id("t").unwrap();
+        if let Constraint::Standard { operator, rhs, .. } = problem.constraints.get(&t_id).unwrap() {
+            assert_eq!((operator.clone(), *rhs), (ComparisonOp::LTE, 10.0));
         }
 
-        let c = ConstraintBuilder::standard("t".into()).coefficient("x", 1.0).ge(5.0).build().unwrap();
-        if let Constraint::Standard { operator, rhs, .. } = c {
-            assert_eq!((operator, rhs), (ComparisonOp::GTE, 5.0));
+        let problem = LpProblemBuilder::new().constraint("t", |c| c.coefficient("x", 1.0).ge(5.0)).build().unwrap();
+        let t_id = problem.get_name_id("t").unwrap();
+        if let Constraint::Standard { operator, rhs, .. } = problem.constraints.get(&t_id).unwrap() {
+            assert_eq!((operator.clone(), *rhs), (ComparisonOp::GTE, 5.0));
         }
 
-        let c = ConstraintBuilder::standard("t".into()).coefficient("x", 1.0).eq(7.0).build().unwrap();
-        if let Constraint::Standard { operator, rhs, .. } = c {
-            assert_eq!((operator, rhs), (ComparisonOp::EQ, 7.0));
+        let problem = LpProblemBuilder::new().constraint("t", |c| c.coefficient("x", 1.0).eq(7.0)).build().unwrap();
+        let t_id = problem.get_name_id("t").unwrap();
+        if let Constraint::Standard { operator, rhs, .. } = problem.constraints.get(&t_id).unwrap() {
+            assert_eq!((operator.clone(), *rhs), (ComparisonOp::EQ, 7.0));
         }
 
-        let c = ConstraintBuilder::standard("t".into()).coefficient("x", 1.0).lt(15.0).build().unwrap();
-        if let Constraint::Standard { operator, rhs, .. } = c {
-            assert_eq!((operator, rhs), (ComparisonOp::LT, 15.0));
+        let problem = LpProblemBuilder::new().constraint("t", |c| c.coefficient("x", 1.0).lt(15.0)).build().unwrap();
+        let t_id = problem.get_name_id("t").unwrap();
+        if let Constraint::Standard { operator, rhs, .. } = problem.constraints.get(&t_id).unwrap() {
+            assert_eq!((operator.clone(), *rhs), (ComparisonOp::LT, 15.0));
         }
 
-        let c = ConstraintBuilder::standard("t".into()).coefficient("x", 1.0).gt(2.0).build().unwrap();
-        if let Constraint::Standard { operator, rhs, .. } = c {
-            assert_eq!((operator, rhs), (ComparisonOp::GT, 2.0));
+        let problem = LpProblemBuilder::new().constraint("t", |c| c.coefficient("x", 1.0).gt(2.0)).build().unwrap();
+        let t_id = problem.get_name_id("t").unwrap();
+        if let Constraint::Standard { operator, rhs, .. } = problem.constraints.get(&t_id).unwrap() {
+            assert_eq!((operator.clone(), *rhs), (ComparisonOp::GT, 2.0));
         }
 
         // Missing operator and no coefficients errors
-        assert!(ConstraintBuilder::standard("i".into()).coefficient("x", 1.0).build().is_err());
-        assert!(ConstraintBuilder::standard("e".into()).le(10.0).build().is_err());
+        assert!(LpProblemBuilder::new().constraint("i", |c| c.coefficient("x", 1.0)).build().is_err());
+        assert!(LpProblemBuilder::new().constraint("e", |c| c.le(10.0)).build().is_err());
     }
 
     #[test]
     fn test_constraint_builder_sos() {
-        let constraint = ConstraintBuilder::sos("sos".into(), SOSType::S1).coefficient("x1", 1.0).coefficient("x2", 2.0).build().unwrap();
+        let problem = LpProblemBuilder::new()
+            .sos_constraint("sos", SOSType::S1, |c| c.coefficient("x1", 1.0).coefficient("x2", 2.0))
+            .build()
+            .unwrap();
+        let sos_id = problem.get_name_id("sos").unwrap();
 
-        if let Constraint::SOS { name, sos_type, weights } = constraint {
-            assert_eq!(name, "sos");
-            assert_eq!(sos_type, SOSType::S1);
+        if let Constraint::SOS { name, sos_type, weights, .. } = problem.constraints.get(&sos_id).unwrap() {
+            assert_eq!(problem.resolve(*name), "sos");
+            assert_eq!(*sos_type, SOSType::S1);
             assert_eq!(weights.len(), 2);
         } else {
             panic!("Expected SOS");
         }
 
         // Empty SOS fails
-        assert!(ConstraintBuilder::sos("e".into(), SOSType::S2).build().is_err());
+        assert!(LpProblemBuilder::new().sos_constraint("e", SOSType::S2, |c| c).build().is_err());
 
         // Operators on SOS have no effect
-        let sos = ConstraintBuilder::sos("s".into(), SOSType::S1).coefficient("x", 1.0).le(10.0).ge(5.0).build().unwrap();
-        assert!(matches!(sos, Constraint::SOS { .. }));
+        let problem =
+            LpProblemBuilder::new().sos_constraint("s", SOSType::S1, |c| c.coefficient("x", 1.0).le(10.0).ge(5.0)).build().unwrap();
+        let s_id = problem.get_name_id("s").unwrap();
+        assert!(matches!(problem.constraints.get(&s_id).unwrap(), Constraint::SOS { .. }));
     }
 
     #[test]
     fn test_variable_builder_types() {
-        // Test all variable types
-        assert_eq!(VariableBuilder::new("x").build().unwrap().var_type, VariableType::Free);
-        assert_eq!(VariableBuilder::new("x").binary().build().unwrap().var_type, VariableType::Binary);
-        assert_eq!(VariableBuilder::new("x").integer().build().unwrap().var_type, VariableType::Integer);
-        assert_eq!(VariableBuilder::new("x").general().build().unwrap().var_type, VariableType::General);
-        assert_eq!(VariableBuilder::new("x").free().build().unwrap().var_type, VariableType::Free);
-        assert_eq!(VariableBuilder::new("x").semi_continuous().build().unwrap().var_type, VariableType::SemiContinuous);
-        assert_eq!(VariableBuilder::new("x").lower_bound(5.0).build().unwrap().var_type, VariableType::LowerBound(5.0));
-        assert_eq!(VariableBuilder::new("x").upper_bound(10.0).build().unwrap().var_type, VariableType::UpperBound(10.0));
-        assert_eq!(VariableBuilder::new("x").bounds(0.0, 100.0).build().unwrap().var_type, VariableType::DoubleBound(0.0, 100.0));
+        // Test all variable types via LpProblemBuilder
+        let build_var = |f: fn(VariableBuilder) -> VariableBuilder| -> VariableType {
+            let problem = LpProblemBuilder::new().variable("x", f).build().unwrap();
+            let x_id = problem.get_name_id("x").unwrap();
+            problem.variables.get(&x_id).unwrap().var_type.clone()
+        };
+
+        assert_eq!(build_var(|v| v), VariableType::Free);
+        assert_eq!(build_var(VariableBuilder::binary), VariableType::Binary);
+        assert_eq!(build_var(VariableBuilder::integer), VariableType::Integer);
+        assert_eq!(build_var(VariableBuilder::general), VariableType::General);
+        assert_eq!(build_var(VariableBuilder::free), VariableType::Free);
+        assert_eq!(build_var(VariableBuilder::semi_continuous), VariableType::SemiContinuous);
+        assert_eq!(build_var(|v| v.lower_bound(5.0)), VariableType::LowerBound(5.0));
+        assert_eq!(build_var(|v| v.upper_bound(10.0)), VariableType::UpperBound(10.0));
+        assert_eq!(build_var(|v| v.bounds(0.0, 100.0)), VariableType::DoubleBound(0.0, 100.0));
 
         // Override behavior
-        assert_eq!(VariableBuilder::new("x").binary().integer().build().unwrap().var_type, VariableType::Integer);
+        assert_eq!(build_var(|v| v.binary().integer()), VariableType::Integer);
     }
 
     #[test]
@@ -574,7 +604,8 @@ mod tests {
         for sos_type in [SOSType::S1, SOSType::S2] {
             let problem = LpProblemBuilder::new().sos_constraint("sos", sos_type.clone(), |c| c.coefficient("x", 1.0)).build().unwrap();
 
-            if let Constraint::SOS { sos_type: st, .. } = problem.constraints.get("sos").unwrap() {
+            let sos_id = problem.get_name_id("sos").unwrap();
+            if let Constraint::SOS { sos_type: st, .. } = problem.constraints.get(&sos_id).unwrap() {
                 assert_eq!(*st, sos_type);
             }
         }
@@ -606,7 +637,8 @@ mod tests {
             .objective("ext", |o| o.coefficient("a", 0.0).coefficient("b", f64::MAX).coefficient("c", f64::NEG_INFINITY))
             .build()
             .unwrap();
-        assert_eq!(problem.objectives.get("ext").unwrap().coefficients.len(), 3);
+        let ext_id = problem.get_name_id("ext").unwrap();
+        assert_eq!(problem.objectives.get(&ext_id).unwrap().coefficients.len(), 3);
 
         // Special characters and long names
         let long = "x".repeat(1000);
@@ -616,8 +648,8 @@ mod tests {
             .variable(&long, super::VariableBuilder::binary)
             .build()
             .unwrap();
-        assert!(problem.variables.contains_key("var_1.2$special"));
-        assert!(problem.variables.contains_key(long.as_str()));
+        assert!(problem.get_name_id("var_1.2$special").and_then(|id| problem.variables.get(&id)).is_some());
+        assert!(problem.get_name_id(&long).and_then(|id| problem.variables.get(&id)).is_some());
     }
 
     #[test]

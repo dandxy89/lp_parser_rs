@@ -2,11 +2,9 @@
 source: rust/tests/test_from_file.rs
 expression: parsed
 ---
-name: ~
 sense: Minimize
 objectives:
-  obj1:
-    name: obj1
+  - name: obj1
     coefficients:
       - name: x
         value: -0.5
@@ -14,8 +12,7 @@ objectives:
         value: -2
       - name: z
         value: -8
-  obj2:
-    name: obj2
+  - name: obj2
     coefficients:
       - name: y
         value: 1
@@ -24,8 +21,7 @@ objectives:
       - name: z
         value: 1
 constraints:
-  cons1:
-    type: Standard
+  - type: Standard
     name: cons1
     coefficients:
       - name: x
@@ -36,8 +32,7 @@ constraints:
         value: 1
     operator: LTE
     rhs: 0
-  cons2:
-    type: Standard
+  - type: Standard
     name: cons2
     coefficients:
       - name: y
@@ -47,12 +42,9 @@ constraints:
     operator: GTE
     rhs: 0
 variables:
-  x:
-    name: x
+  - name: x
     var_type: Binary
-  y:
-    name: y
+  - name: y
     var_type: General
-  z:
-    name: z
+  - name: z
     var_type: Free

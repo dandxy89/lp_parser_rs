@@ -5,8 +5,7 @@ expression: parsed
 name: Computer_Plant_Problem
 sense: Minimize
 objectives:
-  Total_Costs:
-    name: Total_Costs
+  - name: Total_Costs
     coefficients:
       - name: BuildaPlant_Denver
         value: 70000
@@ -49,8 +48,7 @@ objectives:
       - name: Route_San_Francisco_Tucson
         value: 2
 constraints:
-  Sum_of_Products_into_Stores_Barstow:
-    type: Standard
+  - type: Standard
     name: Sum_of_Products_into_Stores_Barstow
     coefficients:
       - name: Route_Denver_Barstow
@@ -63,8 +61,7 @@ constraints:
         value: 1
     operator: GTE
     rhs: 1000
-  Sum_of_Products_into_Stores_Dallas:
-    type: Standard
+  - type: Standard
     name: Sum_of_Products_into_Stores_Dallas
     coefficients:
       - name: Route_Denver_Dallas
@@ -77,8 +74,7 @@ constraints:
         value: 1
     operator: GTE
     rhs: 1200
-  Sum_of_Products_into_Stores_San_Diego:
-    type: Standard
+  - type: Standard
     name: Sum_of_Products_into_Stores_San_Diego
     coefficients:
       - name: Route_Denver_San_Diego
@@ -91,8 +87,7 @@ constraints:
         value: 1
     operator: GTE
     rhs: 1700
-  Sum_of_Products_into_Stores_Tucson:
-    type: Standard
+  - type: Standard
     name: Sum_of_Products_into_Stores_Tucson
     coefficients:
       - name: Route_Denver_Tucson
@@ -105,8 +100,7 @@ constraints:
         value: 1
     operator: GTE
     rhs: 1500
-  Sum_of_Products_out_of_Plant_Denver:
-    type: Standard
+  - type: Standard
     name: Sum_of_Products_out_of_Plant_Denver
     coefficients:
       - name: BuildaPlant_Denver
@@ -121,8 +115,7 @@ constraints:
         value: 1
     operator: LTE
     rhs: 0
-  Sum_of_Products_out_of_Plant_Los_Angeles:
-    type: Standard
+  - type: Standard
     name: Sum_of_Products_out_of_Plant_Los_Angeles
     coefficients:
       - name: BuildaPlant_Los_Angeles
@@ -137,8 +130,7 @@ constraints:
         value: 1
     operator: LTE
     rhs: 0
-  Sum_of_Products_out_of_Plant_Phoenix:
-    type: Standard
+  - type: Standard
     name: Sum_of_Products_out_of_Plant_Phoenix
     coefficients:
       - name: BuildaPlant_Phoenix
@@ -153,8 +145,7 @@ constraints:
         value: 1
     operator: LTE
     rhs: 0
-  Sum_of_Products_out_of_Plant_San_Francisco:
-    type: Standard
+  - type: Standard
     name: Sum_of_Products_out_of_Plant_San_Francisco
     coefficients:
       - name: BuildaPlant_San_Francisco
@@ -170,79 +161,59 @@ constraints:
     operator: LTE
     rhs: 0
 variables:
-  BuildaPlant_Denver:
-    name: BuildaPlant_Denver
+  - name: BuildaPlant_Denver
     var_type: Binary
-  BuildaPlant_Los_Angeles:
-    name: BuildaPlant_Los_Angeles
+  - name: BuildaPlant_Los_Angeles
     var_type: Binary
-  BuildaPlant_Phoenix:
-    name: BuildaPlant_Phoenix
+  - name: BuildaPlant_Phoenix
     var_type: Binary
-  BuildaPlant_San_Francisco:
-    name: BuildaPlant_San_Francisco
+  - name: BuildaPlant_San_Francisco
     var_type: Binary
-  Route_Denver_Barstow:
-    name: Route_Denver_Barstow
+  - name: Route_Denver_Barstow
     var_type:
       LowerBound: 0
-  Route_Denver_Dallas:
-    name: Route_Denver_Dallas
+  - name: Route_Denver_Dallas
     var_type:
       LowerBound: 0
-  Route_Denver_San_Diego:
-    name: Route_Denver_San_Diego
+  - name: Route_Denver_San_Diego
     var_type:
       LowerBound: 0
-  Route_Denver_Tucson:
-    name: Route_Denver_Tucson
+  - name: Route_Denver_Tucson
     var_type:
       LowerBound: 0
-  Route_Los_Angeles_Barstow:
-    name: Route_Los_Angeles_Barstow
+  - name: Route_Los_Angeles_Barstow
     var_type:
       LowerBound: 0
-  Route_Los_Angeles_Dallas:
-    name: Route_Los_Angeles_Dallas
+  - name: Route_Los_Angeles_Dallas
     var_type:
       LowerBound: 0
-  Route_Los_Angeles_San_Diego:
-    name: Route_Los_Angeles_San_Diego
+  - name: Route_Los_Angeles_San_Diego
     var_type:
       LowerBound: 0
-  Route_Los_Angeles_Tucson:
-    name: Route_Los_Angeles_Tucson
+  - name: Route_Los_Angeles_Tucson
     var_type:
       LowerBound: 0
-  Route_Phoenix_Barstow:
-    name: Route_Phoenix_Barstow
+  - name: Route_Phoenix_Barstow
     var_type:
       LowerBound: 0
-  Route_Phoenix_Dallas:
-    name: Route_Phoenix_Dallas
+  - name: Route_Phoenix_Dallas
     var_type:
       LowerBound: 0
-  Route_Phoenix_San_Diego:
-    name: Route_Phoenix_San_Diego
+  - name: Route_Phoenix_San_Diego
     var_type:
       LowerBound: 0
-  Route_Phoenix_Tucson:
-    name: Route_Phoenix_Tucson
+  - name: Route_Phoenix_Tucson
     var_type:
       LowerBound: 0
-  Route_San_Francisco_Barstow:
-    name: Route_San_Francisco_Barstow
+  - name: Route_San_Francisco_Barstow
     var_type:
       LowerBound: 0
-  Route_San_Francisco_Dallas:
-    name: Route_San_Francisco_Dallas
+  - name: Route_San_Francisco_Dallas
     var_type:
       LowerBound: 0
-  Route_San_Francisco_San_Diego:
-    name: Route_San_Francisco_San_Diego
+  - name: Route_San_Francisco_San_Diego
     var_type:
       LowerBound: 0
-  Route_San_Francisco_Tucson:
-    name: Route_San_Francisco_Tucson
+  - name: Route_San_Francisco_Tucson
     var_type:
       LowerBound: 0
