@@ -13,8 +13,12 @@ jobs:
   release-please:
     runs-on: ubuntu-24.04-arm
     outputs:
-      release_created: ${{ steps.release.outputs.release_created }}
-      tag_name: ${{ steps.release.outputs.tag_name }}
+      rust--release_created: ${{ steps.release.outputs['rust--release_created'] }}
+      rust--tag_name: ${{ steps.release.outputs['rust--tag_name'] }}
+      python--release_created: ${{ steps.release.outputs['python--release_created'] }}
+      python--tag_name: ${{ steps.release.outputs['python--tag_name'] }}
+      tui--release_created: ${{ steps.release.outputs['tui--release_created'] }}
+      tui--tag_name: ${{ steps.release.outputs['tui--tag_name'] }}
     steps:
       - uses: googleapis/release-please-action@v4
         id: release
@@ -24,7 +28,7 @@ jobs:
 
   publish-crate:
     needs: release-please
-    if: ${{ needs.release-please.outputs.release_created }}
+    if: ${{ needs.release-please.outputs.rust--release_created }}
     runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v6
@@ -38,7 +42,7 @@ jobs:
 
   build-python-wheels:
     needs: release-please
-    if: ${{ needs.release-please.outputs.release_created }}
+    if: ${{ needs.release-please.outputs.python--release_created }}
     strategy:
       matrix:
         include:
@@ -80,7 +84,7 @@ jobs:
 
   build-sdist:
     needs: release-please
-    if: ${{ needs.release-please.outputs.release_created }}
+    if: ${{ needs.release-please.outputs.python--release_created }}
     runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v6
@@ -98,7 +102,7 @@ jobs:
 
   publish-python:
     needs: [release-please, build-python-wheels, build-sdist]
-    if: ${{ needs.release-please.outputs.release_created }}
+    if: ${{ needs.release-please.outputs.python--release_created }}
     runs-on: ubuntu-24.04-arm
     environment:
       name: pypi
@@ -117,3 +121,12 @@ jobs:
         with:
           command: upload
           args: --non-interactive --skip-existing dist/*
+
+  build-tui-binaries:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.tui--release_created }}
+    uses: ./.github/workflows/tui-release.yml
+    with:
+      tag_name: ${{ needs.release-please.outputs.tui--tag_name }}
+    permissions:
+      contents: write

@@ -1,0 +1,152 @@
+name: Build TUI Binaries
+
+on:
+  workflow_call:
+    inputs:
+      tag_name:
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Release tag (e.g. lp_diff-v0.2.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            runner: ubuntu-latest
+            archive: tar.gz
+          - target: aarch64-unknown-linux-gnu
+            runner: ubuntu-24.04-arm
+            archive: tar.gz
+          - target: x86_64-apple-darwin
+            runner: macos-latest
+            archive: tar.gz
+          - target: aarch64-apple-darwin
+            runner: macos-latest
+            archive: tar.gz
+          - target: x86_64-pc-windows-msvc
+            runner: windows-latest
+            archive: zip
+          - target: aarch64-pc-windows-msvc
+            runner: windows-latest
+            archive: zip
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install dependencies (Linux)
+        if: contains(matrix.target, 'linux')
+        run: sudo apt-get update && sudo apt-get install -y cmake build-essential
+
+      - name: Install dependencies (macOS)
+        if: contains(matrix.target, 'apple')
+        run: brew install cmake
+
+      - name: Install dependencies (Windows)
+        if: contains(matrix.target, 'windows')
+        uses: lukka/get-cmake@latest
+
+      - name: Extract version from tag
+        id: version
+        shell: bash
+        run: |
+          VERSION="${{ inputs.tag_name }}"
+          # Strip the component prefix (e.g. lp_diff-v0.2.0 -> 0.2.0)
+          VERSION="${VERSION##*-v}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Set cross-compile env (macOS x86_64)
+        if: matrix.target == 'x86_64-apple-darwin'
+        shell: bash
+        run: |
+          echo "CARGO_TARGET_X86_64_APPLE_DARWIN_LINKER=clang" >> "$GITHUB_ENV"
+          echo "CMAKE_OSX_ARCHITECTURES=x86_64" >> "$GITHUB_ENV"
+
+      - name: Set cross-compile env (Windows aarch64)
+        if: matrix.target == 'aarch64-pc-windows-msvc'
+        shell: bash
+        run: |
+          echo "CMAKE_GENERATOR_PLATFORM=ARM64" >> "$GITHUB_ENV"
+
+      - name: Build binary
+        run: cargo build --release --target ${{ matrix.target }} --package lp_parser_tui
+
+      - name: Package (Unix)
+        if: matrix.archive == 'tar.gz'
+        shell: bash
+        run: |
+          ARCHIVE_NAME="lp_diff-${{ steps.version.outputs.version }}-${{ matrix.target }}"
+          mkdir -p "${ARCHIVE_NAME}"
+          cp "target/${{ matrix.target }}/release/lp_diff" "${ARCHIVE_NAME}/"
+          tar czf "${ARCHIVE_NAME}.tar.gz" "${ARCHIVE_NAME}"
+          shasum -a 256 "${ARCHIVE_NAME}.tar.gz" > "${ARCHIVE_NAME}.tar.gz.sha256"
+          echo "ASSET=${ARCHIVE_NAME}.tar.gz" >> "$GITHUB_ENV"
+          echo "CHECKSUM=${ARCHIVE_NAME}.tar.gz.sha256" >> "$GITHUB_ENV"
+
+      - name: Package (Windows)
+        if: matrix.archive == 'zip'
+        shell: pwsh
+        run: |
+          $ArchiveName = "lp_diff-${{ steps.version.outputs.version }}-${{ matrix.target }}"
+          New-Item -ItemType Directory -Path $ArchiveName -Force
+          Copy-Item "target/${{ matrix.target }}/release/lp_diff.exe" "$ArchiveName/"
+          Compress-Archive -Path "$ArchiveName/*" -DestinationPath "$ArchiveName.zip"
+          $hash = (Get-FileHash "$ArchiveName.zip" -Algorithm SHA256).Hash.ToLower()
+          "$hash  $ArchiveName.zip" | Out-File -Encoding ascii "$ArchiveName.zip.sha256"
+          echo "ASSET=$ArchiveName.zip" >> $env:GITHUB_ENV
+          echo "CHECKSUM=$ArchiveName.zip.sha256" >> $env:GITHUB_ENV
+
+      # TODO: Windows code signing step
+      # - name: Sign binary (Windows)
+      #   if: contains(matrix.target, 'windows')
+      #   ...
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: binary-${{ matrix.target }}
+          path: |
+            ${{ env.ASSET }}
+            ${{ env.CHECKSUM }}
+
+  upload-release:
+    name: Upload to GitHub Release
+    needs: build
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v7
+        with:
+          pattern: binary-*
+          merge-multiple: true
+
+      - name: Generate combined checksums
+        shell: bash
+        run: |
+          cat *.sha256 > checksums-sha256.txt
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag_name }}
+          files: |
+            *.tar.gz
+            *.zip
+            *.sha256
+            checksums-sha256.txt
