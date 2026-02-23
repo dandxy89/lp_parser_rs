@@ -466,37 +466,42 @@ impl Display for ProblemAnalysis {
     }
 }
 
-/// Collect coefficient statistics from a slice of coefficients, classifying
-/// each as normal, large, or small based on the analysis configuration.
-#[allow(clippy::too_many_arguments)]
-fn collect_coeff_stats(
-    coefficients: &[crate::model::Coefficient],
-    location_name: &str,
-    is_objective: bool,
-    config: &AnalysisConfig,
-    range: &mut RangeStats,
-    large: &mut Vec<CoefficientLocation>,
-    small: &mut Vec<CoefficientLocation>,
-    interner: &crate::interner::NameInterner,
-) {
-    for coeff in coefficients {
-        let abs_value = coeff.value.abs();
-        range.update(abs_value);
+/// Collects coefficient statistics, classifying each as normal, large, or small.
+struct CoeffCollector<'a> {
+    range: &'a mut RangeStats,
+    large: &'a mut Vec<CoefficientLocation>,
+    small: &'a mut Vec<CoefficientLocation>,
+}
 
-        if abs_value > config.large_coefficient_threshold {
-            large.push(CoefficientLocation {
-                location: location_name.to_string(),
-                is_objective,
-                variable: interner.resolve(coeff.name).to_string(),
-                value: coeff.value,
-            });
-        } else if abs_value > 0.0 && abs_value < config.small_coefficient_threshold {
-            small.push(CoefficientLocation {
-                location: location_name.to_string(),
-                is_objective,
-                variable: interner.resolve(coeff.name).to_string(),
-                value: coeff.value,
-            });
+impl<'a> CoeffCollector<'a> {
+    /// Process a slice of coefficients for a given location.
+    fn collect(
+        &mut self,
+        coefficients: &[crate::model::Coefficient],
+        location_name: &str,
+        is_objective: bool,
+        config: &AnalysisConfig,
+        interner: &crate::interner::NameInterner,
+    ) {
+        for coeff in coefficients {
+            let abs_value = coeff.value.abs();
+            self.range.update(abs_value);
+
+            if abs_value > config.large_coefficient_threshold {
+                self.large.push(CoefficientLocation {
+                    location: location_name.to_string(),
+                    is_objective,
+                    variable: interner.resolve(coeff.name).to_string(),
+                    value: coeff.value,
+                });
+            } else if abs_value > 0.0 && abs_value < config.small_coefficient_threshold {
+                self.small.push(CoefficientLocation {
+                    location: location_name.to_string(),
+                    is_objective,
+                    variable: interner.resolve(coeff.name).to_string(),
+                    value: coeff.value,
+                });
+            }
         }
     }
 }
@@ -605,7 +610,7 @@ impl LpProblem {
         SparsityMetrics { min_vars_per_constraint: if min_v == usize::MAX { 0 } else { min_v }, max_vars_per_constraint: max_v }
     }
 
-    /// Analyze variables.
+    /// Analyze variable types, bounds, and usage.
     fn analyze_variables(&self) -> VariableAnalysis {
         let mut type_distribution = VariableTypeDistribution::default();
         let mut free_variables = Vec::new();
@@ -637,7 +642,28 @@ impl LpProblem {
             }
         }
 
-        // Find unused variables
+        let unused_variables = self.find_unused_variables();
+        let discrete_variable_count = type_distribution.binary + type_distribution.integer;
+
+        debug_assert_eq!(
+            type_distribution.free
+                + type_distribution.general
+                + type_distribution.lower_bounded
+                + type_distribution.upper_bounded
+                + type_distribution.double_bounded
+                + type_distribution.binary
+                + type_distribution.integer
+                + type_distribution.semi_continuous
+                + type_distribution.sos,
+            self.variables.len(),
+            "postcondition: type distribution must sum to total variable count"
+        );
+
+        VariableAnalysis { type_distribution, free_variables, fixed_variables, invalid_bounds, unused_variables, discrete_variable_count }
+    }
+
+    /// Find variables declared but not referenced in any objective or constraint.
+    fn find_unused_variables(&self) -> Vec<String> {
         let mut used_variables: HashSet<NameId> = HashSet::new();
 
         for objective in self.objectives.values() {
@@ -661,30 +687,11 @@ impl LpProblem {
             }
         }
 
-        let unused_variables: Vec<String> = self
-            .variables
+        self.variables
             .keys()
             .filter(|name_id| !used_variables.contains(name_id))
             .map(|id| self.interner.resolve(*id).to_string())
-            .collect();
-
-        let discrete_variable_count = type_distribution.binary + type_distribution.integer;
-
-        debug_assert_eq!(
-            type_distribution.free
-                + type_distribution.general
-                + type_distribution.lower_bounded
-                + type_distribution.upper_bounded
-                + type_distribution.double_bounded
-                + type_distribution.binary
-                + type_distribution.integer
-                + type_distribution.semi_continuous
-                + type_distribution.sos,
-            self.variables.len(),
-            "postcondition: type distribution must sum to total variable count"
-        );
-
-        VariableAnalysis { type_distribution, free_variables, fixed_variables, invalid_bounds, unused_variables, discrete_variable_count }
+            .collect()
     }
 
     /// Analyze constraints.
@@ -748,34 +755,23 @@ impl LpProblem {
         let mut large_coefficients = Vec::new();
         let mut small_coefficients = Vec::new();
 
+        let mut constraint_collector =
+            CoeffCollector { range: &mut constraint_range, large: &mut large_coefficients, small: &mut small_coefficients };
+
         for (name_id, constraint) in &self.constraints {
             if let Constraint::Standard { coefficients, .. } = constraint {
                 let name_str = self.interner.resolve(*name_id);
-                collect_coeff_stats(
-                    coefficients,
-                    name_str,
-                    false,
-                    config,
-                    &mut constraint_range,
-                    &mut large_coefficients,
-                    &mut small_coefficients,
-                    &self.interner,
-                );
+                constraint_collector.collect(coefficients, name_str, false, config, &self.interner);
             }
         }
 
+        // Reborrow for objectives with a separate range tracker.
+        let mut objective_collector =
+            CoeffCollector { range: &mut objective_range, large: constraint_collector.large, small: constraint_collector.small };
+
         for (name_id, objective) in &self.objectives {
             let name_str = self.interner.resolve(*name_id);
-            collect_coeff_stats(
-                &objective.coefficients,
-                name_str,
-                true,
-                config,
-                &mut objective_range,
-                &mut large_coefficients,
-                &mut small_coefficients,
-                &self.interner,
-            );
+            objective_collector.collect(&objective.coefficients, name_str, true, config, &self.interner);
         }
 
         let constraint_coeff_range = constraint_range.finalise();

@@ -508,31 +508,31 @@ mod tests {
         let problem = LpProblemBuilder::new().constraint("t", |c| c.coefficient("x", 1.0).le(10.0)).build().unwrap();
         let t_id = problem.get_name_id("t").unwrap();
         if let Constraint::Standard { operator, rhs, .. } = problem.constraints.get(&t_id).unwrap() {
-            assert_eq!((operator.clone(), *rhs), (ComparisonOp::LTE, 10.0));
+            assert_eq!((*operator, *rhs), (ComparisonOp::LTE, 10.0));
         }
 
         let problem = LpProblemBuilder::new().constraint("t", |c| c.coefficient("x", 1.0).ge(5.0)).build().unwrap();
         let t_id = problem.get_name_id("t").unwrap();
         if let Constraint::Standard { operator, rhs, .. } = problem.constraints.get(&t_id).unwrap() {
-            assert_eq!((operator.clone(), *rhs), (ComparisonOp::GTE, 5.0));
+            assert_eq!((*operator, *rhs), (ComparisonOp::GTE, 5.0));
         }
 
         let problem = LpProblemBuilder::new().constraint("t", |c| c.coefficient("x", 1.0).eq(7.0)).build().unwrap();
         let t_id = problem.get_name_id("t").unwrap();
         if let Constraint::Standard { operator, rhs, .. } = problem.constraints.get(&t_id).unwrap() {
-            assert_eq!((operator.clone(), *rhs), (ComparisonOp::EQ, 7.0));
+            assert_eq!((*operator, *rhs), (ComparisonOp::EQ, 7.0));
         }
 
         let problem = LpProblemBuilder::new().constraint("t", |c| c.coefficient("x", 1.0).lt(15.0)).build().unwrap();
         let t_id = problem.get_name_id("t").unwrap();
         if let Constraint::Standard { operator, rhs, .. } = problem.constraints.get(&t_id).unwrap() {
-            assert_eq!((operator.clone(), *rhs), (ComparisonOp::LT, 15.0));
+            assert_eq!((*operator, *rhs), (ComparisonOp::LT, 15.0));
         }
 
         let problem = LpProblemBuilder::new().constraint("t", |c| c.coefficient("x", 1.0).gt(2.0)).build().unwrap();
         let t_id = problem.get_name_id("t").unwrap();
         if let Constraint::Standard { operator, rhs, .. } = problem.constraints.get(&t_id).unwrap() {
-            assert_eq!((operator.clone(), *rhs), (ComparisonOp::GT, 2.0));
+            assert_eq!((*operator, *rhs), (ComparisonOp::GT, 2.0));
         }
 
         // Missing operator and no coefficients errors
@@ -602,7 +602,7 @@ mod tests {
     #[test]
     fn test_sos_constraint_on_problem() {
         for sos_type in [SOSType::S1, SOSType::S2] {
-            let problem = LpProblemBuilder::new().sos_constraint("sos", sos_type.clone(), |c| c.coefficient("x", 1.0)).build().unwrap();
+            let problem = LpProblemBuilder::new().sos_constraint("sos", sos_type, |c| c.coefficient("x", 1.0)).build().unwrap();
 
             let sos_id = problem.get_name_id("sos").unwrap();
             if let Constraint::SOS { sos_type: st, .. } = problem.constraints.get(&sos_id).unwrap() {

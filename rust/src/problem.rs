@@ -1,4 +1,3 @@
-use std::collections::HashSet;
 use std::fmt::{Display, Formatter, Result as FmtResult, Write as _};
 
 use indexmap::IndexMap;
@@ -135,13 +134,13 @@ fn intern_constraint(interner: &mut NameInterner, raw: &RawConstraint<'_>) -> Co
         RawConstraint::Standard { name, coefficients, operator, rhs, byte_offset } => Constraint::Standard {
             name: interner.intern(name),
             coefficients: intern_coefficients(interner, coefficients),
-            operator: operator.clone(),
+            operator: *operator,
             rhs: *rhs,
             byte_offset: *byte_offset,
         },
         RawConstraint::SOS { name, sos_type, weights, byte_offset } => Constraint::SOS {
             name: interner.intern(name),
-            sos_type: sos_type.clone(),
+            sos_type: *sos_type,
             weights: intern_coefficients(interner, weights),
             byte_offset: *byte_offset,
         },
@@ -473,6 +472,9 @@ impl LpProblem {
         new_variable.var_type = variable.var_type;
         self.variables.insert(new_id, new_variable);
 
+        // PERF: O(n*m) scan over all objectives and constraints to rename the variable.
+        // Acceptable because rename is infrequent in typical LP workflows. For mutation-heavy
+        // workloads, prefer batch operations or maintain a reverse index.
         for objective in self.objectives.values_mut() {
             for coeff in &mut objective.coefficients {
                 if coeff.name == old_id {
@@ -592,6 +594,9 @@ impl LpProblem {
 
         self.variables.shift_remove(&var_id);
 
+        // PERF: O(n*m) scan over all objectives and constraints to remove the variable.
+        // Acceptable because removal is infrequent in typical LP workflows. For mutation-heavy
+        // workloads, prefer batch operations or maintain a reverse index.
         for objective in self.objectives.values_mut() {
             objective.coefficients.retain(|c| c.name != var_id);
         }
@@ -669,42 +674,19 @@ impl LpProblem {
     }
 
     /// Get a sorted list of all variable name IDs referenced in the problem.
+    ///
+    /// Relies on the invariant that all variables referenced in objectives and
+    /// constraints are registered in `self.variables` (ensured by
+    /// `register_variables_from_coefficients` during parse).
     #[must_use]
     pub fn get_all_variable_name_ids(&self) -> Vec<NameId> {
-        let mut ids = HashSet::with_capacity(self.variables.len());
-
-        for &id in self.variables.keys() {
-            ids.insert(id);
-        }
-
-        for objective in self.objectives.values() {
-            for coeff in &objective.coefficients {
-                ids.insert(coeff.name);
-            }
-        }
-
-        for constraint in self.constraints.values() {
-            match constraint {
-                Constraint::Standard { coefficients, .. } => {
-                    for coeff in coefficients {
-                        ids.insert(coeff.name);
-                    }
-                }
-                Constraint::SOS { weights, .. } => {
-                    for weight in weights {
-                        ids.insert(weight.name);
-                    }
-                }
-            }
-        }
-
-        let mut result: Vec<NameId> = ids.into_iter().collect();
-        result.sort_by(|a, b| self.interner.resolve(*a).cmp(self.interner.resolve(*b)));
+        let mut ids: Vec<NameId> = self.variables.keys().copied().collect();
+        ids.sort_by(|a, b| self.interner.resolve(*a).cmp(self.interner.resolve(*b)));
         debug_assert!(
-            result.windows(2).all(|w| self.interner.resolve(w[0]) <= self.interner.resolve(w[1])),
+            ids.windows(2).all(|w| self.interner.resolve(w[0]) <= self.interner.resolve(w[1])),
             "postcondition: result must be sorted by resolved name"
         );
-        result
+        ids
     }
 
     /// Get a sorted list of all variable names referenced in the problem.
@@ -807,12 +789,12 @@ mod serde_support {
                         Constraint::Standard { name, coefficients, operator, rhs, .. } => SerdeConstraint::Standard {
                             name: self.interner.resolve(*name).to_string(),
                             coefficients: coeffs_to_serde(coefficients, &self.interner),
-                            operator: operator.clone(),
+                            operator: *operator,
                             rhs: *rhs,
                         },
                         Constraint::SOS { name, sos_type, weights, .. } => SerdeConstraint::Sos {
                             name: self.interner.resolve(*name).to_string(),
-                            sos_type: sos_type.clone(),
+                            sos_type: *sos_type,
                             weights: coeffs_to_serde(weights, &self.interner),
                         },
                     })
@@ -853,7 +835,7 @@ mod serde_support {
                         let con = Constraint::Standard {
                             name: name_id,
                             coefficients: coeffs_from_serde(coefficients, &mut interner),
-                            operator: operator.clone(),
+                            operator: *operator,
                             rhs: *rhs,
                             byte_offset: None,
                         };
@@ -863,7 +845,7 @@ mod serde_support {
                         let name_id = interner.intern(name);
                         let con = Constraint::SOS {
                             name: name_id,
-                            sos_type: sos_type.clone(),
+                            sos_type: *sos_type,
                             weights: coeffs_from_serde(weights, &mut interner),
                             byte_offset: None,
                         };

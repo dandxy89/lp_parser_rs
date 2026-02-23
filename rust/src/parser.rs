@@ -91,7 +91,7 @@ impl MappedFile {
     /// Borrow the file contents as a string slice.
     #[inline]
     #[must_use]
-    pub fn as_str(&self) -> &str {
+    pub const fn as_str(&self) -> &str {
         // SAFETY: `content` points into `_mmap` which is alive for `&self`'s lifetime.
         unsafe { &*self.content }
     }

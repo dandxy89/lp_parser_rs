@@ -71,11 +71,11 @@ fn resolve_constraint(problem: &LpProblem, constraint: &Constraint, interner: &m
     match constraint {
         Constraint::Standard { coefficients, operator, rhs, .. } => ResolvedConstraint::Standard {
             coefficients: resolve_coefficients(problem, coefficients, interner),
-            operator: operator.clone(),
+            operator: *operator,
             rhs: *rhs,
         },
         Constraint::SOS { sos_type, weights, .. } => {
-            ResolvedConstraint::Sos { sos_type: sos_type.clone(), weights: resolve_coefficients(problem, weights, interner) }
+            ResolvedConstraint::Sos { sos_type: *sos_type, weights: resolve_coefficients(problem, weights, interner) }
         }
     }
 }
@@ -480,7 +480,7 @@ fn diff_standard_constraints(
     interner: &NameInterner,
 ) -> Option<ConstraintDiffDetail> {
     let coeff_changes = diff_coefficients(old_coefficients, new_coefficients, interner);
-    let operator_change = if old_operator == new_operator { None } else { Some((old_operator.clone(), new_operator.clone())) };
+    let operator_change = if old_operator == new_operator { None } else { Some((*old_operator, *new_operator)) };
     let rhs_change = if (old_rhs - new_rhs).abs() > COEFF_EPSILON { Some((old_rhs, new_rhs)) } else { None };
 
     if coeff_changes.is_empty() && operator_change.is_none() && rhs_change.is_none() {
@@ -507,7 +507,7 @@ fn diff_sos_constraints(
     interner: &NameInterner,
 ) -> Option<ConstraintDiffDetail> {
     let weight_changes = diff_coefficients(old_weights, new_weights, interner);
-    let type_change = if old_type == new_type { None } else { Some((old_type.clone(), new_type.clone())) };
+    let type_change = if old_type == new_type { None } else { Some((*old_type, *new_type)) };
 
     if weight_changes.is_empty() && type_change.is_none() {
         return None;

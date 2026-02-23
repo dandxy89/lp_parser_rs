@@ -18,7 +18,7 @@ use crate::interner::NameId;
 
 #[cfg_attr(feature = "diff", derive(diff::Diff), diff(attr(#[derive(Debug, PartialEq, Eq)])))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 /// Represents comparison operations that can be used to compare values.
 pub enum ComparisonOp {
     #[default]
@@ -90,7 +90,7 @@ impl Display for Sense {
 
 #[cfg_attr(feature = "diff", derive(diff::Diff), diff(attr(#[derive(Debug, PartialEq, Eq)])))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 /// Represents the type of SOS (Special Ordered Set) with variants `S1` and `S2`.
 pub enum SOSType {
     #[default]

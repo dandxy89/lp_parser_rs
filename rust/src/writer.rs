@@ -160,8 +160,12 @@ fn write_constraint(output: &mut String, constraint: &Constraint, interner: &Nam
 
             write_coefficients_line(output, coefficients, interner, options)?;
 
-            writeln!(output, " {} {}", operator, format_number(*rhs, options.decimal_precision))
+            write!(output, " {operator} ")
                 .map_err(|err| LpParseError::io_error(format!("Failed to write constraint RHS: {err}")))?;
+            write_number(output, *rhs, options.decimal_precision)
+                .map_err(|err| LpParseError::io_error(format!("Failed to write constraint RHS: {err}")))?;
+            writeln!(output)
+                .map_err(|err| LpParseError::io_error(format!("Failed to write newline: {err}")))?;
         }
         Constraint::SOS { name, sos_type, weights, .. } => {
             let resolved_name = interner.resolve(*name);
@@ -173,7 +177,9 @@ fn write_constraint(output: &mut String, constraint: &Constraint, interner: &Nam
                     write!(output, " ").map_err(|err| LpParseError::io_error(format!("Failed to write space: {err}")))?;
                 }
                 let var_name = interner.resolve(weight.name);
-                write!(output, "{}:{}", var_name, format_number(weight.value, options.decimal_precision))
+                write!(output, "{var_name}:")
+                    .map_err(|err| LpParseError::io_error(format!("Failed to write SOS weight: {err}")))?;
+                write_number(output, weight.value, options.decimal_precision)
                     .map_err(|err| LpParseError::io_error(format!("Failed to write SOS weight: {err}")))?;
             }
             writeln!(output).map_err(|err| LpParseError::io_error(format!("Failed to write newline: {err}")))?;
@@ -222,21 +228,30 @@ fn write_variable_bounds(output: &mut String, variable: &Variable, interner: &Na
             writeln!(output, "{var_name} free").map_err(|err| LpParseError::io_error(format!("Failed to write free variable: {err}")))?;
         }
         VariableType::LowerBound(bound) => {
-            writeln!(output, "{var_name} >= {}", format_number(*bound, options.decimal_precision))
+            write!(output, "{var_name} >= ")
                 .map_err(|err| LpParseError::io_error(format!("Failed to write lower bound: {err}")))?;
+            write_number(output, *bound, options.decimal_precision)
+                .map_err(|err| LpParseError::io_error(format!("Failed to write lower bound: {err}")))?;
+            writeln!(output)
+                .map_err(|err| LpParseError::io_error(format!("Failed to write newline: {err}")))?;
         }
         VariableType::UpperBound(bound) => {
-            writeln!(output, "{var_name} <= {}", format_number(*bound, options.decimal_precision))
+            write!(output, "{var_name} <= ")
                 .map_err(|err| LpParseError::io_error(format!("Failed to write upper bound: {err}")))?;
+            write_number(output, *bound, options.decimal_precision)
+                .map_err(|err| LpParseError::io_error(format!("Failed to write upper bound: {err}")))?;
+            writeln!(output)
+                .map_err(|err| LpParseError::io_error(format!("Failed to write newline: {err}")))?;
         }
         VariableType::DoubleBound(lower, upper) => {
-            writeln!(
-                output,
-                "{} <= {var_name} <= {}",
-                format_number(*lower, options.decimal_precision),
-                format_number(*upper, options.decimal_precision)
-            )
-            .map_err(|err| LpParseError::io_error(format!("Failed to write double bound: {err}")))?;
+            write_number(output, *lower, options.decimal_precision)
+                .map_err(|err| LpParseError::io_error(format!("Failed to write double bound: {err}")))?;
+            write!(output, " <= {var_name} <= ")
+                .map_err(|err| LpParseError::io_error(format!("Failed to write double bound: {err}")))?;
+            write_number(output, *upper, options.decimal_precision)
+                .map_err(|err| LpParseError::io_error(format!("Failed to write double bound: {err}")))?;
+            writeln!(output)
+                .map_err(|err| LpParseError::io_error(format!("Failed to write newline: {err}")))?;
         }
         _ => {} // Other types don't need bounds declarations
     }
@@ -355,40 +370,59 @@ fn write_formatted_coefficient(output: &mut String, name: &str, value: f64, is_f
 
     if is_first {
         if value < 0.0 {
-            if is_one { write!(output, "- {name}") } else { write!(output, "- {} {name}", format_number(abs_value, precision)) }
+            if is_one {
+                write!(output, "- {name}")
+            } else {
+                write!(output, "- ")?;
+                write_number(output, abs_value, precision)?;
+                write!(output, " {name}")
+            }
         } else if is_one {
             write!(output, "{name}")
         } else {
-            write!(output, "{} {name}", format_number(abs_value, precision))
+            write_number(output, abs_value, precision)?;
+            write!(output, " {name}")
         }
     } else if is_one {
         write!(output, " {sign} {name}")
     } else {
-        write!(output, " {sign} {} {name}", format_number(abs_value, precision))
+        write!(output, " {sign} ")?;
+        write_number(output, abs_value, precision)?;
+        write!(output, " {name}")
     }
 }
 
-/// Format a number with specified precision, removing trailing zeros.
-/// Uses a single `String` allocation by truncating in-place.
+/// Write a number with specified precision directly to the output buffer,
+/// removing trailing zeros. Avoids intermediate `String` allocation.
 #[allow(clippy::uninlined_format_args, clippy::cast_precision_loss, clippy::cast_possible_truncation)]
-fn format_number(value: f64, precision: usize) -> String {
-    debug_assert!(value.is_finite(), "format_number called with non-finite value: {value}");
+fn write_number(output: &mut String, value: f64, precision: usize) -> std::fmt::Result {
+    debug_assert!(value.is_finite(), "write_number called with non-finite value: {value}");
     let is_whole_number = value.fract().abs() < f64::EPSILON;
     let is_safe_for_i64 = value >= (i64::MIN as f64) && value <= (i64::MAX as f64);
 
     if is_whole_number && is_safe_for_i64 && value.abs() < 1e10 {
         let cast = value as i64;
         debug_assert!((cast as f64 - value).abs() < 1.0, "i64 cast lost precision: {value} -> {cast}");
-        format!("{}", cast)
+        write!(output, "{}", cast)
     } else {
-        let mut formatted = format!("{:.precision$}", value, precision = precision);
-        // Truncate trailing zeros in-place instead of allocating a second String
-        if formatted.contains('.') {
-            let trimmed_len = formatted.trim_end_matches('0').trim_end_matches('.').len();
-            formatted.truncate(trimmed_len);
+        // Write the formatted number, then trim trailing zeros in-place.
+        let start = output.len();
+        write!(output, "{:.precision$}", value, precision = precision)?;
+        if output[start..].contains('.') {
+            let trimmed_len = start + output[start..].trim_end_matches('0').trim_end_matches('.').len();
+            output.truncate(trimmed_len);
         }
-        formatted
+        Ok(())
     }
+}
+
+/// Format a number with specified precision, removing trailing zeros.
+/// Convenience wrapper around `write_number` for use in tests.
+#[cfg(test)]
+fn format_number(value: f64, precision: usize) -> String {
+    let mut s = String::new();
+    write_number(&mut s, value, precision).expect("write_number failed");
+    s
 }
 
 #[cfg(test)]
