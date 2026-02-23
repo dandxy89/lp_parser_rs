@@ -10,6 +10,7 @@
 
 use std::path::{Path, PathBuf};
 
+use lp_parser_rs::analysis::AnalysisConfig;
 use lp_parser_rs::csv::LpCsvWriter as _;
 use lp_parser_rs::model::{Constraint, Sense, VariableType};
 use lp_parser_rs::parser::parse_file;
@@ -480,7 +481,6 @@ impl LpParser {
     /// - issues: List of detected issues/warnings
     #[pyo3(text_signature = "($self)")]
     fn analyze(&self, py: Python) -> PyResult<Py<PyAny>> {
-        use lp_parser_rs::analysis::AnalysisConfig;
 
         let problem = self.get_problem()?;
         let analysis = problem.analyze_with_config(&AnalysisConfig::default());
@@ -501,7 +501,6 @@ impl LpParser {
         small_coeff_threshold: f64,
         ratio_threshold: f64,
     ) -> PyResult<Py<PyAny>> {
-        use lp_parser_rs::analysis::AnalysisConfig;
 
         let problem = self.get_problem()?;
         let config = AnalysisConfig {

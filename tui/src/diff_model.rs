@@ -776,6 +776,8 @@ pub fn build_diff_report(input: &DiffInput<'_>) -> LpDiffReport {
 
 #[cfg(test)]
 mod tests {
+    use std::fmt::Write;
+
     use lp_parser_rs::analysis::ProblemAnalysis;
     use lp_parser_rs::model::{ComparisonOp, Sense, VariableType};
     use lp_parser_rs::problem::LpProblem;
@@ -996,7 +998,6 @@ mod tests {
     #[test]
     fn test_unchanged_not_stored() {
         // Build two problems with 10 identical Free variables and 1 modified variable.
-        use std::fmt::Write;
         let mut var_lines_1 = String::new();
         let mut var_lines_2 = String::new();
         for i in 0..10 {

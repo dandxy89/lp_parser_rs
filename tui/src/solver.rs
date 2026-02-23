@@ -57,10 +57,21 @@ pub struct SolveDiffResult {
     pub constraint_counts: DiffCounts,
 }
 
+/// Zero-copy name reference into a [`SolveResult`]'s variable or row-value vec,
+/// avoiding per-row `String` clones during diff construction.
+#[derive(Debug, Clone, Copy)]
+pub struct NameRef {
+    /// `false` → name lives in result1, `true` → result2.
+    pub from_result2: bool,
+    /// Index into the source result's `variables` (for [`VarDiffRow`]) or
+    /// `row_values` (for [`ConstraintDiffRow`]) vec.
+    pub index: u32,
+}
+
 /// A single variable row in a solve diff comparison.
 #[derive(Debug, Clone)]
 pub struct VarDiffRow {
-    pub name: String,
+    pub name_ref: NameRef,
     pub val1: Option<f64>,
     pub val2: Option<f64>,
     pub reduced_cost1: Option<f64>,
@@ -68,15 +79,35 @@ pub struct VarDiffRow {
     pub changed: bool,
 }
 
+impl VarDiffRow {
+    /// Resolve the variable name from the source solve results.
+    pub fn name<'a>(&self, r1: &'a SolveResult, r2: &'a SolveResult) -> &'a str {
+        let (result, idx) =
+            if self.name_ref.from_result2 { (r2, self.name_ref.index as usize) } else { (r1, self.name_ref.index as usize) };
+        debug_assert!(idx < result.variables.len(), "VarDiffRow name_ref index {idx} out of bounds");
+        &result.variables[idx].0
+    }
+}
+
 /// A single constraint row in a solve diff comparison.
 #[derive(Debug, Clone)]
 pub struct ConstraintDiffRow {
-    pub name: String,
+    pub name_ref: NameRef,
     pub activity1: Option<f64>,
     pub activity2: Option<f64>,
     pub shadow_price1: Option<f64>,
     pub shadow_price2: Option<f64>,
     pub changed: bool,
+}
+
+impl ConstraintDiffRow {
+    /// Resolve the constraint name from the source solve results.
+    pub fn name<'a>(&self, r1: &'a SolveResult, r2: &'a SolveResult) -> &'a str {
+        let (result, idx) =
+            if self.name_ref.from_result2 { (r2, self.name_ref.index as usize) } else { (r1, self.name_ref.index as usize) };
+        debug_assert!(idx < result.row_values.len(), "ConstraintDiffRow name_ref index {idx} out of bounds");
+        &result.row_values[idx].0
+    }
 }
 
 /// Build a `SolveDiffResult` by comparing two solve results.
@@ -132,8 +163,8 @@ fn diff_variables(r1: &SolveResult, r2: &SolveResult, threshold: f64) -> Vec<Var
     debug_assert_eq!(r1.variables.len(), r1.reduced_costs.len(), "variables and reduced_costs must have equal length for result 1");
     debug_assert_eq!(r2.variables.len(), r2.reduced_costs.len(), "variables and reduced_costs must have equal length for result 2");
 
-    let mut i = 0;
-    let mut j = 0;
+    let mut i: usize = 0;
+    let mut j: usize = 0;
     let mut rows = Vec::new();
 
     while i < r1.variables.len() || j < r2.variables.len() {
@@ -146,26 +177,29 @@ fn diff_variables(r1: &SolveResult, r2: &SolveResult, threshold: f64) -> Vec<Var
 
         let row = match cmp {
             std::cmp::Ordering::Less => {
-                let (name, val) = &r1.variables[i];
+                let val = r1.variables[i].1;
                 let rc1 = r1.reduced_costs.get(i).map(|(_, v)| *v);
+                let name_ref = NameRef { from_result2: false, index: i as u32 };
                 i += 1;
-                VarDiffRow { name: name.clone(), val1: Some(*val), val2: None, reduced_cost1: rc1, reduced_cost2: None, changed: true }
+                VarDiffRow { name_ref, val1: Some(val), val2: None, reduced_cost1: rc1, reduced_cost2: None, changed: true }
             }
             std::cmp::Ordering::Greater => {
-                let (name, val) = &r2.variables[j];
+                let val = r2.variables[j].1;
                 let rc2 = r2.reduced_costs.get(j).map(|(_, v)| *v);
+                let name_ref = NameRef { from_result2: true, index: j as u32 };
                 j += 1;
-                VarDiffRow { name: name.clone(), val1: None, val2: Some(*val), reduced_cost1: None, reduced_cost2: rc2, changed: true }
+                VarDiffRow { name_ref, val1: None, val2: Some(val), reduced_cost1: None, reduced_cost2: rc2, changed: true }
             }
             std::cmp::Ordering::Equal => {
-                let (name, val1) = &r1.variables[i];
+                let val1 = r1.variables[i].1;
                 let val2 = r2.variables[j].1;
                 let rc1 = r1.reduced_costs.get(i).map(|(_, v)| *v);
                 let rc2 = r2.reduced_costs.get(j).map(|(_, v)| *v);
-                let changed = (*val1 - val2).abs() > threshold || opt_diff(rc1, rc2, threshold);
+                let changed = (val1 - val2).abs() > threshold || opt_diff(rc1, rc2, threshold);
+                let name_ref = NameRef { from_result2: false, index: i as u32 };
                 i += 1;
                 j += 1;
-                VarDiffRow { name: name.clone(), val1: Some(*val1), val2: Some(val2), reduced_cost1: rc1, reduced_cost2: rc2, changed }
+                VarDiffRow { name_ref, val1: Some(val1), val2: Some(val2), reduced_cost1: rc1, reduced_cost2: rc2, changed }
             }
         };
         rows.push(row);
@@ -177,8 +211,8 @@ fn diff_constraints(r1: &SolveResult, r2: &SolveResult, threshold: f64) -> Vec<C
     debug_assert_eq!(r1.row_values.len(), r1.shadow_prices.len(), "row_values and shadow_prices must have equal length for result 1");
     debug_assert_eq!(r2.row_values.len(), r2.shadow_prices.len(), "row_values and shadow_prices must have equal length for result 2");
 
-    let mut i = 0;
-    let mut j = 0;
+    let mut i: usize = 0;
+    let mut j: usize = 0;
     let mut rows = Vec::new();
 
     while i < r1.row_values.len() || j < r2.row_values.len() {
@@ -191,12 +225,13 @@ fn diff_constraints(r1: &SolveResult, r2: &SolveResult, threshold: f64) -> Vec<C
 
         let row = match cmp {
             std::cmp::Ordering::Less => {
-                let (name, activity) = &r1.row_values[i];
+                let activity = r1.row_values[i].1;
                 let sp = r1.shadow_prices[i].1;
+                let name_ref = NameRef { from_result2: false, index: i as u32 };
                 i += 1;
                 ConstraintDiffRow {
-                    name: name.clone(),
-                    activity1: Some(*activity),
+                    name_ref,
+                    activity1: Some(activity),
                     activity2: None,
                     shadow_price1: Some(sp),
                     shadow_price2: None,
@@ -204,29 +239,31 @@ fn diff_constraints(r1: &SolveResult, r2: &SolveResult, threshold: f64) -> Vec<C
                 }
             }
             std::cmp::Ordering::Greater => {
-                let (name, activity) = &r2.row_values[j];
+                let activity = r2.row_values[j].1;
                 let sp = r2.shadow_prices[j].1;
+                let name_ref = NameRef { from_result2: true, index: j as u32 };
                 j += 1;
                 ConstraintDiffRow {
-                    name: name.clone(),
+                    name_ref,
                     activity1: None,
-                    activity2: Some(*activity),
+                    activity2: Some(activity),
                     shadow_price1: None,
                     shadow_price2: Some(sp),
                     changed: true,
                 }
             }
             std::cmp::Ordering::Equal => {
-                let (name, a1) = &r1.row_values[i];
+                let a1 = r1.row_values[i].1;
                 let a2 = r2.row_values[j].1;
                 let sp1 = r1.shadow_prices[i].1;
                 let sp2 = r2.shadow_prices[j].1;
-                let changed = (*a1 - a2).abs() > threshold || (sp1 - sp2).abs() > threshold;
+                let changed = (a1 - a2).abs() > threshold || (sp1 - sp2).abs() > threshold;
+                let name_ref = NameRef { from_result2: false, index: i as u32 };
                 i += 1;
                 j += 1;
                 ConstraintDiffRow {
-                    name: name.clone(),
-                    activity1: Some(*a1),
+                    name_ref,
+                    activity1: Some(a1),
                     activity2: Some(a2),
                     shadow_price1: Some(sp1),
                     shadow_price2: Some(sp2),
@@ -279,19 +316,24 @@ fn build_highs_model(problem: &LpProblem) -> BuiltModel {
 
     let variable_names: Vec<String> = sorted_var_ids.iter().map(|id| problem.resolve(*id).to_string()).collect();
 
-    let variable_index: HashMap<NameId, usize> = sorted_var_ids.iter().enumerate().map(|(i, &id)| (id, i)).collect();
+    let variable_index: HashMap<NameId, usize> = {
+        let mut map = HashMap::with_capacity(sorted_var_ids.len());
+        map.extend(sorted_var_ids.iter().enumerate().map(|(i, &id)| (id, i)));
+        map
+    };
 
     let objective_coefficients: HashMap<NameId, f64> = {
-        let mut map = HashMap::new();
-        // Sort objective names and take the first one (primary objective).
-        let mut obj_names: Vec<(&NameId, &lp_parser_rs::model::Objective)> = problem.objectives.iter().collect();
-        obj_names.sort_by_key(|(id, _)| problem.resolve(**id));
-        if let Some((_, objective)) = obj_names.first() {
+        // Find the primary objective (alphabetically first by resolved name).
+        let primary = problem.objectives.iter().min_by_key(|(id, _)| problem.resolve(**id));
+        if let Some((_, objective)) = primary {
+            let mut map = HashMap::with_capacity(objective.coefficients.len());
             for coefficient in &objective.coefficients {
                 map.insert(coefficient.name, coefficient.value);
             }
+            map
+        } else {
+            HashMap::new()
         }
-        map
     };
 
     let mut row_problem = highs::RowProblem::new();
@@ -322,14 +364,15 @@ fn build_highs_model(problem: &LpProblem) -> BuiltModel {
 
     let mut skipped_sos: usize = 0;
     let mut row_constraint_names = Vec::new();
+    let mut row_factors: Vec<(highs::Col, f64)> = Vec::new();
 
     for (name_id, constraint) in &sorted_constraints {
         let constraint_name = problem.resolve(**name_id);
 
         match constraint {
             Constraint::Standard { coefficients, operator, rhs, .. } => {
-                let row_factors: Vec<(highs::Col, f64)> =
-                    coefficients.iter().filter_map(|c| variable_index.get(&c.name).map(|&idx| (columns[idx], c.value))).collect();
+                row_factors.clear();
+                row_factors.extend(coefficients.iter().filter_map(|c| variable_index.get(&c.name).map(|&idx| (columns[idx], c.value))));
 
                 match operator {
                     ComparisonOp::LTE | ComparisonOp::LT => {
@@ -484,6 +527,7 @@ pub fn write_diff_csv(diff: &SolveDiffResult, dir: &Path) -> Result<(String, Str
                 continue;
             }
 
+            let name = row.name(&diff.result1, &diff.result2);
             write_opt_f64_to_buf(&mut buf_v1, row.val1);
             write_opt_f64_to_buf(&mut buf_v2, row.val2);
             buf_delta.clear();
@@ -493,7 +537,7 @@ pub fn write_diff_csv(diff: &SolveDiffResult, dir: &Path) -> Result<(String, Str
             write_opt_f64_to_buf(&mut buf_rc1, row.reduced_cost1);
             write_opt_f64_to_buf(&mut buf_rc2, row.reduced_cost2);
 
-            wtr.write_record([&row.name, &buf_v1, &buf_v2, &buf_delta, &buf_rc1, &buf_rc2])?;
+            wtr.write_record([name, &buf_v1, &buf_v2, &buf_delta, &buf_rc1, &buf_rc2])?;
         }
         wtr.flush()?;
     }
@@ -513,12 +557,13 @@ pub fn write_diff_csv(diff: &SolveDiffResult, dir: &Path) -> Result<(String, Str
                 continue;
             }
 
+            let name = row.name(&diff.result1, &diff.result2);
             write_opt_f64_to_buf(&mut buf_a1, row.activity1);
             write_opt_f64_to_buf(&mut buf_a2, row.activity2);
             write_opt_f64_to_buf(&mut buf_sp1, row.shadow_price1);
             write_opt_f64_to_buf(&mut buf_sp2, row.shadow_price2);
 
-            wtr.write_record([&row.name, &buf_a1, &buf_a2, &buf_sp1, &buf_sp2])?;
+            wtr.write_record([name, &buf_a1, &buf_a2, &buf_sp1, &buf_sp2])?;
         }
         wtr.flush()?;
     }

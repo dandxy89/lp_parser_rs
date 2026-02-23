@@ -25,6 +25,7 @@
 use std::collections::HashSet;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 
+use crate::interner::NameId;
 use crate::model::{ComparisonOp, Constraint, SOSType, VariableType};
 use crate::problem::LpProblem;
 
@@ -606,8 +607,6 @@ impl LpProblem {
 
     /// Analyze variables.
     fn analyze_variables(&self) -> VariableAnalysis {
-        use crate::interner::NameId;
-
         let mut type_distribution = VariableTypeDistribution::default();
         let mut free_variables = Vec::new();
         let mut fixed_variables = Vec::new();

@@ -7,7 +7,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, Paragraph};
 
 use crate::app::{App, CachedDiffRow, SolveRenderCache};
-use crate::solver::{ConstraintDiffRow, DiffCounts, SolveDiffResult, SolveResult, VarDiffRow};
+use crate::solver::{DiffCounts, SolveDiffResult, SolveResult, VarDiffRow};
 use crate::state::{SolveState, SolveTab, SolveViewState};
 use crate::theme::theme;
 
@@ -413,7 +413,8 @@ pub fn build_diff_solve_cache(diff: &SolveDiffResult) -> SolveRenderCache {
         .variable_diff
         .iter()
         .filter_map(|row| {
-            let line = format_variable_diff_line(row, 24, 14)?;
+            let name = row.name(&diff.result1, &diff.result2);
+            let line = format_variable_diff_line(row, name, 24, 14)?;
             Some(CachedDiffRow { line, changed: row.changed })
         })
         .collect();
@@ -422,7 +423,8 @@ pub fn build_diff_solve_cache(diff: &SolveDiffResult) -> SolveRenderCache {
         .constraint_diff
         .iter()
         .filter_map(|row| {
-            let line = format_constraint_diff_line(row, 22, 13)?;
+            let name = row.name(&diff.result1, &diff.result2);
+            let line = format_constraint_diff_line(row, name, 22, 13)?;
             Some(CachedDiffRow { line, changed: row.changed })
         })
         .collect();
@@ -434,7 +436,7 @@ pub fn build_diff_solve_cache(diff: &SolveDiffResult) -> SolveRenderCache {
 }
 
 /// Format a single variable diff row as a `Line`. Returns `None` for `(None, None)` rows.
-fn format_variable_diff_line(row: &VarDiffRow, name_w: usize, value_w: usize) -> Option<Line<'static>> {
+fn format_variable_diff_line(row: &VarDiffRow, name: &str, name_w: usize, value_w: usize) -> Option<Line<'static>> {
     let t = theme();
     let dash = "\u{2014}";
 
@@ -463,7 +465,7 @@ fn format_variable_diff_line(row: &VarDiffRow, name_w: usize, value_w: usize) ->
     };
 
     let mut spans = vec![
-        Span::styled(format!("  {:<name_w$}", row.name), name_style),
+        Span::styled(format!("  {:<name_w$}", name), name_style),
         Span::styled(value1_str, name_style),
         Span::styled(format!("  {value2_str}"), name_style),
     ];
@@ -477,7 +479,7 @@ fn format_variable_diff_line(row: &VarDiffRow, name_w: usize, value_w: usize) ->
 }
 
 /// Format a single constraint diff row as a `Line`. Returns `None` for `(None, None)` rows.
-fn format_constraint_diff_line(row: &ConstraintDiffRow, name_w: usize, val_w: usize) -> Option<Line<'static>> {
+fn format_constraint_diff_line(row: &crate::solver::ConstraintDiffRow, name: &str, name_w: usize, val_w: usize) -> Option<Line<'static>> {
     let t = theme();
     let dash = "\u{2014}";
 
@@ -530,7 +532,7 @@ fn format_constraint_diff_line(row: &ConstraintDiffRow, name_w: usize, val_w: us
     };
 
     let mut spans = vec![
-        Span::styled(format!("  {:<name_w$}", row.name), name_style),
+        Span::styled(format!("  {:<name_w$}", name), name_style),
         Span::styled(a1, name_style),
         Span::styled(format!("  {a2}"), name_style),
         Span::styled(format!("  {s1}"), name_style),

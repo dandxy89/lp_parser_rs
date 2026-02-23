@@ -306,6 +306,8 @@ impl Variable {
 
 #[cfg(test)]
 mod tests {
+    use std::fmt::Write;
+
     use super::*;
     use crate::interner::NameInterner;
 
@@ -352,8 +354,6 @@ mod tests {
 
     #[test]
     fn test_coefficient() {
-        use std::fmt::Write;
-
         let mut interner = NameInterner::new();
         let x1 = interner.intern("x1");
         let x = interner.intern("x");

@@ -14,7 +14,7 @@ pub type ParsedLpFile = (LpProblem, ProblemAnalysis, HashMap<NameId, usize>);
 /// Build a map from constraint name to 1-based line number using byte offsets
 /// captured during parsing and a `LineIndex` built from the source text.
 fn build_constraint_line_map(problem: &LpProblem, line_index: &LineIndex) -> HashMap<NameId, usize> {
-    let mut map = HashMap::new();
+    let mut map = HashMap::with_capacity(problem.constraints.len());
     for (name_id, constraint) in &problem.constraints {
         if let Some(offset) = constraint.byte_offset()
             && let Some(line) = line_index.line_number(offset)

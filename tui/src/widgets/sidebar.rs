@@ -5,9 +5,8 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, List, ListItem, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState};
 
 use crate::app::{App, Focus, Section};
-use crate::diff_model::DiffEntry;
 use crate::theme::theme;
-use crate::widgets::{focus_border_style, kind_prefix, kind_style};
+use crate::widgets::focus_border_style;
 
 /// Draw the section selector as a bordered list in the top-left.
 pub fn draw_section_selector(frame: &mut Frame, area: Rect, app: &mut App) {
@@ -70,31 +69,25 @@ pub fn draw_name_list(frame: &mut Frame, area: Rect, app: &mut App) {
         }
         Section::Variables => {
             let idx = Section::Variables.list_index().expect("Variables has a list_index");
-            let (filtered, state) = app.section_states[idx].indices_and_state_mut();
+            let (filtered, cached_lines, state) = app.section_states[idx].indices_lines_and_state_mut();
             let total = app.report.variables.counts.total();
             draw_entry_name_list(
                 frame,
                 area,
-                &NameListParams {
-                    entries: &app.report.variables.entries,
-                    filtered_indices: filtered,
-                    section_label: "variables",
-                    total_count: total,
-                    border_style,
-                },
+                &NameListParams { filtered_indices: filtered, cached_lines, section_label: "variables", total_count: total, border_style },
                 state,
             );
         }
         Section::Constraints => {
             let idx = Section::Constraints.list_index().expect("Constraints has a list_index");
-            let (filtered, state) = app.section_states[idx].indices_and_state_mut();
+            let (filtered, cached_lines, state) = app.section_states[idx].indices_lines_and_state_mut();
             let total = app.report.constraints.counts.total();
             draw_entry_name_list(
                 frame,
                 area,
                 &NameListParams {
-                    entries: &app.report.constraints.entries,
                     filtered_indices: filtered,
+                    cached_lines,
                     section_label: "constraints",
                     total_count: total,
                     border_style,
@@ -104,18 +97,12 @@ pub fn draw_name_list(frame: &mut Frame, area: Rect, app: &mut App) {
         }
         Section::Objectives => {
             let idx = Section::Objectives.list_index().expect("Objectives has a list_index");
-            let (filtered, state) = app.section_states[idx].indices_and_state_mut();
+            let (filtered, cached_lines, state) = app.section_states[idx].indices_lines_and_state_mut();
             let total = app.report.objectives.counts.total();
             draw_entry_name_list(
                 frame,
                 area,
-                &NameListParams {
-                    entries: &app.report.objectives.entries,
-                    filtered_indices: filtered,
-                    section_label: "objectives",
-                    total_count: total,
-                    border_style,
-                },
+                &NameListParams { filtered_indices: filtered, cached_lines, section_label: "objectives", total_count: total, border_style },
                 state,
             );
         }
@@ -123,43 +110,28 @@ pub fn draw_name_list(frame: &mut Frame, area: Rect, app: &mut App) {
 }
 
 /// Parameters for rendering a section's name list in the sidebar.
-pub struct NameListParams<'a, T> {
-    pub entries: &'a [T],
+pub struct NameListParams<'a> {
     pub filtered_indices: &'a [usize],
+    /// Pre-built lines (one per filtered entry), cached in `SectionViewState`.
+    pub cached_lines: &'a [Line<'static>],
     pub section_label: &'a str,
     pub total_count: usize,
     pub border_style: Style,
 }
 
 /// Draw a compact name list for a section's entries in the sidebar.
-fn draw_entry_name_list<T: DiffEntry>(
-    frame: &mut Frame,
-    area: Rect,
-    params: &NameListParams<'_, T>,
-    state: &mut ratatui::widgets::ListState,
-) {
-    debug_assert!(
-        params.filtered_indices.iter().all(|&i| i < params.entries.len()),
-        "filtered index out of bounds for section '{}'",
+fn draw_entry_name_list(frame: &mut Frame, area: Rect, params: &NameListParams<'_>, state: &mut ratatui::widgets::ListState) {
+    debug_assert_eq!(
+        params.filtered_indices.len(),
+        params.cached_lines.len(),
+        "filtered_indices and cached_lines must be the same length for section '{}'",
         params.section_label,
     );
 
     let t = theme();
 
-    let items: Vec<ListItem> = params
-        .filtered_indices
-        .iter()
-        .map(|&index| {
-            let entry = &params.entries[index];
-            let kind = entry.kind();
-            let line = Line::from(vec![
-                Span::styled(kind_prefix(kind), kind_style(kind)),
-                Span::raw(" "),
-                Span::styled(entry.name(), kind_style(kind)),
-            ]);
-            ListItem::new(line)
-        })
-        .collect();
+    // Convert cached `Line<'static>` to `ListItem` — cheap wrapping, no allocation.
+    let items: Vec<ListItem> = params.cached_lines.iter().map(|line| ListItem::new(line.clone())).collect();
 
     let selected_position = state.selected().map_or(0, |selection| selection + 1);
     let filtered_len = params.filtered_indices.len();

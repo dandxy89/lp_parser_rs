@@ -328,6 +328,7 @@ mod tests {
     use test_case::test_case;
 
     use super::*;
+    use crate::lp::LpProblemParser;
 
     fn tokenize(input: &str) -> Vec<Token<'_>> {
         Lexer::new(input).filter_map(Result::ok).map(|(_, tok, _)| tok).collect()
@@ -787,7 +788,6 @@ end
 
     #[test]
     fn test_parse_simple() {
-        use crate::lp::LpProblemParser;
 
         // Test with just objective, no constraints
         let input = "minimize\nx1\nsubject to\nend";
@@ -800,7 +800,6 @@ end
 
     #[test]
     fn test_parse_named_objective() {
-        use crate::lp::LpProblemParser;
 
         // Test with named objective
         let input = "minimize\nobj: x1\nsubject to\nend";
@@ -813,7 +812,6 @@ end
 
     #[test]
     fn test_parse_with_constraint() {
-        use crate::lp::LpProblemParser;
 
         // Test with named constraint
         let input = "minimize\nobj: x1\nsubject to\nc1: x1 <= 1\nend";
@@ -826,7 +824,6 @@ end
 
     #[test]
     fn test_parse_unnamed_obj_with_constraint() {
-        use crate::lp::LpProblemParser;
 
         // Test with UNNAMED objective and named constraint - this is what minimal_parse uses
         let input = "minimize\nx1\nsubject to\nc1: x1 <= 1\nend";

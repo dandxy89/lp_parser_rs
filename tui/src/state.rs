@@ -1,8 +1,11 @@
+use ratatui::style::Style;
+use ratatui::text::{Line, Span};
 use ratatui::widgets::ListState;
 use smallvec::SmallVec;
 
 use crate::diff_model::{DiffEntry, DiffKind};
 use crate::solver::{SolveDiffResult, SolveResult};
+use crate::widgets::{kind_prefix, kind_style};
 
 /// State machine for the LP solver overlay.
 #[derive(Debug)]
@@ -307,12 +310,15 @@ impl JumpList {
 pub struct SectionViewState {
     pub list_state: ListState,
     filtered_indices: Vec<usize>,
+    /// Pre-built `Line<'static>` per filtered entry, used by the sidebar to
+    /// avoid rebuilding `Vec<ListItem>` every frame.  Built in `recompute()`.
+    cached_lines: Vec<Line<'static>>,
     dirty: bool,
 }
 
 impl SectionViewState {
     pub fn new() -> Self {
-        Self { list_state: ListState::default(), filtered_indices: Vec::new(), dirty: true }
+        Self { list_state: ListState::default(), filtered_indices: Vec::new(), cached_lines: Vec::new(), dirty: true }
     }
 
     /// Mark the cache as stale so it will be recomputed on next access.
@@ -325,11 +331,22 @@ impl SectionViewState {
         self.dirty
     }
 
-    /// Recompute the filtered indices from the given entries and filter.
+    /// Recompute the filtered indices and cached sidebar lines from the given entries and filter.
     pub(crate) fn recompute<T: DiffEntry>(&mut self, entries: &[T], filter: DiffFilter) {
         debug_assert!(self.dirty, "recompute called on non-dirty SectionViewState");
         self.filtered_indices.clear();
-        self.filtered_indices.extend(entries.iter().enumerate().filter(|(_, e)| filter.matches(e.kind())).map(|(i, _)| i));
+        self.cached_lines.clear();
+        for (i, entry) in entries.iter().enumerate() {
+            if filter.matches(entry.kind()) {
+                self.filtered_indices.push(i);
+                let kind = entry.kind();
+                let style = kind_style(kind);
+                let line =
+                    Line::from(vec![Span::styled(kind_prefix(kind), style), Span::raw(" "), Span::styled(entry.name().to_owned(), style)]);
+                self.cached_lines.push(line);
+            }
+        }
+        debug_assert_eq!(self.filtered_indices.len(), self.cached_lines.len(), "filtered indices and cached lines must be in sync");
         self.dirty = false;
     }
 
@@ -340,11 +357,24 @@ impl SectionViewState {
         &self.filtered_indices
     }
 
+    /// Return the cached sidebar lines (one per filtered entry).
+    /// Caller must ensure the cache is not dirty.
+    pub fn cached_sidebar_lines(&self) -> &[Line<'static>] {
+        debug_assert!(!self.dirty, "cached_sidebar_lines called on dirty SectionViewState");
+        &self.cached_lines
+    }
+
     /// Return both the cached indices and a mutable reference to the list state.
     /// This avoids borrow-checker conflicts when drawing (need indices for items
     /// and &mut `ListState` for `render_stateful_widget`).
     pub fn indices_and_state_mut(&mut self) -> (&[usize], &mut ListState) {
         debug_assert!(!self.dirty, "indices_and_state_mut called on dirty SectionViewState");
         (&self.filtered_indices, &mut self.list_state)
+    }
+
+    /// Return cached indices, cached sidebar lines, and a mutable list state.
+    pub fn indices_lines_and_state_mut(&mut self) -> (&[usize], &[Line<'static>], &mut ListState) {
+        debug_assert!(!self.dirty, "indices_lines_and_state_mut called on dirty SectionViewState");
+        (&self.filtered_indices, &self.cached_lines, &mut self.list_state)
     }
 }
