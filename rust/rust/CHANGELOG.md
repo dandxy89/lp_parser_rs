@@ -1,5 +1,37 @@
 # Changelog
 
+## [3.2.1](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v3.2.0...lp_parser_rs-v3.2.1) (2026-02-23)
+
+
+### Continuous Integration
+
+* TUI Release - Pre-Built Binaries ([#163](https://github.com/dandxy89/lp_parser_rs/issues/163)) ([70dea66](https://github.com/dandxy89/lp_parser_rs/commit/70dea6632a894302f6ee6c425c8fee2e15428103))
+
+
+### Bug Fixes
+
+* auto-naming now reuses a single String buffer per function instead of allocating a new format!() string per unnamed ([7028d49](https://github.com/dandxy89/lp_parser_rs/commit/7028d498d504e9832fecf83c87dd4c6073785364))
+* intern_coefficients now pre-allocates the Vec with exact capacity ([01b6962](https://github.com/dandxy89/lp_parser_rs/commit/01b6962be70102de169792fadd40a8556cb3c68d))
+* interner now estimates constraints.len() * 2 ([0281b05](https://github.com/dandxy89/lp_parser_rs/commit/0281b05005b186d5157c08f5f5f5431bf7e78bc1))
+* memmap2 = { version = "0.9.10", optional = true } ([e11767f](https://github.com/dandxy89/lp_parser_rs/commit/e11767ff5fbf893528eb85c2fd1b1bdc55b501ed))
+* variables map now includes binaries and constraints.len() in the capacity estimate ([6aa5aa6](https://github.com/dandxy89/lp_parser_rs/commit/6aa5aa6890be551e3fa04cc816e803cc4ec98720))
+
+
+### Performance Improvements
+
+* eliminate writer allocations, derive Copy for small enums, simplify variable collection, refactor analysis functions ([cd4f331](https://github.com/dandxy89/lp_parser_rs/commit/cd4f331588e3bacc86285d0ceb9993297c8a1dc2))
+
+
+### Styles
+
+* Formatting ([4d3ab97](https://github.com/dandxy89/lp_parser_rs/commit/4d3ab97e560eb04c921ea057da2bfb409c60127f))
+* Remove inline imports and qualified imports ([42c20a2](https://github.com/dandxy89/lp_parser_rs/commit/42c20a25b412b6fded358fdca70db4983db6f19b))
+
+
+### Tests
+
+* Additional testing ([#161](https://github.com/dandxy89/lp_parser_rs/issues/161)) ([dbd67af](https://github.com/dandxy89/lp_parser_rs/commit/dbd67af432aa7f9655f7155c49d5366aca5b1eb8))
+
 ## [3.2.0](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v3.1.1...lp_parser_rs-v3.2.0) (2026-02-22)
 
 
