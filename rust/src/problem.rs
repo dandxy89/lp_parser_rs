@@ -1,5 +1,5 @@
 use std::collections::HashSet;
-use std::fmt::{Display, Formatter, Result as FmtResult};
+use std::fmt::{Display, Formatter, Result as FmtResult, Write as _};
 
 use indexmap::IndexMap;
 use indexmap::map::Entry;
@@ -941,14 +941,16 @@ fn intern_objectives(
 ) -> IndexMap<NameId, Objective> {
     let mut objectives = IndexMap::with_capacity(raw_objectives.len());
     let mut obj_counter: u32 = 0;
+    let mut name_buf = String::with_capacity(16);
 
     for raw_obj in raw_objectives {
         let mut obj = intern_objective(interner, raw_obj);
 
         if raw_obj.name == "__obj__" {
             obj_counter += 1;
-            let auto_name = format!("OBJ{obj_counter}");
-            obj.name = interner.intern(&auto_name);
+            name_buf.clear();
+            write!(name_buf, "OBJ{obj_counter}").expect("writing to String cannot fail");
+            obj.name = interner.intern(&name_buf);
         }
 
         register_variables_from_coefficients(variables, &obj.coefficients, None);
@@ -966,10 +968,11 @@ fn intern_constraints(
     constraint_counter: &mut u32,
 ) -> IndexMap<NameId, Constraint> {
     let mut constraints = IndexMap::with_capacity(raw_constraints.len());
+    let mut name_buf = String::with_capacity(16);
 
     for raw_con in raw_constraints {
         let mut con = intern_constraint(interner, raw_con);
-        let final_id = assign_constraint_name(interner, &mut con, constraint_counter, "C");
+        let final_id = assign_constraint_name(interner, &mut con, constraint_counter, "C", &mut name_buf);
         register_constraint_variables(variables, &con);
         constraints.insert(final_id, con);
     }
@@ -1006,12 +1009,13 @@ fn intern_sos_constraints(
     constraints: &mut IndexMap<NameId, Constraint>,
     constraint_counter: &mut u32,
 ) {
+    let mut name_buf = String::with_capacity(16);
     for raw_sos_con in raw_sos {
         if matches!(raw_sos_con, RawConstraint::Standard { .. }) {
             continue;
         }
         let mut sos = intern_constraint(interner, raw_sos_con);
-        let final_id = assign_constraint_name(interner, &mut sos, constraint_counter, "SOS");
+        let final_id = assign_constraint_name(interner, &mut sos, constraint_counter, "SOS", &mut name_buf);
         register_constraint_variables(variables, &sos);
         constraints.insert(final_id, sos);
     }
@@ -1020,14 +1024,21 @@ fn intern_sos_constraints(
 /// Assign a name to a constraint, generating one if unnamed.
 /// Returns the final [`NameId`].
 #[inline]
-fn assign_constraint_name(interner: &mut NameInterner, constraint: &mut Constraint, counter: &mut u32, prefix: &str) -> NameId {
+fn assign_constraint_name(
+    interner: &mut NameInterner,
+    constraint: &mut Constraint,
+    counter: &mut u32,
+    prefix: &str,
+    name_buf: &mut String,
+) -> NameId {
     let current_name = interner.resolve(constraint.name());
     let is_unnamed = current_name == "__c__" || current_name.is_empty();
 
     let final_id = if is_unnamed {
         *counter += 1;
-        let auto_name = format!("{prefix}{}", *counter);
-        interner.intern(&auto_name)
+        name_buf.clear();
+        write!(name_buf, "{prefix}{}", *counter).expect("writing to String cannot fail");
+        interner.intern(name_buf)
     } else {
         constraint.name()
     };
