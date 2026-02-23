@@ -325,8 +325,9 @@ impl<'input> Iterator for Lexer<'input> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use test_case::test_case;
+
+    use super::*;
 
     fn tokenize(input: &str) -> Vec<Token<'_>> {
         Lexer::new(input).filter_map(Result::ok).map(|(_, tok, _)| tok).collect()
