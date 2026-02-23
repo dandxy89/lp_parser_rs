@@ -3,6 +3,7 @@
 //! Renders the full before/after breakdown for a single selected diff entry
 //! (variables, constraints, objectives) in the detail pane.
 
+use lp_parser_rs::interner::NameInterner;
 use lp_parser_rs::model::VariableType;
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
@@ -156,6 +157,7 @@ pub fn render_constraint_detail(
     border_style: Style,
     scroll: u16,
     cached_rows: Option<&[crate::detail_model::CoefficientRow]>,
+    interner: &NameInterner,
 ) -> usize {
     debug_assert!(area.width > 0 && area.height > 0, "constraint detail area must be non-zero");
     let mut lines = detail_header("Constraint", &entry.name, entry.kind);
@@ -236,11 +238,12 @@ pub fn render_constraint_detail(
                     border_style,
                     scroll,
                     cached_rows,
+                    interner,
                 );
             }
 
             let visible = coeff_visible_range(scroll, area, lines.len());
-            render_coeff_changes(&mut lines, coeff_changes, old_coefficients, new_coefficients, cached_rows, Some(visible));
+            render_coeff_changes(&mut lines, coeff_changes, old_coefficients, new_coefficients, cached_rows, Some(visible), interner);
         }
 
         ConstraintDiffDetail::Sos { old_weights, new_weights, weight_changes, type_change } => {
@@ -257,7 +260,7 @@ pub fn render_constraint_detail(
             lines.push(Line::from(Span::styled("  Weights:", muted().add_modifier(Modifier::BOLD))));
 
             let visible = coeff_visible_range(scroll, area, lines.len());
-            render_coeff_changes(&mut lines, weight_changes, old_weights, new_weights, cached_rows, Some(visible));
+            render_coeff_changes(&mut lines, weight_changes, old_weights, new_weights, cached_rows, Some(visible), interner);
         }
 
         ConstraintDiffDetail::TypeChanged { old_summary, new_summary } => {
@@ -286,7 +289,7 @@ pub fn render_constraint_detail(
                     lines.push(Line::from(Span::styled("  Coefficients:", muted().add_modifier(Modifier::BOLD))));
                     for coeff in coefficients {
                         lines.push(Line::from(vec![
-                            Span::styled(format!("    {:<20}", coeff.name), Style::default().fg(entry_colour)),
+                            Span::styled(format!("    {:<20}", interner.resolve(coeff.name)), Style::default().fg(entry_colour)),
                             Span::styled(format!("{}", coeff.value), Style::default().fg(entry_colour)),
                         ]));
                     }
@@ -300,7 +303,7 @@ pub fn render_constraint_detail(
                     lines.push(Line::from(Span::styled("  Weights:", muted().add_modifier(Modifier::BOLD))));
                     for w in weights {
                         lines.push(Line::from(vec![
-                            Span::styled(format!("    {:<20}", w.name), Style::default().fg(entry_colour)),
+                            Span::styled(format!("    {:<20}", interner.resolve(w.name)), Style::default().fg(entry_colour)),
                             Span::styled(format!("{}", w.value), Style::default().fg(entry_colour)),
                         ]));
                     }
@@ -323,6 +326,7 @@ pub fn render_objective_detail(
     border_style: Style,
     scroll: u16,
     cached_rows: Option<&[crate::detail_model::CoefficientRow]>,
+    interner: &NameInterner,
 ) -> usize {
     debug_assert!(area.width > 0 && area.height > 0, "objective detail area must be non-zero");
     let mut lines = detail_header("Objective", &entry.name, entry.kind);
@@ -338,13 +342,14 @@ pub fn render_objective_detail(
             &entry.new_coefficients,
             cached_rows,
             Some(visible),
+            interner,
         );
     } else {
         let coeffs = if entry.kind == DiffKind::Added { &entry.new_coefficients } else { &entry.old_coefficients };
         let colour = kind_colour(entry.kind);
         for c in coeffs {
             lines.push(Line::from(vec![
-                Span::styled(format!("    {:<20}", c.name), Style::default().fg(colour)),
+                Span::styled(format!("    {:<20}", interner.resolve(c.name)), Style::default().fg(colour)),
                 Span::styled(format!("{}", c.value), Style::default().fg(colour)),
             ]));
         }
@@ -369,6 +374,7 @@ fn render_constraint_side_by_side(
     border_style: Style,
     scroll: u16,
     cached_rows: Option<&[crate::detail_model::CoefficientRow]>,
+    interner: &NameInterner,
 ) -> usize {
     let t = theme();
     let header_line_count = header_lines.len();
@@ -387,7 +393,7 @@ fn render_constraint_side_by_side(
     let rows = if let Some(cached) = cached_rows {
         cached
     } else {
-        owned_rows = build_coeff_rows(coeff_changes, old_coefficients, new_coefficients);
+        owned_rows = build_coeff_rows(coeff_changes, old_coefficients, new_coefficients, interner);
         &owned_rows
     };
 
@@ -480,6 +486,7 @@ fn render_coeff_changes(
     new_coefficients: &[ResolvedCoefficient],
     cached_rows: Option<&[crate::detail_model::CoefficientRow]>,
     visible_range: Option<(usize, usize)>,
+    interner: &NameInterner,
 ) {
     // Column width for value formatting — wide enough for typical LP coefficients.
     const VAL_WIDTH: usize = 12;
@@ -490,7 +497,7 @@ fn render_coeff_changes(
     let rows = if let Some(cached) = cached_rows {
         cached
     } else {
-        owned_rows = build_coeff_rows(changes, old_coefficients, new_coefficients);
+        owned_rows = build_coeff_rows(changes, old_coefficients, new_coefficients, interner);
         &owned_rows
     };
 

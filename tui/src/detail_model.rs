@@ -3,6 +3,8 @@
 
 use std::collections::BTreeMap;
 
+use lp_parser_rs::interner::{NameId, NameInterner};
+
 use crate::diff_model::{CoefficientChange, DiffKind, ResolvedCoefficient};
 
 /// A single row in the unified coefficient diff table.
@@ -19,10 +21,14 @@ pub struct CoefficientRow {
 ///
 /// Every variable that appears in *either* old or new is included. Variables
 /// with no entry in `changes` are treated as unchanged.
+///
+/// The `interner` is used to resolve [`NameId`]s stored in the coefficients
+/// and changes back to display strings.
 pub fn build_coeff_rows(
     changes: &[CoefficientChange],
     old_coefficients: &[ResolvedCoefficient],
     new_coefficients: &[ResolvedCoefficient],
+    interner: &NameInterner,
 ) -> Vec<CoefficientRow> {
     debug_assert!(
         changes.iter().all(|c| matches!(c.kind, DiffKind::Added | DiffKind::Removed | DiffKind::Modified)),
@@ -33,16 +39,16 @@ pub fn build_coeff_rows(
     #[allow(clippy::items_after_statements)]
     type Entry = (Option<f64>, Option<f64>, Option<DiffKind>);
 
-    let mut all_vars: BTreeMap<&str, Entry> = BTreeMap::new();
+    let mut all_vars: BTreeMap<NameId, Entry> = BTreeMap::new();
 
     for c in old_coefficients {
-        all_vars.entry(&c.name).or_default().0 = Some(c.value);
+        all_vars.entry(c.name).or_default().0 = Some(c.value);
     }
     for c in new_coefficients {
-        all_vars.entry(&c.name).or_default().1 = Some(c.value);
+        all_vars.entry(c.name).or_default().1 = Some(c.value);
     }
     for change in changes {
-        if let Some(entry) = all_vars.get_mut(change.variable.as_str()) {
+        if let Some(entry) = all_vars.get_mut(&change.variable) {
             // Prefer the values already computed during diffing when present.
             if change.old_value.is_some() {
                 entry.0 = change.old_value;
@@ -56,8 +62,8 @@ pub fn build_coeff_rows(
 
     let rows: Vec<CoefficientRow> = all_vars
         .into_iter()
-        .map(|(var_name, (old_value, new_value, change_kind))| CoefficientRow {
-            variable: var_name.to_owned(),
+        .map(|(name_id, (old_value, new_value, change_kind))| CoefficientRow {
+            variable: interner.resolve(name_id).to_owned(),
             old_value,
             new_value,
             change_kind,

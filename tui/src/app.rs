@@ -318,17 +318,17 @@ impl App {
                 let entry = &self.report.constraints.entries[entry_index];
                 match &entry.detail {
                     crate::diff_model::ConstraintDiffDetail::Standard { coeff_changes, old_coefficients, new_coefficients, .. } => {
-                        build_coeff_rows(coeff_changes, old_coefficients, new_coefficients)
+                        build_coeff_rows(coeff_changes, old_coefficients, new_coefficients, &self.report.interner)
                     }
                     crate::diff_model::ConstraintDiffDetail::Sos { weight_changes, old_weights, new_weights, .. } => {
-                        build_coeff_rows(weight_changes, old_weights, new_weights)
+                        build_coeff_rows(weight_changes, old_weights, new_weights, &self.report.interner)
                     }
                     _ => return,
                 }
             }
             Section::Objectives => {
                 let entry = &self.report.objectives.entries[entry_index];
-                build_coeff_rows(&entry.coeff_changes, &entry.old_coefficients, &entry.new_coefficients)
+                build_coeff_rows(&entry.coeff_changes, &entry.old_coefficients, &entry.new_coefficients, &self.report.interner)
             }
             _ => return,
         };

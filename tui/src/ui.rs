@@ -144,11 +144,20 @@ fn draw_detail_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut A
                     border_style,
                     scroll,
                     cached_rows,
+                    &app.report.interner,
                 )
             }
             Section::Objectives => {
                 debug_assert!(entry_index < app.report.objectives.entries.len(), "objective entry_index {entry_index} out of bounds");
-                detail::render_objective_detail(frame, area, &app.report.objectives.entries[entry_index], border_style, scroll, cached_rows)
+                detail::render_objective_detail(
+                    frame,
+                    area,
+                    &app.report.objectives.entries[entry_index],
+                    border_style,
+                    scroll,
+                    cached_rows,
+                    &app.report.interner,
+                )
             }
             Section::Summary => unreachable!("handled above"),
         }

@@ -6,20 +6,20 @@ use std::collections::HashMap;
 use std::fmt;
 
 use lp_parser_rs::analysis::ProblemAnalysis;
-use lp_parser_rs::interner::NameId;
+use lp_parser_rs::interner::{NameId, NameInterner};
 use lp_parser_rs::model::{ComparisonOp, Constraint, SOSType, Sense, VariableType};
 use lp_parser_rs::problem::LpProblem;
 
 // Epsilon used for floating-point coefficient value comparison.
 const COEFF_EPSILON: f64 = 1e-10;
 
-/// A coefficient with its variable name resolved from the interner to a `String`.
+/// A coefficient with its variable name interned as a [`NameId`].
 ///
-/// Used at the diff/display boundary so downstream code (detail panels, plain-text
-/// rendering) can work with owned strings without needing the interner.
+/// Names are resolved lazily via the [`LpDiffReport::resolve`] method, avoiding
+/// per-coefficient `String` allocations during diff construction.
 #[derive(Debug, Clone)]
 pub struct ResolvedCoefficient {
-    pub name: String,
+    pub name: NameId,
     pub value: f64,
 }
 
@@ -50,21 +50,32 @@ fn coefficients_equal(
     c1.iter().zip(c2.iter()).all(|(a, b)| p1.resolve(a.name) == p2.resolve(b.name) && (a.value - b.value).abs() <= COEFF_EPSILON)
 }
 
-/// Resolve a slice of model `Coefficient`s into `ResolvedCoefficient`s using the problem's interner.
-fn resolve_coefficients(problem: &LpProblem, coefficients: &[lp_parser_rs::model::Coefficient]) -> Vec<ResolvedCoefficient> {
-    coefficients.iter().map(|c| ResolvedCoefficient { name: problem.resolve(c.name).to_string(), value: c.value }).collect()
+/// Intern a slice of model `Coefficient`s into `ResolvedCoefficient`s, adding
+/// their names to the report's shared interner instead of allocating `String`s.
+fn resolve_coefficients(
+    problem: &LpProblem,
+    coefficients: &[lp_parser_rs::model::Coefficient],
+    interner: &mut NameInterner,
+) -> Vec<ResolvedCoefficient> {
+    let mut out = Vec::with_capacity(coefficients.len());
+    for c in coefficients {
+        let name = interner.intern(problem.resolve(c.name));
+        out.push(ResolvedCoefficient { name, value: c.value });
+    }
+    out
 }
 
-/// Resolve a model `Constraint` into a `ResolvedConstraint` using the problem's interner.
-fn resolve_constraint(problem: &LpProblem, constraint: &Constraint) -> ResolvedConstraint {
+/// Resolve a model `Constraint` into a `ResolvedConstraint`, interning names
+/// into the report's shared interner.
+fn resolve_constraint(problem: &LpProblem, constraint: &Constraint, interner: &mut NameInterner) -> ResolvedConstraint {
     match constraint {
         Constraint::Standard { coefficients, operator, rhs, .. } => ResolvedConstraint::Standard {
-            coefficients: resolve_coefficients(problem, coefficients),
+            coefficients: resolve_coefficients(problem, coefficients, interner),
             operator: operator.clone(),
             rhs: *rhs,
         },
         Constraint::SOS { sos_type, weights, .. } => {
-            ResolvedConstraint::Sos { sos_type: sos_type.clone(), weights: resolve_coefficients(problem, weights) }
+            ResolvedConstraint::Sos { sos_type: sos_type.clone(), weights: resolve_coefficients(problem, weights, interner) }
         }
     }
 }
@@ -90,6 +101,9 @@ pub struct LpDiffReport {
     pub analysis1: ProblemAnalysis,
     /// Structural analysis of the second file.
     pub analysis2: ProblemAnalysis,
+    /// Shared interner for coefficient/variable names used in diff entries.
+    /// Avoids per-coefficient `String` allocations by deduplicating names.
+    pub interner: NameInterner,
 }
 
 impl LpDiffReport {
@@ -231,7 +245,7 @@ pub enum ConstraintDiffDetail {
 /// A change to a single coefficient (or weight) within a constraint or objective.
 #[derive(Debug, Clone)]
 pub struct CoefficientChange {
-    pub variable: String,
+    pub variable: NameId,
     pub kind: DiffKind,
     /// Value in the first problem; `None` when the coefficient was added.
     pub old_value: Option<f64>,
@@ -287,13 +301,13 @@ impl DiffEntry for ObjectiveDiffEntry {
 
 /// Diff two coefficient lists using sorted merge-join and return only the changed entries.
 ///
-/// Both slices are sorted by name before merging. Uses an epsilon of [`COEFF_EPSILON`]
-/// for floating-point comparison.
-fn diff_coefficients(old: &[ResolvedCoefficient], new: &[ResolvedCoefficient]) -> Vec<CoefficientChange> {
-    let mut old_sorted: Vec<(&str, f64)> = old.iter().map(|c| (c.name.as_str(), c.value)).collect();
-    let mut new_sorted: Vec<(&str, f64)> = new.iter().map(|c| (c.name.as_str(), c.value)).collect();
-    old_sorted.sort_unstable_by(|a, b| a.0.cmp(b.0));
-    new_sorted.sort_unstable_by(|a, b| a.0.cmp(b.0));
+/// Both slices are sorted by name (resolved via `interner`) before merging.
+/// Uses an epsilon of [`COEFF_EPSILON`] for floating-point comparison.
+fn diff_coefficients(old: &[ResolvedCoefficient], new: &[ResolvedCoefficient], interner: &NameInterner) -> Vec<CoefficientChange> {
+    let mut old_sorted: Vec<(NameId, f64)> = old.iter().map(|c| (c.name, c.value)).collect();
+    let mut new_sorted: Vec<(NameId, f64)> = new.iter().map(|c| (c.name, c.value)).collect();
+    old_sorted.sort_unstable_by(|a, b| interner.resolve(a.0).cmp(interner.resolve(b.0)));
+    new_sorted.sort_unstable_by(|a, b| interner.resolve(a.0).cmp(interner.resolve(b.0)));
 
     let mut changes = Vec::new();
     let mut i = 0;
@@ -304,7 +318,7 @@ fn diff_coefficients(old: &[ResolvedCoefficient], new: &[ResolvedCoefficient]) -
         debug_assert!(j <= new_sorted.len(), "new index out of bounds");
 
         let cmp = match (old_sorted.get(i), new_sorted.get(j)) {
-            (Some((n1, _)), Some((n2, _))) => n1.cmp(n2),
+            (Some((n1, _)), Some((n2, _))) => interner.resolve(*n1).cmp(interner.resolve(*n2)),
             (Some(_), None) => std::cmp::Ordering::Less,
             (None, Some(_)) => std::cmp::Ordering::Greater,
             (None, None) => break,
@@ -313,22 +327,12 @@ fn diff_coefficients(old: &[ResolvedCoefficient], new: &[ResolvedCoefficient]) -
         match cmp {
             std::cmp::Ordering::Less => {
                 let (name, old_val) = old_sorted[i];
-                changes.push(CoefficientChange {
-                    variable: name.to_string(),
-                    kind: DiffKind::Removed,
-                    old_value: Some(old_val),
-                    new_value: None,
-                });
+                changes.push(CoefficientChange { variable: name, kind: DiffKind::Removed, old_value: Some(old_val), new_value: None });
                 i += 1;
             }
             std::cmp::Ordering::Greater => {
                 let (name, new_val) = new_sorted[j];
-                changes.push(CoefficientChange {
-                    variable: name.to_string(),
-                    kind: DiffKind::Added,
-                    old_value: None,
-                    new_value: Some(new_val),
-                });
+                changes.push(CoefficientChange { variable: name, kind: DiffKind::Added, old_value: None, new_value: Some(new_val) });
                 j += 1;
             }
             std::cmp::Ordering::Equal => {
@@ -336,7 +340,7 @@ fn diff_coefficients(old: &[ResolvedCoefficient], new: &[ResolvedCoefficient]) -
                 let new_val = new_sorted[j].1;
                 if (old_val - new_val).abs() > COEFF_EPSILON {
                     changes.push(CoefficientChange {
-                        variable: name.to_string(),
+                        variable: name,
                         kind: DiffKind::Modified,
                         old_value: Some(old_val),
                         new_value: Some(new_val),
@@ -473,8 +477,9 @@ fn diff_standard_constraints(
     new_coefficients: &[ResolvedCoefficient],
     new_operator: &ComparisonOp,
     new_rhs: f64,
+    interner: &NameInterner,
 ) -> Option<ConstraintDiffDetail> {
-    let coeff_changes = diff_coefficients(old_coefficients, new_coefficients);
+    let coeff_changes = diff_coefficients(old_coefficients, new_coefficients, interner);
     let operator_change = if old_operator == new_operator { None } else { Some((old_operator.clone(), new_operator.clone())) };
     let rhs_change = if (old_rhs - new_rhs).abs() > COEFF_EPSILON { Some((old_rhs, new_rhs)) } else { None };
 
@@ -499,8 +504,9 @@ fn diff_sos_constraints(
     old_weights: &[ResolvedCoefficient],
     new_type: &SOSType,
     new_weights: &[ResolvedCoefficient],
+    interner: &NameInterner,
 ) -> Option<ConstraintDiffDetail> {
-    let weight_changes = diff_coefficients(old_weights, new_weights);
+    let weight_changes = diff_coefficients(old_weights, new_weights, interner);
     let type_change = if old_type == new_type { None } else { Some((old_type.clone(), new_type.clone())) };
 
     if weight_changes.is_empty() && type_change.is_none() {
@@ -511,7 +517,13 @@ fn diff_sos_constraints(
 }
 
 /// Compute the detail for two constraints that both exist, returning `None` if unchanged.
-fn diff_constraint_pair(p1: &LpProblem, c1: &Constraint, p2: &LpProblem, c2: &Constraint) -> Option<ConstraintDiffDetail> {
+fn diff_constraint_pair(
+    p1: &LpProblem,
+    c1: &Constraint,
+    p2: &LpProblem,
+    c2: &Constraint,
+    interner: &mut NameInterner,
+) -> Option<ConstraintDiffDetail> {
     match (c1, c2) {
         // Standard vs SOS: structurally incompatible.
         (Constraint::Standard { .. }, Constraint::SOS { .. }) | (Constraint::SOS { .. }, Constraint::Standard { .. }) => {
@@ -530,9 +542,9 @@ fn diff_constraint_pair(p1: &LpProblem, c1: &Constraint, p2: &LpProblem, c2: &Co
             {
                 return None;
             }
-            let old_resolved = resolve_coefficients(p1, old_coefficients);
-            let new_resolved = resolve_coefficients(p2, new_coefficients);
-            diff_standard_constraints(&old_resolved, old_operator, *old_rhs, &new_resolved, new_operator, *new_rhs)
+            let old_resolved = resolve_coefficients(p1, old_coefficients, interner);
+            let new_resolved = resolve_coefficients(p2, new_coefficients, interner);
+            diff_standard_constraints(&old_resolved, old_operator, *old_rhs, &new_resolved, new_operator, *new_rhs, interner)
         }
 
         // Both SOS: diff weights and sos_type.
@@ -544,9 +556,9 @@ fn diff_constraint_pair(p1: &LpProblem, c1: &Constraint, p2: &LpProblem, c2: &Co
             if old_type == new_type && coefficients_equal(p1, old_weights, p2, new_weights) {
                 return None;
             }
-            let old_resolved = resolve_coefficients(p1, old_weights);
-            let new_resolved = resolve_coefficients(p2, new_weights);
-            diff_sos_constraints(old_type, &old_resolved, new_type, &new_resolved)
+            let old_resolved = resolve_coefficients(p1, old_weights, interner);
+            let new_resolved = resolve_coefficients(p2, new_weights, interner);
+            diff_sos_constraints(old_type, &old_resolved, new_type, &new_resolved, interner)
         }
     }
 }
@@ -557,6 +569,7 @@ fn diff_constraints(
     p2: &LpProblem,
     line_map1: &HashMap<NameId, usize>,
     line_map2: &HashMap<NameId, usize>,
+    interner: &mut NameInterner,
 ) -> SectionDiff<ConstraintDiffEntry> {
     let cons1 = build_sorted_constraints(p1);
     let cons2 = build_sorted_constraints(p2);
@@ -586,7 +599,7 @@ fn diff_constraints(
                 entries.push(ConstraintDiffEntry {
                     name: name.to_string(),
                     kind: DiffKind::Removed,
-                    detail: ConstraintDiffDetail::AddedOrRemoved(resolve_constraint(p1, constraint)),
+                    detail: ConstraintDiffDetail::AddedOrRemoved(resolve_constraint(p1, constraint, interner)),
                     line_file1: line1,
                     line_file2: line2,
                 });
@@ -600,7 +613,7 @@ fn diff_constraints(
                 entries.push(ConstraintDiffEntry {
                     name: name.to_string(),
                     kind: DiffKind::Added,
-                    detail: ConstraintDiffDetail::AddedOrRemoved(resolve_constraint(p2, constraint)),
+                    detail: ConstraintDiffDetail::AddedOrRemoved(resolve_constraint(p2, constraint, interner)),
                     line_file1: line1,
                     line_file2: line2,
                 });
@@ -611,7 +624,7 @@ fn diff_constraints(
                 let (name_id2, _, c2) = &cons2[j];
                 let line1 = line_map1.get(name_id1).copied();
                 let line2 = line_map2.get(name_id2).copied();
-                if let Some(detail) = diff_constraint_pair(p1, c1, p2, c2) {
+                if let Some(detail) = diff_constraint_pair(p1, c1, p2, c2, interner) {
                     counts.modified += 1;
                     entries.push(ConstraintDiffEntry {
                         name: name.to_string(),
@@ -633,7 +646,7 @@ fn diff_constraints(
 }
 
 /// Diff the objectives section between two problems using sorted merge-join.
-fn diff_objectives(p1: &LpProblem, p2: &LpProblem) -> SectionDiff<ObjectiveDiffEntry> {
+fn diff_objectives(p1: &LpProblem, p2: &LpProblem, interner: &mut NameInterner) -> SectionDiff<ObjectiveDiffEntry> {
     let objs1 = build_sorted_objectives(p1);
     let objs2 = build_sorted_objectives(p2);
 
@@ -660,7 +673,7 @@ fn diff_objectives(p1: &LpProblem, p2: &LpProblem) -> SectionDiff<ObjectiveDiffE
                 entries.push(ObjectiveDiffEntry {
                     name: name.to_string(),
                     kind: DiffKind::Removed,
-                    old_coefficients: resolve_coefficients(p1, &o.coefficients),
+                    old_coefficients: resolve_coefficients(p1, &o.coefficients, interner),
                     new_coefficients: Vec::new(),
                     coeff_changes: Vec::new(),
                 });
@@ -673,7 +686,7 @@ fn diff_objectives(p1: &LpProblem, p2: &LpProblem) -> SectionDiff<ObjectiveDiffE
                     name: name.to_string(),
                     kind: DiffKind::Added,
                     old_coefficients: Vec::new(),
-                    new_coefficients: resolve_coefficients(p2, &o.coefficients),
+                    new_coefficients: resolve_coefficients(p2, &o.coefficients, interner),
                     coeff_changes: Vec::new(),
                 });
                 j += 1;
@@ -688,9 +701,9 @@ fn diff_objectives(p1: &LpProblem, p2: &LpProblem) -> SectionDiff<ObjectiveDiffE
                     j += 1;
                     continue;
                 }
-                let old_resolved = resolve_coefficients(p1, &o1_val.coefficients);
-                let new_resolved = resolve_coefficients(p2, &o2_val.coefficients);
-                let coeff_changes = diff_coefficients(&old_resolved, &new_resolved);
+                let old_resolved = resolve_coefficients(p1, &o1_val.coefficients, interner);
+                let new_resolved = resolve_coefficients(p2, &o2_val.coefficients, interner);
+                let coeff_changes = diff_coefficients(&old_resolved, &new_resolved, interner);
                 if coeff_changes.is_empty() {
                     counts.unchanged += 1;
                 } else {
@@ -737,9 +750,11 @@ pub fn build_diff_report(input: &DiffInput<'_>) -> LpDiffReport {
     debug_assert!(!input.file1.is_empty(), "file1 label must not be empty");
     debug_assert!(!input.file2.is_empty(), "file2 label must not be empty");
 
+    let mut interner = NameInterner::new();
+
     let variables = diff_variables(input.p1, input.p2);
-    let constraints = diff_constraints(input.p1, input.p2, input.line_map1, input.line_map2);
-    let objectives = diff_objectives(input.p1, input.p2);
+    let constraints = diff_constraints(input.p1, input.p2, input.line_map1, input.line_map2, &mut interner);
+    let objectives = diff_objectives(input.p1, input.p2, &mut interner);
 
     let sense_changed = if input.p1.sense == input.p2.sense { None } else { Some((input.p1.sense.clone(), input.p2.sense.clone())) };
 
@@ -755,6 +770,7 @@ pub fn build_diff_report(input: &DiffInput<'_>) -> LpDiffReport {
         objectives,
         analysis1: input.analysis1.clone(),
         analysis2: input.analysis2.clone(),
+        interner,
     }
 }
 
@@ -912,12 +928,12 @@ mod tests {
             assert!(operator_change.is_none());
             assert!(rhs_change.is_none());
 
-            let removed = coeff_changes.iter().find(|c| c.variable == "y").expect("y should be removed");
+            let removed = coeff_changes.iter().find(|c| report.interner.resolve(c.variable) == "y").expect("y should be removed");
             assert_eq!(removed.kind, DiffKind::Removed);
             assert_eq!(removed.old_value, Some(3.0));
             assert!(removed.new_value.is_none());
 
-            let added = coeff_changes.iter().find(|c| c.variable == "z").expect("z should be added");
+            let added = coeff_changes.iter().find(|c| report.interner.resolve(c.variable) == "z").expect("z should be added");
             assert_eq!(added.kind, DiffKind::Added);
             assert!(added.old_value.is_none());
             assert_eq!(added.new_value, Some(5.0));
@@ -958,7 +974,7 @@ mod tests {
         assert_eq!(entry.kind, DiffKind::Modified);
         assert_eq!(entry.coeff_changes.len(), 2);
 
-        let b_change = entry.coeff_changes.iter().find(|c| c.variable == "b").expect("b should be modified");
+        let b_change = entry.coeff_changes.iter().find(|c| report.interner.resolve(c.variable) == "b").expect("b should be modified");
         assert_eq!(b_change.kind, DiffKind::Modified);
         assert_eq!(b_change.old_value, Some(2.0));
         assert_eq!(b_change.new_value, Some(5.0));
@@ -1005,6 +1021,8 @@ mod tests {
 
     #[test]
     fn test_diff_entry_trait() {
+        let mut interner = lp_parser_rs::interner::NameInterner::new();
+
         let added_var =
             VariableDiffEntry { name: "x".to_string(), kind: DiffKind::Added, old_type: None, new_type: Some(VariableType::Binary) };
         assert_diff_entry(&added_var, "x", DiffKind::Added);
@@ -1013,14 +1031,13 @@ mod tests {
             VariableDiffEntry { name: "y".to_string(), kind: DiffKind::Removed, old_type: Some(VariableType::Integer), new_type: None };
         assert_diff_entry(&removed_var, "y", DiffKind::Removed);
 
+        let x_id = interner.intern("x");
+        let y_id = interner.intern("y");
         let added_constraint = ConstraintDiffEntry {
             name: "c1".to_string(),
             kind: DiffKind::Added,
             detail: ConstraintDiffDetail::AddedOrRemoved(ResolvedConstraint::Standard {
-                coefficients: vec![
-                    ResolvedCoefficient { name: "x".to_string(), value: 1.0 },
-                    ResolvedCoefficient { name: "y".to_string(), value: 2.0 },
-                ],
+                coefficients: vec![ResolvedCoefficient { name: x_id, value: 1.0 }, ResolvedCoefficient { name: y_id, value: 2.0 }],
                 operator: ComparisonOp::LTE,
                 rhs: 5.0,
             }),
@@ -1029,14 +1046,13 @@ mod tests {
         };
         assert_diff_entry(&added_constraint, "c1", DiffKind::Added);
 
+        let a_id = interner.intern("a");
+        let b_id = interner.intern("b");
         let added_obj = ObjectiveDiffEntry {
             name: "obj".to_string(),
             kind: DiffKind::Added,
             old_coefficients: vec![],
-            new_coefficients: vec![
-                ResolvedCoefficient { name: "a".to_string(), value: 1.0 },
-                ResolvedCoefficient { name: "b".to_string(), value: 2.0 },
-            ],
+            new_coefficients: vec![ResolvedCoefficient { name: a_id, value: 1.0 }, ResolvedCoefficient { name: b_id, value: 2.0 }],
             coeff_changes: vec![],
         };
         assert_diff_entry(&added_obj, "obj", DiffKind::Added);

@@ -205,14 +205,14 @@ fn draw_detail_preview(frame: &mut Frame, area: Rect, app: &App) {
         }
         Section::Constraints => {
             if let Some(entry) = app.report.constraints.entries.get(result.entry_index) {
-                detail::render_constraint_detail(frame, area, entry, border_style, scroll, None);
+                detail::render_constraint_detail(frame, area, entry, border_style, scroll, None, &app.report.interner);
             } else {
                 sidebar::draw_empty_detail(frame, area, "Entry not found", border_style);
             }
         }
         Section::Objectives => {
             if let Some(entry) = app.report.objectives.entries.get(result.entry_index) {
-                detail::render_objective_detail(frame, area, entry, border_style, scroll, None);
+                detail::render_objective_detail(frame, area, entry, border_style, scroll, None, &app.report.interner);
             } else {
                 sidebar::draw_empty_detail(frame, area, "Entry not found", border_style);
             }

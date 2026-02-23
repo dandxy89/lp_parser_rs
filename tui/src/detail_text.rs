@@ -2,6 +2,8 @@
 
 use std::fmt::Write;
 
+use lp_parser_rs::interner::NameInterner;
+
 use crate::app::App;
 use crate::detail_model::{CoefficientRow, build_coeff_rows};
 use crate::diff_model::{
@@ -43,11 +45,11 @@ pub fn render_detail_plain(app: &App) -> Option<String> {
         }
         Section::Constraints => {
             let entry = app.report.constraints.entries.get(entry_index)?;
-            Some(render_constraint_plain(entry, cached_rows))
+            Some(render_constraint_plain(entry, cached_rows, &app.report.interner))
         }
         Section::Objectives => {
             let entry = app.report.objectives.entries.get(entry_index)?;
-            Some(render_objective_plain(entry, cached_rows))
+            Some(render_objective_plain(entry, cached_rows, &app.report.interner))
         }
         Section::Summary => None,
     }
@@ -115,7 +117,7 @@ fn render_variable_plain(entry: &VariableDiffEntry) -> String {
     out
 }
 
-fn render_constraint_plain(entry: &ConstraintDiffEntry, cached_rows: Option<&[CoefficientRow]>) -> String {
+fn render_constraint_plain(entry: &ConstraintDiffEntry, cached_rows: Option<&[CoefficientRow]>, interner: &NameInterner) -> String {
     let mut out = String::new();
     w!(out, "Constraint: {} [{}]", entry.name, entry.kind);
     w!(out, "{}", RULE_38);
@@ -155,7 +157,7 @@ fn render_constraint_plain(entry: &ConstraintDiffEntry, cached_rows: Option<&[Co
             }
             w!(out);
             w!(out, "  Coefficients:");
-            write_coeff_changes(&mut out, coeff_changes, old_coefficients, new_coefficients, cached_rows);
+            write_coeff_changes(&mut out, coeff_changes, old_coefficients, new_coefficients, cached_rows, interner);
         }
         ConstraintDiffDetail::Sos { old_weights, new_weights, weight_changes, type_change } => {
             if let Some((old_type, new_type)) = type_change {
@@ -163,7 +165,7 @@ fn render_constraint_plain(entry: &ConstraintDiffEntry, cached_rows: Option<&[Co
             }
             w!(out);
             w!(out, "  Weights:");
-            write_coeff_changes(&mut out, weight_changes, old_weights, new_weights, None);
+            write_coeff_changes(&mut out, weight_changes, old_weights, new_weights, None, interner);
         }
         ConstraintDiffDetail::TypeChanged { old_summary, new_summary } => {
             w!(out, "  Was:  {old_summary}");
@@ -176,7 +178,7 @@ fn render_constraint_plain(entry: &ConstraintDiffEntry, cached_rows: Option<&[Co
                 w!(out);
                 w!(out, "  Coefficients:");
                 for c in coefficients {
-                    w!(out, "    {:<20}{}", c.name, c.value);
+                    w!(out, "    {:<20}{}", interner.resolve(c.name), c.value);
                 }
             }
             ResolvedConstraint::Sos { sos_type, weights } => {
@@ -184,7 +186,7 @@ fn render_constraint_plain(entry: &ConstraintDiffEntry, cached_rows: Option<&[Co
                 w!(out);
                 w!(out, "  Weights:");
                 for w_entry in weights {
-                    w!(out, "    {:<20}{}", w_entry.name, w_entry.value);
+                    w!(out, "    {:<20}{}", interner.resolve(w_entry.name), w_entry.value);
                 }
             }
         },
@@ -192,18 +194,18 @@ fn render_constraint_plain(entry: &ConstraintDiffEntry, cached_rows: Option<&[Co
     out
 }
 
-fn render_objective_plain(entry: &ObjectiveDiffEntry, cached_rows: Option<&[CoefficientRow]>) -> String {
+fn render_objective_plain(entry: &ObjectiveDiffEntry, cached_rows: Option<&[CoefficientRow]>, interner: &NameInterner) -> String {
     let mut out = String::new();
     w!(out, "Objective: {} [{}]", entry.name, entry.kind);
     w!(out, "{}", RULE_38);
     w!(out, "  Coefficients:");
 
     if entry.kind == DiffKind::Modified {
-        write_coeff_changes(&mut out, &entry.coeff_changes, &entry.old_coefficients, &entry.new_coefficients, cached_rows);
+        write_coeff_changes(&mut out, &entry.coeff_changes, &entry.old_coefficients, &entry.new_coefficients, cached_rows, interner);
     } else {
         let coeffs = if entry.kind == DiffKind::Added { &entry.new_coefficients } else { &entry.old_coefficients };
         for c in coeffs {
-            w!(out, "    {:<20}{}", c.name, c.value);
+            w!(out, "    {:<20}{}", interner.resolve(c.name), c.value);
         }
     }
     out
@@ -218,12 +220,13 @@ fn write_coeff_changes(
     old_coefficients: &[ResolvedCoefficient],
     new_coefficients: &[ResolvedCoefficient],
     cached_rows: Option<&[CoefficientRow]>,
+    interner: &NameInterner,
 ) {
     let built;
     let rows = if let Some(cached) = cached_rows {
         cached
     } else {
-        built = build_coeff_rows(changes, old_coefficients, new_coefficients);
+        built = build_coeff_rows(changes, old_coefficients, new_coefficients, interner);
         &built
     };
 
