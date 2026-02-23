@@ -33,9 +33,6 @@ pub struct SolveResult {
     pub skipped_sos: usize,
 }
 
-/// Tolerance for floating-point comparison in diff results.
-const EPSILON: f64 = 1e-10;
-
 /// Pre-computed diff counts, avoiding per-frame iteration.
 #[derive(Debug, Clone, Copy)]
 pub struct DiffCounts {
@@ -86,9 +83,16 @@ pub struct ConstraintDiffRow {
 ///
 /// Variables and constraints are matched by name. Rows present in only one result
 /// are included with `None` on the other side and marked as changed.
-pub fn diff_results(file1_label: String, file2_label: String, result1: SolveResult, result2: SolveResult) -> SolveDiffResult {
-    let variable_diff = diff_variables(&result1, &result2);
-    let constraint_diff = diff_constraints(&result1, &result2);
+pub fn diff_results(
+    file1_label: String,
+    file2_label: String,
+    result1: SolveResult,
+    result2: SolveResult,
+    threshold: f64,
+) -> SolveDiffResult {
+    debug_assert!(threshold >= 0.0, "diff threshold must be non-negative, got {threshold}");
+    let variable_diff = diff_variables(&result1, &result2, threshold);
+    let constraint_diff = diff_constraints(&result1, &result2, threshold);
     let variable_counts = count_var_diffs(&variable_diff);
     let constraint_counts = count_constraint_diffs_from_rows(&constraint_diff);
     SolveDiffResult { file1_label, file2_label, result1, result2, variable_diff, constraint_diff, variable_counts, constraint_counts }
@@ -124,7 +128,7 @@ fn count_constraint_diffs_from_rows(rows: &[ConstraintDiffRow]) -> DiffCounts {
     counts
 }
 
-fn diff_variables(r1: &SolveResult, r2: &SolveResult) -> Vec<VarDiffRow> {
+fn diff_variables(r1: &SolveResult, r2: &SolveResult, threshold: f64) -> Vec<VarDiffRow> {
     debug_assert_eq!(r1.variables.len(), r1.reduced_costs.len(), "variables and reduced_costs must have equal length for result 1");
     debug_assert_eq!(r2.variables.len(), r2.reduced_costs.len(), "variables and reduced_costs must have equal length for result 2");
 
@@ -158,7 +162,7 @@ fn diff_variables(r1: &SolveResult, r2: &SolveResult) -> Vec<VarDiffRow> {
                 let val2 = r2.variables[j].1;
                 let rc1 = r1.reduced_costs.get(i).map(|(_, v)| *v);
                 let rc2 = r2.reduced_costs.get(j).map(|(_, v)| *v);
-                let changed = (*val1 - val2).abs() > EPSILON || opt_diff(rc1, rc2);
+                let changed = (*val1 - val2).abs() > threshold || opt_diff(rc1, rc2, threshold);
                 i += 1;
                 j += 1;
                 VarDiffRow { name: name.clone(), val1: Some(*val1), val2: Some(val2), reduced_cost1: rc1, reduced_cost2: rc2, changed }
@@ -169,7 +173,7 @@ fn diff_variables(r1: &SolveResult, r2: &SolveResult) -> Vec<VarDiffRow> {
     rows
 }
 
-fn diff_constraints(r1: &SolveResult, r2: &SolveResult) -> Vec<ConstraintDiffRow> {
+fn diff_constraints(r1: &SolveResult, r2: &SolveResult, threshold: f64) -> Vec<ConstraintDiffRow> {
     debug_assert_eq!(r1.row_values.len(), r1.shadow_prices.len(), "row_values and shadow_prices must have equal length for result 1");
     debug_assert_eq!(r2.row_values.len(), r2.shadow_prices.len(), "row_values and shadow_prices must have equal length for result 2");
 
@@ -217,7 +221,7 @@ fn diff_constraints(r1: &SolveResult, r2: &SolveResult) -> Vec<ConstraintDiffRow
                 let a2 = r2.row_values[j].1;
                 let sp1 = r1.shadow_prices[i].1;
                 let sp2 = r2.shadow_prices[j].1;
-                let changed = (*a1 - a2).abs() > EPSILON || (sp1 - sp2).abs() > EPSILON;
+                let changed = (*a1 - a2).abs() > threshold || (sp1 - sp2).abs() > threshold;
                 i += 1;
                 j += 1;
                 ConstraintDiffRow {
@@ -235,10 +239,10 @@ fn diff_constraints(r1: &SolveResult, r2: &SolveResult) -> Vec<ConstraintDiffRow
     rows
 }
 
-/// Return `true` if two optional f64 values differ beyond epsilon.
-fn opt_diff(a: Option<f64>, b: Option<f64>) -> bool {
+/// Return `true` if two optional f64 values differ beyond the given threshold.
+fn opt_diff(a: Option<f64>, b: Option<f64>, threshold: f64) -> bool {
     match (a, b) {
-        (Some(x), Some(y)) => (x - y).abs() > EPSILON,
+        (Some(x), Some(y)) => (x - y).abs() > threshold,
         (None, None) => false,
         _ => true,
     }

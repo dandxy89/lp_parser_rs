@@ -53,6 +53,7 @@ const HELP_TEXT: &[&str] = &[
     "  y         Yank results to clipboard",
     "  w         Write diff to CSV (both mode)",
     "  d         Toggle diff-only (both mode)",
+    "  t / T     Cycle delta threshold (both mode)",
     "  1–4       Switch tab",
     "  Esc       Close solver overlay",
     "",

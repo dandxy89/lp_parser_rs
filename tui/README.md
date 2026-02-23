@@ -136,7 +136,11 @@ Search mode prefixes (type in the pop-up input):
 |-----|--------|
 | `S` | Solve an LP file with HiGHS |
 | `1` / `2` | Select file 1 or file 2 (in picker) |
+| `3` | Solve both and diff (in picker) |
 | `j` / `k` | Scroll results (in results view) |
+| `d` | Toggle diff-only filter (both mode) |
+| `t` / `T` | Cycle delta threshold forward / backward (both mode) |
+| `w` | Write diff to CSV (both mode) |
 | `y` | Yank solve results to clipboard |
 | `Esc` | Close solver overlay |
 
@@ -151,6 +155,8 @@ Search mode prefixes (type in the pop-up input):
 ## HiGHS Solver
 
 Press `S` to solve either LP file on demand using the [HiGHS](https://highs.dev) solver. Pick file 1 or 2, and the solver runs in a background thread. Results show the optimisation status, objective value, solve time, and a scrollable variable table.
+
+Option 3 ("Both") solves both files and shows a side-by-side comparison. Rows are marked as "changed" when their absolute difference exceeds a configurable delta threshold. Press `t` to cycle forward through preset thresholds (`0.0`, `0.0001`, `0.001`, `0.01`, `0.1`, `1.0`) and `T` to cycle backward. The default threshold is `0.0001`. Press `d` to toggle between showing all rows and changed-only rows, and `w` to export the diff to CSV.
 
 ## Jumplist
 

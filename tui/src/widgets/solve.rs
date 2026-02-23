@@ -332,14 +332,14 @@ fn draw_done_both(frame: &mut Frame, area: Rect, diff: &SolveDiffResult, view: &
 
     match active {
         SolveTab::Summary => build_diff_summary_tab(&mut lines, diff),
-        SolveTab::Variables => build_diff_variables_tab(&mut lines, diff, view.diff_only, scroll, popup_height),
-        SolveTab::Constraints => build_diff_constraints_tab(&mut lines, diff, view.diff_only, scroll, popup_height),
+        SolveTab::Variables => build_diff_variables_tab(&mut lines, diff, view, scroll, popup_height),
+        SolveTab::Constraints => build_diff_constraints_tab(&mut lines, diff, view, scroll, popup_height),
         SolveTab::Log => build_diff_log_tab(&mut lines, diff),
     }
 
     lines.push(Line::from(""));
     lines.push(Line::from(Span::styled(
-        "  1-4: tabs  Tab/S-Tab: cycle  j/k: scroll  d: toggle diff  y: yank  Esc: close",
+        "  1-4: tabs  Tab/S-Tab: cycle  j/k: scroll  d: toggle diff  t/T: threshold  y: yank  Esc: close",
         Style::default().fg(t.muted),
     )));
 
@@ -353,14 +353,14 @@ fn draw_done_both(frame: &mut Frame, area: Rect, diff: &SolveDiffResult, view: &
     frame.render_widget(paragraph, popup);
 }
 
-/// Format a delta string. Returns empty spans if no delta.
-fn delta_spans(v1: Option<f64>, v2: Option<f64>) -> Vec<Span<'static>> {
+/// Format a delta string. Returns empty spans if no delta exceeds `threshold`.
+fn delta_spans(v1: Option<f64>, v2: Option<f64>, threshold: f64) -> Vec<Span<'static>> {
     let t = theme();
     let (Some(a), Some(b)) = (v1, v2) else {
         return Vec::new();
     };
     let d = b - a;
-    if d.abs() < 1e-10 {
+    if d.abs() <= threshold {
         return Vec::new();
     }
     let sign = if d > 0.0 { "+" } else { "" };
@@ -441,7 +441,7 @@ fn build_diff_summary_metrics(lines: &mut Vec<Line<'static>>, diff: &SolveDiffRe
         Span::styled(format!("{obj1_str:<col_w$}"), Style::default().fg(t.text).add_modifier(Modifier::BOLD)),
         Span::styled(format!("{obj2_str:<col_w$}"), Style::default().fg(t.text).add_modifier(Modifier::BOLD)),
     ];
-    objective_spans.extend(delta_spans(r1.objective_value, r2.objective_value));
+    objective_spans.extend(delta_spans(r1.objective_value, r2.objective_value, 0.0));
     lines.push(Line::from(objective_spans));
 
     // Time.
@@ -507,16 +507,24 @@ fn build_diff_summary_tab(lines: &mut Vec<Line<'static>>, diff: &SolveDiffResult
     ]));
 }
 
-/// Render the diff-only toggle label for tabs with filtering.
-const fn diff_filter_label(diff_only: bool) -> &'static str {
-    if diff_only { " (showing changed only, press d for all)" } else { " (showing all, press d for changed only)" }
+/// Render the diff-only toggle label with threshold for tabs with filtering.
+fn diff_filter_label(diff_only: bool, threshold: f64) -> String {
+    let toggle = if diff_only { "press d for all" } else { "press d for changed only" };
+    if threshold == 0.0 { format!(" (threshold: exact, {toggle})") } else { format!(" (threshold: {threshold}, {toggle})") }
 }
 
-fn build_diff_variables_tab(lines: &mut Vec<Line<'static>>, diff: &SolveDiffResult, diff_only: bool, scroll: u16, visible_height: u16) {
+fn build_diff_variables_tab(
+    lines: &mut Vec<Line<'static>>,
+    diff: &SolveDiffResult,
+    view: &SolveViewState,
+    scroll: u16,
+    visible_height: u16,
+) {
     let t = theme();
     let counts = &diff.variable_counts;
     let summary = diff_counts_summary_label(counts);
-    let filter_label = diff_filter_label(diff_only);
+    let filter_label = diff_filter_label(view.diff_only, view.delta_threshold);
+    let diff_only = view.diff_only;
 
     lines.push(Line::from(Span::styled(
         format!("  Variables: {summary} (of {} total){filter_label}", counts.total),
@@ -597,11 +605,18 @@ fn build_variable_diff_line(lines: &mut Vec<Line<'static>>, row: &VarDiffRow, na
     lines.push(Line::from(spans));
 }
 
-fn build_diff_constraints_tab(lines: &mut Vec<Line<'static>>, diff: &SolveDiffResult, diff_only: bool, scroll: u16, visible_height: u16) {
+fn build_diff_constraints_tab(
+    lines: &mut Vec<Line<'static>>,
+    diff: &SolveDiffResult,
+    view: &SolveViewState,
+    scroll: u16,
+    visible_height: u16,
+) {
     let t = theme();
     let counts = &diff.constraint_counts;
     let summary = diff_counts_summary_label(counts);
-    let filter_label = diff_filter_label(diff_only);
+    let filter_label = diff_filter_label(view.diff_only, view.delta_threshold);
+    let diff_only = view.diff_only;
 
     lines.push(Line::from(Span::styled(
         format!("  Constraints: {summary} (of {} total){filter_label}", counts.total),

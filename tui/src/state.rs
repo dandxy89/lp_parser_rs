@@ -75,14 +75,50 @@ impl SolveTab {
     }
 }
 
+/// Preset delta thresholds for cycling with `t`/`T` in the diff view.
+pub const DELTA_THRESHOLDS: [f64; 6] = [0.0, 0.0001, 0.001, 0.01, 0.1, 1.0];
+
+/// Default index into `DELTA_THRESHOLDS` (0.0001).
+const DEFAULT_THRESHOLD_INDEX: usize = 1;
+
 /// Scroll state for the solve results panel.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct SolveViewState {
     pub tab: SolveTab,
     /// Per-tab scroll offsets, indexed by `SolveTab::index()`.
     pub scroll: [u16; 4],
     /// When `true`, the Variables and Constraints tabs in diff view show only changed rows.
     pub diff_only: bool,
+    /// Delta threshold for filtering insignificant differences in the diff view.
+    pub delta_threshold: f64,
+    /// Current index into `DELTA_THRESHOLDS` for cycling.
+    pub threshold_index: usize,
+}
+
+impl Default for SolveViewState {
+    fn default() -> Self {
+        Self {
+            tab: SolveTab::default(),
+            scroll: [0; 4],
+            diff_only: false,
+            delta_threshold: DELTA_THRESHOLDS[DEFAULT_THRESHOLD_INDEX],
+            threshold_index: DEFAULT_THRESHOLD_INDEX,
+        }
+    }
+}
+
+impl SolveViewState {
+    /// Cycle to the next preset threshold, wrapping around.
+    pub fn cycle_threshold_forward(&mut self) {
+        self.threshold_index = (self.threshold_index + 1) % DELTA_THRESHOLDS.len();
+        self.delta_threshold = DELTA_THRESHOLDS[self.threshold_index];
+    }
+
+    /// Cycle to the previous preset threshold, wrapping around.
+    pub fn cycle_threshold_backward(&mut self) {
+        self.threshold_index = if self.threshold_index == 0 { DELTA_THRESHOLDS.len() - 1 } else { self.threshold_index - 1 };
+        self.delta_threshold = DELTA_THRESHOLDS[self.threshold_index];
+    }
 }
 
 /// A single result from the search pop-up, spanning all sections.

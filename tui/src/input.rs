@@ -474,6 +474,14 @@ impl App {
             KeyCode::Char('d') => {
                 self.solver.view.diff_only = !self.solver.view.diff_only;
             }
+            KeyCode::Char('t') => {
+                self.solver.view.cycle_threshold_forward();
+                self.recompute_solve_diff();
+            }
+            KeyCode::Char('T') => {
+                self.solver.view.cycle_threshold_backward();
+                self.recompute_solve_diff();
+            }
             KeyCode::Char('y') => {
                 if let SolveState::DoneBoth(diff) = &self.solver.state {
                     let text = format_solve_diff_result(diff);

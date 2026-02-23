@@ -541,12 +541,26 @@ impl App {
             let r2 = *result2.take().expect("checked Some above");
             let label1 = file1.clone();
             let label2 = file2.clone();
-            let diff = crate::solver::diff_results(label1, label2, r1, r2);
+            let diff = crate::solver::diff_results(label1, label2, r1, r2, self.solver.view.delta_threshold);
             self.solver.state = SolveState::DoneBoth(Box::new(diff));
             self.solver.view = SolveViewState { diff_only: true, ..SolveViewState::default() };
             self.solver.receive = None;
             self.solver.receive2 = None;
         }
+    }
+
+    /// Recompute the solve diff with the current threshold from `SolveViewState`.
+    ///
+    /// Extracts `result1` and `result2` from the existing `SolveDiffResult`, rebuilds
+    /// the diff with the updated threshold, and replaces the `DoneBoth` state.
+    pub fn recompute_solve_diff(&mut self) {
+        let SolveState::DoneBoth(old_diff) = std::mem::replace(&mut self.solver.state, SolveState::Idle) else {
+            return;
+        };
+        let threshold = self.solver.view.delta_threshold;
+        let new_diff =
+            crate::solver::diff_results(old_diff.file1_label, old_diff.file2_label, old_diff.result1, old_diff.result2, threshold);
+        self.solver.state = SolveState::DoneBoth(Box::new(new_diff));
     }
 
     /// Recompute search pop-up results from the current query.
