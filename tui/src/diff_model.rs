@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use std::fmt;
 
 use lp_parser_rs::analysis::ProblemAnalysis;
+use lp_parser_rs::interner::NameId;
 use lp_parser_rs::model::{ComparisonOp, Constraint, SOSType, Sense, VariableType};
 use lp_parser_rs::problem::LpProblem;
 
@@ -371,11 +372,13 @@ fn build_sorted_vars(problem: &LpProblem) -> Vec<(&str, &lp_parser_rs::model::Va
     pairs
 }
 
-/// Build a sorted vec of (name, &Constraint) pairs from the interner-keyed constraints.
-fn build_sorted_constraints(problem: &LpProblem) -> Vec<(&str, &Constraint)> {
-    let mut pairs: Vec<_> = problem.constraints.iter().map(|(id, c)| (problem.resolve(*id), c)).collect();
-    pairs.sort_unstable_by(|a, b| a.0.cmp(b.0));
-    pairs
+/// Build a sorted vec of (name_id, name, &Constraint) triples from the interner-keyed constraints.
+///
+/// Preserves the `NameId` for line-map lookups while resolving the name for sort/compare.
+fn build_sorted_constraints(problem: &LpProblem) -> Vec<(NameId, &str, &Constraint)> {
+    let mut triples: Vec<_> = problem.constraints.iter().map(|(id, c)| (*id, problem.resolve(*id), c)).collect();
+    triples.sort_unstable_by(|a, b| a.1.cmp(b.1));
+    triples
 }
 
 /// Build a sorted vec of (name, &Objective) pairs from the interner-keyed objectives.
@@ -552,8 +555,8 @@ fn diff_constraint_pair(p1: &LpProblem, c1: &Constraint, p2: &LpProblem, c2: &Co
 fn diff_constraints(
     p1: &LpProblem,
     p2: &LpProblem,
-    line_map1: &HashMap<String, usize>,
-    line_map2: &HashMap<String, usize>,
+    line_map1: &HashMap<NameId, usize>,
+    line_map2: &HashMap<NameId, usize>,
 ) -> SectionDiff<ConstraintDiffEntry> {
     let cons1 = build_sorted_constraints(p1);
     let cons2 = build_sorted_constraints(p2);
@@ -568,7 +571,7 @@ fn diff_constraints(
         debug_assert!(j <= cons2.len(), "cons2 index out of bounds");
 
         let cmp = match (cons1.get(i), cons2.get(j)) {
-            (Some((n1, _)), Some((n2, _))) => n1.cmp(n2),
+            (Some((_, n1, _)), Some((_, n2, _))) => n1.cmp(n2),
             (Some(_), None) => std::cmp::Ordering::Less,
             (None, Some(_)) => std::cmp::Ordering::Greater,
             (None, None) => break,
@@ -576,9 +579,9 @@ fn diff_constraints(
 
         match cmp {
             std::cmp::Ordering::Less => {
-                let (name, constraint) = &cons1[i];
-                let line1 = line_map1.get(*name).copied();
-                let line2 = line_map2.get(*name).copied();
+                let (name_id, name, constraint) = &cons1[i];
+                let line1 = line_map1.get(name_id).copied();
+                let line2 = line_map2.get(name_id).copied();
                 counts.removed += 1;
                 entries.push(ConstraintDiffEntry {
                     name: name.to_string(),
@@ -590,9 +593,9 @@ fn diff_constraints(
                 i += 1;
             }
             std::cmp::Ordering::Greater => {
-                let (name, constraint) = &cons2[j];
-                let line1 = line_map1.get(*name).copied();
-                let line2 = line_map2.get(*name).copied();
+                let (name_id, name, constraint) = &cons2[j];
+                let line1 = line_map1.get(name_id).copied();
+                let line2 = line_map2.get(name_id).copied();
                 counts.added += 1;
                 entries.push(ConstraintDiffEntry {
                     name: name.to_string(),
@@ -604,10 +607,10 @@ fn diff_constraints(
                 j += 1;
             }
             std::cmp::Ordering::Equal => {
-                let (name, c1) = &cons1[i];
-                let c2 = cons2[j].1;
-                let line1 = line_map1.get(*name).copied();
-                let line2 = line_map2.get(*name).copied();
+                let (name_id1, name, c1) = &cons1[i];
+                let (name_id2, _, c2) = &cons2[j];
+                let line1 = line_map1.get(name_id1).copied();
+                let line2 = line_map2.get(name_id2).copied();
                 if let Some(detail) = diff_constraint_pair(p1, c1, p2, c2) {
                     counts.modified += 1;
                     entries.push(ConstraintDiffEntry {
@@ -719,10 +722,10 @@ pub struct DiffInput<'a> {
     pub p1: &'a LpProblem,
     /// The second LP problem.
     pub p2: &'a LpProblem,
-    /// Constraint name → 1-based line number for file 1.
-    pub line_map1: &'a HashMap<String, usize>,
-    /// Constraint name → 1-based line number for file 2.
-    pub line_map2: &'a HashMap<String, usize>,
+    /// Constraint NameId → 1-based line number for file 1.
+    pub line_map1: &'a HashMap<NameId, usize>,
+    /// Constraint NameId → 1-based line number for file 2.
+    pub line_map2: &'a HashMap<NameId, usize>,
     /// Structural analysis of the first file.
     pub analysis1: ProblemAnalysis,
     /// Structural analysis of the second file.
@@ -818,8 +821,8 @@ mod tests {
         file2: &str,
         p1: &LpProblem,
         p2: &LpProblem,
-        line_map1: &HashMap<String, usize>,
-        line_map2: &HashMap<String, usize>,
+        line_map1: &HashMap<NameId, usize>,
+        line_map2: &HashMap<NameId, usize>,
         analysis1: ProblemAnalysis,
         analysis2: ProblemAnalysis,
     ) -> LpDiffReport {
@@ -1039,14 +1042,19 @@ mod tests {
         assert_diff_entry(&added_obj, "obj", DiffKind::Added);
     }
 
+    /// Look up the `NameId` for a constraint name in a problem.
+    fn constraint_name_id(problem: &LpProblem, name: &str) -> NameId {
+        *problem.constraints.keys().find(|id| problem.resolve(**id) == name).expect("constraint name should exist")
+    }
+
     #[test]
     fn test_line_numbers_in_constraint_diff() {
         let p1 = problem_with_standard_constraint("c1", &[("x", 1.0)], &ComparisonOp::LTE, 10.0);
         let p2 = problem_with_standard_constraint("c1", &[("x", 2.0)], &ComparisonOp::LTE, 10.0);
         let mut lm1 = HashMap::new();
-        lm1.insert("c1".to_string(), 5);
+        lm1.insert(constraint_name_id(&p1, "c1"), 5);
         let mut lm2 = HashMap::new();
-        lm2.insert("c1".to_string(), 8);
+        lm2.insert(constraint_name_id(&p2, "c1"), 8);
 
         let report = test_diff_report("a.lp", "b.lp", &p1, &p2, &lm1, &lm2, dummy_analysis(), dummy_analysis());
         let entry = report.constraints.entries.iter().find(|e| e.name == "c1").expect("should have c1 entry");
