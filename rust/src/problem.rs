@@ -911,8 +911,10 @@ impl TryFrom<&str> for LpProblem {
         let parser = LpProblemParser::new();
         let parsed = parser.parse(lexer).map_err(LpParseError::from)?;
 
+        // Double the constraint count as a heuristic: one entry for the constraint
+        // name itself, plus at least one new variable name per constraint on average.
         let estimated_names = parsed.objectives.len()
-            + parsed.constraints.len()
+            + parsed.constraints.len() * 2
             + parsed.bounds.len()
             + parsed.generals.len()
             + parsed.integers.len()
