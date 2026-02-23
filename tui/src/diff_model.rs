@@ -365,23 +365,23 @@ fn constraint_summary(problem: &LpProblem, constraint: &Constraint) -> String {
 }
 
 /// Build a sorted vec of (name, &Variable) pairs from the interner-keyed variables.
-fn build_sorted_vars(problem: &LpProblem) -> Vec<(String, &lp_parser_rs::model::Variable)> {
-    let mut pairs: Vec<_> = problem.variables.iter().map(|(id, var)| (problem.resolve(*id).to_string(), var)).collect();
-    pairs.sort_unstable_by(|a, b| a.0.cmp(&b.0));
+fn build_sorted_vars(problem: &LpProblem) -> Vec<(&str, &lp_parser_rs::model::Variable)> {
+    let mut pairs: Vec<_> = problem.variables.iter().map(|(id, var)| (problem.resolve(*id), var)).collect();
+    pairs.sort_unstable_by(|a, b| a.0.cmp(b.0));
     pairs
 }
 
 /// Build a sorted vec of (name, &Constraint) pairs from the interner-keyed constraints.
-fn build_sorted_constraints(problem: &LpProblem) -> Vec<(String, &Constraint)> {
-    let mut pairs: Vec<_> = problem.constraints.iter().map(|(id, c)| (problem.resolve(*id).to_string(), c)).collect();
-    pairs.sort_unstable_by(|a, b| a.0.cmp(&b.0));
+fn build_sorted_constraints(problem: &LpProblem) -> Vec<(&str, &Constraint)> {
+    let mut pairs: Vec<_> = problem.constraints.iter().map(|(id, c)| (problem.resolve(*id), c)).collect();
+    pairs.sort_unstable_by(|a, b| a.0.cmp(b.0));
     pairs
 }
 
 /// Build a sorted vec of (name, &Objective) pairs from the interner-keyed objectives.
-fn build_sorted_objectives(problem: &LpProblem) -> Vec<(String, &lp_parser_rs::model::Objective)> {
-    let mut pairs: Vec<_> = problem.objectives.iter().map(|(id, o)| (problem.resolve(*id).to_string(), o)).collect();
-    pairs.sort_unstable_by(|a, b| a.0.cmp(&b.0));
+fn build_sorted_objectives(problem: &LpProblem) -> Vec<(&str, &lp_parser_rs::model::Objective)> {
+    let mut pairs: Vec<_> = problem.objectives.iter().map(|(id, o)| (problem.resolve(*id), o)).collect();
+    pairs.sort_unstable_by(|a, b| a.0.cmp(b.0));
     pairs
 }
 
@@ -410,8 +410,12 @@ fn diff_variables(p1: &LpProblem, p2: &LpProblem) -> SectionDiff<VariableDiffEnt
             std::cmp::Ordering::Less => {
                 let (name, v1) = &vars1[i];
                 counts.removed += 1;
-                let entry =
-                    VariableDiffEntry { name: name.clone(), kind: DiffKind::Removed, old_type: Some(v1.var_type.clone()), new_type: None };
+                let entry = VariableDiffEntry {
+                    name: name.to_string(),
+                    kind: DiffKind::Removed,
+                    old_type: Some(v1.var_type.clone()),
+                    new_type: None,
+                };
                 debug_assert!(entry.old_type.is_some(), "Removed variable must have old_type");
                 debug_assert!(entry.new_type.is_none(), "Removed variable must not have new_type");
                 entries.push(entry);
@@ -420,8 +424,12 @@ fn diff_variables(p1: &LpProblem, p2: &LpProblem) -> SectionDiff<VariableDiffEnt
             std::cmp::Ordering::Greater => {
                 let (name, v2) = &vars2[j];
                 counts.added += 1;
-                let entry =
-                    VariableDiffEntry { name: name.clone(), kind: DiffKind::Added, old_type: None, new_type: Some(v2.var_type.clone()) };
+                let entry = VariableDiffEntry {
+                    name: name.to_string(),
+                    kind: DiffKind::Added,
+                    old_type: None,
+                    new_type: Some(v2.var_type.clone()),
+                };
                 debug_assert!(entry.new_type.is_some(), "Added variable must have new_type");
                 debug_assert!(entry.old_type.is_none(), "Added variable must not have old_type");
                 entries.push(entry);
@@ -435,7 +443,7 @@ fn diff_variables(p1: &LpProblem, p2: &LpProblem) -> SectionDiff<VariableDiffEnt
                 } else {
                     counts.modified += 1;
                     let entry = VariableDiffEntry {
-                        name: name.clone(),
+                        name: name.to_string(),
                         kind: DiffKind::Modified,
                         old_type: Some(v1.var_type.clone()),
                         new_type: Some(v2.var_type.clone()),
@@ -569,11 +577,11 @@ fn diff_constraints(
         match cmp {
             std::cmp::Ordering::Less => {
                 let (name, constraint) = &cons1[i];
-                let line1 = line_map1.get(name.as_str()).copied();
-                let line2 = line_map2.get(name.as_str()).copied();
+                let line1 = line_map1.get(*name).copied();
+                let line2 = line_map2.get(*name).copied();
                 counts.removed += 1;
                 entries.push(ConstraintDiffEntry {
-                    name: name.clone(),
+                    name: name.to_string(),
                     kind: DiffKind::Removed,
                     detail: ConstraintDiffDetail::AddedOrRemoved(resolve_constraint(p1, constraint)),
                     line_file1: line1,
@@ -583,11 +591,11 @@ fn diff_constraints(
             }
             std::cmp::Ordering::Greater => {
                 let (name, constraint) = &cons2[j];
-                let line1 = line_map1.get(name.as_str()).copied();
-                let line2 = line_map2.get(name.as_str()).copied();
+                let line1 = line_map1.get(*name).copied();
+                let line2 = line_map2.get(*name).copied();
                 counts.added += 1;
                 entries.push(ConstraintDiffEntry {
-                    name: name.clone(),
+                    name: name.to_string(),
                     kind: DiffKind::Added,
                     detail: ConstraintDiffDetail::AddedOrRemoved(resolve_constraint(p2, constraint)),
                     line_file1: line1,
@@ -598,12 +606,12 @@ fn diff_constraints(
             std::cmp::Ordering::Equal => {
                 let (name, c1) = &cons1[i];
                 let c2 = cons2[j].1;
-                let line1 = line_map1.get(name.as_str()).copied();
-                let line2 = line_map2.get(name.as_str()).copied();
+                let line1 = line_map1.get(*name).copied();
+                let line2 = line_map2.get(*name).copied();
                 if let Some(detail) = diff_constraint_pair(p1, c1, p2, c2) {
                     counts.modified += 1;
                     entries.push(ConstraintDiffEntry {
-                        name: name.clone(),
+                        name: name.to_string(),
                         kind: DiffKind::Modified,
                         detail,
                         line_file1: line1,
@@ -647,7 +655,7 @@ fn diff_objectives(p1: &LpProblem, p2: &LpProblem) -> SectionDiff<ObjectiveDiffE
                 let (name, o) = &objs1[i];
                 counts.removed += 1;
                 entries.push(ObjectiveDiffEntry {
-                    name: name.clone(),
+                    name: name.to_string(),
                     kind: DiffKind::Removed,
                     old_coefficients: resolve_coefficients(p1, &o.coefficients),
                     new_coefficients: Vec::new(),
@@ -659,7 +667,7 @@ fn diff_objectives(p1: &LpProblem, p2: &LpProblem) -> SectionDiff<ObjectiveDiffE
                 let (name, o) = &objs2[j];
                 counts.added += 1;
                 entries.push(ObjectiveDiffEntry {
-                    name: name.clone(),
+                    name: name.to_string(),
                     kind: DiffKind::Added,
                     old_coefficients: Vec::new(),
                     new_coefficients: resolve_coefficients(p2, &o.coefficients),
@@ -685,7 +693,7 @@ fn diff_objectives(p1: &LpProblem, p2: &LpProblem) -> SectionDiff<ObjectiveDiffE
                 } else {
                     counts.modified += 1;
                     entries.push(ObjectiveDiffEntry {
-                        name: name.clone(),
+                        name: name.to_string(),
                         kind: DiffKind::Modified,
                         old_coefficients: old_resolved,
                         new_coefficients: new_resolved,
