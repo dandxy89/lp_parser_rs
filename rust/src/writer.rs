@@ -160,12 +160,10 @@ fn write_constraint(output: &mut String, constraint: &Constraint, interner: &Nam
 
             write_coefficients_line(output, coefficients, interner, options)?;
 
-            write!(output, " {operator} ")
-                .map_err(|err| LpParseError::io_error(format!("Failed to write constraint RHS: {err}")))?;
+            write!(output, " {operator} ").map_err(|err| LpParseError::io_error(format!("Failed to write constraint RHS: {err}")))?;
             write_number(output, *rhs, options.decimal_precision)
                 .map_err(|err| LpParseError::io_error(format!("Failed to write constraint RHS: {err}")))?;
-            writeln!(output)
-                .map_err(|err| LpParseError::io_error(format!("Failed to write newline: {err}")))?;
+            writeln!(output).map_err(|err| LpParseError::io_error(format!("Failed to write newline: {err}")))?;
         }
         Constraint::SOS { name, sos_type, weights, .. } => {
             let resolved_name = interner.resolve(*name);
@@ -177,8 +175,7 @@ fn write_constraint(output: &mut String, constraint: &Constraint, interner: &Nam
                     write!(output, " ").map_err(|err| LpParseError::io_error(format!("Failed to write space: {err}")))?;
                 }
                 let var_name = interner.resolve(weight.name);
-                write!(output, "{var_name}:")
-                    .map_err(|err| LpParseError::io_error(format!("Failed to write SOS weight: {err}")))?;
+                write!(output, "{var_name}:").map_err(|err| LpParseError::io_error(format!("Failed to write SOS weight: {err}")))?;
                 write_number(output, weight.value, options.decimal_precision)
                     .map_err(|err| LpParseError::io_error(format!("Failed to write SOS weight: {err}")))?;
             }
@@ -228,30 +225,24 @@ fn write_variable_bounds(output: &mut String, variable: &Variable, interner: &Na
             writeln!(output, "{var_name} free").map_err(|err| LpParseError::io_error(format!("Failed to write free variable: {err}")))?;
         }
         VariableType::LowerBound(bound) => {
-            write!(output, "{var_name} >= ")
-                .map_err(|err| LpParseError::io_error(format!("Failed to write lower bound: {err}")))?;
+            write!(output, "{var_name} >= ").map_err(|err| LpParseError::io_error(format!("Failed to write lower bound: {err}")))?;
             write_number(output, *bound, options.decimal_precision)
                 .map_err(|err| LpParseError::io_error(format!("Failed to write lower bound: {err}")))?;
-            writeln!(output)
-                .map_err(|err| LpParseError::io_error(format!("Failed to write newline: {err}")))?;
+            writeln!(output).map_err(|err| LpParseError::io_error(format!("Failed to write newline: {err}")))?;
         }
         VariableType::UpperBound(bound) => {
-            write!(output, "{var_name} <= ")
-                .map_err(|err| LpParseError::io_error(format!("Failed to write upper bound: {err}")))?;
+            write!(output, "{var_name} <= ").map_err(|err| LpParseError::io_error(format!("Failed to write upper bound: {err}")))?;
             write_number(output, *bound, options.decimal_precision)
                 .map_err(|err| LpParseError::io_error(format!("Failed to write upper bound: {err}")))?;
-            writeln!(output)
-                .map_err(|err| LpParseError::io_error(format!("Failed to write newline: {err}")))?;
+            writeln!(output).map_err(|err| LpParseError::io_error(format!("Failed to write newline: {err}")))?;
         }
         VariableType::DoubleBound(lower, upper) => {
             write_number(output, *lower, options.decimal_precision)
                 .map_err(|err| LpParseError::io_error(format!("Failed to write double bound: {err}")))?;
-            write!(output, " <= {var_name} <= ")
-                .map_err(|err| LpParseError::io_error(format!("Failed to write double bound: {err}")))?;
+            write!(output, " <= {var_name} <= ").map_err(|err| LpParseError::io_error(format!("Failed to write double bound: {err}")))?;
             write_number(output, *upper, options.decimal_precision)
                 .map_err(|err| LpParseError::io_error(format!("Failed to write double bound: {err}")))?;
-            writeln!(output)
-                .map_err(|err| LpParseError::io_error(format!("Failed to write newline: {err}")))?;
+            writeln!(output).map_err(|err| LpParseError::io_error(format!("Failed to write newline: {err}")))?;
         }
         _ => {} // Other types don't need bounds declarations
     }

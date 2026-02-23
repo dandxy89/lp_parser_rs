@@ -687,11 +687,7 @@ impl LpProblem {
             }
         }
 
-        self.variables
-            .keys()
-            .filter(|name_id| !used_variables.contains(name_id))
-            .map(|id| self.interner.resolve(*id).to_string())
-            .collect()
+        self.variables.keys().filter(|name_id| !used_variables.contains(name_id)).map(|id| self.interner.resolve(*id).to_string()).collect()
     }
 
     /// Analyze constraints.

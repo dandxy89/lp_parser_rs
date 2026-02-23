@@ -481,7 +481,6 @@ impl LpParser {
     /// - issues: List of detected issues/warnings
     #[pyo3(text_signature = "($self)")]
     fn analyze(&self, py: Python) -> PyResult<Py<PyAny>> {
-
         let problem = self.get_problem()?;
         let analysis = problem.analyze_with_config(&AnalysisConfig::default());
         self.analysis_to_dict(py, &analysis)
@@ -501,7 +500,6 @@ impl LpParser {
         small_coeff_threshold: f64,
         ratio_threshold: f64,
     ) -> PyResult<Py<PyAny>> {
-
         let problem = self.get_problem()?;
         let config = AnalysisConfig {
             large_coefficient_threshold: large_coeff_threshold,

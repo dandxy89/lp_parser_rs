@@ -68,15 +68,13 @@ impl MappedFile {
     /// Returns an `LpParseError::IoError` if the file cannot be opened, mapped,
     /// or is not valid UTF-8.
     pub fn open(path: &Path) -> LpResult<Self> {
-        let file =
-            File::open(path).map_err(|e| LpParseError::io_error(format!("Failed to open file '{}': {}", path.display(), e)))?;
+        let file = File::open(path).map_err(|e| LpParseError::io_error(format!("Failed to open file '{}': {}", path.display(), e)))?;
 
         // SAFETY: The file is opened read-only. Concurrent external modification
         // would be undefined behaviour, but this is the standard trade-off for
         // memory-mapped I/O and matches the documented contract of memmap2::Mmap.
         let mmap = unsafe {
-            memmap2::Mmap::map(&file)
-                .map_err(|e| LpParseError::io_error(format!("Failed to mmap file '{}': {}", path.display(), e)))?
+            memmap2::Mmap::map(&file).map_err(|e| LpParseError::io_error(format!("Failed to mmap file '{}': {}", path.display(), e)))?
         };
 
         let content_str = std::str::from_utf8(&mmap)

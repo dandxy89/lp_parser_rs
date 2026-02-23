@@ -903,11 +903,8 @@ impl TryFrom<&str> for LpProblem {
             + parsed.binaries.len();
         let mut interner = NameInterner::with_capacity(estimated_names.max(16));
 
-        let estimated_variables = parsed.bounds.len()
-            + parsed.generals.len()
-            + parsed.integers.len()
-            + parsed.binaries.len()
-            + parsed.constraints.len();
+        let estimated_variables =
+            parsed.bounds.len() + parsed.generals.len() + parsed.integers.len() + parsed.binaries.len() + parsed.constraints.len();
         let mut variables: IndexMap<NameId, Variable> = IndexMap::with_capacity(estimated_variables);
         let mut constraint_counter: u32 = 0;
 

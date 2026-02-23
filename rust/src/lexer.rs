@@ -788,7 +788,6 @@ end
 
     #[test]
     fn test_parse_simple() {
-
         // Test with just objective, no constraints
         let input = "minimize\nx1\nsubject to\nend";
         let lexer = Lexer::new(input);
@@ -800,7 +799,6 @@ end
 
     #[test]
     fn test_parse_named_objective() {
-
         // Test with named objective
         let input = "minimize\nobj: x1\nsubject to\nend";
         let lexer = Lexer::new(input);
@@ -812,7 +810,6 @@ end
 
     #[test]
     fn test_parse_with_constraint() {
-
         // Test with named constraint
         let input = "minimize\nobj: x1\nsubject to\nc1: x1 <= 1\nend";
         let lexer = Lexer::new(input);
@@ -824,7 +821,6 @@ end
 
     #[test]
     fn test_parse_unnamed_obj_with_constraint() {
-
         // Test with UNNAMED objective and named constraint - this is what minimal_parse uses
         let input = "minimize\nx1\nsubject to\nc1: x1 <= 1\nend";
         println!("Input: {input:?}");
