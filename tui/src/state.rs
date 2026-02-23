@@ -109,13 +109,13 @@ impl Default for SolveViewState {
 
 impl SolveViewState {
     /// Cycle to the next preset threshold, wrapping around.
-    pub fn cycle_threshold_forward(&mut self) {
+    pub const fn cycle_threshold_forward(&mut self) {
         self.threshold_index = (self.threshold_index + 1) % DELTA_THRESHOLDS.len();
         self.delta_threshold = DELTA_THRESHOLDS[self.threshold_index];
     }
 
     /// Cycle to the previous preset threshold, wrapping around.
-    pub fn cycle_threshold_backward(&mut self) {
+    pub const fn cycle_threshold_backward(&mut self) {
         self.threshold_index = if self.threshold_index == 0 { DELTA_THRESHOLDS.len() - 1 } else { self.threshold_index - 1 };
         self.delta_threshold = DELTA_THRESHOLDS[self.threshold_index];
     }

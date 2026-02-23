@@ -1,6 +1,6 @@
 //! `HiGHS` solver integration — converts an `LpProblem` to a `HiGHS` problem and solves it.
 
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::Write as _;
 use std::path::Path;
@@ -251,7 +251,7 @@ fn opt_diff(a: Option<f64>, b: Option<f64>, threshold: f64) -> bool {
 struct BuiltModel {
     row_problem: highs::RowProblem,
     variable_names: Vec<String>,
-    objective_coefficients: BTreeMap<String, f64>,
+    objective_coefficients: HashMap<String, f64>,
     row_constraint_names: Vec<String>,
     skipped_sos: usize,
     sense: highs::Sense,
@@ -261,7 +261,7 @@ struct BuiltModel {
 /// `row_problem` has been consumed by `optimise`).
 struct SolveMetadata {
     variable_names: Vec<String>,
-    objective_coefficients: BTreeMap<String, f64>,
+    objective_coefficients: HashMap<String, f64>,
     row_constraint_names: Vec<String>,
     skipped_sos: usize,
 }
@@ -274,10 +274,10 @@ fn build_highs_model(problem: &LpProblem) -> BuiltModel {
     let mut variable_names: Vec<String> = problem.variables.keys().map(|id| problem.resolve(*id).to_string()).collect();
     variable_names.sort();
 
-    let variable_index: BTreeMap<&str, usize> = variable_names.iter().enumerate().map(|(i, name)| (name.as_str(), i)).collect();
+    let variable_index: HashMap<String, usize> = variable_names.iter().enumerate().map(|(i, name)| (name.clone(), i)).collect();
 
-    let objective_coefficients: BTreeMap<String, f64> = {
-        let mut map = BTreeMap::new();
+    let objective_coefficients: HashMap<String, f64> = {
+        let mut map = HashMap::new();
         // Sort objective names and take the first one (primary objective).
         let mut obj_names: Vec<(&lp_parser_rs::interner::NameId, &lp_parser_rs::model::Objective)> = problem.objectives.iter().collect();
         obj_names.sort_by_key(|(id, _)| problem.resolve(**id));
