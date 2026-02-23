@@ -15,18 +15,13 @@ use crate::diff_model::{DiffCounts, DiffSummary, LpDiffReport};
 use crate::theme::theme;
 use crate::widgets::{ARROW, muted};
 
-/// Draw the summary content into `area` (no border — caller provides the border).
-/// Returns the total content line count.
-pub fn draw_summary(
-    frame: &mut Frame,
-    area: Rect,
+/// Build pre-formatted summary lines. Called once at startup since report data never changes.
+pub fn build_summary_lines(
     report: &LpDiffReport,
     summary: &DiffSummary,
     analysis1: &ProblemAnalysis,
     analysis2: &ProblemAnalysis,
-    scroll: u16,
-) -> usize {
-    debug_assert!(area.width > 0 && area.height > 0, "summary area must be non-zero");
+) -> Vec<Line<'static>> {
     let mut lines: Vec<Line<'static>> = Vec::with_capacity(64);
 
     build_header(&mut lines, report);
@@ -56,8 +51,15 @@ pub fn draw_summary(
     lines.push(Line::from(""));
     build_issues_section(&mut lines, report, analysis1, analysis2);
 
-    let line_count = lines.len();
-    let paragraph = Paragraph::new(lines).scroll((scroll, 0));
+    lines
+}
+
+/// Draw the summary content into `area` using pre-built lines (no border — caller provides the border).
+/// Returns the total content line count.
+pub fn draw_summary(frame: &mut Frame, area: Rect, cached_lines: &[Line<'static>], scroll: u16) -> usize {
+    debug_assert!(area.width > 0 && area.height > 0, "summary area must be non-zero");
+    let line_count = cached_lines.len();
+    let paragraph = Paragraph::new(cached_lines.to_vec()).scroll((scroll, 0));
     frame.render_widget(paragraph, area);
     line_count
 }

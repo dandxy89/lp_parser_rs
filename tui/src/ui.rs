@@ -118,14 +118,14 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
 }
 
 /// Draw the detail panel on the right side.
-fn draw_detail_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App, report_summary: &crate::diff_model::DiffSummary) {
+fn draw_detail_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App, _report_summary: &crate::diff_model::DiffSummary) {
     let border_style = focus_border_style(app.focus, Focus::Detail);
 
     let content_lines = if app.active_section == Section::Summary {
         let block = Block::default().borders(Borders::ALL).border_style(border_style).title(" Summary ");
         let inner = block.inner(area);
         frame.render_widget(block, area);
-        summary::draw_summary(frame, inner, &app.report, report_summary, &app.report.analysis1, &app.report.analysis2, app.detail_scroll)
+        summary::draw_summary(frame, inner, &app.summary_lines, app.detail_scroll)
     } else if let Some(entry_index) = app.selected_entry_index() {
         app.ensure_coeff_row_cache();
         let scroll = app.detail_scroll;

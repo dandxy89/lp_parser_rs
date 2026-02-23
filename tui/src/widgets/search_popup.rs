@@ -219,11 +219,10 @@ fn draw_detail_preview(frame: &mut Frame, area: Rect, app: &App) {
         }
         Section::Summary => {
             // Summary entries don't appear in search results, but handle gracefully.
-            let report_summary = app.report.summary();
             let block = Block::default().borders(Borders::ALL).border_style(border_style).title(" Summary ");
             let inner = block.inner(area);
             frame.render_widget(block, area);
-            summary::draw_summary(frame, inner, &app.report, &report_summary, &app.report.analysis1, &app.report.analysis2, scroll);
+            summary::draw_summary(frame, inner, &app.summary_lines, scroll);
         }
     }
 }

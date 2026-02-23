@@ -228,11 +228,9 @@ impl App {
             Focus::SectionSelector => {
                 let current = self.section_selector_state.selected().unwrap_or(0);
                 let new_index = (current + 1).min(Section::ALL.len() - 1);
-                self.section_selector_state.select(Some(new_index));
-
                 let new_section = Section::from_index(new_index);
                 if self.active_section != new_section {
-                    self.active_section = new_section;
+                    self.set_active_section(new_section);
                     self.invalidate_cache();
                     self.ensure_active_section_cache();
                     self.reset_name_list_selection();
@@ -261,11 +259,9 @@ impl App {
             Focus::SectionSelector => {
                 let current = self.section_selector_state.selected().unwrap_or(0);
                 let new_index = current.saturating_sub(1);
-                self.section_selector_state.select(Some(new_index));
-
                 let new_section = Section::from_index(new_index);
                 if self.active_section != new_section {
-                    self.active_section = new_section;
+                    self.set_active_section(new_section);
                     self.invalidate_cache();
                     self.ensure_active_section_cache();
                     self.reset_name_list_selection();
@@ -292,10 +288,9 @@ impl App {
     fn jump_to_top(&mut self) {
         match self.focus {
             Focus::SectionSelector => {
-                self.section_selector_state.select(Some(0));
                 let new_section = Section::Summary;
                 if self.active_section != new_section {
-                    self.active_section = new_section;
+                    self.set_active_section(new_section);
                     self.invalidate_cache();
                     self.ensure_active_section_cache();
                     self.reset_name_list_selection();
@@ -318,10 +313,9 @@ impl App {
     fn jump_to_bottom(&mut self) {
         match self.focus {
             Focus::SectionSelector => {
-                self.section_selector_state.select(Some(Section::ALL.len() - 1));
                 let new_section = Section::Objectives;
                 if self.active_section != new_section {
-                    self.active_section = new_section;
+                    self.set_active_section(new_section);
                     self.invalidate_cache();
                     self.ensure_active_section_cache();
                     self.detail_scroll = 0;
@@ -560,8 +554,7 @@ impl App {
 
     pub(crate) fn set_section(&mut self, section: Section) {
         self.record_jump();
-        self.active_section = section;
-        self.section_selector_state.select(Some(section.index()));
+        self.set_active_section(section);
         self.invalidate_cache();
         self.ensure_active_section_cache();
         self.reset_name_list_selection();

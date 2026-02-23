@@ -6,8 +6,8 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, Paragraph};
 
-use crate::app::App;
-use crate::solver::{ConstraintDiffRow, DiffCounts, SolveDiffResult, VarDiffRow};
+use crate::app::{App, CachedDiffRow, SolveRenderCache};
+use crate::solver::{ConstraintDiffRow, DiffCounts, SolveDiffResult, SolveResult, VarDiffRow};
 use crate::state::{SolveState, SolveTab, SolveViewState};
 use crate::theme::theme;
 
@@ -29,8 +29,8 @@ pub fn draw_solve_overlay(frame: &mut Frame, area: Rect, app: &App) {
         SolveState::RunningBoth { file1, file2, result1, result2 } => {
             draw_running_both(frame, area, file1, file2, result1.is_some(), result2.is_some());
         }
-        SolveState::Done(result) => draw_done(frame, area, result, &app.solver.view),
-        SolveState::DoneBoth(diff) => draw_done_both(frame, area, diff, &app.solver.view),
+        SolveState::Done(result) => draw_done(frame, area, result, &app.solver.view, &app.solver.render_cache),
+        SolveState::DoneBoth(diff) => draw_done_both(frame, area, diff, &app.solver.view, &app.solver.render_cache),
         SolveState::Failed(error) => draw_failed(frame, area, error),
     }
 }
@@ -90,7 +90,7 @@ fn draw_running(frame: &mut Frame, area: Rect, file: &str) {
     frame.render_widget(paragraph, popup);
 }
 
-fn draw_done(frame: &mut Frame, area: Rect, result: &crate::solver::SolveResult, view: &crate::state::SolveViewState) {
+fn draw_done(frame: &mut Frame, area: Rect, result: &SolveResult, view: &SolveViewState, cache: &SolveRenderCache) {
     let t = theme();
     let popup_width = (area.width * 4 / 5).max(60).min(area.width);
     let popup_height = (area.height * 4 / 5).max(20).min(area.height);
@@ -102,14 +102,21 @@ fn draw_done(frame: &mut Frame, area: Rect, result: &crate::solver::SolveResult,
     // Build tab bar line.
     let tab_bar = build_tab_bar(active);
 
-    // Build content for the active tab.
+    // Build content for the active tab, preferring cached lines when available.
     let mut lines = vec![tab_bar, Line::from("")];
 
-    match active {
-        SolveTab::Summary => build_summary_tab(&mut lines, result),
-        SolveTab::Variables => build_variables_tab(&mut lines, result),
-        SolveTab::Constraints => build_constraints_tab(&mut lines, result),
-        SolveTab::Log => build_log_tab(&mut lines, result),
+    let cached_tabs = if let SolveRenderCache::Single(tabs) = cache { Some(tabs) } else { None };
+
+    if let Some(tabs) = cached_tabs {
+        lines.extend(tabs[active.index()].iter().cloned());
+    } else {
+        // Fallback: build lines from scratch (should not happen in normal flow).
+        match active {
+            SolveTab::Summary => build_summary_tab(&mut lines, result),
+            SolveTab::Variables => build_variables_tab(&mut lines, result),
+            SolveTab::Constraints => build_constraints_tab(&mut lines, result),
+            SolveTab::Log => build_log_tab(&mut lines, result),
+        }
     }
 
     lines.push(Line::from(""));
@@ -143,11 +150,11 @@ fn build_tab_bar(active: SolveTab) -> Line<'static> {
     Line::from(spans)
 }
 
-fn build_summary_tab<'a>(lines: &mut Vec<Line<'a>>, result: &'a crate::solver::SolveResult) {
+fn build_summary_tab(lines: &mut Vec<Line<'static>>, result: &SolveResult) {
     let t = theme();
     lines.push(Line::from(vec![
         Span::styled("  Status:    ", Style::default().fg(t.muted)),
-        Span::styled(&result.status, status_style(&result.status)),
+        Span::styled(result.status.clone(), status_style(&result.status)),
     ]));
 
     if let Some(obj) = result.objective_value {
@@ -188,7 +195,7 @@ fn build_summary_tab<'a>(lines: &mut Vec<Line<'a>>, result: &'a crate::solver::S
     }
 }
 
-fn build_variables_tab<'a>(lines: &mut Vec<Line<'a>>, result: &'a crate::solver::SolveResult) {
+fn build_variables_tab(lines: &mut Vec<Line<'static>>, result: &SolveResult) {
     let t = theme();
     if result.variables.is_empty() {
         lines.push(Line::from(Span::styled("  No variable values available.", Style::default().fg(t.muted))));
@@ -223,7 +230,7 @@ fn build_variables_tab<'a>(lines: &mut Vec<Line<'a>>, result: &'a crate::solver:
     }
 }
 
-fn build_constraints_tab<'a>(lines: &mut Vec<Line<'a>>, result: &'a crate::solver::SolveResult) {
+fn build_constraints_tab(lines: &mut Vec<Line<'static>>, result: &SolveResult) {
     let t = theme();
     if result.shadow_prices.is_empty() && result.row_values.is_empty() {
         lines.push(Line::from(Span::styled("  No constraint data available.", Style::default().fg(t.muted))));
@@ -255,7 +262,7 @@ fn build_constraints_tab<'a>(lines: &mut Vec<Line<'a>>, result: &'a crate::solve
     }
 }
 
-fn build_log_tab<'a>(lines: &mut Vec<Line<'a>>, result: &'a crate::solver::SolveResult) {
+fn build_log_tab(lines: &mut Vec<Line<'static>>, result: &SolveResult) {
     const MAX_LOG_LINES: usize = 200;
 
     let t = theme();
@@ -318,7 +325,7 @@ fn draw_running_both(frame: &mut Frame, area: Rect, file1: &str, file2: &str, do
     frame.render_widget(paragraph, popup);
 }
 
-fn draw_done_both(frame: &mut Frame, area: Rect, diff: &SolveDiffResult, view: &SolveViewState) {
+fn draw_done_both(frame: &mut Frame, area: Rect, diff: &SolveDiffResult, view: &SolveViewState, cache: &SolveRenderCache) {
     let t = theme();
     let popup_width = (area.width * 4 / 5).max(60).min(area.width);
     let popup_height = (area.height * 4 / 5).max(20).min(area.height);
@@ -331,10 +338,34 @@ fn draw_done_both(frame: &mut Frame, area: Rect, diff: &SolveDiffResult, view: &
     let mut lines = vec![tab_bar, Line::from("")];
 
     match active {
-        SolveTab::Summary => build_diff_summary_tab(&mut lines, diff),
-        SolveTab::Variables => build_diff_variables_tab(&mut lines, diff, view, scroll, popup_height),
-        SolveTab::Constraints => build_diff_constraints_tab(&mut lines, diff, view, scroll, popup_height),
-        SolveTab::Log => build_diff_log_tab(&mut lines, diff),
+        SolveTab::Summary => {
+            if let SolveRenderCache::Diff { summary, .. } = cache {
+                lines.extend(summary.iter().cloned());
+            } else {
+                build_diff_summary_tab(&mut lines, diff);
+            }
+        }
+        SolveTab::Variables => {
+            if let SolveRenderCache::Diff { variable_rows, variable_count_label, .. } = cache {
+                build_diff_variables_tab_cached(&mut lines, variable_count_label, variable_rows, view, scroll, popup_height);
+            } else {
+                build_diff_variables_tab(&mut lines, diff, view, scroll, popup_height);
+            }
+        }
+        SolveTab::Constraints => {
+            if let SolveRenderCache::Diff { constraint_rows, constraint_count_label, .. } = cache {
+                build_diff_constraints_tab_cached(&mut lines, constraint_count_label, constraint_rows, view, scroll, popup_height);
+            } else {
+                build_diff_constraints_tab(&mut lines, diff, view, scroll, popup_height);
+            }
+        }
+        SolveTab::Log => {
+            if let SolveRenderCache::Diff { log, .. } = cache {
+                lines.extend(log.iter().cloned());
+            } else {
+                build_diff_log_tab(&mut lines, diff);
+            }
+        }
     }
 
     lines.push(Line::from(""));
@@ -353,20 +384,274 @@ fn draw_done_both(frame: &mut Frame, area: Rect, diff: &SolveDiffResult, view: &
     frame.render_widget(paragraph, popup);
 }
 
-/// Format a delta string. Returns empty spans if no delta exceeds `threshold`.
-fn delta_spans(v1: Option<f64>, v2: Option<f64>, threshold: f64) -> Vec<Span<'static>> {
-    let t = theme();
-    let (Some(a), Some(b)) = (v1, v2) else {
-        return Vec::new();
-    };
-    let d = b - a;
-    if d.abs() <= threshold {
-        return Vec::new();
-    }
-    let sign = if d > 0.0 { "+" } else { "" };
-    let colour = if d > 0.0 { t.added } else { t.removed };
-    vec![Span::styled(format!("  \u{0394} {sign}{d:.6}"), Style::default().fg(colour))]
+// ---------------------------------------------------------------------------
+// Cache-building functions — called once when solve completes
+// ---------------------------------------------------------------------------
+
+/// Pre-format all 4 tab contents for a single solve result.
+pub fn build_single_solve_cache(result: &SolveResult) -> [Vec<Line<'static>>; 4] {
+    let mut summary = Vec::new();
+    build_summary_tab(&mut summary, result);
+    let mut variables = Vec::new();
+    build_variables_tab(&mut variables, result);
+    let mut constraints = Vec::new();
+    build_constraints_tab(&mut constraints, result);
+    let mut log = Vec::new();
+    build_log_tab(&mut log, result);
+    [summary, variables, constraints, log]
 }
+
+/// Pre-format summary, log, and per-row lines for a diff solve result.
+pub fn build_diff_solve_cache(diff: &SolveDiffResult) -> SolveRenderCache {
+    let mut summary = Vec::new();
+    build_diff_summary_tab(&mut summary, diff);
+
+    let mut log = Vec::new();
+    build_diff_log_tab(&mut log, diff);
+
+    let variable_rows: Vec<CachedDiffRow> = diff
+        .variable_diff
+        .iter()
+        .filter_map(|row| {
+            let line = format_variable_diff_line(row, 24, 14)?;
+            Some(CachedDiffRow { line, changed: row.changed })
+        })
+        .collect();
+
+    let constraint_rows: Vec<CachedDiffRow> = diff
+        .constraint_diff
+        .iter()
+        .filter_map(|row| {
+            let line = format_constraint_diff_line(row, 22, 13)?;
+            Some(CachedDiffRow { line, changed: row.changed })
+        })
+        .collect();
+
+    let variable_count_label = diff_counts_summary_label(&diff.variable_counts);
+    let constraint_count_label = diff_counts_summary_label(&diff.constraint_counts);
+
+    SolveRenderCache::Diff { summary, log, variable_rows, constraint_rows, variable_count_label, constraint_count_label }
+}
+
+/// Format a single variable diff row as a `Line`. Returns `None` for `(None, None)` rows.
+fn format_variable_diff_line(row: &VarDiffRow, name_w: usize, value_w: usize) -> Option<Line<'static>> {
+    let t = theme();
+    let dash = "\u{2014}";
+
+    let (name_style, value1_str, value2_str, delta_str, marker) = match (row.val1, row.val2) {
+        (None, Some(v2)) => {
+            (Style::default().fg(t.added), format!("{dash:>value_w$}"), format!("{v2:>value_w$.6}"), format!("{:>value_w$}", "(added)"), "")
+        }
+        (Some(v1), None) => (
+            Style::default().fg(t.removed),
+            format!("{v1:>value_w$.6}"),
+            format!("{dash:>value_w$}"),
+            format!("{:>value_w$}", "(removed)"),
+            "",
+        ),
+        (Some(v1), Some(v2)) => {
+            if row.changed {
+                let d = v2 - v1;
+                let sign = if d >= 0.0 { "+" } else { "" };
+                (Style::default().fg(t.modified), format!("{v1:>value_w$.6}"), format!("{v2:>value_w$.6}"), format!("{sign}{d:>.6}"), " *")
+            } else {
+                let base = if v1.abs() < 1e-10 { Style::default().fg(t.muted) } else { Style::default().fg(t.text) };
+                (base, format!("{v1:>value_w$.6}"), format!("{v2:>value_w$.6}"), String::new(), "")
+            }
+        }
+        (None, None) => return None,
+    };
+
+    let mut spans = vec![
+        Span::styled(format!("  {:<name_w$}", row.name), name_style),
+        Span::styled(value1_str, name_style),
+        Span::styled(format!("  {value2_str}"), name_style),
+    ];
+    if !delta_str.is_empty() {
+        spans.push(Span::styled(format!("  {delta_str}"), name_style));
+    }
+    if !marker.is_empty() {
+        spans.push(Span::styled(marker.to_owned(), Style::default().fg(t.modified).add_modifier(Modifier::BOLD)));
+    }
+    Some(Line::from(spans))
+}
+
+/// Format a single constraint diff row as a `Line`. Returns `None` for `(None, None)` rows.
+fn format_constraint_diff_line(row: &ConstraintDiffRow, name_w: usize, val_w: usize) -> Option<Line<'static>> {
+    let t = theme();
+    let dash = "\u{2014}";
+
+    let (name_style, a1, a2, s1, s2, marker) = match (row.activity1, row.activity2) {
+        (None, Some(_)) => {
+            let style = Style::default().fg(t.added);
+            (
+                style,
+                format!("{dash:>val_w$}"),
+                row.activity2.map_or_else(String::new, |v| format!("{v:>val_w$.4}")),
+                format!("{dash:>val_w$}"),
+                row.shadow_price2.map_or_else(String::new, |v| format!("{v:>val_w$.4}")),
+                "",
+            )
+        }
+        (Some(_), None) => {
+            let style = Style::default().fg(t.removed);
+            (
+                style,
+                row.activity1.map_or_else(String::new, |v| format!("{v:>val_w$.4}")),
+                format!("{dash:>val_w$}"),
+                row.shadow_price1.map_or_else(String::new, |v| format!("{v:>val_w$.4}")),
+                format!("{dash:>val_w$}"),
+                "",
+            )
+        }
+        (Some(act1), Some(act2)) => {
+            if row.changed {
+                (
+                    Style::default().fg(t.modified),
+                    format!("{act1:>val_w$.4}"),
+                    format!("{act2:>val_w$.4}"),
+                    row.shadow_price1.map_or_else(String::new, |v| format!("{v:>val_w$.4}")),
+                    row.shadow_price2.map_or_else(String::new, |v| format!("{v:>val_w$.4}")),
+                    " *",
+                )
+            } else {
+                let base = if act1.abs() < 1e-10 { Style::default().fg(t.muted) } else { Style::default().fg(t.text) };
+                (
+                    base,
+                    format!("{act1:>val_w$.4}"),
+                    format!("{act2:>val_w$.4}"),
+                    row.shadow_price1.map_or_else(String::new, |v| format!("{v:>val_w$.4}")),
+                    row.shadow_price2.map_or_else(String::new, |v| format!("{v:>val_w$.4}")),
+                    "",
+                )
+            }
+        }
+        (None, None) => return None,
+    };
+
+    let mut spans = vec![
+        Span::styled(format!("  {:<name_w$}", row.name), name_style),
+        Span::styled(a1, name_style),
+        Span::styled(format!("  {a2}"), name_style),
+        Span::styled(format!("  {s1}"), name_style),
+        Span::styled(format!("  {s2}"), name_style),
+    ];
+    if !marker.is_empty() {
+        spans.push(Span::styled(marker.to_owned(), Style::default().fg(t.modified).add_modifier(Modifier::BOLD)));
+    }
+    Some(Line::from(spans))
+}
+
+// ---------------------------------------------------------------------------
+// Cached diff tab rendering — uses pre-formatted row Lines
+// ---------------------------------------------------------------------------
+
+/// Render the variables diff tab using pre-formatted cached row lines.
+fn build_diff_variables_tab_cached(
+    lines: &mut Vec<Line<'static>>,
+    count_label: &str,
+    cached_rows: &[CachedDiffRow],
+    view: &SolveViewState,
+    scroll: u16,
+    visible_height: u16,
+) {
+    let t = theme();
+    let filter_label = diff_filter_label(view.diff_only, view.delta_threshold);
+    let diff_only = view.diff_only;
+    let total = cached_rows.len();
+
+    lines.push(Line::from(Span::styled(
+        format!("  Variables: {count_label} (of {total} total){filter_label}"),
+        Style::default().fg(t.muted).add_modifier(Modifier::BOLD),
+    )));
+    lines.push(Line::from(""));
+
+    let name_w = 24;
+    let value_w = 14;
+    lines.push(Line::from(vec![
+        Span::styled(format!("  {:<name_w$}", "Name"), Style::default().fg(t.muted).add_modifier(Modifier::BOLD)),
+        Span::styled(format!("{:>value_w$}", "File 1"), Style::default().fg(t.muted).add_modifier(Modifier::BOLD)),
+        Span::styled(format!("{:>value_w$}", "File 2"), Style::default().fg(t.muted).add_modifier(Modifier::BOLD)),
+        Span::styled(format!("{:>value_w$}", "\u{0394}"), Style::default().fg(t.muted).add_modifier(Modifier::BOLD)),
+    ]));
+    lines.push(Line::from(Span::styled(format!("  {RULE_70}"), Style::default().fg(t.muted))));
+
+    // Windowed rendering using cached lines.
+    let header_count = lines.len();
+    let scroll_usize = scroll as usize;
+    let visible = visible_height as usize;
+    let first_visible_data = scroll_usize.saturating_sub(header_count);
+    let visible_data_count = if scroll_usize >= header_count { visible } else { visible.saturating_sub(header_count - scroll_usize) };
+
+    let mut data_index: usize = 0;
+    for cached in cached_rows {
+        if diff_only && !cached.changed {
+            continue;
+        }
+        if data_index >= first_visible_data && data_index < first_visible_data + visible_data_count {
+            lines.push(cached.line.clone());
+        } else {
+            lines.push(Line::default());
+        }
+        data_index += 1;
+    }
+}
+
+/// Render the constraints diff tab using pre-formatted cached row lines.
+fn build_diff_constraints_tab_cached(
+    lines: &mut Vec<Line<'static>>,
+    count_label: &str,
+    cached_rows: &[CachedDiffRow],
+    view: &SolveViewState,
+    scroll: u16,
+    visible_height: u16,
+) {
+    let t = theme();
+    let filter_label = diff_filter_label(view.diff_only, view.delta_threshold);
+    let diff_only = view.diff_only;
+    let total = cached_rows.len();
+
+    lines.push(Line::from(Span::styled(
+        format!("  Constraints: {count_label} (of {total} total){filter_label}"),
+        Style::default().fg(t.muted).add_modifier(Modifier::BOLD),
+    )));
+    lines.push(Line::from(""));
+
+    let name_w = 22;
+    let value_w = 13;
+    lines.push(Line::from(vec![
+        Span::styled(format!("  {:<name_w$}", "Name"), Style::default().fg(t.muted).add_modifier(Modifier::BOLD)),
+        Span::styled(format!("{:>value_w$}", "Activity 1"), Style::default().fg(t.muted).add_modifier(Modifier::BOLD)),
+        Span::styled(format!("{:>value_w$}", "Activity 2"), Style::default().fg(t.muted).add_modifier(Modifier::BOLD)),
+        Span::styled(format!("{:>value_w$}", "Shadow 1"), Style::default().fg(t.muted).add_modifier(Modifier::BOLD)),
+        Span::styled(format!("{:>value_w$}", "Shadow 2"), Style::default().fg(t.muted).add_modifier(Modifier::BOLD)),
+    ]));
+    lines.push(Line::from(Span::styled(format!("  {RULE_80}"), Style::default().fg(t.muted))));
+
+    // Windowed rendering using cached lines.
+    let header_count = lines.len();
+    let scroll_usize = scroll as usize;
+    let visible = visible_height as usize;
+    let first_visible_data = scroll_usize.saturating_sub(header_count);
+    let visible_data_count = if scroll_usize >= header_count { visible } else { visible.saturating_sub(header_count - scroll_usize) };
+
+    let mut data_index: usize = 0;
+    for cached in cached_rows {
+        if diff_only && !cached.changed {
+            continue;
+        }
+        if data_index >= first_visible_data && data_index < first_visible_data + visible_data_count {
+            lines.push(cached.line.clone());
+        } else {
+            lines.push(Line::default());
+        }
+        data_index += 1;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Uncached diff tab rendering — fallback when cache is not available
+// ---------------------------------------------------------------------------
 
 /// Format the cached diff counts as a human-readable summary string.
 fn diff_counts_summary_label(counts: &DiffCounts) -> String {
@@ -409,6 +694,21 @@ fn count_delta_span(count1: usize, count2: usize) -> Option<Span<'static>> {
     let sign = if delta > 0 { "+" } else { "" };
     let colour = if delta > 0 { t.added } else { t.removed };
     Some(Span::styled(format!("  \u{0394} {sign}{delta}"), Style::default().fg(colour)))
+}
+
+/// Format a delta string. Returns empty spans if no delta exceeds `threshold`.
+fn delta_spans(v1: Option<f64>, v2: Option<f64>, threshold: f64) -> Vec<Span<'static>> {
+    let t = theme();
+    let (Some(a), Some(b)) = (v1, v2) else {
+        return Vec::new();
+    };
+    let d = b - a;
+    if d.abs() <= threshold {
+        return Vec::new();
+    }
+    let sign = if d > 0.0 { "+" } else { "" };
+    let colour = if d > 0.0 { t.added } else { t.removed };
+    vec![Span::styled(format!("  \u{0394} {sign}{d:.6}"), Style::default().fg(colour))]
 }
 
 /// Render the comparison table header and metrics rows for the diff summary.
@@ -555,54 +855,14 @@ fn build_diff_variables_tab(
             continue;
         }
         if data_index >= first_visible_data && data_index < first_visible_data + visible_data_count {
-            build_variable_diff_line(lines, row, name_w, value_w);
+            if let Some(line) = format_variable_diff_line(row, name_w, value_w) {
+                lines.push(line);
+            }
         } else {
             lines.push(Line::default());
         }
         data_index += 1;
     }
-}
-
-fn build_variable_diff_line(lines: &mut Vec<Line<'static>>, row: &VarDiffRow, name_w: usize, value_w: usize) {
-    let t = theme();
-    let dash = "\u{2014}";
-
-    let (name_style, value1_str, value2_str, delta_str, marker) = match (row.val1, row.val2) {
-        (None, Some(v2)) => {
-            (Style::default().fg(t.added), format!("{dash:>value_w$}"), format!("{v2:>value_w$.6}"), format!("{:>value_w$}", "(added)"), "")
-        }
-        (Some(v1), None) => (
-            Style::default().fg(t.removed),
-            format!("{v1:>value_w$.6}"),
-            format!("{dash:>value_w$}"),
-            format!("{:>value_w$}", "(removed)"),
-            "",
-        ),
-        (Some(v1), Some(v2)) => {
-            if row.changed {
-                let d = v2 - v1;
-                let sign = if d >= 0.0 { "+" } else { "" };
-                (Style::default().fg(t.modified), format!("{v1:>value_w$.6}"), format!("{v2:>value_w$.6}"), format!("{sign}{d:>.6}"), " *")
-            } else {
-                let base = if v1.abs() < 1e-10 { Style::default().fg(t.muted) } else { Style::default().fg(t.text) };
-                (base, format!("{v1:>value_w$.6}"), format!("{v2:>value_w$.6}"), String::new(), "")
-            }
-        }
-        (None, None) => return,
-    };
-
-    let mut spans = vec![
-        Span::styled(format!("  {:<name_w$}", row.name), name_style),
-        Span::styled(value1_str, name_style),
-        Span::styled(format!("  {value2_str}"), name_style),
-    ];
-    if !delta_str.is_empty() {
-        spans.push(Span::styled(format!("  {delta_str}"), name_style));
-    }
-    if !marker.is_empty() {
-        spans.push(Span::styled(marker.to_owned(), Style::default().fg(t.modified).add_modifier(Modifier::BOLD)));
-    }
-    lines.push(Line::from(spans));
 }
 
 fn build_diff_constraints_tab(
@@ -648,77 +908,14 @@ fn build_diff_constraints_tab(
             continue;
         }
         if data_index >= first_visible_data && data_index < first_visible_data + visible_data_count {
-            build_constraint_diff_line(lines, row, name_w, value_w);
+            if let Some(line) = format_constraint_diff_line(row, name_w, value_w) {
+                lines.push(line);
+            }
         } else {
             lines.push(Line::default());
         }
         data_index += 1;
     }
-}
-
-fn build_constraint_diff_line(lines: &mut Vec<Line<'static>>, row: &ConstraintDiffRow, name_w: usize, val_w: usize) {
-    let t = theme();
-    let dash = "\u{2014}";
-
-    let (name_style, a1, a2, s1, s2, marker) = match (row.activity1, row.activity2) {
-        (None, Some(_)) => {
-            let style = Style::default().fg(t.added);
-            (
-                style,
-                format!("{dash:>val_w$}"),
-                row.activity2.map_or_else(String::new, |v| format!("{v:>val_w$.4}")),
-                format!("{dash:>val_w$}"),
-                row.shadow_price2.map_or_else(String::new, |v| format!("{v:>val_w$.4}")),
-                "",
-            )
-        }
-        (Some(_), None) => {
-            let style = Style::default().fg(t.removed);
-            (
-                style,
-                row.activity1.map_or_else(String::new, |v| format!("{v:>val_w$.4}")),
-                format!("{dash:>val_w$}"),
-                row.shadow_price1.map_or_else(String::new, |v| format!("{v:>val_w$.4}")),
-                format!("{dash:>val_w$}"),
-                "",
-            )
-        }
-        (Some(act1), Some(act2)) => {
-            if row.changed {
-                (
-                    Style::default().fg(t.modified),
-                    format!("{act1:>val_w$.4}"),
-                    format!("{act2:>val_w$.4}"),
-                    row.shadow_price1.map_or_else(String::new, |v| format!("{v:>val_w$.4}")),
-                    row.shadow_price2.map_or_else(String::new, |v| format!("{v:>val_w$.4}")),
-                    " *",
-                )
-            } else {
-                let base = if act1.abs() < 1e-10 { Style::default().fg(t.muted) } else { Style::default().fg(t.text) };
-                (
-                    base,
-                    format!("{act1:>val_w$.4}"),
-                    format!("{act2:>val_w$.4}"),
-                    row.shadow_price1.map_or_else(String::new, |v| format!("{v:>val_w$.4}")),
-                    row.shadow_price2.map_or_else(String::new, |v| format!("{v:>val_w$.4}")),
-                    "",
-                )
-            }
-        }
-        (None, None) => return,
-    };
-
-    let mut spans = vec![
-        Span::styled(format!("  {:<name_w$}", row.name), name_style),
-        Span::styled(a1, name_style),
-        Span::styled(format!("  {a2}"), name_style),
-        Span::styled(format!("  {s1}"), name_style),
-        Span::styled(format!("  {s2}"), name_style),
-    ];
-    if !marker.is_empty() {
-        spans.push(Span::styled(marker.to_owned(), Style::default().fg(t.modified).add_modifier(Modifier::BOLD)));
-    }
-    lines.push(Line::from(spans));
 }
 
 fn build_diff_log_tab(lines: &mut Vec<Line<'static>>, diff: &SolveDiffResult) {

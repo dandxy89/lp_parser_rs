@@ -1,9 +1,11 @@
+use std::borrow::Cow;
 use std::path::PathBuf;
 use std::sync::{Arc, mpsc};
 use std::time::Instant;
 
 use lp_parser_rs::problem::LpProblem;
 use ratatui::layout::Rect;
+use ratatui::text::Line;
 use ratatui::widgets::ListState;
 use smallvec::SmallVec;
 
@@ -56,6 +58,33 @@ pub struct HaystackEntry {
     pub kind: DiffKind,
 }
 
+/// A pre-formatted diff row line with its `changed` flag for filtering.
+pub struct CachedDiffRow {
+    pub line: Line<'static>,
+    pub changed: bool,
+}
+
+/// Cached formatted lines for the solve overlay, avoiding per-frame `format!` allocations.
+///
+/// Built once when transitioning to `Done`/`DoneBoth` state and invalidated on state change.
+pub enum SolveRenderCache {
+    /// No cache available.
+    Empty,
+    /// Single-solve result: pre-formatted tab lines `[summary, variables, constraints, log]`.
+    Single([Vec<Line<'static>>; 4]),
+    /// Diff-solve result: pre-formatted summary, log, and per-row lines.
+    Diff {
+        summary: Vec<Line<'static>>,
+        log: Vec<Line<'static>>,
+        variable_rows: Vec<CachedDiffRow>,
+        constraint_rows: Vec<CachedDiffRow>,
+        /// Pre-formatted variable counts summary label.
+        variable_count_label: String,
+        /// Pre-formatted constraint counts summary label.
+        constraint_count_label: String,
+    },
+}
+
 /// Bundles solver-related state: lifecycle, view, and result channel.
 pub struct SolverSession {
     /// `HiGHS` solver state machine.
@@ -66,11 +95,19 @@ pub struct SolverSession {
     pub receive: Option<mpsc::Receiver<Result<SolveResult, String>>>,
     /// Second channel for the "both" solve mode.
     pub receive2: Option<mpsc::Receiver<Result<SolveResult, String>>>,
+    /// Cached formatted lines for the solve overlay.
+    pub render_cache: SolveRenderCache,
 }
 
 impl SolverSession {
     fn new() -> Self {
-        Self { state: SolveState::Idle, view: SolveViewState::default(), receive: None, receive2: None }
+        Self {
+            state: SolveState::Idle,
+            view: SolveViewState::default(),
+            receive: None,
+            receive2: None,
+            render_cache: SolveRenderCache::Empty,
+        }
     }
 }
 
@@ -130,6 +167,13 @@ pub struct App {
     /// Cached coefficient rows for the detail panel, avoiding per-frame `BTreeMap` + String allocations.
     /// Invalidated when the selected entry changes.
     pub(crate) coeff_row_cache: Option<CoeffRowCache>,
+
+    /// Pre-built summary lines, avoiding per-frame `format!` allocations.
+    /// Built once in `App::new()` since the report data never changes.
+    pub(crate) summary_lines: Vec<Line<'static>>,
+
+    /// Pre-computed section selector labels, avoiding per-frame `format!` allocations.
+    pub(crate) section_labels: [Cow<'static, str>; 4],
 }
 
 /// Cached coefficient rows keyed on (section, `entry_index`).
@@ -164,12 +208,27 @@ fn build_haystack(report: &LpDiffReport) -> (Vec<HaystackEntry>, Vec<String>) {
     (haystack, names)
 }
 
+/// Build pre-computed section selector labels. The active section gets a marker prefix.
+pub(crate) fn build_section_labels(active: Section) -> [Cow<'static, str>; 4] {
+    Section::ALL.map(|section| {
+        let marker = if section == active { "\u{25b6} " } else { "  " };
+        Cow::Owned(format!("{marker}{}", section.label()))
+    })
+}
+
 impl App {
     pub fn new(report: LpDiffReport, file1_path: PathBuf, file2_path: PathBuf, problem1: Arc<LpProblem>, problem2: Arc<LpProblem>) -> Self {
         let mut section_selector_state = ListState::default();
         section_selector_state.select(Some(0));
 
         let (haystack, names) = build_haystack(&report);
+
+        // Pre-build summary lines once (report data never changes).
+        let report_summary = report.summary();
+        let summary_lines = crate::widgets::summary::build_summary_lines(&report, &report_summary, &report.analysis1, &report.analysis2);
+
+        // Pre-compute section selector labels.
+        let section_labels = build_section_labels(Section::Summary);
 
         Self {
             report,
@@ -200,6 +259,8 @@ impl App {
             search_name_buffer: names,
             search_haystack: haystack,
             coeff_row_cache: None,
+            summary_lines,
+            section_labels,
         }
     }
 
@@ -437,10 +498,16 @@ impl App {
         self.jumplist.push(JumpEntry { section: self.active_section, entry_index, detail_scroll: self.detail_scroll, filter: self.filter });
     }
 
+    /// Update active section and rebuild section selector labels.
+    pub(crate) fn set_active_section(&mut self, section: Section) {
+        self.active_section = section;
+        self.section_selector_state.select(Some(section.index()));
+        self.section_labels = build_section_labels(section);
+    }
+
     /// Navigate to a jumplist entry, restoring section, selection, scroll, and filter.
     pub(crate) fn restore_jump(&mut self, entry: JumpEntry) {
-        self.active_section = entry.section;
-        self.section_selector_state.select(Some(entry.section.index()));
+        self.set_active_section(entry.section);
         self.filter = entry.filter;
         self.invalidate_cache();
         self.ensure_active_section_cache();
@@ -481,6 +548,8 @@ impl App {
         };
         match receive.try_recv() {
             Ok(Ok(result)) => {
+                let cache = crate::widgets::solve::build_single_solve_cache(&result);
+                self.solver.render_cache = SolveRenderCache::Single(cache);
                 self.solver.state = SolveState::Done(Box::new(result));
                 self.solver.view = SolveViewState::default();
                 self.solver.receive = None;
@@ -551,6 +620,7 @@ impl App {
             let label1 = file1.clone();
             let label2 = file2.clone();
             let diff = crate::solver::diff_results(label1, label2, r1, r2, self.solver.view.delta_threshold);
+            self.solver.render_cache = crate::widgets::solve::build_diff_solve_cache(&diff);
             self.solver.state = SolveState::DoneBoth(Box::new(diff));
             self.solver.view = SolveViewState { diff_only: true, ..SolveViewState::default() };
             self.solver.receive = None;
@@ -569,6 +639,7 @@ impl App {
         let threshold = self.solver.view.delta_threshold;
         let new_diff =
             crate::solver::diff_results(old_diff.file1_label, old_diff.file2_label, old_diff.result1, old_diff.result2, threshold);
+        self.solver.render_cache = crate::widgets::solve::build_diff_solve_cache(&new_diff);
         self.solver.state = SolveState::DoneBoth(Box::new(new_diff));
     }
 
@@ -693,8 +764,7 @@ impl App {
         self.search_popup.visible = false;
 
         // Switch to the target section.
-        self.active_section = section;
-        self.section_selector_state.select(Some(section.index()));
+        self.set_active_section(section);
 
         // Reset filter and recompute caches.
         self.filter = DiffFilter::All;
