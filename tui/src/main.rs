@@ -16,6 +16,7 @@ mod widgets;
 
 use std::io::{self, Write as _, stderr};
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use clap::Parser;
@@ -125,8 +126,12 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         original_hook(panic_info);
     }));
 
+    // Wrap parsed problems in Arc for sharing with solver threads.
+    let problem1 = Arc::new(owned1);
+    let problem2 = Arc::new(owned2);
+
     // Create app and event handler
-    let mut app = App::new(report, args.file1, args.file2);
+    let mut app = App::new(report, args.file1, args.file2, problem1, problem2);
     let events = EventHandler::new(Duration::from_millis(50));
 
     // Main loop — draw then process the next event

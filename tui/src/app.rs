@@ -1,7 +1,8 @@
 use std::path::PathBuf;
-use std::sync::mpsc;
+use std::sync::{Arc, mpsc};
 use std::time::Instant;
 
+use lp_parser_rs::problem::LpProblem;
 use ratatui::layout::Rect;
 use ratatui::widgets::ListState;
 use smallvec::SmallVec;
@@ -113,6 +114,12 @@ pub struct App {
     /// Path to the second LP file.
     pub file2_path: PathBuf,
 
+    /// Parsed problem for the first LP file (shared with solver threads).
+    pub problem1: Arc<LpProblem>,
+
+    /// Parsed problem for the second LP file (shared with solver threads).
+    pub problem2: Arc<LpProblem>,
+
     /// Pre-built flat haystack for the search pop-up (built once in `App::new`).
     pub(crate) search_haystack: Vec<HaystackEntry>,
 
@@ -158,7 +165,7 @@ fn build_haystack(report: &LpDiffReport) -> (Vec<HaystackEntry>, Vec<String>) {
 }
 
 impl App {
-    pub fn new(report: LpDiffReport, file1_path: PathBuf, file2_path: PathBuf) -> Self {
+    pub fn new(report: LpDiffReport, file1_path: PathBuf, file2_path: PathBuf, problem1: Arc<LpProblem>, problem2: Arc<LpProblem>) -> Self {
         let mut section_selector_state = ListState::default();
         section_selector_state.select(Some(0));
 
@@ -188,6 +195,8 @@ impl App {
             solver: SolverSession::new(),
             file1_path,
             file2_path,
+            problem1,
+            problem2,
             search_name_buffer: names,
             search_haystack: haystack,
             coeff_row_cache: None,

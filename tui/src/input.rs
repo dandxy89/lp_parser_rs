@@ -1,6 +1,7 @@
-use std::sync::mpsc;
+use std::sync::{Arc, mpsc};
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+use lp_parser_rs::problem::LpProblem;
 
 use crate::app::App;
 use crate::detail_text::{format_solve_diff_result, format_solve_result};
@@ -403,8 +404,16 @@ impl App {
     fn handle_solve_picker_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Esc => self.solver.state = SolveState::Idle,
-            KeyCode::Char('1') => self.spawn_solver(self.file1_path.clone()),
-            KeyCode::Char('2') => self.spawn_solver(self.file2_path.clone()),
+            KeyCode::Char('1') => {
+                let problem = Arc::clone(&self.problem1);
+                let label = self.file1_path.display().to_string();
+                self.spawn_solver(problem, label);
+            }
+            KeyCode::Char('2') => {
+                let problem = Arc::clone(&self.problem2);
+                let label = self.file2_path.display().to_string();
+                self.spawn_solver(problem, label);
+            }
             KeyCode::Char('3') => self.spawn_both_solvers(),
             _ => {}
         }
@@ -447,9 +456,8 @@ impl App {
         }
     }
 
-    /// Spawn the solver in a background thread for the given file.
-    fn spawn_solver(&mut self, path: std::path::PathBuf) {
-        let file_label = path.display().to_string();
+    /// Spawn the solver in a background thread for the given problem.
+    fn spawn_solver(&mut self, problem: Arc<LpProblem>, file_label: String) {
         self.solver.state = SolveState::Running { file: file_label };
         self.solver.view = SolveViewState::default();
 
@@ -457,7 +465,7 @@ impl App {
         self.solver.receive = Some(receiver);
 
         std::thread::spawn(move || {
-            let result = crate::solver::solve_file(&path);
+            let result = crate::solver::solve_problem(&problem);
             // Receiver may be dropped if the user dismissed the overlay — this is expected.
             if sender.send(result).is_err() {
                 eprintln!("solve result dropped: receiver closed");
@@ -516,10 +524,10 @@ impl App {
 
     /// Spawn both solvers in parallel for the "Both (diff)" option.
     fn spawn_both_solvers(&mut self) {
-        let path1 = self.file1_path.clone();
-        let path2 = self.file2_path.clone();
-        let label1 = path1.display().to_string();
-        let label2 = path2.display().to_string();
+        let label1 = self.file1_path.display().to_string();
+        let label2 = self.file2_path.display().to_string();
+        let problem1 = Arc::clone(&self.problem1);
+        let problem2 = Arc::clone(&self.problem2);
 
         self.solver.state = SolveState::RunningBoth { file1: label1, file2: label2, result1: None, result2: None };
         self.solver.view = SolveViewState::default();
@@ -530,14 +538,14 @@ impl App {
         self.solver.receive2 = Some(receiver2);
 
         std::thread::spawn(move || {
-            let result = crate::solver::solve_file(&path1);
+            let result = crate::solver::solve_problem(&problem1);
             // Receiver may be dropped if the user dismissed the overlay — this is expected.
             if sender1.send(result).is_err() {
                 eprintln!("solve result 1 dropped: receiver closed");
             }
         });
         std::thread::spawn(move || {
-            let result = crate::solver::solve_file(&path2);
+            let result = crate::solver::solve_problem(&problem2);
             // Receiver may be dropped if the user dismissed the overlay — this is expected.
             if sender2.send(result).is_err() {
                 eprintln!("solve result 2 dropped: receiver closed");

@@ -7,7 +7,6 @@ use std::path::Path;
 use std::time::Instant;
 
 use lp_parser_rs::model::{ComparisonOp, Constraint, VariableType};
-use lp_parser_rs::parser::parse_file;
 use lp_parser_rs::problem::LpProblem;
 
 /// Result returned after a successful solve.
@@ -248,14 +247,6 @@ fn opt_diff(a: Option<f64>, b: Option<f64>, threshold: f64) -> bool {
     }
 }
 
-/// Parse and solve an LP file, returning a `SolveResult` or an error message.
-pub fn solve_file(path: &Path) -> Result<SolveResult, String> {
-    let content = parse_file(path).map_err(|e| format!("failed to read '{}': {e}", path.display()))?;
-    let problem = LpProblem::parse(&content).map_err(|e| format!("failed to parse '{}': {e}", path.display()))?;
-
-    solve_problem(&problem)
-}
-
 /// Intermediate model built from an `LpProblem` before solving.
 struct BuiltModel {
     row_problem: highs::RowProblem,
@@ -428,7 +419,7 @@ fn extract_solution(
 }
 
 /// Convert an `LpProblem` to a `HiGHS` `RowProblem` and solve it.
-fn solve_problem(problem: &LpProblem) -> Result<SolveResult, String> {
+pub fn solve_problem(problem: &LpProblem) -> Result<SolveResult, String> {
     debug_assert!(!problem.variables.is_empty(), "cannot solve a problem with no variables");
 
     let model = build_highs_model(problem);
