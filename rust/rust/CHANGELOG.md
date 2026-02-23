@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.2.1](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v3.2.0...lp_parser_rs-v3.2.1) (2026-02-23)
+
+
+### Continuous Integration
+
+* TUI Release - Pre-Built Binaries ([#163](https://github.com/dandxy89/lp_parser_rs/issues/163)) ([70dea66](https://github.com/dandxy89/lp_parser_rs/commit/70dea6632a894302f6ee6c425c8fee2e15428103))
+
+
+### Tests
+
+* Additional testing ([#161](https://github.com/dandxy89/lp_parser_rs/issues/161)) ([dbd67af](https://github.com/dandxy89/lp_parser_rs/commit/dbd67af432aa7f9655f7155c49d5366aca5b1eb8))
+
 ## [3.2.0](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v3.1.1...lp_parser_rs-v3.2.0) (2026-02-22)
 
 
