@@ -6,6 +6,7 @@ use std::fmt::Write as _;
 use std::path::Path;
 use std::time::Instant;
 
+use lp_parser_rs::interner::NameId;
 use lp_parser_rs::model::{ComparisonOp, Constraint, VariableType};
 use lp_parser_rs::problem::LpProblem;
 
@@ -251,7 +252,8 @@ fn opt_diff(a: Option<f64>, b: Option<f64>, threshold: f64) -> bool {
 struct BuiltModel {
     row_problem: highs::RowProblem,
     variable_names: Vec<String>,
-    objective_coefficients: HashMap<String, f64>,
+    sorted_var_ids: Vec<NameId>,
+    objective_coefficients: HashMap<NameId, f64>,
     row_constraint_names: Vec<String>,
     skipped_sos: usize,
     sense: highs::Sense,
@@ -261,7 +263,8 @@ struct BuiltModel {
 /// `row_problem` has been consumed by `optimise`).
 struct SolveMetadata {
     variable_names: Vec<String>,
-    objective_coefficients: HashMap<String, f64>,
+    sorted_var_ids: Vec<NameId>,
+    objective_coefficients: HashMap<NameId, f64>,
     row_constraint_names: Vec<String>,
     skipped_sos: usize,
 }
@@ -270,32 +273,34 @@ struct SolveMetadata {
 fn build_highs_model(problem: &LpProblem) -> BuiltModel {
     debug_assert!(!problem.variables.is_empty(), "cannot build a HiGHS model with no variables");
 
-    // Resolve variable names and sort them for deterministic ordering.
-    let mut variable_names: Vec<String> = problem.variables.keys().map(|id| problem.resolve(*id).to_string()).collect();
-    variable_names.sort();
+    // Sort variable NameIds by resolved name for deterministic ordering.
+    let mut sorted_var_ids: Vec<NameId> = problem.variables.keys().copied().collect();
+    sorted_var_ids.sort_by(|a, b| problem.resolve(*a).cmp(problem.resolve(*b)));
 
-    let variable_index: HashMap<String, usize> = variable_names.iter().enumerate().map(|(i, name)| (name.clone(), i)).collect();
+    let variable_names: Vec<String> = sorted_var_ids.iter().map(|id| problem.resolve(*id).to_string()).collect();
 
-    let objective_coefficients: HashMap<String, f64> = {
+    let variable_index: HashMap<NameId, usize> =
+        sorted_var_ids.iter().enumerate().map(|(i, &id)| (id, i)).collect();
+
+    let objective_coefficients: HashMap<NameId, f64> = {
         let mut map = HashMap::new();
         // Sort objective names and take the first one (primary objective).
-        let mut obj_names: Vec<(&lp_parser_rs::interner::NameId, &lp_parser_rs::model::Objective)> = problem.objectives.iter().collect();
+        let mut obj_names: Vec<(&NameId, &lp_parser_rs::model::Objective)> = problem.objectives.iter().collect();
         obj_names.sort_by_key(|(id, _)| problem.resolve(**id));
         if let Some((_, objective)) = obj_names.first() {
             for coefficient in &objective.coefficients {
-                map.insert(problem.resolve(coefficient.name).to_string(), coefficient.value);
+                map.insert(coefficient.name, coefficient.value);
             }
         }
         map
     };
 
     let mut row_problem = highs::RowProblem::new();
-    let mut columns = Vec::with_capacity(variable_names.len());
+    let mut columns = Vec::with_capacity(sorted_var_ids.len());
 
-    for name in &variable_names {
-        let objective_coefficient = objective_coefficients.get(name.as_str()).copied().unwrap_or(0.0);
-        let var_id = problem.get_name_id(name);
-        let variable = var_id.and_then(|id| problem.variables.get(&id));
+    for &var_id in &sorted_var_ids {
+        let objective_coefficient = objective_coefficients.get(&var_id).copied().unwrap_or(0.0);
+        let variable = problem.variables.get(&var_id);
 
         let (is_integer, lower, upper) = match variable.map(|v| &v.var_type) {
             Some(VariableType::Binary) => (true, 0.0, 1.0),
@@ -327,8 +332,7 @@ fn build_highs_model(problem: &LpProblem) -> BuiltModel {
                 let row_factors: Vec<(highs::Col, f64)> = coefficients
                     .iter()
                     .filter_map(|c| {
-                        let var_name = problem.resolve(c.name);
-                        variable_index.get(var_name).map(|&idx| (columns[idx], c.value))
+                        variable_index.get(&c.name).map(|&idx| (columns[idx], c.value))
                     })
                     .collect();
 
@@ -358,7 +362,7 @@ fn build_highs_model(problem: &LpProblem) -> BuiltModel {
 
     debug_assert_eq!(columns.len(), variable_names.len(), "column count must match variable count");
 
-    BuiltModel { row_problem, variable_names, objective_coefficients, row_constraint_names, skipped_sos, sense }
+    BuiltModel { row_problem, variable_names, sorted_var_ids, objective_coefficients, row_constraint_names, skipped_sos, sense }
 }
 
 /// Extract the solution from a solved `HiGHS` model into a `SolveResult`.
@@ -382,7 +386,7 @@ fn extract_solution(
                     .iter()
                     .enumerate()
                     .map(|(i, &value)| {
-                        let coefficient = metadata.objective_coefficients.get(metadata.variable_names[i].as_str()).copied().unwrap_or(0.0);
+                        let coefficient = metadata.objective_coefficients.get(&metadata.sorted_var_ids[i]).copied().unwrap_or(0.0);
                         value * coefficient
                     })
                     .sum::<f64>(),
@@ -427,9 +431,9 @@ pub fn solve_problem(problem: &LpProblem) -> Result<SolveResult, String> {
     let log_file = tempfile::NamedTempFile::new().map_err(|e| format!("failed to create solver log temp file: {e}"))?;
     let log_path = log_file.path().to_owned();
 
-    let BuiltModel { row_problem, sense, variable_names, objective_coefficients, row_constraint_names, skipped_sos } = model;
+    let BuiltModel { row_problem, sense, variable_names, sorted_var_ids, objective_coefficients, row_constraint_names, skipped_sos } = model;
 
-    let metadata = SolveMetadata { variable_names, objective_coefficients, row_constraint_names, skipped_sos };
+    let metadata = SolveMetadata { variable_names, sorted_var_ids, objective_coefficients, row_constraint_names, skipped_sos };
 
     let mut highs_model = row_problem.optimise(sense);
     highs_model.set_option("output_flag", true);
