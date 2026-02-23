@@ -25,7 +25,7 @@ fn build_constraint_line_map(problem: &LpProblem, line_index: &LineIndex) -> Has
 }
 
 /// Parse an LP file, returning the problem, analysis, and a constraint→line-number map.
-pub fn parse_lp_file(path: &Path) -> Result<ParsedLpFile, Box<dyn std::error::Error>> {
+pub fn parse_lp_file(path: &Path) -> Result<ParsedLpFile, Box<dyn std::error::Error + Send + Sync>> {
     let content = parse_file(path).map_err(|e| format!("failed to read '{}': {e}", path.display()))?;
     let problem = LpProblem::parse(&content).map_err(|e| format!("failed to parse '{}': {e}", path.display()))?;
     let line_index = LineIndex::new(&content);

@@ -32,6 +32,23 @@ pub enum ResolvedConstraint {
     Sos { sos_type: SOSType, weights: Vec<ResolvedCoefficient> },
 }
 
+/// Compare two coefficient slices across different interners without allocating.
+///
+/// Resolves each `NameId` inline via the respective problem's interner and compares
+/// names and values pairwise. Returns `false` if lengths differ or any pair mismatches.
+fn coefficients_equal(
+    p1: &LpProblem,
+    c1: &[lp_parser_rs::model::Coefficient],
+    p2: &LpProblem,
+    c2: &[lp_parser_rs::model::Coefficient],
+) -> bool {
+    debug_assert!(!c1.is_empty() || !c2.is_empty() || c1.len() == c2.len(), "both slices empty is trivially equal");
+    if c1.len() != c2.len() {
+        return false;
+    }
+    c1.iter().zip(c2.iter()).all(|(a, b)| p1.resolve(a.name) == p2.resolve(b.name) && (a.value - b.value).abs() <= COEFF_EPSILON)
+}
+
 /// Resolve a slice of model `Coefficient`s into `ResolvedCoefficient`s using the problem's interner.
 fn resolve_coefficients(problem: &LpProblem, coefficients: &[lp_parser_rs::model::Coefficient]) -> Vec<ResolvedCoefficient> {
     coefficients.iter().map(|c| ResolvedCoefficient { name: problem.resolve(c.name).to_string(), value: c.value }).collect()
@@ -495,6 +512,13 @@ fn diff_constraint_pair(p1: &LpProblem, c1: &Constraint, p2: &LpProblem, c2: &Co
             Constraint::Standard { coefficients: old_coefficients, operator: old_operator, rhs: old_rhs, .. },
             Constraint::Standard { coefficients: new_coefficients, operator: new_operator, rhs: new_rhs, .. },
         ) => {
+            // Fast path: skip resolution if the raw data is identical.
+            if old_operator == new_operator
+                && (old_rhs - new_rhs).abs() <= COEFF_EPSILON
+                && coefficients_equal(p1, old_coefficients, p2, new_coefficients)
+            {
+                return None;
+            }
             let old_resolved = resolve_coefficients(p1, old_coefficients);
             let new_resolved = resolve_coefficients(p2, new_coefficients);
             diff_standard_constraints(&old_resolved, old_operator, *old_rhs, &new_resolved, new_operator, *new_rhs)
@@ -505,6 +529,10 @@ fn diff_constraint_pair(p1: &LpProblem, c1: &Constraint, p2: &LpProblem, c2: &Co
             Constraint::SOS { sos_type: old_type, weights: old_weights, .. },
             Constraint::SOS { sos_type: new_type, weights: new_weights, .. },
         ) => {
+            // Fast path: skip resolution if the raw data is identical.
+            if old_type == new_type && coefficients_equal(p1, old_weights, p2, new_weights) {
+                return None;
+            }
             let old_resolved = resolve_coefficients(p1, old_weights);
             let new_resolved = resolve_coefficients(p2, new_weights);
             diff_sos_constraints(old_type, &old_resolved, new_type, &new_resolved)
@@ -642,6 +670,13 @@ fn diff_objectives(p1: &LpProblem, p2: &LpProblem) -> SectionDiff<ObjectiveDiffE
             std::cmp::Ordering::Equal => {
                 let (name, o1_val) = &objs1[i];
                 let o2_val = objs2[j].1;
+                // Fast path: skip resolution if the raw coefficients are identical.
+                if coefficients_equal(p1, &o1_val.coefficients, p2, &o2_val.coefficients) {
+                    counts.unchanged += 1;
+                    i += 1;
+                    j += 1;
+                    continue;
+                }
                 let old_resolved = resolve_coefficients(p1, &o1_val.coefficients);
                 let new_resolved = resolve_coefficients(p2, &o2_val.coefficients);
                 let coeff_changes = diff_coefficients(&old_resolved, &new_resolved);

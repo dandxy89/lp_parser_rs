@@ -43,7 +43,7 @@ struct Cli {
     summary: bool,
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let args = Cli::parse();
 
     // Validate file existence at the CLI boundary before doing any work.
@@ -54,27 +54,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Err(format!("file not found: '{}'", args.file2.display()).into());
     }
 
-    // Parse files with progress output to stderr
+    // Parse both files in parallel using scoped threads
     let start = Instant::now();
-    eprint!("Parsing {}... ", args.file1.display());
+    eprintln!("Parsing both files in parallel...");
     stderr().flush()?;
-    let (owned1, analysis1, line_map1) = parse_lp_file(&args.file1)?;
+
+    let (result1, result2) = std::thread::scope(|s| {
+        let h1 = s.spawn(|| parse_lp_file(&args.file1));
+        let h2 = s.spawn(|| parse_lp_file(&args.file2));
+        (h1.join(), h2.join())
+    });
+
+    let (owned1, analysis1, line_map1) = result1.expect("file1 parse thread panicked")?;
+    let (owned2, analysis2, line_map2) = result2.expect("file2 parse thread panicked")?;
+
     eprintln!(
-        "done ({:.1}s, {} variables, {} constraints)",
-        start.elapsed().as_secs_f64(),
+        "Parsed {} ({} vars, {} cons) and {} ({} vars, {} cons) in {:.1}s",
+        args.file1.display(),
         owned1.variable_count(),
         owned1.constraint_count(),
-    );
-
-    let start2 = Instant::now();
-    eprint!("Parsing {}... ", args.file2.display());
-    stderr().flush()?;
-    let (owned2, analysis2, line_map2) = parse_lp_file(&args.file2)?;
-    eprintln!(
-        "done ({:.1}s, {} variables, {} constraints)",
-        start2.elapsed().as_secs_f64(),
+        args.file2.display(),
         owned2.variable_count(),
         owned2.constraint_count(),
+        start.elapsed().as_secs_f64(),
     );
 
     let diff_start = Instant::now();
