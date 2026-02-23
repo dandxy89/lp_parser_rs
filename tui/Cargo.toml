@@ -13,7 +13,7 @@ name = "lp_diff"
 path = "src/main.rs"
 
 [dependencies]
-lp_parser_rs = { path = "../rust", features = ["diff", "serde"] }
+lp_parser_rs = { path = "../rust", features = ["diff", "serde", "mmap"] }
 
 arboard = "3.6.1"
 chrono = "0.4.43"

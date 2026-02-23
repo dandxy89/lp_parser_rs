@@ -279,8 +279,7 @@ fn build_highs_model(problem: &LpProblem) -> BuiltModel {
 
     let variable_names: Vec<String> = sorted_var_ids.iter().map(|id| problem.resolve(*id).to_string()).collect();
 
-    let variable_index: HashMap<NameId, usize> =
-        sorted_var_ids.iter().enumerate().map(|(i, &id)| (id, i)).collect();
+    let variable_index: HashMap<NameId, usize> = sorted_var_ids.iter().enumerate().map(|(i, &id)| (id, i)).collect();
 
     let objective_coefficients: HashMap<NameId, f64> = {
         let mut map = HashMap::new();
@@ -329,12 +328,8 @@ fn build_highs_model(problem: &LpProblem) -> BuiltModel {
 
         match constraint {
             Constraint::Standard { coefficients, operator, rhs, .. } => {
-                let row_factors: Vec<(highs::Col, f64)> = coefficients
-                    .iter()
-                    .filter_map(|c| {
-                        variable_index.get(&c.name).map(|&idx| (columns[idx], c.value))
-                    })
-                    .collect();
+                let row_factors: Vec<(highs::Col, f64)> =
+                    coefficients.iter().filter_map(|c| variable_index.get(&c.name).map(|&idx| (columns[idx], c.value))).collect();
 
                 match operator {
                     ComparisonOp::LTE | ComparisonOp::LT => {
@@ -431,7 +426,8 @@ pub fn solve_problem(problem: &LpProblem) -> Result<SolveResult, String> {
     let log_file = tempfile::NamedTempFile::new().map_err(|e| format!("failed to create solver log temp file: {e}"))?;
     let log_path = log_file.path().to_owned();
 
-    let BuiltModel { row_problem, sense, variable_names, sorted_var_ids, objective_coefficients, row_constraint_names, skipped_sos } = model;
+    let BuiltModel { row_problem, sense, variable_names, sorted_var_ids, objective_coefficients, row_constraint_names, skipped_sos } =
+        model;
 
     let metadata = SolveMetadata { variable_names, sorted_var_ids, objective_coefficients, row_constraint_names, skipped_sos };
 
