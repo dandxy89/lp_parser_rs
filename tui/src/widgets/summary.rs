@@ -6,10 +6,10 @@
 
 use lp_parser_rs::analysis::{IssueSeverity, ProblemAnalysis};
 use ratatui::Frame;
+use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::Paragraph;
 
 use crate::diff_model::{DiffCounts, DiffSummary, LpDiffReport};
 use crate::theme::theme;
@@ -55,12 +55,22 @@ pub fn build_summary_lines(
 }
 
 /// Draw the summary content into `area` using pre-built lines (no border — caller provides the border).
+///
+/// Uses O(visible) windowed rendering instead of cloning all lines into a `Paragraph`.
 /// Returns the total content line count.
 pub fn draw_summary(frame: &mut Frame, area: Rect, cached_lines: &[Line<'static>], scroll: u16) -> usize {
     debug_assert!(area.width > 0 && area.height > 0, "summary area must be non-zero");
     let line_count = cached_lines.len();
-    let paragraph = Paragraph::new(cached_lines.to_vec()).scroll((scroll, 0));
-    frame.render_widget(paragraph, area);
+    let skip = scroll as usize;
+    let visible = area.height as usize;
+    let buf: &mut Buffer = frame.buffer_mut();
+
+    for (i, line) in cached_lines.iter().skip(skip).take(visible).enumerate() {
+        let y = area.y + i as u16;
+        debug_assert!(y < area.y + area.height, "summary line y={y} exceeds area bounds");
+        buf.set_line(area.x, y, line, area.width);
+    }
+
     line_count
 }
 

@@ -1,4 +1,3 @@
-use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::ListState;
 use smallvec::SmallVec;
@@ -355,21 +354,6 @@ impl SectionViewState {
     pub fn cached_indices(&self) -> &[usize] {
         debug_assert!(!self.dirty, "cached_indices called on dirty SectionViewState");
         &self.filtered_indices
-    }
-
-    /// Return the cached sidebar lines (one per filtered entry).
-    /// Caller must ensure the cache is not dirty.
-    pub fn cached_sidebar_lines(&self) -> &[Line<'static>] {
-        debug_assert!(!self.dirty, "cached_sidebar_lines called on dirty SectionViewState");
-        &self.cached_lines
-    }
-
-    /// Return both the cached indices and a mutable reference to the list state.
-    /// This avoids borrow-checker conflicts when drawing (need indices for items
-    /// and &mut `ListState` for `render_stateful_widget`).
-    pub fn indices_and_state_mut(&mut self) -> (&[usize], &mut ListState) {
-        debug_assert!(!self.dirty, "indices_and_state_mut called on dirty SectionViewState");
-        (&self.filtered_indices, &mut self.list_state)
     }
 
     /// Return cached indices, cached sidebar lines, and a mutable list state.

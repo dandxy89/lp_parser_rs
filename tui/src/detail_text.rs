@@ -347,6 +347,7 @@ fn write_diff_variables(text: &mut String, diff: &SolveDiffResult) {
     w!(text, "  {:<24} {:>14} {:>14} {:>14} {:>14} {:>14}", "Name", "File 1", "File 2", "\u{0394}", "RC 1", "RC 2");
     w!(text, "  {RULE_98}");
     for row in &diff.variable_diff {
+        let name = row.name(&diff.result1, &diff.result2);
         let v1 = row.val1.map_or_else(|| "\u{2014}".to_owned(), |v| format!("{v:.6}"));
         let v2 = row.val2.map_or_else(|| "\u{2014}".to_owned(), |v| format!("{v:.6}"));
         let rc1 = row.reduced_cost1.map_or_else(|| "\u{2014}".to_owned(), |v| format!("{v:.6}"));
@@ -362,7 +363,7 @@ fn write_diff_variables(text: &mut String, diff: &SolveDiffResult) {
             _ => String::new(),
         };
         let marker = if row.changed { " *" } else { "" };
-        w!(text, "  {:<24} {:>14} {:>14} {:>14} {:>14} {:>14}{marker}", row.name, v1, v2, delta, rc1, rc2);
+        w!(text, "  {:<24} {:>14} {:>14} {:>14} {:>14} {:>14}{marker}", name, v1, v2, delta, rc1, rc2);
     }
 }
 
@@ -376,12 +377,13 @@ fn write_diff_constraints(text: &mut String, diff: &SolveDiffResult) {
     w!(text, "  {:<22} {:>13} {:>13} {:>13} {:>13}", "Name", "Activity 1", "Activity 2", "Shadow 1", "Shadow 2");
     w!(text, "  {RULE_78}");
     for row in &diff.constraint_diff {
+        let name = row.name(&diff.result1, &diff.result2);
         let a1 = row.activity1.map_or_else(|| "\u{2014}".to_owned(), |v| format!("{v:.4}"));
         let a2 = row.activity2.map_or_else(|| "\u{2014}".to_owned(), |v| format!("{v:.4}"));
         let s1 = row.shadow_price1.map_or_else(|| "\u{2014}".to_owned(), |v| format!("{v:.4}"));
         let s2 = row.shadow_price2.map_or_else(|| "\u{2014}".to_owned(), |v| format!("{v:.4}"));
         let marker = if row.changed { " *" } else { "" };
-        w!(text, "  {:<22} {:>13} {:>13} {:>13} {:>13}{marker}", row.name, a1, a2, s1, s2);
+        w!(text, "  {:<22} {:>13} {:>13} {:>13} {:>13}{marker}", name, a1, a2, s1, s2);
     }
 }
 

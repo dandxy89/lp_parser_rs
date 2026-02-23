@@ -465,7 +465,7 @@ fn format_variable_diff_line(row: &VarDiffRow, name: &str, name_w: usize, value_
     };
 
     let mut spans = vec![
-        Span::styled(format!("  {:<name_w$}", name), name_style),
+        Span::styled(format!("  {name:<name_w$}"), name_style),
         Span::styled(value1_str, name_style),
         Span::styled(format!("  {value2_str}"), name_style),
     ];
@@ -532,7 +532,7 @@ fn format_constraint_diff_line(row: &crate::solver::ConstraintDiffRow, name: &st
     };
 
     let mut spans = vec![
-        Span::styled(format!("  {:<name_w$}", name), name_style),
+        Span::styled(format!("  {name:<name_w$}"), name_style),
         Span::styled(a1, name_style),
         Span::styled(format!("  {a2}"), name_style),
         Span::styled(format!("  {s1}"), name_style),
@@ -857,7 +857,8 @@ fn build_diff_variables_tab(
             continue;
         }
         if data_index >= first_visible_data && data_index < first_visible_data + visible_data_count {
-            if let Some(line) = format_variable_diff_line(row, name_w, value_w) {
+            let name = row.name(&diff.result1, &diff.result2);
+            if let Some(line) = format_variable_diff_line(row, name, name_w, value_w) {
                 lines.push(line);
             }
         } else {
@@ -910,7 +911,8 @@ fn build_diff_constraints_tab(
             continue;
         }
         if data_index >= first_visible_data && data_index < first_visible_data + visible_data_count {
-            if let Some(line) = format_constraint_diff_line(row, name_w, value_w) {
+            let name = row.name(&diff.result1, &diff.result2);
+            if let Some(line) = format_constraint_diff_line(row, name, name_w, value_w) {
                 lines.push(line);
             }
         } else {
