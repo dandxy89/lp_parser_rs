@@ -121,7 +121,11 @@ fn register_variables_from_coefficients(
 /// Intern a slice of raw coefficients into model coefficients.
 #[inline]
 fn intern_coefficients(interner: &mut NameInterner, raw: &[RawCoefficient<'_>]) -> Vec<Coefficient> {
-    raw.iter().map(|rc| Coefficient { name: interner.intern(rc.name), value: rc.value }).collect()
+    let mut coefficients = Vec::with_capacity(raw.len());
+    for rc in raw {
+        coefficients.push(Coefficient { name: interner.intern(rc.name), value: rc.value });
+    }
+    coefficients
 }
 
 /// Intern a raw constraint into a model constraint.
