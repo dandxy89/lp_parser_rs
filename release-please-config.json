@@ -62,6 +62,7 @@
     "rust": {
       "changelog-path": "CHANGELOG.md",
       "release-type": "rust",
+      "component": "lp_parser_rs",
       "path": "rust",
       "bump-minor-pre-major": false,
       "bump-patch-for-minor-pre-major": false,
@@ -78,6 +79,7 @@
     "python": {
       "changelog-path": "CHANGELOG.md",
       "release-type": "rust",
+      "component": "parse_lp",
       "path": "python",
       "bump-minor-pre-major": false,
       "bump-patch-for-minor-pre-major": false,
