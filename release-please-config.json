@@ -60,9 +60,9 @@
   ],
   "packages": {
     "rust": {
-      "changelog-path": "rust/CHANGELOG.md",
+      "changelog-path": "CHANGELOG.md",
       "release-type": "rust",
-      "path": "rust/Cargo.toml",
+      "path": "rust",
       "bump-minor-pre-major": false,
       "bump-patch-for-minor-pre-major": false,
       "draft": false,
@@ -76,18 +76,18 @@
       ]
     },
     "python": {
-      "changelog-path": "python/CHANGELOG.md",
+      "changelog-path": "CHANGELOG.md",
       "release-type": "rust",
-      "path": "python/Cargo.toml",
+      "path": "python",
       "bump-minor-pre-major": false,
       "bump-patch-for-minor-pre-major": false,
       "draft": false,
       "prerelease": false
     },
     "tui": {
-      "changelog-path": "tui/CHANGELOG.md",
+      "changelog-path": "CHANGELOG.md",
       "release-type": "rust",
-      "path": "tui/Cargo.toml",
+      "path": "tui",
       "component": "lp_diff",
       "bump-minor-pre-major": false,
       "bump-patch-for-minor-pre-major": false,
