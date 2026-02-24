@@ -809,7 +809,7 @@ fn build_diff_summary_metrics(lines: &mut Vec<Line<'static>>, diff: &SolveDiffRe
         [("Build:", r1.build_time, r2.build_time), ("Solve:", r1.solve_time, r2.solve_time), ("Extract:", r1.extract_time, r2.extract_time)]
     {
         lines.push(Line::from(vec![
-            Span::styled(format!("  {:<label_w$}", label), Style::default().fg(t.muted)),
+            Span::styled(format!("  {label:<label_w$}"), Style::default().fg(t.muted)),
             Span::styled(format!("{:<col_w$}", format!("{:.3}s", d1.as_secs_f64())), Style::default().fg(t.accent)),
             Span::styled(format!("{:<col_w$}", format!("{:.3}s", d2.as_secs_f64())), Style::default().fg(t.accent)),
         ]));

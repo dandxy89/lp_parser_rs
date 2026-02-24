@@ -58,7 +58,7 @@ pub fn draw_search_popup(frame: &mut Frame, area: Rect, app: &App) {
     ])
     .split(v_chunks[1]);
 
-    draw_results_list(frame, h_chunks[0], &app.search_popup.results, &app.search_name_buffer, app.search_popup.selected);
+    draw_results_list(frame, h_chunks[0], &app.search_popup.cached_result_lines, app.search_popup.results.len(), app.search_popup.selected);
     draw_detail_preview(frame, h_chunks[1], app);
 
     // Bottom bar: hints
@@ -94,39 +94,43 @@ fn draw_search_input(frame: &mut Frame, area: Rect, query: &str, mode_label: &st
     frame.render_widget(paragraph, area);
 }
 
-/// Draw the ranked results list on the left side.
-fn draw_results_list(frame: &mut Frame, area: Rect, results: &[SearchResult], names: &[String], selected: usize) {
+/// Build pre-styled `Line`s for all search results, to be cached on `SearchPopupState`.
+///
+/// Called once per query change rather than every frame.
+pub fn build_result_lines(results: &[SearchResult], names: &[String]) -> Vec<Line<'static>> {
     let t = theme();
-    let items: Vec<ListItem> = results
+    results
         .iter()
         .map(|r| {
             let tag = section_tag(r.section);
             let prefix = kind_prefix(r.kind);
             let style = kind_style(r.kind);
 
-            // Resolve name from the name buffer.
             debug_assert!(r.haystack_index < names.len(), "haystack_index {} out of bounds (len {})", r.haystack_index, names.len());
             let name = &names[r.haystack_index];
-
-            // Build name with match highlighting.
-            let name_spans = build_highlighted_name(name, &r.match_indices, style);
+            let name_spans = build_highlighted_name_owned(name, &r.match_indices, style);
 
             let mut spans = vec![Span::styled(format!("{tag} "), Style::default().fg(t.muted)), Span::styled(format!("{prefix} "), style)];
             spans.extend(name_spans);
 
-            // Show fuzzy score when available.
             if r.score > 0 {
                 spans.push(Span::styled(format!(" ({})", r.score), Style::default().fg(t.muted)));
             }
 
-            ListItem::new(Line::from(spans))
+            Line::from(spans)
         })
-        .collect();
+        .collect()
+}
+
+/// Draw the ranked results list on the left side using pre-built cached lines.
+fn draw_results_list(frame: &mut Frame, area: Rect, cached_lines: &[Line<'static>], result_count: usize, selected: usize) {
+    let t = theme();
+    let items: Vec<ListItem> = cached_lines.iter().map(|line| ListItem::new(line.clone())).collect();
 
     let block = Block::default().borders(Borders::ALL).border_style(Style::default().fg(t.muted)).title(" Results ");
 
     let mut state = ListState::default();
-    if !results.is_empty() {
+    if result_count > 0 {
         state.select(Some(selected));
     }
 
@@ -138,8 +142,8 @@ fn draw_results_list(frame: &mut Frame, area: Rect, results: &[SearchResult], na
     frame.render_stateful_widget(list, area, &mut state);
 
     // Scrollbar for long result lists.
-    if results.len() > area.height.saturating_sub(2) as usize {
-        let mut scrollbar_state = ScrollbarState::new(results.len()).position(selected);
+    if result_count > area.height.saturating_sub(2) as usize {
+        let mut scrollbar_state = ScrollbarState::new(result_count).position(selected);
         frame.render_stateful_widget(
             Scrollbar::new(ScrollbarOrientation::VerticalRight).begin_symbol(None).end_symbol(None),
             area,
@@ -148,11 +152,13 @@ fn draw_results_list(frame: &mut Frame, area: Rect, results: &[SearchResult], na
     }
 }
 
-/// Build spans for a name with fuzzy match positions highlighted.
-fn build_highlighted_name<'a>(name: &'a str, match_indices: &[usize], base_style: Style) -> Vec<Span<'a>> {
+/// Build owned spans for a name with fuzzy match positions highlighted.
+///
+/// Returns `Span<'static>` with owned strings, suitable for caching across frames.
+fn build_highlighted_name_owned(name: &str, match_indices: &[usize], base_style: Style) -> Vec<Span<'static>> {
     debug_assert!(name.is_ascii(), "fuzzy match highlighting assumes ASCII names");
     if match_indices.is_empty() {
-        return vec![Span::styled(name, base_style)];
+        return vec![Span::styled(name.to_owned(), base_style)];
     }
 
     let highlight_style = base_style.add_modifier(Modifier::BOLD | Modifier::UNDERLINED);
@@ -163,19 +169,16 @@ fn build_highlighted_name<'a>(name: &'a str, match_indices: &[usize], base_style
         if idx > name.len() {
             continue;
         }
-        // Add non-highlighted segment before this match.
         if idx > last_end {
-            spans.push(Span::styled(&name[last_end..idx], base_style));
+            spans.push(Span::styled(name[last_end..idx].to_owned(), base_style));
         }
-        // Add highlighted character.
         let end = (idx + 1).min(name.len());
-        spans.push(Span::styled(&name[idx..end], highlight_style));
+        spans.push(Span::styled(name[idx..end].to_owned(), highlight_style));
         last_end = end;
     }
 
-    // Remaining non-highlighted tail.
     if last_end < name.len() {
-        spans.push(Span::styled(&name[last_end..], base_style));
+        spans.push(Span::styled(name[last_end..].to_owned(), base_style));
     }
 
     spans

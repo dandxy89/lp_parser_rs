@@ -181,7 +181,7 @@ fn diff_variables(r1: &SolveResult, r2: &SolveResult, threshold: f64) -> Vec<Var
 
     let mut i: usize = 0;
     let mut j: usize = 0;
-    let mut rows = Vec::new();
+    let mut rows = Vec::with_capacity(r1.variables.len().max(r2.variables.len()));
 
     while i < r1.variables.len() || j < r2.variables.len() {
         let cmp = match (r1.variables.get(i), r2.variables.get(j)) {
@@ -229,7 +229,7 @@ fn diff_constraints(r1: &SolveResult, r2: &SolveResult, threshold: f64) -> Vec<C
 
     let mut i: usize = 0;
     let mut j: usize = 0;
-    let mut rows = Vec::new();
+    let mut rows = Vec::with_capacity(r1.row_values.len().max(r2.row_values.len()));
 
     while i < r1.row_values.len() || j < r2.row_values.len() {
         let cmp = match (r1.row_values.get(i), r2.row_values.get(j)) {

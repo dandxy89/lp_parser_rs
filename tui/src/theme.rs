@@ -4,8 +4,6 @@
 //! hard-coding `Color::*` constants.  This ensures the palette stays consistent
 //! and can later adapt to the terminal's colour capability tier.
 
-use std::sync::LazyLock;
-
 use ratatui::style::Color;
 
 /// Semantic colour palette for the TUI.
@@ -37,8 +35,9 @@ pub struct Theme {
     pub secondary_accent: Color,
 }
 
-/// The default theme, equivalent to the previously hard-coded colours.
-static DEFAULT_THEME: LazyLock<Theme> = LazyLock::new(|| Theme {
+/// The default theme — a plain const eliminates the atomic load that
+/// `LazyLock` would add on every `theme()` call.
+static DEFAULT_THEME: Theme = Theme {
     added: Color::Green,
     removed: Color::Red,
     modified: Color::Yellow,
@@ -51,7 +50,7 @@ static DEFAULT_THEME: LazyLock<Theme> = LazyLock::new(|| Theme {
     highlight_bg: Color::Blue,
     border_focus: Color::Cyan,
     secondary_accent: Color::Magenta,
-});
+};
 
 /// Return the active theme.
 pub fn theme() -> &'static Theme {

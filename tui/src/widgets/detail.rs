@@ -3,6 +3,8 @@
 //! Renders the full before/after breakdown for a single selected diff entry
 //! (variables, constraints, objectives) in the detail pane.
 
+use std::fmt::Write as _;
+
 use lp_parser_rs::interner::NameInterner;
 use lp_parser_rs::model::VariableType;
 use ratatui::Frame;
@@ -418,6 +420,9 @@ fn render_constraint_side_by_side(
     }
 
     // Build styled Lines only for the visible window.
+    // Reuse string buffers across rows to avoid per-row heap allocations.
+    let mut old_buf = String::with_capacity(16);
+    let mut new_buf = String::with_capacity(16);
     for row in rows.iter().skip(data_skip).take(data_take) {
         let (left_style, right_style, badge) = match row.change_kind {
             Some(DiffKind::Added) => (Style::default().fg(t.muted), Style::default().fg(t.added), " [+]"),
@@ -426,17 +431,23 @@ fn render_constraint_side_by_side(
             None => (Style::default().fg(t.muted), Style::default().fg(t.muted), ""),
         };
 
-        let old_str = row.old_value.map_or_else(String::new, |v| format!("{v}"));
-        let new_str = row.new_value.map_or_else(String::new, |v| format!("{v}"));
+        old_buf.clear();
+        if let Some(v) = row.old_value {
+            write!(old_buf, "{v}").expect("writing f64 to String is infallible");
+        }
+        new_buf.clear();
+        if let Some(v) = row.new_value {
+            write!(new_buf, "{v}").expect("writing f64 to String is infallible");
+        }
 
         left_lines.push(Line::from(vec![
             Span::styled(format!(" {:<18}", row.variable), left_style),
-            Span::styled(format!("{old_str:>10}"), left_style),
+            Span::styled(format!("{old_buf:>10}"), left_style),
             Span::styled(badge, left_style),
         ]));
         right_lines.push(Line::from(vec![
             Span::styled(format!(" {:<18}", row.variable), right_style),
-            Span::styled(format!("{new_str:>10}"), right_style),
+            Span::styled(format!("{new_buf:>10}"), right_style),
             Span::styled(badge, right_style),
         ]));
     }
@@ -510,25 +521,37 @@ fn render_coeff_changes(
     }
 
     // Build styled Lines only for the visible window.
+    // Reuse string buffers across rows to avoid per-row heap allocations.
     let visible_count = rows.len().saturating_sub(skip).min(take);
+    let mut name_buf = String::with_capacity(24);
+    let mut old_buf = String::with_capacity(16);
+    let mut new_buf = String::with_capacity(16);
     for row in rows.iter().skip(skip).take(take) {
-        let old_str = row.old_value.map_or_else(String::new, |v| format!("{v}"));
-        let new_str = row.new_value.map_or_else(String::new, |v| format!("{v}"));
+        old_buf.clear();
+        if let Some(v) = row.old_value {
+            write!(old_buf, "{v}").expect("writing f64 to String is infallible");
+        }
+        new_buf.clear();
+        if let Some(v) = row.new_value {
+            write!(new_buf, "{v}").expect("writing f64 to String is infallible");
+        }
+        name_buf.clear();
+        write!(name_buf, "    {:<20}", row.variable).expect("writing to String is infallible");
 
         match row.change_kind {
             Some(DiffKind::Added) => {
                 lines.push(Line::from(vec![
-                    Span::styled(format!("    {:<20}", row.variable), Style::default().fg(t.added)),
+                    Span::styled(name_buf.clone(), Style::default().fg(t.added)),
                     Span::styled(format!("{:>VAL_WIDTH$}", ""), Style::default()),
                     Span::styled(ARROW, muted()),
-                    Span::styled(format!("{new_str:<VAL_WIDTH$}"), Style::default().fg(t.added)),
+                    Span::styled(format!("{new_buf:<VAL_WIDTH$}"), Style::default().fg(t.added)),
                     Span::styled(" [added]", Style::default().fg(t.added)),
                 ]));
             }
             Some(DiffKind::Removed) => {
                 lines.push(Line::from(vec![
-                    Span::styled(format!("    {:<20}", row.variable), Style::default().fg(t.removed)),
-                    Span::styled(format!("{old_str:>VAL_WIDTH$}"), Style::default().fg(t.removed)),
+                    Span::styled(name_buf.clone(), Style::default().fg(t.removed)),
+                    Span::styled(format!("{old_buf:>VAL_WIDTH$}"), Style::default().fg(t.removed)),
                     Span::styled(ARROW, muted()),
                     Span::styled(format!("{:VAL_WIDTH$}", ""), Style::default()),
                     Span::styled(" [removed]", Style::default().fg(t.removed)),
@@ -536,17 +559,17 @@ fn render_coeff_changes(
             }
             Some(DiffKind::Modified) => {
                 lines.push(Line::from(vec![
-                    Span::styled(format!("    {:<20}", row.variable), Style::default().fg(t.modified)),
-                    Span::styled(format!("{old_str:>VAL_WIDTH$}"), Style::default().fg(t.removed)),
+                    Span::styled(name_buf.clone(), Style::default().fg(t.modified)),
+                    Span::styled(format!("{old_buf:>VAL_WIDTH$}"), Style::default().fg(t.removed)),
                     Span::styled(ARROW, muted()),
-                    Span::styled(format!("{new_str:<VAL_WIDTH$}"), Style::default().fg(t.added)),
+                    Span::styled(format!("{new_buf:<VAL_WIDTH$}"), Style::default().fg(t.added)),
                     Span::styled(" [modified]", Style::default().fg(t.modified)),
                 ]));
             }
             None => {
                 lines.push(Line::from(vec![
-                    Span::styled(format!("    {:<20}", row.variable), Style::default().fg(t.muted)),
-                    Span::styled(format!("{old_str:>VAL_WIDTH$}"), Style::default().fg(t.muted)),
+                    Span::styled(name_buf.clone(), Style::default().fg(t.muted)),
+                    Span::styled(format!("{old_buf:>VAL_WIDTH$}"), Style::default().fg(t.muted)),
                     Span::styled(" (unchanged)", Style::default().fg(t.muted)),
                 ]));
             }

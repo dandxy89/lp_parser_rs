@@ -10,7 +10,7 @@ use ratatui::widgets::ListState;
 use smallvec::SmallVec;
 
 use crate::detail_model::{CoefficientRow, build_coeff_rows};
-use crate::diff_model::{DiffEntry, DiffKind, LpDiffReport};
+use crate::diff_model::{DiffEntry, DiffKind, DiffSummary, LpDiffReport};
 use crate::search::{self, CompiledSearch, SearchMode};
 use crate::solver::SolveResult;
 pub use crate::state::{DiffFilter, Focus, SearchResult, Section, SectionViewState};
@@ -28,6 +28,9 @@ pub struct SearchPopupState {
     pub selected: usize,
     /// Scroll offset for the detail preview pane inside the pop-up.
     pub scroll: u16,
+    /// Pre-built styled lines for each search result, avoiding per-frame
+    /// `format!` allocations. Rebuilt in `recompute_search_popup`.
+    pub cached_result_lines: Vec<Line<'static>>,
 }
 
 /// Layout rectangles and dimensions stored during draw for mouse hit-testing and scrolling.
@@ -172,6 +175,10 @@ pub struct App {
     /// Built once in `App::new()` since the report data never changes.
     pub(crate) summary_lines: Vec<Line<'static>>,
 
+    /// Pre-computed diff summary. Built once in `App::new()` since
+    /// the report data never changes, avoiding repeated recomputation.
+    pub(crate) cached_summary: DiffSummary,
+
     /// Pre-computed section selector labels, avoiding per-frame `format!` allocations.
     pub(crate) section_labels: [Cow<'static, str>; 4],
 }
@@ -249,7 +256,14 @@ impl App {
                 detail_content_lines: 0,
             },
             yank: YankState { flash: None, message: String::new() },
-            search_popup: SearchPopupState { visible: false, query: String::new(), results: Vec::new(), selected: 0, scroll: 0 },
+            search_popup: SearchPopupState {
+                visible: false,
+                query: String::new(),
+                results: Vec::new(),
+                selected: 0,
+                scroll: 0,
+                cached_result_lines: Vec::new(),
+            },
             jumplist: JumpList::new(),
             solver: SolverSession::new(),
             file1_path,
@@ -260,6 +274,7 @@ impl App {
             search_haystack: haystack,
             coeff_row_cache: None,
             summary_lines,
+            cached_summary: report_summary,
             section_labels,
         }
     }
@@ -666,6 +681,7 @@ impl App {
 
         if self.search_popup.query.is_empty() {
             self.populate_all_search_results();
+            self.rebuild_search_result_lines();
             return;
         }
 
@@ -681,6 +697,14 @@ impl App {
             }
             SearchMode::Regex | SearchMode::Substring => self.populate_filtered_results(),
         }
+
+        self.rebuild_search_result_lines();
+    }
+
+    /// Rebuild the cached styled lines for the current search results.
+    fn rebuild_search_result_lines(&mut self) {
+        self.search_popup.cached_result_lines =
+            crate::widgets::search_popup::build_result_lines(&self.search_popup.results, &self.search_name_buffer);
     }
 
     /// Populate search results with all entries (no query filter).

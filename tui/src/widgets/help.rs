@@ -2,6 +2,8 @@
 //!
 //! Renders a centred pop-up listing all keybindings grouped by category.
 
+use std::sync::LazyLock;
+
 use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
@@ -64,19 +66,23 @@ const HELP_TEXT: &[&str] = &[
 const POPUP_WIDTH: u16 = 60;
 const POPUP_HEIGHT: u16 = 50;
 
+/// Pre-built help text lines, cached to avoid per-frame allocation.
+static HELP_LINES: LazyLock<Vec<Line<'static>>> = LazyLock::new(|| {
+    let t = theme();
+    let text_style = Style::default().fg(t.text);
+    HELP_TEXT.iter().map(|&s| Line::from(Span::styled(s, text_style))).collect()
+});
+
 /// Draw a centred help pop-up overlay on top of the current frame.
 pub fn draw_help(frame: &mut Frame, area: Rect) {
     debug_assert!(area.width > 0 && area.height > 0, "help overlay area must be non-zero");
     let popup = super::centred_rect(area, POPUP_WIDTH, POPUP_HEIGHT);
 
     let t = theme();
-    let text_style = Style::default().fg(t.text);
-    let lines: Vec<Line<'_>> = HELP_TEXT.iter().map(|&s| Line::from(Span::styled(s, text_style))).collect();
-
     let border_style = Style::default().fg(t.added).add_modifier(Modifier::BOLD);
     let block = Block::default().borders(Borders::ALL).border_style(border_style).title(Span::styled(" Keybindings ", border_style));
 
-    let paragraph = Paragraph::new(lines).block(block);
+    let paragraph = Paragraph::new(HELP_LINES.clone()).block(block);
 
     frame.render_widget(Clear, popup);
     frame.render_widget(paragraph, popup);

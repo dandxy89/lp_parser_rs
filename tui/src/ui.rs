@@ -36,7 +36,7 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     app.ensure_active_section_cache();
 
     let filter_count = app.name_list_len();
-    let report_summary = app.report.summary();
+    let report_summary = app.cached_summary;
     let total_changes = report_summary.total_changes();
 
     let outer = Layout::vertical([
@@ -71,7 +71,7 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     sidebar::draw_name_list(frame, sidebar_chunks[1], app);
 
     // Detail Panel
-    draw_detail_panel(frame, detail_area, app, &report_summary);
+    draw_detail_panel(frame, detail_area, app);
 
     // Status bar (drawn after detail so detail_content_lines is populated).
     let detail_pos = if app.focus == Focus::Detail && app.layout.detail_content_lines > 0 {
@@ -118,7 +118,7 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
 }
 
 /// Draw the detail panel on the right side.
-fn draw_detail_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App, _report_summary: &crate::diff_model::DiffSummary) {
+fn draw_detail_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut App) {
     let border_style = focus_border_style(app.focus, Focus::Detail);
 
     let content_lines = if app.active_section == Section::Summary {

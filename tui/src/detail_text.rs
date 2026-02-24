@@ -214,6 +214,33 @@ fn render_objective_plain(entry: &ObjectiveDiffEntry, cached_rows: Option<&[Coef
 /// Column width for value formatting.
 const VAL_WIDTH: usize = 12;
 
+/// Format an `Option<f64>` into a reusable buffer, returning the formatted slice.
+///
+/// Avoids per-row `map_or_else` / `format!` heap allocations by writing into a
+/// caller-owned `String` buffer that is cleared before each use.
+fn fmt_opt_f64_precise(buf: &mut String, value: Option<f64>) -> &str {
+    buf.clear();
+    match value {
+        Some(v) => {
+            write!(buf, "{v:.6}").expect("writing to String is infallible");
+            buf.as_str()
+        }
+        None => "\u{2014}",
+    }
+}
+
+/// Like [`fmt_opt_f64_precise`] but with 4 decimal places, for constraint tables.
+fn fmt_opt_f64_short(buf: &mut String, value: Option<f64>) -> &str {
+    buf.clear();
+    match value {
+        Some(v) => {
+            write!(buf, "{v:.4}").expect("writing to String is infallible");
+            buf.as_str()
+        }
+        None => "\u{2014}",
+    }
+}
+
 fn write_coeff_changes(
     out: &mut String,
     changes: &[CoefficientChange],
@@ -230,22 +257,31 @@ fn write_coeff_changes(
         &built
     };
 
+    // Reuse buffers across rows to avoid per-row String allocations.
+    let mut old_buf = String::with_capacity(16);
+    let mut new_buf = String::with_capacity(16);
     for row in rows {
-        let old_str = row.old_value.map_or_else(String::new, |v| format!("{v}"));
-        let new_str = row.new_value.map_or_else(String::new, |v| format!("{v}"));
+        old_buf.clear();
+        if let Some(v) = row.old_value {
+            write!(old_buf, "{v}").expect("writing to String is infallible");
+        }
+        new_buf.clear();
+        if let Some(v) = row.new_value {
+            write!(new_buf, "{v}").expect("writing to String is infallible");
+        }
 
         match row.change_kind {
             Some(DiffKind::Added) => {
-                w!(out, "    {:<20}{:>VAL_WIDTH$}  \u{2192}  {new_str:<VAL_WIDTH$} [added]", row.variable, "");
+                w!(out, "    {:<20}{:>VAL_WIDTH$}  \u{2192}  {:<VAL_WIDTH$} [added]", row.variable, "", new_buf);
             }
             Some(DiffKind::Removed) => {
-                w!(out, "    {:<20}{old_str:>VAL_WIDTH$}  \u{2192}  {:VAL_WIDTH$} [removed]", row.variable, "");
+                w!(out, "    {:<20}{:>VAL_WIDTH$}  \u{2192}  {:VAL_WIDTH$} [removed]", row.variable, old_buf, "");
             }
             Some(DiffKind::Modified) => {
-                w!(out, "    {:<20}{old_str:>VAL_WIDTH$}  \u{2192}  {new_str:<VAL_WIDTH$} [modified]", row.variable);
+                w!(out, "    {:<20}{:>VAL_WIDTH$}  \u{2192}  {:<VAL_WIDTH$} [modified]", row.variable, old_buf, new_buf);
             }
             None => {
-                w!(out, "    {:<20}{old_str:>VAL_WIDTH$} (unchanged)", row.variable);
+                w!(out, "    {:<20}{:>VAL_WIDTH$} (unchanged)", row.variable, old_buf);
             }
         }
     }
@@ -373,21 +409,28 @@ fn write_diff_variables(text: &mut String, diff: &SolveDiffResult) {
     w!(text, "Variables:");
     w!(text, "  {:<24} {:>14} {:>14} {:>14} {:>14} {:>14}", "Name", "File 1", "File 2", "\u{0394}", "RC 1", "RC 2");
     w!(text, "  {RULE_98}");
+    let mut buf1 = String::with_capacity(24);
+    let mut buf2 = String::with_capacity(24);
+    let mut buf3 = String::with_capacity(24);
+    let mut buf4 = String::with_capacity(24);
+    let mut delta_buf = String::with_capacity(24);
     for row in &diff.variable_diff {
         let name = row.name(&diff.result1, &diff.result2);
-        let v1 = row.val1.map_or_else(|| "\u{2014}".to_owned(), |v| format!("{v:.6}"));
-        let v2 = row.val2.map_or_else(|| "\u{2014}".to_owned(), |v| format!("{v:.6}"));
-        let rc1 = row.reduced_cost1.map_or_else(|| "\u{2014}".to_owned(), |v| format!("{v:.6}"));
-        let rc2 = row.reduced_cost2.map_or_else(|| "\u{2014}".to_owned(), |v| format!("{v:.6}"));
-        let delta = match (row.val1, row.val2) {
-            (None, Some(_)) => "(added)".to_owned(),
-            (Some(_), None) => "(removed)".to_owned(),
+        let v1 = fmt_opt_f64_precise(&mut buf1, row.val1);
+        let v2 = fmt_opt_f64_precise(&mut buf2, row.val2);
+        let rc1 = fmt_opt_f64_precise(&mut buf3, row.reduced_cost1);
+        let rc2 = fmt_opt_f64_precise(&mut buf4, row.reduced_cost2);
+        delta_buf.clear();
+        let delta: &str = match (row.val1, row.val2) {
+            (None, Some(_)) => "(added)",
+            (Some(_), None) => "(removed)",
             (Some(a), Some(b)) if row.changed => {
                 let d = b - a;
                 let sign = if d >= 0.0 { "+" } else { "" };
-                format!("{sign}{d:.6}")
+                write!(delta_buf, "{sign}{d:.6}").expect("writing to String is infallible");
+                &delta_buf
             }
-            _ => String::new(),
+            _ => "",
         };
         let marker = if row.changed { " *" } else { "" };
         w!(text, "  {:<24} {:>14} {:>14} {:>14} {:>14} {:>14}{marker}", name, v1, v2, delta, rc1, rc2);
@@ -403,12 +446,16 @@ fn write_diff_constraints(text: &mut String, diff: &SolveDiffResult) {
     w!(text, "Constraints:");
     w!(text, "  {:<22} {:>13} {:>13} {:>13} {:>13}", "Name", "Activity 1", "Activity 2", "Shadow 1", "Shadow 2");
     w!(text, "  {RULE_78}");
+    let mut buf1 = String::with_capacity(16);
+    let mut buf2 = String::with_capacity(16);
+    let mut buf3 = String::with_capacity(16);
+    let mut buf4 = String::with_capacity(16);
     for row in &diff.constraint_diff {
         let name = row.name(&diff.result1, &diff.result2);
-        let a1 = row.activity1.map_or_else(|| "\u{2014}".to_owned(), |v| format!("{v:.4}"));
-        let a2 = row.activity2.map_or_else(|| "\u{2014}".to_owned(), |v| format!("{v:.4}"));
-        let s1 = row.shadow_price1.map_or_else(|| "\u{2014}".to_owned(), |v| format!("{v:.4}"));
-        let s2 = row.shadow_price2.map_or_else(|| "\u{2014}".to_owned(), |v| format!("{v:.4}"));
+        let a1 = fmt_opt_f64_short(&mut buf1, row.activity1);
+        let a2 = fmt_opt_f64_short(&mut buf2, row.activity2);
+        let s1 = fmt_opt_f64_short(&mut buf3, row.shadow_price1);
+        let s2 = fmt_opt_f64_short(&mut buf4, row.shadow_price2);
         let marker = if row.changed { " *" } else { "" };
         w!(text, "  {:<22} {:>13} {:>13} {:>13} {:>13}{marker}", name, a1, a2, s1, s2);
     }

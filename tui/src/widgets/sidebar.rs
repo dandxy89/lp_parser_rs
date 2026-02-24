@@ -14,16 +14,18 @@ pub fn draw_section_selector(frame: &mut Frame, area: Rect, app: &mut App) {
     let t = theme();
     let border_style = focus_border_style(app.focus, Focus::SectionSelector);
 
-    let items: Vec<ListItem> = Section::ALL
+    // Use pre-computed labels from App to avoid per-frame format! allocations.
+    let items: Vec<ListItem> = app
+        .section_labels
         .iter()
-        .map(|section| {
-            let marker = if *section == app.active_section { "\u{25b6} " } else { "  " };
-            let style = if *section == app.active_section {
+        .enumerate()
+        .map(|(i, label)| {
+            let style = if Section::from_index(i) == app.active_section {
                 Style::default().fg(t.text).add_modifier(Modifier::BOLD)
             } else {
                 Style::default().fg(t.muted)
             };
-            ListItem::new(Line::from(Span::styled(format!("{marker}{}", section.label()), style)))
+            ListItem::new(Line::from(Span::styled(label.as_ref().to_owned(), style)))
         })
         .collect();
 
@@ -46,7 +48,7 @@ pub fn draw_name_list(frame: &mut Frame, area: Rect, app: &mut App) {
     match app.active_section {
         Section::Summary => {
             // When Summary is active, show a quick-nav list of sections with counts.
-            let counts = app.report.summary();
+            let counts = app.cached_summary;
             let items: Vec<ListItem> = vec![
                 ListItem::new(Line::from(Span::styled(
                     format!("  Variables    ({})", counts.variables.changed()),
