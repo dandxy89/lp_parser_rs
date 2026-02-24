@@ -258,7 +258,11 @@ pub fn format_solve_result(result: &SolveResult) -> String {
     if let Some(obj) = result.objective_value {
         w!(text, "Objective: {obj}");
     }
-    w!(text, "Solve time: {:.3}s", result.solve_time.as_secs_f64());
+    let total = result.build_time + result.solve_time + result.extract_time;
+    w!(text, "Build time:   {:.3}s", result.build_time.as_secs_f64());
+    w!(text, "Solve time:   {:.3}s", result.solve_time.as_secs_f64());
+    w!(text, "Extract time: {:.3}s", result.extract_time.as_secs_f64());
+    w!(text, "Total time:   {:.3}s", total.as_secs_f64());
     if result.skipped_sos > 0 {
         w!(text, "Warning: {} SOS constraint(s) skipped (not supported by solver)", result.skipped_sos);
     }
@@ -326,15 +330,38 @@ fn write_diff_summary(text: &mut String, diff: &SolveDiffResult) {
     let obj1 = r1.objective_value.map_or_else(|| "N/A".to_owned(), |v| format!("{v:.6}"));
     let obj2 = r2.objective_value.map_or_else(|| "N/A".to_owned(), |v| format!("{v:.6}"));
     w!(text, "{:<18} {:<20} {:<20}", "Objective:", obj1, obj2);
+    w!(text, "{:<18} {:<20} {:<20}", "Variables:", r1.variables.len(), r2.variables.len());
+    w!(text, "{:<18} {:<20} {:<20}", "Constraints:", r1.shadow_prices.len(), r2.shadow_prices.len());
+
+    let total1 = r1.build_time + r1.solve_time + r1.extract_time;
+    let total2 = r2.build_time + r2.solve_time + r2.extract_time;
+    w!(text);
+    w!(text, "Timings");
+    w!(text, "{RULE_60}");
     w!(
         text,
         "{:<18} {:<20} {:<20}",
-        "Time:",
+        "Build:",
+        format!("{:.3}s", r1.build_time.as_secs_f64()),
+        format!("{:.3}s", r2.build_time.as_secs_f64())
+    );
+    w!(
+        text,
+        "{:<18} {:<20} {:<20}",
+        "Solve:",
         format!("{:.3}s", r1.solve_time.as_secs_f64()),
         format!("{:.3}s", r2.solve_time.as_secs_f64())
     );
-    w!(text, "{:<18} {:<20} {:<20}", "Variables:", r1.variables.len(), r2.variables.len());
-    w!(text, "{:<18} {:<20} {:<20}", "Constraints:", r1.shadow_prices.len(), r2.shadow_prices.len());
+    w!(
+        text,
+        "{:<18} {:<20} {:<20}",
+        "Extract:",
+        format!("{:.3}s", r1.extract_time.as_secs_f64()),
+        format!("{:.3}s", r2.extract_time.as_secs_f64())
+    );
+    w!(text, "{:<18} {:<20} {:<20}", "Total:", format!("{:.3}s", total1.as_secs_f64()), format!("{:.3}s", total2.as_secs_f64()));
+    w!(text, "{RULE_60}");
+    w!(text, "{:<18} {:.3}s", "Diff:", diff.diff_time.as_secs_f64());
 }
 
 /// Write the variable diff table.

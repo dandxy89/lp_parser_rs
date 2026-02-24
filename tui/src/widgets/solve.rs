@@ -164,11 +164,6 @@ fn build_summary_tab(lines: &mut Vec<Line<'static>>, result: &SolveResult) {
         ]));
     }
 
-    lines.push(Line::from(vec![
-        Span::styled("  Time:      ", Style::default().fg(t.muted)),
-        Span::styled(format!("{:.3}s", result.solve_time.as_secs_f64()), Style::default().fg(t.accent)),
-    ]));
-
     if result.skipped_sos > 0 {
         lines.push(Line::from(vec![
             Span::styled("  Warning:   ", Style::default().fg(t.warning).add_modifier(Modifier::BOLD)),
@@ -193,6 +188,28 @@ fn build_summary_tab(lines: &mut Vec<Line<'static>>, result: &SolveResult) {
             Span::styled(format!("{}", result.shadow_prices.len()), Style::default().fg(t.text)),
         ]));
     }
+
+    // Timing breakdown.
+    let total = result.build_time + result.solve_time + result.extract_time;
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled("  Timings", Style::default().fg(t.muted).add_modifier(Modifier::BOLD))));
+    lines.push(Line::from(Span::styled(format!("  {RULE_30}"), Style::default().fg(t.muted))));
+    lines.push(Line::from(vec![
+        Span::styled("  Build:         ", Style::default().fg(t.muted)),
+        Span::styled(format!("{:.3}s", result.build_time.as_secs_f64()), Style::default().fg(t.accent)),
+    ]));
+    lines.push(Line::from(vec![
+        Span::styled("  Solve:         ", Style::default().fg(t.muted)),
+        Span::styled(format!("{:.3}s", result.solve_time.as_secs_f64()), Style::default().fg(t.accent)),
+    ]));
+    lines.push(Line::from(vec![
+        Span::styled("  Extract:       ", Style::default().fg(t.muted)),
+        Span::styled(format!("{:.3}s", result.extract_time.as_secs_f64()), Style::default().fg(t.accent)),
+    ]));
+    lines.push(Line::from(vec![
+        Span::styled("  Total:         ", Style::default().fg(t.muted)),
+        Span::styled(format!("{:.3}s", total.as_secs_f64()), Style::default().fg(t.text).add_modifier(Modifier::BOLD)),
+    ]));
 }
 
 fn build_variables_tab(lines: &mut Vec<Line<'static>>, result: &SolveResult) {
@@ -746,15 +763,6 @@ fn build_diff_summary_metrics(lines: &mut Vec<Line<'static>>, diff: &SolveDiffRe
     objective_spans.extend(delta_spans(r1.objective_value, r2.objective_value, 0.0));
     lines.push(Line::from(objective_spans));
 
-    // Time.
-    let time1 = format!("{:.3}s", r1.solve_time.as_secs_f64());
-    let time2 = format!("{:.3}s", r2.solve_time.as_secs_f64());
-    lines.push(Line::from(vec![
-        Span::styled(format!("  {:<label_w$}", "Time:"), Style::default().fg(t.muted)),
-        Span::styled(format!("{time1:<col_w$}"), Style::default().fg(t.accent)),
-        Span::styled(format!("{time2:<col_w$}"), Style::default().fg(t.accent)),
-    ]));
-
     // Variable counts.
     let variable_count1 = r1.variables.len();
     let variable_count2 = r2.variables.len();
@@ -789,6 +797,41 @@ fn build_diff_summary_metrics(lines: &mut Vec<Line<'static>>, diff: &SolveDiffRe
             Span::styled(format!("{:<col_w$}", r2.skipped_sos), Style::default().fg(t.text)),
         ]));
     }
+
+    // Timing breakdown.
+    let total1 = r1.build_time + r1.solve_time + r1.extract_time;
+    let total2 = r2.build_time + r2.solve_time + r2.extract_time;
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled("  Timings", Style::default().fg(t.muted).add_modifier(Modifier::BOLD))));
+    lines.push(Line::from(Span::styled(format!("  {RULE_60}"), Style::default().fg(t.muted))));
+
+    for (label, d1, d2) in
+        [("Build:", r1.build_time, r2.build_time), ("Solve:", r1.solve_time, r2.solve_time), ("Extract:", r1.extract_time, r2.extract_time)]
+    {
+        lines.push(Line::from(vec![
+            Span::styled(format!("  {:<label_w$}", label), Style::default().fg(t.muted)),
+            Span::styled(format!("{:<col_w$}", format!("{:.3}s", d1.as_secs_f64())), Style::default().fg(t.accent)),
+            Span::styled(format!("{:<col_w$}", format!("{:.3}s", d2.as_secs_f64())), Style::default().fg(t.accent)),
+        ]));
+    }
+
+    lines.push(Line::from(vec![
+        Span::styled(format!("  {:<label_w$}", "Total:"), Style::default().fg(t.muted)),
+        Span::styled(
+            format!("{:<col_w$}", format!("{:.3}s", total1.as_secs_f64())),
+            Style::default().fg(t.text).add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(
+            format!("{:<col_w$}", format!("{:.3}s", total2.as_secs_f64())),
+            Style::default().fg(t.text).add_modifier(Modifier::BOLD),
+        ),
+    ]));
+
+    lines.push(Line::from(Span::styled(format!("  {RULE_60}"), Style::default().fg(t.muted))));
+    lines.push(Line::from(vec![
+        Span::styled(format!("  {:<label_w$}", "Diff:"), Style::default().fg(t.muted)),
+        Span::styled(format!("{:.3}s", diff.diff_time.as_secs_f64()), Style::default().fg(t.accent)),
+    ]));
 }
 
 fn build_diff_summary_tab(lines: &mut Vec<Line<'static>>, diff: &SolveDiffResult) {

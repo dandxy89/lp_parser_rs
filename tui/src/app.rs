@@ -619,7 +619,9 @@ impl App {
             let r2 = *result2.take().expect("checked Some above");
             let label1 = file1.clone();
             let label2 = file2.clone();
-            let diff = crate::solver::diff_results(label1, label2, r1, r2, self.solver.view.delta_threshold);
+            let diff_start = Instant::now();
+            let mut diff = crate::solver::diff_results(label1, label2, r1, r2, self.solver.view.delta_threshold);
+            diff.diff_time = diff_start.elapsed();
             self.solver.render_cache = crate::widgets::solve::build_diff_solve_cache(&diff);
             self.solver.state = SolveState::DoneBoth(Box::new(diff));
             self.solver.view = SolveViewState { diff_only: true, ..SolveViewState::default() };
@@ -637,8 +639,10 @@ impl App {
             return;
         };
         let threshold = self.solver.view.delta_threshold;
-        let new_diff =
+        let diff_start = Instant::now();
+        let mut new_diff =
             crate::solver::diff_results(old_diff.file1_label, old_diff.file2_label, old_diff.result1, old_diff.result2, threshold);
+        new_diff.diff_time = diff_start.elapsed();
         self.solver.render_cache = crate::widgets::solve::build_diff_solve_cache(&new_diff);
         self.solver.state = SolveState::DoneBoth(Box::new(new_diff));
     }

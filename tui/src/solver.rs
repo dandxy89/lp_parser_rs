@@ -25,8 +25,12 @@ pub struct SolveResult {
     pub shadow_prices: Vec<(String, f64)>,
     /// Row activity values per constraint.
     pub row_values: Vec<(String, f64)>,
+    /// Wall-clock time to build the HiGHS `RowProblem` from `LpProblem`.
+    pub build_time: std::time::Duration,
     /// Wall-clock solve time.
     pub solve_time: std::time::Duration,
+    /// Wall-clock time to extract the solution into `SolveResult`.
+    pub extract_time: std::time::Duration,
     /// Captured solver log output (presolve info, iteration counts, etc.).
     pub solver_log: String,
     /// Number of SOS constraints that were skipped (not supported by `RowProblem`).
@@ -55,6 +59,8 @@ pub struct SolveDiffResult {
     pub variable_counts: DiffCounts,
     /// Pre-computed constraint diff counts (computed once in `diff_results`).
     pub constraint_counts: DiffCounts,
+    /// Wall-clock time to compute the diff between the two results.
+    pub diff_time: std::time::Duration,
 }
 
 /// Zero-copy name reference into a [`SolveResult`]'s variable or row-value vec,
@@ -126,7 +132,17 @@ pub fn diff_results(
     let constraint_diff = diff_constraints(&result1, &result2, threshold);
     let variable_counts = count_var_diffs(&variable_diff);
     let constraint_counts = count_constraint_diffs_from_rows(&constraint_diff);
-    SolveDiffResult { file1_label, file2_label, result1, result2, variable_diff, constraint_diff, variable_counts, constraint_counts }
+    SolveDiffResult {
+        file1_label,
+        file2_label,
+        result1,
+        result2,
+        variable_diff,
+        constraint_diff,
+        variable_counts,
+        constraint_counts,
+        diff_time: std::time::Duration::ZERO, // filled in by caller when timed externally
+    }
 }
 
 /// Count variable-level diff statistics in a single pass.
@@ -407,6 +423,7 @@ fn build_highs_model(problem: &LpProblem) -> BuiltModel {
 fn extract_solution(
     metadata: &SolveMetadata,
     solved: &highs::SolvedModel,
+    build_time: std::time::Duration,
     solve_time: std::time::Duration,
     solver_log: String,
 ) -> SolveResult {
@@ -454,7 +471,9 @@ fn extract_solution(
         reduced_costs,
         shadow_prices,
         row_values,
+        build_time,
         solve_time,
+        extract_time: std::time::Duration::ZERO, // filled in by caller
         solver_log,
         skipped_sos: metadata.skipped_sos,
     }
@@ -464,7 +483,9 @@ fn extract_solution(
 pub fn solve_problem(problem: &LpProblem) -> Result<SolveResult, String> {
     debug_assert!(!problem.variables.is_empty(), "cannot solve a problem with no variables");
 
+    let build_start = Instant::now();
     let model = build_highs_model(problem);
+    let build_time = build_start.elapsed();
 
     let log_file = tempfile::NamedTempFile::new().map_err(|e| format!("failed to create solver log temp file: {e}"))?;
     let log_path = log_file.path().to_owned();
@@ -478,13 +499,17 @@ pub fn solve_problem(problem: &LpProblem) -> Result<SolveResult, String> {
     highs_model.set_option("output_flag", true);
     highs_model.set_option("log_file", log_path.to_str().ok_or_else(|| "temp file path is not valid UTF-8".to_owned())?);
 
-    let start = Instant::now();
+    let solve_start = Instant::now();
     let solved = highs_model.solve();
-    let solve_time = start.elapsed();
+    let solve_time = solve_start.elapsed();
 
     let solver_log = std::fs::read_to_string(&log_path).map_err(|e| format!("failed to read solver log: {e}"))?;
 
-    Ok(extract_solution(&metadata, &solved, solve_time, solver_log))
+    let extract_start = Instant::now();
+    let mut result = extract_solution(&metadata, &solved, build_time, solve_time, solver_log);
+    result.extract_time = extract_start.elapsed();
+
+    Ok(result)
 }
 
 /// Write an `Option<f64>` into a reusable string buffer (cleared first), leaving it empty for `None`.
