@@ -1,5 +1,25 @@
 # Changelog
 
+## [3.3.1](https://github.com/dandxy89/lp_parser_rs/compare/parse_lp-v3.3.0...parse_lp-v3.3.1) (2026-02-24)
+
+
+### Continuous Integration
+
+* Fix pipeline sync ([cb8d0bd](https://github.com/dandxy89/lp_parser_rs/commit/cb8d0bda41be746647a7628ab3071f6332b67a4e))
+* fix release-please config paths and changelog locations ([5808e72](https://github.com/dandxy89/lp_parser_rs/commit/5808e72bceb4aefd1c0cbe69a4902ebf42dcabc3))
+* trigger release-please after tag fix ([bb19a1c](https://github.com/dandxy89/lp_parser_rs/commit/bb19a1cdbac44a957ff8ce07ebbe5e5f729eb2c1))
+
+
+### Miscellaneous Chores
+
+* release main ([#164](https://github.com/dandxy89/lp_parser_rs/issues/164)) ([8a8e267](https://github.com/dandxy89/lp_parser_rs/commit/8a8e2671887a8983ed009f0862fbe56784e1569f))
+
+
+### Styles
+
+* Formatting ([4d3ab97](https://github.com/dandxy89/lp_parser_rs/commit/4d3ab97e560eb04c921ea057da2bfb409c60127f))
+* Remove inline imports and qualified imports ([42c20a2](https://github.com/dandxy89/lp_parser_rs/commit/42c20a25b412b6fded358fdca70db4983db6f19b))
+
 ## [0.2.0](https://github.com/dandxy89/lp_parser_rs/compare/parse_lp-v0.2.0...parse_lp-v0.2.0) (2025-01-28)
 
 
