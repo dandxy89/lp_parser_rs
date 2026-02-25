@@ -122,6 +122,10 @@ pub struct NameListParams<'a> {
 }
 
 /// Draw a compact name list for a section's entries in the sidebar.
+///
+/// Uses virtualised rendering: only `ListItem`s for the visible window are
+/// allocated, keeping the per-frame cost at O(visible_height) instead of
+/// O(total_items).  This is critical when the list contains 1M+ entries.
 fn draw_entry_name_list(frame: &mut Frame, area: Rect, params: &NameListParams<'_>, state: &mut ratatui::widgets::ListState) {
     debug_assert_eq!(
         params.filtered_indices.len(),
@@ -131,26 +135,58 @@ fn draw_entry_name_list(frame: &mut Frame, area: Rect, params: &NameListParams<'
     );
 
     let t = theme();
+    let total_items = params.cached_lines.len();
+    // Inner height excludes the top and bottom border rows.
+    let inner_height = area.height.saturating_sub(2) as usize;
 
-    // Convert cached `Line<'static>` to `ListItem` — cheap wrapping, no allocation.
-    let items: Vec<ListItem> = params.cached_lines.iter().map(|line| ListItem::new(line.clone())).collect();
-
-    let selected_position = state.selected().map_or(0, |selection| selection + 1);
-    let filtered_len = params.filtered_indices.len();
-    let title = format!(" {selected_position}/{filtered_len} {} ({} total) ", params.section_label, params.total_count);
-
+    let selected_position = state.selected().map_or(0, |s| s + 1);
+    let title = format!(" {selected_position}/{total_items} {} ({} total) ", params.section_label, params.total_count);
     let block = Block::default().borders(Borders::ALL).border_style(params.border_style).title(title);
+
+    if total_items == 0 || inner_height == 0 {
+        frame.render_widget(block, area);
+        return;
+    }
+
+    // Clamp selected within bounds (mirrors what List does internally).
+    if state.selected().is_some_and(|sel| sel >= total_items) {
+        state.select(Some(total_items.saturating_sub(1)));
+    }
+
+    // --- Compute the visible window, replicating List's scroll-to-selection. ---
+    let selected = state.selected().unwrap_or(0);
+    let mut offset = state.offset();
+
+    if selected < offset {
+        offset = selected;
+    } else if selected >= offset + inner_height {
+        offset = selected - inner_height + 1;
+    }
+    // Clamp so the window never extends past the end of the list.
+    offset = offset.min(total_items.saturating_sub(inner_height));
+
+    // Persist the computed offset back into the real state so that
+    // subsequent frames / input handlers see a consistent value.
+    *state.offset_mut() = offset;
+
+    // Build ListItems for only the visible slice
+    let window_end = (offset + inner_height).min(total_items);
+    let visible_lines = &params.cached_lines[offset..window_end];
+    let items: Vec<ListItem> = visible_lines.iter().map(|line| ListItem::new(line.clone())).collect();
+
+    // Temporary state mapped to the slice coordinate space.
+    let mut slice_state = ratatui::widgets::ListState::default().with_offset(0).with_selected(state.selected().map(|s| s - offset));
 
     let list = List::new(items)
         .block(block)
         .highlight_style(Style::default().bg(t.highlight_bg).add_modifier(Modifier::BOLD))
         .highlight_symbol("\u{25b6} ");
 
-    frame.render_stateful_widget(list, area, state);
+    frame.render_stateful_widget(list, area, &mut slice_state);
 
-    // Scrollbar for long lists.
-    if params.filtered_indices.len() > area.height.saturating_sub(2) as usize {
-        let mut scrollbar_state = ScrollbarState::new(params.filtered_indices.len()).position(state.selected().unwrap_or(0));
+    // Scrollbar — uses real position within the full list.
+    if total_items > inner_height {
+        let mut scrollbar_state = ScrollbarState::new(total_items).position(selected);
         frame.render_stateful_widget(
             Scrollbar::new(ScrollbarOrientation::VerticalRight).begin_symbol(None).end_symbol(None),
             area,
