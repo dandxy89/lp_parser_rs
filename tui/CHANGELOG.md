@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.1.1](https://github.com/dandxy89/lp_parser_rs/compare/lp_diff-v3.1.0...lp_diff-v3.1.1) (2026-02-24)
+
+
+### Bug Fixes
+
+* Show solver timings ([0ac44ea](https://github.com/dandxy89/lp_parser_rs/commit/0ac44eac7b606040d3ac07fe4327ee52d69b4dd2))
+
+
+### Code Refactoring
+
+* Make tui theme const ([b58821b](https://github.com/dandxy89/lp_parser_rs/commit/b58821b8bfa8179604e5af9e4fabcff5e9496846))
+
 ## [3.1.0](https://github.com/dandxy89/lp_parser_rs/compare/lp_diff-v3.0.2...lp_diff-v3.1.0) (2026-02-24)
 
 
