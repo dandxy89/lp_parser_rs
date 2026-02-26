@@ -228,6 +228,8 @@ pub enum ConstraintDiffDetail {
         rhs_change: Option<(f64, f64)>,
         old_rhs: f64,
         new_rhs: f64,
+        /// Operator from the old (file 1) side; equals the new side when `operator_change` is `None`.
+        old_operator: ComparisonOp,
     },
     /// Both versions are SOS constraints.
     Sos {
@@ -235,6 +237,8 @@ pub enum ConstraintDiffDetail {
         new_weights: Vec<ResolvedCoefficient>,
         weight_changes: Vec<CoefficientChange>,
         type_change: Option<(SOSType, SOSType)>,
+        /// SOS type from the old (file 1) side; equals the new side when `type_change` is `None`.
+        old_sos_type: SOSType,
     },
     /// Constraint changed from Standard to SOS or vice versa.
     TypeChanged { old_summary: String, new_summary: String },
@@ -495,6 +499,7 @@ fn diff_standard_constraints(
         rhs_change,
         old_rhs,
         new_rhs,
+        old_operator: *old_operator,
     })
 }
 
@@ -513,7 +518,13 @@ fn diff_sos_constraints(
         return None;
     }
 
-    Some(ConstraintDiffDetail::Sos { old_weights: old_weights.to_vec(), new_weights: new_weights.to_vec(), weight_changes, type_change })
+    Some(ConstraintDiffDetail::Sos {
+        old_weights: old_weights.to_vec(),
+        new_weights: new_weights.to_vec(),
+        weight_changes,
+        type_change,
+        old_sos_type: *old_type,
+    })
 }
 
 /// Compute the detail for two constraints that both exist, returning `None` if unchanged.

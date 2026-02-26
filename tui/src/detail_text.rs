@@ -12,7 +12,7 @@ use crate::diff_model::{
     ResolvedConstraint, VariableDiffEntry,
 };
 use crate::solver::{SolveDiffResult, SolveResult};
-use crate::state::Section;
+use crate::state::{Section, Side};
 use crate::widgets::detail::{fmt_bound, variable_bounds};
 
 /// Pre-computed horizontal rules to avoid heap allocations from `repeat()`.
@@ -57,6 +57,157 @@ pub fn render_detail_plain(app: &App) -> Option<String> {
                 Section::Summary => unreachable!("handled above"),
             }
         }
+    }
+}
+
+/// Render a single side (old or new) of the selected entry as plain text.
+///
+/// Returns `None` if the active section is Summary, no entry is selected,
+/// or the requested side does not exist for the entry (e.g. `Old` on an Added entry).
+pub fn render_side_plain(app: &App, side: Side) -> Option<String> {
+    let entry_index = app.selected_entry_index()?;
+    match app.active_section {
+        Section::Summary => None,
+        Section::Variables => {
+            let entry = app.report.variables.entries.get(entry_index)?;
+            render_variable_side(entry, side)
+        }
+        Section::Constraints => {
+            let entry = app.report.constraints.entries.get(entry_index)?;
+            render_constraint_side(entry, side, &app.report.interner)
+        }
+        Section::Objectives => {
+            let entry = app.report.objectives.entries.get(entry_index)?;
+            render_objective_side(entry, side, &app.report.interner)
+        }
+    }
+}
+
+/// Render a single side of a variable entry.
+fn render_variable_side(entry: &VariableDiffEntry, side: Side) -> Option<String> {
+    let variable_type = match side {
+        Side::Old => entry.old_type.as_ref()?,
+        Side::New => entry.new_type.as_ref()?,
+    };
+    let mut out = String::new();
+    w!(out, "{}", entry.name);
+    write_variable_type_info(&mut out, variable_type);
+    Some(out)
+}
+
+/// Render a single side of a constraint entry.
+fn render_constraint_side(entry: &ConstraintDiffEntry, side: Side, interner: &NameInterner) -> Option<String> {
+    let mut out = String::new();
+    match &entry.detail {
+        ConstraintDiffDetail::Standard { old_coefficients, new_coefficients, old_rhs, new_rhs, operator_change, old_operator, .. } => {
+            let coefficients = match side {
+                Side::Old => old_coefficients,
+                Side::New => new_coefficients,
+            };
+            // For Added entries old_coefficients is empty; for Removed entries new_coefficients is empty.
+            if coefficients.is_empty() {
+                return None;
+            }
+            let rhs = match side {
+                Side::Old => old_rhs,
+                Side::New => new_rhs,
+            };
+            let operator = match operator_change {
+                Some((old_op, new_op)) => match side {
+                    Side::Old => old_op,
+                    Side::New => new_op,
+                },
+                None => old_operator,
+            };
+            write_lp_expression(&mut out, &entry.name, coefficients, Some((*operator, *rhs)), interner);
+        }
+        ConstraintDiffDetail::Sos { old_weights, new_weights, type_change, old_sos_type, .. } => {
+            let weights = match side {
+                Side::Old => old_weights,
+                Side::New => new_weights,
+            };
+            if weights.is_empty() {
+                return None;
+            }
+            let sos_type = match type_change {
+                Some((old_type, new_type)) => match side {
+                    Side::Old => old_type,
+                    Side::New => new_type,
+                },
+                None => old_sos_type,
+            };
+            w!(out, "{}: {} ::", entry.name, sos_type);
+            for weight in weights {
+                w!(out, "  {} : {}", interner.resolve(weight.name), weight.value);
+            }
+        }
+        ConstraintDiffDetail::TypeChanged { old_summary, new_summary } => {
+            let summary = match side {
+                Side::Old => old_summary,
+                Side::New => new_summary,
+            };
+            w!(out, "{}: {}", entry.name, summary);
+        }
+        ConstraintDiffDetail::AddedOrRemoved(constraint) => {
+            // Only one side exists; check that the requested side matches.
+            match (side, entry.kind) {
+                (Side::Old, DiffKind::Removed) | (Side::New, DiffKind::Added) => {}
+                _ => return None,
+            }
+            match constraint {
+                ResolvedConstraint::Standard { coefficients, operator, rhs } => {
+                    write_lp_expression(&mut out, &entry.name, coefficients, Some((*operator, *rhs)), interner);
+                }
+                ResolvedConstraint::Sos { sos_type, weights } => {
+                    w!(out, "{}: {} ::", entry.name, sos_type);
+                    for weight in weights {
+                        w!(out, "  {} : {}", interner.resolve(weight.name), weight.value);
+                    }
+                }
+            }
+        }
+    }
+    Some(out)
+}
+
+/// Render a single side of an objective entry.
+fn render_objective_side(entry: &ObjectiveDiffEntry, side: Side, interner: &NameInterner) -> Option<String> {
+    let coefficients = match side {
+        Side::Old => &entry.old_coefficients,
+        Side::New => &entry.new_coefficients,
+    };
+    if coefficients.is_empty() {
+        return None;
+    }
+    let mut out = String::new();
+    write_lp_expression(&mut out, &entry.name, coefficients, None, interner);
+    Some(out)
+}
+
+/// Write an LP-style expression: `name: coeff1 x1 + coeff2 x2 [operator rhs]`.
+fn write_lp_expression(
+    out: &mut String,
+    name: &str,
+    coefficients: &[ResolvedCoefficient],
+    operator_rhs: Option<(lp_parser_rs::model::ComparisonOp, f64)>,
+    interner: &NameInterner,
+) {
+    debug_assert!(!coefficients.is_empty(), "write_lp_expression called with empty coefficients");
+    write!(out, "{name}:").expect("writing to String is infallible");
+    for (i, coeff) in coefficients.iter().enumerate() {
+        let var_name = interner.resolve(coeff.name);
+        if i == 0 {
+            write!(out, " {} {var_name}", coeff.value).expect("writing to String is infallible");
+        } else if coeff.value < 0.0 {
+            write!(out, " - {} {var_name}", -coeff.value).expect("writing to String is infallible");
+        } else {
+            write!(out, " + {} {var_name}", coeff.value).expect("writing to String is infallible");
+        }
+    }
+    if let Some((operator, rhs)) = operator_rhs {
+        w!(out, " {operator} {rhs}");
+    } else {
+        w!(out);
     }
 }
 
@@ -340,6 +491,7 @@ fn render_constraint_plain(entry: &ConstraintDiffEntry, cached_rows: Option<&[Co
             rhs_change,
             old_rhs,
             new_rhs,
+            ..
         } => {
             if let Some((old_op, new_op)) = operator_change {
                 w!(out, "  Operator: {old_op}  \u{2192}  {new_op}");
@@ -353,7 +505,7 @@ fn render_constraint_plain(entry: &ConstraintDiffEntry, cached_rows: Option<&[Co
             w!(out, "  Coefficients:");
             write_coeff_changes(&mut out, coeff_changes, old_coefficients, new_coefficients, cached_rows, interner);
         }
-        ConstraintDiffDetail::Sos { old_weights, new_weights, weight_changes, type_change } => {
+        ConstraintDiffDetail::Sos { old_weights, new_weights, weight_changes, type_change, .. } => {
             if let Some((old_type, new_type)) = type_change {
                 w!(out, "  SOS Type: {old_type}  \u{2192}  {new_type}");
             }

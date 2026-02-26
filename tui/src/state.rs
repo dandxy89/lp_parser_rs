@@ -362,3 +362,21 @@ impl SectionViewState {
         (&self.filtered_indices, &self.cached_lines, &mut self.list_state)
     }
 }
+
+/// Pending yank state for multi-key chords (`yo`, `yn`, `yy`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PendingYank {
+    /// No pending yank operation.
+    None,
+    /// `y` was pressed; waiting for target key (`o`, `n`, or `y`).
+    WaitingForTarget,
+}
+
+/// Which side of a diff entry to operate on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Side {
+    /// The old (file 1) version.
+    Old,
+    /// The new (file 2) version.
+    New,
+}

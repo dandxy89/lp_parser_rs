@@ -14,7 +14,7 @@ use crate::diff_model::{DiffEntry, DiffKind, DiffSummary, LpDiffReport};
 use crate::search::{self, CompiledSearch, SearchMode};
 use crate::solver::SolveResult;
 pub use crate::state::{DiffFilter, Focus, SearchResult, Section, SectionViewState};
-use crate::state::{JumpEntry, JumpList, SolveState, SolveViewState};
+use crate::state::{JumpEntry, JumpList, PendingYank, Side, SolveState, SolveViewState};
 
 /// State for the telescope-style search pop-up overlay.
 pub struct SearchPopupState {
@@ -139,6 +139,9 @@ pub struct App {
     /// Yank (clipboard) flash state.
     pub yank: YankState,
 
+    /// Pending yank chord state (`y` → waiting for `o`, `n`, or `y`).
+    pub pending_yank: PendingYank,
+
     /// Telescope-style search pop-up state.
     pub search_popup: SearchPopupState,
 
@@ -256,6 +259,7 @@ impl App {
                 detail_content_lines: 0,
             },
             yank: YankState { flash: None, message: String::new() },
+            pending_yank: PendingYank::None,
             search_popup: SearchPopupState {
                 visible: false,
                 query: String::new(),
@@ -480,6 +484,28 @@ impl App {
         let Some(name) = self.selected_entry_name() else { return };
         let name = name.to_owned();
         self.set_yank_flash(&format!("Yanked: {name}"), &name);
+    }
+
+    /// Yank a single side (old or new) of the selected entry to the system clipboard.
+    pub fn yank_side(&mut self, side: Side) {
+        match crate::detail_text::render_side_plain(self, side) {
+            Some(text) => {
+                let side_label = match side {
+                    Side::Old => "old",
+                    Side::New => "new",
+                };
+                let name = self.selected_entry_name().unwrap_or("entry").to_owned();
+                self.set_yank_flash(&format!("Yanked {side_label}: {name}"), &text);
+            }
+            None => {
+                let msg = match side {
+                    Side::Old => "No old version",
+                    Side::New => "No new version",
+                };
+                msg.clone_into(&mut self.yank.message);
+                self.yank.flash = Some(Instant::now());
+            }
+        }
     }
 
     /// Yank the full detail panel content as plain text to the system clipboard.

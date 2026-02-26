@@ -5,7 +5,7 @@ use lp_parser_rs::problem::LpProblem;
 
 use crate::app::App;
 use crate::detail_text::{format_solve_diff_result, format_solve_result};
-use crate::state::{DiffFilter, Focus, Section, SolveState, SolveTab, SolveViewState};
+use crate::state::{DiffFilter, Focus, PendingYank, Section, Side, SolveState, SolveTab, SolveViewState};
 
 impl App {
     pub fn handle_key(&mut self, key: KeyEvent) {
@@ -74,6 +74,26 @@ impl App {
 
     /// Handle a key event in normal (non-search) mode.
     fn handle_normal_key(&mut self, key: KeyEvent) {
+        // Handle pending yank chord first.
+        if self.pending_yank == PendingYank::WaitingForTarget {
+            self.pending_yank = PendingYank::None;
+            match key.code {
+                KeyCode::Char('o') => {
+                    self.yank_side(Side::Old);
+                    return;
+                }
+                KeyCode::Char('n') => {
+                    self.yank_side(Side::New);
+                    return;
+                }
+                KeyCode::Char('y') => {
+                    self.yank_name();
+                    return;
+                }
+                _ => {} // fall through to process the key normally
+            }
+        }
+
         if key.modifiers.contains(KeyModifiers::CONTROL) && self.handle_ctrl_key(key) {
             return;
         }
@@ -110,8 +130,8 @@ impl App {
 
             KeyCode::Char('?') => self.show_help = !self.show_help,
 
-            // Yank (clipboard).
-            KeyCode::Char('y') => self.yank_name(),
+            // Yank (clipboard): `y` begins a chord, `Y` yanks detail immediately.
+            KeyCode::Char('y') => self.pending_yank = PendingYank::WaitingForTarget,
             KeyCode::Char('Y') => self.yank_detail(),
 
             // Open the solver file picker.

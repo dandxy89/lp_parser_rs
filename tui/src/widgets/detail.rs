@@ -200,6 +200,7 @@ pub fn render_constraint_detail(
             rhs_change,
             old_rhs,
             new_rhs,
+            ..
         } => {
             // Operator change.
             if let Some((old_op, new_op)) = operator_change {
@@ -248,7 +249,7 @@ pub fn render_constraint_detail(
             render_coeff_changes(&mut lines, coeff_changes, old_coefficients, new_coefficients, cached_rows, Some(visible), interner);
         }
 
-        ConstraintDiffDetail::Sos { old_weights, new_weights, weight_changes, type_change } => {
+        ConstraintDiffDetail::Sos { old_weights, new_weights, weight_changes, type_change, .. } => {
             if let Some((old_type, new_type)) = type_change {
                 lines.push(Line::from(vec![
                     Span::styled("  SOS Type: ", muted()),
