@@ -69,6 +69,14 @@ Press `?` at any time to open the key bindings pop up.
 
 Modified standard constraints are displayed in a two-column layout showing old and new coefficients side by side. Added coefficients are highlighted in green, removed in red, and modified in yellow. Unchanged coefficients appear in grey.
 
+### Raw Text View
+
+Press `r` in the detail panel to toggle between the parsed diff view and a side-by-side raw text view showing the actual LP file lines for the selected constraint or objective. The left column shows the file 1 text and the right column shows the file 2 text.
+
+### CSV Export
+
+Press `w` to export the full diff report as a CSV file (`lp_diff_report_<timestamp>.csv`) in the current directory. The CSV includes all sections with columns for section, name, change type, and detail.
+
 ### Key Bindings
 
 **Navigation**
@@ -127,7 +135,9 @@ Search mode prefixes (type in the pop-up input):
 
 | Key | Action |
 |-----|--------|
-| `y` | Yank selected entry name to clipboard |
+| `yy` | Yank selected entry name to clipboard |
+| `yo` | Yank old (file 1) version of entry to clipboard |
+| `yn` | Yank new (file 2) version of entry to clipboard |
 | `Y` | Yank full detail panel content to clipboard |
 
 **Solver**
@@ -144,10 +154,17 @@ Search mode prefixes (type in the pop-up input):
 | `y` | Yank solve results to clipboard |
 | `Esc` | Close solver overlay |
 
+**Export**
+
+| Key | Action |
+|-----|--------|
+| `w` | Export full diff report as CSV |
+
 **Other**
 
 | Key | Action |
 |-----|--------|
+| `r` | Toggle raw text side-by-side view (constraints/objectives) |
 | `?` | Toggle help pop-up |
 | `q` | Quit |
 | `Ctrl+C` | Force quit |
