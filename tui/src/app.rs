@@ -493,6 +493,28 @@ impl App {
         self.set_yank_flash(&format!("Yanked detail: {label}"), &text);
     }
 
+    /// Export the full diff report as a CSV file in the current working directory.
+    pub fn export_csv(&mut self) {
+        let dir = match std::env::current_dir() {
+            Ok(d) => d,
+            Err(e) => {
+                self.yank.message = format!("CSV export failed: {e}");
+                self.yank.flash = Some(Instant::now());
+                return;
+            }
+        };
+        match crate::export::write_diff_csv(&self.report, &dir) {
+            Ok(filename) => {
+                self.yank.message = format!("Wrote {filename}");
+                self.yank.flash = Some(Instant::now());
+            }
+            Err(e) => {
+                self.yank.message = format!("CSV export failed: {e}");
+                self.yank.flash = Some(Instant::now());
+            }
+        }
+    }
+
     /// Return the name of an entry given section and entry index.
     ///
     /// Returns `None` if `section` is `Summary` or the index is out of bounds.

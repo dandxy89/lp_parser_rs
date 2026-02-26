@@ -34,11 +34,11 @@ include = ["README.md", "LICENSE-APACHE", "parse_lp/py.typed", "parse_lp/*.pyi"]
 
 [dependency-groups]
 dev = [
-    "basedpyright==1.38.0",
+    "basedpyright==1.38.2",
     "pip==26.0.1",
     "pytest",
-    "ruff==0.15.0",
-    "ty==0.0.16",
+    "ruff==0.15.4",
+    "ty==0.0.19",
     "wheel",
 ]
 

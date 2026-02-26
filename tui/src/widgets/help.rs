@@ -25,6 +25,7 @@ const HELP_TEXT: &[&str] = &[
     "  Ctrl-u  Half page ↑                     ─────────",
     "  Ctrl-f  Full page ↓                     y   Yank name",
     "  Ctrl-b  Full page ↑                     Y   Yank detail",
+    "                                          w   Export CSV",
     "  Ctrl-o  Jump back",
     "  Ctrl-i  Jump forward",
     "  S       Solve LP file",
@@ -64,7 +65,7 @@ const HELP_TEXT: &[&str] = &[
 ];
 
 const POPUP_WIDTH: u16 = 60;
-const POPUP_HEIGHT: u16 = 50;
+const POPUP_HEIGHT: u16 = 51;
 
 /// Pre-built help text lines, cached to avoid per-frame allocation.
 static HELP_LINES: LazyLock<Vec<Line<'static>>> = LazyLock::new(|| {

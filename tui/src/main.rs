@@ -4,6 +4,7 @@ mod detail_model;
 mod detail_text;
 mod diff_model;
 mod event;
+mod export;
 mod input;
 mod line_index;
 mod parse;
