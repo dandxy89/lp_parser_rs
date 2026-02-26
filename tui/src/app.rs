@@ -485,7 +485,11 @@ impl App {
     /// Yank the full detail panel content as plain text to the system clipboard.
     pub fn yank_detail(&mut self) {
         let Some(text) = crate::detail_text::render_detail_plain(self) else { return };
-        let label = self.selected_entry_name().unwrap_or("detail").to_owned();
+        let label = if self.active_section == Section::Summary {
+            "summary".to_owned()
+        } else {
+            self.selected_entry_name().unwrap_or("detail").to_owned()
+        };
         self.set_yank_flash(&format!("Yanked detail: {label}"), &text);
     }
 

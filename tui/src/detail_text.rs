@@ -2,13 +2,14 @@
 
 use std::fmt::Write;
 
+use lp_parser_rs::analysis::ProblemAnalysis;
 use lp_parser_rs::interner::NameInterner;
 
 use crate::app::App;
 use crate::detail_model::{CoefficientRow, build_coeff_rows};
 use crate::diff_model::{
-    CoefficientChange, ConstraintDiffDetail, ConstraintDiffEntry, DiffKind, ObjectiveDiffEntry, ResolvedCoefficient, ResolvedConstraint,
-    VariableDiffEntry,
+    CoefficientChange, ConstraintDiffDetail, ConstraintDiffEntry, DiffCounts, DiffKind, ObjectiveDiffEntry, ResolvedCoefficient,
+    ResolvedConstraint, VariableDiffEntry,
 };
 use crate::solver::{SolveDiffResult, SolveResult};
 use crate::state::Section;
@@ -33,26 +34,219 @@ macro_rules! w {
 }
 
 /// Render the currently selected detail panel as plain text.
-/// Returns `None` if no entry is selected or the section is Summary.
+/// Returns `None` if no entry is selected (except for Summary, which has no entry).
 pub fn render_detail_plain(app: &App) -> Option<String> {
-    let entry_index = app.selected_entry_index()?;
-    let cached_rows = app.cached_coeff_rows();
-
     match app.active_section {
-        Section::Variables => {
-            let entry = app.report.variables.entries.get(entry_index)?;
-            Some(render_variable_plain(entry))
+        Section::Summary => Some(render_summary_plain(app)),
+        _ => {
+            let entry_index = app.selected_entry_index()?;
+            let cached_rows = app.cached_coeff_rows();
+            match app.active_section {
+                Section::Variables => {
+                    let entry = app.report.variables.entries.get(entry_index)?;
+                    Some(render_variable_plain(entry))
+                }
+                Section::Constraints => {
+                    let entry = app.report.constraints.entries.get(entry_index)?;
+                    Some(render_constraint_plain(entry, cached_rows, &app.report.interner))
+                }
+                Section::Objectives => {
+                    let entry = app.report.objectives.entries.get(entry_index)?;
+                    Some(render_objective_plain(entry, cached_rows, &app.report.interner))
+                }
+                Section::Summary => unreachable!("handled above"),
+            }
         }
-        Section::Constraints => {
-            let entry = app.report.constraints.entries.get(entry_index)?;
-            Some(render_constraint_plain(entry, cached_rows, &app.report.interner))
-        }
-        Section::Objectives => {
-            let entry = app.report.objectives.entries.get(entry_index)?;
-            Some(render_objective_plain(entry, cached_rows, &app.report.interner))
-        }
-        Section::Summary => None,
     }
+}
+
+/// Render the summary panel as plain text for clipboard yanking.
+///
+/// Mirrors the visual summary widget: file paths, name/sense changes,
+/// per-section change-count table, totals, and comparative analysis.
+pub fn render_summary_plain(app: &App) -> String {
+    let report = &app.report;
+    let summary = &app.cached_summary;
+    let a1 = &report.analysis1;
+    let a2 = &report.analysis2;
+
+    let mut out = String::with_capacity(1024);
+
+    // File header
+    w!(out, "  {}  \u{2192}  {}", report.file1, report.file2);
+
+    if let Some((ref old, ref new)) = report.name_changed {
+        let old_name = old.as_deref().unwrap_or("(unnamed)");
+        let new_name = new.as_deref().unwrap_or("(unnamed)");
+        w!(out, "  Name:   \"{old_name}\"  \u{2192}  \"{new_name}\"");
+    }
+    if let Some((ref old_sense, ref new_sense)) = report.sense_changed {
+        w!(out, "  Sense:  {old_sense}  \u{2192}  {new_sense}");
+    }
+    w!(out);
+
+    // Change counts table
+    w!(out, "  {:<14}{:>7}{:>9}{:>12}{:>9}", "Section", "Added", "Removed", "Modified", "Total");
+    for (label, counts) in [("Variables", &summary.variables), ("Constraints", &summary.constraints), ("Objectives", &summary.objectives)] {
+        write_count_row(&mut out, label, counts);
+    }
+    w!(out, "  {}", RULE_60);
+    let totals = summary.aggregate_counts();
+    write_count_row(&mut out, "TOTAL", &totals);
+
+    // Problem Dimensions
+    w!(out);
+    write_analysis_sections(&mut out, a1, a2);
+
+    // Issues
+    w!(out);
+    write_issues_plain(&mut out, report, a1, a2);
+
+    out
+}
+
+/// Write a single row of the change-count table.
+fn write_count_row(out: &mut String, label: &str, counts: &DiffCounts) {
+    w!(out, "  {:<14}{:>7}{:>9}{:>12}{:>9}", label, counts.added, counts.removed, counts.modified, counts.total());
+}
+
+/// Write comparative analysis sections (dimensions, variable types,
+/// constraint types, coefficient scaling) as plain text.
+#[allow(clippy::cast_possible_wrap)] // LP problem dimensions never approach i64::MAX
+fn write_analysis_sections(out: &mut String, a: &ProblemAnalysis, b: &ProblemAnalysis) {
+    const W: usize = 18;
+
+    // Problem Dimensions
+    w!(out, "  Problem Dimensions");
+    w!(out, "  {:<W$}{:>12}{:>12}{:>12}", "", "File A", "File B", "Delta");
+    write_comparison_row_usize(out, "Variables", W, a.summary.variable_count, b.summary.variable_count);
+    write_comparison_row_usize(out, "Constraints", W, a.summary.constraint_count, b.summary.constraint_count);
+    write_comparison_row_usize(out, "Non-zeros", W, a.summary.total_nonzeros, b.summary.total_nonzeros);
+    write_comparison_row_pct(out, "Density", W, a.summary.density, b.summary.density);
+    let sparsity_a = format!("{}\u{2013}{}", a.sparsity.min_vars_per_constraint, a.sparsity.max_vars_per_constraint);
+    let sparsity_b = format!("{}\u{2013}{}", b.sparsity.min_vars_per_constraint, b.sparsity.max_vars_per_constraint);
+    w!(out, "  {:<W$}{:>12}{:>12}", "Vars/constraint", sparsity_a, sparsity_b);
+
+    // Variable Types
+    w!(out);
+    w!(out, "  Variable Types");
+    w!(out, "  {:<W$}{:>12}{:>12}{:>12}", "", "File A", "File B", "Delta");
+    let va = &a.variables.type_distribution;
+    let vb = &b.variables.type_distribution;
+    write_comparison_row_usize(out, "Binary", W, va.binary, vb.binary);
+    write_comparison_row_usize(out, "Integer", W, va.integer, vb.integer);
+    write_comparison_row_usize(out, "General", W, va.general, vb.general);
+    write_comparison_row_usize(out, "Free", W, va.free, vb.free);
+    write_comparison_row_usize(out, "Lower-bounded", W, va.lower_bounded, vb.lower_bounded);
+    write_comparison_row_usize(out, "Upper-bounded", W, va.upper_bounded, vb.upper_bounded);
+    write_comparison_row_usize(out, "Double-bounded", W, va.double_bounded, vb.double_bounded);
+    write_comparison_row_usize(out, "Semi-continuous", W, va.semi_continuous, vb.semi_continuous);
+
+    // Constraint Types
+    w!(out);
+    w!(out, "  Constraint Types");
+    w!(out, "  {:<W$}{:>12}{:>12}{:>12}", "", "File A", "File B", "Delta");
+    let ca = &a.constraints.type_distribution;
+    let cb = &b.constraints.type_distribution;
+    write_comparison_row_usize(out, "Equality (=)", W, ca.equality, cb.equality);
+    write_comparison_row_usize(out, "<= constraints", W, ca.less_than_equal, cb.less_than_equal);
+    write_comparison_row_usize(out, ">= constraints", W, ca.greater_than_equal, cb.greater_than_equal);
+    write_comparison_row_usize(out, "< constraints", W, ca.less_than, cb.less_than);
+    write_comparison_row_usize(out, "> constraints", W, ca.greater_than, cb.greater_than);
+    write_comparison_row_usize(out, "SOS1", W, ca.sos1, cb.sos1);
+    write_comparison_row_usize(out, "SOS2", W, ca.sos2, cb.sos2);
+
+    // Coefficient Scaling
+    w!(out);
+    w!(out, "  Coefficient Scaling");
+    w!(out, "  {:<W$}{:>16}{:>16}", "", "File A", "File B");
+    let coeff_a = format_range_stats(&a.coefficients.constraint_coeff_range);
+    let coeff_b = format_range_stats(&b.coefficients.constraint_coeff_range);
+    w!(out, "  {:<W$}{:>16}{:>16}", "Coeff range", coeff_a, coeff_b);
+    let ratio_a = format_scientific_plain(a.coefficients.coefficient_ratio);
+    let ratio_b = format_scientific_plain(b.coefficients.coefficient_ratio);
+    w!(out, "  {:<W$}{:>16}{:>16}", "Coeff ratio", ratio_a, ratio_b);
+    let rhs_a = format_range_stats(&a.constraints.rhs_range);
+    let rhs_b = format_range_stats(&b.constraints.rhs_range);
+    w!(out, "  {:<W$}{:>16}{:>16}", "RHS range", rhs_a, rhs_b);
+}
+
+/// Write a comparison row with usize values and a signed delta.
+#[allow(clippy::cast_possible_wrap)]
+fn write_comparison_row_usize(out: &mut String, label: &str, label_width: usize, a: usize, b: usize) {
+    let delta = b as i64 - a as i64;
+    let delta_str = match delta.cmp(&0) {
+        std::cmp::Ordering::Equal => "\u{2014}".to_string(),
+        std::cmp::Ordering::Greater => format!("+{delta}"),
+        std::cmp::Ordering::Less => format!("{delta}"),
+    };
+    w!(out, "  {:<label_width$}{:>12}{:>12}{:>12}", label, a, b, delta_str);
+}
+
+/// Write a comparison row with percentage values and a delta.
+fn write_comparison_row_pct(out: &mut String, label: &str, label_width: usize, a: f64, b: f64) {
+    let delta = b - a;
+    let delta_str = if delta.abs() < 1e-10 { "\u{2014}".to_string() } else { format!("{:+.2}%", delta * 100.0) };
+    w!(out, "  {:<label_width$}{:>11.2}%{:>11.2}%{:>12}", label, a * 100.0, b * 100.0, delta_str);
+}
+
+/// Format a `RangeStats` as a compact range string.
+fn format_range_stats(r: &lp_parser_rs::analysis::RangeStats) -> String {
+    if r.count == 0 { "\u{2014}".to_string() } else { format!("[{:.1e}, {:.1e}]", r.min, r.max) }
+}
+
+/// Format an f64 in scientific notation, returning em-dash for zero/non-finite.
+fn format_scientific_plain(v: f64) -> String {
+    if v == 0.0 || !v.is_finite() { "\u{2014}".to_string() } else { format!("{v:.2e}") }
+}
+
+/// Write the issues section as plain text.
+fn write_issues_plain(out: &mut String, report: &crate::diff_model::LpDiffReport, a1: &ProblemAnalysis, a2: &ProblemAnalysis) {
+    w!(out, "  Issues");
+
+    let (err1, warn1, info1) = count_issue_severities(&a1.issues);
+    let (err2, warn2, info2) = count_issue_severities(&a2.issues);
+
+    w!(
+        out,
+        "  File A: {} error(s), {} warning(s), {} info  |  File B: {} error(s), {} warning(s), {} info",
+        err1, warn1, info1, err2, warn2, info2
+    );
+
+    if a1.issues.is_empty() && a2.issues.is_empty() {
+        w!(out, "  No issues detected");
+        return;
+    }
+    w!(out);
+
+    let label_a = short_filename(&report.file1);
+    for issue in &a1.issues {
+        w!(out, "  [{:<7}] {}: {}", issue.severity, label_a, issue.message);
+    }
+    let label_b = short_filename(&report.file2);
+    for issue in &a2.issues {
+        w!(out, "  [{:<7}] {}: {}", issue.severity, label_b, issue.message);
+    }
+}
+
+/// Count issues by severity level.
+fn count_issue_severities(issues: &[lp_parser_rs::analysis::AnalysisIssue]) -> (usize, usize, usize) {
+    let mut errors = 0;
+    let mut warnings = 0;
+    let mut infos = 0;
+    for issue in issues {
+        match issue.severity {
+            lp_parser_rs::analysis::IssueSeverity::Error => errors += 1,
+            lp_parser_rs::analysis::IssueSeverity::Warning => warnings += 1,
+            lp_parser_rs::analysis::IssueSeverity::Info => infos += 1,
+        }
+    }
+    (errors, warnings, infos)
+}
+
+/// Extract the filename from a path string for compact display.
+fn short_filename(path: &str) -> String {
+    std::path::Path::new(path).file_name().map_or_else(|| path.to_string(), |f| f.to_string_lossy().into_owned())
 }
 
 /// Write type/bounds lines for a single-side variable (added or removed).
