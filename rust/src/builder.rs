@@ -169,7 +169,7 @@ impl LpProblemBuilder {
                 return Err(LpParseError::validation_error(format!("Objective '{}' has no coefficients", obj_builder.name)));
             }
 
-            let objective = Objective { name: name_id, coefficients };
+            let objective = Objective { name: name_id, coefficients, byte_offset: None };
             debug_assert!(!objective.coefficients.is_empty(), "postcondition: built objective must have coefficients");
             problem.add_objective(objective);
         }

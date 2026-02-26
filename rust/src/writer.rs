@@ -468,6 +468,7 @@ mod tests {
         let objective = Objective {
             name: profit_id,
             coefficients: vec![Coefficient { name: x1_id, value: 3.0 }, Coefficient { name: x2_id, value: 2.0 }],
+            byte_offset: None,
         };
         problem.add_objective(objective);
 
@@ -580,6 +581,7 @@ End";
                 Coefficient { name: x2_id, value: 15.0 },
                 Coefficient { name: x3_id, value: 20.0 },
             ],
+            byte_offset: None,
         };
         problem.add_objective(objective);
 

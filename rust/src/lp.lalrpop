@@ -84,28 +84,28 @@ AnySection: OptionalSection<'input> = {
 
 ObjectivesSection: Vec<RawObjective<'input>> = {
     // Starts with sign: definitely unnamed objective
-    <sign:OptSign> <first:UnsignedCoeff> <rest:CoeffTail*> => {
+    <loc:@L> <sign:OptSign> <first:UnsignedCoeff> <rest:CoeffTail*> => {
         let mut coeffs = vec![RawCoefficient { name: first.name, value: sign * first.value }];
         for (s, c) in rest {
             coeffs.push(RawCoefficient { name: c.name, value: s * c.value });
         }
-        vec![RawObjective { name: Cow::Borrowed("__obj__"), coefficients: coeffs }]
+        vec![RawObjective { name: Cow::Borrowed("__obj__"), coefficients: coeffs, byte_offset: Some(loc) }]
     },
     // Starts with number: definitely unnamed objective
-    <num:"number"> <var:"identifier"> <rest:CoeffTail*> => {
+    <loc:@L> <num:"number"> <var:"identifier"> <rest:CoeffTail*> => {
         let mut coeffs = vec![RawCoefficient { name: var, value: num }];
         for (s, c) in rest {
             coeffs.push(RawCoefficient { name: c.name, value: s * c.value });
         }
-        vec![RawObjective { name: Cow::Borrowed("__obj__"), coefficients: coeffs }]
+        vec![RawObjective { name: Cow::Borrowed("__obj__"), coefficients: coeffs, byte_offset: Some(loc) }]
     },
     // Starts with infinity: definitely unnamed objective (includes sign in token)
-    <inf:"infinity"> <var:"identifier"> <rest:CoeffTail*> => {
+    <loc:@L> <inf:"infinity"> <var:"identifier"> <rest:CoeffTail*> => {
         let mut coeffs = vec![RawCoefficient { name: var, value: inf }];
         for (s, c) in rest {
             coeffs.push(RawCoefficient { name: c.name, value: s * c.value });
         }
-        vec![RawObjective { name: Cow::Borrowed("__obj__"), coefficients: coeffs }]
+        vec![RawObjective { name: Cow::Borrowed("__obj__"), coefficients: coeffs, byte_offset: Some(loc) }]
     },
     // Starts with bare identifier: parse first, then decide
     <first_obj:FirstObjective> <more:NamedObjective*> => {
@@ -118,22 +118,22 @@ ObjectivesSection: Vec<RawObjective<'input>> = {
 // First objective starting with identifier - uses left-factoring
 FirstObjective: RawObjective<'input> = {
     // identifier followed by ":" means named objective
-    <name:"identifier"> ":" <coeffs:CoeffList> => {
-        RawObjective { name: Cow::Borrowed(name), coefficients: coeffs }
+    <loc:@L> <name:"identifier"> ":" <coeffs:CoeffList> => {
+        RawObjective { name: Cow::Borrowed(name), coefficients: coeffs, byte_offset: Some(loc) }
     },
     // identifier followed by +/- or end of section means unnamed objective
-    <var:"identifier"> <rest:CoeffTail*> => {
+    <loc:@L> <var:"identifier"> <rest:CoeffTail*> => {
         let mut coeffs = vec![RawCoefficient { name: var, value: 1.0 }];
         for (s, c) in rest {
             coeffs.push(RawCoefficient { name: c.name, value: s * c.value });
         }
-        RawObjective { name: Cow::Borrowed("__obj__"), coefficients: coeffs }
+        RawObjective { name: Cow::Borrowed("__obj__"), coefficients: coeffs, byte_offset: Some(loc) }
     },
 };
 
 NamedObjective: RawObjective<'input> = {
-    <name:"identifier"> ":" <coeffs:CoeffList> => {
-        RawObjective { name: Cow::Borrowed(name), coefficients: coeffs }
+    <loc:@L> <name:"identifier"> ":" <coeffs:CoeffList> => {
+        RawObjective { name: Cow::Borrowed(name), coefficients: coeffs, byte_offset: Some(loc) }
     },
 };
 

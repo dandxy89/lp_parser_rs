@@ -361,7 +361,12 @@ fn write_issues_plain(out: &mut String, report: &crate::diff_model::LpDiffReport
     w!(
         out,
         "  File A: {} error(s), {} warning(s), {} info  |  File B: {} error(s), {} warning(s), {} info",
-        err1, warn1, info1, err2, warn2, info2
+        err1,
+        warn1,
+        info1,
+        err2,
+        warn2,
+        info2
     );
 
     if a1.issues.is_empty() && a2.issues.is_empty() {

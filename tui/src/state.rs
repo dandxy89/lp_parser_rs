@@ -363,6 +363,16 @@ impl SectionViewState {
     }
 }
 
+/// Which view to show in the detail panel for constraints and objectives.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum DetailView {
+    /// Parsed (structured) diff view — the default.
+    #[default]
+    Parsed,
+    /// Raw LP file text side-by-side view.
+    Raw,
+}
+
 /// Pending yank state for multi-key chords (`yo`, `yn`, `yy`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PendingYank {

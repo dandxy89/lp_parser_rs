@@ -150,7 +150,11 @@ fn intern_constraint(interner: &mut NameInterner, raw: &RawConstraint<'_>) -> Co
 /// Intern a raw objective into a model objective.
 #[inline]
 fn intern_objective(interner: &mut NameInterner, raw: &RawObjective<'_>) -> Objective {
-    Objective { name: interner.intern(&raw.name), coefficients: intern_coefficients(interner, &raw.coefficients) }
+    Objective {
+        name: interner.intern(&raw.name),
+        coefficients: intern_coefficients(interner, &raw.coefficients),
+        byte_offset: raw.byte_offset,
+    }
 }
 
 /// Represents a Linear Programming (LP) problem.
@@ -821,7 +825,8 @@ mod serde_support {
                 .iter()
                 .map(|so| {
                     let name_id = interner.intern(&so.name);
-                    let obj = Objective { name: name_id, coefficients: coeffs_from_serde(&so.coefficients, &mut interner) };
+                    let obj =
+                        Objective { name: name_id, coefficients: coeffs_from_serde(&so.coefficients, &mut interner), byte_offset: None };
                     (name_id, obj)
                 })
                 .collect();
@@ -1162,7 +1167,7 @@ End";
 
         // Add objective
         let obj1 = problem.intern("obj1");
-        problem.add_objective(Objective { name: obj1, coefficients: vec![Coefficient { name: x3, value: 1.0 }] });
+        problem.add_objective(Objective { name: obj1, coefficients: vec![Coefficient { name: x3, value: 1.0 }], byte_offset: None });
         assert_eq!(problem.objective_count(), 1);
         assert_eq!(problem.variable_count(), 3);
 
@@ -1319,6 +1324,7 @@ mod modification_tests {
         problem.add_objective(Objective {
             name: obj1,
             coefficients: vec![Coefficient { name: x1, value: 2.0 }, Coefficient { name: x2, value: 3.0 }],
+            byte_offset: None,
         });
         problem.add_constraint(Constraint::Standard {
             name: c1,

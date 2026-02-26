@@ -13,8 +13,8 @@ use crate::detail_model::{CoefficientRow, build_coeff_rows};
 use crate::diff_model::{DiffEntry, DiffKind, DiffSummary, LpDiffReport};
 use crate::search::{self, CompiledSearch, SearchMode};
 use crate::solver::SolveResult;
+use crate::state::{DetailView, JumpEntry, JumpList, PendingYank, Side, SolveState, SolveViewState};
 pub use crate::state::{DiffFilter, Focus, SearchResult, Section, SectionViewState};
-use crate::state::{JumpEntry, JumpList, PendingYank, Side, SolveState, SolveViewState};
 
 /// State for the telescope-style search pop-up overlay.
 pub struct SearchPopupState {
@@ -163,6 +163,15 @@ pub struct App {
     /// Parsed problem for the second LP file (shared with solver threads).
     pub problem2: Arc<LpProblem>,
 
+    /// Raw source text of the first LP file (for raw text diff view).
+    pub raw_text1: Arc<str>,
+
+    /// Raw source text of the second LP file (for raw text diff view).
+    pub raw_text2: Arc<str>,
+
+    /// Whether to show parsed diff or raw text side-by-side in the detail panel.
+    pub detail_view: DetailView,
+
     /// Pre-built flat haystack for the search pop-up (built once in `App::new`).
     pub(crate) search_haystack: Vec<HaystackEntry>,
 
@@ -227,7 +236,15 @@ pub(crate) fn build_section_labels(active: Section) -> [Cow<'static, str>; 4] {
 }
 
 impl App {
-    pub fn new(report: LpDiffReport, file1_path: PathBuf, file2_path: PathBuf, problem1: Arc<LpProblem>, problem2: Arc<LpProblem>) -> Self {
+    pub fn new(
+        report: LpDiffReport,
+        file1_path: PathBuf,
+        file2_path: PathBuf,
+        problem1: Arc<LpProblem>,
+        problem2: Arc<LpProblem>,
+        raw_text1: Arc<str>,
+        raw_text2: Arc<str>,
+    ) -> Self {
         let mut section_selector_state = ListState::default();
         section_selector_state.select(Some(0));
 
@@ -274,6 +291,9 @@ impl App {
             file2_path,
             problem1,
             problem2,
+            raw_text1,
+            raw_text2,
+            detail_view: DetailView::default(),
             search_name_buffer: names,
             search_haystack: haystack,
             coeff_row_cache: None,
@@ -281,6 +301,58 @@ impl App {
             cached_summary: report_summary,
             section_labels,
         }
+    }
+
+    /// Toggle between parsed and raw text detail views.
+    pub const fn toggle_detail_view(&mut self) {
+        self.detail_view = match self.detail_view {
+            DetailView::Parsed => DetailView::Raw,
+            DetailView::Raw => DetailView::Parsed,
+        };
+        self.detail_scroll = 0;
+    }
+
+    /// Extract raw LP text for the currently selected entry from both files.
+    ///
+    /// Returns `(old_text, new_text)` where each is `None` if the entry
+    /// does not exist in that file or is a variable (not supported).
+    pub fn extract_raw_texts(&self) -> (Option<&str>, Option<&str>) {
+        let Some(entry_index) = self.selected_entry_index() else {
+            return (None, None);
+        };
+        match self.active_section {
+            Section::Constraints => {
+                let entry = &self.report.constraints.entries[entry_index];
+                let name = &entry.name;
+                let old = self.lookup_constraint_text(name, &self.problem1, &self.raw_text1);
+                let new = self.lookup_constraint_text(name, &self.problem2, &self.raw_text2);
+                (old, new)
+            }
+            Section::Objectives => {
+                let entry = &self.report.objectives.entries[entry_index];
+                let name = &entry.name;
+                let old = self.lookup_objective_text(name, &self.problem1, &self.raw_text1);
+                let new = self.lookup_objective_text(name, &self.problem2, &self.raw_text2);
+                (old, new)
+            }
+            _ => (None, None),
+        }
+    }
+
+    /// Look up a constraint by name in a problem and extract its raw text.
+    fn lookup_constraint_text<'a>(&self, name: &str, problem: &LpProblem, raw_text: &'a str) -> Option<&'a str> {
+        let name_id = problem.get_name_id(name)?;
+        let constraint = problem.constraints.get(&name_id)?;
+        let offset = constraint.byte_offset()?;
+        Some(crate::widgets::raw_diff::extract_entry_text(raw_text, offset))
+    }
+
+    /// Look up an objective by name in a problem and extract its raw text.
+    fn lookup_objective_text<'a>(&self, name: &str, problem: &LpProblem, raw_text: &'a str) -> Option<&'a str> {
+        let name_id = problem.get_name_id(name)?;
+        let objective = problem.objectives.get(&name_id)?;
+        let offset = objective.byte_offset?;
+        Some(crate::widgets::raw_diff::extract_entry_text(raw_text, offset))
     }
 
     /// Invalidate cached filtered indices for all sections and the coefficient row cache.

@@ -51,6 +51,8 @@ pub struct RawObjective<'input> {
     pub name: Cow<'input, str>,
     /// Coefficients of the objective function.
     pub coefficients: Vec<RawCoefficient<'input>>,
+    /// Byte offset of this objective in the source text (for line number mapping).
+    pub byte_offset: Option<usize>,
 }
 
 /// Helper enum for parsing SOS entries in the grammar.

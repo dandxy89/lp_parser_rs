@@ -108,7 +108,7 @@ pub fn write_diff_csv(report: &LpDiffReport, dir: &Path) -> Result<String, Box<d
 
 /// Return a short label for a `VariableType`, borrowing the Display output
 /// without allocating for the common cases.
-fn type_label(t: &lp_parser_rs::model::VariableType) -> &'static str {
+const fn type_label(t: &lp_parser_rs::model::VariableType) -> &'static str {
     use lp_parser_rs::model::VariableType;
     match t {
         VariableType::Free => "Free",

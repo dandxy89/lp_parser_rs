@@ -140,6 +140,9 @@ impl App {
             // Export the diff report as CSV.
             KeyCode::Char('w') => self.export_csv(),
 
+            // Toggle raw text side-by-side diff view.
+            KeyCode::Char('r') => self.toggle_detail_view(),
+
             // Open the search pop-up.
             KeyCode::Char('/') => self.open_search_popup(),
 

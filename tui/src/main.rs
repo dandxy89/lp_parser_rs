@@ -67,8 +67,8 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         (h1.join(), h2.join())
     });
 
-    let (owned1, analysis1, line_map1) = result1.expect("file1 parse thread panicked")?;
-    let (owned2, analysis2, line_map2) = result2.expect("file2 parse thread panicked")?;
+    let (owned1, analysis1, line_map1, raw_text1) = result1.expect("file1 parse thread panicked")?;
+    let (owned2, analysis2, line_map2, raw_text2) = result2.expect("file2 parse thread panicked")?;
 
     eprintln!(
         "Parsed {} ({} vars, {} cons) and {} ({} vars, {} cons) in {:.1}s",
@@ -132,7 +132,9 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let problem2 = Arc::new(owned2);
 
     // Create app and event handler
-    let mut app = App::new(report, args.file1, args.file2, problem1, problem2);
+    let raw_text1: Arc<str> = raw_text1.into();
+    let raw_text2: Arc<str> = raw_text2.into();
+    let mut app = App::new(report, args.file1, args.file2, problem1, problem2, raw_text1, raw_text2);
     let events = EventHandler::new(Duration::from_millis(50));
 
     // Main loop — draw then process the next event

@@ -212,6 +212,8 @@ pub struct Objective {
     pub name: NameId,
     /// Coefficients associated with the objective.
     pub coefficients: Vec<Coefficient>,
+    /// Byte offset of this objective in the source text (for line number mapping).
+    pub byte_offset: Option<usize>,
 }
 
 #[cfg_attr(feature = "diff", derive(diff::Diff), diff(attr(#[derive(Debug, PartialEq)])))]
@@ -430,12 +432,12 @@ mod tests {
         let profit = interner.intern("profit");
         let x1 = interner.intern("x1");
 
-        let obj = Objective { name: profit, coefficients: vec![Coefficient { name: x1, value: 5.0 }] };
+        let obj = Objective { name: profit, coefficients: vec![Coefficient { name: x1, value: 5.0 }], byte_offset: None };
         assert_eq!(interner.resolve(obj.name), "profit");
         assert_eq!(obj.coefficients.len(), 1);
 
         let dynamic = interner.intern("dynamic");
-        let obj_empty = Objective { name: dynamic, coefficients: vec![] };
+        let obj_empty = Objective { name: dynamic, coefficients: vec![], byte_offset: None };
         assert_eq!(interner.resolve(obj_empty.name), "dynamic");
         assert!(obj_empty.coefficients.is_empty());
     }

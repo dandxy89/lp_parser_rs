@@ -37,6 +37,7 @@ pub fn focus_border_style(current: Focus, target: Focus) -> Style {
 
 pub mod detail;
 pub mod help;
+pub mod raw_diff;
 pub mod search_popup;
 pub mod sidebar;
 pub mod solve;

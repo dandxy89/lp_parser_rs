@@ -19,7 +19,8 @@ use ratatui::layout::{Constraint, Layout};
 use ratatui::widgets::{Block, Borders};
 
 use crate::app::{App, Focus, Section};
-use crate::widgets::{detail, focus_border_style, help, search_popup, sidebar, solve, status_bar, summary};
+use crate::state::DetailView;
+use crate::widgets::{detail, focus_border_style, help, raw_diff, search_popup, sidebar, solve, status_bar, summary};
 
 /// Minimum width for the sidebar panel in columns.
 const SIDEBAR_MIN_WIDTH: u16 = 20;
@@ -127,39 +128,48 @@ fn draw_detail_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut A
         frame.render_widget(block, area);
         summary::draw_summary(frame, inner, &app.summary_lines, app.detail_scroll)
     } else if let Some(entry_index) = app.selected_entry_index() {
-        app.ensure_coeff_row_cache();
-        let scroll = app.detail_scroll;
-        let cached_rows = app.cached_coeff_rows();
-        match app.active_section {
-            Section::Variables => {
-                debug_assert!(entry_index < app.report.variables.entries.len(), "variable entry_index {entry_index} out of bounds");
-                detail::render_variable_detail(frame, area, &app.report.variables.entries[entry_index], border_style, scroll)
+        // Check for raw view mode on supported sections (Constraints, Objectives).
+        let use_raw = app.detail_view == DetailView::Raw && matches!(app.active_section, Section::Constraints | Section::Objectives);
+
+        if use_raw {
+            let (old_text, new_text) = app.extract_raw_texts();
+            // Variables show a message; Constraints/Objectives show the raw text.
+            raw_diff::draw_raw_diff(frame, area, old_text, new_text, app.detail_scroll, border_style)
+        } else {
+            app.ensure_coeff_row_cache();
+            let scroll = app.detail_scroll;
+            let cached_rows = app.cached_coeff_rows();
+            match app.active_section {
+                Section::Variables => {
+                    debug_assert!(entry_index < app.report.variables.entries.len(), "variable entry_index {entry_index} out of bounds");
+                    detail::render_variable_detail(frame, area, &app.report.variables.entries[entry_index], border_style, scroll)
+                }
+                Section::Constraints => {
+                    debug_assert!(entry_index < app.report.constraints.entries.len(), "constraint entry_index {entry_index} out of bounds");
+                    detail::render_constraint_detail(
+                        frame,
+                        area,
+                        &app.report.constraints.entries[entry_index],
+                        border_style,
+                        scroll,
+                        cached_rows,
+                        &app.report.interner,
+                    )
+                }
+                Section::Objectives => {
+                    debug_assert!(entry_index < app.report.objectives.entries.len(), "objective entry_index {entry_index} out of bounds");
+                    detail::render_objective_detail(
+                        frame,
+                        area,
+                        &app.report.objectives.entries[entry_index],
+                        border_style,
+                        scroll,
+                        cached_rows,
+                        &app.report.interner,
+                    )
+                }
+                Section::Summary => unreachable!("handled above"),
             }
-            Section::Constraints => {
-                debug_assert!(entry_index < app.report.constraints.entries.len(), "constraint entry_index {entry_index} out of bounds");
-                detail::render_constraint_detail(
-                    frame,
-                    area,
-                    &app.report.constraints.entries[entry_index],
-                    border_style,
-                    scroll,
-                    cached_rows,
-                    &app.report.interner,
-                )
-            }
-            Section::Objectives => {
-                debug_assert!(entry_index < app.report.objectives.entries.len(), "objective entry_index {entry_index} out of bounds");
-                detail::render_objective_detail(
-                    frame,
-                    area,
-                    &app.report.objectives.entries[entry_index],
-                    border_style,
-                    scroll,
-                    cached_rows,
-                    &app.report.interner,
-                )
-            }
-            Section::Summary => unreachable!("handled above"),
         }
     } else {
         let label = match app.active_section {
