@@ -76,7 +76,7 @@ class TestLpModification:
         # Update constraint coefficient and RHS
         parser.update_constraint_coefficient("C1", "x1", 2.0)
         parser.update_constraint_rhs("C1", 5.0)
-        c1: StandardConstraint = next(c for c in parser.constraints if c["name"] == "C1")  # pyright: ignore[reportAssignmentType]
+        c1: StandardConstraint = next(c for c in parser.constraints if c["name"] == "C1")  # type: ignore[assignment]
         assert c1["rhs"] == 5.0
 
     def test_rename_operations(self, simple_lp_file: Path) -> None:
@@ -162,7 +162,7 @@ class TestLpModification:
         assert coeffs["x3"] == 1.5
         assert "production" in coeffs
 
-        capacity: StandardConstraint = next(c for c in parser.constraints if c["name"] == "CAPACITY")  # pyright: ignore[reportAssignmentType]
+        capacity: StandardConstraint = next(c for c in parser.constraints if c["name"] == "CAPACITY")  # type: ignore[assignment]
         assert capacity["rhs"] == 10.0
 
         assert "Integer" in parser.variables["x1"]["var_type"]
