@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.4.0](https://github.com/dandxy89/lp_parser_rs/compare/parse_lp-v3.3.1...parse_lp-v3.4.0) (2026-02-27)
+
+
+### Features
+
+* **tui:** Add CSV export of diff report ([fa53f7f](https://github.com/dandxy89/lp_parser_rs/commit/fa53f7fb8108b81cca26f8b0adf25324b5579ea3))
+
+
+### Bug Fixes
+
+* CI Pipeline failure ([3316c6e](https://github.com/dandxy89/lp_parser_rs/commit/3316c6e61c17afa9b32874415ad5582a763c24a6))
+
 ## [3.3.1](https://github.com/dandxy89/lp_parser_rs/compare/parse_lp-v3.3.0...parse_lp-v3.3.1) (2026-02-24)
 
 

@@ -1,5 +1,25 @@
 # Changelog
 
+## [3.2.0](https://github.com/dandxy89/lp_parser_rs/compare/lp_diff-v3.1.1...lp_diff-v3.2.0) (2026-02-27)
+
+
+### Documentation
+
+* **tui:** Update README with new features ([a838e75](https://github.com/dandxy89/lp_parser_rs/commit/a838e75b402470b64bce373bc3441e2ff25b893b))
+
+
+### Features
+
+* **tui:** Add CSV export of diff report ([fa53f7f](https://github.com/dandxy89/lp_parser_rs/commit/fa53f7fb8108b81cca26f8b0adf25324b5579ea3))
+* **tui:** Add raw text side-by-side diff toggle ([24206e6](https://github.com/dandxy89/lp_parser_rs/commit/24206e6fdc7bd4d8bac79eb93d4412f27791d298))
+* **tui:** Add summary yank support ([7180b07](https://github.com/dandxy89/lp_parser_rs/commit/7180b07e125747aa2cdae6ddea47da714cfdca9c))
+* **tui:** Add yo/yn chords to yank old/new side ([5e7060a](https://github.com/dandxy89/lp_parser_rs/commit/5e7060a557becc2f45f8142072663f58f3cac644))
+
+
+### Bug Fixes
+
+* Scrolling logic ([#170](https://github.com/dandxy89/lp_parser_rs/issues/170)) ([7e4588d](https://github.com/dandxy89/lp_parser_rs/commit/7e4588d2d88b0aeb69216d51b412ee0e11c897f3))
+
 ## [3.1.1](https://github.com/dandxy89/lp_parser_rs/compare/lp_diff-v3.1.0...lp_diff-v3.1.1) (2026-02-24)
 
 
