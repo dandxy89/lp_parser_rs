@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.3.0](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v3.2.2...lp_parser_rs-v3.3.0) (2026-02-27)
+
+
+### Features
+
+* **tui:** Add raw text side-by-side diff toggle ([24206e6](https://github.com/dandxy89/lp_parser_rs/commit/24206e6fdc7bd4d8bac79eb93d4412f27791d298))
+
 ## [3.2.2](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v3.2.1...lp_parser_rs-v3.2.2) (2026-02-24)
 
 
