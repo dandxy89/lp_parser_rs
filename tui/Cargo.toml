@@ -1,6 +1,6 @@
 [package]
 name = "lp_parser_tui"
-version = "3.1.1"
+version = "3.2.0"
 edition = "2024"
 description = "Interactive TUI diff viewer for LP files"
 license = "MIT OR Apache-2.0"
