@@ -47,11 +47,9 @@ impl App {
                 self.search_popup.query.pop();
                 self.recompute_search_popup();
             }
-            KeyCode::Char('j') | KeyCode::Down => {
-                if !self.search_popup.results.is_empty() {
-                    self.search_popup.selected = (self.search_popup.selected + 1).min(self.search_popup.results.len() - 1);
-                    self.search_popup.scroll = 0;
-                }
+            KeyCode::Char('j') | KeyCode::Down if !self.search_popup.results.is_empty() => {
+                self.search_popup.selected = (self.search_popup.selected + 1).min(self.search_popup.results.len() - 1);
+                self.search_popup.scroll = 0;
             }
             KeyCode::Char('k') | KeyCode::Up => {
                 self.search_popup.selected = self.search_popup.selected.saturating_sub(1);

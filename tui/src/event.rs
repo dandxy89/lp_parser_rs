@@ -65,20 +65,14 @@ impl EventHandler {
                     };
 
                     match read_result {
-                        CrosstermEvent::Key(key) => {
-                            if event_tx.send(Event::Key(key)).is_err() {
-                                return;
-                            }
+                        CrosstermEvent::Key(key) if event_tx.send(Event::Key(key)).is_err() => {
+                            return;
                         }
-                        CrosstermEvent::Mouse(mouse) => {
-                            if event_tx.send(Event::Mouse(mouse)).is_err() {
-                                return;
-                            }
+                        CrosstermEvent::Mouse(mouse) if event_tx.send(Event::Mouse(mouse)).is_err() => {
+                            return;
                         }
-                        CrosstermEvent::Resize(_, _) => {
-                            if event_tx.send(Event::Resize).is_err() {
-                                return;
-                            }
+                        CrosstermEvent::Resize(_, _) if event_tx.send(Event::Resize).is_err() => {
+                            return;
                         }
                         // Paste, focus, and other crossterm events are intentionally ignored.
                         _ => {}
