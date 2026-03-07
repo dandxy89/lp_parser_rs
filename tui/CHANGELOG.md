@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.2.1](https://github.com/dandxy89/lp_parser_rs/compare/lp_diff-v3.2.0...lp_diff-v3.2.1) (2026-03-07)
+
+
+### Styles
+
+* Clippy lints ([770813b](https://github.com/dandxy89/lp_parser_rs/commit/770813b9b4ac62f795f79535945e5e0861b60fce))
+
 ## [3.2.0](https://github.com/dandxy89/lp_parser_rs/compare/lp_diff-v3.1.1...lp_diff-v3.2.0) (2026-03-02)
 
 
