@@ -31,7 +31,7 @@ const HELP_TEXT: &[&str] = &[
     "  Ctrl-o  Jump back",
     "  Ctrl-i  Jump forward",
     "  r       Toggle raw text view",
-    "  S       Solve LP file",
+    "  S       Solve problem",
     "  Tab     Next panel",
     "  ⇧Tab    Prev panel",
     "  Enter   Go to detail",

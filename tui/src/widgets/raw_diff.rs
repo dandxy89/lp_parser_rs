@@ -1,6 +1,6 @@
 //! Side-by-side raw text diff widget.
 //!
-//! Shows the actual LP file text for the currently selected entry,
+//! Shows the actual file text for the currently selected entry,
 //! one column per file, with simple line-level colour highlighting.
 
 use ratatui::Frame;
