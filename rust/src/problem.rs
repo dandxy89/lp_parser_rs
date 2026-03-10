@@ -9,6 +9,7 @@ use crate::interner::{NameId, NameInterner};
 use crate::lexer::{Lexer, ParseResult, RawCoefficient, RawConstraint, RawObjective};
 use crate::lp::LpProblemParser;
 use crate::model::{Coefficient, ComparisonOp, Constraint, Objective, Sense, Variable, VariableType};
+use crate::mps::{extract_mps_name, parse_mps};
 
 /// Check if a floating-point value is effectively zero using both absolute
 /// and relative epsilon comparisons.
@@ -268,7 +269,7 @@ impl LpProblem {
     }
 
     #[inline]
-    /// Parse a `LpProblem` from a string slice.
+    /// Parse a `LpProblem` from a string slice (LP format).
     ///
     /// # Errors
     ///
@@ -276,6 +277,21 @@ impl LpProblem {
     pub fn parse(input: &str) -> LpResult<Self> {
         log::debug!("Starting to parse LP problem");
         Self::try_from(input)
+    }
+
+    /// Parse a `LpProblem` from an MPS-format string.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the input string is not valid MPS format.
+    pub fn parse_mps(input: &str) -> LpResult<Self> {
+        debug_assert!(!input.is_empty(), "parse_mps called with empty input");
+        debug_assert!(input.contains('\n'), "parse_mps input must contain at least one newline");
+
+        log::debug!("Starting to parse MPS problem");
+        let problem_name = extract_mps_name(input);
+        let parsed = parse_mps(input)?;
+        from_parse_result(parsed, problem_name)
     }
 
     #[inline]
@@ -886,6 +902,37 @@ impl Display for LpProblem {
     }
 }
 
+/// Convert a [`ParseResult`] into an [`LpProblem`], interning all names and
+/// building the full model. Shared by both LP and MPS parse paths.
+fn from_parse_result(parsed: ParseResult<'_>, problem_name: Option<String>) -> LpResult<LpProblem> {
+    debug_assert!(!parsed.objectives.is_empty() || !parsed.constraints.is_empty(), "parse result should have objectives or constraints");
+    debug_assert!(parsed.objectives.iter().all(|o| !o.name.is_empty()), "all objectives must have non-empty names");
+
+    // Double the constraint count as a heuristic: one entry for the constraint
+    // name itself, plus at least one new variable name per constraint on average.
+    let estimated_names = parsed.objectives.len()
+        + parsed.constraints.len() * 2
+        + parsed.bounds.len()
+        + parsed.generals.len()
+        + parsed.integers.len()
+        + parsed.binaries.len();
+    let mut interner = NameInterner::with_capacity(estimated_names.max(16));
+
+    let estimated_variables =
+        parsed.bounds.len() + parsed.generals.len() + parsed.integers.len() + parsed.binaries.len() + parsed.constraints.len();
+    let mut variables: IndexMap<NameId, Variable> = IndexMap::with_capacity(estimated_variables);
+    let mut constraint_counter: u32 = 0;
+
+    let objectives = intern_objectives(&mut interner, &parsed.objectives, &mut variables);
+    let mut constraints = intern_constraints(&mut interner, &parsed.constraints, &mut variables, &mut constraint_counter);
+
+    process_bounds(&mut interner, &parsed.bounds, &mut variables);
+    process_variable_types(&mut interner, &parsed, &mut variables);
+    intern_sos_constraints(&mut interner, &parsed.sos, &mut variables, &mut constraints, &mut constraint_counter);
+
+    Ok(LpProblem { name: problem_name, sense: parsed.sense, objectives, constraints, variables, interner })
+}
+
 impl TryFrom<&str> for LpProblem {
     type Error = LpParseError;
 
@@ -898,28 +945,7 @@ impl TryFrom<&str> for LpProblem {
         let parser = LpProblemParser::new();
         let parsed = parser.parse(lexer).map_err(LpParseError::from)?;
 
-        // Double the constraint count as a heuristic: one entry for the constraint
-        // name itself, plus at least one new variable name per constraint on average.
-        let estimated_names = parsed.objectives.len()
-            + parsed.constraints.len() * 2
-            + parsed.bounds.len()
-            + parsed.generals.len()
-            + parsed.integers.len()
-            + parsed.binaries.len();
-        let mut interner = NameInterner::with_capacity(estimated_names.max(16));
-
-        let estimated_variables =
-            parsed.bounds.len() + parsed.generals.len() + parsed.integers.len() + parsed.binaries.len() + parsed.constraints.len();
-        let mut variables: IndexMap<NameId, Variable> = IndexMap::with_capacity(estimated_variables);
-        let mut constraint_counter: u32 = 0;
-
-        let objectives = intern_objectives(&mut interner, &parsed.objectives, &mut variables);
-        let mut constraints = intern_constraints(&mut interner, &parsed.constraints, &mut variables, &mut constraint_counter);
-        process_bounds(&mut interner, &parsed.bounds, &mut variables);
-        process_variable_types(&mut interner, &parsed, &mut variables);
-        intern_sos_constraints(&mut interner, &parsed.sos, &mut variables, &mut constraints, &mut constraint_counter);
-
-        Ok(Self { name: problem_name, sense: parsed.sense, objectives, constraints, variables, interner })
+        from_parse_result(parsed, problem_name)
     }
 }
 

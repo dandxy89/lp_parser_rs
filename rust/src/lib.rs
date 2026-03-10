@@ -38,6 +38,7 @@ pub mod error;
 pub mod interner;
 pub mod lexer;
 pub mod model;
+pub mod mps;
 pub mod parser;
 pub mod problem;
 pub mod writer;
