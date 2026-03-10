@@ -8,7 +8,7 @@
 
 ## Interactive TUI Diff Viewer (`lp_diff`)
 
-An interactive terminal-based diff viewer for LP files, built with [ratatui](https://ratatui.rs). Compare two LP files with coefficient-level detail, fuzzy search, filtering, and integrated solving via [HiGHS](https://highs.dev).
+An interactive terminal-based diff viewer for LP and MPS files, built with [ratatui](https://ratatui.rs). Compare two files (LP, MPS, or mixed) with coefficient-level detail, fuzzy search, filtering, and integrated solving via [HiGHS](https://highs.dev).
 
 ### Install
 
