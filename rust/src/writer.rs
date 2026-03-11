@@ -255,6 +255,7 @@ fn write_variable_types_sections(output: &mut String, problem: &LpProblem, optio
     // Group variables by type, resolving names
     let mut binaries = Vec::new();
     let mut integers = Vec::new();
+    let mut generals = Vec::new();
     let mut semi_continuous = Vec::new();
 
     for variable in problem.variables.values() {
@@ -262,6 +263,7 @@ fn write_variable_types_sections(output: &mut String, problem: &LpProblem, optio
         match variable.var_type {
             VariableType::Binary => binaries.push(var_name),
             VariableType::Integer => integers.push(var_name),
+            VariableType::General => generals.push(var_name),
             VariableType::SemiContinuous => semi_continuous.push(var_name),
             _ => {} // Other types handled elsewhere
         }
@@ -274,6 +276,10 @@ fn write_variable_types_sections(output: &mut String, problem: &LpProblem, optio
 
     if !integers.is_empty() {
         write_variable_type_section(output, "Integers", &integers, options)?;
+    }
+
+    if !generals.is_empty() {
+        write_variable_type_section(output, "Generals", &generals, options)?;
     }
 
     if !semi_continuous.is_empty() {
@@ -618,6 +624,45 @@ End";
         assert!(result.contains("Integers"));
         assert!(result.contains("x3"));
         assert!(result.contains("End"));
+    }
+
+    #[test]
+    fn test_generals_round_trip() {
+        let input = r"
+Minimize
+obj: x1 + 2 x2 + 3 x3
+
+Subject To
+c1: x1 + x2 + x3 <= 10
+
+Generals
+x1
+x2
+
+End";
+
+        let problem = crate::problem::LpProblem::parse(input).unwrap();
+
+        // Verify the parsed variables are General
+        let x1_id = problem.get_name_id("x1").unwrap();
+        let x2_id = problem.get_name_id("x2").unwrap();
+        assert_eq!(problem.variables.get(&x1_id).unwrap().var_type, VariableType::General);
+        assert_eq!(problem.variables.get(&x2_id).unwrap().var_type, VariableType::General);
+
+        // Write back to LP format
+        let output = write_lp_string(&problem).unwrap();
+
+        // Verify Generals section is present in the output
+        assert!(output.contains("Generals"), "Output should contain a Generals section:\n{output}");
+        assert!(output.contains("x1"), "Generals section should contain x1");
+        assert!(output.contains("x2"), "Generals section should contain x2");
+
+        // Re-parse and verify round-trip
+        let reparsed = crate::problem::LpProblem::parse(&output).unwrap();
+        let x1_id = reparsed.get_name_id("x1").unwrap();
+        let x2_id = reparsed.get_name_id("x2").unwrap();
+        assert_eq!(reparsed.variables.get(&x1_id).unwrap().var_type, VariableType::General);
+        assert_eq!(reparsed.variables.get(&x2_id).unwrap().var_type, VariableType::General);
     }
 
     #[test]

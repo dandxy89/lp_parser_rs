@@ -134,7 +134,7 @@ impl AsVariable for VariableAdapter<'_> {
     }
 
     fn is_integer(&self) -> bool {
-        matches!(self.var_type, VariableType::Binary | VariableType::Integer)
+        matches!(self.var_type, VariableType::Binary | VariableType::Integer | VariableType::General)
     }
 
     fn lower_bound(&self) -> f64 {
@@ -475,7 +475,7 @@ mod tests {
     fn test_variable_bounds() {
         let cases: &[(VariableType, f64, f64, bool)] = &[
             (VariableType::Free, f64::NEG_INFINITY, f64::INFINITY, false),
-            (VariableType::General, 0.0, f64::INFINITY, false),
+            (VariableType::General, 0.0, f64::INFINITY, true),
             (VariableType::Binary, 0.0, 1.0, true),
             (VariableType::Integer, 0.0, f64::INFINITY, true),
             (VariableType::LowerBound(5.0), 5.0, f64::INFINITY, false),
