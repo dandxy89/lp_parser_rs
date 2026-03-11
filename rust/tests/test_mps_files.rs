@@ -1,6 +1,7 @@
 use std::error::Error;
 use std::path::PathBuf;
 
+use lp_parser_rs::mps::writer::write_mps_string;
 use lp_parser_rs::parser::parse_file;
 use lp_parser_rs::problem::LpProblem;
 
@@ -161,3 +162,86 @@ parity_test!(parity_sudoku, "sudoku");
 parity_test!(parity_test2, "test2");
 parity_test!(parity_wbm, "wbm");
 parity_test!(parity_whiskas_model2, "WhiskasModel2");
+
+/// Generate a round-trip test: parse MPS → write MPS → re-parse → assert structural parity.
+macro_rules! mps_round_trip_test {
+    ($name:ident, $file:expr) => {
+        #[test]
+        fn $name() {
+            let input = read_mps_file($file).unwrap_or_else(|e| panic!("Failed to read {}: {e}", $file));
+            let original = LpProblem::parse_mps(&input).unwrap_or_else(|e| panic!("Failed to parse {}: {e}", $file));
+
+            let written = write_mps_string(&original).unwrap_or_else(|e| panic!("Failed to write {}: {e}", $file));
+            let round_tripped =
+                LpProblem::parse_mps(&written).unwrap_or_else(|e| panic!("Failed to re-parse {}: {e}\n\nWritten MPS:\n{written}", $file));
+
+            assert_eq!(original.sense, round_tripped.sense, "{}: sense mismatch", $file);
+            assert_eq!(
+                original.objective_count(),
+                round_tripped.objective_count(),
+                "{}: objective count mismatch (original={}, round-tripped={})",
+                $file,
+                original.objective_count(),
+                round_tripped.objective_count()
+            );
+            assert_eq!(
+                original.constraint_count(),
+                round_tripped.constraint_count(),
+                "{}: constraint count mismatch (original={}, round-tripped={})",
+                $file,
+                original.constraint_count(),
+                round_tripped.constraint_count()
+            );
+            assert_eq!(
+                original.variable_count(),
+                round_tripped.variable_count(),
+                "{}: variable count mismatch (original={}, round-tripped={})",
+                $file,
+                original.variable_count(),
+                round_tripped.variable_count()
+            );
+        }
+    };
+}
+
+mps_round_trip_test!(rt_1obj_1cons_all_variables_with_bounds, "1obj_1cons_all_variables_with_bounds.mps");
+mps_round_trip_test!(rt_american_steel_problem, "AmericanSteelProblem.mps");
+mps_round_trip_test!(rt_beer_distribution_problem, "BeerDistributionProblem.mps");
+mps_round_trip_test!(rt_blank_lines, "blank_lines.mps");
+mps_round_trip_test!(rt_boeing1, "boeing1.mps");
+mps_round_trip_test!(rt_boeing2, "boeing2.mps");
+mps_round_trip_test!(rt_complex_names, "complex_names.mps");
+mps_round_trip_test!(rt_computer_plant_problem, "ComputerPlantProblem.mps");
+mps_round_trip_test!(rt_cplex, "cplex.mps");
+mps_round_trip_test!(rt_diet, "diet.mps");
+mps_round_trip_test!(rt_empty_bounds, "empty_bounds.mps");
+mps_round_trip_test!(rt_fit1d, "fit1d.mps");
+mps_round_trip_test!(rt_fit2d, "fit2d.mps");
+mps_round_trip_test!(rt_infile_comments, "infile_comments.mps");
+mps_round_trip_test!(rt_infile_comments2, "infile_comments2.mps");
+mps_round_trip_test!(rt_kb2, "kb2.mps");
+mps_round_trip_test!(rt_limbo, "limbo.mps");
+mps_round_trip_test!(rt_lol, "lol.mps");
+mps_round_trip_test!(rt_milo1, "milo1.mps");
+mps_round_trip_test!(rt_missing_signs, "missing_signs.mps");
+mps_round_trip_test!(rt_model, "model.mps");
+mps_round_trip_test!(rt_model2, "model2.mps");
+mps_round_trip_test!(rt_mosek_bounds, "mosek_bounds.mps");
+mps_round_trip_test!(rt_mosek, "mosek.mps");
+mps_round_trip_test!(rt_optional_labels, "optional_labels.mps");
+mps_round_trip_test!(rt_output_cplex_2, "output_cplex_2.mps");
+mps_round_trip_test!(rt_output, "output.mps");
+mps_round_trip_test!(rt_output2_1, "output2_1.mps");
+mps_round_trip_test!(rt_output2_2, "output2_2.mps");
+mps_round_trip_test!(rt_output2_3, "output2_3.mps");
+mps_round_trip_test!(rt_output2_4, "output2_4.mps");
+mps_round_trip_test!(rt_pulp, "pulp.mps");
+mps_round_trip_test!(rt_pulp2, "pulp2.mps");
+mps_round_trip_test!(rt_sc50a, "sc50a.mps");
+mps_round_trip_test!(rt_scientific_notation_2, "scientific_notation_2.mps");
+mps_round_trip_test!(rt_scientific_notation, "scientific_notation.mps");
+mps_round_trip_test!(rt_semi_continuous, "semi_continuous.mps");
+mps_round_trip_test!(rt_sudoku, "sudoku.mps");
+mps_round_trip_test!(rt_test2, "test2.mps");
+mps_round_trip_test!(rt_wbm, "wbm.mps");
+mps_round_trip_test!(rt_whiskas_model2, "WhiskasModel2.mps");

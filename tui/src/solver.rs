@@ -361,10 +361,8 @@ fn build_highs_model(problem: &LpProblem) -> BuiltModel {
 
         let (is_integer, lower, upper) = match variable.map(|v| &v.var_type) {
             Some(VariableType::Binary) => (true, 0.0, 1.0),
-            Some(VariableType::Integer) => (true, 0.0, f64::INFINITY),
-            Some(VariableType::Free | VariableType::General | VariableType::SemiContinuous | VariableType::SOS) | None => {
-                (false, 0.0, f64::INFINITY)
-            }
+            Some(VariableType::Integer | VariableType::General) => (true, 0.0, f64::INFINITY),
+            Some(VariableType::Free | VariableType::SemiContinuous | VariableType::SOS) | None => (false, 0.0, f64::INFINITY),
             Some(VariableType::LowerBound(lb)) => (false, *lb, f64::INFINITY),
             Some(VariableType::UpperBound(ub)) => (false, 0.0, *ub),
             Some(VariableType::DoubleBound(lb, ub)) => (false, *lb, *ub),
@@ -594,4 +592,25 @@ pub fn write_diff_csv(diff: &SolveDiffResult, dir: &Path) -> Result<(String, Str
     }
 
     Ok((var_filename, con_filename))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_enlight4_infeasible() {
+        let mut file_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        file_path.push("../rust/resources/enlight4.mps");
+        let input = std::fs::read_to_string(&file_path).expect("failed to read enlight4.mps");
+
+        let problem = LpProblem::parse_mps(&input).expect("failed to parse enlight4.mps");
+
+        let result = solve_problem(&problem).expect("solver should not error");
+        assert_eq!(
+            result.status, "Infeasible",
+            "enlight4 should be infeasible when integers are correctly applied, got: {}",
+            result.status
+        );
+    }
 }

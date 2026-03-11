@@ -10,6 +10,7 @@ mod sections;
 mod state;
 #[cfg(test)]
 mod tests;
+pub mod writer;
 
 pub use state::{extract_mps_name, parse_mps};
 

@@ -1,6 +1,8 @@
 use super::state::{extract_mps_name, parse_mps};
+use super::writer::write_mps_string;
 use crate::lexer::RawConstraint;
 use crate::model::{ComparisonOp, Sense, VariableType};
+use crate::problem::LpProblem;
 
 #[test]
 fn test_minimal_mps() {
@@ -824,6 +826,31 @@ ENDATA
 }
 
 #[test]
+fn test_enlight4_all_variables_integer() {
+    use std::path::PathBuf;
+
+    let mut file_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    file_path.push("resources/enlight4.mps");
+    let input = std::fs::read_to_string(&file_path).expect("failed to read enlight4.mps");
+
+    let result = parse_mps(&input).unwrap();
+
+    // All variables in enlight4 are between INTORG/INTEND markers
+    debug_assert!(!result.integers.is_empty(), "enlight4 should have integer variables");
+    let all_column_names: Vec<&str> = result
+        .objectives
+        .iter()
+        .flat_map(|o| o.coefficients.iter().map(|c| c.name))
+        .collect::<std::collections::HashSet<_>>()
+        .into_iter()
+        .collect();
+
+    for var_name in &all_column_names {
+        assert!(result.integers.contains(var_name), "Variable '{var_name}' should be integer (between INTORG/INTEND markers)");
+    }
+}
+
+#[test]
 fn test_multiple_unsupported_sections_skipped() {
     let input = "\
 NAME        test
@@ -847,4 +874,203 @@ ENDATA
 ";
     let result = parse_mps(input).unwrap();
     assert_eq!(result.constraints.len(), 1);
+}
+
+// --- Round-trip tests: parse MPS → build LpProblem → write MPS → re-parse → compare ---
+
+/// Helper: parse MPS input, write back, re-parse, and assert structural parity.
+fn assert_mps_round_trip(input: &str) {
+    let original = LpProblem::parse_mps(input).unwrap_or_else(|e| panic!("Failed to parse original MPS: {e}"));
+
+    let written = write_mps_string(&original).unwrap_or_else(|e| panic!("Failed to write MPS: {e}"));
+
+    let round_tripped =
+        LpProblem::parse_mps(&written).unwrap_or_else(|e| panic!("Failed to re-parse written MPS: {e}\n\nWritten MPS:\n{written}"));
+
+    assert_eq!(
+        original.sense, round_tripped.sense,
+        "Sense mismatch: original={:?}, round-tripped={:?}",
+        original.sense, round_tripped.sense
+    );
+    assert_eq!(
+        original.objective_count(),
+        round_tripped.objective_count(),
+        "Objective count mismatch: original={}, round-tripped={}",
+        original.objective_count(),
+        round_tripped.objective_count()
+    );
+    assert_eq!(
+        original.constraint_count(),
+        round_tripped.constraint_count(),
+        "Constraint count mismatch: original={}, round-tripped={}",
+        original.constraint_count(),
+        round_tripped.constraint_count()
+    );
+    assert_eq!(
+        original.variable_count(),
+        round_tripped.variable_count(),
+        "Variable count mismatch: original={}, round-tripped={}",
+        original.variable_count(),
+        round_tripped.variable_count()
+    );
+}
+
+#[test]
+fn test_mps_round_trip_basic() {
+    let input = "\
+NAME        basic
+ROWS
+ N  obj
+ L  c1
+COLUMNS
+    x1        obj       1
+    x1        c1        2
+RHS
+    RHS_V     c1        10
+ENDATA
+";
+    assert_mps_round_trip(input);
+}
+
+#[test]
+fn test_mps_round_trip_maximize() {
+    let input = "\
+NAME        maxtest
+OBJSENSE
+  MAX
+ROWS
+ N  obj
+ L  c1
+COLUMNS
+    x1        obj       3
+    x1        c1        1
+RHS
+    RHS_V     c1        5
+ENDATA
+";
+    assert_mps_round_trip(input);
+}
+
+#[test]
+fn test_mps_round_trip_integer_markers() {
+    let input = "\
+NAME        inttest
+ROWS
+ N  obj
+ L  c1
+COLUMNS
+    MARK0000  'MARKER'                 'INTORG'
+    x1        obj       1
+    x1        c1        2
+    x2        obj       3
+    x2        c1        4
+    MARK0001  'MARKER'                 'INTEND'
+ENDATA
+";
+    assert_mps_round_trip(input);
+}
+
+#[test]
+fn test_mps_round_trip_bound_types() {
+    let input = "\
+NAME        bounds
+ROWS
+ N  obj
+ L  c1
+COLUMNS
+    x1        obj       1
+    x1        c1        1
+    x2        obj       1
+    x2        c1        1
+    x3        obj       1
+    x3        c1        1
+    x4        obj       1
+    x4        c1        1
+RHS
+    RHS_V     c1        10
+BOUNDS
+ FR BOUND     x1
+ LO BOUND     x2        5
+ UP BOUND     x2        15
+ BV BOUND     x3
+ FX BOUND     x4        7
+ENDATA
+";
+    assert_mps_round_trip(input);
+}
+
+#[test]
+fn test_mps_round_trip_semi_continuous() {
+    let input = "\
+NAME        sc_test
+ROWS
+ N  obj
+ L  c1
+COLUMNS
+    x1        obj       1
+    x1        c1        1
+    x2        obj       1
+    x2        c1        1
+BOUNDS
+ SC BOUND     x1        100
+ENDATA
+";
+    assert_mps_round_trip(input);
+}
+
+#[test]
+fn test_mps_round_trip_multiple_constraints() {
+    let input = "\
+NAME        multi
+ROWS
+ N  obj
+ L  c1
+ G  c2
+ E  c3
+COLUMNS
+    x1        obj       1
+    x1        c1        1
+    x1        c2        2
+    x1        c3        3
+    x2        obj       4
+    x2        c1        5
+    x2        c2        6
+    x2        c3        7
+RHS
+    RHS_V     c1        10
+    RHS_V     c2        5
+    RHS_V     c3        7
+ENDATA
+";
+    assert_mps_round_trip(input);
+}
+
+#[test]
+fn test_mps_round_trip_multiple_objectives() {
+    let input = "\
+NAME        multiobj
+ROWS
+ N  obj1
+ N  obj2
+ L  c1
+COLUMNS
+    x1        obj1      1
+    x1        obj2      2
+    x1        c1        3
+RHS
+    RHS_V     c1        10
+ENDATA
+";
+    assert_mps_round_trip(input);
+}
+
+#[test]
+fn test_mps_round_trip_enlight4() {
+    use std::path::PathBuf;
+
+    let mut file_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    file_path.push("resources/enlight4.mps");
+    let input = std::fs::read_to_string(&file_path).expect("failed to read enlight4.mps");
+
+    assert_mps_round_trip(&input);
 }

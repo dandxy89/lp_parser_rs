@@ -148,6 +148,8 @@ pub(super) fn build_bounds<'input>(
             continue;
         };
 
+        let is_integer = integer_vars.contains(var_name);
+
         let var_type = if accumulator.binary {
             VariableType::Binary
         } else if accumulator.free {
@@ -156,11 +158,24 @@ pub(super) fn build_bounds<'input>(
             VariableType::DoubleBound(fixed, fixed)
         } else {
             match (accumulator.lower, accumulator.upper) {
-                (Some(lo), Some(hi)) => VariableType::DoubleBound(lo, hi),
-                (Some(lo), None) => VariableType::LowerBound(lo),
+                (Some(lo), Some(hi)) => {
+                    // Integer variable with bounds [0, 1] is Binary
+                    if is_integer && lo == 0.0 && hi == 1.0 { VariableType::Binary } else { VariableType::DoubleBound(lo, hi) }
+                }
+                (Some(lo), None) => {
+                    // Integer variable with lower bound 0 matches Integer default [0, +inf)
+                    if is_integer && lo == 0.0 { VariableType::Integer } else { VariableType::LowerBound(lo) }
+                }
                 (None, Some(hi)) => {
-                    // CPLEX spec: UP < 0 with no LO implies lower = -inf
-                    if hi < 0.0 { VariableType::DoubleBound(f64::NEG_INFINITY, hi) } else { VariableType::UpperBound(hi) }
+                    if is_integer && hi == 1.0 {
+                        // Integer variable with only upper bound 1 (default lower 0) is Binary
+                        VariableType::Binary
+                    } else if hi < 0.0 {
+                        // CPLEX spec: UP < 0 with no LO implies lower = -inf
+                        VariableType::DoubleBound(f64::NEG_INFINITY, hi)
+                    } else {
+                        VariableType::UpperBound(hi)
+                    }
                 }
                 (None, None) => continue, // No bounds to emit
             }
