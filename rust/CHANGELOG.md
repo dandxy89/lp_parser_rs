@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.4.0](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v3.3.0...lp_parser_rs-v3.4.0) (2026-03-16)
+
+
+### Miscellaneous Chores
+
+* Convert .lp files to mps ([#175](https://github.com/dandxy89/lp_parser_rs/issues/175)) ([e6e778a](https://github.com/dandxy89/lp_parser_rs/commit/e6e778a107bdcce4910424e697dddea19ec32e3c))
+
+
+### Features
+
+* Adding support for MPS files ([#176](https://github.com/dandxy89/lp_parser_rs/issues/176)) ([a615c54](https://github.com/dandxy89/lp_parser_rs/commit/a615c543616da1c344c915b9ee878fc2c95532b9))
+
 ## [3.3.0](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v3.2.2...lp_parser_rs-v3.3.0) (2026-03-02)
 
 

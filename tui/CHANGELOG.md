@@ -1,5 +1,20 @@
 # Changelog
 
+## [3.3.0](https://github.com/dandxy89/lp_parser_rs/compare/lp_diff-v3.2.0...lp_diff-v3.3.0) (2026-03-16)
+
+
+### Features
+
+* Adding support for MPS files ([#176](https://github.com/dandxy89/lp_parser_rs/issues/176)) ([a615c54](https://github.com/dandxy89/lp_parser_rs/commit/a615c543616da1c344c915b9ee878fc2c95532b9))
+* Adding toggle to hide ordering differences in Detail window ([#179](https://github.com/dandxy89/lp_parser_rs/issues/179)) ([ef8ec83](https://github.com/dandxy89/lp_parser_rs/commit/ef8ec8371776a7f23d859160e758298bde27ea5d))
+* Extending TUI to also support .mps files ([#178](https://github.com/dandxy89/lp_parser_rs/issues/178)) ([934cde8](https://github.com/dandxy89/lp_parser_rs/commit/934cde8a1b1c954239bd3d2bc190119a3e145c91))
+* Included MPS diff capability into the TUI ([#177](https://github.com/dandxy89/lp_parser_rs/issues/177)) ([a4d15b3](https://github.com/dandxy89/lp_parser_rs/commit/a4d15b39acde3d2d9ec6a4a1d3db7973ac51ab3c))
+
+
+### Styles
+
+* Clippy lints ([770813b](https://github.com/dandxy89/lp_parser_rs/commit/770813b9b4ac62f795f79535945e5e0861b60fce))
+
 ## [3.2.0](https://github.com/dandxy89/lp_parser_rs/compare/lp_diff-v3.1.1...lp_diff-v3.2.0) (2026-03-02)
 
 
