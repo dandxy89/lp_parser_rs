@@ -50,6 +50,31 @@ fn coefficients_equal(
     c1.iter().zip(c2.iter()).all(|(a, b)| p1.resolve(a.name) == p2.resolve(b.name) && (a.value - b.value).abs() <= COEFF_EPSILON)
 }
 
+/// Check whether two coefficient slices have the same set of (name, value) pairs
+/// but in different positional order. Only called on the slow path when the fast
+/// positional comparison has already failed.
+fn coefficients_reordered(
+    p1: &LpProblem,
+    c1: &[lp_parser_rs::model::Coefficient],
+    p2: &LpProblem,
+    c2: &[lp_parser_rs::model::Coefficient],
+) -> bool {
+    if c1.len() != c2.len() {
+        return false;
+    }
+    // If names already match positionally, there is no reordering.
+    let positional_match = c1.iter().zip(c2.iter()).all(|(a, b)| p1.resolve(a.name) == p2.resolve(b.name));
+    if positional_match {
+        return false;
+    }
+    // Sort by name and check that the same set of variable names appear.
+    let mut n1: Vec<&str> = c1.iter().map(|c| p1.resolve(c.name)).collect();
+    let mut n2: Vec<&str> = c2.iter().map(|c| p2.resolve(c.name)).collect();
+    n1.sort_unstable();
+    n2.sort_unstable();
+    n1 == n2
+}
+
 /// Intern a slice of model `Coefficient`s into `ResolvedCoefficient`s, adding
 /// their names to the report's shared interner instead of allocating `String`s.
 fn resolve_coefficients(
@@ -132,6 +157,8 @@ pub struct DiffCounts {
     pub removed: usize,
     pub modified: usize,
     pub unchanged: usize,
+    /// Subset of `modified` where the only difference is coefficient order.
+    pub order_only: usize,
 }
 
 impl DiffCounts {
@@ -171,6 +198,7 @@ impl DiffSummary {
             removed: self.variables.removed + self.constraints.removed + self.objectives.removed,
             modified: self.variables.modified + self.constraints.modified + self.objectives.modified,
             unchanged: self.variables.unchanged + self.constraints.unchanged + self.objectives.unchanged,
+            order_only: self.variables.order_only + self.constraints.order_only + self.objectives.order_only,
         }
     }
 }
@@ -214,6 +242,8 @@ pub struct ConstraintDiffEntry {
     pub line_file1: Option<usize>,
     /// 1-based line number in the second file, if known.
     pub line_file2: Option<usize>,
+    /// Whether the only difference is coefficient/weight ordering.
+    pub order_only: bool,
 }
 
 /// Detailed change information for a constraint diff entry.
@@ -230,6 +260,8 @@ pub enum ConstraintDiffDetail {
         new_rhs: f64,
         /// Operator from the old (file 1) side; equals the new side when `operator_change` is `None`.
         old_operator: ComparisonOp,
+        /// Whether the coefficient ordering differs between the two files.
+        order_changed: bool,
     },
     /// Both versions are SOS constraints.
     Sos {
@@ -239,6 +271,8 @@ pub enum ConstraintDiffDetail {
         type_change: Option<(SOSType, SOSType)>,
         /// SOS type from the old (file 1) side; equals the new side when `type_change` is `None`.
         old_sos_type: SOSType,
+        /// Whether the weight ordering differs between the two files.
+        order_changed: bool,
     },
     /// Constraint changed from Standard to SOS or vice versa.
     TypeChanged { old_summary: String, new_summary: String },
@@ -265,12 +299,20 @@ pub struct ObjectiveDiffEntry {
     pub old_coefficients: Vec<ResolvedCoefficient>,
     pub new_coefficients: Vec<ResolvedCoefficient>,
     pub coeff_changes: Vec<CoefficientChange>,
+    /// Whether the coefficient ordering differs between the two files.
+    pub order_changed: bool,
+    /// Whether the only difference is coefficient ordering.
+    pub order_only: bool,
 }
 
 /// Trait implemented by all diff entry types so the TUI can render them uniformly.
 pub trait DiffEntry {
     fn name(&self) -> &str;
     fn kind(&self) -> DiffKind;
+    /// Whether this entry's only change is coefficient/weight ordering.
+    fn is_order_only(&self) -> bool {
+        false
+    }
 }
 
 impl DiffEntry for VariableDiffEntry {
@@ -291,6 +333,10 @@ impl DiffEntry for ConstraintDiffEntry {
     fn kind(&self) -> DiffKind {
         self.kind
     }
+
+    fn is_order_only(&self) -> bool {
+        self.order_only
+    }
 }
 
 impl DiffEntry for ObjectiveDiffEntry {
@@ -300,6 +346,10 @@ impl DiffEntry for ObjectiveDiffEntry {
 
     fn kind(&self) -> DiffKind {
         self.kind
+    }
+
+    fn is_order_only(&self) -> bool {
+        self.order_only
     }
 }
 
@@ -474,6 +524,7 @@ fn diff_variables(p1: &LpProblem, p2: &LpProblem) -> SectionDiff<VariableDiffEnt
 }
 
 /// Diff two standard constraints and return the detail if they differ, `None` if unchanged.
+#[allow(clippy::too_many_arguments)]
 fn diff_standard_constraints(
     old_coefficients: &[ResolvedCoefficient],
     old_operator: &ComparisonOp,
@@ -482,12 +533,13 @@ fn diff_standard_constraints(
     new_operator: &ComparisonOp,
     new_rhs: f64,
     interner: &NameInterner,
+    order_changed: bool,
 ) -> Option<ConstraintDiffDetail> {
     let coeff_changes = diff_coefficients(old_coefficients, new_coefficients, interner);
     let operator_change = if old_operator == new_operator { None } else { Some((*old_operator, *new_operator)) };
     let rhs_change = if (old_rhs - new_rhs).abs() > COEFF_EPSILON { Some((old_rhs, new_rhs)) } else { None };
 
-    if coeff_changes.is_empty() && operator_change.is_none() && rhs_change.is_none() {
+    if coeff_changes.is_empty() && operator_change.is_none() && rhs_change.is_none() && !order_changed {
         return None;
     }
 
@@ -500,6 +552,7 @@ fn diff_standard_constraints(
         old_rhs,
         new_rhs,
         old_operator: *old_operator,
+        order_changed,
     })
 }
 
@@ -510,11 +563,12 @@ fn diff_sos_constraints(
     new_type: &SOSType,
     new_weights: &[ResolvedCoefficient],
     interner: &NameInterner,
+    order_changed: bool,
 ) -> Option<ConstraintDiffDetail> {
     let weight_changes = diff_coefficients(old_weights, new_weights, interner);
     let type_change = if old_type == new_type { None } else { Some((*old_type, *new_type)) };
 
-    if weight_changes.is_empty() && type_change.is_none() {
+    if weight_changes.is_empty() && type_change.is_none() && !order_changed {
         return None;
     }
 
@@ -524,6 +578,7 @@ fn diff_sos_constraints(
         weight_changes,
         type_change,
         old_sos_type: *old_type,
+        order_changed,
     })
 }
 
@@ -553,9 +608,10 @@ fn diff_constraint_pair(
             {
                 return None;
             }
+            let reordered = coefficients_reordered(p1, old_coefficients, p2, new_coefficients);
             let old_resolved = resolve_coefficients(p1, old_coefficients, interner);
             let new_resolved = resolve_coefficients(p2, new_coefficients, interner);
-            diff_standard_constraints(&old_resolved, old_operator, *old_rhs, &new_resolved, new_operator, *new_rhs, interner)
+            diff_standard_constraints(&old_resolved, old_operator, *old_rhs, &new_resolved, new_operator, *new_rhs, interner, reordered)
         }
 
         // Both SOS: diff weights and sos_type.
@@ -567,9 +623,10 @@ fn diff_constraint_pair(
             if old_type == new_type && coefficients_equal(p1, old_weights, p2, new_weights) {
                 return None;
             }
+            let reordered = coefficients_reordered(p1, old_weights, p2, new_weights);
             let old_resolved = resolve_coefficients(p1, old_weights, interner);
             let new_resolved = resolve_coefficients(p2, new_weights, interner);
-            diff_sos_constraints(old_type, &old_resolved, new_type, &new_resolved, interner)
+            diff_sos_constraints(old_type, &old_resolved, new_type, &new_resolved, interner, reordered)
         }
     }
 }
@@ -613,6 +670,7 @@ fn diff_constraints(
                     detail: ConstraintDiffDetail::AddedOrRemoved(resolve_constraint(p1, constraint, interner)),
                     line_file1: line1,
                     line_file2: line2,
+                    order_only: false,
                 });
                 i += 1;
             }
@@ -627,6 +685,7 @@ fn diff_constraints(
                     detail: ConstraintDiffDetail::AddedOrRemoved(resolve_constraint(p2, constraint, interner)),
                     line_file1: line1,
                     line_file2: line2,
+                    order_only: false,
                 });
                 j += 1;
             }
@@ -636,13 +695,27 @@ fn diff_constraints(
                 let line1 = line_map1.get(name_id1).copied();
                 let line2 = line_map2.get(name_id2).copied();
                 if let Some(detail) = diff_constraint_pair(p1, c1, p2, c2, interner) {
+                    // Determine if this is an order-only change.
+                    let order_only = match &detail {
+                        ConstraintDiffDetail::Standard { coeff_changes, operator_change, rhs_change, order_changed, .. } => {
+                            coeff_changes.is_empty() && operator_change.is_none() && rhs_change.is_none() && *order_changed
+                        }
+                        ConstraintDiffDetail::Sos { weight_changes, type_change, order_changed, .. } => {
+                            weight_changes.is_empty() && type_change.is_none() && *order_changed
+                        }
+                        _ => false,
+                    };
                     counts.modified += 1;
+                    if order_only {
+                        counts.order_only += 1;
+                    }
                     entries.push(ConstraintDiffEntry {
                         name: name.to_string(),
                         kind: DiffKind::Modified,
                         detail,
                         line_file1: line1,
                         line_file2: line2,
+                        order_only,
                     });
                 } else {
                     counts.unchanged += 1;
@@ -687,6 +760,8 @@ fn diff_objectives(p1: &LpProblem, p2: &LpProblem, interner: &mut NameInterner) 
                     old_coefficients: resolve_coefficients(p1, &o.coefficients, interner),
                     new_coefficients: Vec::new(),
                     coeff_changes: Vec::new(),
+                    order_changed: false,
+                    order_only: false,
                 });
                 i += 1;
             }
@@ -699,6 +774,8 @@ fn diff_objectives(p1: &LpProblem, p2: &LpProblem, interner: &mut NameInterner) 
                     old_coefficients: Vec::new(),
                     new_coefficients: resolve_coefficients(p2, &o.coefficients, interner),
                     coeff_changes: Vec::new(),
+                    order_changed: false,
+                    order_only: false,
                 });
                 j += 1;
             }
@@ -712,19 +789,26 @@ fn diff_objectives(p1: &LpProblem, p2: &LpProblem, interner: &mut NameInterner) 
                     j += 1;
                     continue;
                 }
+                let reordered = coefficients_reordered(p1, &o1_val.coefficients, p2, &o2_val.coefficients);
                 let old_resolved = resolve_coefficients(p1, &o1_val.coefficients, interner);
                 let new_resolved = resolve_coefficients(p2, &o2_val.coefficients, interner);
                 let coeff_changes = diff_coefficients(&old_resolved, &new_resolved, interner);
-                if coeff_changes.is_empty() {
+                if coeff_changes.is_empty() && !reordered {
                     counts.unchanged += 1;
                 } else {
+                    let order_only = coeff_changes.is_empty() && reordered;
                     counts.modified += 1;
+                    if order_only {
+                        counts.order_only += 1;
+                    }
                     entries.push(ObjectiveDiffEntry {
                         name: name.to_string(),
                         kind: DiffKind::Modified,
                         old_coefficients: old_resolved,
                         new_coefficients: new_resolved,
                         coeff_changes,
+                        order_changed: reordered,
+                        order_only,
                     });
                 }
                 i += 1;
@@ -1055,6 +1139,7 @@ mod tests {
             }),
             line_file1: None,
             line_file2: None,
+            order_only: false,
         };
         assert_diff_entry(&added_constraint, "c1", DiffKind::Added);
 
@@ -1066,6 +1151,8 @@ mod tests {
             old_coefficients: vec![],
             new_coefficients: vec![ResolvedCoefficient { name: a_id, value: 1.0 }, ResolvedCoefficient { name: b_id, value: 2.0 }],
             coeff_changes: vec![],
+            order_changed: false,
+            order_only: false,
         };
         assert_diff_entry(&added_obj, "obj", DiffKind::Added);
     }
@@ -1088,5 +1175,68 @@ mod tests {
         let entry = report.constraints.entries.iter().find(|e| e.name == "c1").expect("should have c1 entry");
         assert_eq!(entry.line_file1, Some(5));
         assert_eq!(entry.line_file2, Some(8));
+    }
+
+    #[test]
+    fn test_constraint_order_only_change() {
+        // Same coefficients, different order: 2x + 3y vs 3y + 2x
+        let p1 = problem_with_standard_constraint("c1", &[("x", 2.0), ("y", 3.0)], &ComparisonOp::LTE, 10.0);
+        let p2 = problem_with_standard_constraint("c1", &[("y", 3.0), ("x", 2.0)], &ComparisonOp::LTE, 10.0);
+        let report = quick_report(&p1, &p2);
+
+        let entry = report.constraints.entries.iter().find(|e| e.name == "c1");
+        assert!(entry.is_some(), "order-only constraint change should produce an entry");
+        let entry = entry.unwrap();
+        assert_eq!(entry.kind, DiffKind::Modified);
+        assert!(entry.order_only, "entry should be order_only");
+        assert!(entry.is_order_only(), "DiffEntry::is_order_only() should return true");
+
+        if let ConstraintDiffDetail::Standard { order_changed, coeff_changes, .. } = &entry.detail {
+            assert!(order_changed, "order_changed flag should be set");
+            assert!(coeff_changes.is_empty(), "no value changes expected");
+        } else {
+            panic!("Expected Standard detail");
+        }
+
+        assert_eq!(report.constraints.counts.modified, 1);
+        assert_eq!(report.constraints.counts.order_only, 1);
+    }
+
+    #[test]
+    fn test_constraint_order_with_value_change() {
+        // Different order AND different coefficient value.
+        let p1 = problem_with_standard_constraint("c1", &[("x", 2.0), ("y", 3.0)], &ComparisonOp::LTE, 10.0);
+        let p2 = problem_with_standard_constraint("c1", &[("y", 5.0), ("x", 2.0)], &ComparisonOp::LTE, 10.0);
+        let report = quick_report(&p1, &p2);
+
+        let entry = report.constraints.entries.iter().find(|e| e.name == "c1").unwrap();
+        assert_eq!(entry.kind, DiffKind::Modified);
+        assert!(!entry.order_only, "entry should NOT be order_only when values differ");
+
+        if let ConstraintDiffDetail::Standard { order_changed, coeff_changes, .. } = &entry.detail {
+            assert!(order_changed, "order_changed flag should still be set");
+            assert!(!coeff_changes.is_empty(), "value changes expected");
+        } else {
+            panic!("Expected Standard detail");
+        }
+
+        assert_eq!(report.constraints.counts.order_only, 0);
+    }
+
+    #[test]
+    fn test_objective_order_only_change() {
+        // Same coefficients, different order.
+        let p1 = problem_with_objective("obj1", &[("a", 1.0), ("b", 2.0)]);
+        let p2 = problem_with_objective("obj1", &[("b", 2.0), ("a", 1.0)]);
+        let report = quick_report(&p1, &p2);
+
+        let entry = report.objectives.entries.iter().find(|e| e.name == "obj1");
+        assert!(entry.is_some(), "order-only objective change should produce an entry");
+        let entry = entry.unwrap();
+        assert_eq!(entry.kind, DiffKind::Modified);
+        assert!(entry.order_only);
+        assert!(entry.order_changed);
+        assert!(entry.coeff_changes.is_empty());
+        assert_eq!(report.objectives.counts.order_only, 1);
     }
 }

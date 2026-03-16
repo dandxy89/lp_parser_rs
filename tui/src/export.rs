@@ -54,50 +54,68 @@ pub fn write_diff_csv(report: &LpDiffReport, dir: &Path) -> Result<String, Box<d
     // Constraints.
     for entry in &report.constraints.entries {
         detail_buf.clear();
-        match &entry.detail {
-            ConstraintDiffDetail::Standard { operator_change, rhs_change, coeff_changes, old_rhs, new_rhs, .. } => {
-                // For modified entries, summarise what changed.
-                if entry.kind == DiffKind::Modified {
-                    let mut parts: Vec<String> = Vec::new();
-                    if let Some((old_op, new_op)) = operator_change {
-                        parts.push(format!("operator: {old_op} -> {new_op}"));
+        if entry.order_only {
+            write!(detail_buf, "order change only").expect("writing to String cannot fail");
+        } else {
+            match &entry.detail {
+                ConstraintDiffDetail::Standard { operator_change, rhs_change, coeff_changes, old_rhs, new_rhs, order_changed, .. } => {
+                    // For modified entries, summarise what changed.
+                    if entry.kind == DiffKind::Modified {
+                        let mut parts: Vec<String> = Vec::new();
+                        if let Some((old_op, new_op)) = operator_change {
+                            parts.push(format!("operator: {old_op} -> {new_op}"));
+                        }
+                        if rhs_change.is_some() {
+                            parts.push(format!("rhs: {old_rhs} -> {new_rhs}"));
+                        }
+                        if !coeff_changes.is_empty() {
+                            parts.push(format!("{} coefficient(s) changed", coeff_changes.len()));
+                        }
+                        if *order_changed {
+                            parts.push("order changed".to_owned());
+                        }
+                        write!(detail_buf, "{}", parts.join("; ")).expect("writing to String cannot fail");
                     }
-                    if rhs_change.is_some() {
-                        parts.push(format!("rhs: {old_rhs} -> {new_rhs}"));
+                }
+                ConstraintDiffDetail::Sos { weight_changes, type_change, order_changed, .. } => {
+                    if entry.kind == DiffKind::Modified {
+                        let mut parts: Vec<String> = Vec::new();
+                        if let Some((old_t, new_t)) = type_change {
+                            parts.push(format!("SOS type: {old_t:?} -> {new_t:?}"));
+                        }
+                        if !weight_changes.is_empty() {
+                            parts.push(format!("{} weight(s) changed", weight_changes.len()));
+                        }
+                        if *order_changed {
+                            parts.push("order changed".to_owned());
+                        }
+                        write!(detail_buf, "{}", parts.join("; ")).expect("writing to String cannot fail");
                     }
-                    if !coeff_changes.is_empty() {
-                        parts.push(format!("{} coefficient(s) changed", coeff_changes.len()));
-                    }
-                    write!(detail_buf, "{}", parts.join("; ")).expect("writing to String cannot fail");
+                }
+                ConstraintDiffDetail::TypeChanged { old_summary, new_summary } => {
+                    write!(detail_buf, "{old_summary} -> {new_summary}").expect("writing to String cannot fail");
+                }
+                ConstraintDiffDetail::AddedOrRemoved(_) => {
+                    // No extra detail needed for purely added/removed constraints.
                 }
             }
-            ConstraintDiffDetail::Sos { weight_changes, type_change, .. } => {
-                if entry.kind == DiffKind::Modified {
-                    let mut parts: Vec<String> = Vec::new();
-                    if let Some((old_t, new_t)) = type_change {
-                        parts.push(format!("SOS type: {old_t:?} -> {new_t:?}"));
-                    }
-                    if !weight_changes.is_empty() {
-                        parts.push(format!("{} weight(s) changed", weight_changes.len()));
-                    }
-                    write!(detail_buf, "{}", parts.join("; ")).expect("writing to String cannot fail");
-                }
-            }
-            ConstraintDiffDetail::TypeChanged { old_summary, new_summary } => {
-                write!(detail_buf, "{old_summary} -> {new_summary}").expect("writing to String cannot fail");
-            }
-            ConstraintDiffDetail::AddedOrRemoved(_) => {
-                // No extra detail needed for purely added/removed constraints.
-            }
-        }
+        } // end else (not order_only)
         wtr.write_record(["Constraints", &entry.name, &entry.kind.to_string(), &detail_buf])?;
     }
 
     // Objectives.
     for entry in &report.objectives.entries {
         detail_buf.clear();
-        if !entry.coeff_changes.is_empty() {
-            write!(detail_buf, "{} coefficient(s) changed", entry.coeff_changes.len()).expect("writing to String cannot fail");
+        if entry.order_only {
+            write!(detail_buf, "order change only").expect("writing to String cannot fail");
+        } else if !entry.coeff_changes.is_empty() {
+            let mut msg = format!("{} coefficient(s) changed", entry.coeff_changes.len());
+            if entry.order_changed {
+                msg.push_str("; order changed");
+            }
+            write!(detail_buf, "{msg}").expect("writing to String cannot fail");
+        } else if entry.order_changed {
+            write!(detail_buf, "order changed").expect("writing to String cannot fail");
         }
         wtr.write_record(["Objectives", &entry.name, &entry.kind.to_string(), &detail_buf])?;
     }

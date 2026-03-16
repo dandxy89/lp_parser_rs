@@ -331,11 +331,14 @@ impl SectionViewState {
     }
 
     /// Recompute the filtered indices and cached sidebar lines from the given entries and filter.
-    pub(crate) fn recompute<T: DiffEntry>(&mut self, entries: &[T], filter: DiffFilter) {
+    pub(crate) fn recompute<T: DiffEntry>(&mut self, entries: &[T], filter: DiffFilter, ignore_order: bool) {
         debug_assert!(self.dirty, "recompute called on non-dirty SectionViewState");
         self.filtered_indices.clear();
         self.cached_lines.clear();
         for (i, entry) in entries.iter().enumerate() {
+            if ignore_order && entry.is_order_only() {
+                continue;
+            }
             if filter.matches(entry.kind()) {
                 self.filtered_indices.push(i);
                 let kind = entry.kind();

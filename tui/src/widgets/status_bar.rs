@@ -30,6 +30,7 @@ pub struct StatusBarParams<'a> {
     pub filter_count: usize,
     pub detail_position: Option<&'a DetailPosition>,
     pub yank_flash: Option<&'a YankFlash<'a>>,
+    pub ignore_order: bool,
 }
 
 /// Draw the status bar across the given area.
@@ -63,6 +64,9 @@ pub fn draw_status_bar(frame: &mut Frame, area: Rect, params: &StatusBarParams<'
         Span::styled("Filter: ", Style::default().fg(t.muted)),
         Span::styled(format!("{} ({})", params.filter_label, params.filter_count), Style::default().fg(t.modified)),
     ];
+    if params.ignore_order {
+        centre_spans.push(Span::styled(" [ignoring order]", Style::default().fg(t.warning)));
+    }
     if let Some(position) = params.detail_position
         && position.content_lines > 0
     {

@@ -20,6 +20,7 @@ const HELP_TEXT: &[&str] = &[
     "  k / ↑   Up          +   Added           ?   This help",
     "  g / Home Top         -   Removed         q   Quit",
     "  G / End  Bottom      m   Modified        Ctrl-C  Force quit",
+    "                       o   Ignore order",
     "  n / N   Down/Up",
     "  Ctrl-d  Half page ↓                     Clipboard",
     "  Ctrl-u  Half page ↑                     ─────────",
@@ -68,7 +69,7 @@ const HELP_TEXT: &[&str] = &[
 ];
 
 const POPUP_WIDTH: u16 = 60;
-const POPUP_HEIGHT: u16 = 54;
+const POPUP_HEIGHT: u16 = 55;
 
 /// Pre-built help text lines, cached to avoid per-frame allocation.
 static HELP_LINES: LazyLock<Vec<Line<'static>>> = LazyLock::new(|| {
