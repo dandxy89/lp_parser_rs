@@ -99,6 +99,7 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
             filter_count,
             detail_position: detail_pos.as_ref(),
             yank_flash: yank_flash.as_ref(),
+            ignore_order: app.ignore_order,
         },
     );
 

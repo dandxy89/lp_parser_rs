@@ -191,6 +191,14 @@ pub fn render_constraint_detail(
         lines.push(Line::from(spans));
     }
 
+    // Order-only badge.
+    if entry.order_only {
+        lines.push(Line::from(Span::styled(
+            "  \u{26a0} Order Changed \u{2014} coefficients are identical but appear in a different order",
+            Style::default().fg(t.warning),
+        )));
+    }
+
     match &entry.detail {
         ConstraintDiffDetail::Standard {
             old_coefficients,
@@ -200,6 +208,7 @@ pub fn render_constraint_detail(
             rhs_change,
             old_rhs,
             new_rhs,
+            order_changed,
             ..
         } => {
             // Operator change.
@@ -227,6 +236,11 @@ pub fn render_constraint_detail(
                 ]));
             }
 
+            // Note about order change when there are also value changes.
+            if *order_changed && !entry.order_only {
+                lines.push(Line::from(Span::styled("  Note: coefficient order also differs", Style::default().fg(t.warning))));
+            }
+
             lines.push(Line::from(""));
             lines.push(Line::from(Span::styled("  Coefficients:", muted().add_modifier(Modifier::BOLD))));
 
@@ -249,7 +263,7 @@ pub fn render_constraint_detail(
             render_coeff_changes(&mut lines, coeff_changes, old_coefficients, new_coefficients, cached_rows, Some(visible), interner);
         }
 
-        ConstraintDiffDetail::Sos { old_weights, new_weights, weight_changes, type_change, .. } => {
+        ConstraintDiffDetail::Sos { old_weights, new_weights, weight_changes, type_change, order_changed, .. } => {
             if let Some((old_type, new_type)) = type_change {
                 lines.push(Line::from(vec![
                     Span::styled("  SOS Type: ", muted()),
@@ -257,6 +271,10 @@ pub fn render_constraint_detail(
                     Span::styled(ARROW, muted()),
                     Span::styled(format!("{new_type}"), Style::default().fg(t.added)),
                 ]));
+            }
+
+            if *order_changed && !entry.order_only {
+                lines.push(Line::from(Span::styled("  Note: weight order also differs", Style::default().fg(t.warning))));
             }
 
             lines.push(Line::from(""));
@@ -332,7 +350,17 @@ pub fn render_objective_detail(
     interner: &NameInterner,
 ) -> usize {
     debug_assert!(area.width > 0 && area.height > 0, "objective detail area must be non-zero");
+    let t = theme();
     let mut lines = detail_header("Objective", &entry.name, entry.kind);
+
+    if entry.order_only {
+        lines.push(Line::from(Span::styled(
+            "  \u{26a0} Order Changed \u{2014} coefficients are identical but appear in a different order",
+            Style::default().fg(t.warning),
+        )));
+    } else if entry.order_changed {
+        lines.push(Line::from(Span::styled("  Note: coefficient order also differs", Style::default().fg(t.warning))));
+    }
 
     lines.push(Line::from(Span::styled("  Coefficients:", muted().add_modifier(Modifier::BOLD))));
 

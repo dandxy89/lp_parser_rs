@@ -141,6 +141,9 @@ impl App {
             // Toggle raw text side-by-side diff view.
             KeyCode::Char('r') => self.toggle_detail_view(),
 
+            // Toggle hiding order-only coefficient changes.
+            KeyCode::Char('o') => self.toggle_ignore_order(),
+
             // Open the search pop-up.
             KeyCode::Char('/') => self.open_search_popup(),
 

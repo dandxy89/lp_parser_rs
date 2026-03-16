@@ -193,6 +193,9 @@ pub struct App {
 
     /// Pre-computed section selector labels, avoiding per-frame `format!` allocations.
     pub(crate) section_labels: [Cow<'static, str>; 4],
+
+    /// When `true`, entries whose only change is coefficient ordering are hidden.
+    pub ignore_order: bool,
 }
 
 /// Cached coefficient rows keyed on (section, `entry_index`).
@@ -300,6 +303,7 @@ impl App {
             summary_lines,
             cached_summary: report_summary,
             section_labels,
+            ignore_order: false,
         }
     }
 
@@ -310,6 +314,28 @@ impl App {
             DetailView::Raw => DetailView::Parsed,
         };
         self.detail_scroll = 0;
+    }
+
+    /// Toggle hiding of order-only diff entries.
+    pub fn toggle_ignore_order(&mut self) {
+        self.ignore_order = !self.ignore_order;
+        self.invalidate_cache();
+        self.rebuild_summary();
+    }
+
+    /// Rebuild the cached summary and summary lines, adjusting counts when
+    /// `ignore_order` is active (order-only entries move from modified to unchanged).
+    fn rebuild_summary(&mut self) {
+        let mut summary = self.report.summary();
+        if self.ignore_order {
+            for counts in [&mut summary.variables, &mut summary.constraints, &mut summary.objectives] {
+                counts.modified -= counts.order_only;
+                counts.unchanged += counts.order_only;
+            }
+        }
+        self.summary_lines =
+            crate::widgets::summary::build_summary_lines(&self.report, &summary, &self.report.analysis1, &self.report.analysis2);
+        self.cached_summary = summary;
     }
 
     /// Extract raw LP text for the currently selected entry from both files.
@@ -369,10 +395,11 @@ impl App {
         debug_assert!(section != Section::Summary, "Summary has no list entries to recompute");
         let index = section.list_index().expect("non-Summary section has list_index");
         let filter = self.filter;
+        let ignore_order = self.ignore_order;
         match section {
-            Section::Variables => self.section_states[index].recompute(&self.report.variables.entries, filter),
-            Section::Constraints => self.section_states[index].recompute(&self.report.constraints.entries, filter),
-            Section::Objectives => self.section_states[index].recompute(&self.report.objectives.entries, filter),
+            Section::Variables => self.section_states[index].recompute(&self.report.variables.entries, filter, ignore_order),
+            Section::Constraints => self.section_states[index].recompute(&self.report.constraints.entries, filter, ignore_order),
+            Section::Objectives => self.section_states[index].recompute(&self.report.objectives.entries, filter, ignore_order),
             Section::Summary => unreachable!("Summary has no list_index"),
         }
     }
