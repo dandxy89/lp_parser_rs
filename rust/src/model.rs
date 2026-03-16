@@ -224,7 +224,7 @@ pub enum VariableType {
     #[default]
     /// Unbounded variable (-Infinity, +Infinity)
     Free,
-    /// General variable [0, +Infinity]
+    /// General integer variable [0, +Infinity]
     General,
     /// Variable with a lower bound (`x >= lb`).
     LowerBound(f64),

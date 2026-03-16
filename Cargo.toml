@@ -2,6 +2,13 @@
 members = ["python", "rust", "tui"]
 resolver = "3"
 
+[profile.release]
+lto = true
+opt-level = 3
+codegen-units = 1
+strip = "debuginfo"
+
 [profile.dev.package]
 insta.opt-level = 3
 similar.opt-level = 3
+ratatui.opt-level = 3
