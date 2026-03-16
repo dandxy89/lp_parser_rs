@@ -151,22 +151,22 @@ pub struct App {
     /// `HiGHS` solver session (state + view + channel).
     pub solver: SolverSession,
 
-    /// Path to the first LP file.
+    /// Path to the first file.
     pub file1_path: PathBuf,
 
-    /// Path to the second LP file.
+    /// Path to the second file.
     pub file2_path: PathBuf,
 
-    /// Parsed problem for the first LP file (shared with solver threads).
+    /// Parsed problem for the first file (shared with solver threads).
     pub problem1: Arc<LpProblem>,
 
-    /// Parsed problem for the second LP file (shared with solver threads).
+    /// Parsed problem for the second file (shared with solver threads).
     pub problem2: Arc<LpProblem>,
 
-    /// Raw source text of the first LP file (for raw text diff view).
+    /// Raw source text of the first file (for raw text diff view).
     pub raw_text1: Arc<str>,
 
-    /// Raw source text of the second LP file (for raw text diff view).
+    /// Raw source text of the second file (for raw text diff view).
     pub raw_text2: Arc<str>,
 
     /// Whether to show parsed diff or raw text side-by-side in the detail panel.

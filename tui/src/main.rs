@@ -30,15 +30,15 @@ use ratatui::prelude::CrosstermBackend;
 use crate::app::App;
 use crate::diff_model::{DiffInput, build_diff_report};
 use crate::event::{Event, EventHandler};
-use crate::parse::parse_lp_file;
+use crate::parse::parse_file;
 
-/// Interactive diff viewer for LP files
+/// Interactive diff viewer for LP and MPS files
 #[derive(Parser)]
 #[command(name = "lp_diff", version, about)]
 struct Cli {
-    /// First LP file (base)
+    /// First file (base)
     file1: PathBuf,
-    /// Second LP file (compare against)
+    /// Second file (compare against)
     file2: PathBuf,
     /// Print a structured summary to stdout and exit without launching the TUI
     #[arg(long)]
@@ -62,8 +62,8 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     stderr().flush()?;
 
     let (result1, result2) = std::thread::scope(|s| {
-        let h1 = s.spawn(|| parse_lp_file(&args.file1));
-        let h2 = s.spawn(|| parse_lp_file(&args.file2));
+        let h1 = s.spawn(|| parse_file(&args.file1));
+        let h2 = s.spawn(|| parse_file(&args.file2));
         (h1.join(), h2.join())
     });
 

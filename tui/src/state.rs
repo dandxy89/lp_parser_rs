@@ -369,7 +369,7 @@ pub enum DetailView {
     /// Parsed (structured) diff view — the default.
     #[default]
     Parsed,
-    /// Raw LP file text side-by-side view.
+    /// Raw file text side-by-side view.
     Raw,
 }
 

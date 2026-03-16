@@ -1,6 +1,6 @@
-# lp_diff — Interactive LP File Diff Viewer
+# lp_diff — Interactive LP/MPS File Diff Viewer
 
-A terminal-based interactive diff viewer for Linear Programming (LP) files, built with [ratatui](https://ratatui.rs).
+A terminal-based interactive diff viewer for Linear Programming files (LP and MPS formats), built with [ratatui](https://ratatui.rs).
 
 ## Installation
 
@@ -11,7 +11,7 @@ cargo install --path tui
 Or run directly from the workspace:
 
 ```sh
-cargo run -p lp_parser_tui -- file1.lp file2.lp
+cargo run -p lp_parser_tui -- file1.lp file2.mps
 ```
 
 ## Usage
@@ -20,7 +20,13 @@ cargo run -p lp_parser_tui -- file1.lp file2.lp
 lp_diff base.lp modified.lp
 ```
 
-The viewer parses both LP files, computes a rich diff report, and launches an interactive TUI.
+Both LP (`.lp`) and MPS (`.mps`) formats are supported. You can even mix formats — compare an LP file against an MPS file:
+
+```sh
+lp_diff model.lp model.mps
+```
+
+The viewer parses both files, computes a rich diff report, and launches an interactive TUI. Format is detected automatically by file extension.
 
 ### Summary Mode
 
@@ -144,7 +150,7 @@ Search mode prefixes (type in the pop-up input):
 
 | Key | Action |
 |-----|--------|
-| `S` | Solve an LP file with HiGHS |
+| `S` | Solve problem with HiGHS |
 | `1` / `2` | Select file 1 or file 2 (in picker) |
 | `3` | Solve both and diff (in picker) |
 | `j` / `k` | Scroll results (in results view) |
@@ -171,7 +177,7 @@ Search mode prefixes (type in the pop-up input):
 
 ## HiGHS Solver
 
-Press `S` to solve either LP file on demand using the [HiGHS](https://highs.dev) solver. Pick file 1 or 2, and the solver runs in a background thread. Results show the optimisation status, objective value, solve time, and a scrollable variable table.
+Press `S` to solve either file on demand using the [HiGHS](https://highs.dev) solver. Pick file 1 or 2, and the solver runs in a background thread. Results show the optimisation status, objective value, solve time, and a scrollable variable table.
 
 Option 3 ("Both") solves both files and shows a side-by-side comparison. Rows are marked as "changed" when their absolute difference exceeds a configurable delta threshold. Press `t` to cycle forward through preset thresholds (`0.0`, `0.0001`, `0.001`, `0.01`, `0.1`, `1.0`) and `T` to cycle backward. The default threshold is `0.0001`. Press `d` to toggle between showing all rows and changed-only rows, and `w` to export the diff to CSV.
 

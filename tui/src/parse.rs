@@ -8,8 +8,8 @@ use lp_parser_rs::problem::LpProblem;
 
 use crate::line_index::LineIndex;
 
-/// Parsed LP file: the problem, structural analysis, constraint→line-number map, and raw text.
-pub type ParsedLpFile = (LpProblem, ProblemAnalysis, HashMap<NameId, usize>, String);
+/// Parsed file: the problem, structural analysis, constraint→line-number map, and raw text.
+pub type ParsedFile = (LpProblem, ProblemAnalysis, HashMap<NameId, usize>, String);
 
 /// Build a map from constraint name to 1-based line number using byte offsets
 /// captured during parsing and a `LineIndex` built from the source text.
@@ -25,14 +25,22 @@ fn build_constraint_line_map(problem: &LpProblem, line_index: &LineIndex) -> Has
     map
 }
 
-/// Parse an LP file, returning the problem, analysis, and a constraint→line-number map.
+/// Parse an LP or MPS file, returning the problem, analysis, and a constraint→line-number map.
 ///
-/// Uses memory-mapped I/O to avoid copying the file into a heap-allocated `String`.
-pub fn parse_lp_file(path: &Path) -> Result<ParsedLpFile, Box<dyn std::error::Error + Send + Sync>> {
+/// Format is detected by file extension: `.mps` (case-insensitive) uses the MPS parser,
+/// everything else uses the LP parser. Uses memory-mapped I/O to avoid copying the file
+/// into a heap-allocated `String`.
+pub fn parse_file(path: &Path) -> Result<ParsedFile, Box<dyn std::error::Error + Send + Sync>> {
+    debug_assert!(path.exists(), "parse_file called with non-existent path: {}", path.display());
+
     let mapped = MappedFile::open(path).map_err(|e| format!("failed to read '{}': {e}", path.display()))?;
     let content = mapped.as_str();
     let raw_text = content.to_owned();
-    let problem = LpProblem::parse(content).map_err(|e| format!("failed to parse '{}': {e}", path.display()))?;
+
+    let is_mps = path.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("mps"));
+    let problem = if is_mps { LpProblem::parse_mps(content) } else { LpProblem::parse(content) }
+        .map_err(|e| format!("failed to parse '{}': {e}", path.display()))?;
+
     let line_index = LineIndex::new(content);
     let line_map = build_constraint_line_map(&problem, &line_index);
     let analysis = problem.analyze();
