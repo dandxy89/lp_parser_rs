@@ -76,7 +76,7 @@ class TestLpModification:
         # Update constraint coefficient and RHS
         parser.update_constraint_coefficient("C1", "x1", 2.0)
         parser.update_constraint_rhs("C1", 5.0)
-        c1: StandardConstraint = next(c for c in parser.constraints if c["name"] == "C1")  # type: ignore[assignment]
+        c1: StandardConstraint = next(c for c in parser.constraints if c["name"] == "C1")  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
         assert c1["rhs"] == 5.0
 
     def test_rename_operations(self, simple_lp_file: Path) -> None:
@@ -125,7 +125,7 @@ class TestLpModification:
 
         # Invalid type
         with pytest.raises(RuntimeError, match="Unknown variable type"):
-            parser.update_variable_type("x1", "invalid_type")  # type: ignore[arg-type]
+            parser.update_variable_type("x1", "invalid_type")  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
 
         # Set problem name
         parser.set_problem_name("Test Problem")
@@ -137,7 +137,7 @@ class TestLpModification:
 
         # Invalid sense
         with pytest.raises(RuntimeError, match="Invalid sense"):
-            parser.set_sense("invalid_sense")  # type: ignore[arg-type]
+            parser.set_sense("invalid_sense")  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
 
     def test_complex_workflow(self, simple_lp_file: Path) -> None:
         parser = LpParser(str(simple_lp_file))
@@ -162,7 +162,7 @@ class TestLpModification:
         assert coeffs["x3"] == 1.5
         assert "production" in coeffs
 
-        capacity: StandardConstraint = next(c for c in parser.constraints if c["name"] == "CAPACITY")  # type: ignore[assignment]
+        capacity: StandardConstraint = next(c for c in parser.constraints if c["name"] == "CAPACITY")  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
         assert capacity["rhs"] == 10.0
 
         assert "Integer" in parser.variables["x1"]["var_type"]
