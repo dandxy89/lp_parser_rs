@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.4.1](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v3.4.0...lp_parser_rs-v3.4.1) (2026-03-30)
+
+
+### Build System
+
+* Move clap to optional configuration ([042db9c](https://github.com/dandxy89/lp_parser_rs/commit/042db9c76813b93d7cd4a06940dd00a0ac7c5634))
+
 ## [3.4.0](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v3.3.0...lp_parser_rs-v3.4.0) (2026-03-16)
 
 
