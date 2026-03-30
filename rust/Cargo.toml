@@ -16,7 +16,6 @@ keywords = [
 ]
 categories = ["mathematics", "algorithms", "science"]
 repository = "https://github.com/dandxy89/lp_parser_rs"
-default-run = "lp_parser"
 
 [package.metadata.docs.rs]
 all-features = true
@@ -27,9 +26,10 @@ doctest = false
 [[bin]]
 name = "lp_parser"
 path = "src/bin/lp_parser/main.rs"
+required-features = ["cli"]
 
 [dependencies]
-clap = { version = "4.5", features = ["derive"] }
+clap = { version = "4.6", features = ["derive"], optional = true }
 csv = { version = "1.4.0", optional = true }
 diff-struct = { version = "0.5.3", optional = true }
 indexmap = "2.7"
@@ -45,7 +45,7 @@ serde_yaml = { version = "0.9", optional = true }
 thiserror = "2.0.18"
 
 [build-dependencies]
-lalrpop = { version = "0.23.0" }
+lalrpop = { version = "0.23.1" }
 
 [dev-dependencies]
 insta = { version = "1.46.3", features = ["yaml", "redactions"] }
@@ -53,6 +53,7 @@ serde_json = "1.0.149"
 test-case = "3.3.1"
 
 [features]
+cli = ["dep:clap"]
 csv = ["dep:csv"]
 default = []
 mmap = ["dep:memmap2"]
