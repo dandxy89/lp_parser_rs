@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.3.1](https://github.com/dandxy89/lp_parser_rs/compare/lp_diff-v3.3.0...lp_diff-v3.3.1) (2026-03-30)
+
+
+### Build System
+
+* Updating crates in TUI ([a94568c](https://github.com/dandxy89/lp_parser_rs/commit/a94568cffb2e449ebf0e2f1824f0098f0e5d75f0))
+
 ## [3.3.0](https://github.com/dandxy89/lp_parser_rs/compare/lp_diff-v3.2.0...lp_diff-v3.3.0) (2026-03-16)
 
 
