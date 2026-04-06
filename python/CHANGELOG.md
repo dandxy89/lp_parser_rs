@@ -1,5 +1,23 @@
 # Changelog
 
+## [3.4.1](https://github.com/dandxy89/lp_parser_rs/compare/parse_lp-v3.4.0...parse_lp-v3.4.1) (2026-04-06)
+
+
+### Build System
+
+* **deps:** bump pygments from 2.19.2 to 2.20.0 in /python ([#180](https://github.com/dandxy89/lp_parser_rs/issues/180)) ([4e4bd0f](https://github.com/dandxy89/lp_parser_rs/commit/4e4bd0f568ce087b832dc727f015eff46fdf555a))
+* Updating crates, ty and ruff ([76bbebc](https://github.com/dandxy89/lp_parser_rs/commit/76bbebc7ef216386f5f856dbac718cbc4e60cdbd))
+
+
+### Miscellaneous Chores
+
+* **deps-dev:** bump basedpyright ([#183](https://github.com/dandxy89/lp_parser_rs/issues/183)) ([95cab0a](https://github.com/dandxy89/lp_parser_rs/commit/95cab0abdb164057fb51f6b2c8adec6fa8f7569c))
+
+
+### Bug Fixes
+
+* Apply fixes due to ty violations ([76bbebc](https://github.com/dandxy89/lp_parser_rs/commit/76bbebc7ef216386f5f856dbac718cbc4e60cdbd))
+
 ## [3.4.0](https://github.com/dandxy89/lp_parser_rs/compare/parse_lp-v3.3.1...parse_lp-v3.4.0) (2026-03-02)
 
 
