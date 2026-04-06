@@ -20,7 +20,7 @@ chrono = "0.4.44"
 csv = "1.4.0"
 clap = { version = "4.6.0", features = ["derive"] }
 crossterm = "0.29.0"
-frizbee = "0.8.3"
+frizbee = "0.9.0"
 highs = "2.0.0"
 ratatui = { version = "0.30.0", default-features = false, features = ["crossterm"] }
 regex = "1.12.3"
