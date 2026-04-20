@@ -6,417 +6,240 @@
 [![PyPI version](https://badge.fury.io/py/parse-lp.svg)](https://badge.fury.io/py/parse-lp)
 [![PyPI Downloads](https://static.pepy.tech/personalized-badge/parse-lp?period=total&units=NONE&left_color=BLACK&right_color=GREEN&left_text=downloads)](https://pepy.tech/projects/parse-lp)
 
-## Interactive TUI Diff Viewer (`lp_diff`)
+A robust Rust library and CLI for parsing, analysing, modifying, and writing Linear Programming (LP) files. Built on [LALRPOP](https://github.com/lalrpop/lalrpop); grammar lives in [`lp.lalrpop`](/rust/src/lp.lalrpop).
 
-An interactive terminal-based diff viewer for LP and MPS files, built with [ratatui](https://ratatui.rs). Compare two files (LP, MPS, or mixed) with coefficient-level detail, fuzzy search, filtering, and integrated solving via [HiGHS](https://highs.dev).
-
-### Install
-
-```bash
-# From a cloned repo
-git clone https://github.com/dandxy89/lp_parser_rs.git
-cd lp_parser_rs
-cargo install --path tui
-```
-
-### Quick Start
-
-```bash
-lp_diff base.lp modified.lp
-```
-
-For a non interactive summary:
-
-```bash
-lp_diff base.lp modified.lp --summary
-```
-
-### Features
-
-- **Three-panel layout** — section selector, name list, and detail panel with coefficient-level side-by-side diffs
-- **Four sections** — Summary, Variables, Constraints, and Objectives
-- **Filtering** — show all (`a`), added (`+`), removed (`-`), or modified (`m`) entries
-- **Telescope-style search** — fuzzy (default), regex (`r:`), or substring (`s:`) across all sections
-- **HiGHS solver** — press `S` to solve either or both files and compare results
-- **Vim-style navigation** — `j`/`k`, `g`/`G`, `Ctrl+d`/`Ctrl+u`, jumplist (`Ctrl+o`/`Ctrl+i`)
-- **Clipboard & export** — yank names/details (`y`/`Y`), write solve diffs to CSV (`w`)
-- **Built-in help** — press `?` for full keybindings reference
-
-See [`tui/README.md`](tui/README.md) for the complete keybindings reference and detailed documentation.
-
-## Overview
-
-A robust Rust library for parsing, modifying, and writing Linear Programming (LP) files. Built on the [LALRPOP](https://github.com/lalrpop/lalrpop) parser generator, this crate provides comprehensive support for the LP file format with the ability to parse, programmatically modify, and regenerate LP files according to major industry specifications.
-
-The Grammar is defined with the [lp.lalrpop](/rust/src/lp.lalrpop) file - should you be curious...
-
-### Supported Specifications
-
-- [IBM CPLEX v22.1.1](https://www.ibm.com/docs/en/icos/22.1.1?topic=cplex-lp-file-format-algebraic-representation)
-- [FICO Xpress](https://www.fico.com/fico-xpress-optimization/docs/dms2020-03/solver/optimizer/HTML/chapter10_sec_section102.html)
-- [Gurobi](https://www.gurobi.com/documentation/current/refman/lp_format.html)
-- Mosek
+Supported specifications: [IBM CPLEX v22.1.1](https://www.ibm.com/docs/en/icos/22.1.1?topic=cplex-lp-file-format-algebraic-representation), [FICO Xpress](https://www.fico.com/fico-xpress-optimization/docs/dms2020-03/solver/optimizer/HTML/chapter10_sec_section102.html), [Gurobi](https://www.gurobi.com/documentation/current/refman/lp_format.html), Mosek.
 
 ## Features
 
-### Core Functionality
+- **Parsing & writing** — round-trip LP files (parse → modify → write → parse) with configurable formatting
+- **Problem modification** — rename / update / remove objectives, constraints, variables, coefficients, and RHS values
+- **Variable types** — integer, general, bounded, free, semi-continuous
+- **Analysis** — statistics, matrix density, sparsity, coefficient ranges, issue detection with configurable thresholds
+- **Diff** (`diff` feature) — structural comparison between two LP files
+- **Serialisation** (`serde` feature) — JSON / YAML support
+- **External solvers** (`lp-solvers` feature) — CBC, Gurobi, CPLEX, GLPK via the [lp-solvers](https://crates.io/crates/lp-solvers) crate
 
-- **Problem Definition**
-  - Problem name and sense specification
-  - Single and multi-objective optimisation support
-  - Comprehensive constraint handling
+## Library Usage
 
-- **Variable Support**
-  - Integer, general, bounded, free, semi-continuous variables
-
-- **LP File Writing and Modification**
-  - Generate LP files from parsed problems
-  - Modify objectives, constraints, and variables programmatically
-  - Round-trip compatibility (parse → modify → write → parse)
-  - Maintain proper LP format specifications
-
-### Advanced Features
-
-- **Problem Analysis**
-  - Comprehensive statistics: variable/constraint counts, matrix density, sparsity metrics
-  - Variable analysis: type distribution, unused/fixed variables, invalid bounds detection
-  - Constraint analysis: type distribution, empty/singleton constraints, RHS ranges
-  - Coefficient analysis: ranges, large/small coefficient detection, scaling ratios
-  - Issue detection with severity levels (errors, warnings, info)
-  - Configurable thresholds for different problem domains
-
-- **LP File Comparison (`diff` feature)**
-  - Identify added, removed, and modified elements
-  - Useful for model version control and validation
-
-- **Serialisation (`serde` feature)**
-  - Full serialisation support for all model structures
-  - Compatible with various data formats
-  - Enables integration with other tools and systems
-
-## Quick Start
-
-### Installation
-
-Add to your `Cargo.toml`:
-
-```toml
-[dependencies]
-lp_parser_rs = "3.0.0" # x-release-please-version
-```
-
-### Basic Usage
-
-Using the library directly:
-
-```rust
-use lp_parser_rs::{parser::parse_file, problem::LpProblem};
-use std::path::Path;
-
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Parse LP file content
-    let content = parse_file(Path::new("problem.lp"))?;
-
-    // Parse into LP problem structure
-    let problem = LpProblem::parse(&content)?;
-
-    // Access problem components
-    println!("Problem name: {:?}", problem.name());
-    println!("Objective count: {}", problem.objective_count());
-    println!("Constraint count: {}", problem.constraint_count());
-    println!("Variable count: {}", problem.variable_count());
-
-    Ok(())
-}
-```
-
-### LP File Writing and Modification
-
-```rust
-use lp_parser_rs::{problem::LpProblem, writer::write_lp_string, model::*};
-
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Parse an existing LP file
-    let lp_content = std::fs::read_to_string("problem.lp")?;
-    let mut problem = LpProblem::parse(&lp_content)?;
-
-    // Modify objectives
-    problem.update_objective_coefficient("profit", "x1", 5.0)?;
-    problem.rename_objective("profit", "total_profit")?;
-
-    // Modify constraints
-    problem.update_constraint_coefficient("capacity", "x1", 2.0)?;
-    problem.update_constraint_rhs("capacity", 200.0)?;
-    problem.rename_constraint("capacity", "production_limit")?;
-
-    // Modify variables
-    problem.rename_variable("x1", "production_a")?;
-    problem.update_variable_type("production_a", VariableType::Integer)?;
-
-    // Write back to LP format
-    let modified_lp = write_lp_string(&problem)?;
-    std::fs::write("modified_problem.lp", modified_lp)?;
-
-    Ok(())
-}
-```
-
-### Enable Optional Features
+Add to `Cargo.toml`:
 
 ```toml
 [dependencies]
 lp_parser_rs = { version = "3.0.0", features = ["serde", "diff"] } # x-release-please-version
 ```
 
-## Command-Line Interface
+Parse and inspect:
 
-The `lp_parser` binary provides a comprehensive CLI for working with LP files.
+```rust
+use lp_parser_rs::{parser::parse_file, problem::LpProblem};
+use std::path::Path;
 
-### Installation
+let content = parse_file(Path::new("problem.lp"))?;
+let problem = LpProblem::parse(&content)?;
+println!("{} objectives, {} constraints, {} variables",
+    problem.objective_count(), problem.constraint_count(), problem.variable_count());
+```
+
+Modify and write:
+
+```rust
+use lp_parser_rs::{problem::LpProblem, writer::write_lp_string, model::VariableType};
+
+let mut problem = LpProblem::parse(&std::fs::read_to_string("problem.lp")?)?;
+
+problem.update_objective_coefficient("profit", "x1", 5.0)?;
+problem.rename_objective("profit", "total_profit")?;
+problem.update_constraint_coefficient("capacity", "x1", 2.0)?;
+problem.update_constraint_rhs("capacity", 200.0)?;
+problem.rename_variable("x1", "production_a")?;
+problem.update_variable_type("production_a", VariableType::Integer)?;
+
+std::fs::write("modified.lp", write_lp_string(&problem)?)?;
+```
+
+Available modification methods on `LpProblem`: `update_objective_coefficient`, `rename_objective`, `remove_objective`, `update_constraint_coefficient`, `update_constraint_rhs`, `rename_constraint`, `remove_constraint`, `rename_variable`, `update_variable_type`, `remove_variable`.
+
+Writer options: `write_lp_string_with_options(&problem, &LpWriterOptions { include_problem_name, max_line_length, decimal_precision, include_section_spacing })`.
+
+## Command-Line Interface (`lp_parser`)
+
+### Install
 
 ```bash
-# Install with all features
 cargo install lp_parser_rs --all-features
-
-# Or build from source
+# Or from source
 git clone https://github.com/dandxy89/lp_parser_rs.git
-cd lp_parser_rs/rust
-cargo build --release --all-features
+cd lp_parser_rs/rust && cargo build --release --all-features
 ```
 
-### Commands
+### Global options
 
-```
-lp_parser <COMMAND>
+| Flag                               | Description                            |
+| ---------------------------------- | -------------------------------------- |
+| `-v`, `--verbose`                  | Increase output verbosity (repeatable) |
+| `-q`, `--quiet`                    | Suppress non-essential output          |
+| `-h`, `--help` / `-V`, `--version` | Print help / version                   |
 
-Commands:
-  parse    Parse an LP file and display its structure
-  info     Show detailed statistics about an LP problem
-  analyze  Analyze problem structure, detect issues, and report statistics
-  diff     Compare two LP files (requires 'diff' feature)
-  convert  Convert LP file to another format
-  solve    Solve an LP problem using external solvers (requires 'lp-solvers' feature)
+### `parse` — display file structure
 
-Global Options:
-  -v, --verbose    Increase output verbosity
-  -q, --quiet      Suppress non-essential output
-  -h, --help       Print help
-  -V, --version    Print version
-```
-
-### Examples
-
-**Parse and display an LP file:**
+| Option                | Default | Description                            |
+| --------------------- | ------- | -------------------------------------- |
+| `<FILE>`              | —       | Path to the LP file (required)         |
+| `-o, --output <PATH>` | stdout  | Write output to file                   |
+| `-f, --format <FMT>`  | `text`  | `text`, `json` (serde), `yaml` (serde) |
+| `--pretty`            | off     | Pretty-print JSON/YAML                 |
 
 ```bash
 lp_parser parse problem.lp
-```
-
-**Get problem statistics:**
-
-```bash
-lp_parser info problem.lp
-# With detailed listings
-lp_parser info problem.lp --variables --constraints --objectives
-```
-
-**Analyze problem structure and detect issues:**
-
-```bash
-# Full analysis with statistics and issue detection
-lp_parser analyze problem.lp
-
-# Show only warnings and errors
-lp_parser analyze problem.lp --issues-only
-
-# Output as JSON or YAML
-lp_parser analyze problem.lp --format json --pretty
-lp_parser analyze problem.lp --format yaml -o analysis.yaml
-
-# Custom thresholds for numerical issue detection
-lp_parser analyze problem.lp --large-coeff-threshold 1e8 --ratio-threshold 1e5
-```
-
-Example analysis output:
-```yaml
-summary:
-  name: diet
-  sense: Minimize
-  objective_count: 1
-  constraint_count: 7
-  variable_count: 16
-  total_nonzeros: 64
-  density: 0.571
-sparsity:
-  min_vars_per_constraint: 6
-  max_vars_per_constraint: 10
-variables:
-  type_distribution:
-    upper_bounded: 9
-    double_bounded: 7
-  discrete_variable_count: 0
-constraints:
-  type_distribution:
-    equality: 7
-  rhs_range:
-    min: 30.0
-    max: 50000.0
-coefficients:
-  constraint_coeff_range:
-    min: 0.1
-    max: 3055.2
-  coefficient_ratio: 101840.0
-issues: []
-```
-
-**Output as JSON or YAML:**
-
-```bash
-lp_parser info problem.lp --format json --pretty
 lp_parser parse problem.lp --format yaml -o problem.yaml
 ```
 
-**Compare two LP files:**
+### `info` — summary statistics
+
+Adds to the `parse` options:
+
+| Option          | Description                         |
+| --------------- | ----------------------------------- |
+| `--variables`   | List all variables with their types |
+| `--constraints` | List all constraints                |
+| `--objectives`  | List all objectives                 |
 
 ```bash
-lp_parser diff old_model.lp new_model.lp
-lp_parser diff old.lp new.lp --format json --pretty
+lp_parser info problem.lp
+lp_parser info problem.lp --variables --constraints --objectives
+lp_parser info problem.lp --format json --pretty
 ```
 
-**Convert between formats:**
+### `analyze` — structural analysis & issue detection
+
+Adds to the `parse` options:
+
+| Option                        | Default | Description                                   |
+| ----------------------------- | ------- | --------------------------------------------- |
+| `--issues-only`               | off     | Skip full analysis; show warnings/errors only |
+| `--large-coeff-threshold <F>` | `1e9`   | Warn on coefficients larger than this         |
+| `--small-coeff-threshold <F>` | `1e-9`  | Warn on coefficients smaller than this        |
+| `--ratio-threshold <F>`       | `1e6`   | Warn on coefficient scaling ratios above this |
 
 ```bash
-# To LP (with formatting options)
+lp_parser analyze problem.lp
+lp_parser analyze problem.lp --issues-only
+lp_parser analyze problem.lp --large-coeff-threshold 1e8 --ratio-threshold 1e5
+lp_parser analyze problem.lp --format yaml -o analysis.yaml
+```
+
+<details>
+<summary>Example output</summary>
+
+```yaml
+summary: { name: diet, sense: Minimize, objective_count: 1, constraint_count: 7, variable_count: 16, density: 0.571 }
+variables: { type_distribution: { upper_bounded: 9, double_bounded: 7 }, discrete_variable_count: 0 }
+constraints: { type_distribution: { equality: 7 }, rhs_range: { min: 30.0, max: 50000.0 } }
+coefficients: { constraint_coeff_range: { min: 0.1, max: 3055.2 }, coefficient_ratio: 101840.0 }
+issues: []
+```
+</details>
+
+### `diff` — compare two LP files (requires `diff` feature)
+
+| Option                      | Default | Description                                                              |
+| --------------------------- | ------- | ------------------------------------------------------------------------ |
+| `<FILE1> <FILE2>`           | —       | Base and comparison files                                                |
+| `-o, --output <PATH>`       | stdout  | Write output to file                                                     |
+| `-f, --format <FMT>`        | `text`  | `text`, `json`, `yaml`                                                   |
+| `--pretty`                  | off     | Pretty-print structured output                                           |
+| `--abs-tol <F>`             | `0.0`   | Absolute tolerance for numeric comparisons                               |
+| `--rel-tol <F>`             | `0.0`   | Relative tolerance: `                                                    | a-b | ≤ rel_tol · max( | a | , | b | )` |
+| `--rename <PATTERN> <REPL>` | —       | Regex rewrite applied to names in both files before matching; repeatable |
+
+```bash
+lp_parser diff old.lp new.lp
+lp_parser diff old.lp new.lp --abs-tol 1e-6 --rel-tol 1e-9
+lp_parser diff old.lp new.lp --rename '\[\d+\]$' '[N]' --format json --pretty
+```
+
+### `convert` — translate to another format
+
+| Option                  | Default | Description                                 |
+| ----------------------- | ------- | ------------------------------------------- |
+| `<FILE>`                | —       | Path to the LP file                         |
+| `-o, --output <PATH>`   | stdout  | Output file or directory (required for CSV) |
+| `-f, --format <FMT>`    | `lp`    | `lp`, `csv`, `json`, `yaml`                 |
+| `--pretty`              | off     | Pretty-print JSON/YAML                      |
+| `--precision <N>`       | `6`     | Decimal precision for numbers               |
+| `--max-line-length <N>` | `80`    | Line-wrap threshold for LP output           |
+| `--no-problem-name`     | off     | Omit problem-name comment in LP output      |
+| `--compact`             | off     | No section spacing                          |
+
+```bash
 lp_parser convert problem.lp --format lp --precision 4 --compact
-
-# To CSV (creates constraints.csv, objectives.csv, variables.csv)
-lp_parser convert problem.lp --format csv --output ./output_dir
-
-# To JSON/YAML
+lp_parser convert problem.lp --format csv --output ./out     # writes constraints.csv, objectives.csv, variables.csv
 lp_parser convert problem.lp --format json --pretty -o problem.json
-lp_parser convert problem.lp --format yaml -o problem.yaml
 ```
 
-**Solve with external solvers:**
+### `solve` — run an external solver (requires `lp-solvers` feature)
+
+| Option                | Default | Description                      |
+| --------------------- | ------- | -------------------------------- |
+| `<FILE>`              | —       | Path to the LP file              |
+| `-s, --solver <NAME>` | `cbc`   | `cbc`, `gurobi`, `cplex`, `glpk` |
+| `-o, --output <PATH>` | stdout  | Write solution to file           |
+| `-f, --format <FMT>`  | `text`  | `text`, `json`, `yaml`           |
+| `--pretty`            | off     | Pretty-print structured output   |
+
 ```bash
-# Using CBC (default)
 lp_parser solve problem.lp
-
-# Using GLPK
 lp_parser solve problem.lp --solver glpk
-
-# Output solution as JSON
 lp_parser solve problem.lp --format json --pretty
 ```
 
-## Solving with External Solvers (`lp-solvers` feature)
+The selected solver binary must be installed on your `PATH`. The compatibility layer does **not** support multiple objectives (errors), strict inequalities (`<`, `>`), or SOS constraints (ignored with a warning).
 
-Enable the `lp-solvers` feature to solve parsed LP problems using external solvers like CBC, Gurobi, CPLEX, or GLPK via the [lp-solvers](https://crates.io/crates/lp-solvers) crate:
+## Interactive TUI Diff Viewer (`lp_diff`)
 
-```toml
-[dependencies]
-lp_parser_rs = { version = "3.0.0", features = ["lp-solvers"] } # x-release-please-version
-lp-solvers = "1.1"
+A terminal UI for comparing LP/MPS files with coefficient-level side-by-side diffs, fuzzy search, filtering, and integrated [HiGHS](https://highs.dev) solving. Built with [ratatui](https://ratatui.rs).
+
+```bash
+cargo install --path tui
+lp_diff base.lp modified.lp            # interactive
+lp_diff base.lp modified.lp --summary  # non-interactive summary
 ```
 
-```rust
-use lp_parser_rs::{problem::LpProblem, ToLpSolvers};
-use lp_solvers::solvers::{CbcSolver, SolverTrait};
+#### Tolerance & rename (parity with `lp_parser diff`)
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let lp_content = r"
-Minimize
- obj: 2 x + 3 y
-Subject To
- c1: x + y <= 10
- c2: x >= 2
-Bounds
- x >= 0
- y >= 0
-End
-";
+`lp_diff` accepts the same name-rewrite and numeric-tolerance flags as the CLI `diff` command. Active options are shown on the Summary panel (and in `--summary` output) so results are reproducible.
 
-    let problem = LpProblem::parse(lp_content)?;
-    let compat = problem.to_lp_solvers()?;
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--abs-tol <F>` | `0.0` | Absolute tolerance for RHS & coefficient comparisons |
+| `--rel-tol <F>` | `0.0` | Relative tolerance: `|a-b| ≤ rel_tol · max(|a|,|b|)` |
+| `--rename <PATTERN> <REPL>` | — | Regex rewrite applied to names in both files before matching; repeatable |
 
-    // Check for any compatibility warnings
-    for warning in compat.warnings() {
-        eprintln!("Warning: {}", warning);
-    }
+```bash
+# Collapse indexed names (e.g. x[1,2,foo] / x[9,9,baz] → x[idx]) so structural diffs survive renumbering
+lp_diff base.lp modified.lp --rename '\[\d+,\d+,[^]]*\]$' '[idx]'
 
-    // Solve using CBC solver (must be installed on your system)
-    let solver = CbcSolver::new();
-    let solution = solver.run(&compat)?;
-    println!("Solution status: {:?}", solution.status);
+# Hide near-equal RHS/coefficient drift
+lp_diff base.lp modified.lp --abs-tol 1e-4 --rel-tol 1e-6
 
-    Ok(())
-}
+# Combine with --summary for scripting
+lp_diff base.lp modified.lp --summary --rename '\[\d+\]$' '[idx]' --abs-tol 1e-6
 ```
 
-**Limitations:** The lp-solvers compatibility layer does not support multiple objectives (returns an error), strict inequalities (`<`, `>`), or SOS constraints (ignored with a warning).
+Highlights: three-panel layout, four sections (Summary / Variables / Constraints / Objectives), filtering (`a`/`+`/`-`/`m`), telescope-style search (fuzzy, `r:` regex, `s:` substring), HiGHS solve-and-compare (`S`), vim-style navigation and jumplist, clipboard yank (`y`/`Y`), CSV export (`w`), `?` for full help.
 
-## API Reference
-
-### Problem Modification Methods
-
-The `LpProblem` struct provides comprehensive methods for modifying LP problems:
-
-#### Objective Modifications
-- `update_objective_coefficient(objective_name, variable_name, coefficient)` - Update or add a coefficient in an objective
-- `rename_objective(old_name, new_name)` - Rename an objective
-- `remove_objective(objective_name)` - Remove an objective
-
-#### Constraint Modifications
-- `update_constraint_coefficient(constraint_name, variable_name, coefficient)` - Update or add a coefficient in a constraint
-- `update_constraint_rhs(constraint_name, new_rhs)` - Update the right-hand side value
-- `rename_constraint(old_name, new_name)` - Rename a constraint
-- `remove_constraint(constraint_name)` - Remove a constraint
-
-#### Variable Modifications
-- `rename_variable(old_name, new_name)` - Rename a variable across all objectives and constraints
-- `update_variable_type(variable_name, new_type)` - Change variable type (Binary, Integer, etc.)
-- `remove_variable(variable_name)` - Remove a variable from all objectives and constraints
-
-### Writing LP Files
-
-```rust
-use lp_parser_rs::writer::{write_lp_string, write_lp_string_with_options, LpWriterOptions};
-
-// Write with default options
-let lp_content = write_lp_string(&problem)?;
-
-// Write with custom options
-let options = LpWriterOptions {
-    include_problem_name: true,
-    max_line_length: 80,
-    decimal_precision: 6,
-    include_section_spacing: true,
-};
-let lp_content = write_lp_string_with_options(&problem, &options)?;
-```
+See [`tui/README.md`](tui/README.md) for the complete reference.
 
 ## Development
 
-### Testing
-
-The project uses snapshot testing via `insta` for reliable test management:
-
 ```bash
-# Run all tests with all features enabled
-cargo insta test --all-features
-
-# Review snapshot changes
-cargo insta review
+cargo insta test --all-features   # run tests
+cargo insta review                # review snapshot changes
 ```
 
-## Test Data Sources
-
-The test suite includes data from various open-source projects:
-
-- [Jplex](https://github.com/asbestian/jplex/blob/main/instances/afiro.lp)
-- [LPWriter.jl](https://github.com/odow/LPWriter.jl/blob/master/test/model2.lp)
-- [Lp-Parser](https://github.com/aphi/Lp-Parser)
+Test data sources: [Jplex](https://github.com/asbestian/jplex/blob/main/instances/afiro.lp), [LPWriter.jl](https://github.com/odow/LPWriter.jl/blob/master/test/model2.lp), [Lp-Parser](https://github.com/aphi/Lp-Parser).
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome — please open a Pull Request.

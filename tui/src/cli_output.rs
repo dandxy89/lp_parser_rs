@@ -9,6 +9,9 @@ pub fn print_summary(report: &LpDiffReport) {
     let summary = report.summary();
 
     println!("LP Diff: {} vs {}", report.file1, report.file2);
+    if !report.options_summary.is_default() {
+        println!("Options: {}", report.options_summary);
+    }
     println!();
 
     let var = &summary.variables;

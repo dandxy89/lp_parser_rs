@@ -28,7 +28,7 @@ use ratatui::Terminal;
 use ratatui::prelude::CrosstermBackend;
 
 use crate::app::App;
-use crate::diff_model::{DiffInput, build_diff_report};
+use crate::diff_model::{DiffInput, DiffOptions, build_diff_report};
 use crate::event::{Event, EventHandler};
 use crate::parse::parse_file;
 
@@ -43,6 +43,36 @@ struct Cli {
     /// Print a structured summary to stdout and exit without launching the TUI
     #[arg(long)]
     summary: bool,
+
+    /// Absolute tolerance for numeric comparisons (RHS & coefficients)
+    #[arg(long, default_value_t = 0.0)]
+    abs_tol: f64,
+
+    /// Relative tolerance for numeric comparisons (|a-b| <= rel_tol * max(|a|,|b|))
+    #[arg(long, default_value_t = 0.0)]
+    rel_tol: f64,
+
+    /// Regex rewrite applied to names in BOTH files before matching.
+    /// Takes two values: PATTERN REPLACEMENT. May be repeated; rules apply in order.
+    /// Example: --rename '\[\d+,\d+,[^]]*\]$' '[idx]'
+    #[arg(long, num_args = 2, value_names = ["PATTERN", "REPLACEMENT"], action = clap::ArgAction::Append)]
+    rename: Vec<String>,
+}
+
+/// Compile the `--rename` pairs into a list of `(Regex, replacement)` tuples.
+///
+/// Fails on an odd number of values or an invalid regex — both are surfaced to the
+/// user before any expensive parsing happens.
+fn build_rename_rules(raw: &[String]) -> Result<Vec<(regex::Regex, String)>, Box<dyn std::error::Error + Send + Sync>> {
+    if !raw.len().is_multiple_of(2) {
+        return Err("--rename requires pairs of PATTERN REPLACEMENT".into());
+    }
+    let mut rules = Vec::with_capacity(raw.len() / 2);
+    for chunk in raw.chunks_exact(2) {
+        let re = regex::Regex::new(&chunk[0]).map_err(|e| format!("invalid --rename pattern '{}': {e}", chunk[0]))?;
+        rules.push((re, chunk[1].clone()));
+    }
+    Ok(rules)
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -55,6 +85,16 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     if !args.file2.exists() {
         return Err(format!("file not found: '{}'", args.file2.display()).into());
     }
+
+    // Validate + compile comparison options before parsing (fails fast on bad regex).
+    if !args.abs_tol.is_finite() || args.abs_tol < 0.0 {
+        return Err(format!("--abs-tol must be a finite non-negative number, got {}", args.abs_tol).into());
+    }
+    if !args.rel_tol.is_finite() || args.rel_tol < 0.0 {
+        return Err(format!("--rel-tol must be a finite non-negative number, got {}", args.rel_tol).into());
+    }
+    let rename_rules = build_rename_rules(&args.rename)?;
+    let diff_options = DiffOptions { abs_tol: args.abs_tol, rel_tol: args.rel_tol, rename_rules };
 
     // Parse both files in parallel using scoped threads
     let start = Instant::now();
@@ -95,6 +135,7 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         line_map2: &line_map2,
         analysis1,
         analysis2,
+        options: diff_options,
     });
     eprintln!("done ({:.1}s, {} changes found)", diff_start.elapsed().as_secs_f64(), report.summary().total_changes(),);
 
