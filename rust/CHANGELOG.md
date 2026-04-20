@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.4.1](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v3.4.0...lp_parser_rs-v3.4.1) (2026-04-20)
+
+
+### Build System
+
+* Move clap to optional configuration ([042db9c](https://github.com/dandxy89/lp_parser_rs/commit/042db9c76813b93d7cd4a06940dd00a0ac7c5634))
+
+
+### Bug Fixes
+
+* **feat:** Extending the regex and improving the versatility of the original CLI ([#185](https://github.com/dandxy89/lp_parser_rs/issues/185)) ([ebe05b8](https://github.com/dandxy89/lp_parser_rs/commit/ebe05b8cc3361ddf798f6b97c72c290761ad36d7))
+
 ## [3.4.0](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v3.3.0...lp_parser_rs-v3.4.0) (2026-03-16)
 
 
