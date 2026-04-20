@@ -102,6 +102,14 @@ fn build_header(lines: &mut Vec<Line<'static>>, report: &LpDiffReport) {
             Span::styled(format!("{new_sense}"), Style::default().fg(t.added)),
         ]));
     }
+
+    // Compare options — only render when something non-default is active.
+    if !report.options_summary.is_default() {
+        lines.push(Line::from(vec![
+            Span::styled("  Compare: ", Style::default().fg(t.muted)),
+            Span::styled(report.options_summary.to_string(), Style::default().fg(t.accent)),
+        ]));
+    }
 }
 
 fn build_column_headings(lines: &mut Vec<Line<'static>>) {

@@ -13,6 +13,63 @@ use lp_parser_rs::problem::LpProblem;
 // Epsilon used for floating-point coefficient value comparison.
 const COEFF_EPSILON: f64 = 1e-10;
 
+/// Comparison options shared by the whole diff: name-rewrite rules and numeric tolerances.
+///
+/// Semantics mirror the `lp_parser diff` CLI: rename rules rewrite names in both files
+/// before matching; `abs_tol`/`rel_tol` suppress near-equal RHS and coefficient changes.
+#[derive(Clone, Default)]
+pub struct DiffOptions {
+    /// Absolute tolerance for RHS and coefficient comparisons. `0.0` disables.
+    pub abs_tol: f64,
+    /// Relative tolerance: treat `|a-b| <= rel_tol * max(|a|,|b|)` as equal. `0.0` disables.
+    pub rel_tol: f64,
+    /// Regex rewrite rules applied to every name in both files before matching.
+    /// Rules apply in order; each is `(pattern, replacement)`.
+    pub rename_rules: Vec<(regex::Regex, String)>,
+}
+
+impl fmt::Debug for DiffOptions {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("DiffOptions")
+            .field("abs_tol", &self.abs_tol)
+            .field("rel_tol", &self.rel_tol)
+            .field("rename_rules", &self.rename_rules.len())
+            .finish()
+    }
+}
+
+impl DiffOptions {
+    /// Rewrite a name through the rename rules in order. Returns the original string
+    /// unchanged when no rules are configured (avoiding an allocation in the hot path).
+    #[must_use]
+    pub fn rewrite(&self, name: &str) -> String {
+        if self.rename_rules.is_empty() {
+            return name.to_string();
+        }
+        let mut s = name.to_string();
+        for (re, rep) in &self.rename_rules {
+            s = re.replace_all(&s, rep.as_str()).into_owned();
+        }
+        s
+    }
+
+    /// Decide whether two floats should be treated as different under the configured tolerances.
+    ///
+    /// Always floors the absolute tolerance at `COEFF_EPSILON` so that ordinary float noise
+    /// (e.g. `1.0` vs `1.0 + 1e-15`) is still suppressed when no tolerance is supplied.
+    #[must_use]
+    pub fn numeric_differs(&self, a: f64, b: f64) -> bool {
+        debug_assert!(self.abs_tol.is_finite() && self.abs_tol >= 0.0, "abs_tol must be finite and non-negative");
+        debug_assert!(self.rel_tol.is_finite() && self.rel_tol >= 0.0, "rel_tol must be finite and non-negative");
+        let diff = (a - b).abs();
+        let abs_gate = self.abs_tol.max(COEFF_EPSILON);
+        if diff <= abs_gate {
+            return false;
+        }
+        diff > self.rel_tol * a.abs().max(b.abs())
+    }
+}
+
 /// A coefficient with its variable name interned as a [`NameId`].
 ///
 /// Names are resolved lazily via the [`LpDiffReport::resolve`] method, avoiding
@@ -42,12 +99,15 @@ fn coefficients_equal(
     c1: &[lp_parser_rs::model::Coefficient],
     p2: &LpProblem,
     c2: &[lp_parser_rs::model::Coefficient],
+    opts: &DiffOptions,
 ) -> bool {
     debug_assert!(!c1.is_empty() || !c2.is_empty() || c1.len() == c2.len(), "both slices empty is trivially equal");
     if c1.len() != c2.len() {
         return false;
     }
-    c1.iter().zip(c2.iter()).all(|(a, b)| p1.resolve(a.name) == p2.resolve(b.name) && (a.value - b.value).abs() <= COEFF_EPSILON)
+    c1.iter()
+        .zip(c2.iter())
+        .all(|(a, b)| opts.rewrite(p1.resolve(a.name)) == opts.rewrite(p2.resolve(b.name)) && !opts.numeric_differs(a.value, b.value))
 }
 
 /// Check whether two coefficient slices have the same set of (name, value) pairs
@@ -58,18 +118,19 @@ fn coefficients_reordered(
     c1: &[lp_parser_rs::model::Coefficient],
     p2: &LpProblem,
     c2: &[lp_parser_rs::model::Coefficient],
+    opts: &DiffOptions,
 ) -> bool {
     if c1.len() != c2.len() {
         return false;
     }
-    // If names already match positionally, there is no reordering.
-    let positional_match = c1.iter().zip(c2.iter()).all(|(a, b)| p1.resolve(a.name) == p2.resolve(b.name));
+    // Compare using canonical (rewritten) names so that renamed-but-otherwise-equal
+    // coefficient lists are not reported as reordered.
+    let positional_match = c1.iter().zip(c2.iter()).all(|(a, b)| opts.rewrite(p1.resolve(a.name)) == opts.rewrite(p2.resolve(b.name)));
     if positional_match {
         return false;
     }
-    // Sort by name and check that the same set of variable names appear.
-    let mut n1: Vec<&str> = c1.iter().map(|c| p1.resolve(c.name)).collect();
-    let mut n2: Vec<&str> = c2.iter().map(|c| p2.resolve(c.name)).collect();
+    let mut n1: Vec<String> = c1.iter().map(|c| opts.rewrite(p1.resolve(c.name))).collect();
+    let mut n2: Vec<String> = c2.iter().map(|c| opts.rewrite(p2.resolve(c.name))).collect();
     n1.sort_unstable();
     n2.sort_unstable();
     n1 == n2
@@ -81,10 +142,11 @@ fn resolve_coefficients(
     problem: &LpProblem,
     coefficients: &[lp_parser_rs::model::Coefficient],
     interner: &mut NameInterner,
+    opts: &DiffOptions,
 ) -> Vec<ResolvedCoefficient> {
     let mut out = Vec::with_capacity(coefficients.len());
     for c in coefficients {
-        let name = interner.intern(problem.resolve(c.name));
+        let name = interner.intern(&opts.rewrite(problem.resolve(c.name)));
         out.push(ResolvedCoefficient { name, value: c.value });
     }
     out
@@ -92,15 +154,15 @@ fn resolve_coefficients(
 
 /// Resolve a model `Constraint` into a `ResolvedConstraint`, interning names
 /// into the report's shared interner.
-fn resolve_constraint(problem: &LpProblem, constraint: &Constraint, interner: &mut NameInterner) -> ResolvedConstraint {
+fn resolve_constraint(problem: &LpProblem, constraint: &Constraint, interner: &mut NameInterner, opts: &DiffOptions) -> ResolvedConstraint {
     match constraint {
         Constraint::Standard { coefficients, operator, rhs, .. } => ResolvedConstraint::Standard {
-            coefficients: resolve_coefficients(problem, coefficients, interner),
+            coefficients: resolve_coefficients(problem, coefficients, interner, opts),
             operator: *operator,
             rhs: *rhs,
         },
         Constraint::SOS { sos_type, weights, .. } => {
-            ResolvedConstraint::Sos { sos_type: *sos_type, weights: resolve_coefficients(problem, weights, interner) }
+            ResolvedConstraint::Sos { sos_type: *sos_type, weights: resolve_coefficients(problem, weights, interner, opts) }
         }
     }
 }
@@ -129,6 +191,8 @@ pub struct LpDiffReport {
     /// Shared interner for coefficient/variable names used in diff entries.
     /// Avoids per-coefficient `String` allocations by deduplicating names.
     pub interner: NameInterner,
+    /// Summary of the `DiffOptions` that produced this report.
+    pub options_summary: DiffOptionsSummary,
 }
 
 impl LpDiffReport {
@@ -355,9 +419,14 @@ impl DiffEntry for ObjectiveDiffEntry {
 
 /// Diff two coefficient lists using sorted merge-join and return only the changed entries.
 ///
-/// Both slices are sorted by name (resolved via `interner`) before merging.
-/// Uses an epsilon of [`COEFF_EPSILON`] for floating-point comparison.
-fn diff_coefficients(old: &[ResolvedCoefficient], new: &[ResolvedCoefficient], interner: &NameInterner) -> Vec<CoefficientChange> {
+/// Both slices are sorted by name (resolved via `interner`) before merging. Numeric
+/// comparison respects `opts.abs_tol` / `opts.rel_tol` (with a `COEFF_EPSILON` floor).
+fn diff_coefficients(
+    old: &[ResolvedCoefficient],
+    new: &[ResolvedCoefficient],
+    interner: &NameInterner,
+    opts: &DiffOptions,
+) -> Vec<CoefficientChange> {
     let mut old_sorted: Vec<(NameId, f64)> = old.iter().map(|c| (c.name, c.value)).collect();
     let mut new_sorted: Vec<(NameId, f64)> = new.iter().map(|c| (c.name, c.value)).collect();
     old_sorted.sort_unstable_by(|a, b| interner.resolve(a.0).cmp(interner.resolve(b.0)));
@@ -392,7 +461,7 @@ fn diff_coefficients(old: &[ResolvedCoefficient], new: &[ResolvedCoefficient], i
             std::cmp::Ordering::Equal => {
                 let (name, old_val) = old_sorted[i];
                 let new_val = new_sorted[j].1;
-                if (old_val - new_val).abs() > COEFF_EPSILON {
+                if opts.numeric_differs(old_val, new_val) {
                     changes.push(CoefficientChange {
                         variable: name,
                         kind: DiffKind::Modified,
@@ -423,33 +492,35 @@ fn constraint_summary(problem: &LpProblem, constraint: &Constraint) -> String {
     }
 }
 
-/// Build a sorted vec of (name, &Variable) pairs from the interner-keyed variables.
-fn build_sorted_vars(problem: &LpProblem) -> Vec<(&str, &lp_parser_rs::model::Variable)> {
-    let mut pairs: Vec<_> = problem.variables.iter().map(|(id, var)| (problem.resolve(*id), var)).collect();
-    pairs.sort_unstable_by(|a, b| a.0.cmp(b.0));
+/// Build a sorted vec of (canonical_name, &Variable) pairs.
+/// `canonical_name` is the original name with `opts.rename_rules` applied.
+fn build_sorted_vars<'a>(problem: &'a LpProblem, opts: &DiffOptions) -> Vec<(String, &'a lp_parser_rs::model::Variable)> {
+    let mut pairs: Vec<_> = problem.variables.iter().map(|(id, var)| (opts.rewrite(problem.resolve(*id)), var)).collect();
+    pairs.sort_unstable_by(|a, b| a.0.cmp(&b.0));
     pairs
 }
 
-/// Build a sorted vec of (name_id, name, &Constraint) triples from the interner-keyed constraints.
+/// Build a sorted vec of (original_name_id, canonical_name, &Constraint) triples.
 ///
-/// Preserves the `NameId` for line-map lookups while resolving the name for sort/compare.
-fn build_sorted_constraints(problem: &LpProblem) -> Vec<(NameId, &str, &Constraint)> {
-    let mut triples: Vec<_> = problem.constraints.iter().map(|(id, c)| (*id, problem.resolve(*id), c)).collect();
-    triples.sort_unstable_by(|a, b| a.1.cmp(b.1));
+/// Preserves the original per-file `NameId` for line-map lookups while using the
+/// rewritten (canonical) name for sort and merge-join.
+fn build_sorted_constraints<'a>(problem: &'a LpProblem, opts: &DiffOptions) -> Vec<(NameId, String, &'a Constraint)> {
+    let mut triples: Vec<_> = problem.constraints.iter().map(|(id, c)| (*id, opts.rewrite(problem.resolve(*id)), c)).collect();
+    triples.sort_unstable_by(|a, b| a.1.cmp(&b.1));
     triples
 }
 
-/// Build a sorted vec of (name, &Objective) pairs from the interner-keyed objectives.
-fn build_sorted_objectives(problem: &LpProblem) -> Vec<(&str, &lp_parser_rs::model::Objective)> {
-    let mut pairs: Vec<_> = problem.objectives.iter().map(|(id, o)| (problem.resolve(*id), o)).collect();
-    pairs.sort_unstable_by(|a, b| a.0.cmp(b.0));
+/// Build a sorted vec of (canonical_name, &Objective) pairs.
+fn build_sorted_objectives<'a>(problem: &'a LpProblem, opts: &DiffOptions) -> Vec<(String, &'a lp_parser_rs::model::Objective)> {
+    let mut pairs: Vec<_> = problem.objectives.iter().map(|(id, o)| (opts.rewrite(problem.resolve(*id)), o)).collect();
+    pairs.sort_unstable_by(|a, b| a.0.cmp(&b.0));
     pairs
 }
 
 /// Diff the variables section between two problems using sorted merge-join.
-fn diff_variables(p1: &LpProblem, p2: &LpProblem) -> SectionDiff<VariableDiffEntry> {
-    let vars1 = build_sorted_vars(p1);
-    let vars2 = build_sorted_vars(p2);
+fn diff_variables(p1: &LpProblem, p2: &LpProblem, opts: &DiffOptions) -> SectionDiff<VariableDiffEntry> {
+    let vars1 = build_sorted_vars(p1, opts);
+    let vars2 = build_sorted_vars(p2, opts);
 
     let mut entries = Vec::new();
     let mut counts = DiffCounts::default();
@@ -471,12 +542,8 @@ fn diff_variables(p1: &LpProblem, p2: &LpProblem) -> SectionDiff<VariableDiffEnt
             std::cmp::Ordering::Less => {
                 let (name, v1) = &vars1[i];
                 counts.removed += 1;
-                let entry = VariableDiffEntry {
-                    name: name.to_string(),
-                    kind: DiffKind::Removed,
-                    old_type: Some(v1.var_type.clone()),
-                    new_type: None,
-                };
+                let entry =
+                    VariableDiffEntry { name: name.clone(), kind: DiffKind::Removed, old_type: Some(v1.var_type.clone()), new_type: None };
                 debug_assert!(entry.old_type.is_some(), "Removed variable must have old_type");
                 debug_assert!(entry.new_type.is_none(), "Removed variable must not have new_type");
                 entries.push(entry);
@@ -485,12 +552,8 @@ fn diff_variables(p1: &LpProblem, p2: &LpProblem) -> SectionDiff<VariableDiffEnt
             std::cmp::Ordering::Greater => {
                 let (name, v2) = &vars2[j];
                 counts.added += 1;
-                let entry = VariableDiffEntry {
-                    name: name.to_string(),
-                    kind: DiffKind::Added,
-                    old_type: None,
-                    new_type: Some(v2.var_type.clone()),
-                };
+                let entry =
+                    VariableDiffEntry { name: name.clone(), kind: DiffKind::Added, old_type: None, new_type: Some(v2.var_type.clone()) };
                 debug_assert!(entry.new_type.is_some(), "Added variable must have new_type");
                 debug_assert!(entry.old_type.is_none(), "Added variable must not have old_type");
                 entries.push(entry);
@@ -504,7 +567,7 @@ fn diff_variables(p1: &LpProblem, p2: &LpProblem) -> SectionDiff<VariableDiffEnt
                 } else {
                     counts.modified += 1;
                     let entry = VariableDiffEntry {
-                        name: name.to_string(),
+                        name: name.clone(),
                         kind: DiffKind::Modified,
                         old_type: Some(v1.var_type.clone()),
                         new_type: Some(v2.var_type.clone()),
@@ -534,10 +597,11 @@ fn diff_standard_constraints(
     new_rhs: f64,
     interner: &NameInterner,
     order_changed: bool,
+    opts: &DiffOptions,
 ) -> Option<ConstraintDiffDetail> {
-    let coeff_changes = diff_coefficients(old_coefficients, new_coefficients, interner);
+    let coeff_changes = diff_coefficients(old_coefficients, new_coefficients, interner, opts);
     let operator_change = if old_operator == new_operator { None } else { Some((*old_operator, *new_operator)) };
-    let rhs_change = if (old_rhs - new_rhs).abs() > COEFF_EPSILON { Some((old_rhs, new_rhs)) } else { None };
+    let rhs_change = if opts.numeric_differs(old_rhs, new_rhs) { Some((old_rhs, new_rhs)) } else { None };
 
     if coeff_changes.is_empty() && operator_change.is_none() && rhs_change.is_none() && !order_changed {
         return None;
@@ -564,8 +628,9 @@ fn diff_sos_constraints(
     new_weights: &[ResolvedCoefficient],
     interner: &NameInterner,
     order_changed: bool,
+    opts: &DiffOptions,
 ) -> Option<ConstraintDiffDetail> {
-    let weight_changes = diff_coefficients(old_weights, new_weights, interner);
+    let weight_changes = diff_coefficients(old_weights, new_weights, interner, opts);
     let type_change = if old_type == new_type { None } else { Some((*old_type, *new_type)) };
 
     if weight_changes.is_empty() && type_change.is_none() && !order_changed {
@@ -589,6 +654,7 @@ fn diff_constraint_pair(
     p2: &LpProblem,
     c2: &Constraint,
     interner: &mut NameInterner,
+    opts: &DiffOptions,
 ) -> Option<ConstraintDiffDetail> {
     match (c1, c2) {
         // Standard vs SOS: structurally incompatible.
@@ -601,17 +667,27 @@ fn diff_constraint_pair(
             Constraint::Standard { coefficients: old_coefficients, operator: old_operator, rhs: old_rhs, .. },
             Constraint::Standard { coefficients: new_coefficients, operator: new_operator, rhs: new_rhs, .. },
         ) => {
-            // Fast path: skip resolution if the raw data is identical.
+            // Fast path: skip resolution if the raw data is identical under the configured tolerances.
             if old_operator == new_operator
-                && (old_rhs - new_rhs).abs() <= COEFF_EPSILON
-                && coefficients_equal(p1, old_coefficients, p2, new_coefficients)
+                && !opts.numeric_differs(*old_rhs, *new_rhs)
+                && coefficients_equal(p1, old_coefficients, p2, new_coefficients, opts)
             {
                 return None;
             }
-            let reordered = coefficients_reordered(p1, old_coefficients, p2, new_coefficients);
-            let old_resolved = resolve_coefficients(p1, old_coefficients, interner);
-            let new_resolved = resolve_coefficients(p2, new_coefficients, interner);
-            diff_standard_constraints(&old_resolved, old_operator, *old_rhs, &new_resolved, new_operator, *new_rhs, interner, reordered)
+            let reordered = coefficients_reordered(p1, old_coefficients, p2, new_coefficients, opts);
+            let old_resolved = resolve_coefficients(p1, old_coefficients, interner, opts);
+            let new_resolved = resolve_coefficients(p2, new_coefficients, interner, opts);
+            diff_standard_constraints(
+                &old_resolved,
+                old_operator,
+                *old_rhs,
+                &new_resolved,
+                new_operator,
+                *new_rhs,
+                interner,
+                reordered,
+                opts,
+            )
         }
 
         // Both SOS: diff weights and sos_type.
@@ -620,13 +696,13 @@ fn diff_constraint_pair(
             Constraint::SOS { sos_type: new_type, weights: new_weights, .. },
         ) => {
             // Fast path: skip resolution if the raw data is identical.
-            if old_type == new_type && coefficients_equal(p1, old_weights, p2, new_weights) {
+            if old_type == new_type && coefficients_equal(p1, old_weights, p2, new_weights, opts) {
                 return None;
             }
-            let reordered = coefficients_reordered(p1, old_weights, p2, new_weights);
-            let old_resolved = resolve_coefficients(p1, old_weights, interner);
-            let new_resolved = resolve_coefficients(p2, new_weights, interner);
-            diff_sos_constraints(old_type, &old_resolved, new_type, &new_resolved, interner, reordered)
+            let reordered = coefficients_reordered(p1, old_weights, p2, new_weights, opts);
+            let old_resolved = resolve_coefficients(p1, old_weights, interner, opts);
+            let new_resolved = resolve_coefficients(p2, new_weights, interner, opts);
+            diff_sos_constraints(old_type, &old_resolved, new_type, &new_resolved, interner, reordered, opts)
         }
     }
 }
@@ -638,9 +714,10 @@ fn diff_constraints(
     line_map1: &HashMap<NameId, usize>,
     line_map2: &HashMap<NameId, usize>,
     interner: &mut NameInterner,
+    opts: &DiffOptions,
 ) -> SectionDiff<ConstraintDiffEntry> {
-    let cons1 = build_sorted_constraints(p1);
-    let cons2 = build_sorted_constraints(p2);
+    let cons1 = build_sorted_constraints(p1, opts);
+    let cons2 = build_sorted_constraints(p2, opts);
 
     let mut entries = Vec::new();
     let mut counts = DiffCounts::default();
@@ -661,13 +738,14 @@ fn diff_constraints(
         match cmp {
             std::cmp::Ordering::Less => {
                 let (name_id, name, constraint) = &cons1[i];
+                // Line-map lookup uses the ORIGINAL per-file NameId (pre-rename).
                 let line1 = line_map1.get(name_id).copied();
                 let line2 = line_map2.get(name_id).copied();
                 counts.removed += 1;
                 entries.push(ConstraintDiffEntry {
-                    name: name.to_string(),
+                    name: name.clone(),
                     kind: DiffKind::Removed,
-                    detail: ConstraintDiffDetail::AddedOrRemoved(resolve_constraint(p1, constraint, interner)),
+                    detail: ConstraintDiffDetail::AddedOrRemoved(resolve_constraint(p1, constraint, interner, opts)),
                     line_file1: line1,
                     line_file2: line2,
                     order_only: false,
@@ -680,9 +758,9 @@ fn diff_constraints(
                 let line2 = line_map2.get(name_id).copied();
                 counts.added += 1;
                 entries.push(ConstraintDiffEntry {
-                    name: name.to_string(),
+                    name: name.clone(),
                     kind: DiffKind::Added,
-                    detail: ConstraintDiffDetail::AddedOrRemoved(resolve_constraint(p2, constraint, interner)),
+                    detail: ConstraintDiffDetail::AddedOrRemoved(resolve_constraint(p2, constraint, interner, opts)),
                     line_file1: line1,
                     line_file2: line2,
                     order_only: false,
@@ -694,7 +772,7 @@ fn diff_constraints(
                 let (name_id2, _, c2) = &cons2[j];
                 let line1 = line_map1.get(name_id1).copied();
                 let line2 = line_map2.get(name_id2).copied();
-                if let Some(detail) = diff_constraint_pair(p1, c1, p2, c2, interner) {
+                if let Some(detail) = diff_constraint_pair(p1, c1, p2, c2, interner, opts) {
                     // Determine if this is an order-only change.
                     let order_only = match &detail {
                         ConstraintDiffDetail::Standard { coeff_changes, operator_change, rhs_change, order_changed, .. } => {
@@ -710,7 +788,7 @@ fn diff_constraints(
                         counts.order_only += 1;
                     }
                     entries.push(ConstraintDiffEntry {
-                        name: name.to_string(),
+                        name: name.clone(),
                         kind: DiffKind::Modified,
                         detail,
                         line_file1: line1,
@@ -730,9 +808,9 @@ fn diff_constraints(
 }
 
 /// Diff the objectives section between two problems using sorted merge-join.
-fn diff_objectives(p1: &LpProblem, p2: &LpProblem, interner: &mut NameInterner) -> SectionDiff<ObjectiveDiffEntry> {
-    let objs1 = build_sorted_objectives(p1);
-    let objs2 = build_sorted_objectives(p2);
+fn diff_objectives(p1: &LpProblem, p2: &LpProblem, interner: &mut NameInterner, opts: &DiffOptions) -> SectionDiff<ObjectiveDiffEntry> {
+    let objs1 = build_sorted_objectives(p1, opts);
+    let objs2 = build_sorted_objectives(p2, opts);
 
     let mut entries = Vec::new();
     let mut counts = DiffCounts::default();
@@ -755,9 +833,9 @@ fn diff_objectives(p1: &LpProblem, p2: &LpProblem, interner: &mut NameInterner) 
                 let (name, o) = &objs1[i];
                 counts.removed += 1;
                 entries.push(ObjectiveDiffEntry {
-                    name: name.to_string(),
+                    name: name.clone(),
                     kind: DiffKind::Removed,
-                    old_coefficients: resolve_coefficients(p1, &o.coefficients, interner),
+                    old_coefficients: resolve_coefficients(p1, &o.coefficients, interner, opts),
                     new_coefficients: Vec::new(),
                     coeff_changes: Vec::new(),
                     order_changed: false,
@@ -769,10 +847,10 @@ fn diff_objectives(p1: &LpProblem, p2: &LpProblem, interner: &mut NameInterner) 
                 let (name, o) = &objs2[j];
                 counts.added += 1;
                 entries.push(ObjectiveDiffEntry {
-                    name: name.to_string(),
+                    name: name.clone(),
                     kind: DiffKind::Added,
                     old_coefficients: Vec::new(),
-                    new_coefficients: resolve_coefficients(p2, &o.coefficients, interner),
+                    new_coefficients: resolve_coefficients(p2, &o.coefficients, interner, opts),
                     coeff_changes: Vec::new(),
                     order_changed: false,
                     order_only: false,
@@ -782,17 +860,17 @@ fn diff_objectives(p1: &LpProblem, p2: &LpProblem, interner: &mut NameInterner) 
             std::cmp::Ordering::Equal => {
                 let (name, o1_val) = &objs1[i];
                 let o2_val = objs2[j].1;
-                // Fast path: skip resolution if the raw coefficients are identical.
-                if coefficients_equal(p1, &o1_val.coefficients, p2, &o2_val.coefficients) {
+                // Fast path: skip resolution if the raw coefficients are identical under tolerance/rename.
+                if coefficients_equal(p1, &o1_val.coefficients, p2, &o2_val.coefficients, opts) {
                     counts.unchanged += 1;
                     i += 1;
                     j += 1;
                     continue;
                 }
-                let reordered = coefficients_reordered(p1, &o1_val.coefficients, p2, &o2_val.coefficients);
-                let old_resolved = resolve_coefficients(p1, &o1_val.coefficients, interner);
-                let new_resolved = resolve_coefficients(p2, &o2_val.coefficients, interner);
-                let coeff_changes = diff_coefficients(&old_resolved, &new_resolved, interner);
+                let reordered = coefficients_reordered(p1, &o1_val.coefficients, p2, &o2_val.coefficients, opts);
+                let old_resolved = resolve_coefficients(p1, &o1_val.coefficients, interner, opts);
+                let new_resolved = resolve_coefficients(p2, &o2_val.coefficients, interner, opts);
+                let coeff_changes = diff_coefficients(&old_resolved, &new_resolved, interner, opts);
                 if coeff_changes.is_empty() && !reordered {
                     counts.unchanged += 1;
                 } else {
@@ -802,7 +880,7 @@ fn diff_objectives(p1: &LpProblem, p2: &LpProblem, interner: &mut NameInterner) 
                         counts.order_only += 1;
                     }
                     entries.push(ObjectiveDiffEntry {
-                        name: name.to_string(),
+                        name: name.clone(),
                         kind: DiffKind::Modified,
                         old_coefficients: old_resolved,
                         new_coefficients: new_resolved,
@@ -838,6 +916,8 @@ pub struct DiffInput<'a> {
     pub analysis1: ProblemAnalysis,
     /// Structural analysis of the second file.
     pub analysis2: ProblemAnalysis,
+    /// Comparison options (rename rules + numeric tolerances).
+    pub options: DiffOptions,
 }
 
 /// Build a complete diff report comparing two LP problems.
@@ -846,10 +926,11 @@ pub fn build_diff_report(input: &DiffInput<'_>) -> LpDiffReport {
     debug_assert!(!input.file2.is_empty(), "file2 label must not be empty");
 
     let mut interner = NameInterner::new();
+    let opts = &input.options;
 
-    let variables = diff_variables(input.p1, input.p2);
-    let constraints = diff_constraints(input.p1, input.p2, input.line_map1, input.line_map2, &mut interner);
-    let objectives = diff_objectives(input.p1, input.p2, &mut interner);
+    let variables = diff_variables(input.p1, input.p2, opts);
+    let constraints = diff_constraints(input.p1, input.p2, input.line_map1, input.line_map2, &mut interner, opts);
+    let objectives = diff_objectives(input.p1, input.p2, &mut interner, opts);
 
     let sense_changed = if input.p1.sense == input.p2.sense { None } else { Some((input.p1.sense.clone(), input.p2.sense.clone())) };
 
@@ -866,6 +947,33 @@ pub fn build_diff_report(input: &DiffInput<'_>) -> LpDiffReport {
         analysis1: input.analysis1.clone(),
         analysis2: input.analysis2.clone(),
         interner,
+        options_summary: DiffOptionsSummary { abs_tol: opts.abs_tol, rel_tol: opts.rel_tol, rename_rule_count: opts.rename_rules.len() },
+    }
+}
+
+/// Compact, copyable summary of the comparison options that produced a report.
+///
+/// Stored on [`LpDiffReport`] so TUI widgets and `--summary` output can surface the
+/// configuration without holding a reference to the original `DiffOptions` (which
+/// owns compiled `Regex` values).
+#[derive(Debug, Clone, Copy, Default)]
+pub struct DiffOptionsSummary {
+    pub abs_tol: f64,
+    pub rel_tol: f64,
+    pub rename_rule_count: usize,
+}
+
+impl DiffOptionsSummary {
+    /// True when every field has its default value — nothing worth displaying.
+    #[must_use]
+    pub fn is_default(&self) -> bool {
+        self.abs_tol == 0.0 && self.rel_tol == 0.0 && self.rename_rule_count == 0
+    }
+}
+
+impl fmt::Display for DiffOptionsSummary {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "abs_tol={}  rel_tol={}  rename_rules={}", self.abs_tol, self.rel_tol, self.rename_rule_count)
     }
 }
 
@@ -939,7 +1047,7 @@ mod tests {
         analysis1: ProblemAnalysis,
         analysis2: ProblemAnalysis,
     ) -> LpDiffReport {
-        build_diff_report(&DiffInput { file1, file2, p1, p2, line_map1, line_map2, analysis1, analysis2 })
+        build_diff_report(&DiffInput { file1, file2, p1, p2, line_map1, line_map2, analysis1, analysis2, options: DiffOptions::default() })
     }
 
     /// Build a diff report from two problems with no line maps and dummy analyses.
@@ -1238,5 +1346,88 @@ mod tests {
         assert!(entry.order_changed);
         assert!(entry.coeff_changes.is_empty());
         assert_eq!(report.objectives.counts.order_only, 1);
+    }
+
+    /// Build a report with custom `DiffOptions`. Uses empty line maps + dummy analyses.
+    fn quick_report_with_opts(p1: &LpProblem, p2: &LpProblem, options: DiffOptions) -> LpDiffReport {
+        build_diff_report(&DiffInput {
+            file1: "a.lp",
+            file2: "b.lp",
+            p1,
+            p2,
+            line_map1: &HashMap::new(),
+            line_map2: &HashMap::new(),
+            analysis1: dummy_analysis(),
+            analysis2: dummy_analysis(),
+            options,
+        })
+    }
+
+    /// Shorthand for a rename rule. Panics on invalid regex, which is what we want in a test.
+    fn rule(pat: &str, rep: &str) -> (regex::Regex, String) {
+        (regex::Regex::new(pat).unwrap(), rep.to_string())
+    }
+
+    #[test]
+    fn test_rename_collapses_names_across_all_sections() {
+        // Same structural problem in both files, only the `[N]` index differs. A single
+        // rename rule should collapse variables, constraints, and objectives simultaneously.
+        let p1 = LpProblem::parse("minimize\nobj[1]: 2 x[1]\nsubject to\n c[1]: x[1] >= 0\nend").unwrap();
+        let p2 = LpProblem::parse("minimize\nobj[9]: 2 x[9]\nsubject to\n c[9]: x[9] >= 0\nend").unwrap();
+
+        let opts = DiffOptions { rename_rules: vec![rule(r"\[\d+\]$", "[idx]")], ..DiffOptions::default() };
+        assert_eq!(quick_report_with_opts(&p1, &p2, opts).summary().total_changes(), 0);
+    }
+
+    #[test]
+    fn test_rename_rules_apply_in_sequence() {
+        // Rule 1 strips `_vN` suffix; rule 2 renames `x` → `y`.
+        // Neither rule alone matches `x_v1` with `y`, so both must run — in order.
+        let p1 = problem_with_variable("x_v1", &VariableType::Binary);
+        let p2 = problem_with_variable("y", &VariableType::Binary);
+        let opts = DiffOptions { rename_rules: vec![rule(r"_v\d+$", ""), rule("^x$", "y")], ..DiffOptions::default() };
+        assert_eq!(quick_report_with_opts(&p1, &p2, opts).variables.counts.changed(), 0);
+    }
+
+    #[test]
+    fn test_abs_tol_suppresses_small_rhs_diff() {
+        let p1 = problem_with_standard_constraint("c1", &[("x", 1.0)], &ComparisonOp::LTE, 10.0);
+        let p2 = problem_with_standard_constraint("c1", &[("x", 1.0)], &ComparisonOp::LTE, 10.005);
+        let opts = DiffOptions { abs_tol: 0.01, ..DiffOptions::default() };
+        assert!(quick_report_with_opts(&p1, &p2, opts).constraints.entries.is_empty());
+    }
+
+    #[test]
+    fn test_rel_tol_suppresses_proportional_coeff_diff() {
+        // |1001 - 1000| / 1001 ≈ 1e-3, suppressed by rel_tol = 1e-2.
+        let p1 = problem_with_standard_constraint("c1", &[("x", 1000.0)], &ComparisonOp::LTE, 10.0);
+        let p2 = problem_with_standard_constraint("c1", &[("x", 1001.0)], &ComparisonOp::LTE, 10.0);
+        let opts = DiffOptions { rel_tol: 1e-2, ..DiffOptions::default() };
+        assert!(quick_report_with_opts(&p1, &p2, opts).constraints.entries.is_empty());
+    }
+
+    #[test]
+    fn test_tolerance_does_not_mask_large_change() {
+        // 10 → 20 is well beyond any configured tolerance. The change must still surface,
+        // and the stored detail must record the original values (not the tolerance gate).
+        let p1 = problem_with_standard_constraint("c1", &[("x", 1.0)], &ComparisonOp::LTE, 10.0);
+        let p2 = problem_with_standard_constraint("c1", &[("x", 1.0)], &ComparisonOp::LTE, 20.0);
+        let opts = DiffOptions { abs_tol: 0.5, rel_tol: 1e-3, ..DiffOptions::default() };
+        let report = quick_report_with_opts(&p1, &p2, opts);
+        let ConstraintDiffDetail::Standard { rhs_change, .. } = &report.constraints.entries[0].detail else {
+            panic!("expected Standard detail");
+        };
+        assert_eq!(*rhs_change, Some((10.0, 20.0)));
+    }
+
+    #[test]
+    fn test_options_summary_round_trips_onto_report() {
+        let opts = DiffOptions { abs_tol: 0.1, rel_tol: 0.01, rename_rules: vec![rule("x", "y")] };
+        let summary = quick_report_with_opts(&empty_problem(), &empty_problem(), opts).options_summary;
+        assert_eq!(summary.abs_tol, 0.1);
+        assert_eq!(summary.rel_tol, 0.01);
+        assert_eq!(summary.rename_rule_count, 1);
+        assert!(!summary.is_default());
+        assert_eq!(summary.to_string(), "abs_tol=0.1  rel_tol=0.01  rename_rules=1");
     }
 }
