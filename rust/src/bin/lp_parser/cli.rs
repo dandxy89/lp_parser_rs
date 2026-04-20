@@ -160,6 +160,20 @@ pub struct DiffArgs {
     /// Pretty-print structured output
     #[arg(long)]
     pub pretty: bool,
+
+    /// Absolute tolerance for numeric comparisons (RHS & coefficients)
+    #[arg(long, default_value_t = 0.0)]
+    pub abs_tol: f64,
+
+    /// Relative tolerance for numeric comparisons (|a-b| <= rel_tol * max(|a|,|b|))
+    #[arg(long, default_value_t = 0.0)]
+    pub rel_tol: f64,
+
+    /// Regex rewrite applied to names in BOTH files before matching.
+    /// Takes two values: PATTERN REPLACEMENT. May be repeated; rules apply in order.
+    /// Example: --rename '%>%\[\d+,\d+,[^]]*\]$' '%>%idx'
+    #[arg(long, num_args = 2, value_names = ["PATTERN", "REPLACEMENT"], action = clap::ArgAction::Append)]
+    pub rename: Vec<String>,
 }
 
 #[derive(ValueEnum, Clone, Debug, Default)]

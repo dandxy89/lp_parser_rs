@@ -253,8 +253,8 @@ pub enum Token<'input> {
 
     // === Identifiers ===
     /// Variable/constraint name identifier
-    /// Allowed characters: alphanumeric and !#$%&()_,.;?@\{}~'
-    #[regex(r"[a-zA-Z_!#$%&(),.;?@\\{}~']([a-zA-Z0-9_!#$%&(),.;?@\\{}~'|>]|-[a-zA-Z0-9_!#$%&(),.;?@\\{}~'|>])*", |lex| lex.slice(), priority = 5)]
+    /// Allowed characters: alphanumeric and !#$%&()_,.;?@\{}~'[]
+    #[regex(r"[a-zA-Z_!#$%&(),.;?@\\{}~'\[\]]([a-zA-Z0-9_!#$%&(),.;?@\\{}~'|>\[\]]|-[a-zA-Z0-9_!#$%&(),.;?@\\{}~'|>\[\]])*", |lex| lex.slice(), priority = 5)]
     Identifier(&'input str),
 }
 
@@ -498,6 +498,8 @@ mod tests {
     #[test_case("}" => vec![Token::Identifier("}")] ; "close_brace")]
     #[test_case("~" => vec![Token::Identifier("~")] ; "tilde")]
     #[test_case("'" => vec![Token::Identifier("'")] ; "apostrophe")]
+    #[test_case("[" => vec![Token::Identifier("[")] ; "open_bracket")]
+    #[test_case("]" => vec![Token::Identifier("]")] ; "close_bracket")]
     fn test_valid_start_chars(input: &str) -> Vec<Token<'_>> {
         tokenize(input)
     }
@@ -523,8 +525,20 @@ mod tests {
     #[test_case("x~" => vec![Token::Identifier("x~")] ; "tilde_cont")]
     #[test_case("x'" => vec![Token::Identifier("x'")] ; "apostrophe_cont")]
     #[test_case("x_" => vec![Token::Identifier("x_")] ; "underscore_cont")]
+    #[test_case("x[" => vec![Token::Identifier("x[")] ; "open_bracket_cont")]
+    #[test_case("x]" => vec![Token::Identifier("x]")] ; "close_bracket_cont")]
     fn test_valid_continuation_chars(input: &str) -> Vec<Token<'_>> {
         tokenize(input)
+    }
+
+    #[test]
+    fn test_bracketed_subscript_identifier() {
+        // Names like `ArcFlow%>%[0,0,0.0]` appear in Gurobi-written LP files
+        assert_eq!(tokenize("ArcFlow%>%[0,0,0.0]"), vec![Token::Identifier("ArcFlow%>%[0,0,0.0]")]);
+        assert_eq!(
+            tokenize("Cnst%>%Arc-10-28|1.23%>%[0,0,0.0]:"),
+            vec![Token::Identifier("Cnst%>%Arc-10-28|1.23%>%[0,0,0.0]"), Token::Colon,]
+        );
     }
 
     #[test_case("0" ; "zero_is_number")]
@@ -567,8 +581,6 @@ mod tests {
     #[test_case("*" ; "asterisk")]
     #[test_case("/" ; "slash")]
     #[test_case("^" ; "caret")]
-    #[test_case("[" ; "open_bracket")]
-    #[test_case("]" ; "close_bracket")]
     #[test_case("\"" ; "double_quote")]
     fn test_invalid_start_chars(input: &str) {
         let tokens = tokenize_raw(input);
@@ -583,7 +595,6 @@ mod tests {
     #[test_case("x*y", vec![Token::Identifier("x")], "*" ; "asterisk_breaks")]
     #[test_case("x/y", vec![Token::Identifier("x")], "/" ; "slash_breaks")]
     #[test_case("x^y", vec![Token::Identifier("x")], "^" ; "caret_breaks")]
-    #[test_case("x[y", vec![Token::Identifier("x")], "[" ; "bracket_breaks")]
     fn test_invalid_char_breaks_identifier(input: &str, expected_prefix: Vec<Token<'_>>, _invalid: &str) {
         let tokens = tokenize(input);
         assert_eq!(
