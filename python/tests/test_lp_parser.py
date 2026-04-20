@@ -6,6 +6,8 @@ import pytest
 
 from parse_lp import LpParser
 
+from .conftest import EXPECTED_PARSE_FAILURES, collect_lp_resource_files
+
 if TYPE_CHECKING:
     from collections.abc import Callable
     from contextlib import AbstractContextManager
@@ -225,3 +227,27 @@ End"""
                 parser.constraint_count()
             with pytest.raises(RuntimeError, match="Must call parse\\(\\) first"):
                 parser.objective_count()
+
+
+class TestAllResourceFiles:
+    """Parse every .lp file in rust/resources/ — mirrors Rust test_from_file.rs coverage."""
+
+    @pytest.mark.parametrize(
+        "lp_file",
+        [pytest.param(f, id=f.stem) for f in collect_lp_resource_files() if f.name not in EXPECTED_PARSE_FAILURES],
+    )
+    def test_parse_succeeds(self, lp_file: Path) -> None:
+        parser = LpParser(str(lp_file))
+        parser.parse()
+        assert parser.objective_count() >= 1
+        assert parser.variable_count() >= 1
+
+    @pytest.mark.parametrize(
+        "lp_file",
+        [pytest.param(f, id=f.stem) for f in collect_lp_resource_files() if f.name in EXPECTED_PARSE_FAILURES],
+    )
+    def test_parse_fails(self, lp_file: Path) -> None:
+        parser = LpParser(str(lp_file))
+        parser.parse()
+        with pytest.raises(RuntimeError):
+            parser.constraints  # noqa: B018

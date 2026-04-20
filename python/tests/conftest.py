@@ -6,20 +6,36 @@ from typing import Callable
 
 import pytest
 
+FIXTURES_DIR = Path(__file__).parent / "fixtures"
+RUST_RESOURCES_DIR = Path(__file__).parent.parent.parent / "rust" / "resources"
+
+# Files that are expected to fail parsing (match Rust test_from_file.rs)
+EXPECTED_PARSE_FAILURES = {"invalid.lp", "corrupt.lp"}
+
+
+def collect_lp_resource_files() -> list[Path]:
+    """Collect all .lp files from the shared Rust resources directory."""
+    return sorted(RUST_RESOURCES_DIR.glob("*.lp"))
+
 
 @pytest.fixture
 def simple_lp_file() -> Path:
-    return Path(__file__).parent / "fixtures" / "simple.lp"
+    return FIXTURES_DIR / "simple.lp"
 
 
 @pytest.fixture
 def minimize_lp_file() -> Path:
-    return Path(__file__).parent / "fixtures" / "minimize.lp"
+    return FIXTURES_DIR / "minimize.lp"
 
 
 @pytest.fixture
 def afiro_lp_file() -> Path:
-    return Path(__file__).parent / "fixtures" / "afiro.lp"
+    return RUST_RESOURCES_DIR / "afiro.lp"
+
+
+@pytest.fixture
+def gurobi_implicit_sign_lp_file() -> Path:
+    return RUST_RESOURCES_DIR / "gurobi_implicit_sign.lp"
 
 
 @pytest.fixture
