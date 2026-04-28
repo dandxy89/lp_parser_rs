@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.4.0](https://github.com/dandxy89/lp_parser_rs/compare/lp_diff-v3.3.1...lp_diff-v3.4.0) (2026-04-28)
+
+
+### Features
+
+* **tui:** add --abs-tol, --rel-tol, --rename to lp_diff ([#186](https://github.com/dandxy89/lp_parser_rs/issues/186)) ([adfce3a](https://github.com/dandxy89/lp_parser_rs/commit/adfce3a7052e267890c2b18c5086d1a30e9f6e75))
+
 ## [3.3.1](https://github.com/dandxy89/lp_parser_rs/compare/lp_diff-v3.3.0...lp_diff-v3.3.1) (2026-04-20)
 
 
