@@ -38,6 +38,7 @@ macro_rules! w {
 pub fn render_detail_plain(app: &App) -> Option<String> {
     match app.active_section {
         Section::Summary => Some(render_summary_plain(app)),
+        Section::Numerics => Some(render_numerics_plain(app)),
         _ => {
             let entry_index = app.selected_entry_index()?;
             let cached_rows = app.cached_coeff_rows();
@@ -54,7 +55,7 @@ pub fn render_detail_plain(app: &App) -> Option<String> {
                     let entry = app.report.objectives.entries.get(entry_index)?;
                     Some(render_objective_plain(entry, cached_rows, &app.report.interner))
                 }
-                Section::Summary => unreachable!("handled above"),
+                Section::Summary | Section::Numerics => unreachable!("handled above"),
             }
         }
     }
@@ -67,7 +68,7 @@ pub fn render_detail_plain(app: &App) -> Option<String> {
 pub fn render_side_plain(app: &App, side: Side) -> Option<String> {
     let entry_index = app.selected_entry_index()?;
     match app.active_section {
-        Section::Summary => None,
+        Section::Summary | Section::Numerics => None,
         Section::Variables => {
             let entry = app.report.variables.entries.get(entry_index)?;
             render_variable_side(entry, side)
@@ -237,7 +238,7 @@ pub fn render_summary_plain(app: &App) -> String {
     w!(out);
 
     // Change counts table
-    w!(out, "  {:<14}{:>7}{:>9}{:>12}{:>9}", "Section", "Added", "Removed", "Modified", "Total");
+    w!(out, "  {:<14}{:>7}{:>9}{:>12}{:>9}{:>9}", "Section", "Added", "Removed", "Modified", "Renamed", "Total");
     for (label, counts) in [("Variables", &summary.variables), ("Constraints", &summary.constraints), ("Objectives", &summary.objectives)] {
         write_count_row(&mut out, label, counts);
     }
@@ -256,9 +257,73 @@ pub fn render_summary_plain(app: &App) -> String {
     out
 }
 
+/// Render the Numerics section as plain text (mirrors `widgets::numerics`).
+pub fn render_numerics_plain(app: &App) -> String {
+    use crate::widgets::numerics::{MAX_NEW_ISSUES, count_by_severity, format_range, format_ratio, new_issue_indices, range_ratio};
+    const W: usize = 18;
+
+    let report = &app.report;
+    let a = &report.analysis1;
+    let b = &report.analysis2;
+    let mut out = String::with_capacity(1024);
+
+    w!(out, "  {}  \u{2192}  {}", report.file1, report.file2);
+    w!(out);
+
+    w!(out, "  Problem Size");
+    w!(out, "  {:<W$}{:>20}{:>20}", "", "File A", "File B");
+    w!(out, "  {:<W$}{:>20}{:>20}", "Variables", a.summary.variable_count, b.summary.variable_count);
+    w!(out, "  {:<W$}{:>20}{:>20}", "Constraints", a.summary.constraint_count, b.summary.constraint_count);
+    w!(out, "  {:<W$}{:>20}{:>20}", "Non-zeros", a.summary.total_nonzeros, b.summary.total_nonzeros);
+    w!(out, "  {:<W$}{:>19.4}%{:>19.4}%", "Density", a.summary.density * 100.0, b.summary.density * 100.0);
+    w!(out);
+
+    w!(out, "  Coefficient Ranges (|value|)");
+    w!(out, "  {:<W$}{:>20}{:>20}", "", "File A", "File B");
+    for (label, range_a, range_b) in [
+        ("Objective", &a.coefficients.objective_coeff_range, &b.coefficients.objective_coeff_range),
+        ("Matrix", &a.coefficients.constraint_coeff_range, &b.coefficients.constraint_coeff_range),
+        ("RHS", &a.constraints.rhs_range, &b.constraints.rhs_range),
+    ] {
+        w!(out, "  {:<W$}{:>20}{:>20}", label, format_range(range_a), format_range(range_b));
+        w!(out, "  {:<W$}{:>20}{:>20}", format!("{label} ratio"), format_ratio(range_ratio(range_a)), format_ratio(range_ratio(range_b)));
+    }
+    w!(
+        out,
+        "  {:<W$}{:>20}{:>20}",
+        "Overall ratio",
+        format_ratio(Some(a.coefficients.coefficient_ratio)),
+        format_ratio(Some(b.coefficients.coefficient_ratio))
+    );
+    w!(out);
+
+    w!(out, "  Issues");
+    let (err_a, warn_a, info_a) = count_by_severity(&a.issues);
+    let (err_b, warn_b, info_b) = count_by_severity(&b.issues);
+    w!(out, "  File A: {err_a} errors, {warn_a} warnings, {info_a} infos");
+    w!(out, "  File B: {err_b} errors, {warn_b} warnings, {info_b} infos");
+    w!(out);
+
+    w!(out, "  New issues in {}", report.file2);
+    let new_indices = new_issue_indices(&a.issues, &b.issues);
+    if new_indices.is_empty() {
+        w!(out, "  none");
+    } else {
+        for &index in new_indices.iter().take(MAX_NEW_ISSUES) {
+            let issue = &b.issues[index];
+            w!(out, "  [{:<7}] {}", issue.severity.to_string(), issue.message);
+        }
+        if new_indices.len() > MAX_NEW_ISSUES {
+            w!(out, "  \u{2026} ({} more)", new_indices.len() - MAX_NEW_ISSUES);
+        }
+    }
+
+    out
+}
+
 /// Write a single row of the change-count table.
 fn write_count_row(out: &mut String, label: &str, counts: &DiffCounts) {
-    w!(out, "  {:<14}{:>7}{:>9}{:>12}{:>9}", label, counts.added, counts.removed, counts.modified, counts.total());
+    w!(out, "  {:<14}{:>7}{:>9}{:>12}{:>9}{:>9}", label, counts.added, counts.removed, counts.modified, counts.renamed, counts.total());
 }
 
 /// Write comparative analysis sections (dimensions, variable types,
@@ -463,6 +528,10 @@ fn render_variable_plain(entry: &VariableDiffEntry) -> String {
                 w!(out, "  Range:  {}  \u{2192}  {}", fmt_bound(old_range), fmt_bound(new_range));
             }
         }
+        DiffKind::Renamed => {
+            // Rename detection applies to constraints only; variables never carry Renamed.
+            debug_assert!(false, "variable entry cannot be Renamed");
+        }
     }
     out
 }
@@ -471,6 +540,10 @@ fn render_constraint_plain(entry: &ConstraintDiffEntry, cached_rows: Option<&[Co
     let mut out = String::new();
     w!(out, "Constraint: {} [{}]", entry.name, entry.kind);
     w!(out, "{}", RULE_38);
+
+    if let Some(old_name) = &entry.renamed_from {
+        w!(out, "  Renamed from: {old_name}");
+    }
 
     if entry.line_file1.is_some() || entry.line_file2.is_some() {
         match (entry.line_file1, entry.line_file2) {
@@ -628,7 +701,9 @@ fn write_coeff_changes(
             Some(DiffKind::Removed) => {
                 w!(out, "    {:<20}{:>VAL_WIDTH$}  \u{2192}  {:VAL_WIDTH$} [removed]", row.variable, old_buf, "");
             }
-            Some(DiffKind::Modified) => {
+            // Renamed never occurs on coefficient rows (asserted in build_coeff_rows);
+            // folded with Modified to keep the match exhaustive.
+            Some(DiffKind::Modified | DiffKind::Renamed) => {
                 w!(out, "    {:<20}{:>VAL_WIDTH$}  \u{2192}  {:<VAL_WIDTH$} [modified]", row.variable, old_buf, new_buf);
             }
             None => {

@@ -13,6 +13,28 @@ use lp_parser_rs::problem::LpProblem;
 // Epsilon used for floating-point coefficient value comparison.
 const COEFF_EPSILON: f64 = 1e-10;
 
+/// Preset tolerance values cycled by the live `t` / `T` keys in the TUI.
+pub const TOLERANCE_PRESETS: [f64; 5] = [0.0, 1e-9, 1e-6, 1e-4, 1e-2];
+
+/// Return the next tolerance preset after `current`, wrapping around.
+///
+/// When `current` is not one of [`TOLERANCE_PRESETS`] (e.g. a custom CLI value),
+/// the first press jumps to `TOLERANCE_PRESETS[0]` (tolerance off) — the simplest
+/// well-defined starting point for the cycle.
+#[must_use]
+pub fn next_tolerance_preset(current: f64) -> f64 {
+    debug_assert!(current.is_finite() && current >= 0.0, "tolerance must be finite and non-negative");
+    match TOLERANCE_PRESETS.iter().position(|&p| p == current) {
+        Some(index) => TOLERANCE_PRESETS[(index + 1) % TOLERANCE_PRESETS.len()],
+        None => TOLERANCE_PRESETS[0],
+    }
+}
+
+// Deliberate cap on pairwise rename comparisons within one (operator, term count)
+// bucket. Buckets larger than this are skipped silently — the entries simply stay
+// reported as added/removed rather than risking quadratic blow-up on degenerate models.
+const MAX_RENAME_BUCKET_PAIRS: usize = 250_000;
+
 /// Comparison options shared by the whole diff: name-rewrite rules and numeric tolerances.
 ///
 /// Semantics mirror the `lp_parser diff` CLI: rename rules rewrite names in both files
@@ -223,19 +245,21 @@ pub struct DiffCounts {
     pub unchanged: usize,
     /// Subset of `modified` where the only difference is coefficient order.
     pub order_only: usize,
+    /// Structurally identical constraints matched across an added/removed pair.
+    pub renamed: usize,
 }
 
 impl DiffCounts {
-    /// Total number of entries (all states combined).
+    /// Total number of entries (all states combined). A renamed pair counts once.
     #[must_use]
     pub const fn total(&self) -> usize {
-        self.added + self.removed + self.modified + self.unchanged
+        self.added + self.removed + self.modified + self.unchanged + self.renamed
     }
 
     /// Number of entries that differ in any way.
     #[must_use]
     pub const fn changed(&self) -> usize {
-        self.added + self.removed + self.modified
+        self.added + self.removed + self.modified + self.renamed
     }
 }
 
@@ -263,6 +287,7 @@ impl DiffSummary {
             modified: self.variables.modified + self.constraints.modified + self.objectives.modified,
             unchanged: self.variables.unchanged + self.constraints.unchanged + self.objectives.unchanged,
             order_only: self.variables.order_only + self.constraints.order_only + self.objectives.order_only,
+            renamed: self.variables.renamed + self.constraints.renamed + self.objectives.renamed,
         }
     }
 }
@@ -273,6 +298,10 @@ pub enum DiffKind {
     Added,
     Removed,
     Modified,
+    /// Structurally identical constraint matched across an added/removed pair.
+    /// Only produced for constraint entries; the old name lives in
+    /// [`ConstraintDiffEntry::renamed_from`].
+    Renamed,
 }
 
 impl fmt::Display for DiffKind {
@@ -281,6 +310,7 @@ impl fmt::Display for DiffKind {
             Self::Added => write!(f, "Added"),
             Self::Removed => write!(f, "Removed"),
             Self::Modified => write!(f, "Modified"),
+            Self::Renamed => write!(f, "Renamed"),
         }
     }
 }
@@ -308,6 +338,9 @@ pub struct ConstraintDiffEntry {
     pub line_file2: Option<usize>,
     /// Whether the only difference is coefficient/weight ordering.
     pub order_only: bool,
+    /// Name this constraint carried in the first file. Only set for
+    /// [`DiffKind::Renamed`] entries; `name` holds the second file's name.
+    pub renamed_from: Option<String>,
 }
 
 /// Detailed change information for a constraint diff entry.
@@ -377,6 +410,12 @@ pub trait DiffEntry {
     fn is_order_only(&self) -> bool {
         false
     }
+    /// Magnitude of the numeric change for delta-ranked sorting.
+    ///
+    /// Returns `Some(delta)` for [`DiffKind::Modified`] entries (zero when the
+    /// modification has no numeric component, e.g. order-only or type changes)
+    /// and `None` otherwise — added/removed/renamed entries have no delta.
+    fn sort_delta(&self, relative: bool) -> Option<f64>;
 }
 
 impl DiffEntry for VariableDiffEntry {
@@ -386,6 +425,10 @@ impl DiffEntry for VariableDiffEntry {
 
     fn kind(&self) -> DiffKind {
         self.kind
+    }
+
+    fn sort_delta(&self, relative: bool) -> Option<f64> {
+        variable_sort_delta(self, relative)
     }
 }
 
@@ -401,6 +444,10 @@ impl DiffEntry for ConstraintDiffEntry {
     fn is_order_only(&self) -> bool {
         self.order_only
     }
+
+    fn sort_delta(&self, relative: bool) -> Option<f64> {
+        constraint_sort_delta(self, relative)
+    }
 }
 
 impl DiffEntry for ObjectiveDiffEntry {
@@ -415,6 +462,114 @@ impl DiffEntry for ObjectiveDiffEntry {
     fn is_order_only(&self) -> bool {
         self.order_only
     }
+
+    fn sort_delta(&self, relative: bool) -> Option<f64> {
+        objective_sort_delta(self, relative)
+    }
+}
+
+/// Extract (lower, upper) bounds from a `VariableType`, returning `None` for
+/// bounds that don't apply to that type.
+#[must_use]
+pub const fn variable_bounds(variable_type: &VariableType) -> (Option<f64>, Option<f64>) {
+    match *variable_type {
+        VariableType::LowerBound(lower) => (Some(lower), None),
+        VariableType::UpperBound(upper) => (None, Some(upper)),
+        VariableType::DoubleBound(lower, upper) => (Some(lower), Some(upper)),
+        _ => (None, None),
+    }
+}
+
+/// Absolute difference `|new - old|` for a pair of optional values.
+/// A missing side is treated as `0.0` (e.g. a newly introduced bound or coefficient).
+#[must_use]
+pub fn change_abs_delta(old: Option<f64>, new: Option<f64>) -> f64 {
+    (new.unwrap_or(0.0) - old.unwrap_or(0.0)).abs()
+}
+
+/// Relative difference `|new - old| / max(|new|, |old|)` for a pair of optional
+/// values, with a missing side treated as `0.0`. Returns `0.0` when both
+/// magnitudes are zero, guarding against division by zero.
+#[must_use]
+pub fn change_rel_delta(old: Option<f64>, new: Option<f64>) -> f64 {
+    let a = old.unwrap_or(0.0);
+    let b = new.unwrap_or(0.0);
+    let denominator = a.abs().max(b.abs());
+    if denominator == 0.0 { 0.0 } else { (b - a).abs() / denominator }
+}
+
+/// Dispatch to the absolute or relative pair delta.
+fn change_delta(old: Option<f64>, new: Option<f64>, relative: bool) -> f64 {
+    if relative { change_rel_delta(old, new) } else { change_abs_delta(old, new) }
+}
+
+/// Maximum delta across a list of coefficient changes.
+fn max_coefficient_delta(changes: &[CoefficientChange], relative: bool) -> f64 {
+    changes.iter().map(|c| change_delta(c.old_value, c.new_value, relative)).fold(0.0, f64::max)
+}
+
+/// Sort key for a modified constraint: the maximum delta over the RHS change and
+/// all coefficient/weight changes. `None` for non-modified entries.
+#[must_use]
+pub fn constraint_sort_delta(entry: &ConstraintDiffEntry, relative: bool) -> Option<f64> {
+    if entry.kind != DiffKind::Modified {
+        return None;
+    }
+    let max = match &entry.detail {
+        ConstraintDiffDetail::Standard { coeff_changes, rhs_change, .. } => {
+            let rhs_delta = rhs_change.map_or(0.0, |(old, new)| change_delta(Some(old), Some(new), relative));
+            rhs_delta.max(max_coefficient_delta(coeff_changes, relative))
+        }
+        ConstraintDiffDetail::Sos { weight_changes, .. } => max_coefficient_delta(weight_changes, relative),
+        // Type changes have no numeric delta but are still modifications —
+        // group them with the zero-delta modified entries.
+        ConstraintDiffDetail::TypeChanged { .. } | ConstraintDiffDetail::AddedOrRemoved(_) => 0.0,
+    };
+    debug_assert!(max.is_finite() && max >= 0.0, "constraint sort delta must be finite and non-negative");
+    Some(max)
+}
+
+/// Sort key for a modified variable: the maximum delta across its lower and upper
+/// bound changes (a missing bound counts as `0.0`). `None` for non-modified entries.
+#[must_use]
+pub fn variable_sort_delta(entry: &VariableDiffEntry, relative: bool) -> Option<f64> {
+    if entry.kind != DiffKind::Modified {
+        return None;
+    }
+    let (old_lower, old_upper) = entry.old_type.as_ref().map_or((None, None), variable_bounds);
+    let (new_lower, new_upper) = entry.new_type.as_ref().map_or((None, None), variable_bounds);
+    let max = change_delta(old_lower, new_lower, relative).max(change_delta(old_upper, new_upper, relative));
+    debug_assert!(max.is_finite() && max >= 0.0, "variable sort delta must be finite and non-negative");
+    Some(max)
+}
+
+/// Sort key for a modified objective: the maximum delta across its coefficient
+/// changes. `None` for non-modified entries.
+#[must_use]
+pub fn objective_sort_delta(entry: &ObjectiveDiffEntry, relative: bool) -> Option<f64> {
+    if entry.kind != DiffKind::Modified {
+        return None;
+    }
+    Some(max_coefficient_delta(&entry.coeff_changes, relative))
+}
+
+/// Sort `indices` (positions into `entries`) by descending delta.
+///
+/// Modified entries (which carry a delta) come first, largest delta first;
+/// entries without a delta (added/removed/renamed) follow, alphabetically.
+/// Ties within the delta group fall back to name order.
+pub fn sort_indices_by_delta<T: DiffEntry>(entries: &[T], indices: &mut [usize], relative: bool) {
+    debug_assert!(indices.iter().all(|&i| i < entries.len()), "all indices must be in bounds");
+    indices.sort_by(|&a, &b| {
+        let delta_a = entries[a].sort_delta(relative);
+        let delta_b = entries[b].sort_delta(relative);
+        match (delta_a, delta_b) {
+            (Some(x), Some(y)) => y.total_cmp(&x).then_with(|| entries[a].name().cmp(entries[b].name())),
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (None, None) => entries[a].name().cmp(entries[b].name()),
+        }
+    });
 }
 
 /// Diff two coefficient lists using sorted merge-join and return only the changed entries.
@@ -749,6 +904,7 @@ fn diff_constraints(
                     line_file1: line1,
                     line_file2: line2,
                     order_only: false,
+                    renamed_from: None,
                 });
                 i += 1;
             }
@@ -764,6 +920,7 @@ fn diff_constraints(
                     line_file1: line1,
                     line_file2: line2,
                     order_only: false,
+                    renamed_from: None,
                 });
                 j += 1;
             }
@@ -794,6 +951,7 @@ fn diff_constraints(
                         line_file1: line1,
                         line_file2: line2,
                         order_only,
+                        renamed_from: None,
                     });
                 } else {
                     counts.unchanged += 1;
@@ -805,6 +963,173 @@ fn diff_constraints(
     }
 
     SectionDiff { entries, counts }
+}
+
+/// A candidate constraint for rename matching: its entry index, RHS, and a
+/// structural signature of (variable name, coefficient) pairs sorted by name.
+struct RenameCandidate {
+    entry_index: usize,
+    rhs: f64,
+    /// Sorted by `NameId`. IDs come from the report's shared interner, so equal
+    /// canonical names (post `--rename` rewriting) have equal IDs.
+    signature: Vec<(NameId, f64)>,
+}
+
+/// True when two candidates are structurally identical under the active tolerances:
+/// same RHS and the same sorted (name, coefficient) list, with numeric fields
+/// compared via [`DiffOptions::numeric_differs`].
+fn rename_signatures_match(removed: &RenameCandidate, added: &RenameCandidate, opts: &DiffOptions) -> bool {
+    debug_assert_eq!(removed.signature.len(), added.signature.len(), "bucketing guarantees equal term counts");
+    if opts.numeric_differs(removed.rhs, added.rhs) {
+        return false;
+    }
+    removed
+        .signature
+        .iter()
+        .zip(added.signature.iter())
+        .all(|((name1, value1), (name2, value2))| name1 == name2 && !opts.numeric_differs(*value1, *value2))
+}
+
+/// Map a `ComparisonOp` to a stable small integer for use in a bucket key
+/// (`ComparisonOp` does not implement `Hash`).
+const fn operator_bucket_key(operator: ComparisonOp) -> u8 {
+    match operator {
+        ComparisonOp::LTE => 0,
+        ComparisonOp::GTE => 1,
+        ComparisonOp::EQ => 2,
+        ComparisonOp::LT => 3,
+        ComparisonOp::GT => 4,
+    }
+}
+
+/// Detect renamed constraints among the added/removed standard constraints.
+///
+/// Generated LP models often shift row indices between runs, producing large
+/// added+removed pairs that are really the same constraint under a new name.
+/// This buckets candidates by the cheap exact key (operator, term count) and then
+/// does tolerance-aware pairwise comparison of sorted coefficient signatures,
+/// greedily taking the first match. Each matched pair collapses into a single
+/// [`DiffKind::Renamed`] entry carrying the old name in `renamed_from`.
+///
+/// SOS constraints are skipped for v1 — rename detection covers standard
+/// constraints only.
+fn detect_constraint_renames(section: &mut SectionDiff<ConstraintDiffEntry>, opts: &DiffOptions) {
+    // (removed candidates, added candidates) bucketed by (operator key, term count).
+    let mut buckets: HashMap<(u8, usize), (Vec<RenameCandidate>, Vec<RenameCandidate>)> = HashMap::new();
+
+    for (entry_index, entry) in section.entries.iter().enumerate() {
+        let is_added = match entry.kind {
+            DiffKind::Added => true,
+            DiffKind::Removed => false,
+            DiffKind::Modified | DiffKind::Renamed => continue,
+        };
+        // Standard constraints only — SOS rename detection is deferred (see doc comment).
+        let ConstraintDiffDetail::AddedOrRemoved(ResolvedConstraint::Standard { coefficients, operator, rhs }) = &entry.detail else {
+            continue;
+        };
+        let mut signature: Vec<(NameId, f64)> = coefficients.iter().map(|c| (c.name, c.value)).collect();
+        signature.sort_unstable_by_key(|(name, _)| *name);
+        let bucket = buckets.entry((operator_bucket_key(*operator), signature.len())).or_default();
+        let candidate = RenameCandidate { entry_index, rhs: *rhs, signature };
+        if is_added {
+            bucket.1.push(candidate);
+        } else {
+            bucket.0.push(candidate);
+        }
+    }
+
+    // Greedy first-match pairing of (removed entry index, added entry index).
+    let mut pairs: Vec<(usize, usize)> = Vec::new();
+    for (removed, added) in buckets.into_values() {
+        if removed.is_empty() || added.is_empty() {
+            continue;
+        }
+        // Deliberate cap: skip pathological buckets rather than doing an unbounded
+        // quadratic scan. Nothing is surfaced — these entries stay added/removed.
+        if removed.len().saturating_mul(added.len()) > MAX_RENAME_BUCKET_PAIRS {
+            continue;
+        }
+        let mut added_used = vec![false; added.len()];
+        for removed_candidate in &removed {
+            for (j, added_candidate) in added.iter().enumerate() {
+                if added_used[j] {
+                    continue;
+                }
+                if rename_signatures_match(removed_candidate, added_candidate, opts) {
+                    added_used[j] = true;
+                    pairs.push((removed_candidate.entry_index, added_candidate.entry_index));
+                    break;
+                }
+            }
+        }
+    }
+
+    if pairs.is_empty() {
+        return;
+    }
+
+    // Build one Renamed entry per matched pair.
+    let mut renamed_entries = Vec::with_capacity(pairs.len());
+    for &(removed_index, added_index) in &pairs {
+        let removed_entry = &section.entries[removed_index];
+        let added_entry = &section.entries[added_index];
+        let ConstraintDiffDetail::AddedOrRemoved(ResolvedConstraint::Standard {
+            coefficients: old_coefficients,
+            operator: old_operator,
+            rhs: old_rhs,
+        }) = &removed_entry.detail
+        else {
+            unreachable!("rename candidates are always standard AddedOrRemoved entries");
+        };
+        let ConstraintDiffDetail::AddedOrRemoved(ResolvedConstraint::Standard { coefficients: new_coefficients, rhs: new_rhs, .. }) =
+            &added_entry.detail
+        else {
+            unreachable!("rename candidates are always standard AddedOrRemoved entries");
+        };
+        // Positional comparison is valid: term counts are equal within a bucket.
+        let order_changed = old_coefficients.iter().zip(new_coefficients.iter()).any(|(a, b)| a.name != b.name);
+        renamed_entries.push(ConstraintDiffEntry {
+            name: added_entry.name.clone(),
+            kind: DiffKind::Renamed,
+            detail: ConstraintDiffDetail::Standard {
+                old_coefficients: old_coefficients.clone(),
+                new_coefficients: new_coefficients.clone(),
+                // Empty by construction: the pair matched under the active tolerances.
+                coeff_changes: Vec::new(),
+                operator_change: None,
+                rhs_change: None,
+                old_rhs: *old_rhs,
+                new_rhs: *new_rhs,
+                old_operator: *old_operator,
+                order_changed,
+            },
+            line_file1: removed_entry.line_file1,
+            line_file2: added_entry.line_file2,
+            order_only: false,
+            renamed_from: Some(removed_entry.name.clone()),
+        });
+    }
+
+    // Drop the matched added/removed entries and splice in the renamed ones,
+    // restoring the sorted-by-name invariant.
+    let matched: std::collections::HashSet<usize> =
+        pairs.iter().flat_map(|&(removed_index, added_index)| [removed_index, added_index]).collect();
+    debug_assert_eq!(matched.len(), pairs.len() * 2, "an entry must not appear in more than one rename pair");
+    let mut kept: Vec<ConstraintDiffEntry> = Vec::with_capacity(section.entries.len() - pairs.len());
+    for (index, entry) in section.entries.drain(..).enumerate() {
+        if !matched.contains(&index) {
+            kept.push(entry);
+        }
+    }
+    kept.append(&mut renamed_entries);
+    kept.sort_by(|a, b| a.name.cmp(&b.name));
+    section.entries = kept;
+
+    debug_assert!(section.counts.added >= pairs.len(), "added count must cover matched pairs");
+    debug_assert!(section.counts.removed >= pairs.len(), "removed count must cover matched pairs");
+    section.counts.added -= pairs.len();
+    section.counts.removed -= pairs.len();
+    section.counts.renamed += pairs.len();
 }
 
 /// Diff the objectives section between two problems using sorted merge-join.
@@ -929,7 +1254,8 @@ pub fn build_diff_report(input: &DiffInput<'_>) -> LpDiffReport {
     let opts = &input.options;
 
     let variables = diff_variables(input.p1, input.p2, opts);
-    let constraints = diff_constraints(input.p1, input.p2, input.line_map1, input.line_map2, &mut interner, opts);
+    let mut constraints = diff_constraints(input.p1, input.p2, input.line_map1, input.line_map2, &mut interner, opts);
+    detect_constraint_renames(&mut constraints, opts);
     let objectives = diff_objectives(input.p1, input.p2, &mut interner, opts);
 
     let sense_changed = if input.p1.sense == input.p2.sense { None } else { Some((input.p1.sense.clone(), input.p2.sense.clone())) };
@@ -1248,6 +1574,7 @@ mod tests {
             line_file1: None,
             line_file2: None,
             order_only: false,
+            renamed_from: None,
         };
         assert_diff_entry(&added_constraint, "c1", DiffKind::Added);
 
@@ -1418,6 +1745,144 @@ mod tests {
             panic!("expected Standard detail");
         };
         assert_eq!(*rhs_change, Some((10.0, 20.0)));
+    }
+
+    #[test]
+    fn test_rename_detected_for_identical_constraint() {
+        // Same structure, different constraint name — must collapse to one Renamed entry.
+        let p1 = problem_with_standard_constraint("row_1", &[("x", 2.0), ("y", 3.0)], &ComparisonOp::LTE, 10.0);
+        let p2 = problem_with_standard_constraint("row_9", &[("x", 2.0), ("y", 3.0)], &ComparisonOp::LTE, 10.0);
+        let report = quick_report(&p1, &p2);
+
+        assert_eq!(report.constraints.counts.renamed, 1);
+        assert_eq!(report.constraints.counts.added, 0, "renamed pair must not count as added");
+        assert_eq!(report.constraints.counts.removed, 0, "renamed pair must not count as removed");
+
+        let entry = report.constraints.entries.iter().find(|e| e.kind == DiffKind::Renamed).expect("should have a Renamed entry");
+        assert_eq!(entry.name, "row_9");
+        assert_eq!(entry.renamed_from.as_deref(), Some("row_1"));
+        // The renamed entry replaces both the added and the removed entry.
+        assert!(!report.constraints.entries.iter().any(|e| matches!(e.kind, DiffKind::Added | DiffKind::Removed)));
+    }
+
+    #[test]
+    fn test_rename_detected_with_reordered_coefficients() {
+        // Signature is order-insensitive: 2x + 3y matches 3y + 2x.
+        let p1 = problem_with_standard_constraint("c_old", &[("x", 2.0), ("y", 3.0)], &ComparisonOp::GTE, 5.0);
+        let p2 = problem_with_standard_constraint("c_new", &[("y", 3.0), ("x", 2.0)], &ComparisonOp::GTE, 5.0);
+        let report = quick_report(&p1, &p2);
+
+        assert_eq!(report.constraints.counts.renamed, 1);
+        let entry = report.constraints.entries.iter().find(|e| e.kind == DiffKind::Renamed).expect("should have a Renamed entry");
+        let ConstraintDiffDetail::Standard { order_changed, .. } = &entry.detail else {
+            panic!("renamed entry must carry a Standard detail");
+        };
+        assert!(order_changed, "positional order differs between the two files");
+    }
+
+    #[test]
+    fn test_rename_detected_within_tolerance() {
+        // Coefficient differs by 5e-3, within abs_tol = 0.01 — still a rename.
+        let p1 = problem_with_standard_constraint("c_old", &[("x", 1.0)], &ComparisonOp::LTE, 10.0);
+        let p2 = problem_with_standard_constraint("c_new", &[("x", 1.005)], &ComparisonOp::LTE, 10.0);
+        let opts = DiffOptions { abs_tol: 0.01, ..DiffOptions::default() };
+        let report = quick_report_with_opts(&p1, &p2, opts);
+
+        assert_eq!(report.constraints.counts.renamed, 1);
+        assert_eq!(report.constraints.counts.added, 0);
+        assert_eq!(report.constraints.counts.removed, 0);
+    }
+
+    #[test]
+    fn test_rename_not_detected_for_different_rhs() {
+        // Same coefficients but RHS 10 vs 20 — must stay added + removed.
+        let p1 = problem_with_standard_constraint("c_old", &[("x", 1.0)], &ComparisonOp::LTE, 10.0);
+        let p2 = problem_with_standard_constraint("c_new", &[("x", 1.0)], &ComparisonOp::LTE, 20.0);
+        let report = quick_report(&p1, &p2);
+
+        assert_eq!(report.constraints.counts.renamed, 0);
+        assert_eq!(report.constraints.counts.added, 1);
+        assert_eq!(report.constraints.counts.removed, 1);
+    }
+
+    #[test]
+    fn test_renamed_counts_in_total_and_changed() {
+        let counts = DiffCounts { added: 1, removed: 2, modified: 3, unchanged: 4, order_only: 0, renamed: 5 };
+        assert_eq!(counts.total(), 15);
+        assert_eq!(counts.changed(), 11);
+    }
+
+    #[test]
+    fn test_constraint_sort_delta_max_wins() {
+        // Coefficient Δ = |5 - 2| = 3, RHS Δ = |11 - 10| = 1 → max is the coefficient.
+        let p1 = problem_with_standard_constraint("c1", &[("x", 2.0)], &ComparisonOp::LTE, 10.0);
+        let p2 = problem_with_standard_constraint("c1", &[("x", 5.0)], &ComparisonOp::LTE, 11.0);
+        let report = quick_report(&p1, &p2);
+        let entry = report.constraints.entries.iter().find(|e| e.name == "c1").expect("c1 must be modified");
+
+        assert_eq!(constraint_sort_delta(entry, false), Some(3.0));
+        // Relative: coefficient 3/5 = 0.6 beats RHS 1/11 ≈ 0.09.
+        let relative = constraint_sort_delta(entry, true).expect("modified entry has a delta");
+        assert!((relative - 0.6).abs() < 1e-12, "expected 0.6, got {relative}");
+    }
+
+    #[test]
+    fn test_constraint_sort_delta_rhs_wins() {
+        // RHS Δ = 10 beats coefficient Δ = 1.
+        let p1 = problem_with_standard_constraint("c1", &[("x", 2.0)], &ComparisonOp::LTE, 10.0);
+        let p2 = problem_with_standard_constraint("c1", &[("x", 3.0)], &ComparisonOp::LTE, 20.0);
+        let report = quick_report(&p1, &p2);
+        let entry = report.constraints.entries.iter().find(|e| e.name == "c1").expect("c1 must be modified");
+        assert_eq!(constraint_sort_delta(entry, false), Some(10.0));
+    }
+
+    #[test]
+    fn test_rel_delta_zero_guard() {
+        assert_eq!(change_rel_delta(Some(0.0), Some(0.0)), 0.0);
+        assert_eq!(change_rel_delta(None, None), 0.0);
+        // Coefficient appearing from nothing: |2 - 0| / max(2, 0) = 1.
+        assert_eq!(change_rel_delta(None, Some(2.0)), 1.0);
+        assert_eq!(change_abs_delta(None, Some(2.0)), 2.0);
+    }
+
+    #[test]
+    fn test_sort_puts_modified_before_added_and_removed() {
+        let p1 = LpProblem::parse("minimize\nobj: _d\nsubject to\n c_mod: 1 x <= 10\n c_gone: 1 z <= 3\nend").unwrap();
+        let p2 = LpProblem::parse("minimize\nobj: _d\nsubject to\n c_mod: 1 x <= 20\n c_new: 1 y <= 5\nend").unwrap();
+        let report = quick_report(&p1, &p2);
+        let entries = &report.constraints.entries;
+        let mut indices: Vec<usize> = (0..entries.len()).collect();
+        sort_indices_by_delta(entries, &mut indices, false);
+
+        assert_eq!(entries[indices[0]].name, "c_mod", "modified entry with a delta sorts first");
+        assert_eq!(entries[indices[0]].kind, DiffKind::Modified);
+        // The remaining (no-delta) entries are alphabetical among themselves.
+        let tail: Vec<&str> = indices[1..].iter().map(|&i| entries[i].name.as_str()).collect();
+        let mut sorted_tail = tail.clone();
+        sorted_tail.sort_unstable();
+        assert_eq!(tail, sorted_tail, "no-delta entries must be alphabetical");
+    }
+
+    #[test]
+    fn test_variable_sort_delta_uses_bound_changes() {
+        let p1 = problem_with_variable("v", &VariableType::DoubleBound(0.0, 10.0));
+        let p2 = problem_with_variable("v", &VariableType::DoubleBound(1.0, 50.0));
+        let report = quick_report(&p1, &p2);
+        let entry = report.variables.entries.iter().find(|e| e.name == "v").expect("v must be modified");
+        // Lower Δ = 1, upper Δ = 40 → max is 40.
+        assert_eq!(variable_sort_delta(entry, false), Some(40.0));
+    }
+
+    #[test]
+    fn test_tolerance_preset_cycling() {
+        // Preset values advance in order and wrap around.
+        assert_eq!(next_tolerance_preset(0.0), 1e-9);
+        assert_eq!(next_tolerance_preset(1e-9), 1e-6);
+        assert_eq!(next_tolerance_preset(1e-6), 1e-4);
+        assert_eq!(next_tolerance_preset(1e-4), 1e-2);
+        assert_eq!(next_tolerance_preset(1e-2), 0.0);
+        // A non-preset CLI value jumps to the first preset (tolerance off).
+        assert_eq!(next_tolerance_preset(0.5), 0.0);
     }
 
     #[test]

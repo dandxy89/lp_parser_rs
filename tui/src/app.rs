@@ -1,8 +1,10 @@
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, mpsc};
 use std::time::Instant;
 
+use lp_parser_rs::interner::NameId;
 use lp_parser_rs::problem::LpProblem;
 use ratatui::layout::Rect;
 use ratatui::text::Line;
@@ -10,11 +12,13 @@ use ratatui::widgets::ListState;
 use smallvec::SmallVec;
 
 use crate::detail_model::{CoefficientRow, build_coeff_rows};
-use crate::diff_model::{DiffEntry, DiffKind, DiffSummary, LpDiffReport};
+use crate::diff_model::{DiffEntry, DiffInput, DiffKind, DiffOptions, DiffSummary, LpDiffReport, build_diff_report, next_tolerance_preset};
+use crate::parse::ParsedFile;
 use crate::search::{self, CompiledSearch, SearchMode};
-use crate::solver::SolveResult;
-use crate::state::{DetailView, JumpEntry, JumpList, PendingYank, Side, SolveState, SolveViewState};
+use crate::solver::{InfeasibilityDiagnosis, SolveResult};
+use crate::state::{DetailView, DiagnosisState, JumpEntry, JumpList, PendingYank, Side, SolveState, SolveViewState, SortMode};
 pub use crate::state::{DiffFilter, Focus, SearchResult, Section, SectionViewState};
+use crate::watch::{WatchSession, WatchState};
 
 /// State for the telescope-style search pop-up overlay.
 pub struct SearchPopupState {
@@ -31,6 +35,10 @@ pub struct SearchPopupState {
     /// Pre-built styled lines for each search result, avoiding per-frame
     /// `format!` allocations. Rebuilt in `recompute_search_popup`.
     pub cached_result_lines: Vec<Line<'static>>,
+    /// Compact regex compilation error for the current query, if any.
+    /// Shown under the query input so an invalid pattern is not mistaken
+    /// for a query that simply matches nothing.
+    pub regex_error: Option<String>,
 }
 
 /// Layout rectangles and dimensions stored during draw for mouse hit-testing and scrolling.
@@ -41,6 +49,9 @@ pub struct LayoutRects {
     pub name_list_height: u16,
     pub detail_height: u16,
     pub detail_content_lines: usize,
+    /// Per-tab `(start_x, end_x)` column ranges in the tab bar, exclusive end.
+    /// Updated each frame by the tab bar renderer for mouse hit-testing.
+    pub tab_bounds: [(u16, u16); 5],
 }
 
 /// Yank (clipboard) flash state.
@@ -73,12 +84,13 @@ pub struct CachedDiffRow {
 pub enum SolveRenderCache {
     /// No cache available.
     Empty,
-    /// Single-solve result: pre-formatted tab lines `[summary, variables, constraints, log]`.
-    Single([Vec<Line<'static>>; 4]),
-    /// Diff-solve result: pre-formatted summary, log, and per-row lines.
+    /// Single-solve result: pre-formatted tab lines `[summary, variables, constraints, log, duals]`.
+    Single([Vec<Line<'static>>; 5]),
+    /// Diff-solve result: pre-formatted summary, log, duals, and per-row lines.
     Diff {
         summary: Vec<Line<'static>>,
         log: Vec<Line<'static>>,
+        duals: Vec<Line<'static>>,
         variable_rows: Vec<CachedDiffRow>,
         constraint_rows: Vec<CachedDiffRow>,
         /// Pre-formatted variable counts summary label.
@@ -100,6 +112,13 @@ pub struct SolverSession {
     pub receive2: Option<mpsc::Receiver<Result<SolveResult, String>>>,
     /// Cached formatted lines for the solve overlay.
     pub render_cache: SolveRenderCache,
+    /// Infeasibility diagnosis state for the current result (key `e`).
+    pub diagnosis: DiagnosisState,
+    /// Channel for receiving the elastic-relaxation diagnosis from its background thread.
+    pub receive_diagnosis: Option<mpsc::Receiver<Result<InfeasibilityDiagnosis, String>>>,
+    /// The problem behind the current single-solve result, kept so the
+    /// diagnosis can rebuild the model without re-parsing.
+    pub solved_problem: Option<Arc<LpProblem>>,
 }
 
 impl SolverSession {
@@ -110,7 +129,16 @@ impl SolverSession {
             receive: None,
             receive2: None,
             render_cache: SolveRenderCache::Empty,
+            diagnosis: DiagnosisState::Idle,
+            receive_diagnosis: None,
+            solved_problem: None,
         }
+    }
+
+    /// Discard any in-flight or completed diagnosis (new solve or overlay closed).
+    pub(crate) fn reset_diagnosis(&mut self) {
+        self.diagnosis = DiagnosisState::Idle;
+        self.receive_diagnosis = None;
     }
 }
 
@@ -127,7 +155,7 @@ pub struct App {
     /// Scroll offset for the detail panel when it has focus.
     pub detail_scroll: u16,
 
-    /// Section selector list state (tracks which of the 4 sections is highlighted).
+    /// Section selector list state (tracks which of the 5 sections is highlighted).
     pub section_selector_state: ListState,
 
     /// Per-section view states: [Variables, Constraints, Objectives].
@@ -187,15 +215,35 @@ pub struct App {
     /// Built once in `App::new()` since the report data never changes.
     pub(crate) summary_lines: Vec<Line<'static>>,
 
+    /// Pre-built Numerics section lines (per-file conditioning view).
+    /// Rebuilt in `rebuild_report()` since the analyses change on watch reloads.
+    pub(crate) numerics_lines: Vec<Line<'static>>,
+
     /// Pre-computed diff summary. Built once in `App::new()` since
     /// the report data never changes, avoiding repeated recomputation.
     pub(crate) cached_summary: DiffSummary,
 
     /// Pre-computed section selector labels, avoiding per-frame `format!` allocations.
-    pub(crate) section_labels: [Cow<'static, str>; 4],
+    pub(crate) section_labels: [Cow<'static, str>; 5],
 
     /// When `true`, entries whose only change is coefficient ordering are hidden.
     pub ignore_order: bool,
+
+    /// Active sort order for the sidebar name lists (cycled with `s`).
+    pub sort_mode: SortMode,
+
+    /// Comparison options used to build (and rebuild) the diff report.
+    /// Tolerances are mutated live by the `t` / `T` keys.
+    pub diff_options: DiffOptions,
+
+    /// Constraint `NameId` → 1-based line number for file 1, kept for rebuilds.
+    pub(crate) line_map1: HashMap<NameId, usize>,
+
+    /// Constraint `NameId` → 1-based line number for file 2, kept for rebuilds.
+    pub(crate) line_map2: HashMap<NameId, usize>,
+
+    /// Watch-mode session (`--watch`): debounce state + in-flight reload channel.
+    pub watch: WatchSession,
 }
 
 /// Cached coefficient rows keyed on (section, `entry_index`).
@@ -230,15 +278,24 @@ fn build_haystack(report: &LpDiffReport) -> (Vec<HaystackEntry>, Vec<String>) {
     (haystack, names)
 }
 
-/// Build pre-computed section selector labels. The active section gets a marker prefix.
-pub(crate) fn build_section_labels(active: Section) -> [Cow<'static, str>; 4] {
-    Section::ALL.map(|section| {
-        let marker = if section == active { "\u{25b6} " } else { "  " };
-        Cow::Owned(format!("{marker}{}", section.label()))
+/// Format a tolerance value compactly: "off" for zero, scientific notation otherwise.
+pub(crate) fn format_tolerance(value: f64) -> String {
+    debug_assert!(value.is_finite() && value >= 0.0, "tolerance must be finite and non-negative");
+    if value == 0.0 { "off".to_owned() } else { format!("{value:e}") }
+}
+
+/// Build pre-computed tab bar labels: list sections carry their change count.
+pub(crate) fn build_section_labels(summary: &DiffSummary) -> [Cow<'static, str>; 5] {
+    Section::ALL.map(|section| match section {
+        Section::Summary | Section::Numerics => Cow::Borrowed(section.label()),
+        Section::Variables => Cow::Owned(format!("{} ({})", section.label(), summary.variables.changed())),
+        Section::Constraints => Cow::Owned(format!("{} ({})", section.label(), summary.constraints.changed())),
+        Section::Objectives => Cow::Owned(format!("{} ({})", section.label(), summary.objectives.changed())),
     })
 }
 
 impl App {
+    #[allow(clippy::too_many_arguments)] // constructor mirrors main.rs wiring; a params struct adds noise
     pub fn new(
         report: LpDiffReport,
         file1_path: PathBuf,
@@ -247,6 +304,9 @@ impl App {
         problem2: Arc<LpProblem>,
         raw_text1: Arc<str>,
         raw_text2: Arc<str>,
+        diff_options: DiffOptions,
+        line_map1: HashMap<NameId, usize>,
+        line_map2: HashMap<NameId, usize>,
     ) -> Self {
         let mut section_selector_state = ListState::default();
         section_selector_state.select(Some(0));
@@ -256,9 +316,10 @@ impl App {
         // Pre-build summary lines once (report data never changes).
         let report_summary = report.summary();
         let summary_lines = crate::widgets::summary::build_summary_lines(&report, &report_summary, &report.analysis1, &report.analysis2);
+        let numerics_lines = crate::widgets::numerics::build_numerics_lines(&report);
 
-        // Pre-compute section selector labels.
-        let section_labels = build_section_labels(Section::Summary);
+        // Pre-compute tab bar labels.
+        let section_labels = build_section_labels(&report_summary);
 
         Self {
             report,
@@ -277,6 +338,7 @@ impl App {
                 name_list_height: 0,
                 detail_height: 0,
                 detail_content_lines: 0,
+                tab_bounds: [(0, 0); 5],
             },
             yank: YankState { flash: None, message: String::new() },
             pending_yank: PendingYank::None,
@@ -287,6 +349,7 @@ impl App {
                 selected: 0,
                 scroll: 0,
                 cached_result_lines: Vec::new(),
+                regex_error: None,
             },
             jumplist: JumpList::new(),
             solver: SolverSession::new(),
@@ -301,9 +364,15 @@ impl App {
             search_haystack: haystack,
             coeff_row_cache: None,
             summary_lines,
+            numerics_lines,
             cached_summary: report_summary,
             section_labels,
             ignore_order: false,
+            sort_mode: SortMode::default(),
+            diff_options,
+            line_map1,
+            line_map2,
+            watch: WatchSession::disabled(),
         }
     }
 
@@ -335,7 +404,100 @@ impl App {
         }
         self.summary_lines =
             crate::widgets::summary::build_summary_lines(&self.report, &summary, &self.report.analysis1, &self.report.analysis2);
+        self.section_labels = build_section_labels(&summary);
         self.cached_summary = summary;
+    }
+
+    /// Cycle the sidebar sort mode: Name → AbsDelta → RelDelta → Name.
+    pub fn cycle_sort_mode(&mut self) {
+        self.sort_mode = self.sort_mode.next();
+        self.invalidate_cache();
+        self.ensure_active_section_cache();
+        self.reset_name_list_selection();
+        let label = match self.sort_mode {
+            SortMode::Name => "Sort: name",
+            SortMode::AbsDelta => "Sort: |\u{394}| (largest first)",
+            SortMode::RelDelta => "Sort: rel\u{394} (largest first)",
+        };
+        label.clone_into(&mut self.yank.message);
+        self.yank.flash = Some(Instant::now());
+    }
+
+    /// Cycle the relative tolerance through the presets and rebuild the diff.
+    pub fn cycle_rel_tol(&mut self) {
+        let value = next_tolerance_preset(self.diff_options.rel_tol);
+        self.diff_options.rel_tol = value;
+        self.rebuild_report();
+        self.yank.message = format!("rel_tol = {}", format_tolerance(value));
+        self.yank.flash = Some(Instant::now());
+    }
+
+    /// Cycle the absolute tolerance through the presets and rebuild the diff.
+    pub fn cycle_abs_tol(&mut self) {
+        let value = next_tolerance_preset(self.diff_options.abs_tol);
+        self.diff_options.abs_tol = value;
+        self.rebuild_report();
+        self.yank.message = format!("abs_tol = {}", format_tolerance(value));
+        self.yank.flash = Some(Instant::now());
+    }
+
+    /// Rebuild the diff report from the stored problems with the current
+    /// `diff_options`, then refresh every report-derived cache.
+    ///
+    /// Self-contained on purpose: this is the single rebuild path for live
+    /// tolerance changes and is intended to be reused by watch mode later
+    /// (re-parse, replace `problem1`/`problem2`/line maps, then call this).
+    pub fn rebuild_report(&mut self) {
+        let file1 = self.file1_path.display().to_string();
+        let file2 = self.file2_path.display().to_string();
+        self.report = build_diff_report(&DiffInput {
+            file1: &file1,
+            file2: &file2,
+            p1: &self.problem1,
+            p2: &self.problem2,
+            line_map1: &self.line_map1,
+            line_map2: &self.line_map2,
+            analysis1: self.report.analysis1.clone(),
+            analysis2: self.report.analysis2.clone(),
+            options: self.diff_options.clone(),
+        });
+
+        // Report-derived caches: search haystack + name buffer.
+        let (haystack, names) = build_haystack(&self.report);
+        self.search_haystack = haystack;
+        self.search_name_buffer = names;
+
+        // Summary lines + cached summary (respects the active ignore_order setting).
+        self.rebuild_summary();
+
+        // Numerics lines depend on the analyses, which change on watch reloads.
+        self.numerics_lines = crate::widgets::numerics::build_numerics_lines(&self.report);
+
+        // Filtered indices, cached sidebar lines, and coefficient row cache.
+        self.invalidate_cache();
+        self.detail_scroll = 0;
+        self.ensure_active_section_cache();
+        self.clamp_active_selection();
+
+        // The search pop-up references haystack indices — refresh if it is open.
+        if self.search_popup.visible {
+            self.recompute_search_popup();
+        }
+    }
+
+    /// Clamp the active section's list selection to the freshly recomputed
+    /// filtered length. Must be called after `ensure_active_section_cache`.
+    fn clamp_active_selection(&mut self) {
+        let Some(index) = self.active_section.list_index() else {
+            return;
+        };
+        let len = self.section_states[index].cached_indices().len();
+        let state = &mut self.section_states[index].list_state;
+        match state.selected() {
+            Some(_) if len == 0 => state.select(None),
+            Some(selected) if selected >= len => state.select(Some(len - 1)),
+            _ => {}
+        }
     }
 
     /// Extract raw LP text for the currently selected entry from both files.
@@ -390,17 +552,18 @@ impl App {
     }
 
     /// Recompute filtered indices for a given list section.
-    /// Panics (in debug) if `section` is `Summary`.
+    /// Panics (in debug) if `section` is a static section (Summary, Numerics).
     fn recompute_section_cache(&mut self, section: Section) {
-        debug_assert!(section != Section::Summary, "Summary has no list entries to recompute");
-        let index = section.list_index().expect("non-Summary section has list_index");
+        debug_assert!(section.list_index().is_some(), "static section {section:?} has no list entries to recompute");
+        let index = section.list_index().expect("list section has list_index");
         let filter = self.filter;
         let ignore_order = self.ignore_order;
+        let sort = self.sort_mode;
         match section {
-            Section::Variables => self.section_states[index].recompute(&self.report.variables.entries, filter, ignore_order),
-            Section::Constraints => self.section_states[index].recompute(&self.report.constraints.entries, filter, ignore_order),
-            Section::Objectives => self.section_states[index].recompute(&self.report.objectives.entries, filter, ignore_order),
-            Section::Summary => unreachable!("Summary has no list_index"),
+            Section::Variables => self.section_states[index].recompute(&self.report.variables.entries, filter, ignore_order, sort),
+            Section::Constraints => self.section_states[index].recompute(&self.report.constraints.entries, filter, ignore_order, sort),
+            Section::Objectives => self.section_states[index].recompute(&self.report.objectives.entries, filter, ignore_order, sort),
+            Section::Summary | Section::Numerics => unreachable!("static sections have no list_index"),
         }
     }
 
@@ -478,7 +641,7 @@ impl App {
 
     /// Return the report-level entry index for the currently selected name list item.
     ///
-    /// Returns `None` if the active section is Summary or nothing is selected.
+    /// Returns `None` if the active section is static (Summary, Numerics) or nothing is selected.
     pub(crate) fn selected_entry_index(&self) -> Option<usize> {
         let section_index = self.active_section.list_index()?;
         let state = &self.section_states[section_index];
@@ -488,7 +651,7 @@ impl App {
 
     /// Whether the name list panel has selectable content for the current section.
     pub(crate) fn has_name_list(&self) -> bool {
-        self.active_section != Section::Summary && self.name_list_len() > 0
+        self.active_section.list_index().is_some() && self.name_list_len() > 0
     }
 
     pub(crate) const fn reset_name_list_selection(&mut self) {
@@ -559,11 +722,13 @@ impl App {
             static CLIPBOARD: std::cell::RefCell<Option<arboard::Clipboard>> = const { std::cell::RefCell::new(None) };
         }
 
-        let result = CLIPBOARD.with_borrow_mut(|cb| {
+        let result: Result<(), String> = CLIPBOARD.with_borrow_mut(|cb| {
             if cb.is_none() {
-                *cb = arboard::Clipboard::new().ok();
+                // Surface initialisation failure (common on SSH/Wayland sessions) instead of
+                // silently appearing to succeed; the next yank will retry initialisation.
+                *cb = Some(arboard::Clipboard::new().map_err(|error| format!("Clipboard unavailable: {error}"))?);
             }
-            cb.as_mut().map_or(Err(arboard::Error::ClipboardNotSupported), |clipboard| clipboard.set_text(text))
+            cb.as_mut().expect("clipboard initialised above").set_text(text).map_err(|error| format!("Yank failed: {error}"))
         });
 
         match result {
@@ -571,8 +736,8 @@ impl App {
                 label.clone_into(&mut self.yank.message);
                 self.yank.flash = Some(Instant::now());
             }
-            Err(error) => {
-                self.yank.message = format!("Yank failed: {error}");
+            Err(message) => {
+                self.yank.message = message;
                 self.yank.flash = Some(Instant::now());
             }
         }
@@ -610,10 +775,10 @@ impl App {
     /// Yank the full detail panel content as plain text to the system clipboard.
     pub fn yank_detail(&mut self) {
         let Some(text) = crate::detail_text::render_detail_plain(self) else { return };
-        let label = if self.active_section == Section::Summary {
-            "summary".to_owned()
-        } else {
-            self.selected_entry_name().unwrap_or("detail").to_owned()
+        let label = match self.active_section {
+            Section::Summary => "summary".to_owned(),
+            Section::Numerics => "numerics".to_owned(),
+            _ => self.selected_entry_name().unwrap_or("detail").to_owned(),
         };
         self.set_yank_flash(&format!("Yanked detail: {label}"), &text);
     }
@@ -642,13 +807,13 @@ impl App {
 
     /// Return the name of an entry given section and entry index.
     ///
-    /// Returns `None` if `section` is `Summary` or the index is out of bounds.
+    /// Returns `None` for static sections (Summary, Numerics) or an out-of-bounds index.
     fn entry_name(&self, section: Section, entry_index: usize) -> Option<&str> {
         match section {
             Section::Variables => self.report.variables.entries.get(entry_index).map(|e| e.name.as_str()),
             Section::Constraints => self.report.constraints.entries.get(entry_index).map(|e| e.name.as_str()),
             Section::Objectives => self.report.objectives.entries.get(entry_index).map(|e| e.name.as_str()),
-            Section::Summary => None,
+            Section::Summary | Section::Numerics => None,
         }
     }
 
@@ -664,11 +829,11 @@ impl App {
         self.jumplist.push(JumpEntry { section: self.active_section, entry_index, detail_scroll: self.detail_scroll, filter: self.filter });
     }
 
-    /// Update active section and rebuild section selector labels.
+    /// Update active section, keeping the (now invisible) selector state in
+    /// sync — it still backs keyboard navigation over the tab bar.
     pub(crate) fn set_active_section(&mut self, section: Section) {
         self.active_section = section;
         self.section_selector_state.select(Some(section.index()));
-        self.section_labels = build_section_labels(section);
     }
 
     /// Navigate to a jumplist entry, restoring section, selection, scroll, and filter.
@@ -695,7 +860,99 @@ impl App {
         }
 
         self.focus =
-            if entry.entry_index.is_some() && entry.section != Section::Summary { Focus::NameList } else { Focus::SectionSelector };
+            if entry.entry_index.is_some() && entry.section.list_index().is_some() { Focus::NameList } else { Focus::SectionSelector };
+    }
+
+    /// Enable watch mode, anchoring the debounce baseline at the current mtimes.
+    pub fn enable_watch(&mut self) {
+        self.watch.enabled = true;
+        self.watch.state = WatchState::new(crate::watch::read_mtime(&self.file1_path), crate::watch::read_mtime(&self.file2_path));
+    }
+
+    /// Watch-mode tick: drain a finished background reload, or poll both files'
+    /// mtimes and spawn a reload once a change has been stable for two ticks.
+    ///
+    /// While a reload is in flight further triggers are ignored; polling
+    /// re-arms automatically on the tick after the result is applied, so a
+    /// change made during the parse is still picked up.
+    pub fn poll_watch(&mut self) {
+        if !self.watch.enabled {
+            return;
+        }
+
+        if let Some(receive) = &self.watch.receive {
+            match receive.try_recv() {
+                Ok(Ok(parsed)) => {
+                    self.watch.receive = None;
+                    self.apply_reload(*parsed);
+                }
+                Ok(Err(error)) => {
+                    // Keep the old report; the watcher retries on the next change.
+                    self.watch.receive = None;
+                    self.yank.message = format!("reload failed: {error}");
+                    self.yank.flash = Some(Instant::now());
+                }
+                Err(mpsc::TryRecvError::Empty) => {} // still parsing
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    self.watch.receive = None;
+                    self.yank.message = "reload failed: parse thread disconnected".to_owned();
+                    self.yank.flash = Some(Instant::now());
+                }
+            }
+            return;
+        }
+
+        let mtime1 = crate::watch::read_mtime(&self.file1_path);
+        let mtime2 = crate::watch::read_mtime(&self.file2_path);
+        if self.watch.state.observe(mtime1, mtime2) {
+            self.spawn_reload();
+        }
+    }
+
+    /// Spawn a background thread that re-parses both files, mirroring the
+    /// `spawn_solver` mpsc pattern so the UI stays responsive.
+    fn spawn_reload(&mut self) {
+        debug_assert!(self.watch.enabled, "spawn_reload called while watch mode is disabled");
+        debug_assert!(self.watch.receive.is_none(), "spawn_reload called while a reload is already in flight");
+
+        let path1 = self.file1_path.clone();
+        let path2 = self.file2_path.clone();
+        let (sender, receiver) = mpsc::channel();
+        self.watch.receive = Some(receiver);
+
+        std::thread::spawn(move || {
+            let outcome = crate::watch::reload_files(&path1, &path2);
+            // Receiver may be dropped if the app quit — this is expected.
+            if sender.send(outcome).is_err() {
+                eprintln!("reload result dropped: receiver closed");
+            }
+        });
+    }
+
+    /// Apply a completed reload on the main thread: replace the problems and
+    /// derived inputs, rebuild the diff report, and reset the solver session
+    /// (stale solve results and diagnoses would be misleading; old `Arc`s held
+    /// by finished solver threads are harmless).
+    fn apply_reload(&mut self, parsed: (ParsedFile, ParsedFile)) {
+        let ((problem1, analysis1, line_map1, raw_text1), (problem2, analysis2, line_map2, raw_text2)) = parsed;
+
+        self.problem1 = Arc::new(problem1);
+        self.problem2 = Arc::new(problem2);
+        self.line_map1 = line_map1;
+        self.line_map2 = line_map2;
+        self.raw_text1 = raw_text1.into();
+        self.raw_text2 = raw_text2.into();
+
+        // rebuild_report sources the analyses from the current report, so the
+        // fresh ones must be installed first.
+        self.report.analysis1 = analysis1;
+        self.report.analysis2 = analysis2;
+        self.rebuild_report();
+
+        self.solver = SolverSession::new();
+
+        self.yank.message = format!("reloaded {}", crate::watch::format_clock_time(std::time::SystemTime::now()));
+        self.yank.flash = Some(Instant::now());
     }
 
     /// Poll the solver channel(s) for results, transitioning state when complete.
@@ -705,6 +962,40 @@ impl App {
         } else {
             self.poll_solve_single();
         }
+        self.poll_diagnosis();
+    }
+
+    /// Poll the infeasibility-diagnosis channel (`DiagnosisState::Running`).
+    fn poll_diagnosis(&mut self) {
+        let Some(receive) = &self.solver.receive_diagnosis else {
+            return;
+        };
+        let DiagnosisState::Running { file, .. } = &self.solver.diagnosis else {
+            return;
+        };
+        match receive.try_recv() {
+            Ok(Ok(diagnosis)) => {
+                self.solver.diagnosis = DiagnosisState::Done { file: file.clone(), diagnosis: Box::new(diagnosis) };
+                self.solver.receive_diagnosis = None;
+            }
+            Ok(Err(error)) => {
+                self.solver.diagnosis = DiagnosisState::Failed(error);
+                self.solver.receive_diagnosis = None;
+            }
+            Err(mpsc::TryRecvError::Empty) => {} // still running
+            Err(mpsc::TryRecvError::Disconnected) => {
+                self.solver.diagnosis = DiagnosisState::Failed("Diagnosis thread disconnected".to_owned());
+                self.solver.receive_diagnosis = None;
+            }
+        }
+    }
+
+    /// Inner width of the solve results popup, derived from the last drawn
+    /// layout. Mirrors the popup sizing in `widgets::solve` (4/5 of the frame
+    /// width, at least 60 columns, minus the borders).
+    fn solve_popup_inner_width(&self) -> u16 {
+        let frame_width = self.layout.detail.x + self.layout.detail.width;
+        (frame_width * 4 / 5).max(60).min(frame_width).saturating_sub(2)
     }
 
     /// Poll a single solver channel (`Running` state).
@@ -714,7 +1005,7 @@ impl App {
         };
         match receive.try_recv() {
             Ok(Ok(result)) => {
-                let cache = crate::widgets::solve::build_single_solve_cache(&result);
+                let cache = crate::widgets::solve::build_single_solve_cache(&result, self.solve_popup_inner_width());
                 self.solver.render_cache = SolveRenderCache::Single(cache);
                 self.solver.state = SolveState::Done(Box::new(result));
                 self.solver.view = SolveViewState::default();
@@ -777,7 +1068,7 @@ impl App {
         }
 
         // Check if both are done.
-        let SolveState::RunningBoth { file1, file2, result1, result2 } = &mut self.solver.state else {
+        let SolveState::RunningBoth { file1, file2, result1, result2, .. } = &mut self.solver.state else {
             return;
         };
         if result1.is_some() && result2.is_some() {
@@ -788,7 +1079,7 @@ impl App {
             let diff_start = Instant::now();
             let mut diff = crate::solver::diff_results(label1, label2, r1, r2, self.solver.view.delta_threshold);
             diff.diff_time = diff_start.elapsed();
-            self.solver.render_cache = crate::widgets::solve::build_diff_solve_cache(&diff);
+            self.solver.render_cache = crate::widgets::solve::build_diff_solve_cache(&diff, self.solve_popup_inner_width());
             self.solver.state = SolveState::DoneBoth(Box::new(diff));
             self.solver.view = SolveViewState { diff_only: true, ..SolveViewState::default() };
             self.solver.receive = None;
@@ -809,7 +1100,7 @@ impl App {
         let mut new_diff =
             crate::solver::diff_results(old_diff.file1_label, old_diff.file2_label, old_diff.result1, old_diff.result2, threshold);
         new_diff.diff_time = diff_start.elapsed();
-        self.solver.render_cache = crate::widgets::solve::build_diff_solve_cache(&new_diff);
+        self.solver.render_cache = crate::widgets::solve::build_diff_solve_cache(&new_diff, self.solve_popup_inner_width());
         self.solver.state = SolveState::DoneBoth(Box::new(new_diff));
     }
 
@@ -829,6 +1120,7 @@ impl App {
         self.search_popup.results.clear();
         self.search_popup.selected = 0;
         self.search_popup.scroll = 0;
+        self.search_popup.regex_error = None;
 
         if self.search_popup.query.is_empty() {
             self.populate_all_search_results();
@@ -910,6 +1202,9 @@ impl App {
             !matches!(compiled, CompiledSearch::Fuzzy(..)),
             "populate_filtered_results called with Fuzzy query; use populate_fuzzy_results instead"
         );
+        // Surface an invalid regex to the pop-up UI — it would otherwise
+        // silently match nothing.
+        self.search_popup.regex_error = compiled.regex_error();
         for (haystack_index, entry) in self.search_haystack.iter().enumerate() {
             if compiled.matches(&self.search_name_buffer[haystack_index]) {
                 self.search_popup.results.push(SearchResult {

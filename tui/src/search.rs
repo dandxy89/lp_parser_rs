@@ -98,6 +98,21 @@ impl CompiledSearch {
     pub const fn has_regex_error(&self) -> bool {
         matches!(self, Self::Regex(Err(_)))
     }
+
+    /// Compact single-line description of a regex compilation failure, if any.
+    ///
+    /// `regex::Error`'s `Display` output spans several lines; only the final
+    /// `error: ...` line is kept so it fits on a single UI row.
+    pub fn regex_error(&self) -> Option<String> {
+        match self {
+            Self::Regex(Err(error)) => {
+                let message = error.to_string();
+                let last_line = message.lines().last().unwrap_or(&message);
+                Some(last_line.trim_start_matches("error: ").to_owned())
+            }
+            _ => None,
+        }
+    }
 }
 
 impl std::fmt::Debug for CompiledSearch {

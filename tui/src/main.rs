@@ -1,3 +1,16 @@
+//! `lp_diff` — interactive terminal viewer for diffing two LP or MPS files.
+//!
+//! Parses both files, computes a structural diff (variables, constraints,
+//! objectives), and launches a TUI for exploring the changes. With `--summary`
+//! it prints a structured summary to stdout and exits without the TUI.
+//!
+//! # Exit codes
+//!
+//! - `0` — success (including `--summary` mode).
+//! - `1` — runtime error: missing input file, invalid tolerance or rename
+//!   pattern, parse failure, or a terminal/IO error.
+//! - `2` — command-line usage error (reported by clap).
+
 mod app;
 mod cli_output;
 mod detail_model;
@@ -13,6 +26,7 @@ mod solver;
 mod state;
 mod theme;
 mod ui;
+mod watch;
 mod widgets;
 
 use std::io::{self, Write as _, stderr};
@@ -44,19 +58,54 @@ struct Cli {
     #[arg(long)]
     summary: bool,
 
-    /// Absolute tolerance for numeric comparisons (RHS & coefficients)
+    /// Reload and re-diff automatically when either input file changes on disk
+    #[arg(long)]
+    watch: bool,
+
+    /// Absolute tolerance for numeric comparisons (RHS & coefficients).
+    /// Two values compare equal when |a - b| <= abs_tol. A tiny epsilon floor
+    /// is always applied so ordinary float noise never registers as a change.
     #[arg(long, default_value_t = 0.0)]
     abs_tol: f64,
 
-    /// Relative tolerance for numeric comparisons (|a-b| <= rel_tol * max(|a|,|b|))
+    /// Relative tolerance for numeric comparisons, scaled by magnitude.
+    /// Two values compare equal when |a - b| <= rel_tol * max(|a|, |b|).
     #[arg(long, default_value_t = 0.0)]
     rel_tol: f64,
 
     /// Regex rewrite applied to names in BOTH files before matching.
     /// Takes two values: PATTERN REPLACEMENT. May be repeated; rules apply in order.
-    /// Example: --rename '\[\d+,\d+,[^]]*\]$' '[idx]'
+    /// Example: --rename '\[\d+\]' '[i]' rewrites x[1] and x[2] to x[i],
+    /// so index-shifted entries are matched as the same name.
     #[arg(long, num_args = 2, value_names = ["PATTERN", "REPLACEMENT"], action = clap::ArgAction::Append)]
     rename: Vec<String>,
+
+    /// Colour palette: detect from the terminal background, or force light/dark
+    #[arg(long, value_enum, default_value_t = ThemeArg::Auto)]
+    theme: ThemeArg,
+}
+
+/// `--theme` argument values.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+enum ThemeArg {
+    /// Detect from `COLORFGBG`, falling back to dark
+    Auto,
+    Dark,
+    Light,
+}
+
+impl ThemeArg {
+    /// Resolve to a concrete theme mode, consulting the environment for `Auto`.
+    fn resolve(self) -> theme::ThemeMode {
+        match self {
+            Self::Dark => theme::ThemeMode::Dark,
+            Self::Light => theme::ThemeMode::Light,
+            Self::Auto => std::env::var("COLORFGBG")
+                .ok()
+                .and_then(|value| theme::detect_mode_from_colorfgbg(&value))
+                .unwrap_or(theme::ThemeMode::Dark),
+        }
+    }
 }
 
 /// Compile the `--rename` pairs into a list of `(Regex, replacement)` tuples.
@@ -77,6 +126,9 @@ fn build_rename_rules(raw: &[String]) -> Result<Vec<(regex::Regex, String)>, Box
 
 fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let args = Cli::parse();
+
+    // Fix the palette before any cached lines are built against it.
+    theme::init_theme(args.theme.resolve());
 
     // Validate file existence at the CLI boundary before doing any work.
     if !args.file1.exists() {
@@ -135,7 +187,8 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         line_map2: &line_map2,
         analysis1,
         analysis2,
-        options: diff_options,
+        // Cloned so the original options stay available for live rebuilds in the TUI.
+        options: diff_options.clone(),
     });
     eprintln!("done ({:.1}s, {} changes found)", diff_start.elapsed().as_secs_f64(), report.summary().total_changes(),);
 
@@ -156,15 +209,15 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut terminal = Terminal::new(backend)?;
 
     // Set up panic hook to restore terminal before printing the panic message.
-    // Best-effort: we log failures to stderr but cannot propagate from a panic hook.
+    // Errors are deliberately ignored here: we are already panicking and must not
+    // double-panic, so each restoration step is attempted independently to ensure
+    // one failure cannot skip the rest.
     let original_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |panic_info| {
-        if let Err(e) = disable_raw_mode() {
-            eprintln!("warning: failed to disable raw mode during panic: {e}");
-        }
-        if let Err(e) = execute!(io::stderr(), LeaveAlternateScreen, DisableMouseCapture) {
-            eprintln!("warning: failed to leave alternate screen during panic: {e}");
-        }
+        let _ = disable_raw_mode();
+        let _ = execute!(io::stderr(), LeaveAlternateScreen);
+        let _ = execute!(io::stderr(), DisableMouseCapture);
+        let _ = execute!(io::stderr(), crossterm::cursor::Show);
         original_hook(panic_info);
     }));
 
@@ -175,7 +228,10 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Create app and event handler
     let raw_text1: Arc<str> = raw_text1.into();
     let raw_text2: Arc<str> = raw_text2.into();
-    let mut app = App::new(report, args.file1, args.file2, problem1, problem2, raw_text1, raw_text2);
+    let mut app = App::new(report, args.file1, args.file2, problem1, problem2, raw_text1, raw_text2, diff_options, line_map1, line_map2);
+    if args.watch {
+        app.enable_watch();
+    }
     let events = EventHandler::new(Duration::from_millis(50));
 
     // Main loop — draw then process the next event
@@ -196,6 +252,7 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             Event::Resize => {} // ratatui handles resize automatically
             Event::Tick => {
                 app.poll_solve();
+                app.poll_watch();
             }
             Event::Error(e) => return Err(e.into()),
         }
