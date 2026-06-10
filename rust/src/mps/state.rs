@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::builders::{build_bounds, build_constraints, build_objectives};
 use super::sections::{
@@ -20,18 +20,18 @@ pub(super) struct MpsParseState<'input> {
 
     // ROWS section data
     objective_rows: Vec<&'input str>,
-    row_types: HashMap<&'input str, RowType>,
+    row_types: FxHashMap<&'input str, RowType>,
     row_order: Vec<&'input str>,
 
     // COLUMNS section state
     columns: ColumnsState<'input>,
 
     // RHS section data
-    rhs_values: HashMap<&'input str, f64>,
+    rhs_values: FxHashMap<&'input str, f64>,
     rhs_vector_label: Option<&'input str>,
 
     // RANGES section data
-    range_values: HashMap<&'input str, f64>,
+    range_values: FxHashMap<&'input str, f64>,
     ranges_vector_label: Option<&'input str>,
 
     // BOUNDS section state
@@ -54,12 +54,12 @@ impl<'input> MpsParseState<'input> {
             section: None,
             sense: Sense::Minimize,
             objective_rows: Vec::new(),
-            row_types: HashMap::new(),
+            row_types: FxHashMap::default(),
             row_order: Vec::new(),
             columns: ColumnsState::default(),
-            rhs_values: HashMap::new(),
+            rhs_values: FxHashMap::default(),
             rhs_vector_label: None,
-            range_values: HashMap::new(),
+            range_values: FxHashMap::default(),
             ranges_vector_label: None,
             bounds_state: BoundsState::default(),
             bounds_vector_label: None,
@@ -79,7 +79,10 @@ impl<'input> MpsParseState<'input> {
         debug_assert!(!line.is_empty(), "process_section_header called with empty line");
         debug_assert!(line_num > 0, "line_num must be 1-based");
 
-        let header = line.split_whitespace().next().unwrap_or("");
+        let header = line
+            .split_whitespace()
+            .next()
+            .ok_or_else(|| LpParseError::parse_error(line_num, "Malformed section header: no token found on line"))?;
         match header.to_ascii_uppercase().as_str() {
             "NAME" => {
                 self.section = Some(MpsSection::Name);
@@ -209,15 +212,14 @@ impl<'input> MpsParseState<'input> {
             }
         }
 
-        let objectives = build_objectives(&self.objective_rows, &self.columns.coefficients, &self.columns.column_order);
-        let constraints = build_constraints(
-            &self.row_types,
-            &self.row_order,
-            &self.columns.coefficients,
-            &self.columns.column_order,
-            &self.rhs_values,
-            &self.range_values,
-        );
+        // Sort each row's entries by column index so builders emit
+        // coefficients in column order, matching the original file layout.
+        for entries in self.columns.row_entries.values_mut() {
+            entries.sort_unstable_by_key(|&(col_idx, _)| col_idx);
+        }
+
+        let objectives = build_objectives(&self.objective_rows, &self.columns);
+        let constraints = build_constraints(&self.row_types, &self.row_order, &self.columns, &self.rhs_values, &self.range_values);
         let bounds = build_bounds(
             &self.bounds_state.accumulators,
             &self.bounds_state.order,
@@ -226,13 +228,13 @@ impl<'input> MpsParseState<'input> {
         );
 
         // Deduplicate variable lists
-        let mut integer_seen: HashSet<&str> = HashSet::new();
+        let mut integer_seen: FxHashSet<&str> = FxHashSet::default();
         self.columns.integer_vars.retain(|v| integer_seen.insert(v));
 
-        let mut binary_seen: HashSet<&str> = HashSet::new();
+        let mut binary_seen: FxHashSet<&str> = FxHashSet::default();
         self.bounds_state.binary_vars.retain(|v| binary_seen.insert(v));
 
-        let mut semi_continuous_seen: HashSet<&str> = HashSet::new();
+        let mut semi_continuous_seen: FxHashSet<&str> = FxHashSet::default();
         self.bounds_state.semi_continuous_vars.retain(|v| semi_continuous_seen.insert(v));
 
         Ok(ParseResult {
@@ -257,7 +259,10 @@ impl<'input> MpsParseState<'input> {
 /// sections, invalid row/bound types, number parse failures, and references
 /// to undefined rows.
 pub fn parse_mps<'input>(input: &'input str) -> LpResult<ParseResult<'input>> {
-    debug_assert!(!input.is_empty(), "parse_mps called with empty input");
+    // Input is external, so empty input must be a runtime error rather than an assertion.
+    if input.trim().is_empty() {
+        return Err(LpParseError::parse_error(0, "MPS input is empty"));
+    }
     debug_assert!(input.contains('\n'), "parse_mps input must contain at least one newline (multi-line MPS expected)");
 
     let mut state = MpsParseState::new();
@@ -298,7 +303,9 @@ pub fn extract_mps_name(input: &str) -> Option<String> {
         }
         let first_char = line.as_bytes().first().copied();
         if first_char.is_some_and(|c| !c.is_ascii_whitespace()) {
-            let header = line.split_whitespace().next().unwrap_or("");
+            // A header line always has a first token (the line is non-blank and starts
+            // with a non-whitespace byte); skip the line rather than default silently.
+            let Some(header) = line.split_whitespace().next() else { continue };
             if header.eq_ignore_ascii_case("NAME") {
                 debug_assert!(line.len() >= 4, "NAME header must be at least 4 chars");
                 let rest = line[4..].trim();
