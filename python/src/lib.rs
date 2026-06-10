@@ -16,9 +16,20 @@ use lp_parser_rs::model::{Constraint, Sense, VariableType};
 use lp_parser_rs::parser::parse_file;
 use lp_parser_rs::problem::LpProblem;
 use lp_parser_rs::writer::{LpWriterOptions, write_lp_string, write_lp_string_with_options};
+use pyo3::create_exception;
 use pyo3::exceptions::{PyFileExistsError, PyNotADirectoryError, PyRuntimeError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
+
+create_exception!(parse_lp, LpParseError, PyRuntimeError, "Raised when an LP file or problem cannot be parsed.");
+create_exception!(parse_lp, LpNotParsedError, PyRuntimeError, "Raised when a method requires parse() to have been called first.");
+create_exception!(
+    parse_lp,
+    LpObjectNotFoundError,
+    PyRuntimeError,
+    "Raised when a named variable, constraint or objective cannot be found."
+);
+create_exception!(parse_lp, LpInvalidValueError, PyRuntimeError, "Raised when an input value is invalid.");
 
 #[pyclass]
 pub struct LpParser {
@@ -32,7 +43,7 @@ impl LpParser {
     #[pyo3(signature = (lp_file))]
     fn new(lp_file: String) -> PyResult<Self> {
         if !Path::new(&lp_file).is_file() {
-            return Err(PyFileExistsError::new_err("args"));
+            return Err(PyFileExistsError::new_err(format!("LP file '{lp_file}' does not exist or is not a file")));
         }
 
         Ok(Self { lp_file, parsed_content: None })
@@ -45,7 +56,8 @@ impl LpParser {
 
     #[pyo3(text_signature = "($self)")]
     fn parse(&mut self) -> PyResult<()> {
-        let input = parse_file(&PathBuf::from(&self.lp_file)).map_err(|_| PyRuntimeError::new_err("Unable to read LpFile."))?;
+        let input =
+            parse_file(&PathBuf::from(&self.lp_file)).map_err(|err| LpParseError::new_err(format!("Unable to read LP file: {err}")))?;
         self.parsed_content = Some(input);
         Ok(())
     }
@@ -63,7 +75,9 @@ impl LpParser {
         }
 
         let problem = self.get_problem()?;
-        problem.to_csv(Path::new(base_directory)).map_err(|_| PyRuntimeError::new_err("Unable to write to .csv files"))?;
+        problem
+            .to_csv(Path::new(base_directory))
+            .map_err(|err| PyRuntimeError::new_err(format!("Unable to write to .csv files: {err}")))?;
 
         Ok(())
     }
@@ -73,7 +87,10 @@ impl LpParser {
         let problem = self.get_problem()?;
         Ok(problem.name.map(|n| {
             // Remove "Problem name: " prefix if present
-            if n.starts_with("Problem name: ") { n.strip_prefix("Problem name: ").unwrap_or(&n).to_string() } else { n }
+            match n.strip_prefix("Problem name: ") {
+                Some(stripped) => stripped.to_string(),
+                None => n,
+            }
         }))
     }
 
@@ -258,32 +275,30 @@ impl LpParser {
         Ok(dict.into())
     }
 
-    #[allow(clippy::wrong_self_convention)]
     /// Write the current problem to LP format string
     #[pyo3(text_signature = "($self)")]
-    fn to_lp_string(&mut self) -> PyResult<String> {
-        let problem = self.get_mutable_problem()?;
+    fn to_lp_string(&self) -> PyResult<String> {
+        let problem = self.get_problem()?;
         write_lp_string(&problem).map_err(|err| PyRuntimeError::new_err(format!("Failed to write LP string: {err}")))
     }
 
-    #[allow(clippy::wrong_self_convention)]
     /// Write the current problem to LP format string with custom options
     #[pyo3(signature = (*, include_problem_name=true, max_line_length=80, decimal_precision=6, include_section_spacing=true))]
     fn to_lp_string_with_options(
-        &mut self,
+        &self,
         include_problem_name: bool,
         max_line_length: usize,
         decimal_precision: usize,
         include_section_spacing: bool,
     ) -> PyResult<String> {
-        let problem = self.get_mutable_problem()?;
+        let problem = self.get_problem()?;
         let options = LpWriterOptions { include_problem_name, max_line_length, decimal_precision, include_section_spacing };
         write_lp_string_with_options(&problem, &options).map_err(|err| PyRuntimeError::new_err(format!("Failed to write LP string: {err}")))
     }
 
     /// Save the current problem to an LP file
     #[pyo3(text_signature = "($self, filepath)")]
-    fn save_to_file(&mut self, filepath: String) -> PyResult<()> {
+    fn save_to_file(&self, filepath: String) -> PyResult<()> {
         let lp_content = self.to_lp_string()?;
         std::fs::write(&filepath, lp_content).map_err(|err| PyRuntimeError::new_err(format!("Failed to write file: {err}")))
     }
@@ -294,7 +309,7 @@ impl LpParser {
         let mut problem = self.get_mutable_problem()?;
         problem
             .update_objective_coefficient(&objective_name, &variable_name, coefficient)
-            .map_err(|err| PyRuntimeError::new_err(format!("Failed to update objective coefficient: {err}")))?;
+            .map_err(|err| LpObjectNotFoundError::new_err(format!("Failed to update objective coefficient: {err}")))?;
 
         // Update the cached content
         let updated_content =
@@ -309,7 +324,7 @@ impl LpParser {
         let mut problem = self.get_mutable_problem()?;
         problem
             .rename_objective(&old_name, &new_name)
-            .map_err(|err| PyRuntimeError::new_err(format!("Failed to rename objective: {err}")))?;
+            .map_err(|err| LpObjectNotFoundError::new_err(format!("Failed to rename objective: {err}")))?;
 
         let updated_content =
             write_lp_string(&problem).map_err(|err| PyRuntimeError::new_err(format!("Failed to serialize updated problem: {err}")))?;
@@ -321,7 +336,9 @@ impl LpParser {
     #[pyo3(text_signature = "($self, objective_name)")]
     fn remove_objective(&mut self, objective_name: String) -> PyResult<()> {
         let mut problem = self.get_mutable_problem()?;
-        problem.remove_objective(&objective_name).map_err(|err| PyRuntimeError::new_err(format!("Failed to remove objective: {err}")))?;
+        problem
+            .remove_objective(&objective_name)
+            .map_err(|err| LpObjectNotFoundError::new_err(format!("Failed to remove objective: {err}")))?;
 
         let updated_content =
             write_lp_string(&problem).map_err(|err| PyRuntimeError::new_err(format!("Failed to serialize updated problem: {err}")))?;
@@ -335,7 +352,7 @@ impl LpParser {
         let mut problem = self.get_mutable_problem()?;
         problem
             .update_constraint_coefficient(&constraint_name, &variable_name, coefficient)
-            .map_err(|err| PyRuntimeError::new_err(format!("Failed to update constraint coefficient: {err}")))?;
+            .map_err(|err| LpObjectNotFoundError::new_err(format!("Failed to update constraint coefficient: {err}")))?;
 
         let updated_content =
             write_lp_string(&problem).map_err(|err| PyRuntimeError::new_err(format!("Failed to serialize updated problem: {err}")))?;
@@ -349,7 +366,7 @@ impl LpParser {
         let mut problem = self.get_mutable_problem()?;
         problem
             .update_constraint_rhs(&constraint_name, new_rhs)
-            .map_err(|err| PyRuntimeError::new_err(format!("Failed to update constraint RHS: {err}")))?;
+            .map_err(|err| LpObjectNotFoundError::new_err(format!("Failed to update constraint RHS: {err}")))?;
 
         let updated_content =
             write_lp_string(&problem).map_err(|err| PyRuntimeError::new_err(format!("Failed to serialize updated problem: {err}")))?;
@@ -363,7 +380,7 @@ impl LpParser {
         let mut problem = self.get_mutable_problem()?;
         problem
             .rename_constraint(&old_name, &new_name)
-            .map_err(|err| PyRuntimeError::new_err(format!("Failed to rename constraint: {err}")))?;
+            .map_err(|err| LpObjectNotFoundError::new_err(format!("Failed to rename constraint: {err}")))?;
 
         let updated_content =
             write_lp_string(&problem).map_err(|err| PyRuntimeError::new_err(format!("Failed to serialize updated problem: {err}")))?;
@@ -377,7 +394,7 @@ impl LpParser {
         let mut problem = self.get_mutable_problem()?;
         problem
             .remove_constraint(&constraint_name)
-            .map_err(|err| PyRuntimeError::new_err(format!("Failed to remove constraint: {err}")))?;
+            .map_err(|err| LpObjectNotFoundError::new_err(format!("Failed to remove constraint: {err}")))?;
 
         let updated_content =
             write_lp_string(&problem).map_err(|err| PyRuntimeError::new_err(format!("Failed to serialize updated problem: {err}")))?;
@@ -391,7 +408,7 @@ impl LpParser {
         let mut problem = self.get_mutable_problem()?;
         problem
             .rename_variable(&old_name, &new_name)
-            .map_err(|err| PyRuntimeError::new_err(format!("Failed to rename variable: {err}")))?;
+            .map_err(|err| LpObjectNotFoundError::new_err(format!("Failed to rename variable: {err}")))?;
 
         let updated_content =
             write_lp_string(&problem).map_err(|err| PyRuntimeError::new_err(format!("Failed to serialize updated problem: {err}")))?;
@@ -412,7 +429,7 @@ impl LpParser {
             "free" => VariableType::Free,
             "semicontinuous" | "semi_continuous" => VariableType::SemiContinuous,
             _ => {
-                return Err(PyRuntimeError::new_err(format!(
+                return Err(LpInvalidValueError::new_err(format!(
                     "Unknown variable type: {var_type}. Supported types: binary, integer, general, free, semicontinuous",
                 )));
             }
@@ -420,7 +437,7 @@ impl LpParser {
 
         problem
             .update_variable_type(&variable_name, variable_type)
-            .map_err(|err| PyRuntimeError::new_err(format!("Failed to update variable type: {err}")))?;
+            .map_err(|err| LpObjectNotFoundError::new_err(format!("Failed to update variable type: {err}")))?;
 
         let updated_content =
             write_lp_string(&problem).map_err(|err| PyRuntimeError::new_err(format!("Failed to serialize updated problem: {err}")))?;
@@ -432,7 +449,9 @@ impl LpParser {
     #[pyo3(text_signature = "($self, variable_name)")]
     fn remove_variable(&mut self, variable_name: String) -> PyResult<()> {
         let mut problem = self.get_mutable_problem()?;
-        problem.remove_variable(&variable_name).map_err(|err| PyRuntimeError::new_err(format!("Failed to remove variable: {err}")))?;
+        problem
+            .remove_variable(&variable_name)
+            .map_err(|err| LpObjectNotFoundError::new_err(format!("Failed to remove variable: {err}")))?;
 
         let updated_content =
             write_lp_string(&problem).map_err(|err| PyRuntimeError::new_err(format!("Failed to serialize updated problem: {err}")))?;
@@ -460,7 +479,7 @@ impl LpParser {
         problem.sense = match sense.to_lowercase().as_str() {
             "maximize" | "max" => Sense::Maximize,
             "minimize" | "min" => Sense::Minimize,
-            _ => return Err(PyRuntimeError::new_err(format!("Invalid sense: {sense}. Use 'maximize' or 'minimize'"))),
+            _ => return Err(LpInvalidValueError::new_err(format!("Invalid sense: {sense}. Use 'maximize' or 'minimize'"))),
         };
 
         let updated_content =
@@ -535,21 +554,28 @@ impl LpParser {
 
         Ok(issues_list.into())
     }
+
+    fn __repr__(&self) -> String {
+        format!("LpParser(lp_file='{}')", self.lp_file)
+    }
+
+    fn __str__(&self) -> String {
+        let state = if self.parsed_content.is_some() { "parsed" } else { "not parsed" };
+        format!("LpParser for '{}' ({state})", self.lp_file)
+    }
 }
 
 impl LpParser {
     fn get_problem(&self) -> PyResult<LpProblem> {
         self.parsed_content.as_ref().map_or_else(
-            || Err(PyRuntimeError::new_err("Must call parse() first")),
-            |content| LpProblem::parse(content).map_err(|_| PyRuntimeError::new_err("Unable to parse LpProblem")),
+            || Err(LpNotParsedError::new_err("Must call parse() first")),
+            |content| LpProblem::parse(content).map_err(|err| LpParseError::new_err(format!("Unable to parse LpProblem: {err}"))),
         )
     }
 
+    /// Re-parse the cached content into an owned problem that callers may mutate.
     fn get_mutable_problem(&self) -> PyResult<LpProblem> {
-        self.parsed_content.as_ref().map_or_else(
-            || Err(PyRuntimeError::new_err("Must call parse() first")),
-            |content| LpProblem::parse(content).map_err(|_| PyRuntimeError::new_err("Unable to parse LpProblem")),
-        )
+        self.get_problem()
     }
 
     #[allow(clippy::unused_self, clippy::too_many_lines)]
@@ -705,6 +731,10 @@ impl LpParser {
 #[pymodule]
 fn parse_lp(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<LpParser>()?;
+    m.add("LpParseError", m.py().get_type::<LpParseError>())?;
+    m.add("LpNotParsedError", m.py().get_type::<LpNotParsedError>())?;
+    m.add("LpObjectNotFoundError", m.py().get_type::<LpObjectNotFoundError>())?;
+    m.add("LpInvalidValueError", m.py().get_type::<LpInvalidValueError>())?;
 
     Ok(())
 }
