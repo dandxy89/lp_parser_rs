@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.5.0](https://github.com/dandxy89/lp_parser_rs/compare/parse_lp-v3.4.1...parse_lp-v3.5.0) (2026-06-10)
+
+
+### Features
+
+* TUI and Perf fixes ([#189](https://github.com/dandxy89/lp_parser_rs/issues/189)) ([c898123](https://github.com/dandxy89/lp_parser_rs/commit/c898123543df4000ab3ce3aca9adcaedb2059a6f))
+
 ## [3.4.1](https://github.com/dandxy89/lp_parser_rs/compare/parse_lp-v3.4.0...parse_lp-v3.4.1) (2026-04-20)
 
 
