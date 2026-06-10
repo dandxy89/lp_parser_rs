@@ -43,8 +43,15 @@ pub mod parser;
 pub mod problem;
 pub mod writer;
 
+// Crate-root re-exports of the primary public API, so downstream users do not
+// need deep module paths for the most common types and entry points.
+pub use error::{LpParseError, LpResult};
+pub use interner::{NameId, NameInterner};
 // LALRPOP generated grammar module
 use lalrpop_util::lalrpop_mod;
+pub use lexer::ParseResult;
+pub use mps::{extract_mps_name, parse_mps};
+pub use problem::LpProblem;
 
 #[allow(
     clippy::cast_sign_loss,

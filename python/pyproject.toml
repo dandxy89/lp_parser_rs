@@ -34,11 +34,11 @@ include = ["README.md", "LICENSE-APACHE", "parse_lp/py.typed", "parse_lp/*.pyi"]
 
 [dependency-groups]
 dev = [
-    "basedpyright>=1.39.2",
-    "pip>=26.0.1",
+    "basedpyright",
+    "pip",
     "pytest",
-    "ruff>=0.15.11",
-    "ty>=0.0.31",
+    "ruff",
+    "ty",
     "wheel",
 ]
 
@@ -51,6 +51,9 @@ ignore = ["E501", "SIM108", "D", "S", "PLR2004", "COM"]
 
 [tool.ruff.lint.per-file-ignores]
 "parse_lp/cli.py" = ["T201"]
+# The extension module has no Python source, so stub docstrings are the only
+# docs IDEs can surface for it.
+"parse_lp/*.pyi" = ["PYI021"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["parse_lp"]

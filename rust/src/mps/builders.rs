@@ -1,18 +1,33 @@
 use std::borrow::Cow;
-use std::collections::{HashMap, HashSet};
 
+use rustc_hash::{FxHashMap, FxHashSet};
+
+use super::sections::ColumnsState;
 use super::{BoundAccumulator, RowType};
 use crate::lexer::{RawCoefficient, RawConstraint, RawObjective};
 use crate::model::{ComparisonOp, VariableType};
 
+/// Collect the coefficients of a single row in column order.
+///
+/// Iterates only the row's nonzero entries (pre-sorted by column index in
+/// `MpsParseState::build_result`) instead of probing every (row, column) pair.
+fn row_coefficients<'input>(columns: &ColumnsState<'input>, row_name: &'input str) -> Vec<RawCoefficient<'input>> {
+    columns.row_entries.get(row_name).map_or_else(Vec::new, |entries| {
+        debug_assert!(entries.windows(2).all(|w| w[0].0 < w[1].0), "row entries must be sorted by column index without duplicates");
+        entries
+            .iter()
+            .map(|&(_, var_name)| {
+                let value = *columns.coefficients.get(&(var_name, row_name)).expect("row_entries keys must exist in coefficients");
+                RawCoefficient { name: var_name, value }
+            })
+            .collect()
+    })
+}
+
 /// Build objective(s) from the parsed MPS data.
 ///
 /// Produces one `RawObjective` per N-row, supporting multi-objective MPS files.
-pub(super) fn build_objectives<'input>(
-    objective_rows: &[&'input str],
-    coefficients: &HashMap<(&'input str, &'input str), f64>,
-    column_order: &[&'input str],
-) -> Vec<RawObjective<'input>> {
+pub(super) fn build_objectives<'input>(objective_rows: &[&'input str], columns: &ColumnsState<'input>) -> Vec<RawObjective<'input>> {
     debug_assert!(objective_rows.iter().all(|r| !r.is_empty()), "objective_rows must not contain empty row names");
 
     if objective_rows.is_empty() {
@@ -21,13 +36,7 @@ pub(super) fn build_objectives<'input>(
 
     let mut objectives = Vec::with_capacity(objective_rows.len());
     for &obj_row in objective_rows {
-        let mut objective_coefficients = Vec::new();
-        for &var_name in column_order {
-            if let Some(&value) = coefficients.get(&(var_name, obj_row)) {
-                objective_coefficients.push(RawCoefficient { name: var_name, value });
-            }
-        }
-        objectives.push(RawObjective { name: Cow::Borrowed(obj_row), coefficients: objective_coefficients, byte_offset: None });
+        objectives.push(RawObjective { name: Cow::Borrowed(obj_row), coefficients: row_coefficients(columns, obj_row), byte_offset: None });
     }
 
     debug_assert!(objectives.len() == objective_rows.len(), "should produce one objective per N-row");
@@ -43,12 +52,11 @@ pub(super) fn build_objectives<'input>(
 /// - **E row, positive range**: `>= rhs` and `<= rhs + range`
 /// - **E row, negative range**: `<= rhs` and `>= rhs + range`
 pub(super) fn build_constraints<'input>(
-    row_types: &HashMap<&'input str, RowType>,
+    row_types: &FxHashMap<&'input str, RowType>,
     row_order: &[&'input str],
-    coefficients: &HashMap<(&'input str, &'input str), f64>,
-    column_order: &[&'input str],
-    rhs_values: &HashMap<&'input str, f64>,
-    range_values: &HashMap<&'input str, f64>,
+    columns: &ColumnsState<'input>,
+    rhs_values: &FxHashMap<&'input str, f64>,
+    range_values: &FxHashMap<&'input str, f64>,
 ) -> Vec<RawConstraint<'input>> {
     debug_assert!(row_order.iter().all(|r| row_types.contains_key(r)), "every row in row_order must have a type in row_types");
 
@@ -65,12 +73,7 @@ pub(super) fn build_constraints<'input>(
             RowType::N => unreachable!("N-type rows filtered above"),
         };
 
-        let mut row_coeffs = Vec::new();
-        for &var_name in column_order {
-            if let Some(&value) = coefficients.get(&(var_name, row_name)) {
-                row_coeffs.push(RawCoefficient { name: var_name, value });
-            }
-        }
+        let row_coeffs = row_coefficients(columns, row_name);
 
         let rhs = rhs_values.get(row_name).copied().unwrap_or(0.0);
 
@@ -129,17 +132,17 @@ pub(super) fn build_constraints<'input>(
 /// `[0, 1]`. When an UP bound is negative with no explicit LO, the lower
 /// bound is set to `-inf` per CPLEX spec.
 pub(super) fn build_bounds<'input>(
-    bound_accumulators: &HashMap<&'input str, BoundAccumulator>,
+    bound_accumulators: &FxHashMap<&'input str, BoundAccumulator>,
     bound_order: &[&'input str],
     column_order: &[&'input str],
-    integer_vars: &HashSet<&'input str>,
+    integer_vars: &FxHashSet<&'input str>,
 ) -> Vec<(&'input str, VariableType)> {
     debug_assert!(bound_order.iter().all(|v| bound_accumulators.contains_key(v)), "every variable in bound_order must have an accumulator");
 
     let mut bounds = Vec::with_capacity(bound_order.len() + column_order.len());
 
     // First, emit bounds for variables with explicit BOUNDS entries
-    let mut has_explicit_bounds: HashSet<&str> = HashSet::with_capacity(bound_order.len());
+    let mut has_explicit_bounds: FxHashSet<&str> = FxHashSet::with_capacity_and_hasher(bound_order.len(), rustc_hash::FxBuildHasher);
 
     for &var_name in bound_order {
         has_explicit_bounds.insert(var_name);

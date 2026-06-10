@@ -442,7 +442,7 @@ mod tests {
     fn test_format_coefficient() {
         fn fmt(name: &str, value: f64, is_first: bool, precision: usize) -> String {
             let mut buf = String::new();
-            write_formatted_coefficient(&mut buf, name, value, is_first, precision).unwrap();
+            write_formatted_coefficient(&mut buf, name, value, is_first, precision).expect("write! to String cannot fail");
             buf
         }
         assert_eq!(fmt("x1", 1.0, true, 6), "x1");

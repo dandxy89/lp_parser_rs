@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::Write as _;
 use std::path::Path;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use lp_parser_rs::interner::NameId;
 use lp_parser_rs::model::{ComparisonOp, Constraint, VariableType};
@@ -301,6 +301,51 @@ fn opt_diff(a: Option<f64>, b: Option<f64>, threshold: f64) -> bool {
     }
 }
 
+/// Magnitude key used to rank a dual-value pair: `|Δ|` when both sides are
+/// present, `|present value|` when exactly one side is present, and `None`
+/// (excluded from ranking) when neither side has a value.
+fn dual_pair_magnitude(v1: Option<f64>, v2: Option<f64>) -> Option<f64> {
+    match (v1, v2) {
+        (Some(a), Some(b)) => Some((b - a).abs()),
+        (Some(a), None) => Some(a.abs()),
+        (None, Some(b)) => Some(b.abs()),
+        (None, None) => None,
+    }
+}
+
+/// Rank `len` items by a descending magnitude key, dropping items whose key is
+/// `None`. Ties break on the original index so the order is deterministic.
+fn rank_by_key(len: usize, key: impl Fn(usize) -> Option<f64>) -> Vec<usize> {
+    let mut keyed: Vec<(usize, f64)> = (0..len).filter_map(|i| key(i).map(|k| (i, k))).collect();
+    keyed.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal).then_with(|| a.0.cmp(&b.0)));
+    keyed.into_iter().map(|(i, _)| i).collect()
+}
+
+/// Rank constraint diff rows by descending `|Δ shadow price|`.
+///
+/// Rows where both sides have a shadow price rank by `|sp2 - sp1|`; rows where
+/// exactly one side has a value rank by the present value's magnitude; rows
+/// where neither side has a value are excluded. Returns indices into `rows`.
+pub fn rank_constraints_by_shadow_delta(rows: &[ConstraintDiffRow]) -> Vec<usize> {
+    rank_by_key(rows.len(), |i| dual_pair_magnitude(rows[i].shadow_price1, rows[i].shadow_price2))
+}
+
+/// Rank variable diff rows by descending `|Δ reduced cost|`.
+///
+/// Same missing-side semantics as [`rank_constraints_by_shadow_delta`].
+/// Returns indices into `rows`.
+pub fn rank_variables_by_reduced_cost_delta(rows: &[VarDiffRow]) -> Vec<usize> {
+    rank_by_key(rows.len(), |i| dual_pair_magnitude(rows[i].reduced_cost1, rows[i].reduced_cost2))
+}
+
+/// Rank `(name, value)` pairs by descending `|value|`. Returns indices into `values`.
+///
+/// Used by the single-solve Duals tab to rank constraints by `|shadow price|`
+/// and variables by `|reduced cost|`.
+pub fn rank_by_magnitude(values: &[(String, f64)]) -> Vec<usize> {
+    rank_by_key(values.len(), |i| Some(values[i].1.abs()))
+}
+
 /// Intermediate model built from an `LpProblem` before solving.
 struct BuiltModel {
     row_problem: highs::RowProblem,
@@ -322,13 +367,31 @@ struct SolveMetadata {
     skipped_sos: usize,
 }
 
+/// Map a variable's declared type to `(is_integer, lower, upper)` bounds for `HiGHS`.
+fn variable_bounds(var_type: Option<&VariableType>) -> (bool, f64, f64) {
+    match var_type {
+        Some(VariableType::Binary) => (true, 0.0, 1.0),
+        Some(VariableType::Integer | VariableType::General) => (true, 0.0, f64::INFINITY),
+        Some(VariableType::Free | VariableType::SemiContinuous | VariableType::SOS) | None => (false, 0.0, f64::INFINITY),
+        Some(VariableType::LowerBound(lb)) => (false, *lb, f64::INFINITY),
+        Some(VariableType::UpperBound(ub)) => (false, 0.0, *ub),
+        Some(VariableType::DoubleBound(lb, ub)) => (false, *lb, *ub),
+    }
+}
+
+/// Sort variable `NameId`s by resolved name for deterministic column ordering.
+fn sorted_variable_ids(problem: &LpProblem) -> Vec<NameId> {
+    let mut sorted_var_ids: Vec<NameId> = problem.variables.keys().copied().collect();
+    sorted_var_ids.sort_by(|a, b| problem.resolve(*a).cmp(problem.resolve(*b)));
+    sorted_var_ids
+}
+
 /// Build a `HiGHS` `RowProblem` from an `LpProblem`.
 fn build_highs_model(problem: &LpProblem) -> BuiltModel {
     debug_assert!(!problem.variables.is_empty(), "cannot build a HiGHS model with no variables");
 
     // Sort variable NameIds by resolved name for deterministic ordering.
-    let mut sorted_var_ids: Vec<NameId> = problem.variables.keys().copied().collect();
-    sorted_var_ids.sort_by(|a, b| problem.resolve(*a).cmp(problem.resolve(*b)));
+    let sorted_var_ids = sorted_variable_ids(problem);
 
     let variable_names: Vec<String> = sorted_var_ids.iter().map(|id| problem.resolve(*id).to_string()).collect();
 
@@ -359,14 +422,7 @@ fn build_highs_model(problem: &LpProblem) -> BuiltModel {
         let objective_coefficient = objective_coefficients.get(&var_id).copied().unwrap_or(0.0);
         let variable = problem.variables.get(&var_id);
 
-        let (is_integer, lower, upper) = match variable.map(|v| &v.var_type) {
-            Some(VariableType::Binary) => (true, 0.0, 1.0),
-            Some(VariableType::Integer | VariableType::General) => (true, 0.0, f64::INFINITY),
-            Some(VariableType::Free | VariableType::SemiContinuous | VariableType::SOS) | None => (false, 0.0, f64::INFINITY),
-            Some(VariableType::LowerBound(lb)) => (false, *lb, f64::INFINITY),
-            Some(VariableType::UpperBound(ub)) => (false, 0.0, *ub),
-            Some(VariableType::DoubleBound(lb, ub)) => (false, *lb, *ub),
-        };
+        let (is_integer, lower, upper) = variable_bounds(variable.map(|v| &v.var_type));
 
         let col = row_problem.add_column_with_integrality(objective_coefficient, lower..=upper, is_integer);
         columns.push(col);
@@ -510,6 +566,161 @@ pub fn solve_problem(problem: &LpProblem) -> Result<SolveResult, String> {
     Ok(result)
 }
 
+/// Return `true` if a solve status string (as produced by `extract_solution`,
+/// i.e. the `Debug` form of `highs::HighsModelStatus`) indicates infeasibility.
+pub fn status_is_infeasible(status: &str) -> bool {
+    status == "Infeasible" || status == "UnboundedOrInfeasible"
+}
+
+/// Slack values above this threshold count as constraint violations in the
+/// elastic relaxation diagnosis.
+pub const VIOLATION_TOLERANCE: f64 = 1e-7;
+
+/// Outcome of an elastic-relaxation infeasibility diagnosis.
+#[derive(Debug, Clone)]
+pub struct InfeasibilityDiagnosis {
+    /// Sum of all slack values in the optimal elastic solution (the minimum
+    /// total constraint violation needed to make the problem feasible).
+    pub total_violation: f64,
+    /// `(constraint name, violation amount)` for every constraint whose slack
+    /// exceeds [`VIOLATION_TOLERANCE`], sorted descending by amount.
+    pub violations: Vec<(String, f64)>,
+    /// Wall-clock time of the elastic solve (build + solve + extract).
+    pub solve_time: Duration,
+}
+
+/// Aggregate per-constraint slack values into a sorted violation list.
+///
+/// `slack_names` holds the owning constraint name for each slack column (an
+/// equality constraint contributes two consecutive entries with the same name,
+/// which are summed). Constraints whose total slack exceeds `tolerance` are
+/// returned sorted descending by violation amount, ties broken by name.
+pub fn collect_violations(slack_names: &[String], slack_values: &[f64], tolerance: f64) -> Vec<(String, f64)> {
+    debug_assert_eq!(slack_names.len(), slack_values.len(), "slack names and values must have equal length");
+    debug_assert!(tolerance >= 0.0, "violation tolerance must be non-negative, got {tolerance}");
+
+    let mut violations: Vec<(String, f64)> = Vec::new();
+    for (name, &value) in slack_names.iter().zip(slack_values) {
+        match violations.last_mut() {
+            Some((last_name, total)) if last_name == name => *total += value,
+            _ => violations.push((name.clone(), value)),
+        }
+    }
+    violations.retain(|(_, amount)| *amount > tolerance);
+    violations.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal).then_with(|| a.0.cmp(&b.0)));
+    violations
+}
+
+/// Diagnose an infeasible problem via elastic relaxation.
+///
+/// Rebuilds the model with all integrality relaxed and a non-negative slack
+/// variable added to every standard constraint (one for `>=`, one for `<=`,
+/// two for `=`), then minimises the sum of all slacks. Constraints with a
+/// positive slack in the optimal solution are exactly those that must be
+/// violated to make the rest of the problem feasible.
+///
+/// # Errors
+///
+/// Returns an error if the elastic problem does not solve to optimality. By
+/// construction it is always feasible in its constraints, so this only occurs
+/// for conflicting variable bounds or a solver failure.
+pub fn diagnose_infeasibility(problem: &LpProblem) -> Result<InfeasibilityDiagnosis, String> {
+    debug_assert!(!problem.variables.is_empty(), "cannot diagnose a problem with no variables");
+
+    let start = Instant::now();
+    let sorted_var_ids = sorted_variable_ids(problem);
+    let variable_index: HashMap<NameId, usize> = {
+        let mut map = HashMap::with_capacity(sorted_var_ids.len());
+        map.extend(sorted_var_ids.iter().enumerate().map(|(i, &id)| (id, i)));
+        map
+    };
+
+    let mut row_problem = highs::RowProblem::new();
+    let mut columns = Vec::with_capacity(sorted_var_ids.len());
+    for &var_id in &sorted_var_ids {
+        // Zero objective coefficient and relaxed integrality: the elastic
+        // objective is the slack sum alone, and an LP relaxation is faster and
+        // more reliable than the original MIP.
+        let (_, lower, upper) = variable_bounds(problem.variables.get(&var_id).map(|v| &v.var_type));
+        columns.push(row_problem.add_column_with_integrality(0.0, lower..=upper, false));
+    }
+
+    // Sort constraints by resolved name for deterministic ordering, matching `build_highs_model`.
+    let mut sorted_constraints: Vec<_> = problem.constraints.iter().collect();
+    sorted_constraints.sort_by_key(|(id, _)| problem.resolve(**id));
+
+    // One slack column per inequality, two per equality; `slack_names[i]` is
+    // the owning constraint of slack column `slack_cols[i]`.
+    let mut slack_names: Vec<String> = Vec::new();
+    let mut slack_cols: Vec<highs::Col> = Vec::new();
+    let mut row_factors: Vec<(highs::Col, f64)> = Vec::new();
+
+    for (name_id, constraint) in &sorted_constraints {
+        let Constraint::Standard { coefficients, operator, rhs, .. } = constraint else {
+            continue; // SOS constraints are skipped, as in `build_highs_model`.
+        };
+        let constraint_name = problem.resolve(**name_id);
+
+        row_factors.clear();
+        row_factors.extend(coefficients.iter().filter_map(|c| variable_index.get(&c.name).map(|&idx| (columns[idx], c.value))));
+
+        match operator {
+            ComparisonOp::LTE | ComparisonOp::LT => {
+                // Surplus slack: lhs - s <= rhs.
+                let slack = row_problem.add_column(1.0, 0.0..);
+                slack_names.push(constraint_name.to_string());
+                slack_cols.push(slack);
+                row_factors.push((slack, -1.0));
+                row_problem.add_row(..=*rhs, &row_factors);
+            }
+            ComparisonOp::GTE | ComparisonOp::GT => {
+                // Deficit slack: lhs + s >= rhs.
+                let slack = row_problem.add_column(1.0, 0.0..);
+                slack_names.push(constraint_name.to_string());
+                slack_cols.push(slack);
+                row_factors.push((slack, 1.0));
+                row_problem.add_row(*rhs.., &row_factors);
+            }
+            ComparisonOp::EQ => {
+                // Both directions: lhs + s_deficit - s_surplus = rhs.
+                let deficit = row_problem.add_column(1.0, 0.0..);
+                let surplus = row_problem.add_column(1.0, 0.0..);
+                slack_names.push(constraint_name.to_string());
+                slack_names.push(constraint_name.to_string());
+                slack_cols.push(deficit);
+                slack_cols.push(surplus);
+                row_factors.push((deficit, 1.0));
+                row_factors.push((surplus, -1.0));
+                row_problem.add_row(*rhs..=*rhs, &row_factors);
+            }
+        }
+    }
+
+    debug_assert_eq!(slack_names.len(), slack_cols.len(), "slack names and columns must be in sync");
+
+    let mut highs_model = row_problem.optimise(highs::Sense::Minimise);
+    // Suppress solver output: the diagnosis runs while the TUI owns the terminal.
+    highs_model.set_option("output_flag", false);
+
+    let solved = highs_model.solve();
+    let status = solved.status();
+    debug_assert!(
+        matches!(status, highs::HighsModelStatus::Optimal),
+        "elastic relaxation must solve to optimality (feasible by construction), got {status:?}"
+    );
+    if !matches!(status, highs::HighsModelStatus::Optimal) {
+        return Err(format!("elastic relaxation returned {status:?} — infeasibility may stem from conflicting variable bounds"));
+    }
+
+    let solution = solved.get_solution();
+    let column_values = solution.columns();
+    let slack_values: Vec<f64> = slack_cols.iter().map(|col| column_values[col.index()]).collect();
+    let total_violation: f64 = slack_values.iter().sum();
+    let violations = collect_violations(&slack_names, &slack_values, VIOLATION_TOLERANCE);
+
+    Ok(InfeasibilityDiagnosis { total_violation, violations, solve_time: start.elapsed() })
+}
+
 /// Write an `Option<f64>` into a reusable string buffer (cleared first), leaving it empty for `None`.
 #[inline]
 fn write_opt_f64_to_buf(buf: &mut String, value: Option<f64>) {
@@ -597,6 +808,115 @@ pub fn write_diff_csv(diff: &SolveDiffResult, dir: &Path) -> Result<(String, Str
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Build a constraint diff row with the given shadow prices (other fields immaterial to ranking).
+    fn constraint_row(sp1: Option<f64>, sp2: Option<f64>) -> ConstraintDiffRow {
+        ConstraintDiffRow {
+            name_ref: NameRef { from_result2: false, index: 0 },
+            activity1: sp1,
+            activity2: sp2,
+            shadow_price1: sp1,
+            shadow_price2: sp2,
+            changed: false,
+        }
+    }
+
+    /// Build a variable diff row with the given reduced costs (other fields immaterial to ranking).
+    fn variable_row(rc1: Option<f64>, rc2: Option<f64>) -> VarDiffRow {
+        VarDiffRow {
+            name_ref: NameRef { from_result2: false, index: 0 },
+            val1: rc1,
+            val2: rc2,
+            reduced_cost1: rc1,
+            reduced_cost2: rc2,
+            changed: false,
+        }
+    }
+
+    #[test]
+    fn test_rank_constraints_by_shadow_delta_orders_by_magnitude() {
+        let rows = vec![
+            constraint_row(Some(1.0), Some(1.5)),  // |Δ| = 0.5
+            constraint_row(Some(0.0), Some(-3.0)), // |Δ| = 3.0
+            constraint_row(Some(2.0), Some(2.0)),  // |Δ| = 0.0
+        ];
+        assert_eq!(rank_constraints_by_shadow_delta(&rows), vec![1, 0, 2]);
+    }
+
+    #[test]
+    fn test_rank_constraints_missing_sides_rank_by_present_magnitude() {
+        let rows = vec![
+            constraint_row(Some(0.5), Some(0.6)), // both present: |Δ| = 0.1
+            constraint_row(Some(-4.0), None),     // one side: |−4| = 4.0
+            constraint_row(None, Some(2.0)),      // one side: |2| = 2.0
+            constraint_row(None, None),           // excluded
+        ];
+        assert_eq!(rank_constraints_by_shadow_delta(&rows), vec![1, 2, 0]);
+    }
+
+    #[test]
+    fn test_rank_variables_by_reduced_cost_delta() {
+        let rows = vec![
+            variable_row(Some(1.0), Some(1.0)),  // |Δ| = 0.0
+            variable_row(None, Some(-0.5)),      // one side: 0.5
+            variable_row(Some(2.0), Some(-2.0)), // |Δ| = 4.0
+            variable_row(None, None),            // excluded
+        ];
+        assert_eq!(rank_variables_by_reduced_cost_delta(&rows), vec![2, 1, 0]);
+    }
+
+    #[test]
+    fn test_rank_by_magnitude_descending() {
+        let values = vec![("a".to_owned(), 1.0), ("b".to_owned(), -5.0), ("c".to_owned(), 0.0)];
+        assert_eq!(rank_by_magnitude(&values), vec![1, 0, 2]);
+    }
+
+    #[test]
+    fn test_collect_violations_aggregates_and_sorts() {
+        // c2 appears twice (equality constraint: deficit + surplus slack) and aggregates.
+        let names = vec!["c1".to_owned(), "c2".to_owned(), "c2".to_owned(), "c3".to_owned()];
+        let values = vec![0.5, 0.25, 0.5, 0.0];
+        let violations = collect_violations(&names, &values, VIOLATION_TOLERANCE);
+        assert_eq!(violations.len(), 2, "c3 has zero slack and must be filtered out");
+        assert_eq!(violations[0].0, "c2");
+        assert!((violations[0].1 - 0.75).abs() < 1e-12, "c2 slacks must aggregate to 0.75, got {}", violations[0].1);
+        assert_eq!(violations[1].0, "c1");
+        assert!((violations[1].1 - 0.5).abs() < 1e-12);
+    }
+
+    #[test]
+    fn test_diagnose_infeasibility_tiny_lp() {
+        // x >= 2 and x <= 1 conflict by exactly 1.
+        let problem = LpProblem::parse("min\nobj: x\nst\nc1: x >= 2\nc2: x <= 1\nend").expect("failed to parse tiny LP");
+
+        let result = solve_problem(&problem).expect("solver should not error");
+        assert!(status_is_infeasible(&result.status), "tiny LP should be infeasible, got: {}", result.status);
+
+        let diagnosis = diagnose_infeasibility(&problem).expect("elastic relaxation should solve");
+        assert!((diagnosis.total_violation - 1.0).abs() < 1e-6, "total violation should be ≈ 1, got {}", diagnosis.total_violation);
+        assert!(!diagnosis.violations.is_empty(), "the conflicting constraint(s) must be reported");
+        for (name, _) in &diagnosis.violations {
+            assert!(name == "c1" || name == "c2", "unexpected violated constraint: {name}");
+        }
+        let violation_sum: f64 = diagnosis.violations.iter().map(|(_, amount)| amount).sum();
+        assert!((violation_sum - 1.0).abs() < 1e-6, "violations should sum to ≈ 1, got {violation_sum}");
+    }
+
+    #[test]
+    fn test_diagnose_feasible_lp_reports_no_violations() {
+        let problem = LpProblem::parse("min\nobj: x\nst\nc1: x >= 1\nend").expect("failed to parse tiny LP");
+        let diagnosis = diagnose_infeasibility(&problem).expect("elastic relaxation should solve");
+        assert!(diagnosis.violations.is_empty(), "feasible problem must have no violations, got {:?}", diagnosis.violations);
+        assert!(diagnosis.total_violation.abs() < 1e-9, "total violation should be ≈ 0, got {}", diagnosis.total_violation);
+    }
+
+    #[test]
+    fn test_status_is_infeasible() {
+        assert!(status_is_infeasible("Infeasible"));
+        assert!(status_is_infeasible("UnboundedOrInfeasible"));
+        assert!(!status_is_infeasible("Optimal"));
+        assert!(!status_is_infeasible("Unbounded"));
+    }
 
     #[test]
     fn test_enlight4_infeasible() {

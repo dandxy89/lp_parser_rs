@@ -1,11 +1,12 @@
 use std::sync::{Arc, mpsc};
+use std::time::Instant;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use lp_parser_rs::problem::LpProblem;
 
 use crate::app::App;
 use crate::detail_text::{format_solve_diff_result, format_solve_result};
-use crate::state::{DiffFilter, Focus, PendingYank, Section, Side, SolveState, SolveTab, SolveViewState};
+use crate::state::{DiagnosisState, DiffFilter, Focus, PendingYank, Section, Side, SolveState, SolveTab, SolveViewState};
 
 impl App {
     pub fn handle_key(&mut self, key: KeyEvent) {
@@ -106,6 +107,7 @@ impl App {
             KeyCode::Char('2') => self.set_section(Section::Variables),
             KeyCode::Char('3') => self.set_section(Section::Constraints),
             KeyCode::Char('4') => self.set_section(Section::Objectives),
+            KeyCode::Char('5') => self.set_section(Section::Numerics),
 
             // Navigation (vi-style and arrow keys).
             KeyCode::Char('j' | 'n') | KeyCode::Down => self.navigate_down(),
@@ -125,6 +127,14 @@ impl App {
             KeyCode::Char('+') => self.set_filter(DiffFilter::Added),
             KeyCode::Char('-') => self.set_filter(DiffFilter::Removed),
             KeyCode::Char('m') => self.set_filter(DiffFilter::Modified),
+            KeyCode::Char('=') => self.set_filter(DiffFilter::Renamed),
+
+            // Cycle the sidebar sort mode (name → |Δ| → relΔ).
+            KeyCode::Char('s') => self.cycle_sort_mode(),
+
+            // Live tolerance adjustment — rebuilds the diff in place.
+            KeyCode::Char('t') => self.cycle_rel_tol(),
+            KeyCode::Char('T') => self.cycle_abs_tol(),
 
             KeyCode::Char('?') => self.show_help = !self.show_help,
 
@@ -340,7 +350,7 @@ impl App {
     fn jump_to_bottom(&mut self) {
         match self.focus {
             Focus::SectionSelector => {
-                let new_section = Section::Objectives;
+                let new_section = Section::Numerics;
                 if self.active_section != new_section {
                     self.set_active_section(new_section);
                     self.invalidate_cache();
@@ -374,7 +384,7 @@ impl App {
                         self.active_name_list_state_mut().select(Some(0));
                     }
                     self.focus = Focus::NameList;
-                } else if self.active_section == Section::Summary {
+                } else if matches!(self.active_section, Section::Summary | Section::Numerics) {
                     self.focus = Focus::Detail;
                     self.detail_scroll = 0;
                 }
@@ -444,11 +454,15 @@ impl App {
     /// Returns `true` if the key was consumed by shared navigation.
     fn handle_solve_results_nav(&mut self, key: KeyEvent) -> bool {
         match key.code {
-            KeyCode::Esc => self.solver.state = SolveState::Idle,
+            KeyCode::Esc => {
+                self.solver.state = SolveState::Idle;
+                self.solver.reset_diagnosis();
+            }
             KeyCode::Char('1') => self.switch_solve_tab(SolveTab::Summary),
             KeyCode::Char('2') => self.switch_solve_tab(SolveTab::Variables),
             KeyCode::Char('3') => self.switch_solve_tab(SolveTab::Constraints),
             KeyCode::Char('4') => self.switch_solve_tab(SolveTab::Log),
+            KeyCode::Char('5') => self.switch_solve_tab(SolveTab::Duals),
             KeyCode::Tab => self.switch_solve_tab(self.solver.view.tab.next()),
             KeyCode::BackTab => self.switch_solve_tab(self.solver.view.tab.prev()),
             KeyCode::Char('j') | KeyCode::Down => {
@@ -469,18 +483,91 @@ impl App {
         if self.handle_solve_results_nav(key) {
             return;
         }
-        if key.code == KeyCode::Char('y')
-            && let SolveState::Done(result) = &self.solver.state
-        {
-            let text = format_solve_result(result);
-            self.set_yank_flash("Yanked solve results", &text);
+        match key.code {
+            KeyCode::Char('y') => {
+                if let SolveState::Done(result) = &self.solver.state {
+                    let text = format_solve_result(result);
+                    self.set_yank_flash("Yanked solve results", &text);
+                }
+            }
+            KeyCode::Char('e') => self.start_diagnosis_single(),
+            _ => {}
         }
+    }
+
+    /// Start an infeasibility diagnosis for the single-solve result, if it is
+    /// infeasible and no diagnosis is already running or complete.
+    fn start_diagnosis_single(&mut self) {
+        if !matches!(self.solver.diagnosis, DiagnosisState::Idle | DiagnosisState::Failed(_)) {
+            return;
+        }
+        let SolveState::Done(result) = &self.solver.state else {
+            return;
+        };
+        if !crate::solver::status_is_infeasible(&result.status) {
+            return;
+        }
+        let Some(problem) = self.solver.solved_problem.clone() else {
+            self.solver.diagnosis = DiagnosisState::Failed("No problem retained for diagnosis".to_owned());
+            return;
+        };
+        // The solved problem is one of the two app problems; label it accordingly.
+        let label = if Arc::ptr_eq(&problem, &self.problem2) {
+            self.file2_path.display().to_string()
+        } else {
+            self.file1_path.display().to_string()
+        };
+        self.spawn_diagnosis(problem, label);
+    }
+
+    /// Start an infeasibility diagnosis in the comparison view.
+    ///
+    /// Diagnoses whichever side is infeasible; when both sides are infeasible,
+    /// file 1 is diagnosed.
+    fn start_diagnosis_both(&mut self) {
+        if !matches!(self.solver.diagnosis, DiagnosisState::Idle | DiagnosisState::Failed(_)) {
+            return;
+        }
+        let SolveState::DoneBoth(diff) = &self.solver.state else {
+            return;
+        };
+        let (problem, label) = if crate::solver::status_is_infeasible(&diff.result1.status) {
+            (Arc::clone(&self.problem1), self.file1_path.display().to_string())
+        } else if crate::solver::status_is_infeasible(&diff.result2.status) {
+            (Arc::clone(&self.problem2), self.file2_path.display().to_string())
+        } else {
+            return; // neither side is infeasible — nothing to diagnose
+        };
+        self.spawn_diagnosis(problem, label);
+    }
+
+    /// Spawn the elastic-relaxation diagnosis in a background thread,
+    /// mirroring the `spawn_solver` mpsc pattern so the UI never blocks.
+    fn spawn_diagnosis(&mut self, problem: Arc<LpProblem>, file_label: String) {
+        debug_assert!(
+            !matches!(self.solver.diagnosis, DiagnosisState::Running { .. }),
+            "spawn_diagnosis called while a diagnosis is already running"
+        );
+        self.solver.diagnosis = DiagnosisState::Running { file: file_label, started: Instant::now() };
+
+        let (sender, receiver) = mpsc::channel();
+        self.solver.receive_diagnosis = Some(receiver);
+
+        std::thread::spawn(move || {
+            let result = crate::solver::diagnose_infeasibility(&problem);
+            // Receiver may be dropped if the user dismissed the overlay — this is expected.
+            if sender.send(result).is_err() {
+                eprintln!("diagnosis result dropped: receiver closed");
+            }
+        });
     }
 
     /// Spawn the solver in a background thread for the given problem.
     fn spawn_solver(&mut self, problem: Arc<LpProblem>, file_label: String) {
-        self.solver.state = SolveState::Running { file: file_label };
+        self.solver.state = SolveState::Running { file: file_label, started: Instant::now() };
         self.solver.view = SolveViewState::default();
+        self.solver.reset_diagnosis();
+        self.solver.solved_problem = Some(Arc::clone(&problem));
 
         let (sender, receiver) = mpsc::channel();
         self.solver.receive = Some(receiver);
@@ -517,6 +604,7 @@ impl App {
                     self.set_yank_flash("Yanked solve comparison", &text);
                 }
             }
+            KeyCode::Char('e') => self.start_diagnosis_both(),
             KeyCode::Char('w') => {
                 if let SolveState::DoneBoth(diff) = &self.solver.state {
                     let dir = match std::env::current_dir() {
@@ -550,8 +638,10 @@ impl App {
         let problem1 = Arc::clone(&self.problem1);
         let problem2 = Arc::clone(&self.problem2);
 
-        self.solver.state = SolveState::RunningBoth { file1: label1, file2: label2, result1: None, result2: None };
+        self.solver.state = SolveState::RunningBoth { file1: label1, file2: label2, result1: None, result2: None, started: Instant::now() };
         self.solver.view = SolveViewState::default();
+        self.solver.reset_diagnosis();
+        self.solver.solved_problem = None;
 
         let (sender1, receiver1) = mpsc::channel();
         let (sender2, receiver2) = mpsc::channel();
@@ -622,7 +712,9 @@ impl App {
         match event.kind {
             MouseEventKind::ScrollDown => self.handle_mouse_scroll_down(over_section_selector, over_name_list, over_detail),
             MouseEventKind::ScrollUp => self.handle_mouse_scroll_up(over_section_selector, over_name_list, over_detail),
-            MouseEventKind::Down(MouseButton::Left) => self.handle_mouse_click(over_section_selector, over_name_list, over_detail, row),
+            MouseEventKind::Down(MouseButton::Left) => {
+                self.handle_mouse_click(over_section_selector, over_name_list, over_detail, column, row);
+            }
             _ => {}
         }
     }
@@ -664,14 +756,15 @@ impl App {
         }
     }
 
-    fn handle_mouse_click(&mut self, over_section_selector: bool, over_name_list: bool, over_detail: bool, row: u16) {
+    fn handle_mouse_click(&mut self, over_section_selector: bool, over_name_list: bool, over_detail: bool, column: u16, row: u16) {
         if over_section_selector {
             self.focus = Focus::SectionSelector;
-            let relative_row = row.saturating_sub(self.layout.section_selector.y + 1);
-            let index = (relative_row as usize).min(Section::ALL.len() - 1);
-            let new_section = Section::from_index(index);
-            if self.active_section != new_section {
-                self.set_section(new_section);
+            // The tab bar is a single row: map the click column to a tab.
+            if let Some(index) = self.layout.tab_bounds.iter().position(|&(start, end)| column >= start && column < end) {
+                let new_section = Section::from_index(index);
+                if self.active_section != new_section {
+                    self.set_section(new_section);
+                }
             }
         } else if over_name_list {
             self.focus = Focus::NameList;

@@ -54,22 +54,32 @@ pub(super) struct BoundAccumulator {
     pub(super) binary: bool,
 }
 
-/// Strip `$` inline comments from a field list.
+/// Maximum number of whitespace-separated fields on an MPS data line.
+/// The MPS format defines at most six fields per line; eight leaves headroom.
+pub(super) const MAX_FIELDS: usize = 8;
+
+/// Split an MPS data line into whitespace-separated fields without heap
+/// allocation, honouring `$` inline comments.
 ///
 /// Per the CPLEX MPS spec, if Field 3 or Field 5 starts with `$`, the
 /// remainder of the line is a comment. We check all fields from index 0
 /// onward for simplicity -- a `$`-prefixed field truncates everything after.
-pub(super) fn strip_dollar_comments<'a>(fields: &[&'a str]) -> Vec<&'a str> {
-    debug_assert!(!fields.is_empty(), "strip_dollar_comments called with empty fields");
+///
+/// Returns the field buffer and the number of fields written. Fields beyond
+/// [`MAX_FIELDS`] are ignored -- they exceed what the MPS format defines.
+pub(super) fn split_fields(line: &str) -> ([&str; MAX_FIELDS], usize) {
+    debug_assert!(!line.is_empty(), "split_fields called with empty line");
 
-    let mut result = Vec::with_capacity(fields.len());
-    for &field in fields {
-        if field.starts_with('$') {
+    let mut buf = [""; MAX_FIELDS];
+    let mut len = 0;
+    for field in line.split_whitespace() {
+        if field.starts_with('$') || len == MAX_FIELDS {
             break;
         }
-        result.push(field);
+        buf[len] = field;
+        len += 1;
     }
 
-    debug_assert!(result.len() <= fields.len(), "result cannot exceed input length");
-    result
+    debug_assert!(len <= MAX_FIELDS, "field count cannot exceed buffer length");
+    (buf, len)
 }

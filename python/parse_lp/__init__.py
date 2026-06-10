@@ -67,11 +67,26 @@ Modification Methods:
 
 """
 
+from importlib.metadata import version as _version
+
 # pyrefly: ignore [missing-import]
-from .parse_lp import LpParser
+from .parse_lp import (
+    LpInvalidValueError,
+    LpNotParsedError,
+    LpObjectNotFoundError,
+    LpParseError,
+    LpParser,
+)
 
 # Type aliases are defined in parse_lp.pyi for static type checking.
 # Users can import them with: from parse_lp.parse_lp import Objective, Constraint, etc.
 
-__version__ = "2.5.0"
-__all__ = ["LpParser", "__version__"]
+__version__ = _version("parse_lp")
+__all__ = [
+    "LpInvalidValueError",
+    "LpNotParsedError",
+    "LpObjectNotFoundError",
+    "LpParseError",
+    "LpParser",
+    "__version__",
+]

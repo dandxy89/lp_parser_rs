@@ -400,6 +400,7 @@ impl VariableBuilder {
     #[must_use]
     /// Set both lower and upper bounds
     pub const fn bounds(self, lower: f64, upper: f64) -> Self {
+        debug_assert!(lower <= upper, "bounds: lower bound must not exceed upper bound");
         self.var_type(VariableType::DoubleBound(lower, upper))
     }
 }

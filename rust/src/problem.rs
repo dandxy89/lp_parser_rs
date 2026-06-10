@@ -65,14 +65,24 @@ fn update_coefficient_vec(coefficients: &mut Vec<Coefficient>, variable_id: Name
     }
 }
 
-/// Extract the problem name from LP file comments.
+/// Extract the problem name from LP file header comments.
 ///
 /// Supports multiple formats:
 /// 1. `\Problem name: my_problem` or `\\Problem name: my_problem`
 /// 2. `\* my_problem *\` (CPLEX block comment style)
+///
+/// Only the leading comment block is scanned: the scan stops at the first
+/// non-comment, non-blank line, so files without a name comment don't pay
+/// for a full-file scan.
 fn extract_problem_name(input: &str) -> Option<String> {
-    input.lines().find_map(|line| {
+    for line in input.lines() {
         let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if !trimmed.starts_with('\\') {
+            return None;
+        }
 
         // Handle block comment format: \* name *\
         if let Some(inner) = trimmed.strip_prefix("\\*").and_then(|s| s.strip_suffix("*\\")) {
@@ -83,24 +93,17 @@ fn extract_problem_name(input: &str) -> Option<String> {
         }
 
         // Handle single/double backslash prefix
-        let content = if trimmed.starts_with("\\\\") {
-            trimmed.strip_prefix("\\\\")
-        } else if trimmed.starts_with('\\') {
-            trimmed.strip_prefix('\\')
-        } else {
-            None
-        };
+        let content = trimmed.strip_prefix("\\\\").or_else(|| trimmed.strip_prefix('\\'));
 
-        content.and_then(|c| {
+        if let Some(c) = content {
             let c = c.trim();
             let prefix = "problem name:";
             if c.len() >= prefix.len() && c[..prefix.len()].eq_ignore_ascii_case(prefix) {
-                Some(c[prefix.len()..].trim().to_string())
-            } else {
-                None
+                return Some(c[prefix.len()..].trim().to_string());
             }
-        })
-    })
+        }
+    }
+    None
 }
 
 /// Register variables from coefficient lists into the variables map.
@@ -285,7 +288,10 @@ impl LpProblem {
     ///
     /// Returns an error if the input string is not valid MPS format.
     pub fn parse_mps(input: &str) -> LpResult<Self> {
-        debug_assert!(!input.is_empty(), "parse_mps called with empty input");
+        // Input is external, so empty input must be a runtime error rather than an assertion.
+        if input.trim().is_empty() {
+            return Err(LpParseError::parse_error(0, "MPS input is empty"));
+        }
         debug_assert!(input.contains('\n'), "parse_mps input must contain at least one newline");
 
         log::debug!("Starting to parse MPS problem");
@@ -700,8 +706,10 @@ impl LpProblem {
     /// `register_variables_from_coefficients` during parse).
     #[must_use]
     pub fn get_all_variable_name_ids(&self) -> Vec<NameId> {
-        let mut ids: Vec<NameId> = self.variables.keys().copied().collect();
-        ids.sort_by(|a, b| self.interner.resolve(*a).cmp(self.interner.resolve(*b)));
+        // Resolve each name once up front rather than twice per comparison.
+        let mut pairs: Vec<(&str, NameId)> = self.variables.keys().map(|&id| (self.interner.resolve(id), id)).collect();
+        pairs.sort_unstable_by(|a, b| a.0.cmp(b.0));
+        let ids: Vec<NameId> = pairs.into_iter().map(|(_, id)| id).collect();
         debug_assert!(
             ids.windows(2).all(|w| self.interner.resolve(w[0]) <= self.interner.resolve(w[1])),
             "postcondition: result must be sorted by resolved name"

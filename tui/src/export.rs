@@ -47,6 +47,10 @@ pub fn write_diff_csv(report: &LpDiffReport, dir: &Path) -> Result<String, Box<d
                 let new_label = entry.new_type.as_ref().map_or("?", |t| type_label(t));
                 write!(detail_buf, "{old_label} -> {new_label}").expect("writing to String cannot fail");
             }
+            DiffKind::Renamed => {
+                // Rename detection applies to constraints only; variables never carry Renamed.
+                debug_assert!(false, "variable entry cannot be Renamed");
+            }
         }
         wtr.write_record(["Variables", &entry.name, &entry.kind.to_string(), &detail_buf])?;
     }
@@ -54,7 +58,9 @@ pub fn write_diff_csv(report: &LpDiffReport, dir: &Path) -> Result<String, Box<d
     // Constraints.
     for entry in &report.constraints.entries {
         detail_buf.clear();
-        if entry.order_only {
+        if let Some(old_name) = &entry.renamed_from {
+            write!(detail_buf, "renamed from {old_name}").expect("writing to String cannot fail");
+        } else if entry.order_only {
             write!(detail_buf, "order change only").expect("writing to String cannot fail");
         } else {
             match &entry.detail {

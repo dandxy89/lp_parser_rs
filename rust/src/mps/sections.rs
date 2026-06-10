@@ -1,7 +1,9 @@
 use std::borrow::Cow;
-use std::collections::{HashMap, HashSet};
+use std::collections::hash_map::Entry;
 
-use super::{BoundAccumulator, RowType, strip_dollar_comments};
+use rustc_hash::{FxHashMap, FxHashSet};
+
+use super::{BoundAccumulator, RowType, split_fields};
 use crate::error::{LpParseError, LpResult};
 use crate::lexer::{RawCoefficient, RawConstraint};
 use crate::model::SOSType;
@@ -11,14 +13,14 @@ pub(super) fn parse_rows_line<'input>(
     line: &'input str,
     line_num: usize,
     objective_rows: &mut Vec<&'input str>,
-    row_types: &mut HashMap<&'input str, RowType>,
+    row_types: &mut FxHashMap<&'input str, RowType>,
     row_order: &mut Vec<&'input str>,
 ) -> LpResult<()> {
     debug_assert!(!line.is_empty(), "parse_rows_line called with empty line");
     debug_assert!(line_num > 0, "line_num must be 1-based");
 
-    let raw_fields: Vec<&str> = line.split_whitespace().collect();
-    let fields = strip_dollar_comments(&raw_fields);
+    let (buf, len) = split_fields(line);
+    let fields = &buf[..len];
     if fields.len() < 2 {
         return Err(LpParseError::parse_error(line_num, format!("ROWS line requires type and name, got {} field(s)", fields.len())));
     }
@@ -55,12 +57,18 @@ pub(super) fn parse_rows_line<'input>(
 /// Mutable state for parsing the COLUMNS section.
 #[derive(Default)]
 pub(super) struct ColumnsState<'input> {
-    pub(super) coefficients: HashMap<(&'input str, &'input str), f64>,
+    /// Accumulated coefficient per (variable, row) pair. MPS allows split
+    /// entries, so values are summed on duplicate keys.
+    pub(super) coefficients: FxHashMap<(&'input str, &'input str), f64>,
+    /// Per-row list of (column index, variable) pairs in first-insertion
+    /// order. Lets the builders iterate only a row's nonzeros instead of
+    /// probing every (row, column) combination.
+    pub(super) row_entries: FxHashMap<&'input str, Vec<(u32, &'input str)>>,
     pub(super) column_order: Vec<&'input str>,
-    column_seen: HashSet<&'input str>,
+    column_index: FxHashMap<&'input str, u32>,
     pub(super) in_integer_block: bool,
     pub(super) integer_vars: Vec<&'input str>,
-    pub(super) integer_vars_set: HashSet<&'input str>,
+    pub(super) integer_vars_set: FxHashSet<&'input str>,
 }
 
 impl<'input> ColumnsState<'input> {
@@ -69,14 +77,14 @@ impl<'input> ColumnsState<'input> {
         &mut self,
         line: &'input str,
         line_num: usize,
-        row_types: &HashMap<&str, RowType>,
+        row_types: &FxHashMap<&str, RowType>,
         objective_rows: &[&str],
     ) -> LpResult<()> {
         debug_assert!(!line.is_empty(), "ColumnsState::parse_line called with empty line");
         debug_assert!(line_num > 0, "line_num must be 1-based");
 
-        let raw_fields: Vec<&'input str> = line.split_whitespace().collect();
-        let fields = strip_dollar_comments(&raw_fields);
+        let (buf, len) = split_fields(line);
+        let fields = &buf[..len];
         if fields.is_empty() {
             return Ok(());
         }
@@ -102,7 +110,10 @@ impl<'input> ColumnsState<'input> {
         let var_name = fields[0];
 
         // Track column order
-        if self.column_seen.insert(var_name) {
+        if let Entry::Vacant(entry) = self.column_index.entry(var_name) {
+            // Column count fits in u32: an MPS file with > 4 billion columns
+            // would exceed addressable memory long before this truncates.
+            entry.insert(u32::try_from(self.column_order.len()).unwrap_or(u32::MAX));
             self.column_order.push(var_name);
         }
 
@@ -129,7 +140,7 @@ impl<'input> ColumnsState<'input> {
         value_str: &str,
         var_name: &'input str,
         line_num: usize,
-        row_types: &HashMap<&str, RowType>,
+        row_types: &FxHashMap<&str, RowType>,
         objective_rows: &[&str],
     ) -> LpResult<()> {
         debug_assert!(!row_name.is_empty(), "parse_entry called with empty row_name");
@@ -142,7 +153,14 @@ impl<'input> ColumnsState<'input> {
         let value: f64 = value_str.parse().map_err(|_| LpParseError::invalid_number(value_str, line_num))?;
 
         // Accumulate coefficient (additive -- MPS allows split entries)
-        *self.coefficients.entry((var_name, row_name)).or_insert(0.0) += value;
+        match self.coefficients.entry((var_name, row_name)) {
+            Entry::Occupied(mut entry) => *entry.get_mut() += value,
+            Entry::Vacant(entry) => {
+                entry.insert(value);
+                let col_idx = *self.column_index.get(var_name).expect("column index registered in parse_line before parse_entry");
+                self.row_entries.entry(row_name).or_default().push((col_idx, var_name));
+            }
+        }
 
         Ok(())
     }
@@ -155,16 +173,16 @@ impl<'input> ColumnsState<'input> {
 pub(super) fn parse_rhs_line<'input>(
     line: &'input str,
     line_num: usize,
-    row_types: &HashMap<&str, RowType>,
+    row_types: &FxHashMap<&str, RowType>,
     objective_rows: &[&str],
-    rhs_values: &mut HashMap<&'input str, f64>,
+    rhs_values: &mut FxHashMap<&'input str, f64>,
     first_vector_label: &mut Option<&'input str>,
 ) -> LpResult<()> {
     debug_assert!(!line.is_empty(), "parse_rhs_line called with empty line");
     debug_assert!(line_num > 0, "line_num must be 1-based");
 
-    let raw_fields: Vec<&'input str> = line.split_whitespace().collect();
-    let fields = strip_dollar_comments(&raw_fields);
+    let (buf, len) = split_fields(line);
+    let fields = &buf[..len];
     if fields.len() < 3 {
         return Err(LpParseError::parse_error(line_num, format!("RHS data line requires at least 3 fields, got {}", fields.len())));
     }
@@ -190,9 +208,9 @@ fn parse_rhs_entry<'input>(
     row_name: &'input str,
     value_str: &str,
     line_num: usize,
-    row_types: &HashMap<&str, RowType>,
+    row_types: &FxHashMap<&str, RowType>,
     objective_rows: &[&str],
-    rhs_values: &mut HashMap<&'input str, f64>,
+    rhs_values: &mut FxHashMap<&'input str, f64>,
 ) -> LpResult<()> {
     debug_assert!(!row_name.is_empty(), "parse_rhs_entry called with empty row_name");
     debug_assert!(line_num > 0, "line_num must be 1-based");
@@ -215,15 +233,15 @@ fn parse_rhs_entry<'input>(
 pub(super) fn parse_ranges_line<'input>(
     line: &'input str,
     line_num: usize,
-    row_types: &HashMap<&str, RowType>,
-    range_values: &mut HashMap<&'input str, f64>,
+    row_types: &FxHashMap<&str, RowType>,
+    range_values: &mut FxHashMap<&'input str, f64>,
     first_vector_label: &mut Option<&'input str>,
 ) -> LpResult<()> {
     debug_assert!(!line.is_empty(), "parse_ranges_line called with empty line");
     debug_assert!(line_num > 0, "line_num must be 1-based");
 
-    let raw_fields: Vec<&'input str> = line.split_whitespace().collect();
-    let fields = strip_dollar_comments(&raw_fields);
+    let (buf, len) = split_fields(line);
+    let fields = &buf[..len];
     if fields.len() < 3 {
         return Err(LpParseError::parse_error(line_num, format!("RANGES data line requires at least 3 fields, got {}", fields.len())));
     }
@@ -249,8 +267,8 @@ fn parse_range_entry<'input>(
     row_name: &'input str,
     value_str: &str,
     line_num: usize,
-    row_types: &HashMap<&str, RowType>,
-    range_values: &mut HashMap<&'input str, f64>,
+    row_types: &FxHashMap<&str, RowType>,
+    range_values: &mut FxHashMap<&'input str, f64>,
 ) -> LpResult<()> {
     debug_assert!(!row_name.is_empty(), "parse_range_entry called with empty row_name");
     debug_assert!(line_num > 0, "line_num must be 1-based");
@@ -269,9 +287,9 @@ fn parse_range_entry<'input>(
 /// Mutable state for parsing the BOUNDS section.
 #[derive(Default)]
 pub(super) struct BoundsState<'input> {
-    pub(super) accumulators: HashMap<&'input str, BoundAccumulator>,
+    pub(super) accumulators: FxHashMap<&'input str, BoundAccumulator>,
     pub(super) order: Vec<&'input str>,
-    seen: HashSet<&'input str>,
+    seen: FxHashSet<&'input str>,
     pub(super) binary_vars: Vec<&'input str>,
     pub(super) semi_continuous_vars: Vec<&'input str>,
 }
@@ -287,14 +305,14 @@ impl<'input> BoundsState<'input> {
         line: &'input str,
         line_num: usize,
         integer_vars: &mut Vec<&'input str>,
-        integer_vars_set: &mut HashSet<&'input str>,
+        integer_vars_set: &mut FxHashSet<&'input str>,
         first_vector_label: &mut Option<&'input str>,
     ) -> LpResult<()> {
         debug_assert!(!line.is_empty(), "BoundsState::parse_line called with empty line");
         debug_assert!(line_num > 0, "line_num must be 1-based");
 
-        let raw_fields: Vec<&'input str> = line.split_whitespace().collect();
-        let fields = strip_dollar_comments(&raw_fields);
+        let (buf, len) = split_fields(line);
+        let fields = &buf[..len];
         if fields.len() < 3 {
             return Err(LpParseError::parse_error(line_num, format!("BOUNDS line requires at least 3 fields, got {}", fields.len())));
         }
@@ -314,7 +332,7 @@ impl<'input> BoundsState<'input> {
             self.order.push(var_name);
         }
 
-        self.apply_bound(bound_type, var_name, &fields, line_num, integer_vars, integer_vars_set)
+        self.apply_bound(bound_type, var_name, fields, line_num, integer_vars, integer_vars_set)
     }
 
     /// Apply a single bound directive to the accumulator for `var_name`.
@@ -325,7 +343,7 @@ impl<'input> BoundsState<'input> {
         fields: &[&'input str],
         line_num: usize,
         integer_vars: &mut Vec<&'input str>,
-        integer_vars_set: &mut HashSet<&'input str>,
+        integer_vars_set: &mut FxHashSet<&'input str>,
     ) -> LpResult<()> {
         debug_assert!(!bound_type.is_empty(), "apply_bound called with empty bound_type");
         debug_assert!(!var_name.is_empty(), "apply_bound called with empty var_name");

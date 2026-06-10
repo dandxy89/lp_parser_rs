@@ -1,9 +1,11 @@
+use std::time::Instant;
+
 use ratatui::text::{Line, Span};
 use ratatui::widgets::ListState;
 use smallvec::SmallVec;
 
-use crate::diff_model::{DiffEntry, DiffKind};
-use crate::solver::{SolveDiffResult, SolveResult};
+use crate::diff_model::{DiffEntry, DiffKind, sort_indices_by_delta};
+use crate::solver::{InfeasibilityDiagnosis, SolveDiffResult, SolveResult};
 use crate::widgets::{kind_prefix, kind_style};
 
 /// State machine for the LP solver overlay.
@@ -13,15 +15,30 @@ pub enum SolveState {
     Idle,
     /// Showing the file picker popup (choose file 1 or 2).
     Picking,
-    /// Solver is running in a background thread.
-    Running { file: String },
+    /// Solver is running in a background thread. `started` is recorded at launch
+    /// so the overlay can show elapsed time during long solves.
+    Running { file: String, started: Instant },
     /// Solve completed successfully.
     Done(Box<SolveResult>),
     /// Both solvers running in parallel; optional results filled as they complete.
-    RunningBoth { file1: String, file2: String, result1: Option<Box<SolveResult>>, result2: Option<Box<SolveResult>> },
+    RunningBoth { file1: String, file2: String, result1: Option<Box<SolveResult>>, result2: Option<Box<SolveResult>>, started: Instant },
     /// Both solves completed; showing comparison view.
     DoneBoth(Box<SolveDiffResult>),
     /// Solve failed with an error message.
+    Failed(String),
+}
+
+/// State machine for the infeasibility diagnosis (elastic relaxation) run.
+#[derive(Debug)]
+pub enum DiagnosisState {
+    /// No diagnosis requested.
+    Idle,
+    /// Elastic relaxation running in a background thread. `started` is recorded
+    /// at launch so the summary block can show elapsed time during long runs.
+    Running { file: String, started: Instant },
+    /// Diagnosis completed.
+    Done { file: String, diagnosis: Box<InfeasibilityDiagnosis> },
+    /// Diagnosis failed with an error message.
     Failed(String),
 }
 
@@ -33,10 +50,11 @@ pub enum SolveTab {
     Variables,
     Constraints,
     Log,
+    Duals,
 }
 
 impl SolveTab {
-    pub const ALL: [Self; 4] = [Self::Summary, Self::Variables, Self::Constraints, Self::Log];
+    pub const ALL: [Self; 5] = [Self::Summary, Self::Variables, Self::Constraints, Self::Log, Self::Duals];
 
     pub const fn index(self) -> usize {
         match self {
@@ -44,6 +62,7 @@ impl SolveTab {
             Self::Variables => 1,
             Self::Constraints => 2,
             Self::Log => 3,
+            Self::Duals => 4,
         }
     }
 
@@ -53,6 +72,7 @@ impl SolveTab {
             Self::Variables => "Variables",
             Self::Constraints => "Constraints",
             Self::Log => "Log",
+            Self::Duals => "Duals",
         }
     }
 
@@ -62,17 +82,19 @@ impl SolveTab {
             Self::Summary => Self::Variables,
             Self::Variables => Self::Constraints,
             Self::Constraints => Self::Log,
-            Self::Log => Self::Summary,
+            Self::Log => Self::Duals,
+            Self::Duals => Self::Summary,
         }
     }
 
     /// Cycle to the previous tab, wrapping around.
     pub const fn prev(self) -> Self {
         match self {
-            Self::Summary => Self::Log,
+            Self::Summary => Self::Duals,
             Self::Variables => Self::Summary,
             Self::Constraints => Self::Variables,
             Self::Log => Self::Constraints,
+            Self::Duals => Self::Log,
         }
     }
 }
@@ -88,7 +110,7 @@ const DEFAULT_THRESHOLD_INDEX: usize = 1;
 pub struct SolveViewState {
     pub tab: SolveTab,
     /// Per-tab scroll offsets, indexed by `SolveTab::index()`.
-    pub scroll: [u16; 4],
+    pub scroll: [u16; 5],
     /// When `true`, the Variables and Constraints tabs in diff view show only changed rows.
     pub diff_only: bool,
     /// Delta threshold for filtering insignificant differences in the diff view.
@@ -101,7 +123,7 @@ impl Default for SolveViewState {
     fn default() -> Self {
         Self {
             tab: SolveTab::default(),
-            scroll: [0; 4],
+            scroll: [0; 5],
             diff_only: false,
             delta_threshold: DELTA_THRESHOLDS[DEFAULT_THRESHOLD_INDEX],
             threshold_index: DEFAULT_THRESHOLD_INDEX,
@@ -146,10 +168,13 @@ pub enum Section {
     Variables,
     Constraints,
     Objectives,
+    /// Per-file numerical conditioning view (scaling, ranges, issues).
+    /// Static like Summary: no name list, content rendered from cached lines.
+    Numerics,
 }
 
 impl Section {
-    pub const ALL: [Self; 4] = [Self::Summary, Self::Variables, Self::Constraints, Self::Objectives];
+    pub const ALL: [Self; 5] = [Self::Summary, Self::Variables, Self::Constraints, Self::Objectives, Self::Numerics];
 
     pub const fn index(self) -> usize {
         match self {
@@ -157,6 +182,7 @@ impl Section {
             Self::Variables => 1,
             Self::Constraints => 2,
             Self::Objectives => 3,
+            Self::Numerics => 4,
         }
     }
 
@@ -167,6 +193,7 @@ impl Section {
             1 => Self::Variables,
             2 => Self::Constraints,
             3 => Self::Objectives,
+            4 => Self::Numerics,
             _ => unreachable!("Section::from_index called with out-of-range index {i}"),
         }
     }
@@ -177,14 +204,15 @@ impl Section {
             Self::Variables => "Variables",
             Self::Constraints => "Constraints",
             Self::Objectives => "Objectives",
+            Self::Numerics => "Numerics",
         }
     }
 
-    /// Index into the `section_states` array (0-based, Summary excluded).
-    /// Returns `None` for Summary.
+    /// Index into the `section_states` array (0-based, static sections excluded).
+    /// Returns `None` for Summary and Numerics, which have no entry list.
     pub(crate) const fn list_index(self) -> Option<usize> {
         match self {
-            Self::Summary => None,
+            Self::Summary | Self::Numerics => None,
             Self::Variables => Some(0),
             Self::Constraints => Some(1),
             Self::Objectives => Some(2),
@@ -209,6 +237,7 @@ pub enum DiffFilter {
     Added,
     Removed,
     Modified,
+    Renamed,
 }
 
 impl DiffFilter {
@@ -218,6 +247,7 @@ impl DiffFilter {
             Self::Added => kind == DiffKind::Added,
             Self::Removed => kind == DiffKind::Removed,
             Self::Modified => kind == DiffKind::Modified,
+            Self::Renamed => kind == DiffKind::Renamed,
         }
     }
 
@@ -227,6 +257,41 @@ impl DiffFilter {
             Self::Added => "Added",
             Self::Removed => "Removed",
             Self::Modified => "Modified",
+            Self::Renamed => "Renamed",
+        }
+    }
+}
+
+/// Sort order for the sidebar name lists, cycled with `s` in normal mode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SortMode {
+    /// Alphabetical by entry name (the report's natural order).
+    #[default]
+    Name,
+    /// Descending absolute delta `|new - old|`; no-delta entries follow alphabetically.
+    AbsDelta,
+    /// Descending relative delta `|new - old| / max(|new|, |old|)`.
+    RelDelta,
+}
+
+impl SortMode {
+    /// Cycle to the next sort mode: Name → AbsDelta → RelDelta → Name.
+    #[must_use]
+    pub const fn next(self) -> Self {
+        match self {
+            Self::Name => Self::AbsDelta,
+            Self::AbsDelta => Self::RelDelta,
+            Self::RelDelta => Self::Name,
+        }
+    }
+
+    /// Short status-bar label. `None` for the default name sort (nothing to show).
+    #[must_use]
+    pub const fn label(self) -> Option<&'static str> {
+        match self {
+            Self::Name => None,
+            Self::AbsDelta => Some("sort:|\u{394}|"),
+            Self::RelDelta => Some("sort:rel\u{394}"),
         }
     }
 }
@@ -330,8 +395,9 @@ impl SectionViewState {
         self.dirty
     }
 
-    /// Recompute the filtered indices and cached sidebar lines from the given entries and filter.
-    pub(crate) fn recompute<T: DiffEntry>(&mut self, entries: &[T], filter: DiffFilter, ignore_order: bool) {
+    /// Recompute the filtered indices and cached sidebar lines from the given
+    /// entries, filter, and sort mode.
+    pub(crate) fn recompute<T: DiffEntry>(&mut self, entries: &[T], filter: DiffFilter, ignore_order: bool, sort: SortMode) {
         debug_assert!(self.dirty, "recompute called on non-dirty SectionViewState");
         self.filtered_indices.clear();
         self.cached_lines.clear();
@@ -341,12 +407,20 @@ impl SectionViewState {
             }
             if filter.matches(entry.kind()) {
                 self.filtered_indices.push(i);
-                let kind = entry.kind();
-                let style = kind_style(kind);
-                let line =
-                    Line::from(vec![Span::styled(kind_prefix(kind), style), Span::raw(" "), Span::styled(entry.name().to_owned(), style)]);
-                self.cached_lines.push(line);
             }
+        }
+        match sort {
+            SortMode::Name => {} // entries are already name-sorted in the report
+            SortMode::AbsDelta => sort_indices_by_delta(entries, &mut self.filtered_indices, false),
+            SortMode::RelDelta => sort_indices_by_delta(entries, &mut self.filtered_indices, true),
+        }
+        for &i in &self.filtered_indices {
+            let entry = &entries[i];
+            let kind = entry.kind();
+            let style = kind_style(kind);
+            let line =
+                Line::from(vec![Span::styled(kind_prefix(kind), style), Span::raw(" "), Span::styled(entry.name().to_owned(), style)]);
+            self.cached_lines.push(line);
         }
         debug_assert_eq!(self.filtered_indices.len(), self.cached_lines.len(), "filtered indices and cached lines must be in sync");
         self.dirty = false;

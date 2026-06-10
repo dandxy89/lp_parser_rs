@@ -7,9 +7,10 @@ use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Paragraph};
+use ratatui::widgets::Paragraph;
 
 use crate::theme::theme;
+use crate::widgets::panel_block;
 
 /// Render a side-by-side raw text diff into `area`.
 ///
@@ -22,9 +23,7 @@ pub fn draw_raw_diff(
     scroll: u16,
     border_style: Style,
 ) -> usize {
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_style(border_style)
+    let block = panel_block(border_style)
         .title(Span::styled(" Raw Text (r to toggle) ", Style::default().fg(theme().accent).add_modifier(Modifier::BOLD)));
     let inner = block.inner(area);
     frame.render_widget(block, area);
