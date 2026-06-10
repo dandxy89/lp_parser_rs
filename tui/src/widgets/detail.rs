@@ -11,7 +11,7 @@ use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Paragraph};
+use ratatui::widgets::Paragraph;
 
 use crate::detail_model::build_coeff_rows;
 use crate::diff_model::{
@@ -19,7 +19,7 @@ use crate::diff_model::{
     VariableDiffEntry,
 };
 use crate::theme::theme;
-use crate::widgets::{ARROW, bold_text, kind_colour, muted};
+use crate::widgets::{ARROW, bold_text, kind_colour, muted, panel_block, truncate_with_ellipsis};
 
 /// Horizontal rule used as a visual separator below the entry header.
 fn rule<'a>() -> Line<'a> {
@@ -38,16 +38,9 @@ fn detail_header(entity_label: &str, name: &str, kind: DiffKind) -> Vec<Line<'st
     ]
 }
 
-/// Extract (lower, upper) bounds from a `VariableType`, returning `None` for
-/// bounds that don't apply to that type.
-pub const fn variable_bounds(variable_type: &VariableType) -> (Option<f64>, Option<f64>) {
-    match *variable_type {
-        VariableType::LowerBound(lower) => (Some(lower), None),
-        VariableType::UpperBound(upper) => (None, Some(upper)),
-        VariableType::DoubleBound(lower, upper) => (Some(lower), Some(upper)),
-        _ => (None, None),
-    }
-}
+// Re-exported from the pure diff model so existing imports keep working;
+// the function moved there for use by the delta sort keys.
+pub use crate::diff_model::variable_bounds;
 
 /// Format an optional bound value as a string for display.
 pub fn fmt_bound(val: Option<f64>) -> String {
@@ -75,7 +68,11 @@ fn render_variable_type_info(lines: &mut Vec<Line<'static>>, variable_type: &Var
 #[allow(clippy::too_many_lines)]
 #[allow(clippy::similar_names)] // lower_bound/upper_bound share prefixes
 pub fn render_variable_detail(frame: &mut Frame, area: Rect, entry: &VariableDiffEntry, border_style: Style, scroll: u16) -> usize {
-    debug_assert!(area.width > 0 && area.height > 0, "variable detail area must be non-zero");
+    // A zero-sized area is an environmental condition (shrunken terminal), not a
+    // programming error: drawing into it is a no-op.
+    if area.width == 0 || area.height == 0 {
+        return 0;
+    }
     let mut lines = detail_header("Variable", &entry.name, entry.kind);
 
     let t = theme();
@@ -142,6 +139,10 @@ pub fn render_variable_detail(frame: &mut Frame, area: Rect, entry: &VariableDif
                 ]));
             }
         }
+        DiffKind::Renamed => {
+            // Rename detection applies to constraints only; variables never carry Renamed.
+            debug_assert!(false, "variable entry cannot be Renamed");
+        }
     }
 
     render_panel(frame, area, " Variable Detail ", lines, border_style, scroll)
@@ -161,10 +162,22 @@ pub fn render_constraint_detail(
     cached_rows: Option<&[crate::detail_model::CoefficientRow]>,
     interner: &NameInterner,
 ) -> usize {
-    debug_assert!(area.width > 0 && area.height > 0, "constraint detail area must be non-zero");
+    // A zero-sized area is an environmental condition (shrunken terminal), not a
+    // programming error: drawing into it is a no-op.
+    if area.width == 0 || area.height == 0 {
+        return 0;
+    }
     let mut lines = detail_header("Constraint", &entry.name, entry.kind);
 
     let t = theme();
+
+    // Renamed entries: show the name the constraint carried in the first file.
+    if let Some(old_name) = &entry.renamed_from {
+        lines.push(Line::from(vec![
+            Span::styled("  Renamed from: ", muted()),
+            Span::styled(old_name.clone(), Style::default().fg(t.info).add_modifier(Modifier::BOLD)),
+        ]));
+    }
 
     // Render line number location if available.
     if entry.line_file1.is_some() || entry.line_file2.is_some() {
@@ -309,8 +322,9 @@ pub fn render_constraint_detail(
                     lines.push(Line::from(""));
                     lines.push(Line::from(Span::styled("  Coefficients:", muted().add_modifier(Modifier::BOLD))));
                     for coeff in coefficients {
+                        let name = interner.resolve(coeff.name);
                         lines.push(Line::from(vec![
-                            Span::styled(format!("    {:<20}", interner.resolve(coeff.name)), Style::default().fg(entry_colour)),
+                            Span::styled(format!("    {:<20}", truncate_with_ellipsis(name, 20)), Style::default().fg(entry_colour)),
                             Span::styled(format!("{}", coeff.value), Style::default().fg(entry_colour)),
                         ]));
                     }
@@ -323,8 +337,9 @@ pub fn render_constraint_detail(
                     lines.push(Line::from(""));
                     lines.push(Line::from(Span::styled("  Weights:", muted().add_modifier(Modifier::BOLD))));
                     for w in weights {
+                        let name = interner.resolve(w.name);
                         lines.push(Line::from(vec![
-                            Span::styled(format!("    {:<20}", interner.resolve(w.name)), Style::default().fg(entry_colour)),
+                            Span::styled(format!("    {:<20}", truncate_with_ellipsis(name, 20)), Style::default().fg(entry_colour)),
                             Span::styled(format!("{}", w.value), Style::default().fg(entry_colour)),
                         ]));
                     }
@@ -349,7 +364,11 @@ pub fn render_objective_detail(
     cached_rows: Option<&[crate::detail_model::CoefficientRow]>,
     interner: &NameInterner,
 ) -> usize {
-    debug_assert!(area.width > 0 && area.height > 0, "objective detail area must be non-zero");
+    // A zero-sized area is an environmental condition (shrunken terminal), not a
+    // programming error: drawing into it is a no-op.
+    if area.width == 0 || area.height == 0 {
+        return 0;
+    }
     let t = theme();
     let mut lines = detail_header("Objective", &entry.name, entry.kind);
 
@@ -379,8 +398,9 @@ pub fn render_objective_detail(
         let coeffs = if entry.kind == DiffKind::Added { &entry.new_coefficients } else { &entry.old_coefficients };
         let colour = kind_colour(entry.kind);
         for c in coeffs {
+            let name = interner.resolve(c.name);
             lines.push(Line::from(vec![
-                Span::styled(format!("    {:<20}", interner.resolve(c.name)), Style::default().fg(colour)),
+                Span::styled(format!("    {:<20}", truncate_with_ellipsis(name, 20)), Style::default().fg(colour)),
                 Span::styled(format!("{}", c.value), Style::default().fg(colour)),
             ]));
         }
@@ -409,7 +429,7 @@ fn render_constraint_side_by_side(
 ) -> usize {
     let t = theme();
     let header_line_count = header_lines.len();
-    let block = Block::default().borders(Borders::ALL).border_style(border_style).title(" Constraint Detail ");
+    let block = panel_block(border_style).title(" Constraint Detail ");
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
@@ -448,6 +468,10 @@ fn render_constraint_side_by_side(
         right_lines.push(Line::default());
     }
 
+    // Name column sized to the half-pane width: whatever remains after the
+    // value column (10), badge (4), and leading space.
+    let name_w = ((v_chunks[1].width / 2) as usize).saturating_sub(16).clamp(12, 48);
+
     // Build styled Lines only for the visible window.
     // Reuse string buffers across rows to avoid per-row heap allocations.
     let mut old_buf = String::with_capacity(16);
@@ -456,7 +480,9 @@ fn render_constraint_side_by_side(
         let (left_style, right_style, badge) = match row.change_kind {
             Some(DiffKind::Added) => (Style::default().fg(t.muted), Style::default().fg(t.added), " [+]"),
             Some(DiffKind::Removed) => (Style::default().fg(t.removed), Style::default().fg(t.muted), " [-]"),
-            Some(DiffKind::Modified) => (Style::default().fg(t.removed), Style::default().fg(t.added), " [~]"),
+            // Renamed never occurs on coefficient rows (asserted in build_coeff_rows);
+            // folded with Modified to keep the match exhaustive.
+            Some(DiffKind::Modified | DiffKind::Renamed) => (Style::default().fg(t.removed), Style::default().fg(t.added), " [~]"),
             None => (Style::default().fg(t.muted), Style::default().fg(t.muted), ""),
         };
 
@@ -469,13 +495,14 @@ fn render_constraint_side_by_side(
             write!(new_buf, "{v}").expect("writing f64 to String is infallible");
         }
 
+        let name = truncate_with_ellipsis(&row.variable, name_w);
         left_lines.push(Line::from(vec![
-            Span::styled(format!(" {:<18}", row.variable), left_style),
+            Span::styled(format!(" {name:<name_w$}"), left_style),
             Span::styled(format!("{old_buf:>10}"), left_style),
             Span::styled(badge, left_style),
         ]));
         right_lines.push(Line::from(vec![
-            Span::styled(format!(" {:<18}", row.variable), right_style),
+            Span::styled(format!(" {name:<name_w$}"), right_style),
             Span::styled(format!("{new_buf:>10}"), right_style),
             Span::styled(badge, right_style),
         ]));
@@ -565,7 +592,7 @@ fn render_coeff_changes(
             write!(new_buf, "{v}").expect("writing f64 to String is infallible");
         }
         name_buf.clear();
-        write!(name_buf, "    {:<20}", row.variable).expect("writing to String is infallible");
+        write!(name_buf, "    {:<20}", truncate_with_ellipsis(&row.variable, 20)).expect("writing to String is infallible");
 
         match row.change_kind {
             Some(DiffKind::Added) => {
@@ -586,7 +613,9 @@ fn render_coeff_changes(
                     Span::styled(" [removed]", Style::default().fg(t.removed)),
                 ]));
             }
-            Some(DiffKind::Modified) => {
+            // Renamed never occurs on coefficient rows (asserted in build_coeff_rows);
+            // folded with Modified to keep the match exhaustive.
+            Some(DiffKind::Modified | DiffKind::Renamed) => {
                 lines.push(Line::from(vec![
                     Span::styled(name_buf.clone(), Style::default().fg(t.modified)),
                     Span::styled(format!("{old_buf:>VAL_WIDTH$}"), Style::default().fg(t.removed)),
@@ -616,7 +645,7 @@ fn render_coeff_changes(
 /// applying vertical scroll. Returns the total content line count.
 fn render_panel(frame: &mut Frame, area: Rect, title: &'static str, lines: Vec<Line<'_>>, border_style: Style, scroll: u16) -> usize {
     let line_count = lines.len();
-    let block = Block::default().borders(Borders::ALL).border_style(border_style).title(title);
+    let block = panel_block(border_style).title(title);
     let paragraph = Paragraph::new(lines).block(block).scroll((scroll, 0));
     frame.render_widget(paragraph, area);
     line_count

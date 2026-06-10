@@ -3,33 +3,28 @@
 //! Renders a unified single-window layout:
 //!
 //! ```text
-//! ┌──────────────────┬───────────────────────────────────┐
-//! │ Section Selector │                                   │
-//! │ (4 items)        │         Detail Panel              │
-//! ├──────────────────┤                                   │
-//! │ Name List        │                                   │
-//! │ (filtered)       │                                   │
-//! └──────────────────┴───────────────────────────────────┘
-//! │  status bar                                          │
-//! └──────────────────────────────────────────────────────┘
+//!  Summary │ Numerics │ Variables │ Constraints │ Objectives
+//! ╭──────────────────╮╭───────────────────────────────────╮
+//! │ Name List        ││                                   │
+//! │ (filtered)       ││         Detail Panel              │
+//! │                  ││                                   │
+//! │                  ││                                   │
+//! ╰──────────────────╯╰───────────────────────────────────╯
+//!   status bar
 //! ```
 
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout};
-use ratatui::widgets::{Block, Borders};
 
 use crate::app::{App, Focus, Section};
 use crate::state::DetailView;
-use crate::widgets::{detail, focus_border_style, help, raw_diff, search_popup, sidebar, solve, status_bar, summary};
+use crate::widgets::{detail, focus_border_style, help, panel_block, raw_diff, search_popup, sidebar, solve, status_bar, summary};
 
 /// Minimum width for the sidebar panel in columns.
 const SIDEBAR_MIN_WIDTH: u16 = 20;
 
 /// Fraction of the main area width allocated to the sidebar (1/N).
 const SIDEBAR_WIDTH_DIVISOR: u16 = 5;
-
-/// Height of the section selector: 4 items + top/bottom border.
-const SECTION_SELECTOR_HEIGHT: u16 = 6;
 
 /// Render the entire TUI for the current application state.
 pub fn draw(frame: &mut Frame, app: &mut App) {
@@ -41,13 +36,15 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     let total_changes = report_summary.total_changes();
 
     let outer = Layout::vertical([
+        Constraint::Length(1), // tab bar
         Constraint::Min(0),    // main area
         Constraint::Length(1), // status bar
     ])
     .split(frame.area());
 
     // Main area: horizontal split into sidebar + detail.
-    let main_area = outer[0];
+    let tab_bar_area = outer[0];
+    let main_area = outer[1];
 
     let sidebar_width = (main_area.width / SIDEBAR_WIDTH_DIVISOR).max(SIDEBAR_MIN_WIDTH).min(main_area.width);
     let h_chunks = Layout::horizontal([Constraint::Length(sidebar_width), Constraint::Min(0)]).split(main_area);
@@ -55,21 +52,18 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     let sidebar_area = h_chunks[0];
     let detail_area = h_chunks[1];
 
-    // Sidebar: vertical split into section selector + name list.
-    let sidebar_chunks = Layout::vertical([Constraint::Length(SECTION_SELECTOR_HEIGHT), Constraint::Min(0)]).split(sidebar_area);
-
     // Store layout rects and heights on app for mouse hit-testing and page scrolling.
-    app.layout.section_selector = sidebar_chunks[0];
-    app.layout.name_list = sidebar_chunks[1];
+    app.layout.section_selector = tab_bar_area;
+    app.layout.name_list = sidebar_area;
     app.layout.detail = detail_area;
-    app.layout.name_list_height = sidebar_chunks[1].height;
+    app.layout.name_list_height = sidebar_area.height;
     app.layout.detail_height = detail_area.height;
 
-    // Section Selector
-    sidebar::draw_section_selector(frame, sidebar_chunks[0], app);
+    // Tab bar across the full width.
+    sidebar::draw_tab_bar(frame, tab_bar_area, app);
 
-    // Name List
-    sidebar::draw_name_list(frame, sidebar_chunks[1], app);
+    // Name List (full sidebar height).
+    sidebar::draw_name_list(frame, sidebar_area, app);
 
     // Detail Panel
     draw_detail_panel(frame, detail_area, app);
@@ -81,17 +75,40 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
         None
     };
     let yank_flash = if app.yank.flash.is_some() { Some(status_bar::YankFlash { message: &app.yank.message }) } else { None };
+    // Tolerance indicator — only shown when at least one tolerance is active.
+    let tolerance_label = {
+        let options = &app.diff_options;
+        if options.abs_tol > 0.0 || options.rel_tol > 0.0 {
+            let mut label = String::with_capacity(24);
+            if options.abs_tol > 0.0 {
+                label.push_str("abs:");
+                label.push_str(&crate::app::format_tolerance(options.abs_tol));
+            }
+            if options.rel_tol > 0.0 {
+                if !label.is_empty() {
+                    label.push(' ');
+                }
+                label.push_str("rel:");
+                label.push_str(&crate::app::format_tolerance(options.rel_tol));
+            }
+            Some(label)
+        } else {
+            None
+        }
+    };
     // Compute section-specific diff counts for the status bar using the
     // already-derived report_summary to avoid re-accessing report fields.
     let section_counts = match app.active_section {
-        Section::Summary => report_summary.aggregate_counts(),
+        Section::Summary | Section::Numerics => report_summary.aggregate_counts(),
         Section::Variables => report_summary.variables,
         Section::Constraints => report_summary.constraints,
         Section::Objectives => report_summary.objectives,
     };
+    // Watch-mode indicator, shown alongside the sort/tolerance indicators.
+    let watch_reloading = if app.watch.enabled { Some(app.watch.is_reloading()) } else { None };
     status_bar::draw_status_bar(
         frame,
-        outer[1],
+        outer[2],
         &status_bar::StatusBarParams {
             total_changes,
             section_counts: &section_counts,
@@ -100,6 +117,9 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
             detail_position: detail_pos.as_ref(),
             yank_flash: yank_flash.as_ref(),
             ignore_order: app.ignore_order,
+            sort_label: app.sort_mode.label(),
+            tolerance_label: tolerance_label.as_deref(),
+            watch_reloading,
         },
     );
 
@@ -124,10 +144,16 @@ fn draw_detail_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut A
     let border_style = focus_border_style(app.focus, Focus::Detail);
 
     let content_lines = if app.active_section == Section::Summary {
-        let block = Block::default().borders(Borders::ALL).border_style(border_style).title(" Summary ");
+        let block = panel_block(border_style).title(" Summary ");
         let inner = block.inner(area);
         frame.render_widget(block, area);
         summary::draw_summary(frame, inner, &app.summary_lines, app.detail_scroll)
+    } else if app.active_section == Section::Numerics {
+        // Numerics renders exactly like Summary: pre-built cached lines, windowed.
+        let block = panel_block(border_style).title(" Numerics ");
+        let inner = block.inner(area);
+        frame.render_widget(block, area);
+        summary::draw_summary(frame, inner, &app.numerics_lines, app.detail_scroll)
     } else if let Some(entry_index) = app.selected_entry_index() {
         // Check for raw view mode on supported sections (Constraints, Objectives).
         let use_raw = app.detail_view == DetailView::Raw && matches!(app.active_section, Section::Constraints | Section::Objectives);
@@ -169,7 +195,7 @@ fn draw_detail_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut A
                         &app.report.interner,
                     )
                 }
-                Section::Summary => unreachable!("handled above"),
+                Section::Summary | Section::Numerics => unreachable!("handled above"),
             }
         }
     } else {
@@ -177,7 +203,7 @@ fn draw_detail_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut A
             Section::Variables => "Select a variable from the list",
             Section::Constraints => "Select a constraint from the list",
             Section::Objectives => "Select an objective from the list",
-            Section::Summary => unreachable!("handled above"),
+            Section::Summary | Section::Numerics => unreachable!("handled above"),
         };
         sidebar::draw_empty_detail(frame, area, label, border_style);
         0

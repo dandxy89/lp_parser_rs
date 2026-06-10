@@ -10,13 +10,13 @@ use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState};
+use ratatui::widgets::{Clear, List, ListItem, ListState, Paragraph, ScrollbarState};
 
 use crate::app::App;
 use crate::search;
 use crate::state::{SearchResult, Section};
 use crate::theme::theme;
-use crate::widgets::{detail, kind_prefix, kind_style, sidebar, summary};
+use crate::widgets::{detail, kind_prefix, kind_style, panel_block, panel_scrollbar, sidebar, summary, zebra_style};
 
 /// Section tag prefix for display in results list.
 const fn section_tag(section: Section) -> &'static str {
@@ -25,12 +25,17 @@ const fn section_tag(section: Section) -> &'static str {
         Section::Variables => "[var]",
         Section::Constraints => "[con]",
         Section::Objectives => "[obj]",
+        Section::Numerics => "[num]",
     }
 }
 
 /// Draw the search pop-up overlay on top of the current frame.
 pub fn draw_search_popup(frame: &mut Frame, area: Rect, app: &App) {
-    debug_assert!(area.width > 0 && area.height > 0, "search popup area must be non-zero");
+    // A zero-sized area is an environmental condition (shrunken terminal), not a
+    // programming error: drawing into it is a no-op.
+    if area.width == 0 || area.height == 0 {
+        return;
+    }
     let popup = centred_rect(area);
 
     // Clear the background behind the pop-up.
@@ -40,29 +45,41 @@ pub fn draw_search_popup(frame: &mut Frame, area: Rect, app: &App) {
     let mode_label = mode.label();
     let match_count = app.search_popup.results.len();
 
-    // Vertical layout: top input (3 rows with border), main content, bottom hints (3 rows with border).
+    // Vertical layout: top input (3 rows with border), optional regex error row,
+    // main content, bottom hints (3 rows with border).
+    let error_rows = u16::from(app.search_popup.regex_error.is_some());
     let v_chunks = Layout::vertical([
-        Constraint::Length(3), // search input bar
-        Constraint::Min(1),    // main content area
-        Constraint::Length(3), // hint bar
+        Constraint::Length(3),          // search input bar
+        Constraint::Length(error_rows), // regex error line (collapsed when absent)
+        Constraint::Min(1),             // main content area
+        Constraint::Length(3),          // hint bar
     ])
     .split(popup);
 
     // Top bar: search input
     draw_search_input(frame, v_chunks[0], &app.search_popup.query, mode_label, match_count);
 
+    // Regex error line under the input, so an invalid pattern is not mistaken
+    // for a query that matches nothing.
+    if let Some(error) = &app.search_popup.regex_error {
+        let t = theme();
+        let error_line =
+            Line::from(Span::styled(format!(" invalid regex: {error}"), Style::default().fg(t.error).add_modifier(Modifier::BOLD)));
+        frame.render_widget(Paragraph::new(error_line), v_chunks[1]);
+    }
+
     // Main area: horizontal split into results list + detail preview
     let h_chunks = Layout::horizontal([
         Constraint::Percentage(40), // results list
         Constraint::Percentage(60), // detail preview
     ])
-    .split(v_chunks[1]);
+    .split(v_chunks[2]);
 
     draw_results_list(frame, h_chunks[0], &app.search_popup.cached_result_lines, app.search_popup.results.len(), app.search_popup.selected);
     draw_detail_preview(frame, h_chunks[1], app);
 
     // Bottom bar: hints
-    draw_hints(frame, v_chunks[2]);
+    draw_hints(frame, v_chunks[3]);
 }
 
 /// Draw the search input bar at the top of the pop-up.
@@ -85,9 +102,7 @@ fn draw_search_input(frame: &mut Frame, area: Rect, query: &str, mode_label: &st
     spans.push(Span::raw(" ".repeat(padding)));
     spans.push(Span::styled(right_text, Style::default().fg(t.muted)));
 
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(t.accent))
+    let block = panel_block(Style::default().fg(t.accent))
         .title(Span::styled(" Search ", Style::default().fg(t.accent).add_modifier(Modifier::BOLD)));
 
     let paragraph = Paragraph::new(Line::from(spans)).block(block);
@@ -125,9 +140,9 @@ pub fn build_result_lines(results: &[SearchResult], names: &[String]) -> Vec<Lin
 /// Draw the ranked results list on the left side using pre-built cached lines.
 fn draw_results_list(frame: &mut Frame, area: Rect, cached_lines: &[Line<'static>], result_count: usize, selected: usize) {
     let t = theme();
-    let items: Vec<ListItem> = cached_lines.iter().map(|line| ListItem::new(line.clone())).collect();
+    let items: Vec<ListItem> = cached_lines.iter().enumerate().map(|(i, line)| ListItem::new(line.clone()).style(zebra_style(i))).collect();
 
-    let block = Block::default().borders(Borders::ALL).border_style(Style::default().fg(t.muted)).title(" Results ");
+    let block = panel_block(Style::default().fg(t.border)).title(" Results ");
 
     let mut state = ListState::default();
     if result_count > 0 {
@@ -144,11 +159,7 @@ fn draw_results_list(frame: &mut Frame, area: Rect, cached_lines: &[Line<'static
     // Scrollbar for long result lists.
     if result_count > area.height.saturating_sub(2) as usize {
         let mut scrollbar_state = ScrollbarState::new(result_count).position(selected);
-        frame.render_stateful_widget(
-            Scrollbar::new(ScrollbarOrientation::VerticalRight).begin_symbol(None).end_symbol(None),
-            area,
-            &mut scrollbar_state,
-        );
+        frame.render_stateful_widget(panel_scrollbar(), area, &mut scrollbar_state);
     }
 }
 
@@ -222,10 +233,17 @@ fn draw_detail_preview(frame: &mut Frame, area: Rect, app: &App) {
         }
         Section::Summary => {
             // Summary entries don't appear in search results, but handle gracefully.
-            let block = Block::default().borders(Borders::ALL).border_style(border_style).title(" Summary ");
+            let block = panel_block(border_style).title(" Summary ");
             let inner = block.inner(area);
             frame.render_widget(block, area);
             summary::draw_summary(frame, inner, &app.summary_lines, scroll);
+        }
+        Section::Numerics => {
+            // Like Summary, Numerics entries never appear in search results.
+            let block = panel_block(border_style).title(" Numerics ");
+            let inner = block.inner(area);
+            frame.render_widget(block, area);
+            summary::draw_summary(frame, inner, &app.numerics_lines, scroll);
         }
     }
 }
@@ -247,7 +265,7 @@ fn draw_hints(frame: &mut Frame, area: Rect) {
         Span::styled(" cancel", Style::default().fg(t.muted)),
     ]);
 
-    let block = Block::default().borders(Borders::ALL).border_style(Style::default().fg(t.muted));
+    let block = panel_block(Style::default().fg(t.muted));
 
     let paragraph = Paragraph::new(hints).block(block);
     frame.render_widget(paragraph, area);

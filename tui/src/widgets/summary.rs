@@ -13,7 +13,7 @@ use ratatui::text::{Line, Span};
 
 use crate::diff_model::{DiffCounts, DiffSummary, LpDiffReport};
 use crate::theme::theme;
-use crate::widgets::{ARROW, muted};
+use crate::widgets::{ARROW, muted, rule_str};
 
 /// Build pre-formatted summary lines. Called once at startup since report data never changes.
 pub fn build_summary_lines(
@@ -59,7 +59,11 @@ pub fn build_summary_lines(
 /// Uses O(visible) windowed rendering instead of cloning all lines into a `Paragraph`.
 /// Returns the total content line count.
 pub fn draw_summary(frame: &mut Frame, area: Rect, cached_lines: &[Line<'static>], scroll: u16) -> usize {
-    debug_assert!(area.width > 0 && area.height > 0, "summary area must be non-zero");
+    // A zero-sized area is an environmental condition (shrunken terminal), not a
+    // programming error: drawing into it is a no-op.
+    if area.width == 0 || area.height == 0 {
+        return 0;
+    }
     let line_count = cached_lines.len();
     let skip = scroll as usize;
     let visible = area.height as usize;
@@ -115,9 +119,10 @@ fn build_header(lines: &mut Vec<Line<'static>>, report: &LpDiffReport) {
 fn build_column_headings(lines: &mut Vec<Line<'static>>) {
     let t = theme();
     lines.push(Line::from(vec![Span::styled(
-        format!("  {:<14}{:>7}{:>9}{:>12}{:>9}", "Section", "Added", "Removed", "Modified", "Total"),
+        format!("  {:<14}{:>7}{:>9}{:>12}{:>9}{:>9}", "Section", "Added", "Removed", "Modified", "Renamed", "Total"),
         Style::default().fg(t.muted).add_modifier(Modifier::BOLD),
     )]));
+    lines.push(Line::from(vec![Span::styled(format!("  {}", rule_str(60)), Style::default().fg(t.muted))]));
 }
 
 fn build_section_rows(lines: &mut Vec<Line<'static>>, summary: &DiffSummary) {
@@ -128,7 +133,7 @@ fn build_section_rows(lines: &mut Vec<Line<'static>>, summary: &DiffSummary) {
 
 fn build_separator(lines: &mut Vec<Line<'static>>) {
     let t = theme();
-    lines.push(Line::from(vec![Span::styled("  ────────────────────────────────────────────────", Style::default().fg(t.muted))]));
+    lines.push(Line::from(vec![Span::styled(format!("  {}", rule_str(60)), Style::default().fg(t.muted))]));
 }
 
 fn build_totals_row(lines: &mut Vec<Line<'static>>, summary: &DiffSummary) {
@@ -146,6 +151,7 @@ fn format_count_row(label: &str, counts: &DiffCounts, is_total: bool) -> Line<'s
         Span::styled(format!("{:>7}", counts.added), Style::default().fg(t.added)),
         Span::styled(format!("{:>9}", counts.removed), Style::default().fg(t.removed)),
         Span::styled(format!("{:>12}", counts.modified), Style::default().fg(t.modified)),
+        Span::styled(format!("{:>9}", counts.renamed), Style::default().fg(t.info)),
         Span::styled(format!("{:>9}", counts.total()), total_style),
     ])
 }
@@ -156,13 +162,14 @@ fn section_heading(lines: &mut Vec<Line<'static>>, title: &str) {
     lines.push(Line::from(vec![Span::styled(format!("  {title}"), Style::default().fg(t.accent).add_modifier(Modifier::BOLD))]));
 }
 
-/// Render a three-column comparison header row.
+/// Render a three-column comparison header row with a separator rule.
 fn comparison_header(lines: &mut Vec<Line<'static>>, label_width: usize) {
     let t = theme();
     lines.push(Line::from(vec![Span::styled(
         format!("  {:<label_width$}{:>12}{:>12}{:>12}", "", "File A", "File B", "Delta"),
         Style::default().fg(t.muted).add_modifier(Modifier::BOLD),
     )]));
+    lines.push(Line::from(vec![Span::styled(format!("  {}", rule_str(label_width + 36)), Style::default().fg(t.muted))]));
 }
 
 /// Render a comparison row with usize values and a delta.
@@ -287,6 +294,7 @@ fn build_coefficient_table(lines: &mut Vec<Line<'static>>, a: &ProblemAnalysis, 
         format!("  {:<W$}{:>16}{:>16}", "", "File A", "File B"),
         Style::default().fg(t.muted).add_modifier(Modifier::BOLD),
     )]));
+    lines.push(Line::from(vec![Span::styled(format!("  {}", rule_str(W + 32)), Style::default().fg(t.muted))]));
 
     // Coefficient range
     let coeff_a = format_range(&a.coefficients.constraint_coeff_range);
