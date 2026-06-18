@@ -16,13 +16,13 @@ path = "src/main.rs"
 lp_parser_rs = { path = "../rust", features = ["diff", "serde", "mmap"] }
 
 arboard = "3.6.1"
-chrono = "0.4.44"
+chrono = "0.4.45"
 csv = "1.4.0"
 clap = { version = "4.6.1", features = ["derive"] }
 crossterm = "0.29.0"
 frizbee = "0.9.0"
-highs = "2.1.0"
-ratatui = { version = "0.30.0", default-features = false, features = ["crossterm"] }
-regex = "1.12.3"
-smallvec = "1.15.1"
+highs = "2.3.0"
+ratatui = { version = "0.30.1", default-features = false, features = ["crossterm"] }
+regex = "1.12.4"
+smallvec = "1.15.2"
 tempfile = "3.27.0"
