@@ -45,7 +45,7 @@ pub fn panel_block(border_style: Style) -> Block<'static> {
 }
 
 /// Standard vertical scrollbar with end caps.
-pub fn panel_scrollbar() -> Scrollbar<'static> {
+pub const fn panel_scrollbar() -> Scrollbar<'static> {
     Scrollbar::new(ScrollbarOrientation::VerticalRight).begin_symbol(Some("\u{25b2}")).end_symbol(Some("\u{25bc}"))
 }
 
@@ -62,7 +62,7 @@ const SPINNER_FRAMES: [&str; 10] =
 /// Pick the spinner frame for an elapsed duration. Deriving the frame from
 /// elapsed time means callers need no extra animation state — the 50ms event
 /// tick redraws often enough to animate.
-pub fn spinner_frame(elapsed: Duration) -> &'static str {
+pub const fn spinner_frame(elapsed: Duration) -> &'static str {
     SPINNER_FRAMES[(elapsed.as_millis() / 100) as usize % SPINNER_FRAMES.len()]
 }
 

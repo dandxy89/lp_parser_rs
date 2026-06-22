@@ -156,14 +156,7 @@ impl LpProblemBuilder {
         // Add objectives (intern names)
         for (_, obj_builder) in self.objectives {
             let name_id = problem.intern(&obj_builder.name);
-            let coefficients: Vec<Coefficient> = obj_builder
-                .coefficients
-                .iter()
-                .map(|(var_name, value)| {
-                    let var_id = problem.intern(var_name);
-                    Coefficient { name: var_id, value: *value }
-                })
-                .collect();
+            let coefficients = intern_coeffs(&mut problem, &obj_builder.coefficients);
 
             if coefficients.is_empty() {
                 return Err(LpParseError::validation_error(format!("Objective '{}' has no coefficients", obj_builder.name)));
@@ -183,13 +176,7 @@ impl LpProblemBuilder {
                     let rhs =
                         rhs.ok_or_else(|| LpParseError::constraint_syntax(0, format!("Constraint '{name}' is missing a right-hand side")))?;
 
-                    let interned_coeffs: Vec<Coefficient> = coefficients
-                        .iter()
-                        .map(|(var_name, value)| {
-                            let var_id = problem.intern(var_name);
-                            Coefficient { name: var_id, value: *value }
-                        })
-                        .collect();
+                    let interned_coeffs = intern_coeffs(&mut problem, &coefficients);
 
                     if interned_coeffs.is_empty() {
                         return Err(LpParseError::constraint_syntax(0, format!("Constraint '{name}' has no coefficients")));
@@ -210,13 +197,7 @@ impl LpProblemBuilder {
                     });
                 }
                 ConstraintBuilder::SOS { name, sos_type, weights } => {
-                    let interned_weights: Vec<Coefficient> = weights
-                        .iter()
-                        .map(|(var_name, value)| {
-                            let var_id = problem.intern(var_name);
-                            Coefficient { name: var_id, value: *value }
-                        })
-                        .collect();
+                    let interned_weights = intern_coeffs(&mut problem, &weights);
 
                     if interned_weights.is_empty() {
                         return Err(LpParseError::invalid_sos_constraint(&name, "No weights specified"));
@@ -235,6 +216,11 @@ impl LpProblemBuilder {
 
         Ok(problem)
     }
+}
+
+/// Intern a builder's `(name, value)` pairs into model [`Coefficient`]s.
+fn intern_coeffs(problem: &mut LpProblem, coeffs: &[(String, f64)]) -> Vec<Coefficient> {
+    coeffs.iter().map(|(var_name, value)| Coefficient { name: problem.intern(var_name), value: *value }).collect()
 }
 
 impl ObjectiveBuilder {
@@ -288,54 +274,44 @@ impl ConstraintBuilder {
         self
     }
 
+    /// Set the constraint's comparison operator and right-hand side.
     #[must_use]
-    /// Set the constraint to less than or equal
-    pub const fn le(mut self, rhs: f64) -> Self {
+    const fn set_op(mut self, op: ComparisonOp, rhs: f64) -> Self {
         if let Self::Standard { operator, rhs: rhs_ref, .. } = &mut self {
-            *operator = Some(ComparisonOp::LTE);
+            *operator = Some(op);
             *rhs_ref = Some(rhs);
         }
         self
+    }
+
+    #[must_use]
+    /// Set the constraint to less than or equal
+    pub const fn le(self, rhs: f64) -> Self {
+        self.set_op(ComparisonOp::LTE, rhs)
     }
 
     #[must_use]
     /// Set the constraint to less than
-    pub const fn lt(mut self, rhs: f64) -> Self {
-        if let Self::Standard { operator, rhs: rhs_ref, .. } = &mut self {
-            *operator = Some(ComparisonOp::LT);
-            *rhs_ref = Some(rhs);
-        }
-        self
+    pub const fn lt(self, rhs: f64) -> Self {
+        self.set_op(ComparisonOp::LT, rhs)
     }
 
     #[must_use]
     /// Set the constraint to greater than or equal
-    pub const fn ge(mut self, rhs: f64) -> Self {
-        if let Self::Standard { operator, rhs: rhs_ref, .. } = &mut self {
-            *operator = Some(ComparisonOp::GTE);
-            *rhs_ref = Some(rhs);
-        }
-        self
+    pub const fn ge(self, rhs: f64) -> Self {
+        self.set_op(ComparisonOp::GTE, rhs)
     }
 
     #[must_use]
     /// Set the constraint to greater than
-    pub const fn gt(mut self, rhs: f64) -> Self {
-        if let Self::Standard { operator, rhs: rhs_ref, .. } = &mut self {
-            *operator = Some(ComparisonOp::GT);
-            *rhs_ref = Some(rhs);
-        }
-        self
+    pub const fn gt(self, rhs: f64) -> Self {
+        self.set_op(ComparisonOp::GT, rhs)
     }
 
     #[must_use]
     /// Set the constraint to equal
-    pub const fn eq(mut self, rhs: f64) -> Self {
-        if let Self::Standard { operator, rhs: rhs_ref, .. } = &mut self {
-            *operator = Some(ComparisonOp::EQ);
-            *rhs_ref = Some(rhs);
-        }
-        self
+    pub const fn eq(self, rhs: f64) -> Self {
+        self.set_op(ComparisonOp::EQ, rhs)
     }
 }
 

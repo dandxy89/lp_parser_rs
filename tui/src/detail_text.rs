@@ -418,10 +418,11 @@ fn format_scientific_plain(v: f64) -> String {
 
 /// Write the issues section as plain text.
 fn write_issues_plain(out: &mut String, report: &crate::diff_model::LpDiffReport, a1: &ProblemAnalysis, a2: &ProblemAnalysis) {
+    use crate::widgets::numerics::count_by_severity;
     w!(out, "  Issues");
 
-    let (err1, warn1, info1) = count_issue_severities(&a1.issues);
-    let (err2, warn2, info2) = count_issue_severities(&a2.issues);
+    let (err1, warn1, info1) = count_by_severity(&a1.issues);
+    let (err2, warn2, info2) = count_by_severity(&a2.issues);
 
     w!(
         out,
@@ -448,21 +449,6 @@ fn write_issues_plain(out: &mut String, report: &crate::diff_model::LpDiffReport
     for issue in &a2.issues {
         w!(out, "  [{:<7}] {}: {}", issue.severity, label_b, issue.message);
     }
-}
-
-/// Count issues by severity level.
-fn count_issue_severities(issues: &[lp_parser_rs::analysis::AnalysisIssue]) -> (usize, usize, usize) {
-    let mut errors = 0;
-    let mut warnings = 0;
-    let mut infos = 0;
-    for issue in issues {
-        match issue.severity {
-            lp_parser_rs::analysis::IssueSeverity::Error => errors += 1,
-            lp_parser_rs::analysis::IssueSeverity::Warning => warnings += 1,
-            lp_parser_rs::analysis::IssueSeverity::Info => infos += 1,
-        }
-    }
-    (errors, warnings, infos)
 }
 
 /// Extract the filename from a path string for compact display.

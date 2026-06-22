@@ -427,7 +427,7 @@ impl App {
     pub fn cycle_rel_tol(&mut self) {
         let value = next_tolerance_preset(self.diff_options.rel_tol);
         self.diff_options.rel_tol = value;
-        self.rebuild_report();
+        self.rebuild_report_inner(false);
         self.yank.message = format!("rel_tol = {}", format_tolerance(value));
         self.yank.flash = Some(Instant::now());
     }
@@ -436,7 +436,7 @@ impl App {
     pub fn cycle_abs_tol(&mut self) {
         let value = next_tolerance_preset(self.diff_options.abs_tol);
         self.diff_options.abs_tol = value;
-        self.rebuild_report();
+        self.rebuild_report_inner(false);
         self.yank.message = format!("abs_tol = {}", format_tolerance(value));
         self.yank.flash = Some(Instant::now());
     }
@@ -444,10 +444,20 @@ impl App {
     /// Rebuild the diff report from the stored problems with the current
     /// `diff_options`, then refresh every report-derived cache.
     ///
-    /// Self-contained on purpose: this is the single rebuild path for live
-    /// tolerance changes and is intended to be reused by watch mode later
-    /// (re-parse, replace `problem1`/`problem2`/line maps, then call this).
+    /// Self-contained on purpose: the single rebuild path shared by live
+    /// tolerance changes and watch reloads (`poll_watch` re-parses, replaces
+    /// `problem1`/`problem2`/line maps, then calls this).
     pub fn rebuild_report(&mut self) {
+        self.rebuild_report_inner(true);
+    }
+
+    /// Rebuild the report, optionally skipping the numerics cache.
+    ///
+    /// `analyses_changed` is `false` for tolerance-only changes: the per-file
+    /// analyses (and hence `numerics_lines`) are unaffected by tolerances, so
+    /// rebuilding them every keystroke is wasted work. Watch reloads pass
+    /// `true` because they install fresh analyses.
+    fn rebuild_report_inner(&mut self, analyses_changed: bool) {
         let file1 = self.file1_path.display().to_string();
         let file2 = self.file2_path.display().to_string();
         self.report = build_diff_report(&DiffInput {
@@ -470,8 +480,11 @@ impl App {
         // Summary lines + cached summary (respects the active ignore_order setting).
         self.rebuild_summary();
 
-        // Numerics lines depend on the analyses, which change on watch reloads.
-        self.numerics_lines = crate::widgets::numerics::build_numerics_lines(&self.report);
+        // Numerics lines depend only on the analyses, which change on watch
+        // reloads but not on tolerance changes -- skip the rebuild otherwise.
+        if analyses_changed {
+            self.numerics_lines = crate::widgets::numerics::build_numerics_lines(&self.report);
+        }
 
         // Filtered indices, cached sidebar lines, and coefficient row cache.
         self.invalidate_cache();
@@ -831,7 +844,7 @@ impl App {
 
     /// Update active section, keeping the (now invisible) selector state in
     /// sync — it still backs keyboard navigation over the tab bar.
-    pub(crate) fn set_active_section(&mut self, section: Section) {
+    pub(crate) const fn set_active_section(&mut self, section: Section) {
         self.active_section = section;
         self.section_selector_state.select(Some(section.index()));
     }
