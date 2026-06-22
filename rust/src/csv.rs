@@ -5,43 +5,6 @@ use std::path::Path;
 use crate::model::{Constraint, VariableType};
 use crate::problem::LpProblem;
 
-/// Trait for writing LP problem data to CSV files
-pub trait LpCsvWriter {
-    /// Write constraints to a CSV file
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the file cannot be created or written to
-    fn write_constraints(&self, base_path: &Path) -> Result<(), Box<dyn Error>>;
-
-    /// Write objectives to a CSV file
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the file cannot be created or written to
-    fn write_objectives(&self, base_path: &Path) -> Result<(), Box<dyn Error>>;
-
-    /// Write variables to a CSV file
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the file cannot be created or written to
-    fn write_variables(&self, base_path: &Path) -> Result<(), Box<dyn Error>>;
-
-    /// Writes the problem data to CSV files with normalised structure.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if any of the CSV files cannot be created or written to
-    fn to_csv(&self, base_path: &std::path::Path) -> Result<(), Box<dyn std::error::Error>> {
-        self.write_objectives(base_path)?;
-        self.write_constraints(base_path)?;
-        self.write_variables(base_path)?;
-
-        Ok(())
-    }
-}
-
 /// Write an f64 into a reusable string buffer and return it as bytes.
 /// Clears the buffer before writing to avoid stale data.
 #[inline]
@@ -52,7 +15,21 @@ fn write_f64_to_buf(buf: &mut String, value: f64) -> &[u8] {
     buf.as_bytes()
 }
 
-impl LpCsvWriter for LpProblem {
+impl LpProblem {
+    /// Writes the problem data to CSV files (objectives, constraints, variables)
+    /// with normalised structure under `base_path`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any of the CSV files cannot be created or written to
+    pub fn to_csv(&self, base_path: &Path) -> Result<(), Box<dyn Error>> {
+        self.write_objectives(base_path)?;
+        self.write_constraints(base_path)?;
+        self.write_variables(base_path)?;
+
+        Ok(())
+    }
+
     fn write_constraints(&self, base_path: &Path) -> Result<(), Box<dyn Error>> {
         let headers = ["constraint_name", "constraint_type", "variable_name", "coefficient", "operator", "rhs", "sos_type"];
         let mut const_writer = csv::Writer::from_path(base_path.join("constraints.csv"))?;

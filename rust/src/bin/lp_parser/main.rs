@@ -634,8 +634,6 @@ fn cmd_convert(args: ConvertArgs, verbose: u8, quiet: bool) -> Result<(), BoxErr
         }
         #[cfg(feature = "csv")]
         ConvertFormat::Csv => {
-            use lp_parser_rs::csv::LpCsvWriter;
-
             let dir = args.output.ok_or("CSV output requires --output directory")?;
             if !dir.exists() {
                 fs::create_dir_all(&dir)?;

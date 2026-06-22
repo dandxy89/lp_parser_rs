@@ -11,7 +11,6 @@
 use std::path::{Path, PathBuf};
 
 use lp_parser_rs::analysis::AnalysisConfig;
-use lp_parser_rs::csv::LpCsvWriter as _;
 use lp_parser_rs::model::{Constraint, Sense, VariableType};
 use lp_parser_rs::parser::parse_file;
 use lp_parser_rs::problem::LpProblem;
