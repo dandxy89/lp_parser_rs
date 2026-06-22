@@ -55,8 +55,8 @@ pub(super) struct BoundAccumulator {
 }
 
 /// Maximum number of whitespace-separated fields on an MPS data line.
-/// The MPS format defines at most six fields per line; eight leaves headroom.
-pub(super) const MAX_FIELDS: usize = 8;
+/// The MPS format defines at most six fields per line.
+pub(super) const MAX_FIELDS: usize = 6;
 
 /// Split an MPS data line into whitespace-separated fields without heap
 /// allocation, honouring `$` inline comments.
