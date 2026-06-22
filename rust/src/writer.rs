@@ -394,15 +394,21 @@ fn write_number(output: &mut String, value: f64, precision: usize) -> std::fmt::
         debug_assert!((cast as f64 - value).abs() < 1.0, "i64 cast lost precision: {value} -> {cast}");
         write!(output, "{}", cast)
     } else {
-        // Write the formatted number, then trim trailing zeros in-place.
-        let start = output.len();
-        write!(output, "{:.precision$}", value, precision = precision)?;
-        if output[start..].contains('.') {
-            let trimmed_len = start + output[start..].trim_end_matches('0').trim_end_matches('.').len();
-            output.truncate(trimmed_len);
-        }
-        Ok(())
+        write_trimmed_decimal(output, value, precision)
     }
+}
+
+/// Write `value` with `precision` decimal places into `output`, then trim any
+/// trailing zeros (and a bare trailing `.`) in place. Shared by the LP and MPS
+/// writers, which differ only in their integer fast paths.
+pub(crate) fn write_trimmed_decimal(output: &mut String, value: f64, precision: usize) -> std::fmt::Result {
+    let start = output.len();
+    write!(output, "{value:.precision$}")?;
+    if output[start..].contains('.') {
+        let trimmed_len = start + output[start..].trim_end_matches('0').trim_end_matches('.').len();
+        output.truncate(trimmed_len);
+    }
+    Ok(())
 }
 
 /// Format a number with specified precision, removing trailing zeros.

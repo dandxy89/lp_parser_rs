@@ -86,13 +86,7 @@ fn write_mps_number(output: &mut String, value: f64, precision: usize) -> std::f
         let cast = value as i64;
         write!(output, "{cast}")
     } else {
-        let start = output.len();
-        write!(output, "{value:.precision$}")?;
-        if output[start..].contains('.') {
-            let trimmed_len = start + output[start..].trim_end_matches('0').trim_end_matches('.').len();
-            output.truncate(trimmed_len);
-        }
-        Ok(())
+        crate::writer::write_trimmed_decimal(output, value, precision)
     }
 }
 
