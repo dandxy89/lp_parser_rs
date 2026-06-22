@@ -276,16 +276,14 @@ impl RangeStats {
         if self.count == 0 { Self::default() } else { self }
     }
 
-    /// Create range stats from a collection of values.
+    /// Build range stats from a collection of values via the incremental path.
     #[cfg(test)]
     fn from_values(values: &[f64]) -> Self {
-        if values.is_empty() {
-            return Self::default();
+        let mut stats = Self::new();
+        for &v in values {
+            stats.update(v);
         }
-        let min = values.iter().copied().fold(f64::INFINITY, f64::min);
-        let max = values.iter().copied().fold(f64::NEG_INFINITY, f64::max);
-
-        Self { min, max, count: values.len() }
+        stats.finalise()
     }
 }
 
