@@ -128,23 +128,6 @@ pub struct Coefficient {
     pub value: f64,
 }
 
-/// Format a coefficient value with a resolved variable name for display.
-/// Uses `NUMERIC_EPSILON` for consistent tolerance across the crate.
-///
-/// # Errors
-///
-/// Returns `fmt::Error` if the underlying write fails.
-#[inline]
-pub fn fmt_coefficient(name: &str, value: f64, f: &mut Formatter<'_>) -> FmtResult {
-    if (value - 1.0).abs() < crate::NUMERIC_EPSILON {
-        write!(f, "{name}")
-    } else if (value - (-1.0)).abs() < crate::NUMERIC_EPSILON {
-        write!(f, "-{name}")
-    } else {
-        write!(f, "{value} {name}")
-    }
-}
-
 #[derive(Debug, Clone)]
 /// Represents a constraint in an optimisation problem, which can be either a
 /// standard linear constraint or a special ordered set (SOS) constraint.
@@ -308,8 +291,6 @@ impl Variable {
 
 #[cfg(test)]
 mod tests {
-    use std::fmt::Write;
-
     use super::*;
     use crate::interner::NameInterner;
 
@@ -358,41 +339,11 @@ mod tests {
     fn test_coefficient() {
         let mut interner = NameInterner::new();
         let x1 = interner.intern("x1");
-        let x = interner.intern("x");
 
         let coeff = Coefficient { name: x1, value: 2.5 };
         assert_eq!(interner.resolve(coeff.name), "x1");
         assert_eq!(coeff.value, 2.5);
         assert_eq!(coeff.clone(), coeff);
-
-        // fmt_coefficient display special cases
-        let mut buf = String::new();
-        write!(buf, "{}", FmtCoeff { name: "x", value: 1.0 }).unwrap();
-        assert_eq!(buf, "x");
-        buf.clear();
-        write!(buf, "{}", FmtCoeff { name: "x", value: -1.0 }).unwrap();
-        assert_eq!(buf, "-x");
-        buf.clear();
-        write!(buf, "{}", FmtCoeff { name: "x", value: 2.5 }).unwrap();
-        assert_eq!(buf, "2.5 x");
-        buf.clear();
-        write!(buf, "{}", FmtCoeff { name: "x", value: 0.0 }).unwrap();
-        assert_eq!(buf, "0 x");
-
-        // Verify x is used (suppress unused warning)
-        let _ = x;
-    }
-
-    /// Helper for testing `fmt_coefficient`.
-    struct FmtCoeff {
-        name: &'static str,
-        value: f64,
-    }
-
-    impl Display for FmtCoeff {
-        fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-            fmt_coefficient(self.name, self.value, f)
-        }
     }
 
     #[test]

@@ -53,13 +53,6 @@ impl NameInterner {
         self.rodeo.get_or_intern(name)
     }
 
-    /// Intern a static string (avoids allocation for compile-time constants).
-    #[inline]
-    pub fn intern_static(&mut self, name: &'static str) -> NameId {
-        debug_assert!(!name.is_empty(), "must not intern an empty string");
-        self.rodeo.get_or_intern_static(name)
-    }
-
     /// Resolve a [`NameId`] back to its string.
     ///
     /// # Panics
@@ -177,13 +170,6 @@ mod tests {
         let mut interner = NameInterner::with_capacity(100);
         let id = interner.intern("x1");
         assert_eq!(interner.resolve(id), "x1");
-    }
-
-    #[test]
-    fn intern_static_works() {
-        let mut interner = NameInterner::new();
-        let id = interner.intern_static("static_name");
-        assert_eq!(interner.resolve(id), "static_name");
     }
 
     #[test]
