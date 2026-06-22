@@ -14,8 +14,7 @@ pub type NameId = Spur;
 /// Mutable string interner for LP problem names.
 ///
 /// Wraps [`lasso::Rodeo`] and provides convenience methods.
-/// Used during parsing and problem construction. For a read-only
-/// resolver after parsing is complete, see [`NameResolver`].
+/// Used during parsing and problem construction.
 #[derive(Debug, Default)]
 pub struct NameInterner {
     rodeo: Rodeo,
@@ -71,48 +70,6 @@ impl NameInterner {
     pub fn get(&self, name: &str) -> Option<NameId> {
         self.rodeo.get(name)
     }
-
-    /// Number of interned strings.
-    #[inline]
-    #[must_use]
-    pub fn len(&self) -> usize {
-        self.rodeo.len()
-    }
-
-    /// Returns `true` if no strings have been interned.
-    #[inline]
-    #[must_use]
-    pub fn is_empty(&self) -> bool {
-        self.rodeo.is_empty()
-    }
-
-    /// Consume the interner into a read-only resolver.
-    /// Useful after parsing is complete — the resolver is `Send + Sync`.
-    #[must_use]
-    pub fn into_resolver(self) -> NameResolver {
-        NameResolver { resolver: self.rodeo.into_resolver() }
-    }
-}
-
-/// Read-only name resolver produced by [`NameInterner::into_resolver`].
-///
-/// `Send + Sync` — safe to share across threads.
-#[derive(Debug)]
-pub struct NameResolver {
-    resolver: lasso::RodeoResolver,
-}
-
-impl NameResolver {
-    /// Resolve a [`NameId`] to its string.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the key was not produced by the interner that created this resolver.
-    #[inline]
-    #[must_use]
-    pub fn resolve(&self, id: NameId) -> &str {
-        self.resolver.resolve(&id)
-    }
 }
 
 #[cfg(test)]
@@ -132,7 +89,6 @@ mod tests {
         let id1 = interner.intern("x1");
         let id2 = interner.intern("x1");
         assert_eq!(id1, id2);
-        assert_eq!(interner.len(), 1);
     }
 
     #[test]
@@ -141,7 +97,6 @@ mod tests {
         let id1 = interner.intern("x1");
         let id2 = interner.intern("x2");
         assert_ne!(id1, id2);
-        assert_eq!(interner.len(), 2);
     }
 
     #[test]
@@ -155,14 +110,6 @@ mod tests {
         let mut interner = NameInterner::new();
         let id = interner.intern("x1");
         assert_eq!(interner.get("x1"), Some(id));
-    }
-
-    #[test]
-    fn into_resolver_works() {
-        let mut interner = NameInterner::new();
-        let id = interner.intern("x1");
-        let resolver = interner.into_resolver();
-        assert_eq!(resolver.resolve(id), "x1");
     }
 
     #[test]
