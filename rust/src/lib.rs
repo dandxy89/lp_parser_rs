@@ -30,7 +30,6 @@
 //! ```
 
 pub mod analysis;
-pub mod builder;
 pub mod compat;
 #[cfg(feature = "csv")]
 pub mod csv;

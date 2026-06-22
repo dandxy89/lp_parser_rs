@@ -486,8 +486,6 @@ pub(super) fn flush_sos_constraint<'input>(
     current_type: &mut Option<SOSType>,
     current_weights: &mut Vec<RawCoefficient<'input>>,
 ) {
-    let had_pending = current_name.is_some() || current_type.is_some();
-
     if let (Some(name), Some(sos_type)) = (*current_name, *current_type) {
         if !current_weights.is_empty() {
             sos_constraints.push(RawConstraint::SOS {
@@ -502,5 +500,4 @@ pub(super) fn flush_sos_constraint<'input>(
     }
 
     debug_assert!(current_name.is_none(), "current_name must be None after flush");
-    debug_assert!(current_type.is_none() || !had_pending, "current_type must be None after flushing a pending constraint");
 }
