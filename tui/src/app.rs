@@ -444,9 +444,9 @@ impl App {
     /// Rebuild the diff report from the stored problems with the current
     /// `diff_options`, then refresh every report-derived cache.
     ///
-    /// Self-contained on purpose: this is the single rebuild path for live
-    /// tolerance changes and is intended to be reused by watch mode later
-    /// (re-parse, replace `problem1`/`problem2`/line maps, then call this).
+    /// Self-contained on purpose: the single rebuild path shared by live
+    /// tolerance changes and watch reloads (`poll_watch` re-parses, replaces
+    /// `problem1`/`problem2`/line maps, then calls this).
     pub fn rebuild_report(&mut self) {
         self.rebuild_report_inner(true);
     }
