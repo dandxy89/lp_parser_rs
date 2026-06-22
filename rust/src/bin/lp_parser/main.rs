@@ -644,6 +644,21 @@ fn cmd_convert(args: ConvertArgs, verbose: u8, quiet: bool) -> Result<(), BoxErr
     Ok(())
 }
 
+/// Map a solver [`Status`] to its serialised string form.
+#[cfg(all(feature = "lp-solvers", feature = "serde"))]
+fn solve_status_str(status: lp_solvers::solvers::Status) -> &'static str {
+    use lp_solvers::solvers::Status;
+    match status {
+        Status::Optimal => "optimal",
+        Status::SubOptimal => "suboptimal",
+        Status::Infeasible => "infeasible",
+        Status::Unbounded => "unbounded",
+        Status::NotSolved => "not_solved",
+        Status::TimeLimit => "time_limit",
+        Status::MipGap => "mip_gap",
+    }
+}
+
 #[cfg(feature = "lp-solvers")]
 fn cmd_solve(args: SolveArgs, verbose: u8, quiet: bool) -> Result<(), BoxError> {
     use lp_parser_rs::compat::lp_solvers::ToLpSolvers;
@@ -699,17 +714,8 @@ fn cmd_solve(args: SolveArgs, verbose: u8, quiet: bool) -> Result<(), BoxError> 
         }
         #[cfg(feature = "serde")]
         OutputFormat::Json => {
-            let status_str = match solution.status {
-                Status::Optimal => "optimal",
-                Status::SubOptimal => "suboptimal",
-                Status::Infeasible => "infeasible",
-                Status::Unbounded => "unbounded",
-                Status::NotSolved => "not_solved",
-                Status::TimeLimit => "time_limit",
-                Status::MipGap => "mip_gap",
-            };
             let solution_json = serde_json::json!({
-                "status": status_str,
+                "status": solve_status_str(solution.status),
                 "variables": solution.results
             });
             if args.pretty {
@@ -721,17 +727,8 @@ fn cmd_solve(args: SolveArgs, verbose: u8, quiet: bool) -> Result<(), BoxError> 
         }
         #[cfg(feature = "serde")]
         OutputFormat::Yaml => {
-            let status_str = match solution.status {
-                Status::Optimal => "optimal",
-                Status::SubOptimal => "suboptimal",
-                Status::Infeasible => "infeasible",
-                Status::Unbounded => "unbounded",
-                Status::NotSolved => "not_solved",
-                Status::TimeLimit => "time_limit",
-                Status::MipGap => "mip_gap",
-            };
             let solution_yaml = serde_json::json!({
-                "status": status_str,
+                "status": solve_status_str(solution.status),
                 "variables": solution.results
             });
             serde_yaml::to_writer(&mut writer, &solution_yaml)?;
