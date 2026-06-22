@@ -102,8 +102,9 @@ pub fn init_theme(mode: ThemeMode) {
         ThemeMode::Dark => &DARK_THEME,
         ThemeMode::Light => &LIGHT_THEME,
     };
-    // A second call (only possible from tests) keeps the first palette.
-    let _ = ACTIVE_THEME.set(palette);
+    // First call wins; later calls (only possible from tests) keep the first
+    // palette so cached lines built against it never go stale.
+    ACTIVE_THEME.get_or_init(|| palette);
 }
 
 /// Return the active theme.

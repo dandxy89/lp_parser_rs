@@ -534,8 +534,7 @@ const fn coeff_visible_range(scroll: u16, area: Rect, header_line_count: usize) 
     let inner_height = area.height.saturating_sub(2) as usize; // subtract borders
     let scroll_usize = scroll as usize;
     let first_visible = scroll_usize.saturating_sub(header_line_count);
-    let visible_space =
-        if scroll_usize >= header_line_count { inner_height } else { inner_height.saturating_sub(header_line_count - scroll_usize) };
+    let visible_space = inner_height.saturating_sub(header_line_count.saturating_sub(scroll_usize));
     // +1 for partially visible lines at the bottom edge.
     (first_visible, visible_space + 1)
 }

@@ -368,7 +368,7 @@ struct SolveMetadata {
 }
 
 /// Map a variable's declared type to `(is_integer, lower, upper)` bounds for `HiGHS`.
-fn variable_bounds(var_type: Option<&VariableType>) -> (bool, f64, f64) {
+const fn variable_bounds(var_type: Option<&VariableType>) -> (bool, f64, f64) {
     match var_type {
         Some(VariableType::Binary) => (true, 0.0, 1.0),
         Some(VariableType::Integer | VariableType::General) => (true, 0.0, f64::INFINITY),

@@ -854,6 +854,31 @@ fn format_constraint_diff_line(row: &crate::solver::ConstraintDiffRow, name: &st
 // Cached diff tab rendering — uses pre-formatted row Lines
 // ---------------------------------------------------------------------------
 
+/// Visible data-row window `(first_index, count)` for a list whose header
+/// occupies `header_count` lines, given the scroll offset and viewport height.
+const fn window_range(header_count: usize, scroll: u16, visible_height: u16) -> (usize, usize) {
+    let scroll = scroll as usize;
+    (scroll.saturating_sub(header_count), (visible_height as usize).saturating_sub(header_count.saturating_sub(scroll)))
+}
+
+/// Append windowed cached row lines: visible rows get their cached `Line`,
+/// off-screen rows a placeholder so scroll positions stay aligned.
+fn push_cached_window(lines: &mut Vec<Line<'static>>, cached_rows: &[CachedDiffRow], diff_only: bool, scroll: u16, visible_height: u16) {
+    let (first_visible_data, visible_data_count) = window_range(lines.len(), scroll, visible_height);
+    let mut data_index: usize = 0;
+    for cached in cached_rows {
+        if diff_only && !cached.changed {
+            continue;
+        }
+        if data_index >= first_visible_data && data_index < first_visible_data + visible_data_count {
+            lines.push(cached.line.clone());
+        } else {
+            lines.push(Line::default());
+        }
+        data_index += 1;
+    }
+}
+
 /// Render the variables diff tab using pre-formatted cached row lines.
 fn build_diff_variables_tab_cached(
     lines: &mut Vec<Line<'static>>,
@@ -884,25 +909,7 @@ fn build_diff_variables_tab_cached(
     ]));
     lines.push(Line::from(Span::styled(format!("  {RULE_70}"), Style::default().fg(t.muted))));
 
-    // Windowed rendering using cached lines.
-    let header_count = lines.len();
-    let scroll_usize = scroll as usize;
-    let visible = visible_height as usize;
-    let first_visible_data = scroll_usize.saturating_sub(header_count);
-    let visible_data_count = if scroll_usize >= header_count { visible } else { visible.saturating_sub(header_count - scroll_usize) };
-
-    let mut data_index: usize = 0;
-    for cached in cached_rows {
-        if diff_only && !cached.changed {
-            continue;
-        }
-        if data_index >= first_visible_data && data_index < first_visible_data + visible_data_count {
-            lines.push(cached.line.clone());
-        } else {
-            lines.push(Line::default());
-        }
-        data_index += 1;
-    }
+    push_cached_window(lines, cached_rows, diff_only, scroll, visible_height);
 }
 
 /// Render the constraints diff tab using pre-formatted cached row lines.
@@ -936,25 +943,7 @@ fn build_diff_constraints_tab_cached(
     ]));
     lines.push(Line::from(Span::styled(format!("  {RULE_80}"), Style::default().fg(t.muted))));
 
-    // Windowed rendering using cached lines.
-    let header_count = lines.len();
-    let scroll_usize = scroll as usize;
-    let visible = visible_height as usize;
-    let first_visible_data = scroll_usize.saturating_sub(header_count);
-    let visible_data_count = if scroll_usize >= header_count { visible } else { visible.saturating_sub(header_count - scroll_usize) };
-
-    let mut data_index: usize = 0;
-    for cached in cached_rows {
-        if diff_only && !cached.changed {
-            continue;
-        }
-        if data_index >= first_visible_data && data_index < first_visible_data + visible_data_count {
-            lines.push(cached.line.clone());
-        } else {
-            lines.push(Line::default());
-        }
-        data_index += 1;
-    }
+    push_cached_window(lines, cached_rows, diff_only, scroll, visible_height);
 }
 
 // ---------------------------------------------------------------------------
@@ -1177,12 +1166,7 @@ fn build_diff_variables_tab(
     lines.push(Line::from(Span::styled(format!("  {RULE_70}"), Style::default().fg(t.muted))));
 
     // Windowed rendering: only build styled Lines for visible data rows.
-    let header_count = lines.len();
-    let scroll_usize = scroll as usize;
-    let visible = visible_height as usize;
-    let first_visible_data = scroll_usize.saturating_sub(header_count);
-    let visible_data_count = if scroll_usize >= header_count { visible } else { visible.saturating_sub(header_count - scroll_usize) };
-
+    let (first_visible_data, visible_data_count) = window_range(lines.len(), scroll, visible_height);
     let mut data_index: usize = 0;
     for row in &diff.variable_diff {
         if diff_only && !row.changed {
@@ -1231,12 +1215,7 @@ fn build_diff_constraints_tab(
     lines.push(Line::from(Span::styled(format!("  {RULE_80}"), Style::default().fg(t.muted))));
 
     // Windowed rendering: only build styled Lines for visible data rows.
-    let header_count = lines.len();
-    let scroll_usize = scroll as usize;
-    let visible = visible_height as usize;
-    let first_visible_data = scroll_usize.saturating_sub(header_count);
-    let visible_data_count = if scroll_usize >= header_count { visible } else { visible.saturating_sub(header_count - scroll_usize) };
-
+    let (first_visible_data, visible_data_count) = window_range(lines.len(), scroll, visible_height);
     let mut data_index: usize = 0;
     for row in &diff.constraint_diff {
         if diff_only && !row.changed {

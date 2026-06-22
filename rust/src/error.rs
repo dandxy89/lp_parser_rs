@@ -12,22 +12,6 @@ pub enum LpParseError {
     #[error("Invalid constraint syntax at position {position}: {context}")]
     ConstraintSyntax { position: usize, context: String },
 
-    /// Invalid or malformed objective syntax
-    #[error("Invalid objective syntax at position {position}: {context}")]
-    ObjectiveSyntax { position: usize, context: String },
-
-    /// Unknown or invalid variable type specification
-    #[error("Unknown variable type '{var_type}' for variable '{variable}'")]
-    UnknownVariableType { variable: String, var_type: String },
-
-    /// Reference to an undefined variable
-    #[error("Undefined variable '{variable}' referenced in {context}")]
-    UndefinedVariable { variable: String, context: String },
-
-    /// Duplicate definition of a component
-    #[error("Duplicate {component_type} '{name}' defined")]
-    DuplicateDefinition { component_type: String, name: String },
-
     /// Invalid numerical value or format
     #[error("Invalid number format '{value}' at position {position}")]
     InvalidNumber { value: String, position: usize },
@@ -55,36 +39,12 @@ pub enum LpParseError {
     /// File I/O related errors
     #[error("File I/O error: {message}")]
     IoError { message: String },
-
-    /// Internal parser state errors
-    #[error("Internal parser error: {message}")]
-    InternalError { message: String },
 }
 
 impl LpParseError {
     /// Create a new constraint syntax error
     pub fn constraint_syntax(position: usize, context: impl Into<String>) -> Self {
         Self::ConstraintSyntax { position, context: context.into() }
-    }
-
-    /// Create a new objective syntax error
-    pub fn objective_syntax(position: usize, context: impl Into<String>) -> Self {
-        Self::ObjectiveSyntax { position, context: context.into() }
-    }
-
-    /// Create a new unknown variable type error
-    pub fn unknown_variable_type(variable: impl Into<String>, var_type: impl Into<String>) -> Self {
-        Self::UnknownVariableType { variable: variable.into(), var_type: var_type.into() }
-    }
-
-    /// Create a new undefined variable error
-    pub fn undefined_variable(variable: impl Into<String>, context: impl Into<String>) -> Self {
-        Self::UndefinedVariable { variable: variable.into(), context: context.into() }
-    }
-
-    /// Create a new duplicate definition error
-    pub fn duplicate_definition(component_type: impl Into<String>, name: impl Into<String>) -> Self {
-        Self::DuplicateDefinition { component_type: component_type.into(), name: name.into() }
     }
 
     /// Create a new invalid number error
@@ -120,11 +80,6 @@ impl LpParseError {
     /// Create a new I/O error
     pub fn io_error(message: impl Into<String>) -> Self {
         Self::IoError { message: message.into() }
-    }
-
-    /// Create a new internal error
-    pub fn internal_error(message: impl Into<String>) -> Self {
-        Self::InternalError { message: message.into() }
     }
 }
 
@@ -164,41 +119,6 @@ impl From<Box<dyn std::error::Error + 'static>> for LpParseError {
 /// Result type alias for LP parsing operations
 pub type LpResult<T> = Result<T, LpParseError>;
 
-/// Context extension trait for adding location information to errors
-pub trait ErrorContext<T> {
-    /// Add position context to an error
-    ///
-    /// # Errors
-    ///
-    /// Propagates the original error with updated position information
-    fn with_position(self, position: usize) -> LpResult<T>;
-
-    /// Add general context to an error
-    ///
-    /// # Errors
-    ///
-    /// Propagates the original error with added context message
-    fn with_context(self, context: &str) -> LpResult<T>;
-}
-
-impl<T> ErrorContext<T> for Result<T, LpParseError> {
-    fn with_position(self, position: usize) -> Self {
-        self.map_err(|mut err| {
-            if let LpParseError::ParseError { position: pos, .. } = &mut err {
-                *pos = position;
-            }
-            err
-        })
-    }
-
-    fn with_context(self, context: &str) -> Self {
-        self.map_err(|err| match err {
-            LpParseError::ParseError { position, message } => LpParseError::parse_error(position, format!("{context}: {message}")),
-            other => other,
-        })
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -207,15 +127,6 @@ mod tests {
     fn test_error_creation() {
         let err = LpParseError::constraint_syntax(42, "missing operator");
         assert_eq!(err.to_string(), "Invalid constraint syntax at position 42: missing operator");
-    }
-
-    #[test]
-    fn test_error_context() {
-        let result: LpResult<()> = Err(LpParseError::parse_error(10, "test error"));
-        let with_context = result.with_context("parsing constraint");
-
-        assert!(with_context.is_err());
-        assert!(with_context.unwrap_err().to_string().contains("parsing constraint"));
     }
 
     #[test]

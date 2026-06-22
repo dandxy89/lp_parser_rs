@@ -188,15 +188,7 @@ fn write_constraint(output: &mut String, constraint: &Constraint, interner: &Nam
 
 /// Write the bounds section
 fn write_bounds_section(output: &mut String, problem: &LpProblem, options: &LpWriterOptions) -> LpResult<()> {
-    let mut has_bounds = false;
-
-    // First pass: check if we have any bounds to write
-    for variable in problem.variables.values() {
-        if needs_bounds_declaration(&variable.var_type) {
-            has_bounds = true;
-            break;
-        }
-    }
+    let has_bounds = problem.variables.values().any(|v| needs_bounds_declaration(&v.var_type));
 
     if has_bounds {
         if options.include_section_spacing {
