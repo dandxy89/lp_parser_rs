@@ -9,7 +9,6 @@ use lp_parser_rs::problem::LpProblem;
 use ratatui::layout::Rect;
 use ratatui::text::Line;
 use ratatui::widgets::ListState;
-use smallvec::SmallVec;
 
 use crate::detail_model::{CoefficientRow, build_coeff_rows};
 use crate::diff_model::{DiffEntry, DiffInput, DiffKind, DiffOptions, DiffSummary, LpDiffReport, build_diff_report, next_tolerance_preset};
@@ -1170,7 +1169,7 @@ impl App {
                 section: entry.section,
                 entry_index: entry.index,
                 score: 0,
-                match_indices: SmallVec::new(),
+                match_indices: Vec::new(),
                 haystack_index,
                 kind: entry.kind,
             });
@@ -1199,7 +1198,7 @@ impl App {
                 section: entry.section,
                 entry_index: entry.index,
                 score: matched.score,
-                match_indices: SmallVec::from_vec(indices),
+                match_indices: indices,
                 haystack_index,
                 kind: entry.kind,
             });
@@ -1224,7 +1223,7 @@ impl App {
                     section: entry.section,
                     entry_index: entry.index,
                     score: 0,
-                    match_indices: SmallVec::new(),
+                    match_indices: Vec::new(),
                     haystack_index,
                     kind: entry.kind,
                 });
