@@ -232,10 +232,6 @@ pub enum Solver {
     /// CBC solver
     #[default]
     Cbc,
-    /// Gurobi solver
-    Gurobi,
-    /// CPLEX solver
-    Cplex,
     /// GLPK solver
     Glpk,
 }

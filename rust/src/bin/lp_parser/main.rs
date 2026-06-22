@@ -678,11 +678,6 @@ fn cmd_solve(args: SolveArgs, verbose: u8, quiet: bool) -> Result<(), BoxError> 
             let solver = GlpkSolver::new();
             solver.run(&compat)?
         }
-        Solver::Gurobi | Solver::Cplex => {
-            return Err(
-                format!("{:?} solver requires commercial license - use 'cbc' or 'glpk' for open-source alternatives", args.solver).into()
-            );
-        }
     };
 
     let mut writer = OutputWriter::new(args.output)?;
