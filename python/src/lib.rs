@@ -49,8 +49,8 @@ impl LpParser {
     }
 
     #[getter]
-    fn lp_file(&self) -> PyResult<String> {
-        Ok(self.lp_file.clone())
+    fn lp_file(&self) -> String {
+        self.lp_file.clone()
     }
 
     #[pyo3(text_signature = "($self)")]
