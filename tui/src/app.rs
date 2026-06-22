@@ -1210,11 +1210,11 @@ impl App {
     ///
     /// Must not be called for fuzzy mode — that uses `populate_fuzzy_results` instead.
     fn populate_filtered_results(&mut self) {
-        let compiled = CompiledSearch::compile(&self.search_popup.query);
         debug_assert!(
-            !matches!(compiled, CompiledSearch::Fuzzy(..)),
+            !matches!(search::parse_query(&self.search_popup.query).0, SearchMode::Fuzzy),
             "populate_filtered_results called with Fuzzy query; use populate_fuzzy_results instead"
         );
+        let compiled = CompiledSearch::compile(&self.search_popup.query);
         // Surface an invalid regex to the pop-up UI — it would otherwise
         // silently match nothing.
         self.search_popup.regex_error = compiled.regex_error();

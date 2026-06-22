@@ -42,11 +42,10 @@ pub fn parse_query(raw: &str) -> (SearchMode, &str) {
     }
 }
 
-/// A compiled search, built once per query change and reused across all entries.
+/// A compiled non-fuzzy search (regex or substring), built once per query
+/// change and reused across all entries. Fuzzy queries are routed to `frizbee`
+/// directly by the caller and never reach this type.
 pub enum CompiledSearch {
-    /// Fuzzy match via `frizbee`. Stores the needle pattern and a cached config
-    /// to avoid recreating it per match call.
-    Fuzzy(String, frizbee::Config),
     /// Compiled case-insensitive regex.
     Regex(Result<Regex, regex::Error>),
     /// Lowercased substring for case-insensitive contains check.
@@ -58,26 +57,19 @@ impl CompiledSearch {
     pub fn compile(raw: &str) -> Self {
         let (mode, pattern) = parse_query(raw);
         match mode {
-            SearchMode::Fuzzy => Self::Fuzzy(pattern.to_string(), frizbee::Config::default()),
             SearchMode::Regex => {
                 let result = regex::RegexBuilder::new(pattern).case_insensitive(true).build();
                 Self::Regex(result)
             }
-            SearchMode::Substring => Self::Substring(pattern.to_lowercase()),
+            // Fuzzy is handled by the caller via frizbee; fall back to a
+            // substring match on the whole query if it ever reaches here.
+            SearchMode::Substring | SearchMode::Fuzzy => Self::Substring(pattern.to_lowercase()),
         }
     }
 
     /// Test whether `searchable_text` matches this compiled search.
     pub fn matches(&self, searchable_text: &str) -> bool {
         match self {
-            Self::Fuzzy(needle, config) => {
-                if needle.is_empty() {
-                    return true;
-                }
-                let haystacks = [searchable_text];
-                let results = frizbee::match_list(needle, &haystacks, config);
-                !results.is_empty()
-            }
             Self::Regex(Ok(re)) => re.is_match(searchable_text),
             Self::Regex(Err(_)) => {
                 // Invalid regex matches nothing.
@@ -91,12 +83,6 @@ impl CompiledSearch {
                 searchable_text.as_bytes().windows(lower.len()).any(|w| w.eq_ignore_ascii_case(lower.as_bytes()))
             }
         }
-    }
-
-    /// Whether the compiled regex is invalid (for UI highlighting).
-    #[cfg(test)]
-    pub const fn has_regex_error(&self) -> bool {
-        matches!(self, Self::Regex(Err(_)))
     }
 
     /// Compact single-line description of a regex compilation failure, if any.
@@ -118,7 +104,6 @@ impl CompiledSearch {
 impl std::fmt::Debug for CompiledSearch {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Fuzzy(needle, _) => write!(f, "CompiledSearch::Fuzzy({needle:?})"),
             Self::Regex(Ok(re)) => write!(f, "CompiledSearch::Regex({re})"),
             Self::Regex(Err(e)) => write!(f, "CompiledSearch::Regex(Err({e}))"),
             Self::Substring(s) => write!(f, "CompiledSearch::Substring({s:?})"),
@@ -159,10 +144,6 @@ mod tests {
     }
 
     match_tests! {
-        fuzzy_basic_hit:         "constr",       "my_constraint_1"  => true;
-        fuzzy_basic_hit2:        "constr",       "constraint_abc"   => true;
-        fuzzy_empty:             "",             "anything"         => true;
-        fuzzy_miss:              "zzzzz",        "constraint"       => false;
         regex_hit:               "r:^con.*nt$",  "constraint"       => true;
         regex_miss:              "r:^con.*nt$",  "objective"        => false;
         regex_case_insensitive:  "r:CONSTRAINT", "my_constraint"    => true;
@@ -176,16 +157,13 @@ mod tests {
     #[test]
     fn test_regex_invalid() {
         let search = CompiledSearch::compile("r:[invalid");
-        assert!(search.has_regex_error());
+        assert!(search.regex_error().is_some());
         assert!(!search.matches("anything"));
     }
 
     #[test]
     fn test_matches_variable_names_in_searchable_text() {
         let searchable = "c1\0x\0flow_var";
-
-        let fuzzy = CompiledSearch::compile("flow");
-        assert!(fuzzy.matches(searchable));
 
         let substr = CompiledSearch::compile("s:flow_var");
         assert!(substr.matches(searchable));
