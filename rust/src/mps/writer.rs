@@ -10,18 +10,8 @@ use crate::error::{LpParseError, LpResult};
 use crate::model::{Coefficient, Constraint, SOSType, Sense, VariableType};
 use crate::problem::LpProblem;
 
-/// Options for controlling MPS file output format.
-#[derive(Debug, Clone)]
-pub struct MpsWriterOptions {
-    /// Number of decimal places for numeric values.
-    pub decimal_precision: usize,
-}
-
-impl Default for MpsWriterOptions {
-    fn default() -> Self {
-        Self { decimal_precision: 12 }
-    }
-}
+/// Number of decimal places for numeric values in MPS output.
+const MPS_PRECISION: usize = 12;
 
 /// Write an `LpProblem` to a string in standard MPS format.
 ///
@@ -29,24 +19,15 @@ impl Default for MpsWriterOptions {
 ///
 /// Returns an error if the problem cannot be formatted.
 pub fn write_mps_string(problem: &LpProblem) -> LpResult<String> {
-    write_mps_string_with_options(problem, &MpsWriterOptions::default())
-}
-
-/// Write an `LpProblem` to a string in MPS format with custom options.
-///
-/// # Errors
-///
-/// Returns an error if the problem cannot be formatted.
-pub fn write_mps_string_with_options(problem: &LpProblem, options: &MpsWriterOptions) -> LpResult<String> {
     let mut output = String::new();
 
     write_name_section(&mut output, problem)?;
     write_objsense_section(&mut output, problem)?;
     write_rows_section(&mut output, problem)?;
-    write_columns_section(&mut output, problem, options)?;
-    write_rhs_section(&mut output, problem, options)?;
-    write_bounds_section(&mut output, problem, options)?;
-    write_sos_section(&mut output, problem, options)?;
+    write_columns_section(&mut output, problem)?;
+    write_rhs_section(&mut output, problem)?;
+    write_bounds_section(&mut output, problem)?;
+    write_sos_section(&mut output, problem)?;
 
     writeln!(output, "ENDATA").map_err(fmt_err)?;
 
@@ -134,7 +115,7 @@ fn write_rows_section(output: &mut String, problem: &LpProblem) -> LpResult<()> 
     Ok(())
 }
 
-fn write_columns_section(output: &mut String, problem: &LpProblem, options: &MpsWriterOptions) -> LpResult<()> {
+fn write_columns_section(output: &mut String, problem: &LpProblem) -> LpResult<()> {
     writeln!(output, "COLUMNS").map_err(fmt_err)?;
 
     // Build variable → [(row_name, coeff)] map, preserving variable insertion order.
@@ -172,14 +153,14 @@ fn write_columns_section(output: &mut String, problem: &LpProblem, options: &Mps
 
     // Write non-integer variables
     for (var_name, entries) in &non_integer_vars {
-        write_column_entries(output, var_name, entries, options)?;
+        write_column_entries(output, var_name, entries)?;
     }
 
     // Write integer variables wrapped in INTORG/INTEND markers
     if !integer_vars.is_empty() {
         writeln!(output, "    MARK0000  'MARKER'                 'INTORG'").map_err(fmt_err)?;
         for (var_name, entries) in &integer_vars {
-            write_column_entries(output, var_name, entries, options)?;
+            write_column_entries(output, var_name, entries)?;
         }
         writeln!(output, "    MARK0001  'MARKER'                 'INTEND'").map_err(fmt_err)?;
     }
@@ -199,30 +180,28 @@ fn collect_coefficients<'a>(
     }
 }
 
-/// Write column entries for a single variable, packing up to 2 entries per line.
-fn write_column_entries(output: &mut String, var_name: &str, entries: &[ColumnEntry<'_>], options: &MpsWriterOptions) -> LpResult<()> {
+/// Write column entries for a single variable, one entry per line for
+/// robustness with long names.
+fn write_column_entries(output: &mut String, var_name: &str, entries: &[ColumnEntry<'_>]) -> LpResult<()> {
     debug_assert!(!entries.is_empty(), "write_column_entries called with empty entries for {var_name}");
 
-    let mut i = 0;
-    while i < entries.len() {
-        // One entry per line for simplicity and robustness with long names
+    for entry in entries {
         write!(output, "    {var_name}  ").map_err(fmt_err)?;
-        write_mps_field_pair(output, entries[i].row_name, entries[i].value, options)?;
+        write_mps_field_pair(output, entry.row_name, entry.value)?;
         writeln!(output).map_err(fmt_err)?;
-        i += 1;
     }
 
     Ok(())
 }
 
 /// Write a (name, value) field pair with guaranteed whitespace separation.
-fn write_mps_field_pair(output: &mut String, name: &str, value: f64, options: &MpsWriterOptions) -> LpResult<()> {
+fn write_mps_field_pair(output: &mut String, name: &str, value: f64) -> LpResult<()> {
     write!(output, "{name}  ").map_err(fmt_err)?;
-    write_mps_number(output, value, options.decimal_precision).map_err(fmt_err)?;
+    write_mps_number(output, value, MPS_PRECISION).map_err(fmt_err)?;
     Ok(())
 }
 
-fn write_rhs_section(output: &mut String, problem: &LpProblem, options: &MpsWriterOptions) -> LpResult<()> {
+fn write_rhs_section(output: &mut String, problem: &LpProblem) -> LpResult<()> {
     // Collect non-zero RHS values
     let mut rhs_entries: Vec<(&str, f64)> = Vec::new();
 
@@ -242,14 +221,14 @@ fn write_rhs_section(output: &mut String, problem: &LpProblem, options: &MpsWrit
 
     for (row_name, value) in &rhs_entries {
         write!(output, "    RHS  ").map_err(fmt_err)?;
-        write_mps_field_pair(output, row_name, *value, options)?;
+        write_mps_field_pair(output, row_name, *value)?;
         writeln!(output).map_err(fmt_err)?;
     }
 
     Ok(())
 }
 
-fn write_bounds_section(output: &mut String, problem: &LpProblem, options: &MpsWriterOptions) -> LpResult<()> {
+fn write_bounds_section(output: &mut String, problem: &LpProblem) -> LpResult<()> {
     let mut has_bounds = false;
 
     for variable in problem.variables.values() {
@@ -279,24 +258,24 @@ fn write_bounds_section(output: &mut String, problem: &LpProblem, options: &MpsW
                 // Integer/General variables get bounds via INTORG/INTEND in COLUMNS.
                 // Write explicit LO 0 to override the default [0, 1] integer default.
                 write!(output, " LI BOUND     {var_name}  ").map_err(fmt_err)?;
-                write_mps_number(output, 0.0, options.decimal_precision).map_err(fmt_err)?;
+                write_mps_number(output, 0.0, MPS_PRECISION).map_err(fmt_err)?;
                 writeln!(output).map_err(fmt_err)?;
             }
             VariableType::LowerBound(lb) => {
                 write!(output, " LO BOUND     {var_name}  ").map_err(fmt_err)?;
-                write_mps_number(output, *lb, options.decimal_precision).map_err(fmt_err)?;
+                write_mps_number(output, *lb, MPS_PRECISION).map_err(fmt_err)?;
                 writeln!(output).map_err(fmt_err)?;
             }
             VariableType::UpperBound(ub) => {
                 write!(output, " UP BOUND     {var_name}  ").map_err(fmt_err)?;
-                write_mps_number(output, *ub, options.decimal_precision).map_err(fmt_err)?;
+                write_mps_number(output, *ub, MPS_PRECISION).map_err(fmt_err)?;
                 writeln!(output).map_err(fmt_err)?;
             }
             VariableType::DoubleBound(lb, ub) => {
                 // Fixed bound (lb == ub)
                 if (*lb - *ub).abs() < NUMERIC_EPSILON {
                     write!(output, " FX BOUND     {var_name}  ").map_err(fmt_err)?;
-                    write_mps_number(output, *lb, options.decimal_precision).map_err(fmt_err)?;
+                    write_mps_number(output, *lb, MPS_PRECISION).map_err(fmt_err)?;
                     writeln!(output).map_err(fmt_err)?;
                 } else {
                     // Lower bound: MI for -inf, LO otherwise
@@ -304,20 +283,20 @@ fn write_bounds_section(output: &mut String, problem: &LpProblem, options: &MpsW
                         writeln!(output, " MI BOUND     {var_name}").map_err(fmt_err)?;
                     } else {
                         write!(output, " LO BOUND     {var_name}  ").map_err(fmt_err)?;
-                        write_mps_number(output, *lb, options.decimal_precision).map_err(fmt_err)?;
+                        write_mps_number(output, *lb, MPS_PRECISION).map_err(fmt_err)?;
                         writeln!(output).map_err(fmt_err)?;
                     }
                     // Upper bound: skip for +inf, UP otherwise
                     if ub.is_finite() {
                         write!(output, " UP BOUND     {var_name}  ").map_err(fmt_err)?;
-                        write_mps_number(output, *ub, options.decimal_precision).map_err(fmt_err)?;
+                        write_mps_number(output, *ub, MPS_PRECISION).map_err(fmt_err)?;
                         writeln!(output).map_err(fmt_err)?;
                     }
                 }
             }
             VariableType::SemiContinuous => {
                 write!(output, " SC BOUND     {var_name}  ").map_err(fmt_err)?;
-                write_mps_number(output, 0.0, options.decimal_precision).map_err(fmt_err)?;
+                write_mps_number(output, 0.0, MPS_PRECISION).map_err(fmt_err)?;
                 writeln!(output).map_err(fmt_err)?;
             }
             VariableType::SOS => {}
@@ -342,7 +321,7 @@ const fn needs_mps_bounds(var_type: &VariableType) -> bool {
     )
 }
 
-fn write_sos_section(output: &mut String, problem: &LpProblem, options: &MpsWriterOptions) -> LpResult<()> {
+fn write_sos_section(output: &mut String, problem: &LpProblem) -> LpResult<()> {
     let sos_constraints: Vec<_> = problem.constraints.values().filter(|c| matches!(c, Constraint::SOS { .. })).collect();
 
     if sos_constraints.is_empty() {
@@ -363,7 +342,7 @@ fn write_sos_section(output: &mut String, problem: &LpProblem, options: &MpsWrit
             for weight in weights {
                 let var_name = problem.resolve(weight.name);
                 write!(output, "    {var_name:<10}").map_err(fmt_err)?;
-                write_mps_number(output, weight.value, options.decimal_precision).map_err(fmt_err)?;
+                write_mps_number(output, weight.value, MPS_PRECISION).map_err(fmt_err)?;
                 writeln!(output).map_err(fmt_err)?;
             }
         }
