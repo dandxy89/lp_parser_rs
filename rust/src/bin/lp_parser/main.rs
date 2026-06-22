@@ -349,7 +349,7 @@ fn cmd_diff(args: DiffArgs, verbose: u8, quiet: bool) -> Result<(), BoxError> {
     use std::collections::{BTreeMap, BTreeSet, HashMap};
 
     use lp_parser_rs::interner::NameId;
-    use lp_parser_rs::model::{Coefficient, ComparisonOp, Constraint};
+    use lp_parser_rs::model::{Coefficient, Constraint};
 
     // Parse rename rules
     if args.rename.len() % 2 != 0 {
@@ -419,14 +419,18 @@ fn cmd_diff(args: DiffArgs, verbose: u8, quiet: bool) -> Result<(), BoxError> {
         coeffs.iter().map(|c| (rewrite(problem.resolve(c.name)), c.value)).collect()
     };
 
-    let op_str = |op: ComparisonOp| -> &'static str {
-        match op {
-            ComparisonOp::LTE => "<=",
-            ComparisonOp::GTE => ">=",
-            ComparisonOp::LT => "<",
-            ComparisonOp::GT => ">",
-            ComparisonOp::EQ => "=",
+    // Count coefficients that changed value, were removed, or were added.
+    let count_coeff_diffs = |m1: &BTreeMap<String, f64>, m2: &BTreeMap<String, f64>| -> usize {
+        let mut diffs = 0usize;
+        for (k, v1) in m1 {
+            match m2.get(k) {
+                Some(v2) if differs(*v1, *v2) => diffs += 1,
+                None => diffs += 1,
+                _ => {}
+            }
         }
+        diffs += m2.keys().filter(|k| !m1.contains_key(*k)).count();
+        diffs
     };
 
     let mut cons_modified: Vec<(String, Vec<String>)> = Vec::new();
@@ -440,26 +444,14 @@ fn cmd_diff(args: DiffArgs, verbose: u8, quiet: bool) -> Result<(), BoxError> {
                 Constraint::Standard { coefficients: cf2, operator: op2, rhs: r2, .. },
             ) => {
                 if op1 != op2 {
-                    changes.push(format!("operator {} -> {}", op_str(*op1), op_str(*op2)));
+                    changes.push(format!("operator {op1} -> {op2}"));
                 }
                 if differs(*r1, *r2) {
                     changes.push(format!("rhs {r1} -> {r2}"));
                 }
                 let m1 = coeff_map(&p1, cf1);
                 let m2 = coeff_map(&p2, cf2);
-                let mut coef_diffs = 0usize;
-                for (k, v1) in &m1 {
-                    match m2.get(k) {
-                        Some(v2) if differs(*v1, *v2) => coef_diffs += 1,
-                        None => coef_diffs += 1,
-                        _ => {}
-                    }
-                }
-                for k in m2.keys() {
-                    if !m1.contains_key(k) {
-                        coef_diffs += 1;
-                    }
-                }
+                let coef_diffs = count_coeff_diffs(&m1, &m2);
                 if coef_diffs > 0 {
                     changes.push(format!("{coef_diffs} coefficient change(s)"));
                 }
@@ -482,19 +474,7 @@ fn cmd_diff(args: DiffArgs, verbose: u8, quiet: bool) -> Result<(), BoxError> {
         let o2 = &p2.objectives[&cobjs2[name]];
         let m1 = coeff_map(&p1, &o1.coefficients);
         let m2 = coeff_map(&p2, &o2.coefficients);
-        let mut coef_diffs = 0usize;
-        for (k, v1) in &m1 {
-            match m2.get(k) {
-                Some(v2) if differs(*v1, *v2) => coef_diffs += 1,
-                None => coef_diffs += 1,
-                _ => {}
-            }
-        }
-        for k in m2.keys() {
-            if !m1.contains_key(k) {
-                coef_diffs += 1;
-            }
-        }
+        let coef_diffs = count_coeff_diffs(&m1, &m2);
         if coef_diffs > 0 {
             objs_modified.push((name.clone(), vec![format!("{coef_diffs} coefficient change(s)")]));
         }
