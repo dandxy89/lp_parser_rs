@@ -844,7 +844,7 @@ impl App {
 
     /// Update active section, keeping the (now invisible) selector state in
     /// sync — it still backs keyboard navigation over the tab bar.
-    pub(crate) fn set_active_section(&mut self, section: Section) {
+    pub(crate) const fn set_active_section(&mut self, section: Section) {
         self.active_section = section;
         self.section_selector_state.select(Some(section.index()));
     }
