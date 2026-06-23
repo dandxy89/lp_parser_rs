@@ -1,5 +1,27 @@
 # Changelog
 
+## [3.6.0](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v3.5.0...lp_parser_rs-v3.6.0) (2026-06-23)
+
+
+### Features
+
+* tui watch numerics perf ([#193](https://github.com/dandxy89/lp_parser_rs/issues/193)) ([d849d2f](https://github.com/dandxy89/lp_parser_rs/commit/d849d2f6bfa597cdaa59f421f79aa7f9ec571eeb))
+
+
+### Code Refactoring
+
+* drop dead LpParseError variants ([0e455d7](https://github.com/dandxy89/lp_parser_rs/commit/0e455d7dd7e3463e1c0f50fc1f047c063e325848))
+* inline single-impl ToLpSolvers trait ([77bf89e](https://github.com/dandxy89/lp_parser_rs/commit/77bf89e3ca5c1ab84d07f233b67c693b6262e1e4))
+* ponytail audit cleanup ([#195](https://github.com/dandxy89/lp_parser_rs/issues/195)) ([ada04ce](https://github.com/dandxy89/lp_parser_rs/commit/ada04ceebb112725ce75c7fade7bba59c73ab0d8))
+* share whole-number formatting between LP and MPS writers ([b6c30af](https://github.com/dandxy89/lp_parser_rs/commit/b6c30af11e0993093e462c8a5b2fd0c5fa47309c))
+* simplify case-insensitive prefix match in extract_problem_name ([6a1a6a5](https://github.com/dandxy89/lp_parser_rs/commit/6a1a6a50b7173b8ee45fc61ecbb9814c3194ce10))
+* use FxHashSet in find_unused_variables ([8a31d58](https://github.com/dandxy89/lp_parser_rs/commit/8a31d586c2260a74a84703d9c6d04fd4c0858663))
+
+
+### Tests
+
+* gate serde-only analysis test imports ([22ef729](https://github.com/dandxy89/lp_parser_rs/commit/22ef7290f657a6bf3c7b08756615d1bf87dff67b))
+
 ## [3.5.0](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v3.4.1...lp_parser_rs-v3.5.0) (2026-06-10)
 
 
