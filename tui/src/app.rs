@@ -963,7 +963,7 @@ impl App {
 
         self.solver = SolverSession::new();
 
-        self.yank.message = format!("reloaded {}", crate::watch::format_clock_time(std::time::SystemTime::now()));
+        self.yank.message = format!("reloaded {}", chrono::Local::now().format("%H:%M:%S"));
         self.yank.flash = Some(Instant::now());
     }
 

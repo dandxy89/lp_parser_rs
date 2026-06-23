@@ -8,7 +8,7 @@
 
 use std::path::Path;
 use std::sync::mpsc;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::SystemTime;
 
 use crate::parse::{ParsedFile, parse_file};
 
@@ -133,19 +133,9 @@ pub fn reload_files(path1: &Path, path2: &Path) -> ReloadOutcome {
     Ok(Box::new((parsed1, parsed2)))
 }
 
-/// Format a `SystemTime` as seconds-resolution `HH:MM:SS` (UTC), without
-/// pulling in a date/time dependency. Used for the "reloaded <time>" flash.
-pub fn format_clock_time(time: SystemTime) -> String {
-    let seconds_since_epoch = time.duration_since(UNIX_EPOCH).map_or(0, |duration| duration.as_secs());
-    let seconds = seconds_since_epoch % 60;
-    let minutes = (seconds_since_epoch / 60) % 60;
-    let hours = (seconds_since_epoch / 3600) % 24;
-    format!("{hours:02}:{minutes:02}:{seconds:02}")
-}
-
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
+    use std::time::{Duration, UNIX_EPOCH};
 
     use super::*;
 
@@ -228,10 +218,4 @@ mod tests {
         assert!(state.observe(mtime(5), mtime(20)));
     }
 
-    #[test]
-    fn test_format_clock_time() {
-        assert_eq!(format_clock_time(UNIX_EPOCH), "00:00:00");
-        assert_eq!(format_clock_time(UNIX_EPOCH + Duration::from_secs(3661)), "01:01:01");
-        assert_eq!(format_clock_time(UNIX_EPOCH + Duration::from_secs(86399)), "23:59:59");
-    }
 }
