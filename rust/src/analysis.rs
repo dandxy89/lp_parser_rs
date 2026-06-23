@@ -22,8 +22,9 @@
 //! }
 //! ```
 
-use std::collections::HashSet;
 use std::fmt::{Display, Formatter, Result as FmtResult};
+
+use rustc_hash::FxHashSet;
 
 use crate::interner::NameId;
 use crate::model::{ComparisonOp, Constraint, SOSType, VariableType};
@@ -662,7 +663,7 @@ impl LpProblem {
 
     /// Find variables declared but not referenced in any objective or constraint.
     fn find_unused_variables(&self) -> Vec<String> {
-        let mut used_variables: HashSet<NameId> = HashSet::new();
+        let mut used_variables: FxHashSet<NameId> = FxHashSet::default();
 
         for objective in self.objectives.values() {
             for coeff in &objective.coefficients {
