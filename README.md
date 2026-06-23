@@ -26,7 +26,7 @@ Add to `Cargo.toml`:
 
 ```toml
 [dependencies]
-lp_parser_rs = { version = "3.0.0", features = ["serde", "diff"] } # x-release-please-version
+lp_parser_rs = { version = "3.5.0", features = ["serde", "diff"] } # x-release-please-version
 ```
 
 Parse and inspect:
@@ -183,7 +183,7 @@ lp_parser convert problem.lp --format json --pretty -o problem.json
 | Option                | Default | Description                      |
 | --------------------- | ------- | -------------------------------- |
 | `<FILE>`              | —       | Path to the LP file              |
-| `-s, --solver <NAME>` | `cbc`   | `cbc`, `gurobi`, `cplex`, `glpk` |
+| `-s, --solver <NAME>` | `cbc`   | `cbc`, `glpk`                    |
 | `-o, --output <PATH>` | stdout  | Write solution to file           |
 | `-f, --format <FMT>`  | `text`  | `text`, `json`, `yaml`           |
 | `--pretty`            | off     | Pretty-print structured output   |
@@ -199,6 +199,8 @@ The selected solver binary must be installed on your `PATH`. The compatibility l
 ## Interactive TUI Diff Viewer (`lp_diff`)
 
 A terminal UI for comparing LP/MPS files with coefficient-level side-by-side diffs, fuzzy search, filtering, and integrated [HiGHS](https://highs.dev) solving. Built with [ratatui](https://ratatui.rs).
+
+![lp_diff demo](tui/assets/demo.gif)
 
 ```bash
 cargo install --path tui
@@ -227,7 +229,7 @@ lp_diff base.lp modified.lp --abs-tol 1e-4 --rel-tol 1e-6
 lp_diff base.lp modified.lp --summary --rename '\[\d+\]$' '[idx]' --abs-tol 1e-6
 ```
 
-Highlights: three-panel layout, four sections (Summary / Variables / Constraints / Objectives), filtering (`a`/`+`/`-`/`m`), telescope-style search (fuzzy, `r:` regex, `s:` substring), HiGHS solve-and-compare (`S`), vim-style navigation and jumplist, clipboard yank (`y`/`Y`), CSV export (`w`), `?` for full help.
+Highlights: three-panel layout, five sections (Summary / Variables / Constraints / Objectives / Numerics), filtering (`a`/`+`/`-`/`m`/`=`, plus `o` to ignore coefficient order), sort cycling (`s`), live tolerance cycling (`t`/`T`), telescope-style search (fuzzy, `r:` regex, `s:` substring), HiGHS solve-and-compare with infeasibility diagnosis (`S`), vim-style navigation and jumplist, clipboard yank (`y`/`Y`), CSV export (`w`), `?` for full help.
 
 See [`tui/README.md`](tui/README.md) for the complete reference.
 

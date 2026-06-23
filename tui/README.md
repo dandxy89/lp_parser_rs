@@ -38,7 +38,7 @@ lp_diff base.lp modified.lp --summary
 
 Output format:
 
-```
+```text
 LP Diff: base.lp vs modified.lp
 
 Variables:    +3   -1   ~2   (42 unchanged)
@@ -52,11 +52,11 @@ Total: 24 changes
 
 The interface is a three-panel layout:
 
-| Panel | Description |
-|-------|-------------|
-| Section Selector | Left sidebar — choose between Summary, Variables, Constraints, and Objectives |
-| Name List | Left sidebar — filterable list of changed entries for the selected section |
-| Detail | Right panel — full diff detail for the selected entry |
+| Panel            | Description                                                                             |
+| ---------------- | --------------------------------------------------------------------------------------- |
+| Section Selector | Left sidebar — choose between Summary, Variables, Constraints, Objectives, and Numerics |
+| Name List        | Left sidebar — filterable list of changed entries for the selected section              |
+| Detail           | Right panel — full diff detail for the selected entry                                   |
 
 The status bar at the bottom shows total changes, per-section diff statistics (`+N -N ~N`), the active filter, and scroll position.
 
@@ -64,12 +64,13 @@ Press `?` at any time to open the key bindings pop up.
 
 ### Sections
 
-| # | Section | Description |
-|---|---------|-------------|
-| 1 | Summary | Overview of change counts, problem dimensions, and structural analysis |
-| 2 | Variables | Variable type changes |
-| 3 | Constraints | Constraint changes with coefficient-level detail (side-by-side view for modified) |
-| 4 | Objectives | Objective function changes |
+| #   | Section     | Description                                                                       |
+| --- | ----------- | --------------------------------------------------------------------------------- |
+| 1   | Summary     | Overview of change counts, problem dimensions, and structural analysis            |
+| 2   | Variables   | Variable type changes                                                             |
+| 3   | Constraints | Constraint changes with coefficient-level detail (side-by-side view for modified) |
+| 4   | Objectives  | Objective function changes                                                        |
+| 5   | Numerics    | Per-file numerical conditioning view (coefficient scaling, ranges, issues)        |
 
 ### Side-by-Side Constraint View
 
@@ -87,97 +88,106 @@ Press `w` to export the full diff report as a CSV file (`lp_diff_report_<timesta
 
 **Navigation**
 
-| Key | Action |
-|-----|--------|
-| `j` / `↓` | Move down |
-| `k` / `↑` | Move up |
-| `n` | Next match (or down when no search) |
-| `N` | Previous match (or up when no search) |
-| `g` / `Home` | Jump to top |
-| `G` / `End` | Jump to bottom |
-| `Ctrl+d` | Half page down |
-| `Ctrl+u` | Half page up |
-| `Ctrl+f` | Full page down |
-| `Ctrl+b` | Full page up |
-| `Ctrl+o` | Jump back (jumplist) |
-| `Ctrl+i` | Jump forward (jumplist) |
-| `Tab` | Next panel |
-| `Shift+Tab` | Previous panel |
-| `Enter` | Go to detail panel |
-| `h` / `l` | Move to sidebar / detail |
-| `1`–`4` | Jump to section by number |
-| `Esc` | Back / clear search |
+| Key          | Action                    |
+| ------------ | ------------------------- |
+| `j` / `↓`    | Move down                 |
+| `k` / `↑`    | Move up                   |
+| `n`          | Move down                 |
+| `N`          | Move up                   |
+| `g` / `Home` | Jump to top               |
+| `G` / `End`  | Jump to bottom            |
+| `Ctrl+d`     | Half page down            |
+| `Ctrl+u`     | Half page up              |
+| `Ctrl+f`     | Full page down            |
+| `Ctrl+b`     | Full page up              |
+| `Ctrl+o`     | Jump back (jumplist)      |
+| `Ctrl+i`     | Jump forward (jumplist)   |
+| `Tab`        | Next panel                |
+| `Shift+Tab`  | Previous panel            |
+| `Enter`      | Go to detail panel        |
+| `h` / `l`    | Move to sidebar / detail  |
+| `1`–`5`      | Jump to section by number |
+| `Esc`        | Back / clear search       |
 
 **Filters**
 
-| Key | Action |
-|-----|--------|
-| `a` | All changes |
-| `+` | Added only |
-| `-` | Removed only |
-| `m` | Modified only |
+| Key | Action                                   |
+| --- | ---------------------------------------- |
+| `a` | All changes                              |
+| `+` | Added only                               |
+| `-` | Removed only                             |
+| `m` | Modified only                            |
+| `=` | Renamed only                             |
+| `o` | Toggle ignore-coefficient-order matching |
 
 **Search (Telescope-style pop-up)**
 
-| Key | Action |
-|-----|--------|
-| `/` | Open search pop-up (searches across all sections) |
-| `j` / `↓` | Next result (in pop-up) |
-| `k` / `↑` | Previous result (in pop-up) |
-| `Tab` | Complete query with selected result's name |
-| `Enter` | Jump to selected entry |
-| `Esc` | Cancel search |
+| Key       | Action                                                       |
+| --------- | ------------------------------------------------------------ |
+| `/`       | Open search pop-up (searches across all sections)            |
+| `j` / `↓` | Next result (in pop-up)                                      |
+| `k` / `↑` | Previous result (in pop-up)                                  |
+| `Tab`     | Complete query with selected result's name                   |
+| `Enter`   | Jump to selected entry                                       |
+| `Esc`     | Cancel search                                                |
 | `n` / `N` | Next / previous match (main view, when search was committed) |
 
 Search mode prefixes (type in the pop-up input):
 
-| Prefix | Mode |
-|--------|------|
+| Prefix   | Mode                                   |
+| -------- | -------------------------------------- |
 | *(none)* | Fuzzy match (default, ranked by score) |
-| `r:` | Regex (case-insensitive) |
-| `s:` | Substring (case-insensitive) |
+| `r:`     | Regex (case-insensitive)               |
+| `s:`     | Substring (case-insensitive)           |
 
 **Clipboard**
 
-| Key | Action |
-|-----|--------|
-| `yy` | Yank selected entry name to clipboard |
+| Key  | Action                                          |
+| ---- | ----------------------------------------------- |
+| `yy` | Yank selected entry name to clipboard           |
 | `yo` | Yank old (file 1) version of entry to clipboard |
 | `yn` | Yank new (file 2) version of entry to clipboard |
-| `Y` | Yank full detail panel content to clipboard |
+| `Y`  | Yank full detail panel content to clipboard     |
 
 **Solver**
 
-| Key | Action |
-|-----|--------|
-| `S` | Solve problem with HiGHS |
-| `1` / `2` | Select file 1 or file 2 (in picker) |
-| `3` | Solve both and diff (in picker) |
-| `j` / `k` | Scroll results (in results view) |
-| `d` | Toggle diff-only filter (both mode) |
-| `t` / `T` | Cycle delta threshold forward / backward (both mode) |
-| `w` | Write diff to CSV (both mode) |
-| `y` | Yank solve results to clipboard |
-| `Esc` | Close solver overlay |
+| Key                 | Action                                                                         |
+| ------------------- | ------------------------------------------------------------------------------ |
+| `S`                 | Solve problem with HiGHS                                                       |
+| `1` / `2`           | Select file 1 or file 2 (in picker)                                            |
+| `3`                 | Solve both and diff (in picker)                                                |
+| `1`–`5`             | Switch tab — Summary / Variables / Constraints / Log / Duals (in results view) |
+| `Tab` / `Shift+Tab` | Cycle result tabs forward / backward                                           |
+| `j` / `k`           | Scroll results (in results view)                                               |
+| `d`                 | Toggle diff-only filter (both mode)                                            |
+| `t` / `T`           | Cycle delta threshold forward / backward (both mode)                           |
+| `e`                 | Diagnose infeasibility                                                         |
+| `w`                 | Write diff to CSV (both mode)                                                  |
+| `y`                 | Yank solve results to clipboard                                                |
+| `Esc`               | Close solver overlay                                                           |
 
 **Export**
 
-| Key | Action |
-|-----|--------|
+| Key | Action                         |
+| --- | ------------------------------ |
 | `w` | Export full diff report as CSV |
 
 **Other**
 
-| Key | Action |
-|-----|--------|
-| `r` | Toggle raw text side-by-side view (constraints/objectives) |
-| `?` | Toggle help pop-up |
-| `q` | Quit |
-| `Ctrl+C` | Force quit |
+| Key       | Action                                                     |
+| --------- | ---------------------------------------------------------- |
+| `r`       | Toggle raw text side-by-side view (constraints/objectives) |
+| `s`       | Cycle sort mode (name → \|Δ\| → relΔ)                      |
+| `t` / `T` | Cycle relative / absolute tolerance (rebuilds the diff)    |
+| `?`       | Toggle help pop-up                                         |
+| `q`       | Quit                                                       |
+| `Ctrl+C`  | Force quit                                                 |
+
+**Mouse:** the scroll wheel navigates lists and clicking selects entries.
 
 ## HiGHS Solver
 
-Press `S` to solve either file on demand using the [HiGHS](https://highs.dev) solver. Pick file 1 or 2, and the solver runs in a background thread. Results show the optimisation status, objective value, solve time, and a scrollable variable table.
+Press `S` to solve either file on demand using the [HiGHS](https://highs.dev) solver. Pick file 1 or 2, and the solver runs in a background thread. Results are organised into tabs — Summary, Variables, Constraints, Log, and Duals — switchable with `1`–`5` or `Tab`/`Shift+Tab`. The Summary tab shows optimisation status, objective value, and solve time. Press `e` to run an infeasibility diagnosis when a problem does not solve.
 
 Option 3 ("Both") solves both files and shows a side-by-side comparison. Rows are marked as "changed" when their absolute difference exceeds a configurable delta threshold. Press `t` to cycle forward through preset thresholds (`0.0`, `0.0001`, `0.001`, `0.01`, `0.1`, `1.0`) and `T` to cycle backward. The default threshold is `0.0001`. Press `d` to toggle between showing all rows and changed-only rows, and `w` to export the diff to CSV.
 
