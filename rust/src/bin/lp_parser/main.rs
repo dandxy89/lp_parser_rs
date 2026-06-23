@@ -661,7 +661,7 @@ fn solve_status_str(status: lp_solvers::solvers::Status) -> &'static str {
 
 #[cfg(feature = "lp-solvers")]
 fn cmd_solve(args: SolveArgs, verbose: u8, quiet: bool) -> Result<(), BoxError> {
-    use lp_parser_rs::compat::lp_solvers::ToLpSolvers;
+    use lp_parser_rs::compat::lp_solvers::LpSolversCompat;
     use lp_solvers::solvers::{CbcSolver, GlpkSolver, SolverTrait, Status};
 
     let content = parse_file(&args.file)?;
@@ -671,7 +671,7 @@ fn cmd_solve(args: SolveArgs, verbose: u8, quiet: bool) -> Result<(), BoxError> 
         eprintln!("Loading problem: {}", args.file.display());
     }
 
-    let compat = problem.to_lp_solvers()?;
+    let compat = LpSolversCompat::try_new(&problem)?;
 
     // Print warnings
     for warning in compat.warnings() {
