@@ -1,5 +1,22 @@
 # Changelog
 
+## [3.6.0](https://github.com/dandxy89/lp_parser_rs/compare/parse_lp-v3.5.0...parse_lp-v3.6.0) (2026-06-23)
+
+
+### Documentation
+
+* refresh READMEs and tag the summary output code fence ([d718289](https://github.com/dandxy89/lp_parser_rs/commit/d7182890167a342508db6d1daaf7d18e9d89d94e))
+
+
+### Features
+
+* tui watch numerics perf ([#193](https://github.com/dandxy89/lp_parser_rs/issues/193)) ([d849d2f](https://github.com/dandxy89/lp_parser_rs/commit/d849d2f6bfa597cdaa59f421f79aa7f9ec571eeb))
+
+
+### Code Refactoring
+
+* ponytail audit cleanup ([#195](https://github.com/dandxy89/lp_parser_rs/issues/195)) ([ada04ce](https://github.com/dandxy89/lp_parser_rs/commit/ada04ceebb112725ce75c7fade7bba59c73ab0d8))
+
 ## [3.5.0](https://github.com/dandxy89/lp_parser_rs/compare/parse_lp-v3.4.1...parse_lp-v3.5.0) (2026-06-10)
 
 
