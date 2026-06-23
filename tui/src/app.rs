@@ -19,6 +19,18 @@ use crate::state::{DetailView, DiagnosisState, JumpEntry, JumpList, PendingYank,
 pub use crate::state::{DiffFilter, Focus, SearchResult, Section, SectionViewState};
 use crate::watch::{WatchSession, WatchState};
 
+/// State for the `Ctrl+P` command palette overlay.
+pub struct CommandPaletteState {
+    /// Whether the palette overlay is visible.
+    pub visible: bool,
+    /// Current fuzzy-filter query.
+    pub query: String,
+    /// Indices into [`PaletteCommand::ALL`] matching the query, in rank order.
+    pub filtered: Vec<usize>,
+    /// Currently highlighted row within `filtered`.
+    pub selected: usize,
+}
+
 /// State for the telescope-style search pop-up overlay.
 pub struct SearchPopupState {
     /// Whether the search pop-up overlay is visible.
@@ -150,6 +162,12 @@ pub struct App {
 
     /// Whether the help pop-up overlay is visible.
     pub show_help: bool,
+
+    /// Scroll offset for the help overlay (clamped to content height at draw time).
+    pub help_scroll: u16,
+
+    /// `Ctrl+P` command palette state.
+    pub palette: CommandPaletteState,
 
     /// Scroll offset for the detail panel when it has focus.
     pub detail_scroll: u16,
@@ -327,6 +345,8 @@ impl App {
             filter: DiffFilter::All,
             should_quit: false,
             show_help: false,
+            help_scroll: 0,
+            palette: CommandPaletteState { visible: false, query: String::new(), filtered: Vec::new(), selected: 0 },
             detail_scroll: 0,
             section_selector_state,
             section_states: [SectionViewState::new(), SectionViewState::new(), SectionViewState::new()],

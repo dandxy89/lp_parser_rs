@@ -6,7 +6,7 @@ use lp_parser_rs::problem::LpProblem;
 
 use crate::app::App;
 use crate::detail_text::{format_solve_diff_result, format_solve_result};
-use crate::state::{DiagnosisState, DiffFilter, Focus, PendingYank, Section, Side, SolveState, SolveTab, SolveViewState};
+use crate::state::{DiagnosisState, DiffFilter, Focus, PaletteCommand, PendingYank, Section, Side, SolveState, SolveTab, SolveViewState};
 
 impl App {
     pub fn handle_key(&mut self, key: KeyEvent) {
@@ -21,18 +21,128 @@ impl App {
             return;
         }
 
+        if self.palette.visible {
+            self.handle_palette_key(key);
+            return;
+        }
+
         if !matches!(self.solver.state, SolveState::Idle) {
             self.handle_solve_key(key);
             return;
         }
 
         if self.show_help {
-            // Any key dismisses the help pop-up.
-            self.show_help = false;
+            self.handle_help_key(key);
             return;
         }
 
         self.handle_normal_key(key);
+    }
+
+    /// Handle a key event while the help overlay is visible.
+    ///
+    /// Navigation keys scroll the help text (it can exceed the screen on small
+    /// terminals); any other key dismisses the overlay. `G`'s `u16::MAX` is
+    /// clamped to the real content height when the overlay is drawn.
+    const fn handle_help_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Char('j') | KeyCode::Down => self.help_scroll = self.help_scroll.saturating_add(1),
+            KeyCode::Char('k') | KeyCode::Up => self.help_scroll = self.help_scroll.saturating_sub(1),
+            KeyCode::Char('g') | KeyCode::Home => self.help_scroll = 0,
+            KeyCode::Char('G') | KeyCode::End => self.help_scroll = u16::MAX,
+            _ => {
+                self.show_help = false;
+                self.help_scroll = 0;
+            }
+        }
+    }
+
+    /// Open the command palette, resetting its query and filtered list.
+    pub(crate) fn open_command_palette(&mut self) {
+        self.palette.visible = true;
+        self.palette.query.clear();
+        self.palette.selected = 0;
+        self.recompute_palette();
+    }
+
+    /// Recompute the palette's filtered command list from the current query.
+    fn recompute_palette(&mut self) {
+        self.palette.selected = 0;
+        self.palette.filtered.clear();
+        if self.palette.query.is_empty() {
+            self.palette.filtered.extend(0..PaletteCommand::ALL.len());
+            return;
+        }
+        let labels: Vec<String> = PaletteCommand::ALL.iter().map(|c| c.label().to_owned()).collect();
+        let config = frizbee::Config { sort: true, ..Default::default() };
+        for matched in frizbee::match_list_indices(&self.palette.query, &labels, &config) {
+            self.palette.filtered.push(matched.index as usize);
+        }
+    }
+
+    /// Handle a key event while the command palette is visible.
+    fn handle_palette_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::Esc => self.palette.visible = false,
+            KeyCode::Enter => self.confirm_palette(),
+            KeyCode::Backspace => {
+                self.palette.query.pop();
+                self.recompute_palette();
+            }
+            KeyCode::Down => {
+                if !self.palette.filtered.is_empty() {
+                    self.palette.selected = (self.palette.selected + 1).min(self.palette.filtered.len() - 1);
+                }
+            }
+            KeyCode::Up => self.palette.selected = self.palette.selected.saturating_sub(1),
+            KeyCode::Char(character) => {
+                self.palette.query.push(character);
+                self.recompute_palette();
+            }
+            _ => {}
+        }
+    }
+
+    /// Execute the highlighted palette command and close the palette.
+    fn confirm_palette(&mut self) {
+        let command = self.palette.filtered.get(self.palette.selected).map(|&i| PaletteCommand::ALL[i]);
+        self.palette.visible = false;
+        if let Some(command) = command {
+            self.run_palette_command(command);
+        }
+    }
+
+    /// Dispatch a palette command to the same handler as its direct keybinding.
+    fn run_palette_command(&mut self, command: PaletteCommand) {
+        match command {
+            PaletteCommand::GoSummary => self.set_section(Section::Summary),
+            PaletteCommand::GoVariables => self.set_section(Section::Variables),
+            PaletteCommand::GoConstraints => self.set_section(Section::Constraints),
+            PaletteCommand::GoObjectives => self.set_section(Section::Objectives),
+            PaletteCommand::GoNumerics => self.set_section(Section::Numerics),
+            PaletteCommand::FilterAll => self.set_filter(DiffFilter::All),
+            PaletteCommand::FilterAdded => self.set_filter(DiffFilter::Added),
+            PaletteCommand::FilterRemoved => self.set_filter(DiffFilter::Removed),
+            PaletteCommand::FilterModified => self.set_filter(DiffFilter::Modified),
+            PaletteCommand::FilterRenamed => self.set_filter(DiffFilter::Renamed),
+            PaletteCommand::ToggleRawView => self.toggle_detail_view(),
+            PaletteCommand::ToggleIgnoreOrder => self.toggle_ignore_order(),
+            PaletteCommand::CycleSort => self.cycle_sort_mode(),
+            PaletteCommand::CycleRelTol => self.cycle_rel_tol(),
+            PaletteCommand::CycleAbsTol => self.cycle_abs_tol(),
+            PaletteCommand::OpenSearch => self.open_search_popup(),
+            PaletteCommand::Solve => self.solver.state = SolveState::Picking,
+            PaletteCommand::ExportCsv => self.export_csv(),
+            PaletteCommand::YankName => self.yank_name(),
+            PaletteCommand::YankOld => self.yank_side(Side::Old),
+            PaletteCommand::YankNew => self.yank_side(Side::New),
+            PaletteCommand::YankDetail => self.yank_detail(),
+            PaletteCommand::ShowHelp => {
+                self.show_help = true;
+                self.help_scroll = 0;
+            }
+            PaletteCommand::Quit => self.should_quit = true,
+        }
     }
 
     /// Handle a key event while the search pop-up is visible.
@@ -140,7 +250,10 @@ impl App {
             KeyCode::Char('t') => self.cycle_rel_tol(),
             KeyCode::Char('T') => self.cycle_abs_tol(),
 
-            KeyCode::Char('?') => self.show_help = !self.show_help,
+            KeyCode::Char('?') => {
+                self.show_help = !self.show_help;
+                self.help_scroll = 0;
+            }
 
             // Yank (clipboard): `y` begins a chord, `Y` yanks detail immediately.
             KeyCode::Char('y') => self.pending_yank = PendingYank::WaitingForTarget,
@@ -189,6 +302,7 @@ impl App {
                     self.restore_jump(entry);
                 }
             }
+            KeyCode::Char('p') => self.open_command_palette(),
             _ => return false,
         }
         true
@@ -710,7 +824,7 @@ impl App {
 
     /// Handle a mouse event: scroll wheels and left-click panel selection.
     pub fn handle_mouse(&mut self, event: MouseEvent) {
-        if self.search_popup.visible {
+        if self.search_popup.visible || self.palette.visible {
             return;
         }
 

@@ -14,11 +14,17 @@
 //! ```
 
 use ratatui::Frame;
-use ratatui::layout::{Constraint, Layout};
+use ratatui::layout::{Constraint, Layout, Rect};
+use ratatui::style::{Modifier, Style};
+use ratatui::text::{Line, Span};
+use ratatui::widgets::Paragraph;
 
 use crate::app::{App, Focus, Section};
 use crate::state::DetailView;
-use crate::widgets::{detail, focus_border_style, help, panel_block, raw_diff, search_popup, sidebar, solve, status_bar, summary};
+use crate::theme::theme;
+use crate::widgets::{
+    centred_rect, detail, focus_border_style, help, palette, panel_block, raw_diff, search_popup, sidebar, solve, status_bar, summary,
+};
 
 /// Minimum width for the sidebar panel in columns.
 const SIDEBAR_MIN_WIDTH: u16 = 20;
@@ -26,8 +32,21 @@ const SIDEBAR_MIN_WIDTH: u16 = 20;
 /// Fraction of the main area width allocated to the sidebar (1/N).
 const SIDEBAR_WIDTH_DIVISOR: u16 = 5;
 
+/// Minimum terminal size below which the normal layout is unusable; a hint is
+/// shown instead of a cramped, broken UI.
+const MIN_WIDTH: u16 = 60;
+const MIN_HEIGHT: u16 = 15;
+
 /// Render the entire TUI for the current application state.
 pub fn draw(frame: &mut Frame, app: &mut App) {
+    // Below the minimum size the layout cannot render legibly — show a hint
+    // rather than a broken UI.
+    let full = frame.area();
+    if full.width < MIN_WIDTH || full.height < MIN_HEIGHT {
+        draw_too_small(frame, full);
+        return;
+    }
+
     // Ensure the active section's filter cache is fresh before reading it.
     app.ensure_active_section_cache();
 
@@ -128,6 +147,11 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
         search_popup::draw_search_popup(frame, frame.area(), app);
     }
 
+    // Command palette overlay.
+    if app.palette.visible {
+        palette::draw_palette(frame, frame.area(), app);
+    }
+
     // Solve overlay — rendered on top of main content.
     if !matches!(app.solver.state, crate::state::SolveState::Idle) {
         solve::draw_solve_overlay(frame, frame.area(), app);
@@ -135,8 +159,23 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
 
     // Help overlay — rendered last so it draws on top of everything.
     if app.show_help {
-        help::draw_help(frame, frame.area());
+        help::draw_help(frame, frame.area(), app);
     }
+}
+
+/// Render a centred "terminal too small" hint for sub-minimum window sizes.
+fn draw_too_small(frame: &mut Frame, area: Rect) {
+    if area.width == 0 || area.height == 0 {
+        return;
+    }
+    let t = theme();
+    let lines = vec![
+        Line::from(Span::styled("Terminal too small", Style::default().fg(t.error).add_modifier(Modifier::BOLD))),
+        Line::from(Span::styled(format!("Need at least {MIN_WIDTH}×{MIN_HEIGHT}"), Style::default().fg(t.muted))),
+    ];
+    #[allow(clippy::cast_possible_truncation)] // tiny fixed message
+    let popup = centred_rect(area, 24.min(area.width), (lines.len() as u16).min(area.height));
+    frame.render_widget(Paragraph::new(lines).centered(), popup);
 }
 
 /// Draw the detail panel on the right side.
