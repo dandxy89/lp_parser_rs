@@ -36,20 +36,13 @@ pub fn parse_file(path: &Path) -> LpResult<String> {
 ///
 /// Avoids copying file contents into a heap-allocated `String` by letting the OS
 /// manage paging via `mmap`. The file must be valid UTF-8.
+///
+/// `Send`/`Sync` are auto-derived: `memmap2::Mmap` is already `Send + Sync` and
+/// this struct holds no other state.
 #[cfg(feature = "mmap")]
 pub struct MappedFile {
-    _mmap: memmap2::Mmap,
-    /// SAFETY: Points into `_mmap`'s mapping, which lives as long as this struct.
-    content: *const str,
+    mmap: memmap2::Mmap,
 }
-
-// SAFETY: The underlying Mmap is Send + Sync and the raw pointer only references
-// memory owned by _mmap, which cannot be mutated or freed while MappedFile exists.
-#[cfg(feature = "mmap")]
-unsafe impl Send for MappedFile {}
-// SAFETY: See Send impl — no interior mutability, content is immutable.
-#[cfg(feature = "mmap")]
-unsafe impl Sync for MappedFile {}
 
 #[cfg(feature = "mmap")]
 impl MappedFile {
@@ -57,11 +50,9 @@ impl MappedFile {
     ///
     /// # Safety
     ///
-    /// Uses `unsafe` for `Mmap::map` (undefined behaviour if the file is modified
-    /// externally while mapped) and for the internal raw pointer to the mapped
-    /// region. The pointer is valid for the lifetime of the returned `MappedFile`
-    /// because the `Mmap` is owned by the struct and dropped only when the struct
-    /// is dropped.
+    /// Uses `unsafe` for `Mmap::map`: behaviour is undefined if the file is
+    /// modified externally while mapped. This is the standard trade-off for
+    /// memory-mapped I/O and matches the documented contract of `memmap2::Mmap`.
     ///
     /// # Errors
     ///
@@ -77,20 +68,18 @@ impl MappedFile {
             memmap2::Mmap::map(&file).map_err(|e| LpParseError::io_error(format!("Failed to mmap file '{}': {}", path.display(), e)))?
         };
 
-        let content_str = std::str::from_utf8(&mmap)
-            .map_err(|e| LpParseError::io_error(format!("File '{}' is not valid UTF-8: {}", path.display(), e)))?;
+        // Validate UTF-8 once here so `as_str` can rely on the invariant.
+        std::str::from_utf8(&mmap).map_err(|e| LpParseError::io_error(format!("File '{}' is not valid UTF-8: {}", path.display(), e)))?;
 
-        // Store a raw pointer so MappedFile is self-referential without lifetimes.
-        let content: *const str = content_str;
-
-        Ok(Self { _mmap: mmap, content })
+        Ok(Self { mmap })
     }
 
     /// Borrow the file contents as a string slice.
     #[inline]
     #[must_use]
-    pub const fn as_str(&self) -> &str {
-        // SAFETY: `content` points into `_mmap` which is alive for `&self`'s lifetime.
-        unsafe { &*self.content }
+    pub fn as_str(&self) -> &str {
+        // SAFETY: the bytes were validated as UTF-8 in `open` and the mapping is
+        // immutable for the lifetime of `&self`.
+        unsafe { std::str::from_utf8_unchecked(&self.mmap) }
     }
 }
