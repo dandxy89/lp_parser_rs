@@ -8,10 +8,6 @@ use crate::lexer::{LexerError, Token};
 /// including location information and specific error conditions.
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
 pub enum LpParseError {
-    /// Invalid or malformed constraint syntax
-    #[error("Invalid constraint syntax at position {position}: {context}")]
-    ConstraintSyntax { position: usize, context: String },
-
     /// Invalid numerical value or format
     #[error("Invalid number format '{value}' at position {position}")]
     InvalidNumber { value: String, position: usize },
@@ -23,10 +19,6 @@ pub enum LpParseError {
     /// Invalid bound specification
     #[error("Invalid bounds for variable '{variable}': {details}")]
     InvalidBounds { variable: String, details: String },
-
-    /// Invalid SOS constraint specification
-    #[error("Invalid SOS constraint '{constraint}': {details}")]
-    InvalidSosConstraint { constraint: String, details: String },
 
     /// Validation error for logical consistency
     #[error("Validation error: {message}")]
@@ -42,11 +34,6 @@ pub enum LpParseError {
 }
 
 impl LpParseError {
-    /// Create a new constraint syntax error
-    pub fn constraint_syntax(position: usize, context: impl Into<String>) -> Self {
-        Self::ConstraintSyntax { position, context: context.into() }
-    }
-
     /// Create a new invalid number error
     pub fn invalid_number(value: impl Into<String>, position: usize) -> Self {
         Self::InvalidNumber { value: value.into(), position }
@@ -60,11 +47,6 @@ impl LpParseError {
     /// Create a new invalid bounds error
     pub fn invalid_bounds(variable: impl Into<String>, details: impl Into<String>) -> Self {
         Self::InvalidBounds { variable: variable.into(), details: details.into() }
-    }
-
-    /// Create a new invalid SOS constraint error
-    pub fn invalid_sos_constraint(constraint: impl Into<String>, details: impl Into<String>) -> Self {
-        Self::InvalidSosConstraint { constraint: constraint.into(), details: details.into() }
     }
 
     /// Create a new validation error
@@ -125,8 +107,8 @@ mod tests {
 
     #[test]
     fn test_error_creation() {
-        let err = LpParseError::constraint_syntax(42, "missing operator");
-        assert_eq!(err.to_string(), "Invalid constraint syntax at position 42: missing operator");
+        let err = LpParseError::invalid_bounds("x", "lower exceeds upper");
+        assert_eq!(err.to_string(), "Invalid bounds for variable 'x': lower exceeds upper");
     }
 
     #[test]
