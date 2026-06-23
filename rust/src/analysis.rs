@@ -274,7 +274,14 @@ impl RangeStats {
 
     /// Finalise the stats, normalising the sentinel values for empty sets.
     fn finalise(self) -> Self {
-        if self.count == 0 { Self::default() } else { self }
+        let result = if self.count == 0 { Self::default() } else { self };
+        debug_assert!(
+            result.count == 0 || result.min <= result.max,
+            "postcondition: finalised range min ({}) must not exceed max ({})",
+            result.min,
+            result.max
+        );
+        result
     }
 
     /// Build range stats from a collection of values via the incremental path.
@@ -606,7 +613,15 @@ impl LpProblem {
             };
             (min_v.min(n), max_v.max(n))
         });
-        SparsityMetrics { min_vars_per_constraint: if min_v == usize::MAX { 0 } else { min_v }, max_vars_per_constraint: max_v }
+        let metrics =
+            SparsityMetrics { min_vars_per_constraint: if min_v == usize::MAX { 0 } else { min_v }, max_vars_per_constraint: max_v };
+        debug_assert!(
+            metrics.min_vars_per_constraint <= metrics.max_vars_per_constraint,
+            "postcondition: min vars per constraint ({}) must not exceed max ({})",
+            metrics.min_vars_per_constraint,
+            metrics.max_vars_per_constraint
+        );
+        metrics
     }
 
     /// Analyze variable types, bounds, and usage.
@@ -686,7 +701,19 @@ impl LpProblem {
             }
         }
 
-        self.variables.keys().filter(|name_id| !used_variables.contains(name_id)).map(|id| self.interner.resolve(*id).to_string()).collect()
+        let unused: Vec<String> = self
+            .variables
+            .keys()
+            .filter(|name_id| !used_variables.contains(name_id))
+            .map(|id| self.interner.resolve(*id).to_string())
+            .collect();
+        debug_assert!(
+            unused.len() <= self.variables.len(),
+            "postcondition: unused variable count ({}) cannot exceed total variables ({})",
+            unused.len(),
+            self.variables.len()
+        );
+        unused
     }
 
     /// Analyze constraints.
@@ -740,6 +767,18 @@ impl LpProblem {
             }
         }
 
+        debug_assert_eq!(
+            type_distribution.equality
+                + type_distribution.less_than_equal
+                + type_distribution.greater_than_equal
+                + type_distribution.less_than
+                + type_distribution.greater_than
+                + type_distribution.sos1
+                + type_distribution.sos2,
+            self.constraints.len(),
+            "postcondition: constraint type distribution must sum to total constraint count"
+        );
+
         ConstraintAnalysis { type_distribution, empty_constraints, singleton_constraints, rhs_range: rhs_range.finalise(), sos_summary }
     }
 
@@ -772,6 +811,7 @@ impl LpProblem {
         let constraint_coeff_range = constraint_range.finalise();
         let objective_coeff_range = objective_range.finalise();
         let coefficient_ratio = compute_coefficient_ratio(&constraint_coeff_range, &objective_coeff_range);
+        debug_assert!(coefficient_ratio >= 1.0, "postcondition: coefficient ratio must be >= 1.0, got: {coefficient_ratio}");
 
         CoefficientAnalysis { constraint_coeff_range, objective_coeff_range, large_coefficients, small_coefficients, coefficient_ratio }
     }

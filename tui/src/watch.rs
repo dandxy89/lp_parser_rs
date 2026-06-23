@@ -217,5 +217,4 @@ mod tests {
         assert!(!state.observe(mtime(5), mtime(20)));
         assert!(state.observe(mtime(5), mtime(20)));
     }
-
 }

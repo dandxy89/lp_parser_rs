@@ -1,3 +1,5 @@
+#![cfg(feature = "serde")]
+
 use std::error::Error;
 use std::path::PathBuf;
 

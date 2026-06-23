@@ -2,6 +2,8 @@
 
 mod cli;
 
+#[cfg(feature = "diff")]
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs;
 use std::io::{self, Stdout, Write};
 use std::path::PathBuf;
@@ -13,6 +15,10 @@ use cli::{AnalyzeArgs, Cli, Commands, ConvertArgs, ConvertFormat, InfoArgs, Outp
 #[cfg(feature = "lp-solvers")]
 use cli::{SolveArgs, Solver};
 use lp_parser_rs::analysis::AnalysisConfig;
+#[cfg(feature = "diff")]
+use lp_parser_rs::interner::NameId;
+#[cfg(feature = "diff")]
+use lp_parser_rs::model::Coefficient;
 use lp_parser_rs::model::{Constraint, VariableType};
 use lp_parser_rs::parser::parse_file;
 use lp_parser_rs::problem::LpProblem;
@@ -153,6 +159,23 @@ fn cmd_analyze(args: AnalyzeArgs, verbose: u8, quiet: bool) -> Result<(), BoxErr
     Ok(())
 }
 
+/// Count variables by type, returning `(continuous, integer, binary)`.
+fn count_variable_types(problem: &LpProblem) -> (usize, usize, usize) {
+    let mut continuous = 0;
+    let mut integer = 0;
+    let mut binary = 0;
+
+    for var in problem.variables.values() {
+        match var.var_type {
+            VariableType::Binary => binary += 1,
+            VariableType::Integer => integer += 1,
+            _ => continuous += 1,
+        }
+    }
+
+    (continuous, integer, binary)
+}
+
 fn write_info_text<W: Write>(writer: &mut W, problem: &LpProblem, args: &InfoArgs) -> Result<(), BoxError> {
     writeln!(writer, "=== LP Problem Info ===")?;
 
@@ -164,18 +187,7 @@ fn write_info_text<W: Write>(writer: &mut W, problem: &LpProblem, args: &InfoArg
     writeln!(writer, "Constraints: {}", problem.constraint_count())?;
     writeln!(writer, "Variables: {}", problem.variable_count())?;
 
-    // Count variable types
-    let mut binary_count = 0;
-    let mut integer_count = 0;
-    let mut continuous_count = 0;
-
-    for var in problem.variables.values() {
-        match var.var_type {
-            VariableType::Binary => binary_count += 1,
-            VariableType::Integer => integer_count += 1,
-            _ => continuous_count += 1,
-        }
-    }
+    let (continuous_count, integer_count, binary_count) = count_variable_types(problem);
 
     writeln!(writer)?;
     writeln!(writer, "Variable Types:")?;
@@ -269,17 +281,7 @@ struct VariableInfo {
 
 #[cfg(feature = "serde")]
 fn build_info_struct(problem: &LpProblem, args: &InfoArgs) -> ProblemInfo {
-    let mut binary_count = 0;
-    let mut integer_count = 0;
-    let mut continuous_count = 0;
-
-    for var in problem.variables.values() {
-        match var.var_type {
-            VariableType::Binary => binary_count += 1,
-            VariableType::Integer => integer_count += 1,
-            _ => continuous_count += 1,
-        }
-    }
+    let (continuous_count, integer_count, binary_count) = count_variable_types(problem);
 
     let objectives = if args.objectives {
         Some(
@@ -344,97 +346,85 @@ fn build_info_struct(problem: &LpProblem, args: &InfoArgs) -> ProblemInfo {
     }
 }
 
+/// Absolute and relative tolerances for treating two floats as different.
 #[cfg(feature = "diff")]
-fn cmd_diff(args: DiffArgs, verbose: u8, quiet: bool) -> Result<(), BoxError> {
-    use std::collections::{BTreeMap, BTreeSet, HashMap};
+#[derive(Clone, Copy)]
+struct DiffTol {
+    abs: f64,
+    rel: f64,
+}
 
-    use lp_parser_rs::interner::NameId;
-    use lp_parser_rs::model::{Coefficient, Constraint};
-
-    // Parse rename rules
-    if args.rename.len() % 2 != 0 {
-        return Err("--rename requires pairs of PATTERN REPLACEMENT".into());
-    }
-    let rules: Vec<(regex::Regex, String)> =
-        args.rename.chunks_exact(2).map(|c| Ok::<_, BoxError>((regex::Regex::new(&c[0])?, c[1].clone()))).collect::<Result<_, _>>()?;
-
-    let rewrite = |name: &str| -> String {
-        let mut s = name.to_string();
-        for (re, rep) in &rules {
-            s = re.replace_all(&s, rep.as_str()).into_owned();
-        }
-        s
-    };
-
-    let abs_tol = args.abs_tol;
-    let rel_tol = args.rel_tol;
-    let differs = |a: f64, b: f64| -> bool {
+#[cfg(feature = "diff")]
+impl DiffTol {
+    /// Return true if `a` and `b` differ beyond both tolerances.
+    fn differ(self, a: f64, b: f64) -> bool {
         let diff = (a - b).abs();
         if diff == 0.0 {
             return false;
         }
         let scale = a.abs().max(b.abs());
-        diff > abs_tol && diff > rel_tol * scale
-    };
-
-    if !quiet && verbose > 0 {
-        eprintln!("Diffing {} vs {}", args.file1.display(), args.file2.display());
-        eprintln!("abs_tol={abs_tol} rel_tol={rel_tol} rename_rules={}", rules.len());
+        diff > self.abs && diff > self.rel * scale
     }
+}
 
-    let content1 = parse_file(&args.file1)?;
-    let content2 = parse_file(&args.file2)?;
-    let p1 = LpProblem::parse(&content1)?;
-    let p2 = LpProblem::parse(&content2)?;
+/// The computed differences between two LP problems, keyed by canonical name.
+#[cfg(feature = "diff")]
+struct LpDiff {
+    vars_added: Vec<String>,
+    vars_removed: Vec<String>,
+    vars_type_changed: Vec<(String, String, String)>,
+    cons_added: Vec<String>,
+    cons_removed: Vec<String>,
+    cons_modified: Vec<(String, Vec<String>)>,
+    objs_added: Vec<String>,
+    objs_removed: Vec<String>,
+    objs_modified: Vec<(String, Vec<String>)>,
+}
 
-    // --- build canonical-name -> NameId maps --------------------------------
-    let canon_ids = |problem: &LpProblem, ids: &[NameId]| -> HashMap<String, NameId> {
-        ids.iter().map(|id| (rewrite(problem.resolve(*id)), *id)).collect()
-    };
+/// Apply each rename rule in turn, returning the canonical form of `name`.
+#[cfg(feature = "diff")]
+fn apply_rename_rules(name: &str, rules: &[(regex::Regex, String)]) -> String {
+    let mut s = name.to_string();
+    for (re, rep) in rules {
+        s = re.replace_all(&s, rep.as_str()).into_owned();
+    }
+    s
+}
 
-    let cvars1 = canon_ids(&p1, &p1.variables.keys().copied().collect::<Vec<_>>());
-    let cvars2 = canon_ids(&p2, &p2.variables.keys().copied().collect::<Vec<_>>());
-    let ccons1: HashMap<String, NameId> = p1.constraints.values().map(|c| (rewrite(p1.resolve(c.name())), c.name())).collect();
-    let ccons2: HashMap<String, NameId> = p2.constraints.values().map(|c| (rewrite(p2.resolve(c.name())), c.name())).collect();
-    let cobjs1 = canon_ids(&p1, &p1.objectives.keys().copied().collect::<Vec<_>>());
-    let cobjs2 = canon_ids(&p2, &p2.objectives.keys().copied().collect::<Vec<_>>());
+/// Build a coefficient map keyed by canonical variable name.
+#[cfg(feature = "diff")]
+fn coeff_map(problem: &LpProblem, coeffs: &[Coefficient], rules: &[(regex::Regex, String)]) -> BTreeMap<String, f64> {
+    coeffs.iter().map(|c| (apply_rename_rules(problem.resolve(c.name), rules), c.value)).collect()
+}
 
-    let set_of = |m: &HashMap<String, NameId>| -> BTreeSet<String> { m.keys().cloned().collect() };
-    let vars1 = set_of(&cvars1);
-    let vars2 = set_of(&cvars2);
-    let cons1 = set_of(&ccons1);
-    let cons2 = set_of(&ccons2);
-    let objs1 = set_of(&cobjs1);
-    let objs2 = set_of(&cobjs2);
-
-    let vars_added: Vec<String> = vars2.difference(&vars1).cloned().collect();
-    let vars_removed: Vec<String> = vars1.difference(&vars2).cloned().collect();
-    let cons_added: Vec<String> = cons2.difference(&cons1).cloned().collect();
-    let cons_removed: Vec<String> = cons1.difference(&cons2).cloned().collect();
-    let objs_added: Vec<String> = objs2.difference(&objs1).cloned().collect();
-    let objs_removed: Vec<String> = objs1.difference(&objs2).cloned().collect();
-
-    // Coefficient map keyed by canonical variable name.
-    let coeff_map = |problem: &LpProblem, coeffs: &[Coefficient]| -> BTreeMap<String, f64> {
-        coeffs.iter().map(|c| (rewrite(problem.resolve(c.name)), c.value)).collect()
-    };
-
-    // Count coefficients that changed value, were removed, or were added.
-    let count_coeff_diffs = |m1: &BTreeMap<String, f64>, m2: &BTreeMap<String, f64>| -> usize {
-        let mut diffs = 0usize;
-        for (k, v1) in m1 {
-            match m2.get(k) {
-                Some(v2) if differs(*v1, *v2) => diffs += 1,
-                None => diffs += 1,
-                _ => {}
-            }
+/// Count coefficients that changed value, were removed, or were added.
+#[cfg(feature = "diff")]
+fn count_coeff_diffs(m1: &BTreeMap<String, f64>, m2: &BTreeMap<String, f64>, tol: DiffTol) -> usize {
+    let mut diffs = 0usize;
+    for (k, v1) in m1 {
+        match m2.get(k) {
+            Some(v2) if tol.differ(*v1, *v2) => diffs += 1,
+            None => diffs += 1,
+            _ => {}
         }
-        diffs += m2.keys().filter(|k| !m1.contains_key(*k)).count();
-        diffs
-    };
+    }
+    diffs += m2.keys().filter(|k| !m1.contains_key(*k)).count();
+    diffs
+}
 
-    let mut cons_modified: Vec<(String, Vec<String>)> = Vec::new();
-    for name in cons1.intersection(&cons2) {
+/// Describe how each common constraint changed (operator, rhs, coefficients).
+#[cfg(feature = "diff")]
+fn diff_modified_constraints(
+    p1: &LpProblem,
+    p2: &LpProblem,
+    ccons1: &HashMap<String, NameId>,
+    ccons2: &HashMap<String, NameId>,
+    common: &[String],
+    rules: &[(regex::Regex, String)],
+    tol: DiffTol,
+) -> Vec<(String, Vec<String>)> {
+    let mut modified = Vec::new();
+    for name in common {
         let c1 = &p1.constraints[&ccons1[name]];
         let c2 = &p2.constraints[&ccons2[name]];
         let mut changes = Vec::new();
@@ -446,12 +436,10 @@ fn cmd_diff(args: DiffArgs, verbose: u8, quiet: bool) -> Result<(), BoxError> {
                 if op1 != op2 {
                     changes.push(format!("operator {op1} -> {op2}"));
                 }
-                if differs(*r1, *r2) {
+                if tol.differ(*r1, *r2) {
                     changes.push(format!("rhs {r1} -> {r2}"));
                 }
-                let m1 = coeff_map(&p1, cf1);
-                let m2 = coeff_map(&p2, cf2);
-                let coef_diffs = count_coeff_diffs(&m1, &m2);
+                let coef_diffs = count_coeff_diffs(&coeff_map(p1, cf1, rules), &coeff_map(p2, cf2, rules), tol);
                 if coef_diffs > 0 {
                     changes.push(format!("{coef_diffs} coefficient change(s)"));
                 }
@@ -464,23 +452,64 @@ fn cmd_diff(args: DiffArgs, verbose: u8, quiet: bool) -> Result<(), BoxError> {
             _ => changes.push("constraint kind changed (Standard <-> SOS)".to_string()),
         }
         if !changes.is_empty() {
-            cons_modified.push((name.clone(), changes));
+            modified.push((name.clone(), changes));
         }
     }
+    modified
+}
 
-    let mut objs_modified: Vec<(String, Vec<String>)> = Vec::new();
-    for name in objs1.intersection(&objs2) {
+/// Describe how each common objective's coefficients changed.
+#[cfg(feature = "diff")]
+fn diff_modified_objectives(
+    p1: &LpProblem,
+    p2: &LpProblem,
+    cobjs1: &HashMap<String, NameId>,
+    cobjs2: &HashMap<String, NameId>,
+    common: &[String],
+    rules: &[(regex::Regex, String)],
+    tol: DiffTol,
+) -> Vec<(String, Vec<String>)> {
+    let mut modified = Vec::new();
+    for name in common {
         let o1 = &p1.objectives[&cobjs1[name]];
         let o2 = &p2.objectives[&cobjs2[name]];
-        let m1 = coeff_map(&p1, &o1.coefficients);
-        let m2 = coeff_map(&p2, &o2.coefficients);
-        let coef_diffs = count_coeff_diffs(&m1, &m2);
+        let coef_diffs = count_coeff_diffs(&coeff_map(p1, &o1.coefficients, rules), &coeff_map(p2, &o2.coefficients, rules), tol);
         if coef_diffs > 0 {
-            objs_modified.push((name.clone(), vec![format!("{coef_diffs} coefficient change(s)")]));
+            modified.push((name.clone(), vec![format!("{coef_diffs} coefficient change(s)")]));
         }
     }
+    modified
+}
 
-    let mut vars_type_changed: Vec<(String, String, String)> = Vec::new();
+/// Compare two parsed problems, returning the structural and numeric diff.
+#[cfg(feature = "diff")]
+fn compute_lp_diff(p1: &LpProblem, p2: &LpProblem, rules: &[(regex::Regex, String)], tol: DiffTol) -> LpDiff {
+    let canon = |problem: &LpProblem, ids: Vec<NameId>| -> HashMap<String, NameId> {
+        ids.iter().map(|id| (apply_rename_rules(problem.resolve(*id), rules), *id)).collect()
+    };
+
+    let cvars1 = canon(p1, p1.variables.keys().copied().collect());
+    let cvars2 = canon(p2, p2.variables.keys().copied().collect());
+    let ccons1: HashMap<String, NameId> =
+        p1.constraints.values().map(|c| (apply_rename_rules(p1.resolve(c.name()), rules), c.name())).collect();
+    let ccons2: HashMap<String, NameId> =
+        p2.constraints.values().map(|c| (apply_rename_rules(p2.resolve(c.name()), rules), c.name())).collect();
+    let cobjs1 = canon(p1, p1.objectives.keys().copied().collect());
+    let cobjs2 = canon(p2, p2.objectives.keys().copied().collect());
+
+    let set_of = |m: &HashMap<String, NameId>| -> BTreeSet<String> { m.keys().cloned().collect() };
+    let vars1 = set_of(&cvars1);
+    let vars2 = set_of(&cvars2);
+    let cons1 = set_of(&ccons1);
+    let cons2 = set_of(&ccons2);
+    let objs1 = set_of(&cobjs1);
+    let objs2 = set_of(&cobjs2);
+
+    // Sorted intersections keep modified-section output deterministic.
+    let cons_common: Vec<String> = cons1.intersection(&cons2).cloned().collect();
+    let objs_common: Vec<String> = objs1.intersection(&objs2).cloned().collect();
+
+    let mut vars_type_changed = Vec::new();
     for name in vars1.intersection(&vars2) {
         let t1 = &p1.variables[&cvars1[name]].var_type;
         let t2 = &p2.variables[&cvars2[name]].var_type;
@@ -489,86 +518,142 @@ fn cmd_diff(args: DiffArgs, verbose: u8, quiet: bool) -> Result<(), BoxError> {
         }
     }
 
-    let mut writer = OutputWriter::new(args.output)?;
-    match args.format {
-        OutputFormat::Text => {
-            writeln!(writer, "=== LP Diff ===")?;
-            writeln!(writer, "file1: {}", args.file1.display())?;
-            writeln!(writer, "file2: {}", args.file2.display())?;
-            writeln!(writer, "abs_tol: {abs_tol}  rel_tol: {rel_tol}  rename_rules: {}", rules.len())?;
-            writeln!(writer)?;
-            writeln!(writer, "Sense: {:?} -> {:?}", p1.sense, p2.sense)?;
-            writeln!(
-                writer,
-                "Counts: objectives {} -> {}, constraints {} -> {}, variables {} -> {}",
-                p1.objective_count(),
-                p2.objective_count(),
-                p1.constraint_count(),
-                p2.constraint_count(),
-                p1.variable_count(),
-                p2.variable_count()
-            )?;
-            writeln!(writer)?;
+    LpDiff {
+        vars_added: vars2.difference(&vars1).cloned().collect(),
+        vars_removed: vars1.difference(&vars2).cloned().collect(),
+        vars_type_changed,
+        cons_added: cons2.difference(&cons1).cloned().collect(),
+        cons_removed: cons1.difference(&cons2).cloned().collect(),
+        cons_modified: diff_modified_constraints(p1, p2, &ccons1, &ccons2, &cons_common, rules, tol),
+        objs_added: objs2.difference(&objs1).cloned().collect(),
+        objs_removed: objs1.difference(&objs2).cloned().collect(),
+        objs_modified: diff_modified_objectives(p1, p2, &cobjs1, &cobjs2, &objs_common, rules, tol),
+    }
+}
 
-            let limit = 50usize;
-            let fmt_list = |w: &mut OutputWriter, label: &str, items: &[String]| -> io::Result<()> {
-                writeln!(w, "{label} ({}):", items.len())?;
-                for name in items.iter().take(limit) {
-                    writeln!(w, "  {name}")?;
-                }
-                if items.len() > limit {
-                    writeln!(w, "  ... ({} more)", items.len() - limit)?;
-                }
-                Ok(())
-            };
+/// Render the diff in human-readable text form.
+#[cfg(feature = "diff")]
+fn write_diff_text(
+    writer: &mut OutputWriter,
+    args: &DiffArgs,
+    p1: &LpProblem,
+    p2: &LpProblem,
+    diff: &LpDiff,
+    rule_count: usize,
+    tol: DiffTol,
+) -> io::Result<()> {
+    writeln!(writer, "=== LP Diff ===")?;
+    writeln!(writer, "file1: {}", args.file1.display())?;
+    writeln!(writer, "file2: {}", args.file2.display())?;
+    writeln!(writer, "abs_tol: {}  rel_tol: {}  rename_rules: {rule_count}", tol.abs, tol.rel)?;
+    writeln!(writer)?;
+    writeln!(writer, "Sense: {:?} -> {:?}", p1.sense, p2.sense)?;
+    writeln!(
+        writer,
+        "Counts: objectives {} -> {}, constraints {} -> {}, variables {} -> {}",
+        p1.objective_count(),
+        p2.objective_count(),
+        p1.constraint_count(),
+        p2.constraint_count(),
+        p1.variable_count(),
+        p2.variable_count()
+    )?;
+    writeln!(writer)?;
 
-            fmt_list(&mut writer, "Variables added", &vars_added)?;
-            fmt_list(&mut writer, "Variables removed", &vars_removed)?;
-            writeln!(writer, "Variables with changed type ({}):", vars_type_changed.len())?;
-            for (n, a, b) in vars_type_changed.iter().take(limit) {
-                writeln!(writer, "  {n}: {a} -> {b}")?;
-            }
-
-            fmt_list(&mut writer, "Constraints added", &cons_added)?;
-            fmt_list(&mut writer, "Constraints removed", &cons_removed)?;
-            writeln!(writer, "Constraints modified ({}):", cons_modified.len())?;
-            for (n, changes) in cons_modified.iter().take(limit) {
-                writeln!(writer, "  {n}: {}", changes.join("; "))?;
-            }
-            if cons_modified.len() > limit {
-                writeln!(writer, "  ... ({} more)", cons_modified.len() - limit)?;
-            }
-
-            fmt_list(&mut writer, "Objectives added", &objs_added)?;
-            fmt_list(&mut writer, "Objectives removed", &objs_removed)?;
-            writeln!(writer, "Objectives modified ({}):", objs_modified.len())?;
-            for (n, changes) in objs_modified.iter().take(limit) {
-                writeln!(writer, "  {n}: {}", changes.join("; "))?;
-            }
+    let limit = 50usize;
+    let fmt_list = |w: &mut OutputWriter, label: &str, items: &[String]| -> io::Result<()> {
+        writeln!(w, "{label} ({}):", items.len())?;
+        for name in items.iter().take(limit) {
+            writeln!(w, "  {name}")?;
         }
+        if items.len() > limit {
+            writeln!(w, "  ... ({} more)", items.len() - limit)?;
+        }
+        Ok(())
+    };
+
+    fmt_list(writer, "Variables added", &diff.vars_added)?;
+    fmt_list(writer, "Variables removed", &diff.vars_removed)?;
+    writeln!(writer, "Variables with changed type ({}):", diff.vars_type_changed.len())?;
+    for (n, a, b) in diff.vars_type_changed.iter().take(limit) {
+        writeln!(writer, "  {n}: {a} -> {b}")?;
+    }
+
+    fmt_list(writer, "Constraints added", &diff.cons_added)?;
+    fmt_list(writer, "Constraints removed", &diff.cons_removed)?;
+    writeln!(writer, "Constraints modified ({}):", diff.cons_modified.len())?;
+    for (n, changes) in diff.cons_modified.iter().take(limit) {
+        writeln!(writer, "  {n}: {}", changes.join("; "))?;
+    }
+    if diff.cons_modified.len() > limit {
+        writeln!(writer, "  ... ({} more)", diff.cons_modified.len() - limit)?;
+    }
+
+    fmt_list(writer, "Objectives added", &diff.objs_added)?;
+    fmt_list(writer, "Objectives removed", &diff.objs_removed)?;
+    writeln!(writer, "Objectives modified ({}):", diff.objs_modified.len())?;
+    for (n, changes) in diff.objs_modified.iter().take(limit) {
+        writeln!(writer, "  {n}: {}", changes.join("; "))?;
+    }
+
+    Ok(())
+}
+
+/// Build the JSON/YAML representation of the diff.
+#[cfg(all(feature = "diff", feature = "serde"))]
+fn build_diff_json(args: &DiffArgs, p1: &LpProblem, p2: &LpProblem, diff: &LpDiff, rule_count: usize, tol: DiffTol) -> serde_json::Value {
+    serde_json::json!({
+        "file1": args.file1.display().to_string(),
+        "file2": args.file2.display().to_string(),
+        "abs_tol": tol.abs,
+        "rel_tol": tol.rel,
+        "rename_rule_count": rule_count,
+        "counts": {
+            "objectives": [p1.objective_count(), p2.objective_count()],
+            "constraints": [p1.constraint_count(), p2.constraint_count()],
+            "variables": [p1.variable_count(), p2.variable_count()],
+        },
+        "variables_added": diff.vars_added,
+        "variables_removed": diff.vars_removed,
+        "variables_type_changed": diff.vars_type_changed,
+        "constraints_added": diff.cons_added,
+        "constraints_removed": diff.cons_removed,
+        "constraints_modified": diff.cons_modified,
+        "objectives_added": diff.objs_added,
+        "objectives_removed": diff.objs_removed,
+        "objectives_modified": diff.objs_modified,
+    })
+}
+
+#[cfg(feature = "diff")]
+fn cmd_diff(args: DiffArgs, verbose: u8, quiet: bool) -> Result<(), BoxError> {
+    // Rename rules arrive as a flat list of PATTERN REPLACEMENT pairs.
+    if args.rename.len() % 2 != 0 {
+        return Err("--rename requires pairs of PATTERN REPLACEMENT".into());
+    }
+    let rules: Vec<(regex::Regex, String)> =
+        args.rename.chunks_exact(2).map(|c| Ok::<_, BoxError>((regex::Regex::new(&c[0])?, c[1].clone()))).collect::<Result<_, _>>()?;
+
+    let tol = DiffTol { abs: args.abs_tol, rel: args.rel_tol };
+
+    if !quiet && verbose > 0 {
+        eprintln!("Diffing {} vs {}", args.file1.display(), args.file2.display());
+        eprintln!("abs_tol={} rel_tol={} rename_rules={}", tol.abs, tol.rel, rules.len());
+    }
+
+    let content1 = parse_file(&args.file1)?;
+    let content2 = parse_file(&args.file2)?;
+    let p1 = LpProblem::parse(&content1)?;
+    let p2 = LpProblem::parse(&content2)?;
+
+    let diff = compute_lp_diff(&p1, &p2, &rules, tol);
+
+    let mut writer = OutputWriter::new(args.output.clone())?;
+    match args.format {
+        OutputFormat::Text => write_diff_text(&mut writer, &args, &p1, &p2, &diff, rules.len(), tol)?,
         #[cfg(feature = "serde")]
         OutputFormat::Json | OutputFormat::Yaml => {
-            let summary = serde_json::json!({
-                "file1": args.file1.display().to_string(),
-                "file2": args.file2.display().to_string(),
-                "abs_tol": abs_tol,
-                "rel_tol": rel_tol,
-                "rename_rule_count": rules.len(),
-                "counts": {
-                    "objectives": [p1.objective_count(), p2.objective_count()],
-                    "constraints": [p1.constraint_count(), p2.constraint_count()],
-                    "variables": [p1.variable_count(), p2.variable_count()],
-                },
-                "variables_added": vars_added,
-                "variables_removed": vars_removed,
-                "variables_type_changed": vars_type_changed,
-                "constraints_added": cons_added,
-                "constraints_removed": cons_removed,
-                "constraints_modified": cons_modified,
-                "objectives_added": objs_added,
-                "objectives_removed": objs_removed,
-                "objectives_modified": objs_modified,
-            });
+            let summary = build_diff_json(&args, &p1, &p2, &diff, rules.len(), tol);
             match args.format {
                 OutputFormat::Json => {
                     if args.pretty {
@@ -578,9 +663,7 @@ fn cmd_diff(args: DiffArgs, verbose: u8, quiet: bool) -> Result<(), BoxError> {
                     }
                     writeln!(writer)?;
                 }
-                OutputFormat::Yaml => {
-                    serde_yaml::to_writer(&mut writer, &summary)?;
-                }
+                OutputFormat::Yaml => serde_yaml::to_writer(&mut writer, &summary)?,
                 OutputFormat::Text => unreachable!(),
             }
         }
