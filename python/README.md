@@ -84,13 +84,8 @@ for i, objective in enumerate(parser.objectives):
 # Access variables
 for var_name, var_info in parser.variables.items():
     print(f"Variable {var_name}:")
+    # var_type carries any bounds inline, e.g. "DoubleBound(0.0, 100.0)"
     print(f"  Type: {var_info['var_type']}")
-    if 'bounds' in var_info:
-        bounds = var_info['bounds']
-        if 'lower' in bounds:
-            print(f"  Lower bound: {bounds['lower']}")
-        if 'upper' in bounds:
-            print(f"  Upper bound: {bounds['upper']}")
 
 # Access constraints
 for constraint in parser.constraints:
@@ -271,11 +266,10 @@ print(f"Removed constraints: {diff['removed_constraints']}")
 {
     "variable_name": {
         "name": "variable_name",
-        "var_type": "Continuous",  # or "Binary", "Integer", etc.
-        "bounds": {  # Optional
-            "lower": 0.0,  # Optional
-            "upper": 100.0  # Optional
-        }
+        # Debug-formatted VariableType. Bounds are encoded inline:
+        #   "Free", "General", "Binary", "Integer", "SemiContinuous",
+        #   "LowerBound(0.0)", "UpperBound(100.0)", "DoubleBound(0.0, 100.0)"
+        "var_type": "DoubleBound(0.0, 100.0)"
     }
 }
 ```
@@ -287,7 +281,7 @@ print(f"Removed constraints: {diff['removed_constraints']}")
     {
         "name": "constraint_name",
         "type": "standard",  # or "sos"
-        "sense": "LessOrEqual",  # "Equal", "GreaterOrEqual"
+        "operator": "LTE",  # "GT", "GTE", "EQ", "LT", "LTE"
         "rhs": 10.0,
         "coefficients": [
             {"name": "variable_name", "value": 2.0}
