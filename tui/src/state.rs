@@ -466,3 +466,125 @@ pub enum Side {
     /// The new (file 2) version.
     New,
 }
+
+/// A command exposed in the `Ctrl+P` command palette.
+///
+/// Every entry maps onto an action that already has a direct keybinding; the
+/// palette is a discoverable, fuzzy-searchable front-end to the same handlers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PaletteCommand {
+    GoSummary,
+    GoVariables,
+    GoConstraints,
+    GoObjectives,
+    GoNumerics,
+    FilterAll,
+    FilterAdded,
+    FilterRemoved,
+    FilterModified,
+    FilterRenamed,
+    ToggleRawView,
+    ToggleIgnoreOrder,
+    CycleSort,
+    CycleRelTol,
+    CycleAbsTol,
+    OpenSearch,
+    Solve,
+    ExportCsv,
+    YankName,
+    YankOld,
+    YankNew,
+    YankDetail,
+    ShowHelp,
+    Quit,
+}
+
+impl PaletteCommand {
+    /// Every command, in display order.
+    pub const ALL: [Self; 24] = [
+        Self::GoSummary,
+        Self::GoVariables,
+        Self::GoConstraints,
+        Self::GoObjectives,
+        Self::GoNumerics,
+        Self::FilterAll,
+        Self::FilterAdded,
+        Self::FilterRemoved,
+        Self::FilterModified,
+        Self::FilterRenamed,
+        Self::ToggleRawView,
+        Self::ToggleIgnoreOrder,
+        Self::CycleSort,
+        Self::CycleRelTol,
+        Self::CycleAbsTol,
+        Self::OpenSearch,
+        Self::Solve,
+        Self::ExportCsv,
+        Self::YankName,
+        Self::YankOld,
+        Self::YankNew,
+        Self::YankDetail,
+        Self::ShowHelp,
+        Self::Quit,
+    ];
+
+    /// Human-readable label shown in the palette and matched against the query.
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::GoSummary => "Go to Summary",
+            Self::GoVariables => "Go to Variables",
+            Self::GoConstraints => "Go to Constraints",
+            Self::GoObjectives => "Go to Objectives",
+            Self::GoNumerics => "Go to Numerics",
+            Self::FilterAll => "Filter: All",
+            Self::FilterAdded => "Filter: Added",
+            Self::FilterRemoved => "Filter: Removed",
+            Self::FilterModified => "Filter: Modified",
+            Self::FilterRenamed => "Filter: Renamed",
+            Self::ToggleRawView => "Toggle raw text view",
+            Self::ToggleIgnoreOrder => "Toggle ignore coefficient order",
+            Self::CycleSort => "Cycle sort mode",
+            Self::CycleRelTol => "Cycle relative tolerance",
+            Self::CycleAbsTol => "Cycle absolute tolerance",
+            Self::OpenSearch => "Search entries",
+            Self::Solve => "Solve problem (HiGHS)",
+            Self::ExportCsv => "Export diff to CSV",
+            Self::YankName => "Yank entry name",
+            Self::YankOld => "Yank old side (file 1)",
+            Self::YankNew => "Yank new side (file 2)",
+            Self::YankDetail => "Yank detail panel",
+            Self::ShowHelp => "Show help",
+            Self::Quit => "Quit",
+        }
+    }
+
+    /// The equivalent direct keybinding, shown right-aligned in the palette.
+    pub const fn hint(self) -> &'static str {
+        match self {
+            Self::GoSummary => "1",
+            Self::GoVariables => "2",
+            Self::GoConstraints => "3",
+            Self::GoObjectives => "4",
+            Self::GoNumerics => "5",
+            Self::FilterAll => "a",
+            Self::FilterAdded => "+",
+            Self::FilterRemoved => "-",
+            Self::FilterModified => "m",
+            Self::FilterRenamed => "=",
+            Self::ToggleRawView => "r",
+            Self::ToggleIgnoreOrder => "o",
+            Self::CycleSort => "s",
+            Self::CycleRelTol => "t",
+            Self::CycleAbsTol => "T",
+            Self::OpenSearch => "/",
+            Self::Solve => "S",
+            Self::ExportCsv => "w",
+            Self::YankName => "yy",
+            Self::YankOld => "yo",
+            Self::YankNew => "yn",
+            Self::YankDetail => "Y",
+            Self::ShowHelp => "?",
+            Self::Quit => "q",
+        }
+    }
+}

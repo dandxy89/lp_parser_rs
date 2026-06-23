@@ -43,7 +43,7 @@ pub struct StatusBarParams<'a> {
 }
 
 /// Key hints shown on the right of the status bar.
-const HINTS: &str = "Tab:panel  Enter:detail  j/k:nav  y:yank  /:search  ?:help  q:quit";
+const HINTS: &str = "j/k:nav  [/]:section  /:search  ^p:palette  ?:help  q:quit";
 
 /// Muted separator between status bar segments.
 const SEPARATOR: &str = "  \u{2502}  ";
