@@ -98,7 +98,7 @@ fn extract_problem_name(input: &str) -> Option<String> {
         if let Some(c) = content {
             let c = c.trim();
             let prefix = "problem name:";
-            if c.len() >= prefix.len() && c[..prefix.len()].eq_ignore_ascii_case(prefix) {
+            if c.get(..prefix.len()).is_some_and(|head| head.eq_ignore_ascii_case(prefix)) {
                 return Some(c[prefix.len()..].trim().to_string());
             }
         }
