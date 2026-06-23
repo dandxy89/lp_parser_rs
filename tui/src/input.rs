@@ -109,6 +109,10 @@ impl App {
             KeyCode::Char('4') => self.set_section(Section::Objectives),
             KeyCode::Char('5') => self.set_section(Section::Numerics),
 
+            // Cycle sections from any focus (lazygit-style sub-tab navigation).
+            KeyCode::Char(']') => self.cycle_section(true),
+            KeyCode::Char('[') => self.cycle_section(false),
+
             // Navigation (vi-style and arrow keys).
             KeyCode::Char('j' | 'n') | KeyCode::Down => self.navigate_down(),
             KeyCode::Char('k' | 'N') | KeyCode::Up => self.navigate_up(),
@@ -216,11 +220,44 @@ impl App {
         self.recompute_search_popup();
     }
 
-    /// Cycle focus: `SectionSelector` → `NameList` → Detail → `SectionSelector`.
-    /// Skips `NameList` when the current section has no selectable entries.
+    /// Cycle the active section forward (`true`) or backward (`false`), wrapping
+    /// around. Bound to `]` / `[` and reachable from any focus, so changing
+    /// section never requires first parking focus on the tab bar.
+    fn cycle_section(&mut self, forward: bool) {
+        let count = Section::ALL.len();
+        let current = self.active_section.index();
+        let next = if forward { (current + 1) % count } else { (current + count - 1) % count };
+        self.set_section(Section::from_index(next));
+    }
+
+    /// Move focus into the section's content after a section change: the name
+    /// list when it has entries, otherwise the detail panel. This is the
+    /// ergonomic win — after `2`/`]` you land on the variable list and `j`/`k`
+    /// scroll it immediately, instead of parking on the tab bar.
+    fn focus_section_content(&mut self) {
+        if self.has_name_list() {
+            if self.active_name_list_state_mut().selected().is_none() {
+                self.active_name_list_state_mut().select(Some(0));
+            }
+            self.focus = Focus::NameList;
+        } else {
+            self.focus = Focus::Detail;
+        }
+        self.detail_scroll = 0;
+    }
+
+    /// Toggle focus between the name list and the detail panel.
+    ///
+    /// The tab bar (`SectionSelector`) is no longer part of the `Tab` cycle —
+    /// sections are switched with `1`–`5` or `[`/`]`. A click on the tab bar can
+    /// still leave focus there; `Tab` then moves into the content.
     fn cycle_focus_forward(&mut self) {
         self.focus = match self.focus {
-            Focus::SectionSelector => {
+            Focus::NameList => {
+                self.detail_scroll = 0;
+                Focus::Detail
+            }
+            Focus::Detail | Focus::SectionSelector => {
                 if self.has_name_list() {
                     if self.active_name_list_state_mut().selected().is_none() {
                         self.active_name_list_state_mut().select(Some(0));
@@ -231,33 +268,13 @@ impl App {
                     Focus::Detail
                 }
             }
-            Focus::NameList => {
-                self.detail_scroll = 0;
-                Focus::Detail
-            }
-            Focus::Detail => Focus::SectionSelector,
         };
     }
 
-    /// Cycle focus backward: Detail → `NameList` → `SectionSelector`.
+    /// Backward focus toggle. With only two cycle targets this mirrors
+    /// [`Self::cycle_focus_forward`].
     fn cycle_focus_backward(&mut self) {
-        self.focus = match self.focus {
-            Focus::Detail => {
-                if self.has_name_list() {
-                    if self.active_name_list_state_mut().selected().is_none() {
-                        self.active_name_list_state_mut().select(Some(0));
-                    }
-                    Focus::NameList
-                } else {
-                    Focus::SectionSelector
-                }
-            }
-            Focus::NameList => Focus::SectionSelector,
-            Focus::SectionSelector => {
-                self.detail_scroll = 0;
-                Focus::Detail
-            }
-        };
+        self.cycle_focus_forward();
     }
 
     fn navigate_down(&mut self) {
@@ -676,7 +693,9 @@ impl App {
         self.ensure_active_section_cache();
         self.reset_name_list_selection();
         self.detail_scroll = 0;
-        self.focus = Focus::SectionSelector;
+        // Land focus on the section's content so navigation keys act on it
+        // immediately, rather than on the tab bar.
+        self.focus_section_content();
     }
 
     pub(crate) fn set_filter(&mut self, filter: DiffFilter) {
