@@ -101,16 +101,6 @@ impl CompiledSearch {
     }
 }
 
-impl std::fmt::Debug for CompiledSearch {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Regex(Ok(re)) => write!(f, "CompiledSearch::Regex({re})"),
-            Self::Regex(Err(e)) => write!(f, "CompiledSearch::Regex(Err({e}))"),
-            Self::Substring(s) => write!(f, "CompiledSearch::Substring({s:?})"),
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
