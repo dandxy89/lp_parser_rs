@@ -2,6 +2,10 @@
 
 A terminal-based interactive diff viewer for Linear Programming files (LP and MPS formats), built with [ratatui](https://ratatui.rs).
 
+![lp_diff demo](assets/demo.gif)
+
+The demo compares `fit1d.lp` against `fit2d.lp`: browsing the coefficient-level side-by-side constraint diff, telescope-style fuzzy search, and an on-demand HiGHS solve. Regenerate it with `vhs scripts/demo.tape && gifsicle -O3 --batch assets/demo.gif` (run from the repo root).
+
 ## Installation
 
 ```sh
