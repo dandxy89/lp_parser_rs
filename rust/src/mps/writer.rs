@@ -57,18 +57,7 @@ fn write_mps_number(output: &mut String, value: f64, precision: usize) -> std::f
     if value == f64::NEG_INFINITY {
         return write!(output, "-1e30");
     }
-    debug_assert!(value.is_finite(), "write_mps_number called with NaN value");
-
-    let is_whole = value.fract().abs() < f64::EPSILON;
-    let is_safe = value >= (i64::MIN as f64) && value <= (i64::MAX as f64);
-
-    if is_whole && is_safe && value.abs() < 1e15 {
-        #[allow(clippy::cast_possible_truncation)]
-        let cast = value as i64;
-        write!(output, "{cast}")
-    } else {
-        crate::writer::write_trimmed_decimal(output, value, precision)
-    }
+    crate::writer::write_whole_or_decimal(output, value, precision, 1e15)
 }
 
 // --- Section writers ---

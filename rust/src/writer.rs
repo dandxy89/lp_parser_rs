@@ -383,16 +383,23 @@ fn write_formatted_coefficient(output: &mut String, name: &str, value: f64, is_f
 
 /// Write a number with specified precision directly to the output buffer,
 /// removing trailing zeros. Avoids intermediate `String` allocation.
-#[allow(clippy::uninlined_format_args, clippy::cast_precision_loss, clippy::cast_possible_truncation)]
 fn write_number(output: &mut String, value: f64, precision: usize) -> std::fmt::Result {
-    debug_assert!(value.is_finite(), "write_number called with non-finite value: {value}");
+    write_whole_or_decimal(output, value, precision, 1e10)
+}
+
+/// Write `value` as a bare integer when it is whole and `|value| < max_int_abs`
+/// (and round-trips through `i64`), otherwise as a trimmed decimal. Shared by
+/// the LP and MPS writers, which differ only in their integer-range threshold.
+#[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
+pub(crate) fn write_whole_or_decimal(output: &mut String, value: f64, precision: usize, max_int_abs: f64) -> std::fmt::Result {
+    debug_assert!(value.is_finite(), "write_whole_or_decimal called with non-finite value: {value}");
     let is_whole_number = value.fract().abs() < f64::EPSILON;
     let is_safe_for_i64 = value >= (i64::MIN as f64) && value <= (i64::MAX as f64);
 
-    if is_whole_number && is_safe_for_i64 && value.abs() < 1e10 {
+    if is_whole_number && is_safe_for_i64 && value.abs() < max_int_abs {
         let cast = value as i64;
         debug_assert!((cast as f64 - value).abs() < 1.0, "i64 cast lost precision: {value} -> {cast}");
-        write!(output, "{}", cast)
+        write!(output, "{cast}")
     } else {
         write_trimmed_decimal(output, value, precision)
     }
