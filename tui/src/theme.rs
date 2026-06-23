@@ -49,6 +49,10 @@ pub struct Theme {
 pub enum ThemeMode {
     Dark,
     Light,
+    /// Monochrome — every colour resolves to the terminal default. Selected when
+    /// `NO_COLOR` is set (see <https://no-color.org>); structure is then carried
+    /// by borders, bold/underline modifiers, and the `[+] [-] [~] [>]` prefixes.
+    Mono,
 }
 
 /// Dark palette — the default, tuned for dark terminal backgrounds.
@@ -89,6 +93,26 @@ static LIGHT_THEME: Theme = Theme {
     zebra_bg: Color::Indexed(253),
 };
 
+/// Monochrome palette — every colour is the terminal default. Honours
+/// `NO_COLOR`: nothing but the default fg/bg is emitted, so selection and focus
+/// rely on bold/underline modifiers, the `▶` cursor symbol, and the kind prefixes.
+static MONO_THEME: Theme = Theme {
+    added: Color::Reset,
+    removed: Color::Reset,
+    modified: Color::Reset,
+    muted: Color::Reset,
+    accent: Color::Reset,
+    text: Color::Reset,
+    info: Color::Reset,
+    error: Color::Reset,
+    warning: Color::Reset,
+    highlight_bg: Color::Reset,
+    border_focus: Color::Reset,
+    secondary_accent: Color::Reset,
+    border: Color::Reset,
+    zebra_bg: Color::Reset,
+};
+
 /// The palette chosen at startup. Falls back to dark when never initialised
 /// (e.g. in unit tests that render widgets without going through `main`).
 static ACTIVE_THEME: OnceLock<&'static Theme> = OnceLock::new();
@@ -101,6 +125,7 @@ pub fn init_theme(mode: ThemeMode) {
     let palette = match mode {
         ThemeMode::Dark => &DARK_THEME,
         ThemeMode::Light => &LIGHT_THEME,
+        ThemeMode::Mono => &MONO_THEME,
     };
     // First call wins; later calls (only possible from tests) keep the first
     // palette so cached lines built against it never go stale.
