@@ -96,14 +96,23 @@ enum ThemeArg {
 
 impl ThemeArg {
     /// Resolve to a concrete theme mode, consulting the environment for `Auto`.
+    ///
+    /// `NO_COLOR` (<https://no-color.org>) forces monochrome, but only when the
+    /// user left `--theme` at its default: an explicit `--theme dark|light` is
+    /// an intentional override and wins.
     fn resolve(self) -> theme::ThemeMode {
         match self {
             Self::Dark => theme::ThemeMode::Dark,
             Self::Light => theme::ThemeMode::Light,
-            Self::Auto => std::env::var("COLORFGBG")
-                .ok()
-                .and_then(|value| theme::detect_mode_from_colorfgbg(&value))
-                .unwrap_or(theme::ThemeMode::Dark),
+            Self::Auto => {
+                if std::env::var_os("NO_COLOR").is_some() {
+                    return theme::ThemeMode::Mono;
+                }
+                std::env::var("COLORFGBG")
+                    .ok()
+                    .and_then(|value| theme::detect_mode_from_colorfgbg(&value))
+                    .unwrap_or(theme::ThemeMode::Dark)
+            }
         }
     }
 }
@@ -122,6 +131,29 @@ fn build_rename_rules(raw: &[String]) -> Result<Vec<(regex::Regex, String)>, Box
         rules.push((re, chunk[1].clone()));
     }
     Ok(rules)
+}
+
+/// Suspend the process (Ctrl+Z) and resume cleanly.
+///
+/// Leaves raw mode and the alternate screen so the parent shell is intact while
+/// stopped, raises `SIGTSTP`, and — once the shell foregrounds us again — re-enters
+/// the alternate screen and forces a full redraw. Execution resumes right after the
+/// `raise` call, so no separate `SIGCONT` handler is needed.
+#[cfg(unix)]
+fn suspend<W: io::Write>(terminal: &mut Terminal<CrosstermBackend<W>>) -> io::Result<()> {
+    disable_raw_mode()?;
+    execute!(io::stderr(), LeaveAlternateScreen, DisableMouseCapture, crossterm::cursor::Show)?;
+
+    // SAFETY: raise() is async-signal-safe and SIGTSTP is a valid signal number;
+    // it merely stops this process until a SIGCONT is delivered.
+    unsafe {
+        libc::raise(libc::SIGTSTP);
+    }
+
+    enable_raw_mode()?;
+    execute!(io::stderr(), EnterAlternateScreen, EnableMouseCapture)?;
+    terminal.clear()?;
+    Ok(())
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -247,7 +279,16 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         }
 
         match events.next()? {
-            Event::Key(key) => app.handle_key(key),
+            Event::Key(key) => {
+                // Ctrl+Z: in raw mode the terminal does not generate SIGTSTP, so
+                // suspend ourselves explicitly, restoring the terminal first.
+                #[cfg(unix)]
+                if key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) && key.code == crossterm::event::KeyCode::Char('z') {
+                    suspend(&mut terminal)?;
+                    continue;
+                }
+                app.handle_key(key);
+            }
             Event::Mouse(mouse) => app.handle_mouse(mouse),
             Event::Resize => {} // ratatui handles resize automatically
             Event::Tick => {
