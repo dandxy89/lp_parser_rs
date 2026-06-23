@@ -1,0 +1,7 @@
+#!/bin/sh
+# Pre-push checks: format, lint, test. Abort push on any failure.
+set -e
+
+cargo fmt --all -- --check
+cargo clippy --all-targets -- -D warnings
+cargo test
