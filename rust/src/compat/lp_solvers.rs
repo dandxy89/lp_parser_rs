@@ -17,7 +17,7 @@
 //!
 //! ```rust,ignore
 //! use lp_parser_rs::problem::LpProblem;
-//! use lp_parser_rs::lp_solvers_compat::ToLpSolvers;
+//! use lp_parser_rs::compat::lp_solvers::LpSolversCompat;
 //! use lp_solvers::solvers::{CbcSolver, SolverTrait};
 //!
 //! let lp_content = r"
@@ -29,7 +29,7 @@
 //! ";
 //!
 //! let problem = LpProblem::parse(lp_content).unwrap();
-//! let compat = problem.to_lp_solvers().unwrap();
+//! let compat = LpSolversCompat::try_new(&problem).unwrap();
 //!
 //! // Check for any warnings about unsupported features
 //! for warning in compat.warnings() {
@@ -375,23 +375,6 @@ impl<'a> lp_solvers::lp_format::LpProblem<'a> for LpSolversCompat<'a> {
     }
 }
 
-/// Extension trait for converting `LpProblem` to lp-solvers compatible format.
-pub trait ToLpSolvers {
-    /// Try to convert to an lp-solvers compatible wrapper.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the problem is not compatible with lp-solvers
-    /// (e.g., multiple objectives or strict inequalities).
-    fn to_lp_solvers(&self) -> Result<LpSolversCompat<'_>, LpSolversCompatError>;
-}
-
-impl ToLpSolvers for LpProblem {
-    fn to_lp_solvers(&self) -> Result<LpSolversCompat<'_>, LpSolversCompatError> {
-        LpSolversCompat::try_new(self)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -501,14 +484,14 @@ mod tests {
     #[test]
     fn test_problem_sense_and_name() {
         let p = simple_problem();
-        let c = p.to_lp_solvers().unwrap();
+        let c = LpSolversCompat::try_new(&p).unwrap();
         assert!(matches!(lp_solvers::lp_format::LpProblem::sense(&c), LpObjective::Minimize));
         assert_eq!(lp_solvers::lp_format::LpProblem::name(&c), "lp_parser_problem");
 
         let mut p = simple_problem();
         p.sense = Sense::Maximize;
         p.name = Some("test".to_string());
-        let c = p.to_lp_solvers().unwrap();
+        let c = LpSolversCompat::try_new(&p).unwrap();
         assert!(matches!(lp_solvers::lp_format::LpProblem::sense(&c), LpObjective::Maximize));
         assert_eq!(lp_solvers::lp_format::LpProblem::name(&c), "test");
     }

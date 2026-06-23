@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 
-use lp_parser_rs::compat::lp_solvers::{LpSolversCompatError, ToLpSolvers};
+use lp_parser_rs::compat::lp_solvers::{LpSolversCompat, LpSolversCompatError};
 use lp_parser_rs::parser::parse_file;
 use lp_parser_rs::problem::LpProblem;
 use lp_solvers::lp_format::{LpObjective, LpProblem as LpSolversProblem};
@@ -20,7 +20,7 @@ fn test_diet_file_converts_to_lp_solvers() {
 
     assert_eq!(problem.objective_count(), 1);
 
-    let compat = problem.to_lp_solvers().expect("failed to convert to lp-solvers format");
+    let compat = LpSolversCompat::try_new(&problem).expect("failed to convert to lp-solvers format");
 
     assert!(compat.is_fully_compatible());
     assert_eq!(compat.name(), "diet");
@@ -34,7 +34,7 @@ fn test_afiro_file_rejects_multiple_objectives() {
 
     assert!(problem.objective_count() > 1);
 
-    let result = problem.to_lp_solvers();
+    let result = LpSolversCompat::try_new(&problem);
     assert!(matches!(result, Err(LpSolversCompatError::MultipleObjectives { .. })));
 }
 
@@ -43,7 +43,7 @@ fn test_sos_file_converts_with_warning() {
     let content = read_file_from_resources("sos.lp");
     let problem = LpProblem::parse(&content).expect("failed to parse LP problem");
 
-    let compat = problem.to_lp_solvers().expect("failed to convert to lp-solvers format");
+    let compat = LpSolversCompat::try_new(&problem).expect("failed to convert to lp-solvers format");
 
     assert!(!compat.is_fully_compatible());
     assert!(!compat.warnings().is_empty());
@@ -53,7 +53,7 @@ fn test_sos_file_converts_with_warning() {
 fn test_lp_format_output() {
     let content = read_file_from_resources("diet.lp");
     let problem = LpProblem::parse(&content).expect("failed to parse LP problem");
-    let compat = problem.to_lp_solvers().expect("failed to convert to lp-solvers format");
+    let compat = LpSolversCompat::try_new(&problem).expect("failed to convert to lp-solvers format");
 
     let displayed = format!("{}", compat.display_lp());
 
@@ -68,7 +68,7 @@ fn test_solve_with_cbc() {
 
     let content = read_file_from_resources("diet.lp");
     let problem = LpProblem::parse(&content).expect("failed to parse LP problem");
-    let compat = problem.to_lp_solvers().expect("failed to convert to lp-solvers format");
+    let compat = LpSolversCompat::try_new(&problem).expect("failed to convert to lp-solvers format");
 
     let solver = CbcSolver::new();
     let solution = solver.run(&compat).expect("solver failed");
