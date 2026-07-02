@@ -413,7 +413,7 @@ pub fn render_objective_detail(
 /// standard constraints. Returns the total content line count.
 ///
 /// Uses windowed rendering: only builds `Line` objects for coefficient rows
-/// visible in the viewport, avoiding O(total_rows) allocations per frame.
+/// visible in the viewport, avoiding `O(total_rows)` allocations per frame.
 #[allow(clippy::too_many_arguments)]
 fn render_constraint_side_by_side(
     frame: &mut Frame,

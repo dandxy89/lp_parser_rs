@@ -274,7 +274,7 @@ pub enum SortMode {
 }
 
 impl SortMode {
-    /// Cycle to the next sort mode: Name → AbsDelta → RelDelta → Name.
+    /// Cycle to the next sort mode: Name → `AbsDelta` → `RelDelta` → Name.
     #[must_use]
     pub const fn next(self) -> Self {
         match self {

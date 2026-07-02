@@ -68,6 +68,8 @@ pub fn write_lp_string(problem: &LpProblem) -> String {
 ///
 /// A string containing the LP file content
 #[must_use]
+// The only panic is the expect on fmt::Write to String, which is infallible.
+#[allow(clippy::missing_panics_doc)]
 pub fn write_lp_string_with_options(problem: &LpProblem, options: &LpWriterOptions) -> String {
     let mut output = String::new();
     build_lp(&mut output, problem, options).expect("fmt::Write to String is infallible");
@@ -323,7 +325,7 @@ fn estimate_coefficient_len(name: &str, value: f64, is_first: bool) -> usize {
     // " + " or " - " prefix = 3 chars, number ~= up to 12 chars, space + name
     let number_len = if is_one { 0 } else { 12 };
     let prefix_len = if is_first { if value < 0.0 { 2 } else { 0 } } else { 3 };
-    let space_before_name = if is_one && is_first && value >= 0.0 { 0 } else { 1 };
+    let space_before_name = usize::from(!(is_one && is_first && value >= 0.0));
     prefix_len + number_len + space_before_name + name.len()
 }
 

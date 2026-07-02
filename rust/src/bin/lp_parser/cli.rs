@@ -165,7 +165,7 @@ pub struct DiffArgs {
     #[arg(long, default_value_t = 0.0)]
     pub abs_tol: f64,
 
-    /// Relative tolerance for numeric comparisons (|a-b| <= rel_tol * max(|a|,|b|))
+    /// Relative tolerance for numeric comparisons (`|a-b| <= rel_tol * max(|a|,|b|)`)
     #[arg(long, default_value_t = 0.0)]
     pub rel_tol: f64,
 

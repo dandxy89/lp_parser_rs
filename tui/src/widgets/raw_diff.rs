@@ -88,7 +88,7 @@ fn render_divider(frame: &mut Frame, area: Rect, height: u16) {
     frame.render_widget(para, area);
 }
 
-/// Extract the raw LP text for an entry given its byte_offset in the source text.
+/// Extract the raw LP text for an entry given its `byte_offset` in the source text.
 ///
 /// Scans forward from `byte_offset` until a section keyword or the next named
 /// entry (line starting with `identifier:`) is found, returning the slice.

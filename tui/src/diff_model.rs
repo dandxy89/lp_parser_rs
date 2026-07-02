@@ -22,6 +22,9 @@ pub const TOLERANCE_PRESETS: [f64; 5] = [0.0, 1e-9, 1e-6, 1e-4, 1e-2];
 /// the first press jumps to `TOLERANCE_PRESETS[0]` (tolerance off) — the simplest
 /// well-defined starting point for the cycle.
 #[must_use]
+// Cycling matches the exact preset constants; a fuzzy match would wrongly
+// treat a nearby custom CLI tolerance as one of the presets.
+#[allow(clippy::float_cmp)]
 pub fn next_tolerance_preset(current: f64) -> f64 {
     debug_assert!(current.is_finite() && current >= 0.0, "tolerance must be finite and non-negative");
     match TOLERANCE_PRESETS.iter().position(|&p| p == current) {
@@ -647,7 +650,7 @@ fn constraint_summary(problem: &LpProblem, constraint: &Constraint) -> String {
     }
 }
 
-/// Build a sorted vec of (canonical_name, &Variable) pairs.
+/// Build a sorted vec of (`canonical_name`, &Variable) pairs.
 /// `canonical_name` is the original name with `opts.rename_rules` applied.
 fn build_sorted_vars<'a>(problem: &'a LpProblem, opts: &DiffOptions) -> Vec<(String, &'a lp_parser_rs::model::Variable)> {
     let mut pairs: Vec<_> = problem.variables.iter().map(|(id, var)| (opts.rewrite(problem.resolve(*id)), var)).collect();
@@ -655,7 +658,7 @@ fn build_sorted_vars<'a>(problem: &'a LpProblem, opts: &DiffOptions) -> Vec<(Str
     pairs
 }
 
-/// Build a sorted vec of (original_name_id, canonical_name, &Constraint) triples.
+/// Build a sorted vec of (`original_name_id`, `canonical_name`, &Constraint) triples.
 ///
 /// Preserves the original per-file `NameId` for line-map lookups while using the
 /// rewritten (canonical) name for sort and merge-join.
@@ -665,7 +668,7 @@ fn build_sorted_constraints<'a>(problem: &'a LpProblem, opts: &DiffOptions) -> V
     triples
 }
 
-/// Build a sorted vec of (canonical_name, &Objective) pairs.
+/// Build a sorted vec of (`canonical_name`, &Objective) pairs.
 fn build_sorted_objectives<'a>(problem: &'a LpProblem, opts: &DiffOptions) -> Vec<(String, &'a lp_parser_rs::model::Objective)> {
     let mut pairs: Vec<_> = problem.objectives.iter().map(|(id, o)| (opts.rewrite(problem.resolve(*id)), o)).collect();
     pairs.sort_unstable_by(|a, b| a.0.cmp(&b.0));
@@ -745,17 +748,17 @@ fn diff_variables(p1: &LpProblem, p2: &LpProblem, opts: &DiffOptions) -> Section
 #[allow(clippy::too_many_arguments)]
 fn diff_standard_constraints(
     old_coefficients: &[ResolvedCoefficient],
-    old_operator: &ComparisonOp,
+    old_operator: ComparisonOp,
     old_rhs: f64,
     new_coefficients: &[ResolvedCoefficient],
-    new_operator: &ComparisonOp,
+    new_operator: ComparisonOp,
     new_rhs: f64,
     interner: &NameInterner,
     order_changed: bool,
     opts: &DiffOptions,
 ) -> Option<ConstraintDiffDetail> {
     let coeff_changes = diff_coefficients(old_coefficients, new_coefficients, interner, opts);
-    let operator_change = if old_operator == new_operator { None } else { Some((*old_operator, *new_operator)) };
+    let operator_change = if old_operator == new_operator { None } else { Some((old_operator, new_operator)) };
     let rhs_change = if opts.numeric_differs(old_rhs, new_rhs) { Some((old_rhs, new_rhs)) } else { None };
 
     if coeff_changes.is_empty() && operator_change.is_none() && rhs_change.is_none() && !order_changed {
@@ -770,23 +773,23 @@ fn diff_standard_constraints(
         rhs_change,
         old_rhs,
         new_rhs,
-        old_operator: *old_operator,
+        old_operator,
         order_changed,
     })
 }
 
 /// Diff two SOS constraints and return the detail if they differ, `None` if unchanged.
 fn diff_sos_constraints(
-    old_type: &SOSType,
+    old_type: SOSType,
     old_weights: &[ResolvedCoefficient],
-    new_type: &SOSType,
+    new_type: SOSType,
     new_weights: &[ResolvedCoefficient],
     interner: &NameInterner,
     order_changed: bool,
     opts: &DiffOptions,
 ) -> Option<ConstraintDiffDetail> {
     let weight_changes = diff_coefficients(old_weights, new_weights, interner, opts);
-    let type_change = if old_type == new_type { None } else { Some((*old_type, *new_type)) };
+    let type_change = if old_type == new_type { None } else { Some((old_type, new_type)) };
 
     if weight_changes.is_empty() && type_change.is_none() && !order_changed {
         return None;
@@ -797,7 +800,7 @@ fn diff_sos_constraints(
         new_weights: new_weights.to_vec(),
         weight_changes,
         type_change,
-        old_sos_type: *old_type,
+        old_sos_type: old_type,
         order_changed,
     })
 }
@@ -834,10 +837,10 @@ fn diff_constraint_pair(
             let new_resolved = resolve_coefficients(p2, new_coefficients, interner, opts);
             diff_standard_constraints(
                 &old_resolved,
-                old_operator,
+                *old_operator,
                 *old_rhs,
                 &new_resolved,
-                new_operator,
+                *new_operator,
                 *new_rhs,
                 interner,
                 reordered,
@@ -857,7 +860,7 @@ fn diff_constraint_pair(
             let reordered = coefficients_reordered(p1, old_weights, p2, new_weights, opts);
             let old_resolved = resolve_coefficients(p1, old_weights, interner, opts);
             let new_resolved = resolve_coefficients(p2, new_weights, interner, opts);
-            diff_sos_constraints(old_type, &old_resolved, new_type, &new_resolved, interner, reordered, opts)
+            diff_sos_constraints(*old_type, &old_resolved, *new_type, &new_resolved, interner, reordered, opts)
         }
     }
 }
@@ -1233,9 +1236,9 @@ pub struct DiffInput<'a> {
     pub p1: &'a LpProblem,
     /// The second LP problem.
     pub p2: &'a LpProblem,
-    /// Constraint NameId → 1-based line number for file 1.
+    /// Constraint `NameId` → 1-based line number for file 1.
     pub line_map1: &'a HashMap<NameId, usize>,
-    /// Constraint NameId → 1-based line number for file 2.
+    /// Constraint `NameId` → 1-based line number for file 2.
     pub line_map2: &'a HashMap<NameId, usize>,
     /// Structural analysis of the first file.
     pub analysis1: ProblemAnalysis,
@@ -1304,6 +1307,8 @@ impl fmt::Display for DiffOptionsSummary {
 }
 
 #[cfg(test)]
+// Tests assert exact sentinel and preset values, so floats compare strictly.
+#[allow(clippy::float_cmp)]
 mod tests {
     use std::fmt::Write;
 
@@ -1340,8 +1345,8 @@ mod tests {
         LpProblem::parse(&content).expect("variable problem should parse")
     }
 
-    fn problem_with_standard_constraint(constraint_name: &str, coeffs: &[(&str, f64)], operator: &ComparisonOp, rhs: f64) -> LpProblem {
-        let op_str = match *operator {
+    fn problem_with_standard_constraint(constraint_name: &str, coeffs: &[(&str, f64)], operator: ComparisonOp, rhs: f64) -> LpProblem {
+        let op_str = match operator {
             ComparisonOp::LTE => "<=",
             ComparisonOp::GTE => ">=",
             ComparisonOp::EQ => "=",
@@ -1445,8 +1450,8 @@ mod tests {
     fn test_constraint_coeff_diff() {
         // p1: c1: 2x + 3y <= 10
         // p2: c1: 2x + 5z <= 10   (y removed, z added, x unchanged)
-        let p1 = problem_with_standard_constraint("c1", &[("x", 2.0), ("y", 3.0)], &ComparisonOp::LTE, 10.0);
-        let p2 = problem_with_standard_constraint("c1", &[("x", 2.0), ("z", 5.0)], &ComparisonOp::LTE, 10.0);
+        let p1 = problem_with_standard_constraint("c1", &[("x", 2.0), ("y", 3.0)], ComparisonOp::LTE, 10.0);
+        let p2 = problem_with_standard_constraint("c1", &[("x", 2.0), ("z", 5.0)], ComparisonOp::LTE, 10.0);
         let report = quick_report(&p1, &p2);
 
         let entry = report.constraints.entries.iter().find(|e| e.name == "c1");
@@ -1599,8 +1604,8 @@ mod tests {
 
     #[test]
     fn test_line_numbers_in_constraint_diff() {
-        let p1 = problem_with_standard_constraint("c1", &[("x", 1.0)], &ComparisonOp::LTE, 10.0);
-        let p2 = problem_with_standard_constraint("c1", &[("x", 2.0)], &ComparisonOp::LTE, 10.0);
+        let p1 = problem_with_standard_constraint("c1", &[("x", 1.0)], ComparisonOp::LTE, 10.0);
+        let p2 = problem_with_standard_constraint("c1", &[("x", 2.0)], ComparisonOp::LTE, 10.0);
         let mut lm1 = HashMap::new();
         lm1.insert(constraint_name_id(&p1, "c1"), 5);
         let mut lm2 = HashMap::new();
@@ -1615,8 +1620,8 @@ mod tests {
     #[test]
     fn test_constraint_order_only_change() {
         // Same coefficients, different order: 2x + 3y vs 3y + 2x
-        let p1 = problem_with_standard_constraint("c1", &[("x", 2.0), ("y", 3.0)], &ComparisonOp::LTE, 10.0);
-        let p2 = problem_with_standard_constraint("c1", &[("y", 3.0), ("x", 2.0)], &ComparisonOp::LTE, 10.0);
+        let p1 = problem_with_standard_constraint("c1", &[("x", 2.0), ("y", 3.0)], ComparisonOp::LTE, 10.0);
+        let p2 = problem_with_standard_constraint("c1", &[("y", 3.0), ("x", 2.0)], ComparisonOp::LTE, 10.0);
         let report = quick_report(&p1, &p2);
 
         let entry = report.constraints.entries.iter().find(|e| e.name == "c1");
@@ -1640,8 +1645,8 @@ mod tests {
     #[test]
     fn test_constraint_order_with_value_change() {
         // Different order AND different coefficient value.
-        let p1 = problem_with_standard_constraint("c1", &[("x", 2.0), ("y", 3.0)], &ComparisonOp::LTE, 10.0);
-        let p2 = problem_with_standard_constraint("c1", &[("y", 5.0), ("x", 2.0)], &ComparisonOp::LTE, 10.0);
+        let p1 = problem_with_standard_constraint("c1", &[("x", 2.0), ("y", 3.0)], ComparisonOp::LTE, 10.0);
+        let p2 = problem_with_standard_constraint("c1", &[("y", 5.0), ("x", 2.0)], ComparisonOp::LTE, 10.0);
         let report = quick_report(&p1, &p2);
 
         let entry = report.constraints.entries.iter().find(|e| e.name == "c1").unwrap();
@@ -1718,8 +1723,8 @@ mod tests {
 
     #[test]
     fn test_abs_tol_suppresses_small_rhs_diff() {
-        let p1 = problem_with_standard_constraint("c1", &[("x", 1.0)], &ComparisonOp::LTE, 10.0);
-        let p2 = problem_with_standard_constraint("c1", &[("x", 1.0)], &ComparisonOp::LTE, 10.005);
+        let p1 = problem_with_standard_constraint("c1", &[("x", 1.0)], ComparisonOp::LTE, 10.0);
+        let p2 = problem_with_standard_constraint("c1", &[("x", 1.0)], ComparisonOp::LTE, 10.005);
         let opts = DiffOptions { abs_tol: 0.01, ..DiffOptions::default() };
         assert!(quick_report_with_opts(&p1, &p2, opts).constraints.entries.is_empty());
     }
@@ -1727,8 +1732,8 @@ mod tests {
     #[test]
     fn test_rel_tol_suppresses_proportional_coeff_diff() {
         // |1001 - 1000| / 1001 ≈ 1e-3, suppressed by rel_tol = 1e-2.
-        let p1 = problem_with_standard_constraint("c1", &[("x", 1000.0)], &ComparisonOp::LTE, 10.0);
-        let p2 = problem_with_standard_constraint("c1", &[("x", 1001.0)], &ComparisonOp::LTE, 10.0);
+        let p1 = problem_with_standard_constraint("c1", &[("x", 1000.0)], ComparisonOp::LTE, 10.0);
+        let p2 = problem_with_standard_constraint("c1", &[("x", 1001.0)], ComparisonOp::LTE, 10.0);
         let opts = DiffOptions { rel_tol: 1e-2, ..DiffOptions::default() };
         assert!(quick_report_with_opts(&p1, &p2, opts).constraints.entries.is_empty());
     }
@@ -1737,8 +1742,8 @@ mod tests {
     fn test_tolerance_does_not_mask_large_change() {
         // 10 → 20 is well beyond any configured tolerance. The change must still surface,
         // and the stored detail must record the original values (not the tolerance gate).
-        let p1 = problem_with_standard_constraint("c1", &[("x", 1.0)], &ComparisonOp::LTE, 10.0);
-        let p2 = problem_with_standard_constraint("c1", &[("x", 1.0)], &ComparisonOp::LTE, 20.0);
+        let p1 = problem_with_standard_constraint("c1", &[("x", 1.0)], ComparisonOp::LTE, 10.0);
+        let p2 = problem_with_standard_constraint("c1", &[("x", 1.0)], ComparisonOp::LTE, 20.0);
         let opts = DiffOptions { abs_tol: 0.5, rel_tol: 1e-3, ..DiffOptions::default() };
         let report = quick_report_with_opts(&p1, &p2, opts);
         let ConstraintDiffDetail::Standard { rhs_change, .. } = &report.constraints.entries[0].detail else {
@@ -1750,8 +1755,8 @@ mod tests {
     #[test]
     fn test_rename_detected_for_identical_constraint() {
         // Same structure, different constraint name — must collapse to one Renamed entry.
-        let p1 = problem_with_standard_constraint("row_1", &[("x", 2.0), ("y", 3.0)], &ComparisonOp::LTE, 10.0);
-        let p2 = problem_with_standard_constraint("row_9", &[("x", 2.0), ("y", 3.0)], &ComparisonOp::LTE, 10.0);
+        let p1 = problem_with_standard_constraint("row_1", &[("x", 2.0), ("y", 3.0)], ComparisonOp::LTE, 10.0);
+        let p2 = problem_with_standard_constraint("row_9", &[("x", 2.0), ("y", 3.0)], ComparisonOp::LTE, 10.0);
         let report = quick_report(&p1, &p2);
 
         assert_eq!(report.constraints.counts.renamed, 1);
@@ -1768,8 +1773,8 @@ mod tests {
     #[test]
     fn test_rename_detected_with_reordered_coefficients() {
         // Signature is order-insensitive: 2x + 3y matches 3y + 2x.
-        let p1 = problem_with_standard_constraint("c_old", &[("x", 2.0), ("y", 3.0)], &ComparisonOp::GTE, 5.0);
-        let p2 = problem_with_standard_constraint("c_new", &[("y", 3.0), ("x", 2.0)], &ComparisonOp::GTE, 5.0);
+        let p1 = problem_with_standard_constraint("c_old", &[("x", 2.0), ("y", 3.0)], ComparisonOp::GTE, 5.0);
+        let p2 = problem_with_standard_constraint("c_new", &[("y", 3.0), ("x", 2.0)], ComparisonOp::GTE, 5.0);
         let report = quick_report(&p1, &p2);
 
         assert_eq!(report.constraints.counts.renamed, 1);
@@ -1783,8 +1788,8 @@ mod tests {
     #[test]
     fn test_rename_detected_within_tolerance() {
         // Coefficient differs by 5e-3, within abs_tol = 0.01 — still a rename.
-        let p1 = problem_with_standard_constraint("c_old", &[("x", 1.0)], &ComparisonOp::LTE, 10.0);
-        let p2 = problem_with_standard_constraint("c_new", &[("x", 1.005)], &ComparisonOp::LTE, 10.0);
+        let p1 = problem_with_standard_constraint("c_old", &[("x", 1.0)], ComparisonOp::LTE, 10.0);
+        let p2 = problem_with_standard_constraint("c_new", &[("x", 1.005)], ComparisonOp::LTE, 10.0);
         let opts = DiffOptions { abs_tol: 0.01, ..DiffOptions::default() };
         let report = quick_report_with_opts(&p1, &p2, opts);
 
@@ -1796,8 +1801,8 @@ mod tests {
     #[test]
     fn test_rename_not_detected_for_different_rhs() {
         // Same coefficients but RHS 10 vs 20 — must stay added + removed.
-        let p1 = problem_with_standard_constraint("c_old", &[("x", 1.0)], &ComparisonOp::LTE, 10.0);
-        let p2 = problem_with_standard_constraint("c_new", &[("x", 1.0)], &ComparisonOp::LTE, 20.0);
+        let p1 = problem_with_standard_constraint("c_old", &[("x", 1.0)], ComparisonOp::LTE, 10.0);
+        let p2 = problem_with_standard_constraint("c_new", &[("x", 1.0)], ComparisonOp::LTE, 20.0);
         let report = quick_report(&p1, &p2);
 
         assert_eq!(report.constraints.counts.renamed, 0);
@@ -1815,8 +1820,8 @@ mod tests {
     #[test]
     fn test_constraint_sort_delta_max_wins() {
         // Coefficient Δ = |5 - 2| = 3, RHS Δ = |11 - 10| = 1 → max is the coefficient.
-        let p1 = problem_with_standard_constraint("c1", &[("x", 2.0)], &ComparisonOp::LTE, 10.0);
-        let p2 = problem_with_standard_constraint("c1", &[("x", 5.0)], &ComparisonOp::LTE, 11.0);
+        let p1 = problem_with_standard_constraint("c1", &[("x", 2.0)], ComparisonOp::LTE, 10.0);
+        let p2 = problem_with_standard_constraint("c1", &[("x", 5.0)], ComparisonOp::LTE, 11.0);
         let report = quick_report(&p1, &p2);
         let entry = report.constraints.entries.iter().find(|e| e.name == "c1").expect("c1 must be modified");
 
@@ -1829,8 +1834,8 @@ mod tests {
     #[test]
     fn test_constraint_sort_delta_rhs_wins() {
         // RHS Δ = 10 beats coefficient Δ = 1.
-        let p1 = problem_with_standard_constraint("c1", &[("x", 2.0)], &ComparisonOp::LTE, 10.0);
-        let p2 = problem_with_standard_constraint("c1", &[("x", 3.0)], &ComparisonOp::LTE, 20.0);
+        let p1 = problem_with_standard_constraint("c1", &[("x", 2.0)], ComparisonOp::LTE, 10.0);
+        let p2 = problem_with_standard_constraint("c1", &[("x", 3.0)], ComparisonOp::LTE, 20.0);
         let report = quick_report(&p1, &p2);
         let entry = report.constraints.entries.iter().find(|e| e.name == "c1").expect("c1 must be modified");
         assert_eq!(constraint_sort_delta(entry, false), Some(10.0));

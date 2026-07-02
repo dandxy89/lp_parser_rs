@@ -133,7 +133,7 @@ impl<'input> ColumnsState<'input> {
         Ok(())
     }
 
-    /// Parse a single (row_name, value) entry from a COLUMNS line.
+    /// Parse a single (`row_name`, value) entry from a COLUMNS line.
     fn parse_entry(
         &mut self,
         row_name: &'input str,
@@ -203,7 +203,7 @@ pub(super) fn parse_rhs_line<'input>(
     Ok(())
 }
 
-/// Parse a single (row_name, value) RHS entry.
+/// Parse a single (`row_name`, value) RHS entry.
 fn parse_rhs_entry<'input>(
     row_name: &'input str,
     value_str: &str,
@@ -262,7 +262,7 @@ pub(super) fn parse_ranges_line<'input>(
     Ok(())
 }
 
-/// Parse a single (row_name, value) RANGES entry.
+/// Parse a single (`row_name`, value) RANGES entry.
 fn parse_range_entry<'input>(
     row_name: &'input str,
     value_str: &str,

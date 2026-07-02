@@ -418,6 +418,8 @@ fn diff_modified_objectives(
 
 /// Compare two parsed problems, returning the structural and numeric diff.
 #[cfg(feature = "diff")]
+// The paired 1/2-suffixed bindings are the domain language of a two-file diff.
+#[allow(clippy::similar_names)]
 fn compute_lp_diff(p1: &LpProblem, p2: &LpProblem, rules: &[(regex::Regex, String)], tol: DiffTol) -> LpDiff {
     let canon = |problem: &LpProblem, ids: Vec<NameId>| -> HashMap<String, NameId> {
         ids.iter().map(|id| (apply_rename_rules(problem.resolve(*id), rules), *id)).collect()
@@ -561,7 +563,7 @@ fn build_diff_json(args: &DiffArgs, p1: &LpProblem, p2: &LpProblem, diff: &LpDif
 }
 
 #[cfg(feature = "diff")]
-fn cmd_diff(args: DiffArgs, verbose: bool, quiet: bool) -> Result<(), BoxError> {
+fn cmd_diff(args: &DiffArgs, verbose: bool, quiet: bool) -> Result<(), BoxError> {
     // Rename rules arrive as a flat list of PATTERN REPLACEMENT pairs.
     if args.rename.len() % 2 != 0 {
         return Err("--rename requires pairs of PATTERN REPLACEMENT".into());
@@ -585,10 +587,10 @@ fn cmd_diff(args: DiffArgs, verbose: bool, quiet: bool) -> Result<(), BoxError> 
 
     let mut writer = OutputWriter::new(args.output.clone())?;
     match args.format {
-        OutputFormat::Text => write_diff_text(&mut writer, &args, &p1, &p2, &diff, rules.len(), tol)?,
+        OutputFormat::Text => write_diff_text(&mut writer, args, &p1, &p2, &diff, rules.len(), tol)?,
         #[cfg(feature = "serde")]
         OutputFormat::Json | OutputFormat::Yaml => {
-            let summary = build_diff_json(&args, &p1, &p2, &diff, rules.len(), tol);
+            let summary = build_diff_json(args, &p1, &p2, &diff, rules.len(), tol);
             match args.format {
                 OutputFormat::Json => {
                     if args.pretty {
@@ -664,7 +666,7 @@ fn cmd_convert(args: ConvertArgs, verbose: bool, quiet: bool) -> Result<(), BoxE
 
 /// Map a solver [`Status`] to its serialised string form.
 #[cfg(all(feature = "lp-solvers", feature = "serde"))]
-const fn solve_status_str(status: lp_solvers::solvers::Status) -> &'static str {
+const fn solve_status_str(status: &lp_solvers::solvers::Status) -> &'static str {
     use lp_solvers::solvers::Status;
     match status {
         Status::Optimal => "optimal",
@@ -733,7 +735,7 @@ fn cmd_solve(args: SolveArgs, verbose: bool, quiet: bool) -> Result<(), BoxError
         #[cfg(feature = "serde")]
         OutputFormat::Json => {
             let solution_json = serde_json::json!({
-                "status": solve_status_str(solution.status),
+                "status": solve_status_str(&solution.status),
                 "variables": solution.results
             });
             if args.pretty {
@@ -746,7 +748,7 @@ fn cmd_solve(args: SolveArgs, verbose: bool, quiet: bool) -> Result<(), BoxError
         #[cfg(feature = "serde")]
         OutputFormat::Yaml => {
             let solution_yaml = serde_json::json!({
-                "status": solve_status_str(solution.status),
+                "status": solve_status_str(&solution.status),
                 "variables": solution.results
             });
             serde_yaml::to_writer(&mut writer, &solution_yaml)?;
@@ -794,7 +796,7 @@ fn main() -> Result<(), BoxError> {
         Commands::Info(args) => cmd_info(&args, cli.verbose, cli.quiet),
         Commands::Analyze(args) => cmd_analyze(args, cli.verbose, cli.quiet),
         #[cfg(feature = "diff")]
-        Commands::Diff(args) => cmd_diff(args, cli.verbose, cli.quiet),
+        Commands::Diff(args) => cmd_diff(&args, cli.verbose, cli.quiet),
         Commands::Convert(args) => cmd_convert(args, cli.verbose, cli.quiet),
         #[cfg(feature = "lp-solvers")]
         Commands::Solve(args) => cmd_solve(args, cli.verbose, cli.quiet),

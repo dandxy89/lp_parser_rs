@@ -328,6 +328,8 @@ mod tests {
     }
 
     #[test]
+    // The stored value must round-trip bit-exactly, so compare floats strictly.
+    #[allow(clippy::float_cmp)]
     fn test_coefficient() {
         let mut interner = NameInterner::new();
         let x1 = interner.intern("x1");

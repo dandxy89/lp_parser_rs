@@ -1,3 +1,7 @@
+// Parsed coefficients must round-trip bit-exactly from the source text,
+// so the tests intentionally compare floats strictly.
+#![allow(clippy::float_cmp)]
+
 use super::state::{extract_mps_name, parse_mps};
 use crate::lexer::RawConstraint;
 use crate::model::{ComparisonOp, Sense, VariableType};

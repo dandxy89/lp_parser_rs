@@ -320,7 +320,7 @@ mod tests {
     }
 
     fn tokenize_raw(input: &str) -> Vec<Option<Token<'_>>> {
-        Token::lexer(input).map(|r| r.ok()).collect()
+        Token::lexer(input).map(Result::ok).collect()
     }
 
     #[test]
@@ -534,12 +534,12 @@ mod tests {
         assert_eq!(tokens, vec![Token::Number(0.0), Token::Identifier("abc")]);
     }
 
-    #[test_case("x-y", vec![Token::Identifier("x-y")] ; "simple_hyphen")]
-    #[test_case("a-b-c", vec![Token::Identifier("a-b-c")] ; "double_hyphen_chain")]
-    #[test_case("x-1", vec![Token::Identifier("x-1")] ; "hyphen_digit")]
-    #[test_case("x->", vec![Token::Identifier("x->")] ; "hyphen_gt")]
-    #[test_case("x-|", vec![Token::Identifier("x-|")] ; "hyphen_pipe")]
-    fn test_hyphen_valid(input: &str, expected: Vec<Token<'_>>) {
+    #[test_case("x-y", &[Token::Identifier("x-y")] ; "simple_hyphen")]
+    #[test_case("a-b-c", &[Token::Identifier("a-b-c")] ; "double_hyphen_chain")]
+    #[test_case("x-1", &[Token::Identifier("x-1")] ; "hyphen_digit")]
+    #[test_case("x->", &[Token::Identifier("x->")] ; "hyphen_gt")]
+    #[test_case("x-|", &[Token::Identifier("x-|")] ; "hyphen_pipe")]
+    fn test_hyphen_valid(input: &str, expected: &[Token<'_>]) {
         assert_eq!(tokenize(input), expected);
     }
 
@@ -571,14 +571,14 @@ mod tests {
         assert_eq!(tokenize("<"), vec![Token::Lt]);
     }
 
-    #[test_case("x*y", vec![Token::Identifier("x")], "*" ; "asterisk_breaks")]
-    #[test_case("x/y", vec![Token::Identifier("x")], "/" ; "slash_breaks")]
-    #[test_case("x^y", vec![Token::Identifier("x")], "^" ; "caret_breaks")]
-    fn test_invalid_char_breaks_identifier(input: &str, expected_prefix: Vec<Token<'_>>, _invalid: &str) {
+    #[test_case("x*y", &[Token::Identifier("x")], "*" ; "asterisk_breaks")]
+    #[test_case("x/y", &[Token::Identifier("x")], "/" ; "slash_breaks")]
+    #[test_case("x^y", &[Token::Identifier("x")], "^" ; "caret_breaks")]
+    fn test_invalid_char_breaks_identifier(input: &str, expected_prefix: &[Token<'_>], _invalid: &str) {
         let tokens = tokenize(input);
         assert_eq!(
             &tokens[..expected_prefix.len()],
-            &expected_prefix,
+            expected_prefix,
             "identifier should stop before invalid char in {input:?}: {tokens:?}"
         );
     }
