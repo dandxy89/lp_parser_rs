@@ -26,7 +26,7 @@ create_exception!(parse_lp, LpInvalidValueError, PyRuntimeError, "Raised when an
 #[pyclass]
 pub struct LpParser {
     lp_file: String,
-    parsed_content: Option<String>,
+    problem: Option<LpProblem>,
 }
 
 #[pymethods]
@@ -38,7 +38,7 @@ impl LpParser {
             return Err(PyFileExistsError::new_err(format!("LP file '{lp_file}' does not exist or is not a file")));
         }
 
-        Ok(Self { lp_file, parsed_content: None })
+        Ok(Self { lp_file, problem: None })
     }
 
     #[getter]
@@ -47,23 +47,28 @@ impl LpParser {
     }
 
     #[pyo3(text_signature = "($self)")]
-    fn parse(&mut self) -> PyResult<()> {
-        let input =
-            parse_file(&PathBuf::from(&self.lp_file)).map_err(|err| LpParseError::new_err(format!("Unable to read LP file: {err}")))?;
-        self.parsed_content = Some(input);
+    fn parse(&mut self, py: Python) -> PyResult<()> {
+        let path = PathBuf::from(&self.lp_file);
+        // Release the GIL while reading and parsing so other Python threads
+        // are not blocked by the heavy pure-Rust work.
+        let problem = py.detach(move || {
+            let input = parse_file(&path).map_err(|err| LpParseError::new_err(format!("Unable to read LP file: {err}")))?;
+            LpProblem::parse(&input).map_err(|err| LpParseError::new_err(format!("Unable to parse LpProblem: {err}")))
+        })?;
+        self.problem = Some(problem);
         Ok(())
     }
 
     #[allow(clippy::wrong_self_convention)]
     #[pyo3(text_signature = "($self, base_directory)")]
-    fn to_csv(&mut self, base_directory: &str) -> PyResult<()> {
+    fn to_csv(&mut self, py: Python, base_directory: &str) -> PyResult<()> {
         if !Path::new(&base_directory).is_dir() {
             return Err(PyNotADirectoryError::new_err(format!("Path {base_directory} is not a directory.")));
         }
 
         // Parse if not already parsed
-        if self.parsed_content.is_none() {
-            self.parse()?;
+        if self.problem.is_none() {
+            self.parse(py)?;
         }
 
         let problem = self.get_problem()?;
@@ -77,13 +82,8 @@ impl LpParser {
     #[getter]
     fn name(&self) -> PyResult<Option<String>> {
         let problem = self.get_problem()?;
-        Ok(problem.name.map(|n| {
-            // Remove "Problem name: " prefix if present
-            match n.strip_prefix("Problem name: ") {
-                Some(stripped) => stripped.to_string(),
-                None => n,
-            }
-        }))
+        // Remove "Problem name: " prefix if present.
+        Ok(problem.name.as_deref().map(|n| n.strip_prefix("Problem name: ").unwrap_or(n).to_string()))
     }
 
     #[getter]
@@ -103,7 +103,7 @@ impl LpParser {
         for (name_id, obj) in &problem.objectives {
             let dict = PyDict::new(py);
             dict.set_item("name", problem.resolve(*name_id))?;
-            dict.set_item("coefficients", coefficients_to_list(py, &problem, &obj.coefficients)?)?;
+            dict.set_item("coefficients", coefficients_to_list(py, problem, &obj.coefficients)?)?;
             list.append(dict)?;
         }
 
@@ -122,14 +122,14 @@ impl LpParser {
             match constraint {
                 Constraint::Standard { coefficients, operator, rhs, .. } => {
                     dict.set_item("type", "standard")?;
-                    dict.set_item("coefficients", coefficients_to_list(py, &problem, coefficients)?)?;
+                    dict.set_item("coefficients", coefficients_to_list(py, problem, coefficients)?)?;
                     dict.set_item("operator", format!("{operator:?}"))?;
                     dict.set_item("rhs", rhs)?;
                 }
                 Constraint::SOS { weights, sos_type, .. } => {
                     dict.set_item("type", "sos")?;
                     dict.set_item("sos_type", format!("{sos_type:?}"))?;
-                    dict.set_item("weights", coefficients_to_list(py, &problem, weights)?)?;
+                    dict.set_item("weights", coefficients_to_list(py, problem, weights)?)?;
                 }
             }
             list.append(dict)?;
@@ -173,7 +173,7 @@ impl LpParser {
     #[pyo3(text_signature = "($self)")]
     fn to_lp_string(&self) -> PyResult<String> {
         let problem = self.get_problem()?;
-        Ok(write_lp_string(&problem))
+        Ok(write_lp_string(problem))
     }
 
     /// Write the current problem to LP format string with custom options
@@ -187,7 +187,7 @@ impl LpParser {
     ) -> PyResult<String> {
         let problem = self.get_problem()?;
         let options = LpWriterOptions { include_problem_name, max_line_length, decimal_precision, include_section_spacing };
-        Ok(write_lp_string_with_options(&problem, &options))
+        Ok(write_lp_string_with_options(problem, &options))
     }
 
     /// Save the current problem to an LP file
@@ -200,104 +200,94 @@ impl LpParser {
     /// Update coefficient in an objective
     #[pyo3(text_signature = "($self, objective_name, variable_name, coefficient)")]
     fn update_objective_coefficient(&mut self, objective_name: String, variable_name: String, coefficient: f64) -> PyResult<()> {
-        let mut problem = self.get_problem()?;
+        let problem = self.get_problem_mut()?;
         problem
             .update_objective_coefficient(&objective_name, &variable_name, coefficient)
             .map_err(|err| LpObjectNotFoundError::new_err(format!("Failed to update objective coefficient: {err}")))?;
-
-        // Update the cached content
-        self.parsed_content = Some(write_lp_string(&problem));
         Ok(())
     }
 
     /// Rename an objective
     #[pyo3(text_signature = "($self, old_name, new_name)")]
     fn rename_objective(&mut self, old_name: String, new_name: String) -> PyResult<()> {
-        let mut problem = self.get_problem()?;
+        let problem = self.get_problem_mut()?;
         problem
             .rename_objective(&old_name, &new_name)
             .map_err(|err| LpObjectNotFoundError::new_err(format!("Failed to rename objective: {err}")))?;
 
-        self.parsed_content = Some(write_lp_string(&problem));
         Ok(())
     }
 
     /// Remove an objective
     #[pyo3(text_signature = "($self, objective_name)")]
     fn remove_objective(&mut self, objective_name: String) -> PyResult<()> {
-        let mut problem = self.get_problem()?;
+        let problem = self.get_problem_mut()?;
         problem
             .remove_objective(&objective_name)
             .map_err(|err| LpObjectNotFoundError::new_err(format!("Failed to remove objective: {err}")))?;
 
-        self.parsed_content = Some(write_lp_string(&problem));
         Ok(())
     }
 
     /// Update coefficient in a constraint
     #[pyo3(text_signature = "($self, constraint_name, variable_name, coefficient)")]
     fn update_constraint_coefficient(&mut self, constraint_name: String, variable_name: String, coefficient: f64) -> PyResult<()> {
-        let mut problem = self.get_problem()?;
+        let problem = self.get_problem_mut()?;
         problem
             .update_constraint_coefficient(&constraint_name, &variable_name, coefficient)
             .map_err(|err| LpObjectNotFoundError::new_err(format!("Failed to update constraint coefficient: {err}")))?;
 
-        self.parsed_content = Some(write_lp_string(&problem));
         Ok(())
     }
 
     /// Update the right-hand side value of a constraint
     #[pyo3(text_signature = "($self, constraint_name, new_rhs)")]
     fn update_constraint_rhs(&mut self, constraint_name: String, new_rhs: f64) -> PyResult<()> {
-        let mut problem = self.get_problem()?;
+        let problem = self.get_problem_mut()?;
         problem
             .update_constraint_rhs(&constraint_name, new_rhs)
             .map_err(|err| LpObjectNotFoundError::new_err(format!("Failed to update constraint RHS: {err}")))?;
 
-        self.parsed_content = Some(write_lp_string(&problem));
         Ok(())
     }
 
     /// Rename a constraint
     #[pyo3(text_signature = "($self, old_name, new_name)")]
     fn rename_constraint(&mut self, old_name: String, new_name: String) -> PyResult<()> {
-        let mut problem = self.get_problem()?;
+        let problem = self.get_problem_mut()?;
         problem
             .rename_constraint(&old_name, &new_name)
             .map_err(|err| LpObjectNotFoundError::new_err(format!("Failed to rename constraint: {err}")))?;
 
-        self.parsed_content = Some(write_lp_string(&problem));
         Ok(())
     }
 
     /// Remove a constraint
     #[pyo3(text_signature = "($self, constraint_name)")]
     fn remove_constraint(&mut self, constraint_name: String) -> PyResult<()> {
-        let mut problem = self.get_problem()?;
+        let problem = self.get_problem_mut()?;
         problem
             .remove_constraint(&constraint_name)
             .map_err(|err| LpObjectNotFoundError::new_err(format!("Failed to remove constraint: {err}")))?;
 
-        self.parsed_content = Some(write_lp_string(&problem));
         Ok(())
     }
 
     /// Rename a variable across all objectives and constraints
     #[pyo3(text_signature = "($self, old_name, new_name)")]
     fn rename_variable(&mut self, old_name: String, new_name: String) -> PyResult<()> {
-        let mut problem = self.get_problem()?;
+        let problem = self.get_problem_mut()?;
         problem
             .rename_variable(&old_name, &new_name)
             .map_err(|err| LpObjectNotFoundError::new_err(format!("Failed to rename variable: {err}")))?;
 
-        self.parsed_content = Some(write_lp_string(&problem));
         Ok(())
     }
 
     /// Update variable type (e.g., Binary, Integer, etc.)
     #[pyo3(text_signature = "($self, variable_name, var_type)")]
     fn update_variable_type(&mut self, variable_name: String, var_type: String) -> PyResult<()> {
-        let mut problem = self.get_problem()?;
+        let problem = self.get_problem_mut()?;
 
         // Parse the variable type string
         let variable_type = match var_type.to_lowercase().as_str() {
@@ -317,36 +307,33 @@ impl LpParser {
             .update_variable_type(&variable_name, variable_type)
             .map_err(|err| LpObjectNotFoundError::new_err(format!("Failed to update variable type: {err}")))?;
 
-        self.parsed_content = Some(write_lp_string(&problem));
         Ok(())
     }
 
     /// Remove a variable from all objectives and constraints
     #[pyo3(text_signature = "($self, variable_name)")]
     fn remove_variable(&mut self, variable_name: String) -> PyResult<()> {
-        let mut problem = self.get_problem()?;
+        let problem = self.get_problem_mut()?;
         problem
             .remove_variable(&variable_name)
             .map_err(|err| LpObjectNotFoundError::new_err(format!("Failed to remove variable: {err}")))?;
 
-        self.parsed_content = Some(write_lp_string(&problem));
         Ok(())
     }
 
     /// Set problem name
     #[pyo3(text_signature = "($self, name)")]
     fn set_problem_name(&mut self, name: String) -> PyResult<()> {
-        let mut problem = self.get_problem()?;
+        let problem = self.get_problem_mut()?;
         problem.name = Some(name);
 
-        self.parsed_content = Some(write_lp_string(&problem));
         Ok(())
     }
 
     /// Set problem sense (maximize or minimize)
     #[pyo3(text_signature = "($self, sense)")]
     fn set_sense(&mut self, sense: String) -> PyResult<()> {
-        let mut problem = self.get_problem()?;
+        let problem = self.get_problem_mut()?;
 
         problem.sense = match sense.to_lowercase().as_str() {
             "maximize" | "max" => Sense::Maximize,
@@ -354,7 +341,6 @@ impl LpParser {
             _ => return Err(LpInvalidValueError::new_err(format!("Invalid sense: {sense}. Use 'maximize' or 'minimize'"))),
         };
 
-        self.parsed_content = Some(write_lp_string(&problem));
         Ok(())
     }
 
@@ -419,17 +405,18 @@ impl LpParser {
     }
 
     fn __str__(&self) -> String {
-        let state = if self.parsed_content.is_some() { "parsed" } else { "not parsed" };
+        let state = if self.problem.is_some() { "parsed" } else { "not parsed" };
         format!("LpParser for '{}' ({state})", self.lp_file)
     }
 }
 
 impl LpParser {
-    fn get_problem(&self) -> PyResult<LpProblem> {
-        self.parsed_content.as_ref().map_or_else(
-            || Err(LpNotParsedError::new_err("Must call parse() first")),
-            |content| LpProblem::parse(content).map_err(|err| LpParseError::new_err(format!("Unable to parse LpProblem: {err}"))),
-        )
+    fn get_problem(&self) -> PyResult<&LpProblem> {
+        self.problem.as_ref().ok_or_else(|| LpNotParsedError::new_err("Must call parse() first"))
+    }
+
+    fn get_problem_mut(&mut self) -> PyResult<&mut LpProblem> {
+        self.problem.as_mut().ok_or_else(|| LpNotParsedError::new_err("Must call parse() first"))
     }
 
     #[allow(clippy::unused_self)]
