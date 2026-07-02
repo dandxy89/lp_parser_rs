@@ -154,7 +154,7 @@ class LpParser:
     """Parser, modifier and writer for LP format files, powered by Rust."""
 
     def __init__(self, lp_file: str) -> None:
-        """Create a parser for the given LP file path; raises FileExistsError if it is not a file."""
+        """Create a parser for the given LP file path; raises FileNotFoundError if it is not a file."""
 
     @property
     def lp_file(self) -> str:

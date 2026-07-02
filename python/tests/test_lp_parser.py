@@ -20,7 +20,7 @@ class TestLpParserBasic:
         assert parser.lp_file == str(simple_lp_file)
 
     def test_create_parser_nonexistent_file(self) -> None:
-        with pytest.raises(FileExistsError):
+        with pytest.raises(FileNotFoundError):
             LpParser("nonexistent.lp")
 
     @pytest.mark.parametrize(

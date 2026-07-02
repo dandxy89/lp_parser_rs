@@ -1,4 +1,5 @@
 #![allow(clippy::multiple_crate_versions)]
+#![warn(missing_docs)]
 
 //! LP Parser - A Linear Programming File Parser
 //!
@@ -8,7 +9,7 @@
 //!
 //! # Features
 //!
-//! - Zero-copy parsing with lifetime management
+//! - Owned, interned problem model (no lifetimes) built from a zero-copy grammar
 //! - Support for multiple LP file format specifications
 //! - Comprehensive parsing of all standard LP file components
 //! - Optional serialisation and diff tracking
@@ -16,29 +17,41 @@
 //! # Quick Start
 //!
 //! ```rust
-//! use std::path::Path;
+//! use lp_parser_rs::LpProblem;
 //!
-//! use lp_parser::{parser::parse_file, LpProblem};
+//! let input = "\
+//! Minimize
+//!  obj: 2 x + 3 y
+//! Subject To
+//!  c1: x + y >= 10
+//! Bounds
+//!  0 <= x <= 40
+//! End";
 //!
-//!
-//! fn main() -> Result<(), Box<dyn std::error::Error>> {
-//!     let content = parse_file(Path::new("problem.lp"))?;
-//!     let problem = LpProblem::parse(&content)?;
-//!     println!("Problem name: {:?}", problem.name());
-//!     Ok(())
-//! }
+//! let problem = LpProblem::parse(input)?;
+//! assert_eq!(problem.variable_count(), 2);
+//! assert_eq!(problem.constraint_count(), 1);
+//! # Ok::<(), lp_parser_rs::LpParseError>(())
 //! ```
+//!
+//! To read from disk, use [`parser::parse_file`] to load the file contents
+//! (memory-mapped with the `mmap` feature) and pass them to
+//! [`LpProblem::parse`] or [`LpProblem::parse_mps`].
 
 pub mod analysis;
+/// Compatibility adapters for external solver crates.
 pub mod compat;
 #[cfg(feature = "csv")]
 pub mod csv;
+/// Error types returned by the parsers ([`LpParseError`], [`LpResult`]).
 pub mod error;
 pub mod interner;
 pub mod lexer;
 pub mod model;
 pub mod mps;
+/// File reading helpers (plain or memory-mapped with the `mmap` feature).
 pub mod parser;
+/// The [`LpProblem`] model: parse entry points and mutation API.
 pub mod problem;
 pub mod writer;
 
@@ -69,7 +82,8 @@ pub use problem::LpProblem;
     clippy::trivially_copy_pass_by_ref,
     clippy::type_complexity,
     clippy::unnecessary_wraps,
-    clippy::use_self
+    clippy::use_self,
+    missing_docs
 )]
 mod lp_grammar {
     use super::lalrpop_mod;

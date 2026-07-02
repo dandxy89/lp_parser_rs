@@ -209,8 +209,16 @@ impl LpProblem {
     /// Returns `None` if the name has not been interned.
     #[inline]
     #[must_use]
-    pub fn get_name_id(&self, name: &str) -> Option<NameId> {
+    pub fn name_id(&self, name: &str) -> Option<NameId> {
         self.interner.get(name)
+    }
+
+    /// Deprecated alias for [`Self::name_id`].
+    #[deprecated(since = "3.6.0", note = "renamed to `name_id` to match Rust getter conventions")]
+    #[inline]
+    #[must_use]
+    pub fn get_name_id(&self, name: &str) -> Option<NameId> {
+        self.name_id(name)
     }
 
     /// Ensure a variable exists in the problem, creating it with the given type if not present.
@@ -267,6 +275,17 @@ impl LpProblem {
     #[inline]
     /// Parse a `LpProblem` from a string slice (LP format).
     ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use lp_parser_rs::LpProblem;
+    ///
+    /// let problem = LpProblem::parse("Minimize\n obj: x + 2 y\nSubject To\n c1: x + y >= 1\nEnd")?;
+    /// assert_eq!(problem.variable_count(), 2);
+    /// assert_eq!(problem.constraint_count(), 1);
+    /// # Ok::<(), lp_parser_rs::LpParseError>(())
+    /// ```
+    ///
     /// # Errors
     ///
     /// Returns an error if the input string is not a valid LP file format.
@@ -276,6 +295,30 @@ impl LpProblem {
     }
 
     /// Parse a `LpProblem` from an MPS-format string.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use lp_parser_rs::LpProblem;
+    ///
+    /// let input = "\
+    /// NAME          example
+    /// ROWS
+    ///  N  COST
+    ///  L  LIM1
+    /// COLUMNS
+    ///     X         COST      1.0   LIM1      1.0
+    ///     Y         COST      2.0   LIM1      1.0
+    /// RHS
+    ///     RHS       LIM1      4.0
+    /// ENDATA
+    /// ";
+    ///
+    /// let problem = LpProblem::parse_mps(input)?;
+    /// assert_eq!(problem.name(), Some("example"));
+    /// assert_eq!(problem.variable_count(), 2);
+    /// # Ok::<(), lp_parser_rs::LpParseError>(())
+    /// ```
     ///
     /// # Errors
     ///
@@ -405,6 +448,21 @@ impl LpProblem {
     }
 
     /// Update the right-hand side value of a constraint.
+    ///
+    /// # Example
+    ///
+    /// Parse, mutate, and write back — the pattern shared by the whole
+    /// mutation API (`rename_*`, `update_*`, `remove_*`):
+    ///
+    /// ```rust
+    /// use lp_parser_rs::LpProblem;
+    /// use lp_parser_rs::writer::write_lp_string;
+    ///
+    /// let mut problem = LpProblem::parse("Minimize\n obj: x\nSubject To\n c1: x >= 1\nEnd")?;
+    /// problem.update_constraint_rhs("c1", 5.0)?;
+    /// assert!(write_lp_string(&problem).contains("c1: x >= 5"));
+    /// # Ok::<(), lp_parser_rs::LpParseError>(())
+    /// ```
     ///
     /// # Errors
     ///
@@ -1158,28 +1216,28 @@ End";
         // Variable types
         let input = "minimize\nx1\nsubject to\nx1 <= 1\nintegers\nx1\nend";
         let p = LpProblem::parse(input).unwrap();
-        let x1 = p.get_name_id("x1").unwrap();
+        let x1 = p.name_id("x1").unwrap();
         assert_eq!(p.variables[&x1].var_type, VariableType::Integer);
 
         let input = "minimize\nx1\nsubject to\nx1 <= 1\nbinaries\nx1\nend";
         let p = LpProblem::parse(input).unwrap();
-        let x1 = p.get_name_id("x1").unwrap();
+        let x1 = p.name_id("x1").unwrap();
         assert_eq!(p.variables[&x1].var_type, VariableType::Binary);
 
         let input = "minimize\nx1\nsubject to\nx1 <= 1\ngenerals\nx1\nend";
         let p = LpProblem::parse(input).unwrap();
-        let x1 = p.get_name_id("x1").unwrap();
+        let x1 = p.name_id("x1").unwrap();
         assert_eq!(p.variables[&x1].var_type, VariableType::General);
 
         let input = "minimize\nx1\nsubject to\nx1 <= 1\nsemi-continuous\nx1\nend";
         let p = LpProblem::parse(input).unwrap();
-        let x1 = p.get_name_id("x1").unwrap();
+        let x1 = p.name_id("x1").unwrap();
         assert_eq!(p.variables[&x1].var_type, VariableType::SemiContinuous);
 
         // Bounds
         let p = LpProblem::parse("minimize\nx1 + x2\nsubject to\nx1 <= 10\nbounds\nx1 >= 0\nx2 <= 5\nend").unwrap();
-        let x1 = p.get_name_id("x1").unwrap();
-        let x2 = p.get_name_id("x2").unwrap();
+        let x1 = p.name_id("x1").unwrap();
+        let x2 = p.name_id("x2").unwrap();
         assert!(matches!(p.variables[&x1].var_type, VariableType::LowerBound(0.0)));
         assert!(matches!(p.variables[&x2].var_type, VariableType::UpperBound(5.0)));
 
@@ -1307,12 +1365,12 @@ mod modification_tests {
         p.update_objective_coefficient("obj1", "x3", 1.5).unwrap();
         p.update_objective_coefficient("obj1", "x2", 0.0).unwrap();
 
-        let obj1 = p.get_name_id("obj1").unwrap();
-        let x1 = p.get_name_id("x1").unwrap();
-        let x3 = p.get_name_id("x3").unwrap();
+        let obj1 = p.name_id("obj1").unwrap();
+        let x1 = p.name_id("x1").unwrap();
+        let x3 = p.name_id("x3").unwrap();
         let coeffs: Vec<_> = p.objectives[&obj1].coefficients.iter().map(|c| (c.name, c.value)).collect();
         assert!(coeffs.contains(&(x1, 5.0)) && coeffs.contains(&(x3, 1.5)));
-        let x2 = p.get_name_id("x2").unwrap();
+        let x2 = p.name_id("x2").unwrap();
         assert!(!coeffs.iter().any(|(n, _)| *n == x2));
 
         p.update_constraint_coefficient("c1", "x1", 3.0).unwrap();
@@ -1320,7 +1378,7 @@ mod modification_tests {
         p.update_constraint_coefficient("c1", "x2", 0.0).unwrap();
 
         p.update_constraint_rhs("c1", 15.0).unwrap();
-        let c1 = p.get_name_id("c1").unwrap();
+        let c1 = p.name_id("c1").unwrap();
         if let Constraint::Standard { rhs, .. } = p.constraints.get(&c1).unwrap() {
             assert_eq!(*rhs, 15.0);
         }
@@ -1335,18 +1393,18 @@ mod modification_tests {
         let mut p = create_test_problem();
 
         p.rename_variable("x1", "new_x1").unwrap();
-        let new_x1 = p.get_name_id("new_x1").unwrap();
-        assert!(p.get_name_id("x1").is_none_or(|id| !p.variables.contains_key(&id)));
+        let new_x1 = p.name_id("new_x1").unwrap();
+        assert!(p.name_id("x1").is_none_or(|id| !p.variables.contains_key(&id)));
         assert!(p.variables.contains_key(&new_x1));
-        let obj1 = p.get_name_id("obj1").unwrap();
+        let obj1 = p.name_id("obj1").unwrap();
         assert!(p.objectives[&obj1].coefficients.iter().any(|c| c.name == new_x1));
 
         p.rename_constraint("c1", "new_c1").unwrap();
-        let new_c1 = p.get_name_id("new_c1").unwrap();
+        let new_c1 = p.name_id("new_c1").unwrap();
         assert!(p.constraints.contains_key(&new_c1));
 
         p.rename_objective("obj1", "new_obj1").unwrap();
-        let new_obj1 = p.get_name_id("new_obj1").unwrap();
+        let new_obj1 = p.name_id("new_obj1").unwrap();
         assert!(p.objectives.contains_key(&new_obj1));
 
         assert!(p.rename_variable("nonexistent", "x").is_err());
@@ -1358,13 +1416,13 @@ mod modification_tests {
         let mut p = create_test_problem();
 
         p.remove_variable("x2").unwrap();
-        assert!(p.get_name_id("x2").is_none_or(|id| !p.variables.contains_key(&id)));
-        let obj1 = p.get_name_id("obj1").unwrap();
-        let x2 = p.get_name_id("x2").unwrap();
+        assert!(p.name_id("x2").is_none_or(|id| !p.variables.contains_key(&id)));
+        let obj1 = p.name_id("obj1").unwrap();
+        let x2 = p.name_id("x2").unwrap();
         assert!(!p.objectives[&obj1].coefficients.iter().any(|c| c.name == x2));
 
         p.remove_constraint("c1").unwrap();
-        assert!(p.get_name_id("c1").is_none_or(|id| !p.constraints.contains_key(&id)));
+        assert!(p.name_id("c1").is_none_or(|id| !p.constraints.contains_key(&id)));
 
         p.remove_objective("obj1").unwrap();
         assert!(!p.objectives.contains_key(&obj1));
@@ -1377,7 +1435,7 @@ mod modification_tests {
     fn test_variable_type_update() {
         let mut p = create_test_problem();
         p.update_variable_type("x1", VariableType::Binary).unwrap();
-        let x1 = p.get_name_id("x1").unwrap();
+        let x1 = p.name_id("x1").unwrap();
         assert_eq!(p.variables[&x1].var_type, VariableType::Binary);
     }
 

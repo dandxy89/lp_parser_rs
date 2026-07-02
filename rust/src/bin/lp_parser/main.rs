@@ -664,7 +664,7 @@ fn cmd_convert(args: ConvertArgs, verbose: bool, quiet: bool) -> Result<(), BoxE
     Ok(())
 }
 
-/// Map a solver [`Status`] to its serialised string form.
+/// Map a solver [`Status`](lp_solvers::solvers::Status) to its serialised string form.
 #[cfg(all(feature = "lp-solvers", feature = "serde"))]
 const fn solve_status_str(status: &lp_solvers::solvers::Status) -> &'static str {
     use lp_solvers::solvers::Status;

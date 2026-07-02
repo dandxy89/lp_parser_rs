@@ -6,7 +6,7 @@
 //! # Example
 //!
 //! ```rust
-//! use lp_parser::{LpProblem, analysis::ProblemAnalysis};
+//! use lp_parser_rs::LpProblem;
 //!
 //! fn analyze_problem(input: &str) -> Result<(), Box<dyn std::error::Error>> {
 //!     let problem = LpProblem::parse(input)?;
@@ -30,7 +30,7 @@ use crate::interner::NameId;
 use crate::model::{ComparisonOp, Constraint, SOSType, VariableType};
 use crate::problem::LpProblem;
 
-/// Configuration for analysis behavior and thresholds.
+/// Configuration for analysis behaviour and thresholds.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct AnalysisConfig {
@@ -79,7 +79,7 @@ pub struct ProblemAnalysis {
 pub struct ProblemSummary {
     /// Problem name if available
     pub name: Option<String>,
-    /// Optimization sense (Minimize/Maximize)
+    /// Optimisation sense (Minimize/Maximize)
     pub sense: String,
     /// Number of objectives
     pub objective_count: usize,
@@ -315,7 +315,7 @@ pub struct CoefficientLocation {
 pub enum IssueSeverity {
     /// Problem is likely unsolvable or invalid
     Error,
-    /// May cause numerical issues or unexpected behavior
+    /// May cause numerical issues or unexpected behaviour
     Warning,
     /// Informational only
     Info,

@@ -10,7 +10,7 @@
 //! use lp_parser_rs::{LpProblem, writer::write_lp_string};
 //!
 //! let problem = LpProblem::new()
-//!     .with_problem_name("Example".into())
+//!     .with_problem_name("Example")
 //!     .with_sense(lp_parser_rs::model::Sense::Maximize);
 //!
 //! let lp_content = write_lp_string(&problem);
@@ -497,7 +497,7 @@ End";
 
         // Add new constraint using interned names
         let demand_id = problem.intern("demand");
-        let x1_id = problem.get_name_id("x1").unwrap();
+        let x1_id = problem.name_id("x1").unwrap();
         let new_constraint = Constraint::Standard {
             name: demand_id,
             coefficients: vec![Coefficient { name: x1_id, value: 1.0 }],
@@ -535,10 +535,10 @@ End";
         assert_eq!(reparsed_problem.sense, crate::model::Sense::Maximize);
         assert_eq!(reparsed_problem.constraint_count(), 3);
         assert_eq!(reparsed_problem.variable_count(), 3);
-        assert!(reparsed_problem.get_name_id("production").and_then(|id| reparsed_problem.variables.get(&id)).is_some());
-        assert!(reparsed_problem.get_name_id("x2").and_then(|id| reparsed_problem.variables.get(&id)).is_none());
-        assert!(reparsed_problem.get_name_id("resource_limit").and_then(|id| reparsed_problem.constraints.get(&id)).is_some());
-        assert!(reparsed_problem.get_name_id("capacity").and_then(|id| reparsed_problem.constraints.get(&id)).is_none());
+        assert!(reparsed_problem.name_id("production").and_then(|id| reparsed_problem.variables.get(&id)).is_some());
+        assert!(reparsed_problem.name_id("x2").and_then(|id| reparsed_problem.variables.get(&id)).is_none());
+        assert!(reparsed_problem.name_id("resource_limit").and_then(|id| reparsed_problem.constraints.get(&id)).is_some());
+        assert!(reparsed_problem.name_id("capacity").and_then(|id| reparsed_problem.constraints.get(&id)).is_none());
     }
 
     #[test]
@@ -616,8 +616,8 @@ End";
         let problem = crate::problem::LpProblem::parse(input).unwrap();
 
         // Verify the parsed variables are General
-        let x1_id = problem.get_name_id("x1").unwrap();
-        let x2_id = problem.get_name_id("x2").unwrap();
+        let x1_id = problem.name_id("x1").unwrap();
+        let x2_id = problem.name_id("x2").unwrap();
         assert_eq!(problem.variables.get(&x1_id).unwrap().var_type, VariableType::General);
         assert_eq!(problem.variables.get(&x2_id).unwrap().var_type, VariableType::General);
 
@@ -631,8 +631,8 @@ End";
 
         // Re-parse and verify round-trip
         let reparsed = crate::problem::LpProblem::parse(&output).unwrap();
-        let x1_id = reparsed.get_name_id("x1").unwrap();
-        let x2_id = reparsed.get_name_id("x2").unwrap();
+        let x1_id = reparsed.name_id("x1").unwrap();
+        let x2_id = reparsed.name_id("x2").unwrap();
         assert_eq!(reparsed.variables.get(&x1_id).unwrap().var_type, VariableType::General);
         assert_eq!(reparsed.variables.get(&x2_id).unwrap().var_type, VariableType::General);
     }

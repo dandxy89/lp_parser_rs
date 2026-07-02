@@ -20,9 +20,6 @@ repository = "https://github.com/dandxy89/lp_parser_rs"
 [package.metadata.docs.rs]
 all-features = true
 
-[lib]
-doctest = false
-
 [[bin]]
 name = "lp_parser"
 path = "src/bin/lp_parser/main.rs"

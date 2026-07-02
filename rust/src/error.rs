@@ -10,27 +10,51 @@ use crate::lexer::{LexerError, Token};
 pub enum LpParseError {
     /// Invalid numerical value or format
     #[error("Invalid number format '{value}' at position {position}")]
-    InvalidNumber { value: String, position: usize },
+    InvalidNumber {
+        /// The text that failed to parse as a number.
+        value: String,
+        /// Byte or line position of the value in the input.
+        position: usize,
+    },
 
     /// Missing required section in LP file
     #[error("Missing required section: {section}")]
-    MissingSection { section: String },
+    MissingSection {
+        /// Name of the section that was expected but not found.
+        section: String,
+    },
 
     /// Invalid bound specification
     #[error("Invalid bounds for variable '{variable}': {details}")]
-    InvalidBounds { variable: String, details: String },
+    InvalidBounds {
+        /// Name of the variable with the invalid bound.
+        variable: String,
+        /// Description of what makes the bound invalid.
+        details: String,
+    },
 
     /// Validation error for logical consistency
     #[error("Validation error: {message}")]
-    ValidationError { message: String },
+    ValidationError {
+        /// Description of the consistency violation.
+        message: String,
+    },
 
     /// Generic parsing error with context
     #[error("Parse error at position {position}: {message}")]
-    ParseError { position: usize, message: String },
+    ParseError {
+        /// Byte or line position where parsing failed.
+        position: usize,
+        /// Description of the failure.
+        message: String,
+    },
 
     /// File I/O related errors
     #[error("File I/O error: {message}")]
-    IoError { message: String },
+    IoError {
+        /// The underlying I/O error, rendered as text to keep the type `Clone`.
+        message: String,
+    },
 }
 
 impl LpParseError {

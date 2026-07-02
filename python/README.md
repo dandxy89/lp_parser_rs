@@ -12,7 +12,6 @@ A LP file format parser, writer, and modifier for Python, powered by Rust.
 - **Problem Analysis**: Comprehensive statistics, structure analysis, and issue detection with configurable thresholds
 - **Easy Data Access**: Direct access to problem components (variables, constraints, objectives)
 - **CSV Export**: Export parsed data to CSV files for further analysis
-- **Problem Comparison**: Compare two LP problems to identify differences
 - **Type Safety**: Full type hints for better IDE support and development experience
 
 ## Installation
@@ -319,7 +318,7 @@ Supported variable types for `update_variable_type()`:
 
 - `"binary"` - Binary variables (0 or 1)
 - `"integer"` - General integer variables
-- `"general"` - Continuous variables (default)
+- `"general"` - General integer variables
 - `"free"` - Free variables (no bounds)
 - `"semicontinuous"` - Semi-continuous variables
 

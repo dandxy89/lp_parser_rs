@@ -1,12 +1,12 @@
 # Rust LP File Parser, Writer, and Diff Tool
 
-[![Cargo Test](https://github.com/dandxy89/congenial-enigma/actions/workflows/cargo_test.yml/badge.svg)](https://github.com/dandxy89/congenial-enigma/actions/workflows/cargo_test.yml)
+[![Cargo Test](https://github.com/dandxy89/lp_parser_rs/actions/workflows/cargo_test.yml/badge.svg)](https://github.com/dandxy89/lp_parser_rs/actions/workflows/cargo_test.yml)
 [![Crates.io](https://img.shields.io/crates/v/lp_parser_rs.svg)](https://crates.io/crates/lp_parser_rs)
 [![Documentation](https://docs.rs/lp_parser_rs/badge.svg)](https://docs.rs/lp_parser_rs/)
 [![PyPI version](https://badge.fury.io/py/parse-lp.svg)](https://badge.fury.io/py/parse-lp)
 [![PyPI Downloads](https://static.pepy.tech/personalized-badge/parse-lp?period=total&units=NONE&left_color=BLACK&right_color=GREEN&left_text=downloads)](https://pepy.tech/projects/parse-lp)
 
-A robust Rust library and CLI for parsing, analysing, modifying, and writing Linear Programming (LP) files. Built on [LALRPOP](https://github.com/lalrpop/lalrpop); grammar lives in [`lp.lalrpop`](/rust/src/lp.lalrpop).
+A robust Rust library and CLI for parsing, analysing, modifying, and writing Linear Programming (LP) files. Built on [LALRPOP](https://github.com/lalrpop/lalrpop); grammar lives in [`lp.lalrpop`](https://github.com/dandxy89/lp_parser_rs/blob/main/rust/src/lp.lalrpop).
 
 Supported specifications: [IBM CPLEX v22.1.1](https://www.ibm.com/docs/en/icos/22.1.1?topic=cplex-lp-file-format-algebraic-representation), [FICO Xpress](https://www.fico.com/fico-xpress-optimization/docs/dms2020-03/solver/optimizer/HTML/chapter10_sec_section102.html), [Gurobi](https://www.gurobi.com/documentation/current/refman/lp_format.html), Mosek.
 
@@ -55,7 +55,7 @@ problem.update_constraint_rhs("capacity", 200.0)?;
 problem.rename_variable("x1", "production_a")?;
 problem.update_variable_type("production_a", VariableType::Integer)?;
 
-std::fs::write("modified.lp", write_lp_string(&problem)?)?;
+std::fs::write("modified.lp", write_lp_string(&problem))?;
 ```
 
 Available modification methods on `LpProblem`: `update_objective_coefficient`, `rename_objective`, `remove_objective`, `update_constraint_coefficient`, `update_constraint_rhs`, `rename_constraint`, `remove_constraint`, `rename_variable`, `update_variable_type`, `remove_variable`.
@@ -200,7 +200,7 @@ The selected solver binary must be installed on your `PATH`. The compatibility l
 
 A terminal UI for comparing LP/MPS files with coefficient-level side-by-side diffs, fuzzy search, filtering, and integrated [HiGHS](https://highs.dev) solving. Built with [ratatui](https://ratatui.rs).
 
-![lp_diff demo](tui/assets/demo.gif)
+![lp_diff demo](https://raw.githubusercontent.com/dandxy89/lp_parser_rs/main/tui/assets/demo.gif)
 
 ```bash
 cargo install --path tui
@@ -231,7 +231,7 @@ lp_diff base.lp modified.lp --summary --rename '\[\d+\]$' '[idx]' --abs-tol 1e-6
 
 Highlights: three-panel layout, five sections (Summary / Variables / Constraints / Objectives / Numerics), filtering (`a`/`+`/`-`/`m`/`=`, plus `o` to ignore coefficient order), sort cycling (`s`), live tolerance cycling (`t`/`T`), telescope-style search (fuzzy, `r:` regex, `s:` substring), HiGHS solve-and-compare with infeasibility diagnosis (`S`), vim-style navigation and jumplist, clipboard yank (`y`/`Y`), CSV export (`w`), `?` for full help.
 
-See [`tui/README.md`](tui/README.md) for the complete reference.
+See [`tui/README.md`](https://github.com/dandxy89/lp_parser_rs/blob/main/tui/README.md) for the complete reference.
 
 ## Development
 

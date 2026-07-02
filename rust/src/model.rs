@@ -6,7 +6,7 @@
 //!
 //! All name strings (variables, constraints, objectives) are stored in a
 //! [`NameInterner`](crate::interner::NameInterner) and referenced by
-//! [`NameId`](crate::interner::NameId).
+//! [`NameId`].
 
 use std::fmt::{Display, Formatter, Result as FmtResult};
 
@@ -58,8 +58,10 @@ impl Display for ComparisonOp {
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 /// Represents the optimisation sense for an objective function.
 pub enum Sense {
+    /// Minimise the objective function.
     #[default]
     Minimize,
+    /// Maximise the objective function.
     Maximize,
 }
 
@@ -129,8 +131,11 @@ pub enum Constraint {
     Standard {
         /// Interned constraint name.
         name: NameId,
+        /// Left-hand-side coefficients.
         coefficients: Vec<Coefficient>,
+        /// Comparison operator between the LHS and the RHS.
         operator: ComparisonOp,
+        /// Right-hand-side value.
         rhs: f64,
         /// Byte offset of this constraint in the source text (for line number mapping).
         byte_offset: Option<usize>,
@@ -139,7 +144,9 @@ pub enum Constraint {
     SOS {
         /// Interned constraint name.
         name: NameId,
+        /// SOS type (S1 or S2).
         sos_type: SOSType,
+        /// Weight per participating variable.
         weights: Vec<Coefficient>,
         /// Byte offset of this constraint in the source text (for line number mapping).
         byte_offset: Option<usize>,

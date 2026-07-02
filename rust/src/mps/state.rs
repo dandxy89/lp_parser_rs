@@ -292,6 +292,15 @@ pub fn parse_mps(input: &str) -> LpResult<ParseResult<'_>> {
 }
 
 /// Extract the problem name from MPS input (the NAME section line).
+///
+/// # Example
+///
+/// ```rust
+/// use lp_parser_rs::extract_mps_name;
+///
+/// assert_eq!(extract_mps_name("NAME  afiro\nROWS\n"), Some("afiro".to_string()));
+/// assert_eq!(extract_mps_name("ROWS\n"), None);
+/// ```
 #[must_use]
 pub fn extract_mps_name(input: &str) -> Option<String> {
     debug_assert!(!input.is_empty(), "extract_mps_name called with empty input");

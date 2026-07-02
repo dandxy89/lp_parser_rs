@@ -34,14 +34,28 @@ pub struct RawCoefficient<'input> {
 pub enum RawConstraint<'input> {
     /// A standard linear constraint.
     Standard {
+        /// Constraint name (borrowed, or owned when auto-generated).
         name: Cow<'input, str>,
+        /// Left-hand-side coefficients.
         coefficients: Vec<RawCoefficient<'input>>,
+        /// Comparison operator between the LHS and the RHS.
         operator: ComparisonOp,
+        /// Right-hand-side value.
         rhs: f64,
+        /// Byte offset of the constraint in the source text, if tracked.
         byte_offset: Option<usize>,
     },
     /// A special ordered set constraint.
-    SOS { name: Cow<'input, str>, sos_type: SOSType, weights: Vec<RawCoefficient<'input>>, byte_offset: Option<usize> },
+    SOS {
+        /// Constraint name (borrowed, or owned when auto-generated).
+        name: Cow<'input, str>,
+        /// SOS type (S1 or S2).
+        sos_type: SOSType,
+        /// Weight per participating variable.
+        weights: Vec<RawCoefficient<'input>>,
+        /// Byte offset of the constraint in the source text, if tracked.
+        byte_offset: Option<usize>,
+    },
 }
 
 /// Raw objective produced by the grammar (zero-copy).
@@ -97,11 +111,17 @@ impl<'input> ConstraintCont<'input> {
 /// Helper enum for optional sections that can appear in any order.
 #[derive(Debug, Clone, PartialEq)]
 pub enum OptionalSection<'input> {
+    /// `Bounds` section: variable name and its bound-derived type.
     Bounds(Vec<(&'input str, VariableType)>),
+    /// `Generals` section: general integer variable names.
     Generals(Vec<&'input str>),
+    /// `Integers` section: integer variable names.
     Integers(Vec<&'input str>),
+    /// `Binaries` section: binary variable names.
     Binaries(Vec<&'input str>),
+    /// `Semi-Continuous` section: semi-continuous variable names.
     SemiContinuous(Vec<&'input str>),
+    /// `SOS` section: special ordered set constraints.
     SOS(Vec<RawConstraint<'input>>),
 }
 
@@ -140,9 +160,9 @@ impl Display for LexerError {
 #[logos(error = LexerError)]
 pub enum Token<'input> {
     // === Keywords (case-insensitive) ===
-    /// Optimization sense: minimize
+    /// Optimisation sense: minimize
     #[regex(r"(?i)minimize|minimise|minimum|min", |_| Sense::Minimize, priority = 10)]
-    /// Optimization sense: maximize
+    /// Optimisation sense: maximize
     #[regex(r"(?i)maximize|maximise|maximum|max", |_| Sense::Maximize, priority = 10)]
     SenseKw(Sense),
 
