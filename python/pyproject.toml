@@ -22,9 +22,6 @@ classifiers = [
 ]
 dynamic = ["version"]
 
-[project.scripts]
-parse-lp = "parse_lp.cli:cli_entry"
-
 [build-system]
 requires = ["maturin>=1,<2"]
 build-backend = "maturin"

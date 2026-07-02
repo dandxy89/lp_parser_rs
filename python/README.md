@@ -222,30 +222,6 @@ new_parser.parse()
 print(f"Successfully modified and re-parsed: {new_parser.name}")
 ```
 
-### Problem Comparison
-
-```python
-# Parse two different versions of a problem
-parser1 = LpParser("problem_v1.lp")
-parser1.parse()
-
-parser2 = LpParser("problem_v2.lp")
-parser2.parse()
-
-# Compare the problems
-diff = parser1.compare(parser2)
-
-print("Comparison Results:")
-print(f"Name changed: {diff['name_changed']}")
-print(f"Sense changed: {diff['sense_changed']}")
-print(f"Variable count difference: {diff['variable_count_diff']}")
-print(f"Added variables: {diff['added_variables']}")
-print(f"Removed variables: {diff['removed_variables']}")
-print(f"Modified variables: {diff['modified_variables']}")
-print(f"Added constraints: {diff['added_constraints']}")
-print(f"Removed constraints: {diff['removed_constraints']}")
-```
-
 ### Objectives Structure
 
 ```python
