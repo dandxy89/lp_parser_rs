@@ -13,6 +13,7 @@ use ratatui::text::{Line, Span};
 
 use crate::diff_model::{DiffCounts, DiffSummary, LpDiffReport};
 use crate::theme::theme;
+use crate::widgets::numerics::format_scientific;
 use crate::widgets::{ARROW, muted, rule_str};
 
 /// Build pre-formatted summary lines. Called once at startup since report data never changes.
@@ -282,7 +283,7 @@ fn build_constraint_type_table(lines: &mut Vec<Line<'static>>, a: &ProblemAnalys
 }
 
 fn format_range(r: &lp_parser_rs::analysis::RangeStats) -> String {
-    if r.count == 0 { "\u{2014}".to_string() } else { format!("[{:.1e}, {:.1e}]", r.min, r.max) }
+    crate::widgets::numerics::format_range_prec(r, 1)
 }
 
 fn build_coefficient_table(lines: &mut Vec<Line<'static>>, a: &ProblemAnalysis, b: &ProblemAnalysis) {
@@ -322,10 +323,6 @@ fn build_coefficient_table(lines: &mut Vec<Line<'static>>, a: &ProblemAnalysis, 
         Span::styled(format!("{rhs_a:>16}"), Style::default().fg(t.text)),
         Span::styled(format!("{rhs_b:>16}"), Style::default().fg(t.text)),
     ]));
-}
-
-fn format_scientific(v: f64) -> String {
-    if v == 0.0 || !v.is_finite() { "\u{2014}".to_string() } else { format!("{v:.2e}") }
 }
 
 fn build_issues_section(lines: &mut Vec<Line<'static>>, report: &LpDiffReport, analysis1: &ProblemAnalysis, analysis2: &ProblemAnalysis) {

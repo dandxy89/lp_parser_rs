@@ -541,8 +541,9 @@ pub fn solve_problem(problem: &LpProblem) -> Result<SolveResult, String> {
     let model = build_highs_model(problem);
     let build_time = build_start.elapsed();
 
-    let log_file = tempfile::NamedTempFile::new().map_err(|e| format!("failed to create solver log temp file: {e}"))?;
-    let log_path = log_file.path().to_owned();
+    // ponytail: pid-named temp file + explicit cleanup instead of the tempfile crate;
+    // one solve at a time per process, so no collision risk.
+    let log_path = std::env::temp_dir().join(format!("lp_diff_solver_{}.log", std::process::id()));
 
     let BuiltModel { row_problem, sense, variable_names, sorted_var_ids, objective_coefficients, row_constraint_names, skipped_sos } =
         model;
@@ -557,7 +558,11 @@ pub fn solve_problem(problem: &LpProblem) -> Result<SolveResult, String> {
     let solved = highs_model.solve();
     let solve_time = solve_start.elapsed();
 
-    let solver_log = std::fs::read_to_string(&log_path).map_err(|e| format!("failed to read solver log: {e}"))?;
+    let mut solver_log = std::fs::read_to_string(&log_path).map_err(|e| format!("failed to read solver log: {e}"))?;
+    // Cleanup failure is non-fatal (overwritten next solve, reaped by the OS); surface it in the log.
+    if let Err(e) = std::fs::remove_file(&log_path) {
+        solver_log.push_str(&format!("\n[lp_diff] warning: failed to remove solver log {}: {e}\n", log_path.display()));
+    }
 
     let extract_start = Instant::now();
     let mut result = extract_solution(&metadata, &solved, build_time, solve_time, solver_log);

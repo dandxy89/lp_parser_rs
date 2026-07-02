@@ -78,9 +78,20 @@ pub(crate) fn count_by_severity(issues: &[AnalysisIssue]) -> (usize, usize, usiz
     (errors, warnings, infos)
 }
 
+/// Format a `RangeStats` as a min/max magnitude interval with the given
+/// precision, or an em dash when empty.
+pub(crate) fn format_range_prec(range: &RangeStats, precision: usize) -> String {
+    if range.count == 0 { "\u{2014}".to_owned() } else { format!("[{:.p$e}, {:.p$e}]", range.min, range.max, p = precision) }
+}
+
 /// Format a `RangeStats` as a min/max magnitude interval, or an em dash when empty.
 pub(crate) fn format_range(range: &RangeStats) -> String {
-    if range.count == 0 { "\u{2014}".to_owned() } else { format!("[{:.2e}, {:.2e}]", range.min, range.max) }
+    format_range_prec(range, 2)
+}
+
+/// Format an f64 in scientific notation, em dash for zero/non-finite.
+pub(crate) fn format_scientific(v: f64) -> String {
+    if v == 0.0 || !v.is_finite() { "\u{2014}".to_owned() } else { format!("{v:.2e}") }
 }
 
 /// Ratio of max to min magnitude within a single `RangeStats`, when meaningful.
