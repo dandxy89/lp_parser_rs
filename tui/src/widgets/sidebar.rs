@@ -40,7 +40,7 @@ pub fn draw_tab_bar(frame: &mut Frame, area: Rect, app: &mut App) {
         } else {
             Style::default().fg(t.muted)
         };
-        spans.push(Span::styled(label.as_ref().to_owned(), style));
+        spans.push(Span::styled(label.as_ref(), style));
         #[allow(clippy::cast_possible_truncation)] // labels are short, far below u16::MAX
         let width = label.chars().count() as u16;
         bounds[i] = (x, x.saturating_add(width));
@@ -127,8 +127,8 @@ pub struct NameListParams<'a> {
 /// Draw a compact name list for a section's entries in the sidebar.
 ///
 /// Uses virtualised rendering: only `ListItem`s for the visible window are
-/// allocated, keeping the per-frame cost at O(visible_height) instead of
-/// O(total_items).  This is critical when the list contains 1M+ entries.
+/// allocated, keeping the per-frame cost at `O(visible_height)` instead of
+/// `O(total_items)`.  This is critical when the list contains 1M+ entries.
 fn draw_entry_name_list(frame: &mut Frame, area: Rect, params: &NameListParams<'_>, state: &mut ratatui::widgets::ListState) {
     debug_assert_eq!(
         params.filtered_indices.len(),
@@ -200,6 +200,7 @@ fn draw_entry_name_list(frame: &mut Frame, area: Rect, params: &NameListParams<'
             if line.width() > usable {
                 #[allow(clippy::cast_possible_truncation)] // bounded by area width
                 let x = area.x + 1 + inner_width as u16 - 1;
+                #[allow(clippy::cast_possible_truncation)] // bounded by area height
                 let y = area.y + 1 + i as u16;
                 if let Some(cell) = buf.cell_mut((x, y)) {
                     cell.set_symbol("\u{2026}").set_fg(t.muted);

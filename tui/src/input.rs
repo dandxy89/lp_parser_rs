@@ -209,8 +209,8 @@ impl App {
 
         match key.code {
             KeyCode::Char('q') => self.should_quit = true,
-            KeyCode::Tab => self.cycle_focus_forward(),
-            KeyCode::BackTab => self.cycle_focus_backward(),
+            // With only two cycle targets, backward equals forward.
+            KeyCode::Tab | KeyCode::BackTab => self.cycle_focus_forward(),
 
             // Direct section jump.
             KeyCode::Char('1') => self.set_section(Section::Summary),
@@ -383,12 +383,6 @@ impl App {
                 }
             }
         };
-    }
-
-    /// Backward focus toggle. With only two cycle targets this mirrors
-    /// [`Self::cycle_focus_forward`].
-    fn cycle_focus_backward(&mut self) {
-        self.cycle_focus_forward();
     }
 
     fn navigate_down(&mut self) {

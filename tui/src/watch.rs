@@ -24,12 +24,16 @@ pub struct WatchSession {
     /// Channel for the in-flight background reload, if any. While this is
     /// `Some`, further triggers are ignored; polling re-arms once it completes.
     pub receive: Option<mpsc::Receiver<ReloadOutcome>>,
+    /// Tick counter used to throttle mtime polls to every 5th tick (~250 ms),
+    /// keeping `--watch` at ~8 `stat()` calls/sec instead of ~40. The debounce
+    /// needs two stable observations, so reload latency stays under a second.
+    pub ticks: u8,
 }
 
 impl WatchSession {
     /// A disabled session (the default when `--watch` is not given).
     pub const fn disabled() -> Self {
-        Self { enabled: false, state: WatchState::new(None, None), receive: None }
+        Self { enabled: false, state: WatchState::new(None, None), receive: None, ticks: 0 }
     }
 
     /// Whether a background reload parse is currently in flight.
@@ -140,6 +144,8 @@ mod tests {
     use super::*;
 
     /// Helper: a deterministic mtime `n` seconds after the epoch.
+    // Wrapped in Option so call sites match observe()'s parameters directly.
+    #[allow(clippy::unnecessary_wraps)]
     fn mtime(n: u64) -> Option<SystemTime> {
         Some(UNIX_EPOCH + Duration::from_secs(n))
     }

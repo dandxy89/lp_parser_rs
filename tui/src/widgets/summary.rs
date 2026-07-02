@@ -71,6 +71,7 @@ pub fn draw_summary(frame: &mut Frame, area: Rect, cached_lines: &[Line<'static>
     let buf: &mut Buffer = frame.buffer_mut();
 
     for (i, line) in cached_lines.iter().skip(skip).take(visible).enumerate() {
+        #[allow(clippy::cast_possible_truncation)] // i < visible <= area.height (u16)
         let y = area.y + i as u16;
         debug_assert!(y < area.y + area.height, "summary line y={y} exceeds area bounds");
         buf.set_line(area.x, y, line, area.width);
@@ -282,10 +283,6 @@ fn build_constraint_type_table(lines: &mut Vec<Line<'static>>, a: &ProblemAnalys
     comparison_row_usize(lines, "SOS2", W, ca.sos2, cb.sos2);
 }
 
-fn format_range(r: &lp_parser_rs::analysis::RangeStats) -> String {
-    crate::widgets::numerics::format_range_prec(r, 1)
-}
-
 fn build_coefficient_table(lines: &mut Vec<Line<'static>>, a: &ProblemAnalysis, b: &ProblemAnalysis) {
     const W: usize = 18;
 
@@ -298,8 +295,8 @@ fn build_coefficient_table(lines: &mut Vec<Line<'static>>, a: &ProblemAnalysis, 
     lines.push(Line::from(vec![Span::styled(format!("  {}", rule_str(W + 32)), Style::default().fg(t.muted))]));
 
     // Coefficient range
-    let coeff_a = format_range(&a.coefficients.constraint_coeff_range);
-    let coeff_b = format_range(&b.coefficients.constraint_coeff_range);
+    let coeff_a = crate::widgets::numerics::format_range_prec(&a.coefficients.constraint_coeff_range, 1);
+    let coeff_b = crate::widgets::numerics::format_range_prec(&b.coefficients.constraint_coeff_range, 1);
     lines.push(Line::from(vec![
         Span::styled(format!("  {:<W$}", "Coeff range"), Style::default().fg(t.text)),
         Span::styled(format!("{coeff_a:>16}"), Style::default().fg(t.text)),
@@ -316,8 +313,8 @@ fn build_coefficient_table(lines: &mut Vec<Line<'static>>, a: &ProblemAnalysis, 
     ]));
 
     // RHS range
-    let rhs_a = format_range(&a.constraints.rhs_range);
-    let rhs_b = format_range(&b.constraints.rhs_range);
+    let rhs_a = crate::widgets::numerics::format_range_prec(&a.constraints.rhs_range, 1);
+    let rhs_b = crate::widgets::numerics::format_range_prec(&b.constraints.rhs_range, 1);
     lines.push(Line::from(vec![
         Span::styled(format!("  {:<W$}", "RHS range"), Style::default().fg(t.text)),
         Span::styled(format!("{rhs_a:>16}"), Style::default().fg(t.text)),

@@ -14,13 +14,7 @@ use crate::diff_model::{
 use crate::solver::{SolveDiffResult, SolveResult};
 use crate::state::{Section, Side};
 use crate::widgets::detail::{fmt_bound, variable_bounds};
-
-/// Pre-computed horizontal rules to avoid heap allocations from `repeat()`.
-const RULE_30: &str = "──────────────────────────────────";
-const RULE_38: &str = "──────────────────────────────────────";
-const RULE_60: &str = "──────────────────────────────────────────────────────────────";
-const RULE_78: &str = "──────────────────────────────────────────────────────────────────────────────────";
-const RULE_98: &str = "──────────────────────────────────────────────────────────────────────────────────────────────────────────";
+use crate::widgets::rule_str;
 
 /// Writing to a `String` via `fmt::Write` is infallible. This macro replaces
 /// `let _ = writeln!(...)` with an asserting version that satisfies Tiger Style.
@@ -242,7 +236,7 @@ pub fn render_summary_plain(app: &App) -> String {
     for (label, counts) in [("Variables", &summary.variables), ("Constraints", &summary.constraints), ("Objectives", &summary.objectives)] {
         write_count_row(&mut out, label, counts);
     }
-    w!(out, "  {}", RULE_60);
+    w!(out, "  {}", rule_str(62));
     let totals = summary.aggregate_counts();
     write_count_row(&mut out, "TOTAL", &totals);
 
@@ -376,14 +370,14 @@ fn write_analysis_sections(out: &mut String, a: &ProblemAnalysis, b: &ProblemAna
     w!(out);
     w!(out, "  Coefficient Scaling");
     w!(out, "  {:<W$}{:>16}{:>16}", "", "File A", "File B");
-    let coeff_a = format_range_stats(&a.coefficients.constraint_coeff_range);
-    let coeff_b = format_range_stats(&b.coefficients.constraint_coeff_range);
+    let coeff_a = crate::widgets::numerics::format_range_prec(&a.coefficients.constraint_coeff_range, 1);
+    let coeff_b = crate::widgets::numerics::format_range_prec(&b.coefficients.constraint_coeff_range, 1);
     w!(out, "  {:<W$}{:>16}{:>16}", "Coeff range", coeff_a, coeff_b);
-    let ratio_a = format_scientific_plain(a.coefficients.coefficient_ratio);
-    let ratio_b = format_scientific_plain(b.coefficients.coefficient_ratio);
+    let ratio_a = crate::widgets::numerics::format_scientific(a.coefficients.coefficient_ratio);
+    let ratio_b = crate::widgets::numerics::format_scientific(b.coefficients.coefficient_ratio);
     w!(out, "  {:<W$}{:>16}{:>16}", "Coeff ratio", ratio_a, ratio_b);
-    let rhs_a = format_range_stats(&a.constraints.rhs_range);
-    let rhs_b = format_range_stats(&b.constraints.rhs_range);
+    let rhs_a = crate::widgets::numerics::format_range_prec(&a.constraints.rhs_range, 1);
+    let rhs_b = crate::widgets::numerics::format_range_prec(&b.constraints.rhs_range, 1);
     w!(out, "  {:<W$}{:>16}{:>16}", "RHS range", rhs_a, rhs_b);
 }
 
@@ -404,16 +398,6 @@ fn write_comparison_row_pct(out: &mut String, label: &str, label_width: usize, a
     let delta = b - a;
     let delta_str = if delta.abs() < 1e-10 { "\u{2014}".to_string() } else { format!("{:+.2}%", delta * 100.0) };
     w!(out, "  {:<label_width$}{:>11.2}%{:>11.2}%{:>12}", label, a * 100.0, b * 100.0, delta_str);
-}
-
-/// Format a `RangeStats` as a compact range string.
-fn format_range_stats(r: &lp_parser_rs::analysis::RangeStats) -> String {
-    crate::widgets::numerics::format_range_prec(r, 1)
-}
-
-/// Format an f64 in scientific notation, returning em-dash for zero/non-finite.
-fn format_scientific_plain(v: f64) -> String {
-    crate::widgets::numerics::format_scientific(v)
 }
 
 /// Write the issues section as plain text.
@@ -476,7 +460,7 @@ fn write_variable_type_info(out: &mut String, variable_type: &lp_parser_rs::mode
 fn render_variable_plain(entry: &VariableDiffEntry) -> String {
     let mut out = String::new();
     w!(out, "Variable: {} [{}]", entry.name, entry.kind);
-    w!(out, "{}", RULE_38);
+    w!(out, "{}", rule_str(38));
 
     match entry.kind {
         DiffKind::Added => {
@@ -525,7 +509,7 @@ fn render_variable_plain(entry: &VariableDiffEntry) -> String {
 fn render_constraint_plain(entry: &ConstraintDiffEntry, cached_rows: Option<&[CoefficientRow]>, interner: &NameInterner) -> String {
     let mut out = String::new();
     w!(out, "Constraint: {} [{}]", entry.name, entry.kind);
-    w!(out, "{}", RULE_38);
+    w!(out, "{}", rule_str(38));
 
     if let Some(old_name) = &entry.renamed_from {
         w!(out, "  Renamed from: {old_name}");
@@ -607,7 +591,7 @@ fn render_constraint_plain(entry: &ConstraintDiffEntry, cached_rows: Option<&[Co
 fn render_objective_plain(entry: &ObjectiveDiffEntry, cached_rows: Option<&[CoefficientRow]>, interner: &NameInterner) -> String {
     let mut out = String::new();
     w!(out, "Objective: {} [{}]", entry.name, entry.kind);
-    w!(out, "{}", RULE_38);
+    w!(out, "{}", rule_str(38));
     w!(out, "  Coefficients:");
 
     if entry.kind == DiffKind::Modified {
@@ -772,7 +756,7 @@ fn write_diff_summary(text: &mut String, diff: &SolveDiffResult) {
     let r2 = &diff.result2;
 
     w!(text, "{:<18} {:<20} {:<20}", "", "File 1", "File 2");
-    w!(text, "{RULE_60}");
+    w!(text, "{}", rule_str(62));
     w!(text, "{:<18} {:<20} {:<20}", "Status:", r1.status, r2.status);
 
     let obj1 = r1.objective_value.map_or_else(|| "N/A".to_owned(), |v| format!("{v:.6}"));
@@ -785,7 +769,7 @@ fn write_diff_summary(text: &mut String, diff: &SolveDiffResult) {
     let total2 = r2.build_time + r2.solve_time + r2.extract_time;
     w!(text);
     w!(text, "Timings");
-    w!(text, "{RULE_60}");
+    w!(text, "{}", rule_str(62));
     w!(
         text,
         "{:<18} {:<20} {:<20}",
@@ -808,7 +792,7 @@ fn write_diff_summary(text: &mut String, diff: &SolveDiffResult) {
         format!("{:.3}s", r2.extract_time.as_secs_f64())
     );
     w!(text, "{:<18} {:<20} {:<20}", "Total:", format!("{:.3}s", total1.as_secs_f64()), format!("{:.3}s", total2.as_secs_f64()));
-    w!(text, "{RULE_60}");
+    w!(text, "{}", rule_str(62));
     w!(text, "{:<18} {:.3}s", "Diff:", diff.diff_time.as_secs_f64());
 }
 
@@ -820,7 +804,7 @@ fn write_diff_variables(text: &mut String, diff: &SolveDiffResult) {
     w!(text);
     w!(text, "Variables:");
     w!(text, "  {:<24} {:>14} {:>14} {:>14} {:>14} {:>14}", "Name", "File 1", "File 2", "\u{0394}", "RC 1", "RC 2");
-    w!(text, "  {RULE_98}");
+    w!(text, "  {}", rule_str(106));
     let mut buf1 = String::with_capacity(24);
     let mut buf2 = String::with_capacity(24);
     let mut buf3 = String::with_capacity(24);
@@ -857,7 +841,7 @@ fn write_diff_constraints(text: &mut String, diff: &SolveDiffResult) {
     w!(text);
     w!(text, "Constraints:");
     w!(text, "  {:<22} {:>13} {:>13} {:>13} {:>13}", "Name", "Activity 1", "Activity 2", "Shadow 1", "Shadow 2");
-    w!(text, "  {RULE_78}");
+    w!(text, "  {}", rule_str(82));
     let mut buf1 = String::with_capacity(16);
     let mut buf2 = String::with_capacity(16);
     let mut buf3 = String::with_capacity(16);
@@ -883,13 +867,13 @@ fn write_diff_solver_logs(text: &mut String, diff: &SolveDiffResult) {
     w!(text);
     w!(text, "Solver Logs:");
     if !r1.solver_log.is_empty() {
-        w!(text, "\u{2500}\u{2500} File 1: {} \u{2500}{RULE_30}", diff.file1_label);
+        w!(text, "\u{2500}\u{2500} File 1: {} \u{2500}{}", diff.file1_label, rule_str(34));
         for line in r1.solver_log.lines() {
             w!(text, "  {line}");
         }
     }
     if !r2.solver_log.is_empty() {
-        w!(text, "\u{2500}\u{2500} File 2: {} \u{2500}{RULE_30}", diff.file2_label);
+        w!(text, "\u{2500}\u{2500} File 2: {} \u{2500}{}", diff.file2_label, rule_str(34));
         for line in r2.solver_log.lines() {
             w!(text, "  {line}");
         }
