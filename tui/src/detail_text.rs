@@ -408,12 +408,12 @@ fn write_comparison_row_pct(out: &mut String, label: &str, label_width: usize, a
 
 /// Format a `RangeStats` as a compact range string.
 fn format_range_stats(r: &lp_parser_rs::analysis::RangeStats) -> String {
-    if r.count == 0 { "\u{2014}".to_string() } else { format!("[{:.1e}, {:.1e}]", r.min, r.max) }
+    crate::widgets::numerics::format_range_prec(r, 1)
 }
 
 /// Format an f64 in scientific notation, returning em-dash for zero/non-finite.
 fn format_scientific_plain(v: f64) -> String {
-    if v == 0.0 || !v.is_finite() { "\u{2014}".to_string() } else { format!("{v:.2e}") }
+    crate::widgets::numerics::format_scientific(v)
 }
 
 /// Write the issues section as plain text.
