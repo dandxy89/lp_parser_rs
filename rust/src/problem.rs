@@ -8,7 +8,7 @@ use crate::error::{LpParseError, LpResult};
 use crate::interner::{NameId, NameInterner};
 use crate::lexer::{Lexer, ParseResult, RawCoefficient, RawConstraint, RawObjective};
 use crate::lp::LpProblemParser;
-use crate::model::{Coefficient, ComparisonOp, Constraint, Objective, Sense, Variable, VariableType};
+use crate::model::{Coefficient, Constraint, Objective, Sense, Variable, VariableType};
 use crate::mps::{extract_mps_name, parse_mps};
 
 /// Check if a floating-point value is effectively zero using both absolute
@@ -245,13 +245,6 @@ impl LpProblem {
 
     #[must_use]
     #[inline]
-    /// Returns `true` if this is a minimisation problem.
-    pub const fn is_minimization(&self) -> bool {
-        self.sense.is_minimisation()
-    }
-
-    #[must_use]
-    #[inline]
     /// Returns the number of constraints.
     pub fn constraint_count(&self) -> usize {
         self.constraints.len()
@@ -440,32 +433,6 @@ impl LpProblem {
                 Ok(())
             }
             Constraint::SOS { .. } => Err(LpParseError::validation_error("SOS constraints do not have right-hand side values")),
-        }
-    }
-
-    /// Update the operator of a constraint.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the constraint does not exist or is an SOS constraint.
-    pub fn update_constraint_operator(&mut self, constraint_name: &str, new_operator: ComparisonOp) -> LpResult<()> {
-        debug_assert!(!constraint_name.is_empty(), "constraint_name must not be empty");
-        let con_id = self
-            .interner
-            .get(constraint_name)
-            .ok_or_else(|| LpParseError::validation_error(format!("Constraint '{constraint_name}' not found")))?;
-
-        let constraint = self
-            .constraints
-            .get_mut(&con_id)
-            .ok_or_else(|| LpParseError::validation_error(format!("Constraint '{constraint_name}' not found")))?;
-
-        match constraint {
-            Constraint::Standard { operator, .. } => {
-                *operator = new_operator;
-                Ok(())
-            }
-            Constraint::SOS { .. } => Err(LpParseError::validation_error("SOS constraints do not have comparison operators")),
         }
     }
 
@@ -698,39 +665,12 @@ impl LpProblem {
         variable.var_type = new_type;
         Ok(())
     }
-
-    /// Get a sorted list of all variable name IDs referenced in the problem.
-    ///
-    /// Relies on the invariant that all variables referenced in objectives and
-    /// constraints are registered in `self.variables` (ensured by
-    /// `register_variables_from_coefficients` during parse).
-    #[must_use]
-    pub fn get_all_variable_name_ids(&self) -> Vec<NameId> {
-        // Resolve each name once up front rather than twice per comparison.
-        let mut pairs: Vec<(&str, NameId)> = self.variables.keys().map(|&id| (self.interner.resolve(id), id)).collect();
-        pairs.sort_unstable_by(|a, b| a.0.cmp(b.0));
-        let ids: Vec<NameId> = pairs.into_iter().map(|(_, id)| id).collect();
-        debug_assert!(
-            ids.windows(2).all(|w| self.interner.resolve(w[0]) <= self.interner.resolve(w[1])),
-            "postcondition: result must be sorted by resolved name"
-        );
-        ids
-    }
-
-    /// Get a sorted list of all variable names referenced in the problem.
-    #[must_use]
-    pub fn get_all_variable_names(&self) -> Vec<&str> {
-        self.get_all_variable_name_ids().iter().map(|id| self.interner.resolve(*id)).collect()
-    }
 }
 
-// ── Serde support (feature-gated) ──────────────────────────────────────────
-//
 // Custom Serialize/Deserialize that resolves NameId → String on output and
 // interns String → NameId on input. Inner model types (Coefficient, Constraint,
 // Objective, Variable) are serialised through LpProblem — they don't need
 // standalone serde impls.
-
 #[cfg(feature = "serde")]
 mod serde_support {
     use indexmap::IndexMap;
@@ -739,8 +679,6 @@ mod serde_support {
     use crate::interner::{NameId, NameInterner};
     use crate::model::{Coefficient, ComparisonOp, Constraint, Objective, SOSType, Sense, Variable, VariableType};
     use crate::problem::LpProblem;
-
-    // ── Intermediate serde types ────────────────────────────────────────
 
     #[derive(Serialize, Deserialize)]
     struct SerdeCoefficient {
@@ -777,8 +715,6 @@ mod serde_support {
         variables: Vec<SerdeVariable>,
     }
 
-    // ── Conversion helpers ──────────────────────────────────────────────
-
     fn coeff_to_serde(c: &Coefficient, interner: &NameInterner) -> SerdeCoefficient {
         SerdeCoefficient { name: interner.resolve(c.name).to_string(), value: c.value }
     }
@@ -794,8 +730,6 @@ mod serde_support {
     fn coeffs_from_serde(scs: &[SerdeCoefficient], interner: &mut NameInterner) -> Vec<Coefficient> {
         scs.iter().map(|sc| coeff_from_serde(sc, interner)).collect()
     }
-
-    // ── Serialize ───────────────────────────────────────────────────────
 
     impl Serialize for LpProblem {
         fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
@@ -836,8 +770,6 @@ mod serde_support {
             proxy.serialize(serializer)
         }
     }
-
-    // ── Deserialize ─────────────────────────────────────────────────────
 
     impl<'de> Deserialize<'de> for LpProblem {
         fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
@@ -1159,12 +1091,12 @@ End";
     fn test_problem_lifecycle() {
         let problem = LpProblem::new();
         assert_eq!(problem.name(), None);
-        assert!(problem.is_minimization());
+        assert!(problem.sense.is_minimisation());
         assert_eq!((problem.objective_count(), problem.constraint_count(), problem.variable_count()), (0, 0, 0));
 
         let problem = LpProblem::new().with_problem_name("test").with_sense(Sense::Maximize);
         assert_eq!(problem.name(), Some("test"));
-        assert!(!problem.is_minimization());
+        assert!(!problem.sense.is_minimisation());
 
         let display = format!("{problem}");
         assert!(display.contains("Problem name: test") && display.contains("Sense: Maximize"));
@@ -1391,10 +1323,9 @@ mod modification_tests {
         p.update_constraint_coefficient("c1", "x2", 0.0).unwrap();
 
         p.update_constraint_rhs("c1", 15.0).unwrap();
-        p.update_constraint_operator("c1", ComparisonOp::GTE).unwrap();
         let c1 = p.get_name_id("c1").unwrap();
-        if let Constraint::Standard { rhs, operator, .. } = p.constraints.get(&c1).unwrap() {
-            assert_eq!((*rhs, operator), (15.0, &ComparisonOp::GTE));
+        if let Constraint::Standard { rhs, .. } = p.constraints.get(&c1).unwrap() {
+            assert_eq!(*rhs, 15.0);
         }
 
         assert!(p.update_objective_coefficient("nonexistent", "x1", 1.0).is_err());
@@ -1467,16 +1398,8 @@ mod modification_tests {
 
         assert!(p.update_constraint_coefficient("sos1", "x1", 3.0).is_err());
         assert!(p.update_constraint_rhs("sos1", 5.0).is_err());
-        assert!(p.update_constraint_operator("sos1", ComparisonOp::LTE).is_err());
 
         p.rename_constraint("sos1", "new_sos").unwrap();
         p.remove_constraint("new_sos").unwrap();
-    }
-
-    #[test]
-    fn test_get_variable_names() {
-        let p = create_test_problem();
-        let names = p.get_all_variable_names();
-        assert!(names.contains(&"x1") && names.contains(&"x2") && names.len() == 2);
     }
 }

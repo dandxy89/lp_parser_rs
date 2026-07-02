@@ -269,27 +269,6 @@ fn parse_number<'input>(lex: &logos::Lexer<'input, Token<'input>>) -> Option<f64
     Some(value)
 }
 
-impl Token<'_> {
-    /// Convert comparison tokens to `ComparisonOp`
-    #[must_use]
-    pub const fn as_comparison_op(&self) -> Option<ComparisonOp> {
-        match self {
-            Token::Lte => Some(ComparisonOp::LTE),
-            Token::Gte => Some(ComparisonOp::GTE),
-            Token::Lt => Some(ComparisonOp::LT),
-            Token::Gt => Some(ComparisonOp::GT),
-            Token::Eq => Some(ComparisonOp::EQ),
-            _ => None,
-        }
-    }
-
-    /// Check if token is a comparison operator
-    #[must_use]
-    pub const fn is_comparison_op(&self) -> bool {
-        matches!(self, Token::Lte | Token::Gte | Token::Lt | Token::Gt | Token::Eq)
-    }
-}
-
 /// A spanned token containing position information
 pub type Spanned<Tok, Loc, Error> = Result<(Loc, Tok, Loc), Error>;
 
