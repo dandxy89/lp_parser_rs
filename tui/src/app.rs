@@ -427,7 +427,7 @@ impl App {
         self.cached_summary = summary;
     }
 
-    /// Cycle the sidebar sort mode: Name → AbsDelta → RelDelta → Name.
+    /// Cycle the sidebar sort mode: Name → `AbsDelta` → `RelDelta` → Name.
     pub fn cycle_sort_mode(&mut self) {
         self.sort_mode = self.sort_mode.next();
         self.invalidate_cache();
@@ -544,15 +544,15 @@ impl App {
             Section::Constraints => {
                 let entry = &self.report.constraints.entries[entry_index];
                 let name = &entry.name;
-                let old = self.lookup_constraint_text(name, &self.problem1, &self.raw_text1);
-                let new = self.lookup_constraint_text(name, &self.problem2, &self.raw_text2);
+                let old = Self::lookup_constraint_text(name, &self.problem1, &self.raw_text1);
+                let new = Self::lookup_constraint_text(name, &self.problem2, &self.raw_text2);
                 (old, new)
             }
             Section::Objectives => {
                 let entry = &self.report.objectives.entries[entry_index];
                 let name = &entry.name;
-                let old = self.lookup_objective_text(name, &self.problem1, &self.raw_text1);
-                let new = self.lookup_objective_text(name, &self.problem2, &self.raw_text2);
+                let old = Self::lookup_objective_text(name, &self.problem1, &self.raw_text1);
+                let new = Self::lookup_objective_text(name, &self.problem2, &self.raw_text2);
                 (old, new)
             }
             _ => (None, None),
@@ -560,7 +560,7 @@ impl App {
     }
 
     /// Look up a constraint by name in a problem and extract its raw text.
-    fn lookup_constraint_text<'a>(&self, name: &str, problem: &LpProblem, raw_text: &'a str) -> Option<&'a str> {
+    fn lookup_constraint_text<'a>(name: &str, problem: &LpProblem, raw_text: &'a str) -> Option<&'a str> {
         let name_id = problem.get_name_id(name)?;
         let constraint = problem.constraints.get(&name_id)?;
         let offset = constraint.byte_offset()?;
@@ -568,7 +568,7 @@ impl App {
     }
 
     /// Look up an objective by name in a problem and extract its raw text.
-    fn lookup_objective_text<'a>(&self, name: &str, problem: &LpProblem, raw_text: &'a str) -> Option<&'a str> {
+    fn lookup_objective_text<'a>(name: &str, problem: &LpProblem, raw_text: &'a str) -> Option<&'a str> {
         let name_id = problem.get_name_id(name)?;
         let objective = problem.objectives.get(&name_id)?;
         let offset = objective.byte_offset?;
@@ -784,23 +784,20 @@ impl App {
 
     /// Yank a single side (old or new) of the selected entry to the system clipboard.
     pub fn yank_side(&mut self, side: Side) {
-        match crate::detail_text::render_side_plain(self, side) {
-            Some(text) => {
-                let side_label = match side {
-                    Side::Old => "old",
-                    Side::New => "new",
-                };
-                let name = self.selected_entry_name().unwrap_or("entry").to_owned();
-                self.set_yank_flash(&format!("Yanked {side_label}: {name}"), &text);
-            }
-            None => {
-                let msg = match side {
-                    Side::Old => "No old version",
-                    Side::New => "No new version",
-                };
-                msg.clone_into(&mut self.yank.message);
-                self.yank.flash = Some(Instant::now());
-            }
+        if let Some(text) = crate::detail_text::render_side_plain(self, side) {
+            let side_label = match side {
+                Side::Old => "old",
+                Side::New => "new",
+            };
+            let name = self.selected_entry_name().unwrap_or("entry").to_owned();
+            self.set_yank_flash(&format!("Yanked {side_label}: {name}"), &text);
+        } else {
+            let msg = match side {
+                Side::Old => "No old version",
+                Side::New => "No new version",
+            };
+            msg.clone_into(&mut self.yank.message);
+            self.yank.flash = Some(Instant::now());
         }
     }
 
@@ -927,10 +924,16 @@ impl App {
                 Err(mpsc::TryRecvError::Empty) => {} // still parsing
                 Err(mpsc::TryRecvError::Disconnected) => {
                     self.watch.receive = None;
-                    self.yank.message = "reload failed: parse thread disconnected".to_owned();
+                    "reload failed: parse thread disconnected".clone_into(&mut self.yank.message);
                     self.yank.flash = Some(Instant::now());
                 }
             }
+            return;
+        }
+
+        // Throttle the stat() pair to every 5th tick; see `WatchSession::ticks`.
+        self.watch.ticks = self.watch.ticks.wrapping_add(1);
+        if !self.watch.ticks.is_multiple_of(5) {
             return;
         }
 
@@ -985,6 +988,17 @@ impl App {
 
         self.yank.message = format!("reloaded {}", chrono::Local::now().format("%H:%M:%S"));
         self.yank.flash = Some(Instant::now());
+    }
+
+    /// Whether any time-driven UI is active and needs tick-driven redraws:
+    /// a running solve or diagnosis (elapsed-time display), an in-flight
+    /// watch reload, or a visible yank flash. Everything else only changes
+    /// in response to input, so the main loop skips idle-tick repaints.
+    pub fn is_animating(&self) -> bool {
+        self.yank.flash.is_some()
+            || self.watch.is_reloading()
+            || matches!(self.solver.state, SolveState::Running { .. } | SolveState::RunningBoth { .. })
+            || matches!(self.solver.diagnosis, DiagnosisState::Running { .. })
     }
 
     /// Poll the solver channel(s) for results, transitioning state when complete.

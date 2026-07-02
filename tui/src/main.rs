@@ -63,13 +63,13 @@ struct Cli {
     watch: bool,
 
     /// Absolute tolerance for numeric comparisons (RHS & coefficients).
-    /// Two values compare equal when |a - b| <= abs_tol. A tiny epsilon floor
+    /// Two values compare equal when |a - b| <= `abs_tol`. A tiny epsilon floor
     /// is always applied so ordinary float noise never registers as a change.
     #[arg(long, default_value_t = 0.0)]
     abs_tol: f64,
 
     /// Relative tolerance for numeric comparisons, scaled by magnitude.
-    /// Two values compare equal when |a - b| <= rel_tol * max(|a|, |b|).
+    /// Two values compare equal when |a - b| <= `rel_tol` * max(|a|, |b|).
     #[arg(long, default_value_t = 0.0)]
     rel_tol: f64,
 
@@ -156,6 +156,63 @@ fn suspend<W: io::Write>(terminal: &mut Terminal<CrosstermBackend<W>>) -> io::Re
     Ok(())
 }
 
+/// Draw/event loop, running until the user quits.
+///
+/// Redraws only for input, resize, or active animation — `Event::Tick` fires
+/// every 50 ms and would otherwise repaint an idle UI at 20 fps for nothing.
+fn run_event_loop<W: io::Write>(
+    terminal: &mut Terminal<CrosstermBackend<W>>,
+    app: &mut App,
+    events: &EventHandler,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let mut needs_redraw = true;
+    while !app.should_quit {
+        if needs_redraw {
+            terminal.draw(|frame| ui::draw(frame, app))?;
+        }
+
+        match events.next()? {
+            Event::Key(key) => {
+                // Ctrl+Z: in raw mode the terminal does not generate SIGTSTP, so
+                // suspend ourselves explicitly, restoring the terminal first.
+                #[cfg(unix)]
+                if key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) && key.code == crossterm::event::KeyCode::Char('z') {
+                    suspend(terminal)?;
+                    needs_redraw = true;
+                    continue;
+                }
+                app.handle_key(key);
+                needs_redraw = true;
+            }
+            Event::Mouse(mouse) => {
+                app.handle_mouse(mouse);
+                needs_redraw = true;
+            }
+            Event::Resize => needs_redraw = true,
+            Event::Tick => {
+                // Capture the animation state before mutating it so the frame
+                // that ends an animation (flash expiry, solve completion) is
+                // still painted.
+                let was_animating = app.is_animating();
+
+                // Clear yank flash after 1.5 seconds.
+                if let Some(flash_time) = app.yank.flash
+                    && flash_time.elapsed() >= Duration::from_millis(1500)
+                {
+                    app.yank.flash = None;
+                    app.yank.message.clear();
+                }
+
+                app.poll_solve();
+                app.poll_watch();
+                needs_redraw = was_animating || app.is_animating();
+            }
+            Event::Error(e) => return Err(e.into()),
+        }
+    }
+    Ok(())
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let args = Cli::parse();
 
@@ -222,7 +279,7 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // Cloned so the original options stay available for live rebuilds in the TUI.
         options: diff_options.clone(),
     });
-    eprintln!("done ({:.1}s, {} changes found)", diff_start.elapsed().as_secs_f64(), report.summary().total_changes(),);
+    eprintln!("done ({:.1}s, {} changes found)", diff_start.elapsed().as_secs_f64(), report.summary().total_changes());
 
     // Non-interactive summary mode: print and exit.
     if args.summary {
@@ -266,38 +323,7 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     }
     let events = EventHandler::new(Duration::from_millis(50));
 
-    // Main loop — draw then process the next event
-    while !app.should_quit {
-        terminal.draw(|frame| ui::draw(frame, &mut app))?;
-
-        // Clear yank flash after 1.5 seconds.
-        if let Some(flash_time) = app.yank.flash
-            && flash_time.elapsed() >= Duration::from_millis(1500)
-        {
-            app.yank.flash = None;
-            app.yank.message.clear();
-        }
-
-        match events.next()? {
-            Event::Key(key) => {
-                // Ctrl+Z: in raw mode the terminal does not generate SIGTSTP, so
-                // suspend ourselves explicitly, restoring the terminal first.
-                #[cfg(unix)]
-                if key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) && key.code == crossterm::event::KeyCode::Char('z') {
-                    suspend(&mut terminal)?;
-                    continue;
-                }
-                app.handle_key(key);
-            }
-            Event::Mouse(mouse) => app.handle_mouse(mouse),
-            Event::Resize => {} // ratatui handles resize automatically
-            Event::Tick => {
-                app.poll_solve();
-                app.poll_watch();
-            }
-            Event::Error(e) => return Err(e.into()),
-        }
-    }
+    run_event_loop(&mut terminal, &mut app, &events)?;
 
     // Restore terminal
     disable_raw_mode()?;

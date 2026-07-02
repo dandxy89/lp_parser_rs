@@ -15,14 +15,6 @@ use crate::state::{DiagnosisState, SolveState, SolveTab, SolveViewState};
 use crate::theme::theme;
 use crate::widgets::{panel_block, rule_str, spinner_frame, truncate_with_ellipsis, zebra_style};
 
-/// Pre-computed horizontal rule strings to avoid per-frame heap allocations from `repeat()`.
-const RULE_60: &str = "──────────────────────────────────────────────────────────────";
-const RULE_30: &str = "──────────────────────────────────────";
-// Diff variables tab: name_w(24) + value_w(14)*3 + 4 = 70
-const RULE_70: &str = "────────────────────────────────────────────────────────────────────────";
-// Diff constraints tab: name_w(22) + value_w(13)*4 + 6 = 80
-const RULE_80: &str = "──────────────────────────────────────────────────────────────────────────────────";
-
 /// Name column width for a table: the space left after `fixed` columns,
 /// clamped so very narrow or very wide terminals stay readable.
 fn name_column_width(inner_width: u16, fixed: usize) -> usize {
@@ -216,7 +208,7 @@ fn build_summary_tab(lines: &mut Vec<Line<'static>>, result: &SolveResult) {
     let total = result.build_time + result.solve_time + result.extract_time;
     lines.push(Line::from(""));
     lines.push(Line::from(Span::styled("  Timings", Style::default().fg(t.muted).add_modifier(Modifier::BOLD))));
-    lines.push(Line::from(Span::styled(format!("  {RULE_30}"), Style::default().fg(t.muted))));
+    lines.push(Line::from(Span::styled(format!("  {}", rule_str(38)), Style::default().fg(t.muted))));
     lines.push(Line::from(vec![
         Span::styled("  Build:         ", Style::default().fg(t.muted)),
         Span::styled(format!("{:.3}s", result.build_time.as_secs_f64()), Style::default().fg(t.accent)),
@@ -317,7 +309,7 @@ fn build_log_tab(lines: &mut Vec<Line<'static>>, result: &SolveResult) {
     }
 
     lines.push(Line::from(Span::styled("  Solver Log:", Style::default().fg(t.muted).add_modifier(Modifier::BOLD))));
-    lines.push(Line::from(Span::styled(format!("  {RULE_30}"), Style::default().fg(t.muted))));
+    lines.push(Line::from(Span::styled(format!("  {}", rule_str(38)), Style::default().fg(t.muted))));
 
     // Count total lines first, then skip/take to avoid collecting into a Vec.
     let total_lines = result.solver_log.lines().count();
@@ -526,7 +518,7 @@ fn append_diagnosis_block(lines: &mut Vec<Line<'static>>, diagnosis: &DiagnosisS
                 format!("  Infeasibility diagnosis \u{2014} {file}"),
                 Style::default().fg(t.warning).add_modifier(Modifier::BOLD),
             )));
-            lines.push(Line::from(Span::styled(format!("  {RULE_60}"), Style::default().fg(t.muted))));
+            lines.push(Line::from(Span::styled(format!("  {}", rule_str(62)), Style::default().fg(t.muted))));
             lines.push(Line::from(vec![
                 Span::styled("  Total violation: ", Style::default().fg(t.muted)),
                 Span::styled(format!("{:.6}", diagnosis.total_violation), Style::default().fg(t.warning).add_modifier(Modifier::BOLD)),
@@ -907,7 +899,7 @@ fn build_diff_variables_tab_cached(
         Span::styled(format!("{:>value_w$}", "File 2"), Style::default().fg(t.muted).add_modifier(Modifier::BOLD)),
         Span::styled(format!("{:>value_w$}", "\u{0394}"), Style::default().fg(t.muted).add_modifier(Modifier::BOLD)),
     ]));
-    lines.push(Line::from(Span::styled(format!("  {RULE_70}"), Style::default().fg(t.muted))));
+    lines.push(Line::from(Span::styled(format!("  {}", rule_str(72)), Style::default().fg(t.muted))));
 
     push_cached_window(lines, cached_rows, diff_only, scroll, visible_height);
 }
@@ -941,7 +933,7 @@ fn build_diff_constraints_tab_cached(
         Span::styled(format!("{:>value_w$}", "Shadow 1"), Style::default().fg(t.muted).add_modifier(Modifier::BOLD)),
         Span::styled(format!("{:>value_w$}", "Shadow 2"), Style::default().fg(t.muted).add_modifier(Modifier::BOLD)),
     ]));
-    lines.push(Line::from(Span::styled(format!("  {RULE_80}"), Style::default().fg(t.muted))));
+    lines.push(Line::from(Span::styled(format!("  {}", rule_str(82)), Style::default().fg(t.muted))));
 
     push_cached_window(lines, cached_rows, diff_only, scroll, visible_height);
 }
@@ -1021,7 +1013,7 @@ fn build_diff_summary_metrics(lines: &mut Vec<Line<'static>>, diff: &SolveDiffRe
         Span::styled(format!("{:<col_w$}", "File 1"), Style::default().fg(t.muted).add_modifier(Modifier::BOLD)),
         Span::styled(format!("{:<col_w$}", "File 2"), Style::default().fg(t.muted).add_modifier(Modifier::BOLD)),
     ]));
-    lines.push(Line::from(Span::styled(format!("  {RULE_60}"), Style::default().fg(t.muted))));
+    lines.push(Line::from(Span::styled(format!("  {}", rule_str(62)), Style::default().fg(t.muted))));
 
     // Status.
     lines.push(Line::from(vec![
@@ -1081,7 +1073,7 @@ fn build_diff_summary_metrics(lines: &mut Vec<Line<'static>>, diff: &SolveDiffRe
     let total2 = r2.build_time + r2.solve_time + r2.extract_time;
     lines.push(Line::from(""));
     lines.push(Line::from(Span::styled("  Timings", Style::default().fg(t.muted).add_modifier(Modifier::BOLD))));
-    lines.push(Line::from(Span::styled(format!("  {RULE_60}"), Style::default().fg(t.muted))));
+    lines.push(Line::from(Span::styled(format!("  {}", rule_str(62)), Style::default().fg(t.muted))));
 
     for (label, d1, d2) in
         [("Build:", r1.build_time, r2.build_time), ("Solve:", r1.solve_time, r2.solve_time), ("Extract:", r1.extract_time, r2.extract_time)]
@@ -1105,7 +1097,7 @@ fn build_diff_summary_metrics(lines: &mut Vec<Line<'static>>, diff: &SolveDiffRe
         ),
     ]));
 
-    lines.push(Line::from(Span::styled(format!("  {RULE_60}"), Style::default().fg(t.muted))));
+    lines.push(Line::from(Span::styled(format!("  {}", rule_str(62)), Style::default().fg(t.muted))));
     lines.push(Line::from(vec![
         Span::styled(format!("  {:<label_w$}", "Diff:"), Style::default().fg(t.muted)),
         Span::styled(format!("{:.3}s", diff.diff_time.as_secs_f64()), Style::default().fg(t.accent)),
@@ -1163,7 +1155,7 @@ fn build_diff_variables_tab(
         Span::styled(format!("{:>value_w$}", "File 2"), Style::default().fg(t.muted).add_modifier(Modifier::BOLD)),
         Span::styled(format!("{:>value_w$}", "\u{0394}"), Style::default().fg(t.muted).add_modifier(Modifier::BOLD)),
     ]));
-    lines.push(Line::from(Span::styled(format!("  {RULE_70}"), Style::default().fg(t.muted))));
+    lines.push(Line::from(Span::styled(format!("  {}", rule_str(72)), Style::default().fg(t.muted))));
 
     // Windowed rendering: only build styled Lines for visible data rows.
     let (first_visible_data, visible_data_count) = window_range(lines.len(), scroll, visible_height);
@@ -1212,7 +1204,7 @@ fn build_diff_constraints_tab(
         Span::styled(format!("{:>value_w$}", "Shadow 1"), Style::default().fg(t.muted).add_modifier(Modifier::BOLD)),
         Span::styled(format!("{:>value_w$}", "Shadow 2"), Style::default().fg(t.muted).add_modifier(Modifier::BOLD)),
     ]));
-    lines.push(Line::from(Span::styled(format!("  {RULE_80}"), Style::default().fg(t.muted))));
+    lines.push(Line::from(Span::styled(format!("  {}", rule_str(82)), Style::default().fg(t.muted))));
 
     // Windowed rendering: only build styled Lines for visible data rows.
     let (first_visible_data, visible_data_count) = window_range(lines.len(), scroll, visible_height);
@@ -1240,7 +1232,7 @@ fn build_diff_log_tab(lines: &mut Vec<Line<'static>>, diff: &SolveDiffResult) {
 
     // File 1 log — iterator skip/take to avoid per-frame Vec.
     lines.push(Line::from(Span::styled(
-        format!("  \u{2500}\u{2500} File 1: {} \u{2500}{RULE_30}", diff.file1_label),
+        format!("  \u{2500}\u{2500} File 1: {} \u{2500}{}", diff.file1_label, rule_str(38)),
         Style::default().fg(t.muted).add_modifier(Modifier::BOLD),
     )));
     append_truncated_log(lines, &diff.result1.solver_log, MAX_LOG_LINES, t);
@@ -1249,7 +1241,7 @@ fn build_diff_log_tab(lines: &mut Vec<Line<'static>>, diff: &SolveDiffResult) {
 
     // File 2 log — iterator skip/take to avoid per-frame Vec.
     lines.push(Line::from(Span::styled(
-        format!("  \u{2500}\u{2500} File 2: {} \u{2500}{RULE_30}", diff.file2_label),
+        format!("  \u{2500}\u{2500} File 2: {} \u{2500}{}", diff.file2_label, rule_str(38)),
         Style::default().fg(t.muted).add_modifier(Modifier::BOLD),
     )));
     append_truncated_log(lines, &diff.result2.solver_log, MAX_LOG_LINES, t);
