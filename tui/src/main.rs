@@ -75,7 +75,7 @@ struct Cli {
 
     /// Regex rewrite applied to names in BOTH files before matching.
     /// Takes two values: PATTERN REPLACEMENT. May be repeated; rules apply in order.
-    /// Example: --rename '\[\d+\]' '[i]' rewrites x[1] and x[2] to x[i],
+    /// Example: `--rename '\[\d+\]' '[i]'` rewrites `x[1]` and `x[2]` to `x[i]`,
     /// so index-shifted entries are matched as the same name.
     #[arg(long, num_args = 2, value_names = ["PATTERN", "REPLACEMENT"], action = clap::ArgAction::Append)]
     rename: Vec<String>,

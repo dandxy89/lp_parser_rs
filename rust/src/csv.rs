@@ -1,3 +1,5 @@
+//! CSV export: write problem components to per-section `.csv` files.
+
 use std::error::Error;
 use std::fmt::Write as _;
 use std::path::Path;
@@ -16,8 +18,21 @@ fn write_f64_to_buf(buf: &mut String, value: f64) -> &[u8] {
 }
 
 impl LpProblem {
-    /// Writes the problem data to CSV files (objectives, constraints, variables)
-    /// with normalised structure under `base_path`.
+    /// Writes the problem data to three CSV files under `base_path`:
+    /// `objectives.csv`, `constraints.csv`, and `variables.csv`.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// use std::path::Path;
+    ///
+    /// use lp_parser_rs::LpProblem;
+    ///
+    /// let problem = LpProblem::parse("Minimize\n obj: x\nSubject To\n c1: x >= 1\nEnd")?;
+    /// problem.to_csv(Path::new("/tmp/lp_export"))?;
+    /// // Creates /tmp/lp_export/{objectives,constraints,variables}.csv
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     ///
     /// # Errors
     ///

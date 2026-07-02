@@ -25,7 +25,8 @@ pub struct CommandPaletteState {
     pub visible: bool,
     /// Current fuzzy-filter query.
     pub query: String,
-    /// Indices into [`PaletteCommand::ALL`] matching the query, in rank order.
+    /// Indices into [`PaletteCommand::ALL`](crate::state::PaletteCommand::ALL)
+    /// matching the query, in rank order.
     pub filtered: Vec<usize>,
     /// Currently highlighted row within `filtered`.
     pub selected: usize,
@@ -561,7 +562,7 @@ impl App {
 
     /// Look up a constraint by name in a problem and extract its raw text.
     fn lookup_constraint_text<'a>(name: &str, problem: &LpProblem, raw_text: &'a str) -> Option<&'a str> {
-        let name_id = problem.get_name_id(name)?;
+        let name_id = problem.name_id(name)?;
         let constraint = problem.constraints.get(&name_id)?;
         let offset = constraint.byte_offset()?;
         Some(crate::widgets::raw_diff::extract_entry_text(raw_text, offset))
@@ -569,7 +570,7 @@ impl App {
 
     /// Look up an objective by name in a problem and extract its raw text.
     fn lookup_objective_text<'a>(name: &str, problem: &LpProblem, raw_text: &'a str) -> Option<&'a str> {
-        let name_id = problem.get_name_id(name)?;
+        let name_id = problem.name_id(name)?;
         let objective = problem.objectives.get(&name_id)?;
         let offset = objective.byte_offset?;
         Some(crate::widgets::raw_diff::extract_entry_text(raw_text, offset))

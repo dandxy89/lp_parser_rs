@@ -97,7 +97,7 @@ impl DiffOptions {
 
 /// A coefficient with its variable name interned as a [`NameId`].
 ///
-/// Names are resolved lazily via the [`LpDiffReport::resolve`] method, avoiding
+/// Names are resolved lazily against the report's [`NameInterner`], avoiding
 /// per-coefficient `String` allocations during diff construction.
 #[derive(Debug, Clone)]
 pub struct ResolvedCoefficient {

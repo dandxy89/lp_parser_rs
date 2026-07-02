@@ -1,8 +1,8 @@
 //! MPS file format parser.
 //!
 //! Parses MPS (Mathematical Programming System) files into the same
-//! [`ParseResult`] used by the LP grammar, enabling seamless integration
-//! with `LpProblem::from_parse_result`.
+//! [`ParseResult`](crate::lexer::ParseResult) used by the LP grammar,
+//! enabling seamless integration with `LpProblem::parse_mps`.
 //!
 
 mod builders;

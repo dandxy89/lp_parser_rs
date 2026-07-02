@@ -28,20 +28,12 @@ impl NameInterner {
     }
 
     /// Create an interner pre-sized for the expected number of names.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the computed byte capacity overflows (should not happen in practice).
     #[must_use]
     pub fn with_capacity(capacity: usize) -> Self {
-        Self {
-            // Estimate ~32 bytes average per name for byte capacity
-            rodeo: Rodeo::with_capacity(Capacity::new(
-                capacity,
-                // SAFETY: 32 is non-zero
-                NonZeroUsize::new(capacity.saturating_mul(32).max(1)).expect("capacity overflow"),
-            )),
-        }
+        // Estimate ~32 bytes average per name for byte capacity; the max(1)
+        // keeps the value non-zero even for capacity == 0.
+        let bytes = NonZeroUsize::new(capacity.saturating_mul(32).max(1)).unwrap_or(NonZeroUsize::MIN);
+        Self { rodeo: Rodeo::with_capacity(Capacity::new(capacity, bytes)) }
     }
 
     /// Intern a string, returning its [`NameId`]. Idempotent — interning

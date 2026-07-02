@@ -9,7 +9,7 @@ use lp_parser_rs::parser::parse_file;
 use lp_parser_rs::problem::LpProblem;
 use lp_parser_rs::writer::{LpWriterOptions, write_lp_string, write_lp_string_with_options};
 use pyo3::create_exception;
-use pyo3::exceptions::{PyFileExistsError, PyNotADirectoryError, PyRuntimeError};
+use pyo3::exceptions::{PyFileNotFoundError, PyNotADirectoryError, PyRuntimeError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
 
@@ -35,7 +35,7 @@ impl LpParser {
     #[pyo3(signature = (lp_file))]
     fn new(lp_file: String) -> PyResult<Self> {
         if !Path::new(&lp_file).is_file() {
-            return Err(PyFileExistsError::new_err(format!("LP file '{lp_file}' does not exist or is not a file")));
+            return Err(PyFileNotFoundError::new_err(format!("LP file '{lp_file}' does not exist or is not a file")));
         }
 
         Ok(Self { lp_file, problem: None })
@@ -81,9 +81,10 @@ impl LpParser {
 
     #[getter]
     fn name(&self) -> PyResult<Option<String>> {
+        // extract_problem_name already stores the bare name, without the
+        // "Problem name: " comment prefix.
         let problem = self.get_problem()?;
-        // Remove "Problem name: " prefix if present.
-        Ok(problem.name.as_deref().map(|n| n.strip_prefix("Problem name: ").unwrap_or(n).to_string()))
+        Ok(problem.name.clone())
     }
 
     #[getter]
@@ -348,11 +349,10 @@ impl LpParser {
     ///
     /// Returns a dictionary containing:
     /// - summary: Basic statistics (counts, density, etc.)
-    /// - sparsity: Sparsity metrics (variables per constraint, connectivity)
+    /// - sparsity: Sparsity metrics (variables per constraint)
     /// - variables: Variable analysis (type distribution, invalid bounds, etc.)
     /// - constraints: Constraint analysis (type distribution, empty/singleton)
     /// - coefficients: Coefficient range analysis
-    /// - objectives: Objective analysis
     /// - issues: List of detected issues/warnings
     #[pyo3(text_signature = "($self)")]
     fn analyze(&self, py: Python) -> PyResult<Py<PyAny>> {
