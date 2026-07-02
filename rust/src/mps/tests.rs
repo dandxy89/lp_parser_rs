@@ -873,4 +873,3 @@ ENDATA
     let result = parse_mps(input).unwrap();
     assert_eq!(result.constraints.len(), 1);
 }
-

@@ -161,4 +161,3 @@ parity_test!(parity_sudoku, "sudoku");
 parity_test!(parity_test2, "test2");
 parity_test!(parity_wbm, "wbm");
 parity_test!(parity_whiskas_model2, "WhiskasModel2");
-
