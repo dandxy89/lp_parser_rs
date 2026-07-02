@@ -449,28 +449,22 @@ pub(super) fn parse_sos_line<'input>(
 
         let sos_type = if upper.starts_with("S1") { SOSType::S1 } else { SOSType::S2 };
 
-        // The rest of the header might contain a name
-        let fields: Vec<&str> = trimmed.split_whitespace().collect();
-        let name = if fields.len() > 1 { fields[1] } else { "" };
+        // The rest of the header might contain a name; the fields borrow from
+        // `line`, so no re-slicing or allocation is needed.
+        let mut fields = trimmed.split_whitespace();
+        let type_token = fields.next().expect("non-empty SOS header line must have a first field");
+        let name = fields.next().unwrap_or("");
 
         *current_type = Some(sos_type);
-        *current_name = Some(if name.is_empty() {
-            // Use a default name extracted from the trimmed string
-            fields[0]
-        } else {
-            // Use the name portion from the original line
-            let name_start = line.find(name).expect("SOS name from split_whitespace must exist in original line");
-            &line[name_start..name_start + name.len()]
-        });
+        *current_name = Some(if name.is_empty() { type_token } else { name });
 
         return Ok(());
     }
 
     // SOS weight entry: var_name weight
-    let fields: Vec<&'input str> = line.split_whitespace().collect();
-    if fields.len() >= 2 {
-        let var_name = fields[0];
-        let weight: f64 = fields[1].parse().map_err(|_| LpParseError::invalid_number(fields[1], line_num))?;
+    let mut fields = line.split_whitespace();
+    if let (Some(var_name), Some(weight_field)) = (fields.next(), fields.next()) {
+        let weight: f64 = weight_field.parse().map_err(|_| LpParseError::invalid_number(weight_field, line_num))?;
         current_weights.push(RawCoefficient { name: var_name, value: weight });
     } else if !trimmed.is_empty() {
         return Err(LpParseError::parse_error(line_num, format!("SOS entry requires variable name and weight, got: '{trimmed}'")));

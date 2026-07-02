@@ -31,7 +31,6 @@ required-features = ["cli"]
 [dependencies]
 clap = { version = "4.6", features = ["derive"], optional = true }
 csv = { version = "1.4", optional = true }
-diff-struct = { version = "0.5", optional = true }
 indexmap = "2.7"
 lalrpop-util = { version = "0.23" }
 lasso = "0.7"
@@ -59,10 +58,10 @@ cli = ["dep:clap", "dep:regex", "dep:serde_json", "dep:serde_yaml"]
 csv = ["dep:csv"]
 default = []
 mmap = ["dep:memmap2"]
-diff = ["dep:diff-struct", "serde"]
+diff = ["serde"]
 lp-solvers = ["dep:lp-solvers"]
 serde = ["dep:serde"]
 test-cbc = ["lp-solvers"]
 
 [package.metadata.cargo-machete]
-ignored = ["lalrpop", "diff-struct"]
+ignored = ["lalrpop"]

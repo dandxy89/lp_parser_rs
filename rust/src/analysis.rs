@@ -472,42 +472,43 @@ impl Display for ProblemAnalysis {
     }
 }
 
-/// Collects coefficient statistics, classifying each as normal, large, or small.
-struct CoeffCollector<'a> {
-    range: &'a mut RangeStats,
-    large: &'a mut Vec<CoefficientLocation>,
-    small: &'a mut Vec<CoefficientLocation>,
-}
+/// Collect coefficient statistics for one location, classifying each
+/// coefficient as normal, large, or small.
+#[allow(clippy::too_many_arguments)]
+fn collect_coefficient_stats(
+    coefficients: &[crate::model::Coefficient],
+    location_name: &str,
+    is_objective: bool,
+    config: &AnalysisConfig,
+    interner: &crate::interner::NameInterner,
+    range: &mut RangeStats,
+    large: &mut Vec<CoefficientLocation>,
+    small: &mut Vec<CoefficientLocation>,
+) {
+    debug_assert!(!location_name.is_empty(), "location name must not be empty");
+    debug_assert!(
+        config.small_coefficient_threshold <= config.large_coefficient_threshold,
+        "small threshold must not exceed large threshold"
+    );
 
-impl<'a> CoeffCollector<'a> {
-    /// Process a slice of coefficients for a given location.
-    fn collect(
-        &mut self,
-        coefficients: &[crate::model::Coefficient],
-        location_name: &str,
-        is_objective: bool,
-        config: &AnalysisConfig,
-        interner: &crate::interner::NameInterner,
-    ) {
-        for coeff in coefficients {
-            let abs_value = coeff.value.abs();
-            self.range.update(abs_value);
+    for coeff in coefficients {
+        let abs_value = coeff.value.abs();
+        range.update(abs_value);
 
-            if abs_value > config.large_coefficient_threshold {
-                self.large.push(CoefficientLocation {
-                    location: location_name.to_string(),
-                    is_objective,
-                    variable: interner.resolve(coeff.name).to_string(),
-                    value: coeff.value,
-                });
-            } else if abs_value > 0.0 && abs_value < config.small_coefficient_threshold {
-                self.small.push(CoefficientLocation {
-                    location: location_name.to_string(),
-                    is_objective,
-                    variable: interner.resolve(coeff.name).to_string(),
-                    value: coeff.value,
-                });
-            }
+        if abs_value > config.large_coefficient_threshold {
+            large.push(CoefficientLocation {
+                location: location_name.to_string(),
+                is_objective,
+                variable: interner.resolve(coeff.name).to_string(),
+                value: coeff.value,
+            });
+        } else if abs_value > 0.0 && abs_value < config.small_coefficient_threshold {
+            small.push(CoefficientLocation {
+                location: location_name.to_string(),
+                is_objective,
+                variable: interner.resolve(coeff.name).to_string(),
+                value: coeff.value,
+            });
         }
     }
 }
@@ -789,23 +790,34 @@ impl LpProblem {
         let mut large_coefficients = Vec::new();
         let mut small_coefficients = Vec::new();
 
-        let mut constraint_collector =
-            CoeffCollector { range: &mut constraint_range, large: &mut large_coefficients, small: &mut small_coefficients };
-
         for (name_id, constraint) in &self.constraints {
             if let Constraint::Standard { coefficients, .. } = constraint {
                 let name_str = self.interner.resolve(*name_id);
-                constraint_collector.collect(coefficients, name_str, false, config, &self.interner);
+                collect_coefficient_stats(
+                    coefficients,
+                    name_str,
+                    false,
+                    config,
+                    &self.interner,
+                    &mut constraint_range,
+                    &mut large_coefficients,
+                    &mut small_coefficients,
+                );
             }
         }
 
-        // Reborrow for objectives with a separate range tracker.
-        let mut objective_collector =
-            CoeffCollector { range: &mut objective_range, large: constraint_collector.large, small: constraint_collector.small };
-
         for (name_id, objective) in &self.objectives {
             let name_str = self.interner.resolve(*name_id);
-            objective_collector.collect(&objective.coefficients, name_str, true, config, &self.interner);
+            collect_coefficient_stats(
+                &objective.coefficients,
+                name_str,
+                true,
+                config,
+                &self.interner,
+                &mut objective_range,
+                &mut large_coefficients,
+                &mut small_coefficients,
+            );
         }
 
         let constraint_coeff_range = constraint_range.finalise();

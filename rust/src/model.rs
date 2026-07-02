@@ -8,15 +8,10 @@
 //! [`NameInterner`](crate::interner::NameInterner) and referenced by
 //! [`NameId`](crate::interner::NameId).
 
-// Allow float_cmp in this module because the diff::Diff derive macro generates
-// code that uses direct f64 comparisons which we can't annotate
-#![allow(clippy::float_cmp)]
-
 use std::fmt::{Display, Formatter, Result as FmtResult};
 
 use crate::interner::NameId;
 
-#[cfg_attr(feature = "diff", derive(diff::Diff), diff(attr(#[derive(Debug, PartialEq, Eq)])))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 /// Represents comparison operations that can be used to compare values.
@@ -59,7 +54,6 @@ impl Display for ComparisonOp {
     }
 }
 
-#[cfg_attr(feature = "diff", derive(diff::Diff), diff(attr(#[derive(Debug, PartialEq, Eq)])))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 /// Represents the optimisation sense for an objective function.
@@ -88,7 +82,6 @@ impl Display for Sense {
     }
 }
 
-#[cfg_attr(feature = "diff", derive(diff::Diff), diff(attr(#[derive(Debug, PartialEq, Eq)])))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 /// Represents the type of SOS (Special Ordered Set) with variants `S1` and `S2`.
@@ -199,7 +192,6 @@ pub struct Objective {
     pub byte_offset: Option<usize>,
 }
 
-#[cfg_attr(feature = "diff", derive(diff::Diff), diff(attr(#[derive(Debug, PartialEq)])))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default, PartialEq)]
 /// Represents different types of variables that can be used in optimisation models.

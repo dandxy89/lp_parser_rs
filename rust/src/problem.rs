@@ -281,12 +281,7 @@ impl LpProblem {
     ///
     /// Returns an error if the input string is not valid MPS format.
     pub fn parse_mps(input: &str) -> LpResult<Self> {
-        // Input is external, so empty input must be a runtime error rather than an assertion.
-        if input.trim().is_empty() {
-            return Err(LpParseError::parse_error(0, "MPS input is empty"));
-        }
-        debug_assert!(input.contains('\n'), "parse_mps input must contain at least one newline");
-
+        // Empty-input validation is owned by the inner MPS parser.
         log::debug!("Starting to parse MPS problem");
         let problem_name = extract_mps_name(input);
         let parsed = parse_mps(input)?;
