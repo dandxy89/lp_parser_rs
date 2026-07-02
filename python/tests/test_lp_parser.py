@@ -197,6 +197,5 @@ class TestAllResourceFiles:
     )
     def test_parse_fails(self, lp_file: Path) -> None:
         parser = LpParser(str(lp_file))
-        parser.parse()
         with pytest.raises(RuntimeError):
-            parser.constraints  # noqa: B018
+            parser.parse()
