@@ -25,11 +25,11 @@ use lp_parser_rs::problem::LpProblem;
 
 type BoxError = Box<dyn std::error::Error>;
 
-fn cmd_parse(args: ParseArgs, verbose: u8, quiet: bool) -> Result<(), BoxError> {
+fn cmd_parse(args: ParseArgs, verbose: bool, quiet: bool) -> Result<(), BoxError> {
     let content = parse_file(&args.file)?;
     let problem = LpProblem::parse(&content)?;
 
-    if !quiet && verbose > 0 {
+    if !quiet && verbose {
         eprintln!("Parsed file: {}", args.file.display());
         eprintln!(
             "Problem: {} objectives, {} constraints, {} variables",
@@ -63,11 +63,11 @@ fn cmd_parse(args: ParseArgs, verbose: u8, quiet: bool) -> Result<(), BoxError> 
     Ok(())
 }
 
-fn cmd_info(args: &InfoArgs, verbose: u8, quiet: bool) -> Result<(), BoxError> {
+fn cmd_info(args: &InfoArgs, verbose: bool, quiet: bool) -> Result<(), BoxError> {
     let content = parse_file(&args.file)?;
     let problem = LpProblem::parse(&content)?;
 
-    if !quiet && verbose > 0 {
+    if !quiet && verbose {
         eprintln!("Analyzing file: {}", args.file.display());
     }
 
@@ -79,7 +79,7 @@ fn cmd_info(args: &InfoArgs, verbose: u8, quiet: bool) -> Result<(), BoxError> {
         }
         #[cfg(feature = "serde")]
         OutputFormat::Json => {
-            let info = build_info_struct(&problem, args);
+            let info = build_info_value(&problem, args);
             if args.pretty {
                 serde_json::to_writer_pretty(&mut writer, &info)?;
             } else {
@@ -89,7 +89,7 @@ fn cmd_info(args: &InfoArgs, verbose: u8, quiet: bool) -> Result<(), BoxError> {
         }
         #[cfg(feature = "serde")]
         OutputFormat::Yaml => {
-            let info = build_info_struct(&problem, args);
+            let info = build_info_value(&problem, args);
             serde_yaml::to_writer(&mut writer, &info)?;
         }
     }
@@ -97,11 +97,11 @@ fn cmd_info(args: &InfoArgs, verbose: u8, quiet: bool) -> Result<(), BoxError> {
     Ok(())
 }
 
-fn cmd_analyze(args: AnalyzeArgs, verbose: u8, quiet: bool) -> Result<(), BoxError> {
+fn cmd_analyze(args: AnalyzeArgs, verbose: bool, quiet: bool) -> Result<(), BoxError> {
     let content = parse_file(&args.file)?;
     let problem = LpProblem::parse(&content)?;
 
-    if !quiet && verbose > 0 {
+    if !quiet && verbose {
         eprintln!("Analyzing file: {}", args.file.display());
     }
 
@@ -232,118 +232,53 @@ fn write_info_text<W: Write>(writer: &mut W, problem: &LpProblem, args: &InfoArg
     Ok(())
 }
 
+/// Build the structured `info` output as a JSON value (also serialised as YAML).
 #[cfg(feature = "serde")]
-#[derive(serde::Serialize)]
-struct ProblemInfo {
-    name: Option<String>,
-    sense: String,
-    objective_count: usize,
-    constraint_count: usize,
-    variable_count: usize,
-    variable_types: VariableTypeCounts,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    objectives: Option<Vec<ObjectiveInfo>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    constraints: Option<Vec<ConstraintInfo>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    variables: Option<Vec<VariableInfo>>,
-}
+fn build_info_value(problem: &LpProblem, args: &InfoArgs) -> serde_json::Value {
+    let (continuous, integer, binary) = count_variable_types(problem);
 
-#[cfg(feature = "serde")]
-#[derive(serde::Serialize)]
-struct VariableTypeCounts {
-    continuous: usize,
-    integer: usize,
-    binary: usize,
-}
+    let mut info = serde_json::json!({
+        "name": problem.name(),
+        "sense": problem.sense.to_string(),
+        "objective_count": problem.objective_count(),
+        "constraint_count": problem.constraint_count(),
+        "variable_count": problem.variable_count(),
+        "variable_types": { "continuous": continuous, "integer": integer, "binary": binary },
+    });
 
-#[cfg(feature = "serde")]
-#[derive(serde::Serialize)]
-struct ObjectiveInfo {
-    name: String,
-    term_count: usize,
-}
-
-#[cfg(feature = "serde")]
-#[derive(serde::Serialize)]
-struct ConstraintInfo {
-    name: String,
-    constraint_type: String,
-    details: String,
-}
-
-#[cfg(feature = "serde")]
-#[derive(serde::Serialize)]
-struct VariableInfo {
-    name: String,
-    var_type: String,
-}
-
-#[cfg(feature = "serde")]
-fn build_info_struct(problem: &LpProblem, args: &InfoArgs) -> ProblemInfo {
-    let (continuous_count, integer_count, binary_count) = count_variable_types(problem);
-
-    let objectives = if args.objectives {
-        Some(
-            problem
-                .objectives
-                .iter()
-                .map(|(name_id, obj)| ObjectiveInfo { name: problem.resolve(*name_id).to_string(), term_count: obj.coefficients.len() })
-                .collect(),
-        )
-    } else {
-        None
-    };
-
-    let constraints = if args.constraints {
-        Some(
-            problem
-                .constraints
-                .iter()
-                .map(|(name_id, constr)| {
-                    let name = problem.resolve(*name_id).to_string();
-                    match constr {
-                        Constraint::Standard { coefficients, operator, rhs, .. } => ConstraintInfo {
-                            name,
-                            constraint_type: "standard".to_string(),
-                            details: format!("{} terms {} {}", coefficients.len(), operator, rhs),
-                        },
-                        Constraint::SOS { sos_type, weights, .. } => ConstraintInfo {
-                            name,
-                            constraint_type: "sos".to_string(),
-                            details: format!("{} with {} variables", sos_type, weights.len()),
-                        },
-                    }
-                })
-                .collect(),
-        )
-    } else {
-        None
-    };
-
-    let variables = if args.variables {
-        Some(
-            problem
-                .variables
-                .iter()
-                .map(|(name_id, var)| VariableInfo { name: problem.resolve(*name_id).to_string(), var_type: format!("{:?}", var.var_type) })
-                .collect(),
-        )
-    } else {
-        None
-    };
-
-    ProblemInfo {
-        name: problem.name().map(String::from),
-        sense: format!("{}", problem.sense),
-        objective_count: problem.objective_count(),
-        constraint_count: problem.constraint_count(),
-        variable_count: problem.variable_count(),
-        variable_types: VariableTypeCounts { continuous: continuous_count, integer: integer_count, binary: binary_count },
-        objectives,
-        constraints,
-        variables,
+    if args.objectives {
+        info["objectives"] = problem
+            .objectives
+            .iter()
+            .map(|(name_id, obj)| serde_json::json!({ "name": problem.resolve(*name_id), "term_count": obj.coefficients.len() }))
+            .collect();
     }
+
+    if args.constraints {
+        info["constraints"] = problem
+            .constraints
+            .iter()
+            .map(|(name_id, constr)| {
+                let (constraint_type, details) = match constr {
+                    Constraint::Standard { coefficients, operator, rhs, .. } => {
+                        ("standard", format!("{} terms {operator} {rhs}", coefficients.len()))
+                    }
+                    Constraint::SOS { sos_type, weights, .. } => ("sos", format!("{sos_type} with {} variables", weights.len())),
+                };
+                serde_json::json!({ "name": problem.resolve(*name_id), "constraint_type": constraint_type, "details": details })
+            })
+            .collect();
+    }
+
+    if args.variables {
+        info["variables"] = problem
+            .variables
+            .iter()
+            .map(|(name_id, var)| serde_json::json!({ "name": problem.resolve(*name_id), "var_type": format!("{:?}", var.var_type) }))
+            .collect();
+    }
+
+    info
 }
 
 /// Absolute and relative tolerances for treating two floats as different.
@@ -626,7 +561,7 @@ fn build_diff_json(args: &DiffArgs, p1: &LpProblem, p2: &LpProblem, diff: &LpDif
 }
 
 #[cfg(feature = "diff")]
-fn cmd_diff(args: DiffArgs, verbose: u8, quiet: bool) -> Result<(), BoxError> {
+fn cmd_diff(args: DiffArgs, verbose: bool, quiet: bool) -> Result<(), BoxError> {
     // Rename rules arrive as a flat list of PATTERN REPLACEMENT pairs.
     if args.rename.len() % 2 != 0 {
         return Err("--rename requires pairs of PATTERN REPLACEMENT".into());
@@ -636,7 +571,7 @@ fn cmd_diff(args: DiffArgs, verbose: u8, quiet: bool) -> Result<(), BoxError> {
 
     let tol = DiffTol { abs: args.abs_tol, rel: args.rel_tol };
 
-    if !quiet && verbose > 0 {
+    if !quiet && verbose {
         eprintln!("Diffing {} vs {}", args.file1.display(), args.file2.display());
         eprintln!("abs_tol={} rel_tol={} rename_rules={}", tol.abs, tol.rel, rules.len());
     }
@@ -672,13 +607,13 @@ fn cmd_diff(args: DiffArgs, verbose: u8, quiet: bool) -> Result<(), BoxError> {
     Ok(())
 }
 
-fn cmd_convert(args: ConvertArgs, verbose: u8, quiet: bool) -> Result<(), BoxError> {
+fn cmd_convert(args: ConvertArgs, verbose: bool, quiet: bool) -> Result<(), BoxError> {
     use lp_parser_rs::writer::{LpWriterOptions, write_lp_string_with_options};
 
     let content = parse_file(&args.file)?;
     let problem = LpProblem::parse(&content)?;
 
-    if !quiet && verbose > 0 {
+    if !quiet && verbose {
         eprintln!("Converting file: {}", args.file.display());
     }
 
@@ -690,7 +625,7 @@ fn cmd_convert(args: ConvertArgs, verbose: u8, quiet: bool) -> Result<(), BoxErr
                 decimal_precision: args.precision,
                 include_section_spacing: !args.compact,
             };
-            let output = write_lp_string_with_options(&problem, &options)?;
+            let output = write_lp_string_with_options(&problem, &options);
 
             let mut writer = OutputWriter::new(args.output)?;
             write!(writer, "{output}")?;
@@ -743,14 +678,14 @@ fn solve_status_str(status: lp_solvers::solvers::Status) -> &'static str {
 }
 
 #[cfg(feature = "lp-solvers")]
-fn cmd_solve(args: SolveArgs, verbose: u8, quiet: bool) -> Result<(), BoxError> {
+fn cmd_solve(args: SolveArgs, verbose: bool, quiet: bool) -> Result<(), BoxError> {
     use lp_parser_rs::compat::lp_solvers::LpSolversCompat;
     use lp_solvers::solvers::{CbcSolver, GlpkSolver, SolverTrait, Status};
 
     let content = parse_file(&args.file)?;
     let problem = LpProblem::parse(&content)?;
 
-    if !quiet && verbose > 0 {
+    if !quiet && verbose {
         eprintln!("Loading problem: {}", args.file.display());
     }
 
@@ -763,7 +698,7 @@ fn cmd_solve(args: SolveArgs, verbose: u8, quiet: bool) -> Result<(), BoxError> 
         }
     }
 
-    if !quiet && verbose > 0 {
+    if !quiet && verbose {
         eprintln!("Solving with {:?}...", args.solver);
     }
 

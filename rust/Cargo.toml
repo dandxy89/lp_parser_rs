@@ -55,13 +55,13 @@ serde_json = "1.0.150"
 test-case = "3.3.1"
 
 [features]
-cli = ["dep:clap", "dep:regex"]
+cli = ["dep:clap", "dep:regex", "dep:serde_json", "dep:serde_yaml"]
 csv = ["dep:csv"]
 default = []
 mmap = ["dep:memmap2"]
 diff = ["dep:diff-struct", "serde"]
 lp-solvers = ["dep:lp-solvers"]
-serde = ["dep:serde", "dep:serde_json", "dep:serde_yaml"]
+serde = ["dep:serde"]
 test-cbc = ["lp-solvers"]
 
 [package.metadata.cargo-machete]
