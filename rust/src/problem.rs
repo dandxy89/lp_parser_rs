@@ -285,7 +285,7 @@ impl LpProblem {
         log::debug!("Starting to parse MPS problem");
         let problem_name = extract_mps_name(input);
         let parsed = parse_mps(input)?;
-        from_parse_result(parsed, problem_name)
+        Ok(from_parse_result(parsed, problem_name))
     }
 
     #[inline]
@@ -839,7 +839,7 @@ impl Display for LpProblem {
 
 /// Convert a [`ParseResult`] into an [`LpProblem`], interning all names and
 /// building the full model. Shared by both LP and MPS parse paths.
-fn from_parse_result(parsed: ParseResult<'_>, problem_name: Option<String>) -> LpResult<LpProblem> {
+fn from_parse_result(parsed: ParseResult<'_>, problem_name: Option<String>) -> LpProblem {
     debug_assert!(!parsed.objectives.is_empty() || !parsed.constraints.is_empty(), "parse result should have objectives or constraints");
     debug_assert!(parsed.objectives.iter().all(|o| !o.name.is_empty()), "all objectives must have non-empty names");
 
@@ -865,7 +865,7 @@ fn from_parse_result(parsed: ParseResult<'_>, problem_name: Option<String>) -> L
     process_variable_types(&mut interner, &parsed, &mut variables);
     intern_sos_constraints(&mut interner, &parsed.sos, &mut variables, &mut constraints, &mut constraint_counter);
 
-    Ok(LpProblem { name: problem_name, sense: parsed.sense, objectives, constraints, variables, interner })
+    LpProblem { name: problem_name, sense: parsed.sense, objectives, constraints, variables, interner }
 }
 
 impl TryFrom<&str> for LpProblem {
@@ -880,7 +880,7 @@ impl TryFrom<&str> for LpProblem {
         let parser = LpProblemParser::new();
         let parsed = parser.parse(lexer).map_err(LpParseError::from)?;
 
-        from_parse_result(parsed, problem_name)
+        Ok(from_parse_result(parsed, problem_name))
     }
 }
 
@@ -1298,6 +1298,8 @@ mod modification_tests {
     }
 
     #[test]
+    // The updated RHS must round-trip bit-exactly, so compare floats strictly.
+    #[allow(clippy::float_cmp)]
     fn test_update_coefficients() {
         let mut p = create_test_problem();
 

@@ -141,7 +141,6 @@ impl<'input> MpsParseState<'input> {
         let current_section = self.section.ok_or_else(|| LpParseError::parse_error(line_num, "Data line before any section header"))?;
 
         match current_section {
-            MpsSection::Name => {}
             MpsSection::ObjSense => {
                 let trimmed = line.trim();
                 match trimmed.to_ascii_uppercase().as_str() {
@@ -173,8 +172,8 @@ impl<'input> MpsParseState<'input> {
                     &mut self.bounds_vector_label,
                 )?;
             }
-            MpsSection::Unsupported => {
-                // Skip data lines in unsupported sections
+            MpsSection::Name | MpsSection::Unsupported => {
+                // NAME is captured by extract_mps_name; unsupported sections are skipped.
             }
             MpsSection::Sos => {
                 parse_sos_line(
@@ -258,7 +257,7 @@ impl<'input> MpsParseState<'input> {
 /// Returns an error for malformed MPS content including missing required
 /// sections, invalid row/bound types, number parse failures, and references
 /// to undefined rows.
-pub fn parse_mps<'input>(input: &'input str) -> LpResult<ParseResult<'input>> {
+pub fn parse_mps(input: &str) -> LpResult<ParseResult<'_>> {
     // Input is external, so empty input must be a runtime error rather than an assertion.
     if input.trim().is_empty() {
         return Err(LpParseError::parse_error(0, "MPS input is empty"));
@@ -293,6 +292,7 @@ pub fn parse_mps<'input>(input: &'input str) -> LpResult<ParseResult<'input>> {
 }
 
 /// Extract the problem name from MPS input (the NAME section line).
+#[must_use]
 pub fn extract_mps_name(input: &str) -> Option<String> {
     debug_assert!(!input.is_empty(), "extract_mps_name called with empty input");
     debug_assert!(input.is_ascii() || input.is_char_boundary(0), "input must be valid UTF-8");

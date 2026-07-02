@@ -2,6 +2,9 @@
 members = ["python", "rust", "tui"]
 resolver = "3"
 
+[workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+
 [profile.release]
 lto = true
 opt-level = 3

@@ -96,7 +96,7 @@ pub fn rule_str(width: usize) -> &'static str {
 pub fn gauge_bar(fraction: f64, cells: usize) -> String {
     debug_assert!(cells > 0, "gauge_bar needs at least one cell");
     let clamped = fraction.clamp(0.0, 1.0);
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)] // clamped to [0, cells]
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss, clippy::cast_precision_loss)] // clamped to [0, cells]
     let filled = ((clamped * cells as f64).round() as usize).min(cells);
     let mut bar = String::with_capacity(2 + cells * 3);
     bar.push('\u{2590}');
@@ -204,6 +204,6 @@ mod tests {
     fn test_spinner_frame_cycles() {
         assert_eq!(spinner_frame(Duration::from_millis(0)), SPINNER_FRAMES[0]);
         assert_eq!(spinner_frame(Duration::from_millis(150)), SPINNER_FRAMES[1]);
-        assert_eq!(spinner_frame(Duration::from_millis(1000)), SPINNER_FRAMES[0]);
+        assert_eq!(spinner_frame(Duration::from_secs(1)), SPINNER_FRAMES[0]);
     }
 }

@@ -29,3 +29,6 @@ regex = "1.12.4"
 # tree transitively (crossterm); declared here so the call site is portable.
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
+
+[lints]
+workspace = true

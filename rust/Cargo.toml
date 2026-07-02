@@ -65,3 +65,6 @@ test-cbc = ["lp-solvers"]
 
 [package.metadata.cargo-machete]
 ignored = ["lalrpop"]
+
+[lints]
+workspace = true

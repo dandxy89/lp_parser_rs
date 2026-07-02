@@ -25,7 +25,7 @@ pub struct SolveResult {
     pub shadow_prices: Vec<(String, f64)>,
     /// Row activity values per constraint.
     pub row_values: Vec<(String, f64)>,
-    /// Wall-clock time to build the HiGHS `RowProblem` from `LpProblem`.
+    /// Wall-clock time to build the `HiGHS` `RowProblem` from `LpProblem`.
     pub build_time: std::time::Duration,
     /// Wall-clock solve time.
     pub solve_time: std::time::Duration,
@@ -175,6 +175,8 @@ fn count_constraint_diffs_from_rows(rows: &[ConstraintDiffRow]) -> DiffCounts {
     counts
 }
 
+// NameRef indices fit u32: solver column counts are far below 4 billion.
+#[allow(clippy::cast_possible_truncation)]
 fn diff_variables(r1: &SolveResult, r2: &SolveResult, threshold: f64) -> Vec<VarDiffRow> {
     debug_assert_eq!(r1.variables.len(), r1.reduced_costs.len(), "variables and reduced_costs must have equal length for result 1");
     debug_assert_eq!(r2.variables.len(), r2.reduced_costs.len(), "variables and reduced_costs must have equal length for result 2");
@@ -223,6 +225,8 @@ fn diff_variables(r1: &SolveResult, r2: &SolveResult, threshold: f64) -> Vec<Var
     rows
 }
 
+// NameRef indices fit u32: solver row counts are far below 4 billion.
+#[allow(clippy::cast_possible_truncation)]
 fn diff_constraints(r1: &SolveResult, r2: &SolveResult, threshold: f64) -> Vec<ConstraintDiffRow> {
     debug_assert_eq!(r1.row_values.len(), r1.shadow_prices.len(), "row_values and shadow_prices must have equal length for result 1");
     debug_assert_eq!(r2.row_values.len(), r2.shadow_prices.len(), "row_values and shadow_prices must have equal length for result 2");
@@ -561,7 +565,8 @@ pub fn solve_problem(problem: &LpProblem) -> Result<SolveResult, String> {
     let mut solver_log = std::fs::read_to_string(&log_path).map_err(|e| format!("failed to read solver log: {e}"))?;
     // Cleanup failure is non-fatal (overwritten next solve, reaped by the OS); surface it in the log.
     if let Err(e) = std::fs::remove_file(&log_path) {
-        solver_log.push_str(&format!("\n[lp_diff] warning: failed to remove solver log {}: {e}\n", log_path.display()));
+        write!(solver_log, "\n[lp_diff] warning: failed to remove solver log {}: {e}\n", log_path.display())
+            .expect("fmt::Write to String is infallible");
     }
 
     let extract_start = Instant::now();
