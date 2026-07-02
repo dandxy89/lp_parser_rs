@@ -48,18 +48,6 @@ class SOSConstraint(TypedDict):
 
 Constraint: TypeAlias = StandardConstraint | SOSConstraint
 
-class ComparisonResult(TypedDict):
-    name_changed: bool
-    sense_changed: bool
-    variable_count_diff: int
-    constraint_count_diff: int
-    objective_count_diff: int
-    added_variables: list[str]
-    removed_variables: list[str]
-    modified_variables: list[str]
-    added_constraints: list[str]
-    removed_constraints: list[str]
-
 # Analysis result structures (mirroring the dictionaries built in src/lib.rs)
 class AnalysisSummary(TypedDict):
     name: str | None
@@ -206,9 +194,6 @@ class LpParser:
 
     def objective_count(self) -> int:
         """Number of objectives in the problem."""
-
-    def compare(self, other: LpParser) -> ComparisonResult:
-        """Compare this problem with another, returning a summary of the differences."""
 
     def to_lp_string(self) -> str:
         """Write the current problem to an LP format string."""

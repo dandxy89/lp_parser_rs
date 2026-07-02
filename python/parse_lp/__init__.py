@@ -10,7 +10,6 @@ Key Features:
 - Write LP problems back to standard LP format
 - Export parsed data to CSV files
 - Access to problem components (variables, constraints, objectives)
-- Compare two LP problems to find differences
 - Type hints for better IDE support
 
 Example Usage:
@@ -37,12 +36,6 @@ Example Usage:
     >>>
     >>> # Export to CSV files
     >>> parser.to_csv("output/")
-    >>>
-    >>> # Compare two problems
-    >>> parser2 = LpParser("modified_problem.lp")
-    >>> parser2.parse()
-    >>> diff = parser.compare(parser2)
-    >>> print(f"Added variables: {diff['added_variables']}")
 
 Modification Methods:
     Objective modifications:

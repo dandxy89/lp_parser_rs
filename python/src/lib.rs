@@ -1,12 +1,5 @@
 // Allow pedantic lints that are unavoidable due to PyO3 macro requirements
-// syn v1 is used by diff_derive (transitive dep of diff-struct via lp_parser_rs) - unavoidable
-#![allow(
-    clippy::cast_possible_truncation,
-    clippy::cast_possible_wrap,
-    clippy::multiple_crate_versions,
-    clippy::needless_pass_by_value,
-    clippy::unnecessary_wraps
-)]
+#![allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap, clippy::needless_pass_by_value, clippy::unnecessary_wraps)]
 
 use std::path::{Path, PathBuf};
 
@@ -110,15 +103,7 @@ impl LpParser {
         for (name_id, obj) in &problem.objectives {
             let dict = PyDict::new(py);
             dict.set_item("name", problem.resolve(*name_id))?;
-
-            let coeffs = PyList::empty(py);
-            for coef in &obj.coefficients {
-                let coef_dict = PyDict::new(py);
-                coef_dict.set_item("name", problem.resolve(coef.name))?;
-                coef_dict.set_item("value", coef.value)?;
-                coeffs.append(coef_dict)?;
-            }
-            dict.set_item("coefficients", coeffs)?;
+            dict.set_item("coefficients", coefficients_to_list(py, &problem, &obj.coefficients)?)?;
             list.append(dict)?;
         }
 
@@ -137,30 +122,14 @@ impl LpParser {
             match constraint {
                 Constraint::Standard { coefficients, operator, rhs, .. } => {
                     dict.set_item("type", "standard")?;
-
-                    let coeffs = PyList::empty(py);
-                    for coef in coefficients {
-                        let coef_dict = PyDict::new(py);
-                        coef_dict.set_item("name", problem.resolve(coef.name))?;
-                        coef_dict.set_item("value", coef.value)?;
-                        coeffs.append(coef_dict)?;
-                    }
-                    dict.set_item("coefficients", coeffs)?;
+                    dict.set_item("coefficients", coefficients_to_list(py, &problem, coefficients)?)?;
                     dict.set_item("operator", format!("{operator:?}"))?;
                     dict.set_item("rhs", rhs)?;
                 }
                 Constraint::SOS { weights, sos_type, .. } => {
                     dict.set_item("type", "sos")?;
                     dict.set_item("sos_type", format!("{sos_type:?}"))?;
-
-                    let weights_list = PyList::empty(py);
-                    for weight in weights {
-                        let weight_dict = PyDict::new(py);
-                        weight_dict.set_item("name", problem.resolve(weight.name))?;
-                        weight_dict.set_item("value", weight.value)?;
-                        weights_list.append(weight_dict)?;
-                    }
-                    dict.set_item("weights", weights_list)?;
+                    dict.set_item("weights", coefficients_to_list(py, &problem, weights)?)?;
                 }
             }
             list.append(dict)?;
@@ -200,85 +169,11 @@ impl LpParser {
         Ok(problem.objective_count())
     }
 
-    #[pyo3(text_signature = "($self, other)")]
-    fn compare(&self, other: &Self, py: Python) -> PyResult<Py<PyAny>> {
-        let p1 = self.get_problem()?;
-        let p2 = other.get_problem()?;
-
-        let dict = PyDict::new(py);
-
-        // Compare basic properties
-        dict.set_item("name_changed", p1.name != p2.name)?;
-        dict.set_item("sense_changed", p1.sense != p2.sense)?;
-
-        // Compare counts
-        dict.set_item("variable_count_diff", p1.variable_count() as i32 - p2.variable_count() as i32)?;
-        dict.set_item("constraint_count_diff", p1.constraint_count() as i32 - p2.constraint_count() as i32)?;
-        dict.set_item("objective_count_diff", p1.objective_count() as i32 - p2.objective_count() as i32)?;
-
-        // Find added/removed variables
-        let added_vars = PyList::empty(py);
-        let removed_vars = PyList::empty(py);
-        let modified_vars = PyList::empty(py);
-
-        for (name_id, var1) in &p1.variables {
-            let resolved_name = p1.resolve(*name_id);
-            if let Some(p2_name_id) = p2.get_name_id(resolved_name) {
-                if let Some(var2) = p2.variables.get(&p2_name_id) {
-                    if var1 != var2 {
-                        modified_vars.append(resolved_name)?;
-                    }
-                } else {
-                    removed_vars.append(resolved_name)?;
-                }
-            } else {
-                removed_vars.append(resolved_name)?;
-            }
-        }
-
-        for name_id in p2.variables.keys() {
-            let resolved_name = p2.resolve(*name_id);
-            let in_p1 = p1.get_name_id(resolved_name).is_some_and(|id| p1.variables.contains_key(&id));
-            if !in_p1 {
-                added_vars.append(resolved_name)?;
-            }
-        }
-
-        dict.set_item("added_variables", added_vars)?;
-        dict.set_item("removed_variables", removed_vars)?;
-        dict.set_item("modified_variables", modified_vars)?;
-
-        // Find added/removed constraints
-        let added_constraints = PyList::empty(py);
-        let removed_constraints = PyList::empty(py);
-
-        for name_id in p1.constraints.keys() {
-            let resolved_name = p1.resolve(*name_id);
-            let in_p2 = p2.get_name_id(resolved_name).is_some_and(|id| p2.constraints.contains_key(&id));
-            if !in_p2 {
-                removed_constraints.append(resolved_name)?;
-            }
-        }
-
-        for name_id in p2.constraints.keys() {
-            let resolved_name = p2.resolve(*name_id);
-            let in_p1 = p1.get_name_id(resolved_name).is_some_and(|id| p1.constraints.contains_key(&id));
-            if !in_p1 {
-                added_constraints.append(resolved_name)?;
-            }
-        }
-
-        dict.set_item("added_constraints", added_constraints)?;
-        dict.set_item("removed_constraints", removed_constraints)?;
-
-        Ok(dict.into())
-    }
-
     /// Write the current problem to LP format string
     #[pyo3(text_signature = "($self)")]
     fn to_lp_string(&self) -> PyResult<String> {
         let problem = self.get_problem()?;
-        write_lp_string(&problem).map_err(|err| PyRuntimeError::new_err(format!("Failed to write LP string: {err}")))
+        Ok(write_lp_string(&problem))
     }
 
     /// Write the current problem to LP format string with custom options
@@ -292,7 +187,7 @@ impl LpParser {
     ) -> PyResult<String> {
         let problem = self.get_problem()?;
         let options = LpWriterOptions { include_problem_name, max_line_length, decimal_precision, include_section_spacing };
-        write_lp_string_with_options(&problem, &options).map_err(|err| PyRuntimeError::new_err(format!("Failed to write LP string: {err}")))
+        Ok(write_lp_string_with_options(&problem, &options))
     }
 
     /// Save the current problem to an LP file
@@ -311,9 +206,7 @@ impl LpParser {
             .map_err(|err| LpObjectNotFoundError::new_err(format!("Failed to update objective coefficient: {err}")))?;
 
         // Update the cached content
-        let updated_content =
-            write_lp_string(&problem).map_err(|err| PyRuntimeError::new_err(format!("Failed to serialize updated problem: {err}")))?;
-        self.parsed_content = Some(updated_content);
+        self.parsed_content = Some(write_lp_string(&problem));
         Ok(())
     }
 
@@ -325,9 +218,7 @@ impl LpParser {
             .rename_objective(&old_name, &new_name)
             .map_err(|err| LpObjectNotFoundError::new_err(format!("Failed to rename objective: {err}")))?;
 
-        let updated_content =
-            write_lp_string(&problem).map_err(|err| PyRuntimeError::new_err(format!("Failed to serialize updated problem: {err}")))?;
-        self.parsed_content = Some(updated_content);
+        self.parsed_content = Some(write_lp_string(&problem));
         Ok(())
     }
 
@@ -339,9 +230,7 @@ impl LpParser {
             .remove_objective(&objective_name)
             .map_err(|err| LpObjectNotFoundError::new_err(format!("Failed to remove objective: {err}")))?;
 
-        let updated_content =
-            write_lp_string(&problem).map_err(|err| PyRuntimeError::new_err(format!("Failed to serialize updated problem: {err}")))?;
-        self.parsed_content = Some(updated_content);
+        self.parsed_content = Some(write_lp_string(&problem));
         Ok(())
     }
 
@@ -353,9 +242,7 @@ impl LpParser {
             .update_constraint_coefficient(&constraint_name, &variable_name, coefficient)
             .map_err(|err| LpObjectNotFoundError::new_err(format!("Failed to update constraint coefficient: {err}")))?;
 
-        let updated_content =
-            write_lp_string(&problem).map_err(|err| PyRuntimeError::new_err(format!("Failed to serialize updated problem: {err}")))?;
-        self.parsed_content = Some(updated_content);
+        self.parsed_content = Some(write_lp_string(&problem));
         Ok(())
     }
 
@@ -367,9 +254,7 @@ impl LpParser {
             .update_constraint_rhs(&constraint_name, new_rhs)
             .map_err(|err| LpObjectNotFoundError::new_err(format!("Failed to update constraint RHS: {err}")))?;
 
-        let updated_content =
-            write_lp_string(&problem).map_err(|err| PyRuntimeError::new_err(format!("Failed to serialize updated problem: {err}")))?;
-        self.parsed_content = Some(updated_content);
+        self.parsed_content = Some(write_lp_string(&problem));
         Ok(())
     }
 
@@ -381,9 +266,7 @@ impl LpParser {
             .rename_constraint(&old_name, &new_name)
             .map_err(|err| LpObjectNotFoundError::new_err(format!("Failed to rename constraint: {err}")))?;
 
-        let updated_content =
-            write_lp_string(&problem).map_err(|err| PyRuntimeError::new_err(format!("Failed to serialize updated problem: {err}")))?;
-        self.parsed_content = Some(updated_content);
+        self.parsed_content = Some(write_lp_string(&problem));
         Ok(())
     }
 
@@ -395,9 +278,7 @@ impl LpParser {
             .remove_constraint(&constraint_name)
             .map_err(|err| LpObjectNotFoundError::new_err(format!("Failed to remove constraint: {err}")))?;
 
-        let updated_content =
-            write_lp_string(&problem).map_err(|err| PyRuntimeError::new_err(format!("Failed to serialize updated problem: {err}")))?;
-        self.parsed_content = Some(updated_content);
+        self.parsed_content = Some(write_lp_string(&problem));
         Ok(())
     }
 
@@ -409,9 +290,7 @@ impl LpParser {
             .rename_variable(&old_name, &new_name)
             .map_err(|err| LpObjectNotFoundError::new_err(format!("Failed to rename variable: {err}")))?;
 
-        let updated_content =
-            write_lp_string(&problem).map_err(|err| PyRuntimeError::new_err(format!("Failed to serialize updated problem: {err}")))?;
-        self.parsed_content = Some(updated_content);
+        self.parsed_content = Some(write_lp_string(&problem));
         Ok(())
     }
 
@@ -438,9 +317,7 @@ impl LpParser {
             .update_variable_type(&variable_name, variable_type)
             .map_err(|err| LpObjectNotFoundError::new_err(format!("Failed to update variable type: {err}")))?;
 
-        let updated_content =
-            write_lp_string(&problem).map_err(|err| PyRuntimeError::new_err(format!("Failed to serialize updated problem: {err}")))?;
-        self.parsed_content = Some(updated_content);
+        self.parsed_content = Some(write_lp_string(&problem));
         Ok(())
     }
 
@@ -452,9 +329,7 @@ impl LpParser {
             .remove_variable(&variable_name)
             .map_err(|err| LpObjectNotFoundError::new_err(format!("Failed to remove variable: {err}")))?;
 
-        let updated_content =
-            write_lp_string(&problem).map_err(|err| PyRuntimeError::new_err(format!("Failed to serialize updated problem: {err}")))?;
-        self.parsed_content = Some(updated_content);
+        self.parsed_content = Some(write_lp_string(&problem));
         Ok(())
     }
 
@@ -464,9 +339,7 @@ impl LpParser {
         let mut problem = self.get_problem()?;
         problem.name = Some(name);
 
-        let updated_content =
-            write_lp_string(&problem).map_err(|err| PyRuntimeError::new_err(format!("Failed to serialize updated problem: {err}")))?;
-        self.parsed_content = Some(updated_content);
+        self.parsed_content = Some(write_lp_string(&problem));
         Ok(())
     }
 
@@ -481,9 +354,7 @@ impl LpParser {
             _ => return Err(LpInvalidValueError::new_err(format!("Invalid sense: {sense}. Use 'maximize' or 'minimize'"))),
         };
 
-        let updated_content =
-            write_lp_string(&problem).map_err(|err| PyRuntimeError::new_err(format!("Failed to serialize updated problem: {err}")))?;
-        self.parsed_content = Some(updated_content);
+        self.parsed_content = Some(write_lp_string(&problem));
         Ok(())
     }
 
@@ -573,6 +444,22 @@ impl LpParser {
         dict.cast::<PyDict>()?.set_item("issues", issues_to_list(py, &analysis.issues)?)?;
         Ok(dict.into())
     }
+}
+
+/// Build a list of `{name, value}` dicts from coefficients, resolving interned names.
+fn coefficients_to_list<'py>(
+    py: Python<'py>,
+    problem: &LpProblem,
+    coefficients: &[lp_parser_rs::model::Coefficient],
+) -> PyResult<Bound<'py, PyList>> {
+    let list = PyList::empty(py);
+    for coef in coefficients {
+        let dict = PyDict::new(py);
+        dict.set_item("name", problem.resolve(coef.name))?;
+        dict.set_item("value", coef.value)?;
+        list.append(dict)?;
+    }
+    Ok(list)
 }
 
 /// Build the Python representation of analysis issues, using the human-readable

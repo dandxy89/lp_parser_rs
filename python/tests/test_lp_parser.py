@@ -99,57 +99,6 @@ class TestLpParserComponents:
         assert "LowerBound" in x1["var_type"]
 
 
-class TestLpParserDiff:
-    def test_compare_same_parser(self, simple_lp_file: Path) -> None:
-        parser = LpParser(str(simple_lp_file))
-        parser.parse()
-
-        diff = parser.compare(parser)
-
-        assert not diff["name_changed"]
-        assert not diff["sense_changed"]
-        assert diff["variable_count_diff"] == 0
-        assert diff["constraint_count_diff"] == 0
-        assert diff["objective_count_diff"] == 0
-        assert len(diff["added_variables"]) == 0
-        assert len(diff["removed_variables"]) == 0
-        assert len(diff["modified_variables"]) == 0
-
-    def test_compare_different_parsers(
-        self,
-        simple_lp_file: Path,
-        minimize_lp_file: Path,
-    ) -> None:
-        parser1 = LpParser(str(simple_lp_file))
-        parser1.parse()
-        parser2 = LpParser(str(minimize_lp_file))
-        parser2.parse()
-
-        diff = parser1.compare(parser2)
-
-        assert diff["sense_changed"]
-        assert diff["variable_count_diff"] == -1  # p1 has 2, p2 has 3
-        assert diff["constraint_count_diff"] == 0  # both have 2
-        assert "x3" in diff["added_variables"]
-        assert len(diff["removed_variables"]) == 0
-
-    def test_compare_unparsed_parser(
-        self,
-        simple_lp_file: Path,
-        temp_lp_file: Callable[[str], AbstractContextManager[str]],
-    ) -> None:
-        parser1 = LpParser(str(simple_lp_file))
-        parser1.parse()
-
-        content = """Maximize
-OBJ: x1
-End"""
-        with temp_lp_file(content) as filepath:
-            parser2 = LpParser(filepath)
-            with pytest.raises(RuntimeError, match="Must call parse\\(\\) first"):
-                parser1.compare(parser2)
-
-
 class TestLpParserCSV:
     def test_to_csv_creates_files(self, simple_lp_file: Path, tmp_path: Path) -> None:
         parser = LpParser(str(simple_lp_file))
