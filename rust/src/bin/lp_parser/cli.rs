@@ -12,8 +12,8 @@ pub struct Cli {
     pub command: Commands,
 
     /// Increase output verbosity
-    #[arg(short, long, global = true, action = clap::ArgAction::Count)]
-    pub verbose: u8,
+    #[arg(short, long, global = true)]
+    pub verbose: bool,
 
     /// Suppress non-essential output
     #[arg(short, long, global = true)]
@@ -69,7 +69,7 @@ pub struct ParseArgs {
     #[arg(short, long, value_enum, default_value = "text")]
     pub format: OutputFormat,
 
-    /// Pretty-print structured output (for JSON/YAML)
+    /// Pretty-print structured output (JSON only; YAML is unaffected)
     #[arg(long)]
     pub pretty: bool,
 }
@@ -88,7 +88,7 @@ pub struct AnalyzeArgs {
     #[arg(short, long, value_enum, default_value = "text")]
     pub format: OutputFormat,
 
-    /// Pretty-print structured output
+    /// Pretty-print structured output (JSON only; YAML is unaffected)
     #[arg(long)]
     pub pretty: bool,
 
@@ -123,7 +123,7 @@ pub struct InfoArgs {
     #[arg(short, long, value_enum, default_value = "text")]
     pub format: OutputFormat,
 
-    /// Pretty-print structured output
+    /// Pretty-print structured output (JSON only; YAML is unaffected)
     #[arg(long)]
     pub pretty: bool,
 
@@ -157,7 +157,7 @@ pub struct DiffArgs {
     #[arg(short, long, value_enum, default_value = "text")]
     pub format: OutputFormat,
 
-    /// Pretty-print structured output
+    /// Pretty-print structured output (JSON only; YAML is unaffected)
     #[arg(long)]
     pub pretty: bool,
 
@@ -205,7 +205,7 @@ pub struct ConvertArgs {
     #[arg(short, long, value_enum, default_value = "lp")]
     pub format: ConvertFormat,
 
-    /// Pretty-print output (for JSON/YAML)
+    /// Pretty-print output (JSON only; YAML is unaffected)
     #[arg(long)]
     pub pretty: bool,
 
@@ -254,7 +254,7 @@ pub struct SolveArgs {
     #[arg(short, long, value_enum, default_value = "text")]
     pub format: OutputFormat,
 
-    /// Pretty-print structured output
+    /// Pretty-print structured output (JSON only; YAML is unaffected)
     #[arg(long)]
     pub pretty: bool,
 }

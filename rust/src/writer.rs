@@ -13,14 +13,13 @@
 //!     .with_problem_name("Example".into())
 //!     .with_sense(lp_parser_rs::model::Sense::Maximize);
 //!
-//! let lp_content = write_lp_string(&problem).expect("failed to write LP");
+//! let lp_content = write_lp_string(&problem);
 //! println!("{}", lp_content);
 //! ```
 
 use std::fmt::Write;
 
 use crate::NUMERIC_EPSILON;
-use crate::error::{LpParseError, LpResult};
 use crate::interner::NameInterner;
 use crate::model::{Coefficient, Constraint, Objective, Variable, VariableType};
 use crate::problem::LpProblem;
@@ -53,11 +52,8 @@ impl Default for LpWriterOptions {
 /// # Returns
 ///
 /// A string containing the LP file content in standard format
-///
-/// # Errors
-///
-/// Returns an error if the problem cannot be formatted (e.g., invalid structure)
-pub fn write_lp_string(problem: &LpProblem) -> LpResult<String> {
+#[must_use]
+pub fn write_lp_string(problem: &LpProblem) -> String {
     write_lp_string_with_options(problem, &LpWriterOptions::default())
 }
 
@@ -71,56 +67,53 @@ pub fn write_lp_string(problem: &LpProblem) -> LpResult<String> {
 /// # Returns
 ///
 /// A string containing the LP file content
-///
-/// # Errors
-///
-/// Returns an error if the problem cannot be formatted (e.g., invalid structure)
-pub fn write_lp_string_with_options(problem: &LpProblem, options: &LpWriterOptions) -> LpResult<String> {
+#[must_use]
+pub fn write_lp_string_with_options(problem: &LpProblem, options: &LpWriterOptions) -> String {
     let mut output = String::new();
+    build_lp(&mut output, problem, options).expect("fmt::Write to String is infallible");
+    output
+}
 
+/// Build the full LP document into `output`.
+fn build_lp(output: &mut String, problem: &LpProblem, options: &LpWriterOptions) -> std::fmt::Result {
     // Write problem name comment if requested
     if options.include_problem_name {
         if let Some(name) = problem.name() {
-            writeln!(output, "\\Problem name: {name}")
-                .map_err(|err| LpParseError::io_error(format!("Failed to write problem name: {err}")))?;
+            writeln!(output, "\\Problem name: {name}")?;
             if options.include_section_spacing {
-                writeln!(output).map_err(|err| LpParseError::io_error(format!("Failed to write newline: {err}")))?;
+                writeln!(output)?;
             }
         }
     }
 
     // Write sense and objectives
-    write_objectives_section(&mut output, problem, options)?;
+    write_objectives_section(output, problem, options)?;
 
     // Write constraints
     if !problem.constraints.is_empty() {
         if options.include_section_spacing {
-            writeln!(output).map_err(|err| LpParseError::io_error(format!("Failed to write newline: {err}")))?;
+            writeln!(output)?;
         }
-        write_constraints_section(&mut output, problem, options)?;
+        write_constraints_section(output, problem, options)?;
     }
 
     // Write bounds
-    write_bounds_section(&mut output, problem, options)?;
+    write_bounds_section(output, problem, options)?;
 
     // Write variable type sections
-    write_variable_types_sections(&mut output, problem, options)?;
+    write_variable_types_sections(output, problem, options)?;
 
     // Write end marker
     if options.include_section_spacing {
-        writeln!(output).map_err(|err| LpParseError::io_error(format!("Failed to write newline: {err}")))?;
+        writeln!(output)?;
     }
-    writeln!(output, "End").map_err(|err| LpParseError::io_error(format!("Failed to write end marker: {err}")))?;
-
-    Ok(output)
+    writeln!(output, "End")
 }
 
 /// Write the objectives section (sense + objectives)
-fn write_objectives_section(output: &mut String, problem: &LpProblem, options: &LpWriterOptions) -> LpResult<()> {
-    // Write sense
-    writeln!(output, "{}", problem.sense).map_err(|err| LpParseError::io_error(format!("Failed to write sense: {err}")))?;
+fn write_objectives_section(output: &mut String, problem: &LpProblem, options: &LpWriterOptions) -> std::fmt::Result {
+    writeln!(output, "{}", problem.sense)?;
 
-    // Write objectives
     for objective in problem.objectives.values() {
         write_objective(output, objective, &problem.interner, options)?;
     }
@@ -129,19 +122,17 @@ fn write_objectives_section(output: &mut String, problem: &LpProblem, options: &
 }
 
 /// Write a single objective
-fn write_objective(output: &mut String, objective: &Objective, interner: &NameInterner, options: &LpWriterOptions) -> LpResult<()> {
+fn write_objective(output: &mut String, objective: &Objective, interner: &NameInterner, options: &LpWriterOptions) -> std::fmt::Result {
     let name = interner.resolve(objective.name);
-    write!(output, " {name}: ").map_err(|err| LpParseError::io_error(format!("Failed to write objective name: {err}")))?;
+    write!(output, " {name}: ")?;
 
     write_coefficients_line(output, &objective.coefficients, interner, options)?;
-    writeln!(output).map_err(|err| LpParseError::io_error(format!("Failed to write newline: {err}")))?;
-
-    Ok(())
+    writeln!(output)
 }
 
 /// Write the constraints section
-fn write_constraints_section(output: &mut String, problem: &LpProblem, options: &LpWriterOptions) -> LpResult<()> {
-    writeln!(output, "Subject To").map_err(|err| LpParseError::io_error(format!("Failed to write constraints header: {err}")))?;
+fn write_constraints_section(output: &mut String, problem: &LpProblem, options: &LpWriterOptions) -> std::fmt::Result {
+    writeln!(output, "Subject To")?;
 
     for constraint in problem.constraints.values() {
         write_constraint(output, constraint, &problem.interner, options)?;
@@ -151,50 +142,44 @@ fn write_constraints_section(output: &mut String, problem: &LpProblem, options: 
 }
 
 /// Write a single constraint
-fn write_constraint(output: &mut String, constraint: &Constraint, interner: &NameInterner, options: &LpWriterOptions) -> LpResult<()> {
+fn write_constraint(output: &mut String, constraint: &Constraint, interner: &NameInterner, options: &LpWriterOptions) -> std::fmt::Result {
     match constraint {
         Constraint::Standard { name, coefficients, operator, rhs, .. } => {
             let resolved_name = interner.resolve(*name);
-            write!(output, " {resolved_name}: ")
-                .map_err(|err| LpParseError::io_error(format!("Failed to write constraint name: {err}")))?;
+            write!(output, " {resolved_name}: ")?;
 
             write_coefficients_line(output, coefficients, interner, options)?;
 
-            write!(output, " {operator} ").map_err(|err| LpParseError::io_error(format!("Failed to write constraint RHS: {err}")))?;
-            write_number(output, *rhs, options.decimal_precision)
-                .map_err(|err| LpParseError::io_error(format!("Failed to write constraint RHS: {err}")))?;
-            writeln!(output).map_err(|err| LpParseError::io_error(format!("Failed to write newline: {err}")))?;
+            write!(output, " {operator} ")?;
+            write_number(output, *rhs, options.decimal_precision)?;
+            writeln!(output)
         }
         Constraint::SOS { name, sos_type, weights, .. } => {
             let resolved_name = interner.resolve(*name);
-            write!(output, " {resolved_name}: {sos_type}:: ")
-                .map_err(|err| LpParseError::io_error(format!("Failed to write SOS constraint: {err}")))?;
+            write!(output, " {resolved_name}: {sos_type}:: ")?;
 
             for (i, weight) in weights.iter().enumerate() {
                 if i > 0 {
-                    write!(output, " ").map_err(|err| LpParseError::io_error(format!("Failed to write space: {err}")))?;
+                    write!(output, " ")?;
                 }
                 let var_name = interner.resolve(weight.name);
-                write!(output, "{var_name}:").map_err(|err| LpParseError::io_error(format!("Failed to write SOS weight: {err}")))?;
-                write_number(output, weight.value, options.decimal_precision)
-                    .map_err(|err| LpParseError::io_error(format!("Failed to write SOS weight: {err}")))?;
+                write!(output, "{var_name}:")?;
+                write_number(output, weight.value, options.decimal_precision)?;
             }
-            writeln!(output).map_err(|err| LpParseError::io_error(format!("Failed to write newline: {err}")))?;
+            writeln!(output)
         }
     }
-
-    Ok(())
 }
 
 /// Write the bounds section
-fn write_bounds_section(output: &mut String, problem: &LpProblem, options: &LpWriterOptions) -> LpResult<()> {
+fn write_bounds_section(output: &mut String, problem: &LpProblem, options: &LpWriterOptions) -> std::fmt::Result {
     let has_bounds = problem.variables.values().any(|v| needs_bounds_declaration(&v.var_type));
 
     if has_bounds {
         if options.include_section_spacing {
-            writeln!(output).map_err(|err| LpParseError::io_error(format!("Failed to write newline: {err}")))?;
+            writeln!(output)?;
         }
-        writeln!(output, "Bounds").map_err(|err| LpParseError::io_error(format!("Failed to write bounds header: {err}")))?;
+        writeln!(output, "Bounds")?;
 
         for variable in problem.variables.values() {
             write_variable_bounds(output, variable, &problem.interner, options)?;
@@ -210,31 +195,27 @@ const fn needs_bounds_declaration(var_type: &VariableType) -> bool {
 }
 
 /// Write bounds for a single variable
-fn write_variable_bounds(output: &mut String, variable: &Variable, interner: &NameInterner, options: &LpWriterOptions) -> LpResult<()> {
+fn write_variable_bounds(output: &mut String, variable: &Variable, interner: &NameInterner, options: &LpWriterOptions) -> std::fmt::Result {
     let var_name = interner.resolve(variable.name);
     match &variable.var_type {
         VariableType::Free => {
-            writeln!(output, "{var_name} free").map_err(|err| LpParseError::io_error(format!("Failed to write free variable: {err}")))?;
+            writeln!(output, "{var_name} free")?;
         }
         VariableType::LowerBound(bound) => {
-            write!(output, "{var_name} >= ").map_err(|err| LpParseError::io_error(format!("Failed to write lower bound: {err}")))?;
-            write_number(output, *bound, options.decimal_precision)
-                .map_err(|err| LpParseError::io_error(format!("Failed to write lower bound: {err}")))?;
-            writeln!(output).map_err(|err| LpParseError::io_error(format!("Failed to write newline: {err}")))?;
+            write!(output, "{var_name} >= ")?;
+            write_number(output, *bound, options.decimal_precision)?;
+            writeln!(output)?;
         }
         VariableType::UpperBound(bound) => {
-            write!(output, "{var_name} <= ").map_err(|err| LpParseError::io_error(format!("Failed to write upper bound: {err}")))?;
-            write_number(output, *bound, options.decimal_precision)
-                .map_err(|err| LpParseError::io_error(format!("Failed to write upper bound: {err}")))?;
-            writeln!(output).map_err(|err| LpParseError::io_error(format!("Failed to write newline: {err}")))?;
+            write!(output, "{var_name} <= ")?;
+            write_number(output, *bound, options.decimal_precision)?;
+            writeln!(output)?;
         }
         VariableType::DoubleBound(lower, upper) => {
-            write_number(output, *lower, options.decimal_precision)
-                .map_err(|err| LpParseError::io_error(format!("Failed to write double bound: {err}")))?;
-            write!(output, " <= {var_name} <= ").map_err(|err| LpParseError::io_error(format!("Failed to write double bound: {err}")))?;
-            write_number(output, *upper, options.decimal_precision)
-                .map_err(|err| LpParseError::io_error(format!("Failed to write double bound: {err}")))?;
-            writeln!(output).map_err(|err| LpParseError::io_error(format!("Failed to write newline: {err}")))?;
+            write_number(output, *lower, options.decimal_precision)?;
+            write!(output, " <= {var_name} <= ")?;
+            write_number(output, *upper, options.decimal_precision)?;
+            writeln!(output)?;
         }
         _ => {} // Other types don't need bounds declarations
     }
@@ -243,7 +224,7 @@ fn write_variable_bounds(output: &mut String, variable: &Variable, interner: &Na
 }
 
 /// Write variable type sections (binaries, integers, etc.)
-fn write_variable_types_sections(output: &mut String, problem: &LpProblem, options: &LpWriterOptions) -> LpResult<()> {
+fn write_variable_types_sections(output: &mut String, problem: &LpProblem, options: &LpWriterOptions) -> std::fmt::Result {
     // Group variables by type, resolving names
     let mut binaries = Vec::new();
     let mut integers = Vec::new();
@@ -282,11 +263,11 @@ fn write_variable_types_sections(output: &mut String, problem: &LpProblem, optio
 }
 
 /// Write a variable type section
-fn write_variable_type_section(output: &mut String, section_name: &str, variables: &[&str], options: &LpWriterOptions) -> LpResult<()> {
+fn write_variable_type_section(output: &mut String, section_name: &str, variables: &[&str], options: &LpWriterOptions) -> std::fmt::Result {
     if options.include_section_spacing {
-        writeln!(output).map_err(|err| LpParseError::io_error(format!("Failed to write newline: {err}")))?;
+        writeln!(output)?;
     }
-    writeln!(output, "{section_name}").map_err(|err| LpParseError::io_error(format!("Failed to write section header: {err}")))?;
+    writeln!(output, "{section_name}")?;
 
     // Write variables, potentially wrapping lines
     let mut current_line_length = 0;
@@ -294,17 +275,15 @@ fn write_variable_type_section(output: &mut String, section_name: &str, variable
         let var_len = 1 + var_name.len(); // " " + name
 
         if current_line_length + var_len > options.max_line_length && i > 0 {
-            writeln!(output).map_err(|err| LpParseError::io_error(format!("Failed to write newline: {err}")))?;
-            write!(output, " {var_name}").map_err(|err| LpParseError::io_error(format!("Failed to write variable: {err}")))?;
+            writeln!(output)?;
+            write!(output, " {var_name}")?;
             current_line_length = var_len;
         } else {
-            write!(output, " {var_name}").map_err(|err| LpParseError::io_error(format!("Failed to write variable: {err}")))?;
+            write!(output, " {var_name}")?;
             current_line_length += var_len;
         }
     }
-    writeln!(output).map_err(|err| LpParseError::io_error(format!("Failed to write newline: {err}")))?;
-
-    Ok(())
+    writeln!(output)
 }
 
 /// Write a line of coefficients with proper formatting
@@ -313,7 +292,7 @@ fn write_coefficients_line(
     coefficients: &[Coefficient],
     interner: &NameInterner,
     options: &LpWriterOptions,
-) -> LpResult<()> {
+) -> std::fmt::Result {
     const CONTINUATION_INDENT: &str = "        ";
     let mut current_line_length: usize = 0;
 
@@ -324,14 +303,13 @@ fn write_coefficients_line(
         let estimated_len = estimate_coefficient_len(var_name, coeff.value, i == 0);
 
         if current_line_length + estimated_len > options.max_line_length && i > 0 {
-            writeln!(output).map_err(|err| LpParseError::io_error(format!("Failed to write newline: {err}")))?;
-            write!(output, "{CONTINUATION_INDENT}").map_err(|err| LpParseError::io_error(format!("Failed to write indent: {err}")))?;
+            writeln!(output)?;
+            write!(output, "{CONTINUATION_INDENT}")?;
             current_line_length = CONTINUATION_INDENT.len();
         }
 
         let len_before = output.len();
-        write_formatted_coefficient(output, var_name, coeff.value, i == 0, options.decimal_precision)
-            .map_err(|err| LpParseError::io_error(format!("Failed to write coefficient: {err}")))?;
+        write_formatted_coefficient(output, var_name, coeff.value, i == 0, options.decimal_precision)?;
         current_line_length += output.len() - len_before;
     }
 
@@ -381,41 +359,28 @@ fn write_formatted_coefficient(output: &mut String, name: &str, value: f64, is_f
     }
 }
 
-/// Write a number with specified precision directly to the output buffer,
-/// removing trailing zeros. Avoids intermediate `String` allocation.
-fn write_number(output: &mut String, value: f64, precision: usize) -> std::fmt::Result {
-    write_whole_or_decimal(output, value, precision, 1e10)
-}
-
-/// Write `value` as a bare integer when it is whole and `|value| < max_int_abs`
-/// (and round-trips through `i64`), otherwise as a trimmed decimal. Shared by
-/// the LP and MPS writers, which differ only in their integer-range threshold.
+/// Write a number with specified precision directly to the output buffer: a bare
+/// integer when the value is whole, small enough (|value| < 1e10) and round-trips
+/// through `i64`; otherwise a decimal with trailing zeros trimmed.
 #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
-pub(crate) fn write_whole_or_decimal(output: &mut String, value: f64, precision: usize, max_int_abs: f64) -> std::fmt::Result {
-    debug_assert!(value.is_finite(), "write_whole_or_decimal called with non-finite value: {value}");
+fn write_number(output: &mut String, value: f64, precision: usize) -> std::fmt::Result {
+    debug_assert!(value.is_finite(), "write_number called with non-finite value: {value}");
     let is_whole_number = value.fract().abs() < f64::EPSILON;
     let is_safe_for_i64 = value >= (i64::MIN as f64) && value <= (i64::MAX as f64);
 
-    if is_whole_number && is_safe_for_i64 && value.abs() < max_int_abs {
+    if is_whole_number && is_safe_for_i64 && value.abs() < 1e10 {
         let cast = value as i64;
         debug_assert!((cast as f64 - value).abs() < 1.0, "i64 cast lost precision: {value} -> {cast}");
         write!(output, "{cast}")
     } else {
-        write_trimmed_decimal(output, value, precision)
+        let start = output.len();
+        write!(output, "{value:.precision$}")?;
+        if output[start..].contains('.') {
+            let trimmed_len = start + output[start..].trim_end_matches('0').trim_end_matches('.').len();
+            output.truncate(trimmed_len);
+        }
+        Ok(())
     }
-}
-
-/// Write `value` with `precision` decimal places into `output`, then trim any
-/// trailing zeros (and a bare trailing `.`) in place. Shared by the LP and MPS
-/// writers, which differ only in their integer fast paths.
-pub(crate) fn write_trimmed_decimal(output: &mut String, value: f64, precision: usize) -> std::fmt::Result {
-    let start = output.len();
-    write!(output, "{value:.precision$}")?;
-    if output[start..].contains('.') {
-        let trimmed_len = start + output[start..].trim_end_matches('0').trim_end_matches('.').len();
-        output.truncate(trimmed_len);
-    }
-    Ok(())
 }
 
 /// Format a number with specified precision, removing trailing zeros.
@@ -459,7 +424,7 @@ mod tests {
     #[test]
     fn test_write_empty_problem() {
         let problem = LpProblem::new();
-        let result = write_lp_string(&problem).unwrap();
+        let result = write_lp_string(&problem);
 
         assert!(result.contains("Minimize"));
         assert!(result.contains("End"));
@@ -493,7 +458,7 @@ mod tests {
         };
         problem.add_constraint(constraint);
 
-        let result = write_lp_string(&problem).unwrap();
+        let result = write_lp_string(&problem);
 
         assert!(result.contains("\\Problem name: Test Problem"));
         assert!(result.contains("Maximize"));
@@ -549,7 +514,7 @@ End";
         problem.rename_constraint("capacity", "resource_limit").unwrap();
 
         // Step 3: Write the modified problem back to LP format
-        let result = write_lp_string(&problem).unwrap();
+        let result = write_lp_string(&problem);
 
         assert!(result.contains("Maximize"));
         assert!(result.contains("5 x1"));
@@ -615,7 +580,7 @@ End";
         problem.update_variable_type("x2", VariableType::Binary).unwrap();
         problem.update_variable_type("x3", VariableType::Integer).unwrap();
 
-        let result = write_lp_string(&problem).unwrap();
+        let result = write_lp_string(&problem);
 
         assert!(result.contains("\\Problem name: Complex Problem"));
         assert!(result.contains("Minimize"));
@@ -655,7 +620,7 @@ End";
         assert_eq!(problem.variables.get(&x2_id).unwrap().var_type, VariableType::General);
 
         // Write back to LP format
-        let output = write_lp_string(&problem).unwrap();
+        let output = write_lp_string(&problem);
 
         // Verify Generals section is present in the output
         assert!(output.contains("Generals"), "Output should contain a Generals section:\n{output}");
@@ -692,7 +657,7 @@ End";
         };
         problem.add_constraint(sos_constraint);
 
-        let result = write_lp_string(&problem).unwrap();
+        let result = write_lp_string(&problem);
 
         assert!(result.contains("Subject To"));
         assert!(result.contains("sos1: S1:: x1:1 x2:2 x3:3"));
