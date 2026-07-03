@@ -46,9 +46,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Setup Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
+        uses: dtolnay/rust-toolchain@stable
       # Cache Rust dependencies to speed up builds
       - uses: Swatinem/rust-cache@v2
       - name: Run Clippy
