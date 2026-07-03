@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.0.1](https://github.com/dandxy89/lp_parser_rs/compare/parse_lp-v4.0.0...parse_lp-v4.0.1) (2026-07-03)
+
+
+### Bug Fixes
+
+* **python:** declare dual MIT OR Apache-2.0 licence on PyPI ([2ea18ce](https://github.com/dandxy89/lp_parser_rs/commit/2ea18ce1d2a9fc2c2b5cf762b83251f4f66dcdea))
+
 ## [4.0.0](https://github.com/dandxy89/lp_parser_rs/compare/parse_lp-v3.5.0...parse_lp-v4.0.0) (2026-07-03)
 
 
