@@ -1,5 +1,47 @@
 # Changelog
 
+## [4.0.0](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v3.5.0...lp_parser_rs-v4.0.0) (2026-07-03)
+
+
+### ⚠ BREAKING CHANGES
+
+* **rust:** write_lp_string returns String, not LpResult<String>; the library serde feature no longer enables serde_json/serde_yaml.
+* **rust:** the listed public methods are removed.
+* **rust:** lp_parser_rs::mps::writer is gone.
+
+### Miscellaneous Chores
+
+* enable clippy pedantic workspace-wide and fix all violations ([b334191](https://github.com/dandxy89/lp_parser_rs/commit/b3341919d350ec4ba6d8ef5eb463c8a239a1a0d2))
+
+
+### Documentation
+
+* fix stale examples and links, fill missing docs, enforce doc lints ([e0bb357](https://github.com/dandxy89/lp_parser_rs/commit/e0bb3577dc3a5c3c5d893b46b3931caad4a45c72))
+
+
+### Features
+
+* tui watch numerics perf ([#193](https://github.com/dandxy89/lp_parser_rs/issues/193)) ([d849d2f](https://github.com/dandxy89/lp_parser_rs/commit/d849d2f6bfa597cdaa59f421f79aa7f9ec571eeb))
+
+
+### Code Refactoring
+
+* drop dead LpParseError variants ([0e455d7](https://github.com/dandxy89/lp_parser_rs/commit/0e455d7dd7e3463e1c0f50fc1f047c063e325848))
+* inline single-impl ToLpSolvers trait ([77bf89e](https://github.com/dandxy89/lp_parser_rs/commit/77bf89e3ca5c1ab84d07f233b67c693b6262e1e4))
+* ponytail audit cleanup ([#195](https://github.com/dandxy89/lp_parser_rs/issues/195)) ([ada04ce](https://github.com/dandxy89/lp_parser_rs/commit/ada04ceebb112725ce75c7fade7bba59c73ab0d8))
+* **rust:** drop dead diff-struct dep, shrink helpers, de-alloc SOS parse ([4c70d4d](https://github.com/dandxy89/lp_parser_rs/commit/4c70d4da225b3645a868b389fbd52784d10550f1))
+* **rust:** drop dead LpProblem and lexer APIs ([33a8e19](https://github.com/dandxy89/lp_parser_rs/commit/33a8e199e2d51a507a6caa1262f1fb435d99e32f))
+* **rust:** infallible LP writer, serde rescope, slimmer CLI ([61219f9](https://github.com/dandxy89/lp_parser_rs/commit/61219f9b9cbb6958cdab722785dd9133b1887b86))
+* **rust:** remove unused MPS writer ([f458cf4](https://github.com/dandxy89/lp_parser_rs/commit/f458cf475b0194bacf4fad5ee2c712a770a74074))
+* share whole-number formatting between LP and MPS writers ([b6c30af](https://github.com/dandxy89/lp_parser_rs/commit/b6c30af11e0993093e462c8a5b2fd0c5fa47309c))
+* simplify case-insensitive prefix match in extract_problem_name ([6a1a6a5](https://github.com/dandxy89/lp_parser_rs/commit/6a1a6a50b7173b8ee45fc61ecbb9814c3194ce10))
+* use FxHashSet in find_unused_variables ([8a31d58](https://github.com/dandxy89/lp_parser_rs/commit/8a31d586c2260a74a84703d9c6d04fd4c0858663))
+
+
+### Tests
+
+* gate serde-only analysis test imports ([22ef729](https://github.com/dandxy89/lp_parser_rs/commit/22ef7290f657a6bf3c7b08756615d1bf87dff67b))
+
 ## [3.5.0](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v3.4.1...lp_parser_rs-v3.5.0) (2026-06-10)
 
 

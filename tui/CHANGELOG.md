@@ -1,5 +1,50 @@
 # Changelog
 
+## [3.5.0](https://github.com/dandxy89/lp_parser_rs/compare/lp_diff-v3.4.0...lp_diff-v3.5.0) (2026-07-03)
+
+
+### Build System
+
+* Updating the TUI ([fb6c312](https://github.com/dandxy89/lp_parser_rs/commit/fb6c3126ecbf2430f753e6fca7938d33b4a56c3d))
+
+
+### Miscellaneous Chores
+
+* enable clippy pedantic workspace-wide and fix all violations ([b334191](https://github.com/dandxy89/lp_parser_rs/commit/b3341919d350ec4ba6d8ef5eb463c8a239a1a0d2))
+
+
+### Documentation
+
+* fix stale examples and links, fill missing docs, enforce doc lints ([e0bb357](https://github.com/dandxy89/lp_parser_rs/commit/e0bb3577dc3a5c3c5d893b46b3931caad4a45c72))
+* refresh READMEs and tag the summary output code fence ([d718289](https://github.com/dandxy89/lp_parser_rs/commit/d7182890167a342508db6d1daaf7d18e9d89d94e))
+* **tui:** add VHS demo GIF to READMEs ([9741da5](https://github.com/dandxy89/lp_parser_rs/commit/9741da593a48c01dc0a064ae9a955f647a4a2dcc))
+
+
+### Features
+
+* tui watch numerics perf ([#193](https://github.com/dandxy89/lp_parser_rs/issues/193)) ([d849d2f](https://github.com/dandxy89/lp_parser_rs/commit/d849d2f6bfa597cdaa59f421f79aa7f9ec571eeb))
+* **tui:** cycle sections with [ and ], focus content on switch ([2bf86c8](https://github.com/dandxy89/lp_parser_rs/commit/2bf86c8309b2261659f6efd998097de8136111d2))
+* **tui:** honour NO_COLOR and handle Ctrl+Z suspend ([e43baf3](https://github.com/dandxy89/lp_parser_rs/commit/e43baf35855e0c28c73cd60d4ae45a491fe6ecab))
+* **tui:** scrollable help, command palette, and min-size guard ([3cb7d8b](https://github.com/dandxy89/lp_parser_rs/commit/3cb7d8bef1522c90a58c6dae0058c9abe9bced7c))
+
+
+### Performance Improvements
+
+* **tui:** gate idle-tick redraws, throttle watch polls, shrink helpers ([97854b4](https://github.com/dandxy89/lp_parser_rs/commit/97854b4c77e9b7470b2d159eb10cc32068ede309))
+
+
+### Code Refactoring
+
+* drop unused manual Debug for CompiledSearch ([ab050c9](https://github.com/dandxy89/lp_parser_rs/commit/ab050c90205dbef090da64e2d2713ea4682d13ee))
+* ponytail audit cleanup ([#195](https://github.com/dandxy89/lp_parser_rs/issues/195)) ([ada04ce](https://github.com/dandxy89/lp_parser_rs/commit/ada04ceebb112725ce75c7fade7bba59c73ab0d8))
+* **tui:** drop tempfile dependency, dedupe formatters ([8a5faf0](https://github.com/dandxy89/lp_parser_rs/commit/8a5faf00e06c8382d026f69a448c739704397cfb))
+* use chrono for the reload-flash clock ([2b325e1](https://github.com/dandxy89/lp_parser_rs/commit/2b325e1789c12b0eb78c45fea49c94decdf808ae))
+
+
+### Tests
+
+* gate serde-only analysis test imports ([22ef729](https://github.com/dandxy89/lp_parser_rs/commit/22ef7290f657a6bf3c7b08756615d1bf87dff67b))
+
 ## [3.4.0](https://github.com/dandxy89/lp_parser_rs/compare/lp_diff-v3.3.1...lp_diff-v3.4.0) (2026-06-10)
 
 
