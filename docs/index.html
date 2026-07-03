@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>lp_parser_rs — Rust LP file parser, writer &amp; diff toolkit</title>
+<meta name="description" content="A Rust library, CLI, interactive TUI, and Python package for parsing, analysing, modifying, diffing, and solving Linear Programming (LP) files.">
+<style>
+:root {
+  --bg: #10151d;
+  --panel: #161d28;
+  --panel-2: #1b2432;
+  --line: #26303f;
+  --text: #c9d4e3;
+  --muted: #75849a;
+  --amber: #e8b45a;
+  --cyan: #6fc3df;
+  --green: #5fb877;
+  --red: #e06c75;
+  --yellow: #d3b45f;
+  --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 4rem; }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 1.0625rem;
+  line-height: 1.65;
+}
+a { color: var(--cyan); text-decoration: none; }
+a:hover, a:focus-visible { text-decoration: underline; }
+:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+code, pre, kbd { font-family: var(--mono); }
+code { background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px; padding: 0.1em 0.35em; font-size: 0.85em; }
+pre {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  overflow-x: auto;
+  font-size: 0.85rem;
+  line-height: 1.6;
+}
+pre code { background: none; border: none; padding: 0; font-size: inherit; }
+kbd {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  padding: 0.05em 0.4em;
+  font-size: 0.8em;
+  white-space: nowrap;
+}
+
+/* LP syntax colours */
+.k  { color: var(--amber); font-weight: 600; }   /* LP keywords */
+.n  { color: var(--cyan); }                       /* names */
+.v  { color: var(--text); }                       /* numbers/values */
+.c  { color: var(--muted); font-style: italic; }  /* comments */
+.op { color: var(--red); }                        /* operators */
+.g  { color: var(--green); }
+.r  { color: var(--red); }
+.y  { color: var(--yellow); }
+
+/* ---- nav ---- */
+nav {
+  position: sticky; top: 0; z-index: 10;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--line);
+  font-family: var(--mono); font-size: 0.8rem;
+}
+nav .row {
+  max-width: 62rem; margin: 0 auto; padding: 0.65rem 1.25rem;
+  display: flex; gap: 1.25rem; align-items: baseline; flex-wrap: wrap;
+}
+nav .brand { color: var(--amber); font-weight: 700; margin-right: auto; }
+nav a { color: var(--muted); }
+nav a:hover { color: var(--text); text-decoration: none; }
+
+.wrap { max-width: 62rem; margin: 0 auto; padding: 0 1.25rem; }
+
+/* ---- hero ---- */
+header.hero { padding: 4.5rem 0 3.5rem; border-bottom: 1px solid var(--line); }
+.hero-grid { display: grid; grid-template-columns: 1.1fr 1fr; gap: 3rem; align-items: center; }
+@media (max-width: 820px) { .hero-grid { grid-template-columns: 1fr; } }
+.eyebrow { font-family: var(--mono); font-size: 0.8rem; color: var(--muted); margin-bottom: 1rem; }
+h1 {
+  font-family: var(--mono);
+  font-size: clamp(1.6rem, 4vw, 2.4rem);
+  line-height: 1.25;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+h1 .k { color: var(--amber); }
+.hero p.sub { margin: 1.25rem 0 1.75rem; color: var(--muted); max-width: 34rem; }
+.badges { display: flex; gap: 0.6rem; flex-wrap: wrap; font-family: var(--mono); font-size: 0.75rem; }
+.badges span { border: 1px solid var(--line); border-radius: 99px; padding: 0.2rem 0.75rem; color: var(--muted); }
+.badges span b { color: var(--text); font-weight: 600; }
+.cta { margin-top: 1.75rem; display: flex; gap: 0.75rem; flex-wrap: wrap; }
+.cta a {
+  font-family: var(--mono); font-size: 0.85rem; border-radius: 6px;
+  padding: 0.55rem 1.1rem; border: 1px solid var(--line);
+}
+.cta a.primary { background: var(--amber); color: #10151d; border-color: var(--amber); font-weight: 700; }
+.cta a.primary:hover { text-decoration: none; filter: brightness(1.08); }
+.cta a:hover { text-decoration: none; border-color: var(--muted); }
+.hero pre { box-shadow: 0 20px 50px -20px rgba(0,0,0,0.6); }
+
+/* ---- sections ---- */
+section { padding: 3.5rem 0; border-bottom: 1px solid var(--line); }
+.sec-label { font-family: var(--mono); font-size: 0.8rem; color: var(--muted); margin-bottom: 0.5rem; }
+.sec-label .k { color: var(--amber); }
+h2 {
+  font-family: var(--mono); font-size: clamp(1.25rem, 3vw, 1.6rem);
+  font-weight: 700; letter-spacing: -0.01em; margin-bottom: 1rem;
+}
+h3 { font-family: var(--mono); font-size: 1.05rem; margin: 2rem 0 0.75rem; color: var(--amber); font-weight: 600; }
+section > .wrap > p, section p.lead { color: var(--muted); max-width: 42rem; }
+p + pre, p + table, ul + pre { margin-top: 1rem; }
+pre + p, table + p, pre + h3 { margin-top: 1.25rem; }
+
+/* cards */
+.cards { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1.75rem; }
+@media (max-width: 640px) { .cards { grid-template-columns: 1fr; } }
+.card {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+  padding: 1.25rem 1.4rem;
+}
+.card h4 { font-family: var(--mono); font-size: 0.95rem; margin-bottom: 0.4rem; }
+.card h4 a { color: var(--amber); }
+.card p { font-size: 0.9rem; color: var(--muted); }
+
+/* constraint list — capabilities rendered as LP constraints */
+ul.constraints { list-style: none; margin-top: 1.25rem; }
+ul.constraints li {
+  padding: 0.55rem 0; border-bottom: 1px dashed var(--line);
+  display: grid; grid-template-columns: 14rem 1fr; gap: 1rem;
+}
+ul.constraints li:last-child { border-bottom: none; }
+ul.constraints .cname { font-family: var(--mono); font-size: 0.85rem; color: var(--cyan); }
+ul.constraints .cname::after { content: ":"; color: var(--muted); }
+ul.constraints .cbody { font-size: 0.95rem; }
+@media (max-width: 640px) { ul.constraints li { grid-template-columns: 1fr; gap: 0.15rem; } }
+
+/* tables */
+table { border-collapse: collapse; width: 100%; font-size: 0.88rem; margin-top: 0.75rem; }
+th, td { text-align: left; padding: 0.5rem 0.9rem 0.5rem 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-family: var(--mono); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 600; }
+td:first-child { font-family: var(--mono); font-size: 0.82rem; white-space: nowrap; color: var(--cyan); }
+.tablewrap { overflow-x: auto; }
+
+/* keybinding grid */
+.keys { display: grid; grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr)); gap: 0.35rem 2rem; margin-top: 1rem; }
+.keys div { display: flex; justify-content: space-between; gap: 1rem; font-size: 0.88rem; padding: 0.3rem 0; border-bottom: 1px dashed var(--line); }
+.keys div span:last-child { color: var(--muted); text-align: right; }
+
+img.demo { max-width: 100%; border-radius: 8px; border: 1px solid var(--line); margin-top: 1.5rem; display: block; }
+
+/* footer */
+footer { padding: 3rem 0 4rem; }
+footer .end { font-family: var(--mono); color: var(--amber); font-weight: 700; font-size: 1.1rem; }
+footer p { color: var(--muted); font-size: 0.85rem; margin-top: 0.75rem; }
+</style>
+</head>
+<body>
+
+<nav aria-label="Sections">
+  <div class="row">
+    <span class="brand">lp_parser_rs</span>
+    <a href="#library">Library</a>
+    <a href="#cli">CLI</a>
+    <a href="#tui">TUI</a>
+    <a href="#python">Python</a>
+    <a href="#install">Install</a>
+    <a href="https://github.com/dandxy89/lp_parser_rs">GitHub ↗</a>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap hero-grid">
+    <div>
+      <p class="eyebrow">\* a Rust library, CLI, TUI and Python package *\</p>
+      <h1><span class="k">Minimize</span><br>&nbsp;time_wrangling_lp_files</h1>
+      <p class="sub">Parse, analyse, modify, write, diff, and solve Linear Programming files.
+        Built on a <a href="https://github.com/dandxy89/lp_parser_rs/blob/main/rust/src/lp.lalrpop">LALRPOP grammar</a>
+        covering the CPLEX&nbsp;22.1.1, Gurobi, FICO&nbsp;Xpress, and Mosek LP specifications.</p>
+      <div class="badges">
+        <span><b>crates.io</b> lp_parser_rs</span>
+        <span><b>PyPI</b> parse-lp</span>
+        <span><b>licence</b> MIT / Apache-2.0</span>
+      </div>
+      <div class="cta">
+        <a class="primary" href="#install">Install</a>
+        <a href="https://docs.rs/lp_parser_rs">API docs ↗</a>
+      </div>
+    </div>
+    <pre aria-label="Example LP file"><code><span class="c">\* everything below round-trips:
+   parse → modify → write → parse *\</span>
+<span class="k">Minimize</span>
+ <span class="n">cost</span>: <span class="v">0.1</span> <span class="n">x1</span> + <span class="v">0.2</span> <span class="n">x2</span> + <span class="v">3055.2</span> <span class="n">x3</span>
+<span class="k">Subject To</span>
+ <span class="n">capacity</span>: <span class="v">2</span> <span class="n">x1</span> + <span class="v">4.5</span> <span class="n">x2</span> <span class="op">&lt;=</span> <span class="v">200</span>
+ <span class="n">demand</span>: <span class="n">x1</span> + <span class="n">x2</span> <span class="op">&gt;=</span> <span class="v">30</span>
+<span class="k">Bounds</span>
+ <span class="v">0</span> <span class="op">&lt;=</span> <span class="n">x1</span> <span class="op">&lt;=</span> <span class="v">40</span>
+ <span class="n">x2</span> <span class="k">free</span>
+<span class="k">General</span>
+ <span class="n">x3</span>
+<span class="k">End</span></code></pre>
+  </div>
+</header>
+
+<section id="tools">
+  <div class="wrap">
+    <p class="sec-label"><span class="k">Subject To</span> \* four ways in *\</p>
+    <h2>One parser, four surfaces</h2>
+    <div class="cards">
+      <div class="card">
+        <h4><a href="#library">lp_parser_rs — Rust crate</a></h4>
+        <p>Parse, inspect, modify, and write LP problems programmatically, with optional diff, serde, and solver features.</p>
+      </div>
+      <div class="card">
+        <h4><a href="#cli">lp_parser — CLI</a></h4>
+        <p>Six subcommands: <code>parse</code>, <code>info</code>, <code>analyze</code>, <code>diff</code>, <code>convert</code>, <code>solve</code> — text, JSON, or YAML out.</p>
+      </div>
+      <div class="card">
+        <h4><a href="#tui">lp_diff — interactive TUI</a></h4>
+        <p>Side-by-side coefficient-level diffs of LP/MPS files with fuzzy search, filters, and integrated HiGHS solving.</p>
+      </div>
+      <div class="card">
+        <h4><a href="#python">parse_lp — Python package</a></h4>
+        <p>The same Rust engine from Python, with full type hints. <code>pip install parse_lp</code>.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="library">
+  <div class="wrap">
+    <p class="sec-label"><span class="k">Subject To</span> \* the Rust library *\</p>
+    <h2>Library capabilities</h2>
+    <ul class="constraints">
+      <li><span class="cname">parsing</span><span class="cbody">Full LP format coverage — multiple objectives, all constraint senses, comments, and section keywords across the CPLEX, Gurobi, Xpress, and Mosek dialects.</span></li>
+      <li><span class="cname">variable_types</span><span class="cbody">Integer, general, bounded, free, and semi-continuous variables.</span></li>
+      <li><span class="cname">writing</span><span class="cbody">Round-trip safe LP output with configurable problem-name comment, line length, decimal precision, and section spacing.</span></li>
+      <li><span class="cname">modification</span><span class="cbody">Rename, update, or remove objectives, constraints, variables, coefficients, and RHS values in place.</span></li>
+      <li><span class="cname">analysis</span><span class="cbody">Statistics, matrix density and sparsity, coefficient ranges, and issue detection with configurable numeric thresholds.</span></li>
+      <li><span class="cname">diff</span><span class="cbody">Structural comparison of two problems (<code>diff</code> feature) with numeric tolerances and regex name rewriting.</span></li>
+      <li><span class="cname">serialisation</span><span class="cbody">JSON and YAML in and out (<code>serde</code> feature).</span></li>
+      <li><span class="cname">solving</span><span class="cbody">Hand problems to CBC, GLPK, Gurobi, or CPLEX via the <code>lp-solvers</code> feature.</span></li>
+    </ul>
+
+    <h3>Parse and inspect</h3>
+<pre><code><span class="k">use</span> lp_parser_rs::{parser::parse_file, problem::LpProblem};
+
+<span class="k">let</span> content = parse_file(Path::new(<span class="g">"problem.lp"</span>))?;
+<span class="k">let</span> problem = LpProblem::parse(&amp;content)?;
+println!(<span class="g">"{} objectives, {} constraints, {} variables"</span>,
+    problem.objective_count(), problem.constraint_count(), problem.variable_count());</code></pre>
+
+    <h3>Modify and write back</h3>
+<pre><code><span class="k">let mut</span> problem = LpProblem::parse(&amp;std::fs::read_to_string(<span class="g">"problem.lp"</span>)?)?;
+
+problem.update_objective_coefficient(<span class="g">"profit"</span>, <span class="g">"x1"</span>, <span class="v">5.0</span>)?;
+problem.rename_objective(<span class="g">"profit"</span>, <span class="g">"total_profit"</span>)?;
+problem.update_constraint_coefficient(<span class="g">"capacity"</span>, <span class="g">"x1"</span>, <span class="v">2.0</span>)?;
+problem.update_constraint_rhs(<span class="g">"capacity"</span>, <span class="v">200.0</span>)?;
+problem.rename_variable(<span class="g">"x1"</span>, <span class="g">"production_a"</span>)?;
+problem.update_variable_type(<span class="g">"production_a"</span>, VariableType::Integer)?;
+
+std::fs::write(<span class="g">"modified.lp"</span>, write_lp_string(&amp;problem)?)?;</code></pre>
+    <p>The full modification surface on <code>LpProblem</code>: <code>update_objective_coefficient</code>, <code>rename_objective</code>, <code>remove_objective</code>, <code>update_constraint_coefficient</code>, <code>update_constraint_rhs</code>, <code>rename_constraint</code>, <code>remove_constraint</code>, <code>rename_variable</code>, <code>update_variable_type</code>, <code>remove_variable</code>.
+    Writer knobs live on <code>LpWriterOptions</code>: <code>include_problem_name</code>, <code>max_line_length</code>, <code>decimal_precision</code>, <code>include_section_spacing</code>.</p>
+
+    <h3>Cargo features</h3>
+    <div class="tablewrap"><table>
+      <tr><th>Feature</th><th>Adds</th></tr>
+      <tr><td>diff</td><td>Structural comparison between two LP problems.</td></tr>
+      <tr><td>serde</td><td>JSON / YAML serialisation of problems, analyses, and diffs.</td></tr>
+      <tr><td>lp-solvers</td><td>External solver integration: CBC, GLPK, Gurobi, CPLEX.</td></tr>
+    </table></div>
+  </div>
+</section>
+
+<section id="cli">
+  <div class="wrap">
+    <p class="sec-label"><span class="k">Subject To</span> \* the command line *\</p>
+    <h2>CLI: <code>lp_parser</code></h2>
+    <p class="lead">Every subcommand writes to stdout or a file (<code>-o</code>) as text, JSON, or YAML (<code>-f</code>, plus <code>--pretty</code>). Global flags: <code>-v/--verbose</code> (repeatable), <code>-q/--quiet</code>.</p>
+
+    <h3>parse — display file structure</h3>
+<pre><code>lp_parser parse problem.lp
+lp_parser parse problem.lp --format yaml -o problem.yaml</code></pre>
+
+    <h3>info — summary statistics</h3>
+    <p>Counts plus optional full listings via <code>--variables</code>, <code>--constraints</code>, <code>--objectives</code>.</p>
+<pre><code>lp_parser info problem.lp --variables --constraints --objectives
+lp_parser info problem.lp --format json --pretty</code></pre>
+
+    <h3>analyze — structural analysis &amp; issue detection</h3>
+    <div class="tablewrap"><table>
+      <tr><th>Option</th><th>Default</th><th>Description</th></tr>
+      <tr><td>--issues-only</td><td>off</td><td>Skip full analysis; show warnings/errors only</td></tr>
+      <tr><td>--large-coeff-threshold</td><td>1e9</td><td>Warn on coefficients larger than this</td></tr>
+      <tr><td>--small-coeff-threshold</td><td>1e-9</td><td>Warn on coefficients smaller than this</td></tr>
+      <tr><td>--ratio-threshold</td><td>1e6</td><td>Warn on coefficient scaling ratios above this</td></tr>
+    </table></div>
+<pre><code>lp_parser analyze problem.lp --issues-only
+lp_parser analyze problem.lp --large-coeff-threshold 1e8 --ratio-threshold 1e5</code></pre>
+<pre><code><span class="c"># example output</span>
+<span class="n">summary</span>: { name: diet, sense: Minimize, objective_count: <span class="v">1</span>, constraint_count: <span class="v">7</span>, variable_count: <span class="v">16</span>, density: <span class="v">0.571</span> }
+<span class="n">variables</span>: { type_distribution: { upper_bounded: <span class="v">9</span>, double_bounded: <span class="v">7</span> }, discrete_variable_count: <span class="v">0</span> }
+<span class="n">constraints</span>: { type_distribution: { equality: <span class="v">7</span> }, rhs_range: { min: <span class="v">30.0</span>, max: <span class="v">50000.0</span> } }
+<span class="n">coefficients</span>: { constraint_coeff_range: { min: <span class="v">0.1</span>, max: <span class="v">3055.2</span> }, coefficient_ratio: <span class="v">101840.0</span> }
+<span class="n">issues</span>: []</code></pre>
+
+    <h3>diff — compare two LP files</h3>
+    <div class="tablewrap"><table>
+      <tr><th>Option</th><th>Default</th><th>Description</th></tr>
+      <tr><td>--abs-tol</td><td>0.0</td><td>Absolute tolerance for numeric comparisons</td></tr>
+      <tr><td>--rel-tol</td><td>0.0</td><td>Relative tolerance: |a−b| ≤ rel_tol · max(|a|, |b|)</td></tr>
+      <tr><td>--rename P R</td><td>—</td><td>Regex rewrite applied to names in both files before matching; repeatable</td></tr>
+    </table></div>
+<pre><code>lp_parser diff old.lp new.lp --abs-tol 1e-6 --rel-tol 1e-9
+lp_parser diff old.lp new.lp --rename <span class="g">'\[\d+\]$'</span> <span class="g">'[N]'</span> --format json --pretty</code></pre>
+
+    <h3>convert — translate to another format</h3>
+    <p>Targets: <code>lp</code>, <code>csv</code>, <code>json</code>, <code>yaml</code>. LP output honours <code>--precision</code>, <code>--max-line-length</code>, <code>--no-problem-name</code>, and <code>--compact</code>; CSV writes <code>constraints.csv</code>, <code>objectives.csv</code>, and <code>variables.csv</code> to a directory.</p>
+<pre><code>lp_parser convert problem.lp --format lp --precision 4 --compact
+lp_parser convert problem.lp --format csv --output ./out</code></pre>
+
+    <h3>solve — run an external solver</h3>
+    <p>Solves with CBC (default) or GLPK from your <code>PATH</code> (<code>-s/--solver</code>). Multiple objectives and strict inequalities error; SOS constraints are ignored with a warning.</p>
+<pre><code>lp_parser solve problem.lp --solver glpk --format json --pretty</code></pre>
+  </div>
+</section>
+
+<section id="tui">
+  <div class="wrap">
+    <p class="sec-label"><span class="k">Subject To</span> \* the terminal UI *\</p>
+    <h2>TUI: <code>lp_diff</code></h2>
+    <p class="lead">An interactive <a href="https://ratatui.rs">ratatui</a> diff viewer for LP <em>and</em> MPS files — mix formats freely (<code>lp_diff model.lp model.mps</code>; format auto-detected by extension). Add <code>--summary</code> for a non-interactive report, and the same <code>--abs-tol</code> / <code>--rel-tol</code> / <code>--rename</code> flags as the CLI diff.</p>
+    <img class="demo" src="assets/demo.gif" alt="Animated demo of lp_diff: browsing a side-by-side constraint diff, fuzzy searching, and running a HiGHS solve" loading="lazy">
+    <ul class="constraints">
+      <li><span class="cname">layout</span><span class="cbody">Three panels — section selector, filterable name list, and detail — across five sections: Summary, Variables, Constraints, Objectives, and Numerics (per-file numerical conditioning).</span></li>
+      <li><span class="cname">side_by_side</span><span class="cbody">Modified constraints show old and new coefficients in two columns — added in green, removed in red, modified in yellow. Press <kbd>r</kbd> for the raw LP text of both files.</span></li>
+      <li><span class="cname">search</span><span class="cbody">Telescope-style pop-up across all sections: fuzzy by default, <code>r:</code> for regex, <code>s:</code> for substring; <kbd>n</kbd>/<kbd>N</kbd> step through committed matches.</span></li>
+      <li><span class="cname">filters_and_sort</span><span class="cbody">Filter to added <kbd>+</kbd>, removed <kbd>-</kbd>, modified <kbd>m</kbd>, or renamed <kbd>=</kbd> entries; <kbd>o</kbd> ignores coefficient order; <kbd>s</kbd> cycles sort (name → |Δ| → relΔ).</span></li>
+      <li><span class="cname">live_tolerance</span><span class="cbody"><kbd>t</kbd>/<kbd>T</kbd> cycle relative and absolute tolerances and rebuild the diff on the fly; active options appear on the Summary panel for reproducibility.</span></li>
+      <li><span class="cname">solver</span><span class="cbody"><kbd>S</kbd> solves either file (or both, diffed) with <a href="https://highs.dev">HiGHS</a> in a background thread — results tabbed into Summary, Variables, Constraints, Log, and Duals, with delta thresholds, a diff-only toggle, CSV export, and <kbd>e</kbd> for infeasibility diagnosis.</span></li>
+      <li><span class="cname">navigation</span><span class="cbody">Vim-style keys, half/full-page scrolling, a 100-entry jumplist (<kbd>Ctrl+o</kbd>/<kbd>Ctrl+i</kbd>), section hotkeys <kbd>1</kbd>–<kbd>5</kbd>, <kbd>[</kbd>/<kbd>]</kbd> section cycling, mouse wheel and click, and a command palette.</span></li>
+      <li><span class="cname">clipboard_export</span><span class="cbody">Yank entry names or either file's version (<kbd>yy</kbd>/<kbd>yo</kbd>/<kbd>yn</kbd>), the full detail panel (<kbd>Y</kbd>), or export the entire report as CSV (<kbd>w</kbd>).</span></li>
+      <li><span class="cname">terminal_manners</span><span class="cbody">Honours <code>NO_COLOR</code>, handles <kbd>Ctrl+Z</kbd> suspend, guards against too-small terminals, and ships scrollable in-app help (<kbd>?</kbd>).</span></li>
+    </ul>
+<pre><code><span class="c"># collapse indexed names so structural diffs survive renumbering</span>
+lp_diff base.lp modified.lp --rename <span class="g">'\[\d+,\d+,[^]]*\]$'</span> <span class="g">'[idx]'</span>
+
+<span class="c"># hide near-equal numeric drift, non-interactively</span>
+lp_diff base.lp modified.lp --summary --abs-tol 1e-4 --rel-tol 1e-6</code></pre>
+    <p>The complete key-binding reference lives in the <a href="https://github.com/dandxy89/lp_parser_rs/blob/main/tui/README.md">tui README</a>.</p>
+  </div>
+</section>
+
+<section id="python">
+  <div class="wrap">
+    <p class="sec-label"><span class="k">Subject To</span> \* Python bindings *\</p>
+    <h2>Python: <code>parse_lp</code></h2>
+    <p class="lead">The same Rust engine behind a typed Python API: parsing, data access, modification, LP writing, analysis with configurable thresholds, CSV export, and problem-to-problem comparison.</p>
+<pre><code><span class="k">from</span> parse_lp <span class="k">import</span> LpParser
+
+parser = LpParser(<span class="g">"problem.lp"</span>)
+parser.parse()
+
+print(parser.name, parser.sense, parser.variable_count())
+
+parser.update_objective_coefficient(<span class="g">"OBJ"</span>, <span class="g">"x1"</span>, <span class="v">5.0</span>)
+parser.rename_variable(<span class="g">"x2"</span>, <span class="g">"production"</span>)
+parser.update_constraint_rhs(<span class="g">"C1"</span>, <span class="v">100.0</span>)
+
+parser.save_to_file(<span class="g">"modified_problem.lp"</span>)
+
+analysis = parser.analyze()
+print(analysis[<span class="g">"summary"</span>][<span class="g">"density"</span>])</code></pre>
+  </div>
+</section>
+
+<section id="install">
+  <div class="wrap">
+    <p class="sec-label"><span class="k">Bounds</span> \* getting it *\</p>
+    <h2>Install</h2>
+    <div class="tablewrap"><table>
+      <tr><th>Surface</th><th>Command</th></tr>
+      <tr><td>Rust crate</td><td><code>lp_parser_rs = { version = "3.5.0", features = ["serde", "diff"] }</code></td></tr>
+      <tr><td>CLI</td><td><code>cargo install lp_parser_rs --all-features</code></td></tr>
+      <tr><td>TUI</td><td><code>cargo install --path tui</code> (from a clone)</td></tr>
+      <tr><td>Python</td><td><code>pip install parse_lp</code></td></tr>
+    </table></div>
+    <p style="margin-top:1.25rem;">Develop with <code>cargo insta test --all-features</code> and review snapshot changes with <code>cargo insta review</code>. Contributions welcome — <a href="https://github.com/dandxy89/lp_parser_rs">open a pull request</a>.</p>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p class="end">End</p>
+    <p>lp_parser_rs · dual-licensed MIT / Apache-2.0 ·
+      <a href="https://crates.io/crates/lp_parser_rs">crates.io</a> ·
+      <a href="https://docs.rs/lp_parser_rs">docs.rs</a> ·
+      <a href="https://pypi.org/project/parse-lp/">PyPI</a> ·
+      <a href="https://github.com/dandxy89/lp_parser_rs">GitHub</a></p>
+  </div>
+</footer>
+
+</body>
+</html>
