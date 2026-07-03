@@ -995,7 +995,7 @@ impl App {
     /// a running solve or diagnosis (elapsed-time display), an in-flight
     /// watch reload, or a visible yank flash. Everything else only changes
     /// in response to input, so the main loop skips idle-tick repaints.
-    pub fn is_animating(&self) -> bool {
+    pub const fn is_animating(&self) -> bool {
         self.yank.flash.is_some()
             || self.watch.is_reloading()
             || matches!(self.solver.state, SolveState::Running { .. } | SolveState::RunningBoth { .. })
