@@ -1,5 +1,39 @@
 # Changelog
 
+## [4.0.0](https://github.com/dandxy89/lp_parser_rs/compare/parse_lp-v3.5.0...parse_lp-v4.0.0) (2026-07-03)
+
+
+### ⚠ BREAKING CHANGES
+
+* **python:** parse() now raises LpParseError immediately for malformed files instead of deferring the error to the first attribute access.
+* **python:** parse-lp console script and LpParser.compare() are removed; use the Rust CLI's diff subcommand instead.
+
+### Miscellaneous Chores
+
+* enable clippy pedantic workspace-wide and fix all violations ([b334191](https://github.com/dandxy89/lp_parser_rs/commit/b3341919d350ec4ba6d8ef5eb463c8a239a1a0d2))
+
+
+### Documentation
+
+* fix stale examples and links, fill missing docs, enforce doc lints ([e0bb357](https://github.com/dandxy89/lp_parser_rs/commit/e0bb3577dc3a5c3c5d893b46b3931caad4a45c72))
+* refresh READMEs and tag the summary output code fence ([d718289](https://github.com/dandxy89/lp_parser_rs/commit/d7182890167a342508db6d1daaf7d18e9d89d94e))
+
+
+### Features
+
+* tui watch numerics perf ([#193](https://github.com/dandxy89/lp_parser_rs/issues/193)) ([d849d2f](https://github.com/dandxy89/lp_parser_rs/commit/d849d2f6bfa597cdaa59f421f79aa7f9ec571eeb))
+
+
+### Performance Improvements
+
+* **python:** parse once, store LpProblem instead of re-parsing text ([eb29882](https://github.com/dandxy89/lp_parser_rs/commit/eb2988218770e39a8f7c08f8eb045fde849f6988))
+
+
+### Code Refactoring
+
+* ponytail audit cleanup ([#195](https://github.com/dandxy89/lp_parser_rs/issues/195)) ([ada04ce](https://github.com/dandxy89/lp_parser_rs/commit/ada04ceebb112725ce75c7fade7bba59c73ab0d8))
+* **python:** remove diff CLI and compare(), slim bindings ([65d7873](https://github.com/dandxy89/lp_parser_rs/commit/65d787320e35a6e605ee90c56395c8e54d513b68))
+
 ## [3.5.0](https://github.com/dandxy89/lp_parser_rs/compare/parse_lp-v3.4.1...parse_lp-v3.5.0) (2026-06-10)
 
 
