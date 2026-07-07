@@ -7,11 +7,14 @@ use std::collections::HashMap;
 use std::fmt;
 
 use lp_parser_rs::analysis::ProblemAnalysis;
+use lp_parser_rs::diff::DiffTol;
 use lp_parser_rs::interner::{NameId, NameInterner};
 use lp_parser_rs::model::{ComparisonOp, Constraint, SOSType, Sense, VariableType};
 use lp_parser_rs::problem::LpProblem;
 
-// Epsilon used for floating-point coefficient value comparison.
+// Epsilon used for floating-point coefficient value comparison. The TUI floors
+// the absolute tolerance at this value so ordinary float noise is suppressed
+// even when no tolerance is supplied — a presentation choice the CLI does not make.
 const COEFF_EPSILON: f64 = 1e-10;
 
 /// Preset tolerance values cycled by the live `t` / `T` keys in the TUI.
@@ -81,18 +84,15 @@ impl DiffOptions {
 
     /// Decide whether two floats should be treated as different under the configured tolerances.
     ///
-    /// Always floors the absolute tolerance at `COEFF_EPSILON` so that ordinary float noise
-    /// (e.g. `1.0` vs `1.0 + 1e-15`) is still suppressed when no tolerance is supplied.
+    /// Delegates to the core crate's [`DiffTol`] so both front-ends share one definition of
+    /// "numerically different". The absolute tolerance is floored at `COEFF_EPSILON` first,
+    /// so ordinary float noise (e.g. `1.0` vs `1.0 + 1e-15`) is still suppressed when no
+    /// tolerance is supplied — the CLI, which never floors, keeps its own exact semantics.
     #[must_use]
     pub fn numeric_differs(&self, a: f64, b: f64) -> bool {
         debug_assert!(self.abs_tol.is_finite() && self.abs_tol >= 0.0, "abs_tol must be finite and non-negative");
         debug_assert!(self.rel_tol.is_finite() && self.rel_tol >= 0.0, "rel_tol must be finite and non-negative");
-        let diff = (a - b).abs();
-        let abs_gate = self.abs_tol.max(COEFF_EPSILON);
-        if diff <= abs_gate {
-            return false;
-        }
-        diff > self.rel_tol * a.abs().max(b.abs())
+        DiffTol { abs: self.abs_tol.max(COEFF_EPSILON), rel: self.rel_tol }.differ(a, b)
     }
 }
 

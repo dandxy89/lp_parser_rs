@@ -3,7 +3,7 @@
 mod cli;
 
 #[cfg(feature = "diff")]
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::borrow::Cow;
 use std::fs;
 use std::io::{self, Stdout, Write};
 use std::path::PathBuf;
@@ -16,9 +16,7 @@ use cli::{AnalyzeArgs, Cli, Commands, ConvertArgs, ConvertFormat, InfoArgs, Outp
 use cli::{SolveArgs, Solver};
 use lp_parser_rs::analysis::AnalysisConfig;
 #[cfg(feature = "diff")]
-use lp_parser_rs::interner::NameId;
-#[cfg(feature = "diff")]
-use lp_parser_rs::model::Coefficient;
+use lp_parser_rs::diff::{DiffOptions, DiffTol, LpDiff};
 use lp_parser_rs::model::{Constraint, VariableType};
 use lp_parser_rs::parser::parse_file;
 use lp_parser_rs::problem::LpProblem;
@@ -281,42 +279,22 @@ fn build_info_value(problem: &LpProblem, args: &InfoArgs) -> serde_json::Value {
     info
 }
 
-/// Absolute and relative tolerances for treating two floats as different.
+/// Coerce a closure into the higher-ranked `Fn(&str) -> Cow<str>` shape expected
+/// by [`lp_parser_rs::diff::Normaliser`]. The helper's explicit `for<'a>` bound
+/// steers closure lifetime inference, which does not converge on its own.
 #[cfg(feature = "diff")]
-#[derive(Clone, Copy)]
-struct DiffTol {
-    abs: f64,
-    rel: f64,
-}
-
-#[cfg(feature = "diff")]
-impl DiffTol {
-    /// Return true if `a` and `b` differ beyond both tolerances.
-    fn differ(self, a: f64, b: f64) -> bool {
-        let diff = (a - b).abs();
-        if diff == 0.0 {
-            return false;
-        }
-        let scale = a.abs().max(b.abs());
-        diff > self.abs && diff > self.rel * scale
-    }
-}
-
-/// The computed differences between two LP problems, keyed by canonical name.
-#[cfg(feature = "diff")]
-struct LpDiff {
-    vars_added: Vec<String>,
-    vars_removed: Vec<String>,
-    vars_type_changed: Vec<(String, String, String)>,
-    cons_added: Vec<String>,
-    cons_removed: Vec<String>,
-    cons_modified: Vec<(String, Vec<String>)>,
-    objs_added: Vec<String>,
-    objs_removed: Vec<String>,
-    objs_modified: Vec<(String, Vec<String>)>,
+fn as_normaliser<F>(f: F) -> F
+where
+    F: for<'a> Fn(&'a str) -> Cow<'a, str>,
+{
+    f
 }
 
 /// Apply each rename rule in turn, returning the canonical form of `name`.
+///
+/// This is the CLI's regex-based `--rename` normaliser; it is wrapped in a
+/// closure and handed to the library diff engine as a [`lp_parser_rs::diff::Normaliser`],
+/// keeping the `regex` dependency out of the core crate.
 #[cfg(feature = "diff")]
 fn apply_rename_rules(name: &str, rules: &[(regex::Regex, String)]) -> String {
     let mut s = name.to_string();
@@ -324,148 +302,6 @@ fn apply_rename_rules(name: &str, rules: &[(regex::Regex, String)]) -> String {
         s = re.replace_all(&s, rep.as_str()).into_owned();
     }
     s
-}
-
-/// Build a coefficient map keyed by canonical variable name.
-#[cfg(feature = "diff")]
-fn coeff_map(problem: &LpProblem, coeffs: &[Coefficient], rules: &[(regex::Regex, String)]) -> BTreeMap<String, f64> {
-    coeffs.iter().map(|c| (apply_rename_rules(problem.resolve(c.name), rules), c.value)).collect()
-}
-
-/// Count coefficients that changed value, were removed, or were added.
-#[cfg(feature = "diff")]
-fn count_coeff_diffs(m1: &BTreeMap<String, f64>, m2: &BTreeMap<String, f64>, tol: DiffTol) -> usize {
-    let mut diffs = 0usize;
-    for (k, v1) in m1 {
-        match m2.get(k) {
-            Some(v2) if tol.differ(*v1, *v2) => diffs += 1,
-            None => diffs += 1,
-            _ => {}
-        }
-    }
-    diffs += m2.keys().filter(|k| !m1.contains_key(*k)).count();
-    diffs
-}
-
-/// Describe how each common constraint changed (operator, rhs, coefficients).
-#[cfg(feature = "diff")]
-fn diff_modified_constraints(
-    p1: &LpProblem,
-    p2: &LpProblem,
-    ccons1: &HashMap<String, NameId>,
-    ccons2: &HashMap<String, NameId>,
-    common: &[String],
-    rules: &[(regex::Regex, String)],
-    tol: DiffTol,
-) -> Vec<(String, Vec<String>)> {
-    let mut modified = Vec::new();
-    for name in common {
-        let c1 = &p1.constraints[&ccons1[name]];
-        let c2 = &p2.constraints[&ccons2[name]];
-        let mut changes = Vec::new();
-        match (c1, c2) {
-            (
-                Constraint::Standard { coefficients: cf1, operator: op1, rhs: r1, .. },
-                Constraint::Standard { coefficients: cf2, operator: op2, rhs: r2, .. },
-            ) => {
-                if op1 != op2 {
-                    changes.push(format!("operator {op1} -> {op2}"));
-                }
-                if tol.differ(*r1, *r2) {
-                    changes.push(format!("rhs {r1} -> {r2}"));
-                }
-                let coef_diffs = count_coeff_diffs(&coeff_map(p1, cf1, rules), &coeff_map(p2, cf2, rules), tol);
-                if coef_diffs > 0 {
-                    changes.push(format!("{coef_diffs} coefficient change(s)"));
-                }
-            }
-            (Constraint::SOS { .. }, Constraint::SOS { .. }) => {
-                if c1 != c2 {
-                    changes.push("SOS definition changed".to_string());
-                }
-            }
-            _ => changes.push("constraint kind changed (Standard <-> SOS)".to_string()),
-        }
-        if !changes.is_empty() {
-            modified.push((name.clone(), changes));
-        }
-    }
-    modified
-}
-
-/// Describe how each common objective's coefficients changed.
-#[cfg(feature = "diff")]
-fn diff_modified_objectives(
-    p1: &LpProblem,
-    p2: &LpProblem,
-    cobjs1: &HashMap<String, NameId>,
-    cobjs2: &HashMap<String, NameId>,
-    common: &[String],
-    rules: &[(regex::Regex, String)],
-    tol: DiffTol,
-) -> Vec<(String, Vec<String>)> {
-    let mut modified = Vec::new();
-    for name in common {
-        let o1 = &p1.objectives[&cobjs1[name]];
-        let o2 = &p2.objectives[&cobjs2[name]];
-        let coef_diffs = count_coeff_diffs(&coeff_map(p1, &o1.coefficients, rules), &coeff_map(p2, &o2.coefficients, rules), tol);
-        if coef_diffs > 0 {
-            modified.push((name.clone(), vec![format!("{coef_diffs} coefficient change(s)")]));
-        }
-    }
-    modified
-}
-
-/// Compare two parsed problems, returning the structural and numeric diff.
-#[cfg(feature = "diff")]
-// The paired 1/2-suffixed bindings are the domain language of a two-file diff.
-#[allow(clippy::similar_names)]
-fn compute_lp_diff(p1: &LpProblem, p2: &LpProblem, rules: &[(regex::Regex, String)], tol: DiffTol) -> LpDiff {
-    let canon = |problem: &LpProblem, ids: Vec<NameId>| -> HashMap<String, NameId> {
-        ids.iter().map(|id| (apply_rename_rules(problem.resolve(*id), rules), *id)).collect()
-    };
-
-    let cvars1 = canon(p1, p1.variables.keys().copied().collect());
-    let cvars2 = canon(p2, p2.variables.keys().copied().collect());
-    let ccons1: HashMap<String, NameId> =
-        p1.constraints.values().map(|c| (apply_rename_rules(p1.resolve(c.name()), rules), c.name())).collect();
-    let ccons2: HashMap<String, NameId> =
-        p2.constraints.values().map(|c| (apply_rename_rules(p2.resolve(c.name()), rules), c.name())).collect();
-    let cobjs1 = canon(p1, p1.objectives.keys().copied().collect());
-    let cobjs2 = canon(p2, p2.objectives.keys().copied().collect());
-
-    let set_of = |m: &HashMap<String, NameId>| -> BTreeSet<String> { m.keys().cloned().collect() };
-    let vars1 = set_of(&cvars1);
-    let vars2 = set_of(&cvars2);
-    let cons1 = set_of(&ccons1);
-    let cons2 = set_of(&ccons2);
-    let objs1 = set_of(&cobjs1);
-    let objs2 = set_of(&cobjs2);
-
-    // Sorted intersections keep modified-section output deterministic.
-    let cons_common: Vec<String> = cons1.intersection(&cons2).cloned().collect();
-    let objs_common: Vec<String> = objs1.intersection(&objs2).cloned().collect();
-
-    let mut vars_type_changed = Vec::new();
-    for name in vars1.intersection(&vars2) {
-        let t1 = &p1.variables[&cvars1[name]].var_type;
-        let t2 = &p2.variables[&cvars2[name]].var_type;
-        if t1 != t2 {
-            vars_type_changed.push((name.clone(), format!("{t1:?}"), format!("{t2:?}")));
-        }
-    }
-
-    LpDiff {
-        vars_added: vars2.difference(&vars1).cloned().collect(),
-        vars_removed: vars1.difference(&vars2).cloned().collect(),
-        vars_type_changed,
-        cons_added: cons2.difference(&cons1).cloned().collect(),
-        cons_removed: cons1.difference(&cons2).cloned().collect(),
-        cons_modified: diff_modified_constraints(p1, p2, &ccons1, &ccons2, &cons_common, rules, tol),
-        objs_added: objs2.difference(&objs1).cloned().collect(),
-        objs_removed: objs1.difference(&objs2).cloned().collect(),
-        objs_modified: diff_modified_objectives(p1, p2, &cobjs1, &cobjs2, &objs_common, rules, tol),
-    }
 }
 
 /// Render the diff in human-readable text form.
@@ -583,7 +419,11 @@ fn cmd_diff(args: &DiffArgs, verbose: bool, quiet: bool) -> Result<(), BoxError>
     let p1 = LpProblem::parse(&content1)?;
     let p2 = LpProblem::parse(&content2)?;
 
-    let diff = compute_lp_diff(&p1, &p2, &rules, tol);
+    // Hand the CLI's regex rename rules to the library engine as a normaliser
+    // closure, keeping `regex` out of the core crate.
+    let normalise = as_normaliser(|name: &str| Cow::Owned(apply_rename_rules(name, &rules)));
+    let options = DiffOptions { tol, normalise: &normalise };
+    let diff = p1.diff(&p2, &options);
 
     let mut writer = OutputWriter::new(args.output.clone())?;
     match args.format {
