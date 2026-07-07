@@ -14,7 +14,7 @@ use ratatui::text::{Line, Span};
 use crate::diff_model::{DiffCounts, DiffSummary, LpDiffReport};
 use crate::theme::theme;
 use crate::widgets::numerics::format_scientific;
-use crate::widgets::{ARROW, muted, rule_str};
+use crate::widgets::{ARROW, muted, rule_str, severity_colour, short_filename};
 
 /// Build pre-formatted summary lines. Called once at startup since report data never changes.
 pub fn build_summary_lines(
@@ -387,15 +387,6 @@ fn issue_count_span(count: usize, label: &str, colour: Color) -> Span<'static> {
     Span::styled(format!("{count} {label}{plural}"), style)
 }
 
-fn severity_colour(severity: IssueSeverity) -> Color {
-    let t = theme();
-    match severity {
-        IssueSeverity::Error => t.error,
-        IssueSeverity::Warning => t.warning,
-        IssueSeverity::Info => t.info,
-    }
-}
-
 fn format_issue_line(file_label: &str, issue: &lp_parser_rs::analysis::AnalysisIssue) -> Line<'static> {
     let t = theme();
     let colour = severity_colour(issue.severity);
@@ -407,7 +398,3 @@ fn format_issue_line(file_label: &str, issue: &lp_parser_rs::analysis::AnalysisI
     ])
 }
 
-/// Extract the filename from a path string for compact display.
-fn short_filename(path: &str) -> String {
-    std::path::Path::new(path).file_name().map_or_else(|| path.to_string(), |f| f.to_string_lossy().into_owned())
-}

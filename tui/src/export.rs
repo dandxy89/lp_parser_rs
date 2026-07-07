@@ -43,8 +43,8 @@ pub fn write_diff_csv(report: &LpDiffReport, dir: &Path) -> Result<String, Box<d
                 }
             }
             DiffKind::Modified => {
-                let old_label = entry.old_type.as_ref().map_or("?", |t| type_label(t));
-                let new_label = entry.new_type.as_ref().map_or("?", |t| type_label(t));
+                let old_label = entry.old_type.as_ref().map_or_else(|| "?".to_owned(), ToString::to_string);
+                let new_label = entry.new_type.as_ref().map_or_else(|| "?".to_owned(), ToString::to_string);
                 write!(detail_buf, "{old_label} -> {new_label}").expect("writing to String cannot fail");
             }
             DiffKind::Renamed => {
@@ -128,21 +128,4 @@ pub fn write_diff_csv(report: &LpDiffReport, dir: &Path) -> Result<String, Box<d
 
     wtr.flush()?;
     Ok(filename)
-}
-
-/// Return a short label for a `VariableType`, borrowing the Display output
-/// without allocating for the common cases.
-const fn type_label(t: &lp_parser_rs::model::VariableType) -> &'static str {
-    use lp_parser_rs::model::VariableType;
-    match t {
-        VariableType::Free => "Free",
-        VariableType::General => "General",
-        VariableType::Binary => "Binary",
-        VariableType::Integer => "Integer",
-        VariableType::SemiContinuous => "Semi-Continuous",
-        VariableType::SOS => "SOS",
-        VariableType::LowerBound(_) => "LowerBound",
-        VariableType::UpperBound(_) => "UpperBound",
-        VariableType::DoubleBound(_, _) => "DoubleBound",
-    }
 }

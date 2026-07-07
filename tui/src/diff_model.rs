@@ -2,6 +2,7 @@
 //!
 //! This module is pure data types and logic — no ratatui dependency.
 
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt;
 
@@ -67,15 +68,15 @@ impl DiffOptions {
     /// Rewrite a name through the rename rules in order. Returns the original string
     /// unchanged when no rules are configured (avoiding an allocation in the hot path).
     #[must_use]
-    pub fn rewrite(&self, name: &str) -> String {
+    pub fn rewrite<'a>(&self, name: &'a str) -> Cow<'a, str> {
         if self.rename_rules.is_empty() {
-            return name.to_string();
+            return Cow::Borrowed(name);
         }
         let mut s = name.to_string();
         for (re, rep) in &self.rename_rules {
             s = re.replace_all(&s, rep.as_str()).into_owned();
         }
-        s
+        Cow::Owned(s)
     }
 
     /// Decide whether two floats should be treated as different under the configured tolerances.
@@ -154,8 +155,8 @@ fn coefficients_reordered(
     if positional_match {
         return false;
     }
-    let mut n1: Vec<String> = c1.iter().map(|c| opts.rewrite(p1.resolve(c.name))).collect();
-    let mut n2: Vec<String> = c2.iter().map(|c| opts.rewrite(p2.resolve(c.name))).collect();
+    let mut n1: Vec<Cow<'_, str>> = c1.iter().map(|c| opts.rewrite(p1.resolve(c.name))).collect();
+    let mut n2: Vec<Cow<'_, str>> = c2.iter().map(|c| opts.rewrite(p2.resolve(c.name))).collect();
     n1.sort_unstable();
     n2.sort_unstable();
     n1 == n2
@@ -653,7 +654,7 @@ fn constraint_summary(problem: &LpProblem, constraint: &Constraint) -> String {
 /// Build a sorted vec of (`canonical_name`, &Variable) pairs.
 /// `canonical_name` is the original name with `opts.rename_rules` applied.
 fn build_sorted_vars<'a>(problem: &'a LpProblem, opts: &DiffOptions) -> Vec<(String, &'a lp_parser_rs::model::Variable)> {
-    let mut pairs: Vec<_> = problem.variables.iter().map(|(id, var)| (opts.rewrite(problem.resolve(*id)), var)).collect();
+    let mut pairs: Vec<_> = problem.variables.iter().map(|(id, var)| (opts.rewrite(problem.resolve(*id)).into_owned(), var)).collect();
     pairs.sort_unstable_by(|a, b| a.0.cmp(&b.0));
     pairs
 }
@@ -663,14 +664,14 @@ fn build_sorted_vars<'a>(problem: &'a LpProblem, opts: &DiffOptions) -> Vec<(Str
 /// Preserves the original per-file `NameId` for line-map lookups while using the
 /// rewritten (canonical) name for sort and merge-join.
 fn build_sorted_constraints<'a>(problem: &'a LpProblem, opts: &DiffOptions) -> Vec<(NameId, String, &'a Constraint)> {
-    let mut triples: Vec<_> = problem.constraints.iter().map(|(id, c)| (*id, opts.rewrite(problem.resolve(*id)), c)).collect();
+    let mut triples: Vec<_> = problem.constraints.iter().map(|(id, c)| (*id, opts.rewrite(problem.resolve(*id)).into_owned(), c)).collect();
     triples.sort_unstable_by(|a, b| a.1.cmp(&b.1));
     triples
 }
 
 /// Build a sorted vec of (`canonical_name`, &Objective) pairs.
 fn build_sorted_objectives<'a>(problem: &'a LpProblem, opts: &DiffOptions) -> Vec<(String, &'a lp_parser_rs::model::Objective)> {
-    let mut pairs: Vec<_> = problem.objectives.iter().map(|(id, o)| (opts.rewrite(problem.resolve(*id)), o)).collect();
+    let mut pairs: Vec<_> = problem.objectives.iter().map(|(id, o)| (opts.rewrite(problem.resolve(*id)).into_owned(), o)).collect();
     pairs.sort_unstable_by(|a, b| a.0.cmp(&b.0));
     pairs
 }

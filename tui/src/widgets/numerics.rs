@@ -12,7 +12,7 @@ use ratatui::text::{Line, Span};
 
 use crate::diff_model::LpDiffReport;
 use crate::theme::theme;
-use crate::widgets::{ARROW, gauge_bar};
+use crate::widgets::{ARROW, gauge_bar, severity_colour, short_filename};
 
 /// Range-ratio threshold above which the value is styled as a warning.
 /// Aligned with `AnalysisConfig::default().coefficient_ratio_threshold` (1e6).
@@ -295,20 +295,6 @@ fn issue_count_row(lines: &mut Vec<Line<'static>>, label: &str, (errors, warning
 
 const fn plural(count: usize) -> &'static str {
     if count == 1 { "" } else { "s" }
-}
-
-fn severity_colour(severity: IssueSeverity) -> Color {
-    let t = theme();
-    match severity {
-        IssueSeverity::Error => t.error,
-        IssueSeverity::Warning => t.warning,
-        IssueSeverity::Info => t.info,
-    }
-}
-
-/// Extract the filename from a path string for compact display.
-fn short_filename(path: &str) -> String {
-    std::path::Path::new(path).file_name().map_or_else(|| path.to_owned(), |name| name.to_string_lossy().into_owned())
 }
 
 #[cfg(test)]
