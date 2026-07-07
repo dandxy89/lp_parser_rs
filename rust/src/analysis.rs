@@ -563,7 +563,7 @@ impl LpProblem {
         let variables = self.analyze_variables();
         let constraints = self.analyze_constraints();
         let coefficients = self.analyze_coefficients(config);
-        let issues = self.detect_issues(&summary, &variables, &constraints, &coefficients, config);
+        let issues = Self::detect_issues(&summary, &variables, &constraints, &coefficients, config);
 
         ProblemAnalysis { summary, sparsity, variables, constraints, coefficients, issues }
     }
@@ -829,9 +829,7 @@ impl LpProblem {
     }
 
     /// Detect issues and generate warnings.
-    #[allow(clippy::unused_self)]
     fn detect_issues(
-        &self,
         summary: &ProblemSummary,
         variables: &VariableAnalysis,
         constraints: &ConstraintAnalysis,

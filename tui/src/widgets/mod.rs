@@ -3,11 +3,10 @@
 use std::borrow::Cow;
 use std::time::Duration;
 
+use lp_parser_rs::analysis::IssueSeverity;
 use ratatui::layout::{Constraint, Flex, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::widgets::{Block, BorderType, Borders, Scrollbar, ScrollbarOrientation};
-
-use lp_parser_rs::analysis::IssueSeverity;
 
 use crate::diff_model::DiffKind;
 use crate::state::Focus;

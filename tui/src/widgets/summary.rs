@@ -397,4 +397,3 @@ fn format_issue_line(file_label: &str, issue: &lp_parser_rs::analysis::AnalysisI
         Span::styled(issue.message.clone(), Style::default().fg(t.text)),
     ])
 }
-
