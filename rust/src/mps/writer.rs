@@ -20,13 +20,22 @@
 //!
 //! `NAME`, `OBJSENSE` (only when the sense is `Maximize` -- `Minimize` is the
 //! MPS default and is left implicit), `ROWS`, `COLUMNS` (integer/general/binary
-//! variables wrapped in `'MARKER'` `INTORG`/`INTEND` blocks), `RHS`, `BOUNDS`,
-//! `SOS`, `ENDATA`.
+//! variables wrapped in `'MARKER'` `INTORG`/`INTEND` blocks), `RHS`, `RANGES`
+//! (see below), `BOUNDS`, `SOS`, `ENDATA`.
 //!
-//! No `RANGES` section is ever written: [`LpProblem`](crate::problem::LpProblem)
-//! has no first-class notion of a ranged constraint -- the MPS reader
-//! flattens `RANGES` rows into two ordinary constraints at parse time, so
-//! there is nothing to reconstruct a single ranged row from.
+//! # RANGES
+//!
+//! [`LpProblem`](crate::problem::LpProblem) has no first-class notion of a
+//! ranged constraint: the MPS reader flattens each `RANGES` row `X` into two
+//! ordinary constraints -- `X` (`>=` lower) and `X_rng` (`<=` upper) with
+//! identical coefficients. This writer reverses that flattening: when a
+//! constraint pair matches the reader's exact pattern (`X` is `>=`, `X_rng`
+//! is `<=`, identical coefficient vectors, upper >= lower, both RHS finite),
+//! it is re-emitted as a single `G` row with a `RANGES` entry of
+//! `upper - lower`, so `MPS -> LpProblem -> MPS` preserves the section. An
+//! LP-authored pair that happens to match the pattern is merged the same way;
+//! that is semantically lossless (the feasible region and the re-parsed
+//! constraint pair are identical), it only changes the MPS text shape.
 //!
 //! # Objectives
 //!
@@ -55,12 +64,11 @@
 //!   explicit upper bound in this model, but the MPS `SC` bound type requires
 //!   one. A sentinel value
 //!   ([`SEMI_CONTINUOUS_SENTINEL_UPPER`](crate::mps::writer::SEMI_CONTINUOUS_SENTINEL_UPPER))
-//!   is written
-//!   instead. Separately, the MPS reader currently resolves `SC` bounds to
-//!   [`UpperBound`](crate::model::VariableType::UpperBound) rather than
-//!   `SemiContinuous` (a pre-existing reader characteristic, not introduced
-//!   by this writer), so semi-continuous variables do not round trip through
-//!   MPS as `SemiContinuous`.
+//!   is written instead, and the reader resolves any `SC` bound back to
+//!   `SemiContinuous`, so the type round trips. The flip side: an `SC` bound
+//!   in an *external* MPS file with a meaningful finite upper bound has that
+//!   bound dropped on parse (with a `log::warn`), because the model cannot
+//!   carry both the semi-continuity flag and a bound value.
 //! - Strict inequalities (`ComparisonOp::LT` / `ComparisonOp::GT`) have no MPS
 //!   representation (only `L`/`G`/`E` rows exist); writing a problem with such
 //!   a constraint returns an error.
@@ -88,10 +96,11 @@
 use std::fmt::Write;
 
 use indexmap::IndexMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::error::{LpParseError, LpResult};
 use crate::interner::NameId;
-use crate::model::{ComparisonOp, Constraint, Objective, Sense, VariableType};
+use crate::model::{Coefficient, ComparisonOp, Constraint, Objective, Sense, VariableType};
 use crate::problem::LpProblem;
 use crate::writer::write_number;
 
@@ -157,6 +166,7 @@ pub fn write_mps_string_with_options(problem: &LpProblem, options: &MpsWriterOpt
 fn build_mps(output: &mut String, problem: &LpProblem, options: &MpsWriterOptions) -> LpResult<()> {
     let objective = select_objective(problem, options)?;
     let obj_row_name: &str = objective.map_or(EMPTY_OBJECTIVE_ROW_NAME, |o| problem.resolve(o.name));
+    let range_pairs = detect_range_pairs(problem);
 
     write_name_line(output, problem).expect("fmt::Write to String is infallible");
 
@@ -165,17 +175,78 @@ fn build_mps(output: &mut String, problem: &LpProblem, options: &MpsWriterOption
         writeln!(output, "    MAX").expect("fmt::Write to String is infallible");
     }
 
-    write_rows_section(output, problem, obj_row_name)?;
+    write_rows_section(output, problem, obj_row_name, &range_pairs)?;
 
-    let columns = build_columns(problem, objective, obj_row_name);
+    let columns = build_columns(problem, objective, obj_row_name, &range_pairs);
     write_columns_section(output, problem, &columns, options).expect("fmt::Write to String is infallible");
 
-    write_rhs_section(output, problem, obj_row_name, options).expect("fmt::Write to String is infallible");
+    write_rhs_section(output, problem, obj_row_name, options, &range_pairs).expect("fmt::Write to String is infallible");
+    write_ranges_section(output, problem, options, &range_pairs).expect("fmt::Write to String is infallible");
     write_bounds_section(output, problem, options)?;
     write_sos_section(output, problem, options).expect("fmt::Write to String is infallible");
 
     writeln!(output, "ENDATA").expect("fmt::Write to String is infallible");
     Ok(())
+}
+
+/// Constraint pairs that fold back into MPS `RANGES` entries.
+///
+/// See the "RANGES" section of the module documentation: `ranges` maps a base
+/// constraint (`>=` lower) to its range value `upper - lower`, and `skip`
+/// holds the `_rng` companion rows (`<=` upper) that must be omitted from the
+/// `ROWS`, `COLUMNS`, and `RHS` sections because the single ranged row already
+/// represents them.
+#[derive(Default)]
+struct RangePairs {
+    ranges: FxHashMap<NameId, f64>,
+    skip: FxHashSet<NameId>,
+}
+
+/// Return `true` if two coefficient vectors are equal as (variable, value)
+/// sets. Values compare exactly: pairs produced by the reader's RANGES
+/// flattening are bit-identical clones, and a near-miss simply doesn't pair.
+fn coefficients_match(a: &[Coefficient], b: &[Coefficient]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let map: FxHashMap<NameId, f64> = a.iter().map(|c| (c.name, c.value)).collect();
+    b.iter().all(|c| map.get(&c.name) == Some(&c.value))
+}
+
+/// Detect constraint pairs matching the reader's RANGES flattening pattern:
+/// `X` (`>=` lower) plus `X_rng` (`<=` upper) with identical coefficients,
+/// finite RHS values, and `upper >= lower`.
+fn detect_range_pairs(problem: &LpProblem) -> RangePairs {
+    let mut pairs = RangePairs::default();
+
+    for (name_id, constraint) in &problem.constraints {
+        let Constraint::Standard { name, coefficients, operator: ComparisonOp::LTE, rhs: upper_rhs, .. } = constraint else {
+            continue;
+        };
+        let Some(base_name) = problem.resolve(*name).strip_suffix("_rng") else {
+            continue;
+        };
+        let Some(base_id) = problem.name_id(base_name) else {
+            continue;
+        };
+        let Some(Constraint::Standard { coefficients: base_coefficients, operator: ComparisonOp::GTE, rhs: lower_rhs, .. }) =
+            problem.constraints.get(&base_id)
+        else {
+            continue;
+        };
+        if !upper_rhs.is_finite() || !lower_rhs.is_finite() || upper_rhs < lower_rhs {
+            continue;
+        }
+        if !coefficients_match(base_coefficients, coefficients) {
+            continue;
+        }
+
+        pairs.ranges.insert(base_id, upper_rhs - lower_rhs);
+        pairs.skip.insert(*name_id);
+    }
+
+    debug_assert_eq!(pairs.ranges.len(), pairs.skip.len(), "every range entry must have exactly one skipped companion row");
+    pairs
 }
 
 /// Select the objective to write, applying the single-objective rule.
@@ -225,12 +296,15 @@ fn row_type_letter(operator: ComparisonOp, constraint_name: &str) -> LpResult<ch
 }
 
 /// Write the `ROWS` section: the objective's `N` row followed by one row per
-/// standard constraint.
-fn write_rows_section(output: &mut String, problem: &LpProblem, obj_row_name: &str) -> LpResult<()> {
+/// standard constraint. Ranged companion rows are omitted (see [`RangePairs`]).
+fn write_rows_section(output: &mut String, problem: &LpProblem, obj_row_name: &str, range_pairs: &RangePairs) -> LpResult<()> {
     writeln!(output, "ROWS").expect("fmt::Write to String is infallible");
     writeln!(output, " N  {obj_row_name}").expect("fmt::Write to String is infallible");
 
-    for constraint in problem.constraints.values() {
+    for (name_id, constraint) in &problem.constraints {
+        if range_pairs.skip.contains(name_id) {
+            continue;
+        }
         if let Constraint::Standard { name, operator, .. } = constraint {
             let resolved_name = problem.resolve(*name);
             let letter = row_type_letter(*operator, resolved_name)?;
@@ -262,7 +336,12 @@ type ColumnEntries<'p> = IndexMap<NameId, Vec<(&'p str, f64)>>;
 /// need at least one COLUMNS entry to be registered as a column and picked
 /// up by the reader's `INTORG`/`INTEND` tracking -- a zero-valued entry
 /// against the objective row is synthesised for them.
-fn build_columns<'p>(problem: &'p LpProblem, objective: Option<&'p Objective>, obj_row_name: &'p str) -> ColumnEntries<'p> {
+fn build_columns<'p>(
+    problem: &'p LpProblem,
+    objective: Option<&'p Objective>,
+    obj_row_name: &'p str,
+    range_pairs: &RangePairs,
+) -> ColumnEntries<'p> {
     let mut columns: ColumnEntries<'p> = IndexMap::with_capacity(problem.variables.len());
     for name_id in problem.variables.keys() {
         columns.insert(*name_id, Vec::new());
@@ -275,7 +354,10 @@ fn build_columns<'p>(problem: &'p LpProblem, objective: Option<&'p Objective>, o
         }
     }
 
-    for constraint in problem.constraints.values() {
+    for (constraint_id, constraint) in &problem.constraints {
+        if range_pairs.skip.contains(constraint_id) {
+            continue; // The base row already carries these coefficients.
+        }
         if let Constraint::Standard { name, coefficients, .. } = constraint {
             let row_name = problem.resolve(*name);
             for coeff in coefficients {
@@ -335,12 +417,22 @@ fn write_columns_section(
 }
 
 /// Write the `RHS` section. Zero-valued RHS entries are omitted -- the reader
-/// already defaults missing rows to an RHS of zero.
-fn write_rhs_section(output: &mut String, problem: &LpProblem, obj_row_name: &str, options: &MpsWriterOptions) -> std::fmt::Result {
+/// already defaults missing rows to an RHS of zero. Ranged companion rows are
+/// omitted (their upper RHS is carried by the `RANGES` section).
+fn write_rhs_section(
+    output: &mut String,
+    problem: &LpProblem,
+    obj_row_name: &str,
+    options: &MpsWriterOptions,
+    range_pairs: &RangePairs,
+) -> std::fmt::Result {
     debug_assert!(!obj_row_name.is_empty(), "obj_row_name must not be empty");
     writeln!(output, "RHS")?;
 
-    for constraint in problem.constraints.values() {
+    for (constraint_id, constraint) in &problem.constraints {
+        if range_pairs.skip.contains(constraint_id) {
+            continue;
+        }
         if let Constraint::Standard { name, rhs, .. } = constraint {
             if *rhs == 0.0 {
                 continue;
@@ -348,6 +440,36 @@ fn write_rhs_section(output: &mut String, problem: &LpProblem, obj_row_name: &st
             let resolved_name = problem.resolve(*name);
             write!(output, "    {RHS_VECTOR_LABEL:<10} {resolved_name:<10} ")?;
             write_number(output, *rhs, options.decimal_precision)?;
+            writeln!(output)?;
+        }
+    }
+
+    Ok(())
+}
+
+/// Fixed vector label written in the RANGES section, analogous to
+/// [`RHS_VECTOR_LABEL`].
+const RANGES_VECTOR_LABEL: &str = "RNG";
+
+/// Write the `RANGES` section for detected constraint pairs (see
+/// [`RangePairs`]). Omitted entirely when there are no pairs.
+fn write_ranges_section(
+    output: &mut String,
+    problem: &LpProblem,
+    options: &MpsWriterOptions,
+    range_pairs: &RangePairs,
+) -> std::fmt::Result {
+    if range_pairs.ranges.is_empty() {
+        return Ok(());
+    }
+    writeln!(output, "RANGES")?;
+
+    // Iterate constraints (not the hash map) for deterministic output order.
+    for constraint_id in problem.constraints.keys() {
+        if let Some(range_value) = range_pairs.ranges.get(constraint_id) {
+            let resolved_name = problem.resolve(*constraint_id);
+            write!(output, "    {RANGES_VECTOR_LABEL:<10} {resolved_name:<10} ")?;
+            write_number(output, *range_value, options.decimal_precision)?;
             writeln!(output)?;
         }
     }
@@ -807,8 +929,73 @@ mod tests {
     }
 
     #[test]
-    fn test_semi_continuous_round_trip_is_lossy_upper_bound() {
-        // Documented limitation: SemiContinuous round-trips as UpperBound.
+    fn test_ranges_round_trip() {
+        // A RANGES row is flattened by the reader into `X` (>=) plus `X_rng`
+        // (<=); the writer must fold the pair back into a single row with a
+        // RANGES entry so the section survives MPS -> LpProblem -> MPS.
+        let input = "\
+NAME        rngtest
+ROWS
+ N  obj
+ G  lim1
+ L  lim2
+COLUMNS
+    x1        obj       1
+    x1        lim1      1
+    x1        lim2      2
+RHS
+    RHS       lim1      2
+    RHS       lim2      10
+RANGES
+    RNG       lim1      4
+    RNG       lim2      3
+ENDATA
+";
+        let problem = LpProblem::parse_mps(input).unwrap();
+        assert_eq!(problem.constraint_count(), 4, "two ranged rows must flatten into four constraints");
+
+        let output = write_mps_string(&problem).unwrap();
+        assert!(output.contains("RANGES"), "RANGES section must be re-emitted:\n{output}");
+        assert!(!output.contains("lim1_rng"), "companion rows must fold back into the RANGES entry:\n{output}");
+
+        let reparsed = LpProblem::parse_mps(&output).unwrap();
+        assert_eq!(reparsed.constraint_count(), problem.constraint_count());
+        for (name, expected_op, expected_rhs) in [
+            ("lim1", ComparisonOp::GTE, 2.0),
+            ("lim1_rng", ComparisonOp::LTE, 6.0),
+            ("lim2", ComparisonOp::GTE, 7.0),
+            ("lim2_rng", ComparisonOp::LTE, 10.0),
+        ] {
+            let id = reparsed.name_id(name).unwrap_or_else(|| panic!("constraint '{name}' missing after round trip"));
+            let Some(Constraint::Standard { operator, rhs, .. }) = reparsed.constraints.get(&id) else {
+                panic!("constraint '{name}' must be a standard constraint");
+            };
+            assert_eq!(*operator, expected_op, "operator mismatch for '{name}'");
+            assert_eq!(*rhs, expected_rhs, "rhs mismatch for '{name}'");
+        }
+    }
+
+    #[test]
+    fn test_user_authored_rng_suffix_not_merged_when_structurally_different() {
+        // A user constraint that merely ends in `_rng` must NOT be folded into
+        // a RANGES entry unless it exactly matches the reader's flattening
+        // pattern (identical coefficients, >=/<= pairing, upper >= lower).
+        let input = "\
+Minimize
+ obj: x + y
+Subject To
+ c1: x + y >= 1
+ c1_rng: x + 2 y <= 5
+End
+";
+        let problem = LpProblem::parse(input).unwrap();
+        let output = write_mps_string(&problem).unwrap();
+        assert!(!output.contains("RANGES"), "structurally different pair must not merge:\n{output}");
+        assert!(output.contains("c1_rng"), "companion row must be written as an ordinary row:\n{output}");
+    }
+
+    #[test]
+    fn test_semi_continuous_round_trips() {
         let mut problem = LpProblem::new();
         let obj_id = problem.intern("obj");
         problem.add_objective(Objective { name: obj_id, coefficients: vec![], byte_offset: None });
@@ -820,7 +1007,7 @@ mod tests {
 
         let reparsed = LpProblem::parse_mps(&output).unwrap();
         let x1 = &reparsed.variables[&reparsed.name_id("x1").unwrap()];
-        assert_eq!(x1.var_type, VariableType::UpperBound(SEMI_CONTINUOUS_SENTINEL_UPPER));
+        assert_eq!(x1.var_type, VariableType::SemiContinuous);
     }
 
     #[test]

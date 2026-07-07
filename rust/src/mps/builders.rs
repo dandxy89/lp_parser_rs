@@ -205,9 +205,8 @@ pub(super) fn build_bounds<'input>(
         }
     }
 
-    debug_assert!(
-        !bounds.is_empty() || (bound_order.is_empty() && column_order.is_empty()),
-        "bounds should be non-empty when there are variables"
-    );
+    // Note: `bounds` can legitimately be empty even when `bound_order` is not --
+    // an `SC`-only variable records no lower/upper value (its semi-continuity is
+    // applied later from `ParseResult::semi_continuous`).
     bounds
 }

@@ -257,10 +257,15 @@ BOUNDS
 ENDATA
 ";
     let result = parse_mps(input).unwrap();
+    // SC: semi-continuity is preserved; the (unrepresentable) upper bound is dropped.
     assert!(result.semi_continuous.contains(&"x1"));
-    assert!(result.semi_continuous.contains(&"x2"));
     assert!(!result.integers.contains(&"x1"));
+    assert!(result.bounds.iter().all(|(name, _)| *name != "x1"), "SC-only variable must not resolve to a plain bound");
+    // SI: the model has no semi-integer type; the closest representation is
+    // an integer variable with the given upper bound.
+    assert!(!result.semi_continuous.contains(&"x2"));
     assert!(result.integers.contains(&"x2"));
+    assert!(result.bounds.contains(&("x2", VariableType::UpperBound(200.0))));
 }
 
 #[test]

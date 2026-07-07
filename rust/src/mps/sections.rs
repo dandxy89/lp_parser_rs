@@ -400,11 +400,25 @@ impl<'input> BoundsState<'input> {
                 accumulator.binary = true;
                 self.binary_vars.push(var_name);
             }
-            "SC" | "SI" => {
+            "SC" => {
+                let value = parse_bound_value(fields.get(3), line_num, bound_type)?;
+                // Semi-continuity is represented by `VariableType::SemiContinuous`,
+                // which carries no bound value: recording the SC upper bound in the
+                // accumulator would resolve the variable to `UpperBound` instead and
+                // lose the semi-continuity (it also broke the MPS round trip). The
+                // bound value is dropped; warn when it is a meaningful finite bound
+                // rather than the conventional 1e30/infinity sentinel.
+                if value.is_finite() && value < crate::mps::writer::SEMI_CONTINUOUS_SENTINEL_UPPER {
+                    log::warn!("line {line_num}: SC upper bound {value} on '{var_name}' cannot be represented and is dropped");
+                }
+                self.semi_continuous_vars.push(var_name);
+            }
+            "SI" => {
+                // Semi-integer: the model has no semi-integer type, so the closest
+                // representation is an integer variable with the given upper bound.
                 let value = parse_bound_value(fields.get(3), line_num, bound_type)?;
                 accumulator.upper = Some(value);
-                self.semi_continuous_vars.push(var_name);
-                if upper == "SI" && integer_vars_set.insert(var_name) {
+                if integer_vars_set.insert(var_name) {
                     integer_vars.push(var_name);
                 }
             }

@@ -58,6 +58,7 @@ mps_test!(mps_output2_3, "output2_3.mps");
 mps_test!(mps_output2_4, "output2_4.mps");
 mps_test!(mps_pulp, "pulp.mps");
 mps_test!(mps_pulp2, "pulp2.mps");
+mps_test!(mps_ranges, "ranges.mps");
 mps_test!(mps_sc50a, "sc50a.mps");
 mps_test!(mps_scientific_notation_2, "scientific_notation_2.mps");
 mps_test!(mps_scientific_notation, "scientific_notation.mps");
