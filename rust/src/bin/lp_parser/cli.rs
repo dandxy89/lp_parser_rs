@@ -28,10 +28,12 @@ pub enum Commands {
     /// Show detailed statistics about an LP problem
     Info(InfoArgs),
 
-    /// Perform comprehensive analysis on an LP problem
+    /// Perform comprehensive analysis on an LP problem.
+    /// Exits 1 when any error-severity issue is found, 2 on failure.
     Analyze(AnalyzeArgs),
 
-    /// Compare two LP files
+    /// Compare two LP files.
+    /// Exits 0 when the problems match, 1 when they differ, 2 on failure.
     #[cfg(feature = "diff")]
     Diff(DiffArgs),
 

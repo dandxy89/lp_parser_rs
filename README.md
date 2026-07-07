@@ -159,6 +159,19 @@ lp_parser diff old.lp new.lp --abs-tol 1e-6 --rel-tol 1e-9
 lp_parser diff old.lp new.lp --rename '\[\d+\]$' '[N]' --format json --pretty
 ```
 
+#### CI usage
+
+Both `diff` and `analyze` follow the GNU `diff` exit-code convention, so a
+pipeline can gate on unexpected model changes or structural errors:
+
+- `diff` exits `0` when the problems match, `1` when they differ, `2` on failure.
+- `analyze` exits `0` when clean, `1` when any error-severity issue is found, `2` on failure.
+
+```bash
+lp_parser diff baseline.lp candidate.lp --format json > model_diff.json || echo "model changed"
+lp_parser analyze candidate.lp --issues-only || exit 1
+```
+
 ### `convert` — translate to another format
 
 | Option                  | Default | Description                                 |

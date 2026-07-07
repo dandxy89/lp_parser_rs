@@ -139,6 +139,23 @@ pub struct LpDiff {
     pub objs_modified: Vec<(String, Vec<String>)>,
 }
 
+impl LpDiff {
+    /// Returns `true` when the two problems are identical under the diff
+    /// options used, i.e. no additions, removals, or modifications were found.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.vars_added.is_empty()
+            && self.vars_removed.is_empty()
+            && self.vars_type_changed.is_empty()
+            && self.cons_added.is_empty()
+            && self.cons_removed.is_empty()
+            && self.cons_modified.is_empty()
+            && self.objs_added.is_empty()
+            && self.objs_removed.is_empty()
+            && self.objs_modified.is_empty()
+    }
+}
+
 impl LpProblem {
     /// Compare this problem against `other`, returning the structural and numeric diff.
     ///

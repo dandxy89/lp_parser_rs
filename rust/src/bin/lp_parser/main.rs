@@ -7,6 +7,7 @@ use std::borrow::Cow;
 use std::fs;
 use std::io::{self, Stdout, Write};
 use std::path::PathBuf;
+use std::process::ExitCode;
 
 use clap::Parser;
 #[cfg(feature = "diff")]
@@ -14,7 +15,7 @@ use cli::DiffArgs;
 use cli::{AnalyzeArgs, Cli, Commands, ConvertArgs, ConvertFormat, InfoArgs, OutputFormat, ParseArgs};
 #[cfg(feature = "lp-solvers")]
 use cli::{SolveArgs, Solver};
-use lp_parser_rs::analysis::AnalysisConfig;
+use lp_parser_rs::analysis::{AnalysisConfig, IssueSeverity};
 #[cfg(feature = "diff")]
 use lp_parser_rs::diff::{DiffOptions, DiffTol, LpDiff};
 use lp_parser_rs::model::{Constraint, VariableType};
@@ -95,7 +96,8 @@ fn cmd_info(args: &InfoArgs, verbose: bool, quiet: bool) -> Result<(), BoxError>
     Ok(())
 }
 
-fn cmd_analyze(args: AnalyzeArgs, verbose: bool, quiet: bool) -> Result<(), BoxError> {
+/// Returns `ExitCode` 1 when any error-severity issue is found (CI gating), 0 otherwise.
+fn cmd_analyze(args: AnalyzeArgs, verbose: bool, quiet: bool) -> Result<ExitCode, BoxError> {
     let content = parse_file(&args.file)?;
     let problem = LpProblem::parse(&content)?;
 
@@ -154,7 +156,8 @@ fn cmd_analyze(args: AnalyzeArgs, verbose: bool, quiet: bool) -> Result<(), BoxE
         }
     }
 
-    Ok(())
+    let has_errors = analysis.issues.iter().any(|issue| issue.severity == IssueSeverity::Error);
+    Ok(if has_errors { ExitCode::from(1) } else { ExitCode::SUCCESS })
 }
 
 /// Count variables by type, returning `(continuous, integer, binary)`.
@@ -398,8 +401,10 @@ fn build_diff_json(args: &DiffArgs, p1: &LpProblem, p2: &LpProblem, diff: &LpDif
     })
 }
 
+/// Returns `ExitCode` 0 when the problems match, 1 when differences were found
+/// (the GNU `diff` convention, so CI can gate on unexpected model changes).
 #[cfg(feature = "diff")]
-fn cmd_diff(args: &DiffArgs, verbose: bool, quiet: bool) -> Result<(), BoxError> {
+fn cmd_diff(args: &DiffArgs, verbose: bool, quiet: bool) -> Result<ExitCode, BoxError> {
     // Rename rules arrive as a flat list of PATTERN REPLACEMENT pairs.
     if args.rename.len() % 2 != 0 {
         return Err("--rename requires pairs of PATTERN REPLACEMENT".into());
@@ -446,7 +451,7 @@ fn cmd_diff(args: &DiffArgs, verbose: bool, quiet: bool) -> Result<(), BoxError>
         }
     }
 
-    Ok(())
+    Ok(if diff.is_empty() { ExitCode::SUCCESS } else { ExitCode::from(1) })
 }
 
 /// Parse `content` as MPS if `path` has a `.mps` extension (case-insensitive),
@@ -644,17 +649,24 @@ impl Write for OutputWriter {
     }
 }
 
-fn main() -> Result<(), BoxError> {
+/// Exit codes follow the GNU `diff` convention: 0 success (no differences /
+/// no error-severity issues), 1 differences or analysis errors found, 2 failure.
+fn main() -> ExitCode {
     let cli = Cli::parse();
 
-    match cli.command {
-        Commands::Parse(args) => cmd_parse(args, cli.verbose, cli.quiet),
-        Commands::Info(args) => cmd_info(&args, cli.verbose, cli.quiet),
+    let result = match cli.command {
+        Commands::Parse(args) => cmd_parse(args, cli.verbose, cli.quiet).map(|()| ExitCode::SUCCESS),
+        Commands::Info(args) => cmd_info(&args, cli.verbose, cli.quiet).map(|()| ExitCode::SUCCESS),
         Commands::Analyze(args) => cmd_analyze(args, cli.verbose, cli.quiet),
         #[cfg(feature = "diff")]
         Commands::Diff(args) => cmd_diff(&args, cli.verbose, cli.quiet),
-        Commands::Convert(args) => cmd_convert(args, cli.verbose, cli.quiet),
+        Commands::Convert(args) => cmd_convert(args, cli.verbose, cli.quiet).map(|()| ExitCode::SUCCESS),
         #[cfg(feature = "lp-solvers")]
-        Commands::Solve(args) => cmd_solve(args, cli.verbose, cli.quiet),
-    }
+        Commands::Solve(args) => cmd_solve(args, cli.verbose, cli.quiet).map(|()| ExitCode::SUCCESS),
+    };
+
+    result.unwrap_or_else(|error| {
+        eprintln!("Error: {error}");
+        ExitCode::from(2)
+    })
 }
