@@ -180,6 +180,14 @@ lp_parser convert problem.lp --format mps -o problem.mps     # LP -> MPS
 lp_parser convert problem.mps --format mps -o rewritten.mps  # MPS -> MPS
 ```
 
+> **Caveat (LP → MPS):** a variable that appears only in constraints and is
+> never given an explicit bound defaults to `Free` internally, which is
+> written out as an MPS `FR` bound. LP format's own default for such a
+> variable is `[0, +inf)`, not free -- so an unbounded-looking variable can
+> widen to include negative values once converted to MPS. Declare bounds
+> explicitly (even a redundant `x >= 0`) in the LP source if this distinction
+> matters to the downstream solver.
+
 ### `solve` — run an external solver (requires `lp-solvers` feature)
 
 | Option                | Default | Description                      |

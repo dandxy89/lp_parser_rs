@@ -72,6 +72,18 @@
 //!   keeps it correct at the cost of re-parsing as `DoubleBound(0, ub)`
 //!   rather than `UpperBound(ub)` (the same feasible region, a different
 //!   variant).
+//! - **Free-default conversion caveat**: [`LpProblem`] defaults an
+//!   undeclared variable that only appears in constraints (never in a
+//!   `Bounds`/`Free`/etc. section, and never given an explicit bound) to
+//!   [`VariableType::Free`], which this writer faithfully emits as an `FR`
+//!   bound. LP format's own default for such a variable is `[0, +inf)`, not
+//!   free -- so converting an LP file straight through this writer without
+//!   ever having declared the variable's bounds widens its feasible region
+//!   to include negative values. This is not a writer bug (the LP-side
+//!   default is deliberately preserved rather than silently narrowed back
+//!   down), but it is a real semantic difference to be aware of when the
+//!   MPS output feeds another solver: declare bounds explicitly in the LP
+//!   source (even a redundant `x >= 0`) if the distinction matters.
 
 use std::fmt::Write;
 
@@ -486,10 +498,7 @@ fn write_double_bound(output: &mut String, var_name: &str, lb: f64, ub: f64, pre
         return Err(invalid_bound_error(var_name, "has a NaN double bound, which MPS cannot represent"));
     }
     if lb == f64::INFINITY || ub == f64::NEG_INFINITY {
-        return Err(invalid_bound_error(
-            var_name,
-            &format!("has a nonsensical double bound ({lb}, {ub}), which MPS cannot represent"),
-        ));
+        return Err(invalid_bound_error(var_name, &format!("has a nonsensical double bound ({lb}, {ub}), which MPS cannot represent")));
     }
 
     #[allow(clippy::float_cmp)]
