@@ -594,12 +594,18 @@ pub const VIOLATION_TOLERANCE: f64 = 1e-7;
 /// Outcome of an elastic-relaxation infeasibility diagnosis.
 #[derive(Debug, Clone)]
 pub struct InfeasibilityDiagnosis {
-    /// Sum of all slack values in the optimal elastic solution (the minimum
-    /// total constraint violation needed to make the problem feasible).
+    /// Sum of all slack values in the optimal elastic solution plus all bound
+    /// conflict gaps (the minimum total violation needed to make the problem
+    /// feasible).
     pub total_violation: f64,
     /// `(constraint name, violation amount)` for every constraint whose slack
     /// exceeds [`VIOLATION_TOLERANCE`], sorted descending by amount.
     pub violations: Vec<(String, f64)>,
+    /// `(variable name, gap)` for every variable whose declared bounds
+    /// conflict (`lower > upper`, gap = `lower - upper`), sorted descending
+    /// by gap. Such bounds are relaxed before the elastic solve so the
+    /// diagnosis can still run.
+    pub bound_conflicts: Vec<(String, f64)>,
     /// Wall-clock time of the elastic solve (build + solve + extract).
     pub solve_time: Duration,
 }
@@ -628,17 +634,22 @@ pub fn collect_violations(slack_names: &[String], slack_values: &[f64], toleranc
 
 /// Diagnose an infeasible problem via elastic relaxation.
 ///
-/// Rebuilds the model with all integrality relaxed and a non-negative slack
-/// variable added to every standard constraint (one for `>=`, one for `<=`,
-/// two for `=`), then minimises the sum of all slacks. Constraints with a
-/// positive slack in the optimal solution are exactly those that must be
-/// violated to make the rest of the problem feasible.
+/// Variables whose declared bounds conflict (`lower > upper`, e.g.
+/// `DoubleBound(5, 3)` or a negative `UpperBound` with the implicit lower
+/// bound of 0) are reported directly as bound conflicts and their bounds
+/// relaxed to the interval between the conflicting values, so the elastic
+/// solve can still run. The model is then rebuilt with all integrality
+/// relaxed and a non-negative slack variable added to every standard
+/// constraint (one for `>=`, one for `<=`, two for `=`), minimising the sum
+/// of all slacks. Constraints with a positive slack in the optimal solution
+/// are exactly those that must be violated to make the rest of the problem
+/// feasible.
 ///
 /// # Errors
 ///
 /// Returns an error if the elastic problem does not solve to optimality. By
-/// construction it is always feasible in its constraints, so this only occurs
-/// for conflicting variable bounds or a solver failure.
+/// construction it is feasible in both its constraints and its (sanitised)
+/// bounds, so this only occurs on a solver failure.
 pub fn diagnose_infeasibility(problem: &LpProblem) -> Result<InfeasibilityDiagnosis, String> {
     debug_assert!(!problem.variables.is_empty(), "cannot diagnose a problem with no variables");
 
@@ -652,11 +663,20 @@ pub fn diagnose_infeasibility(problem: &LpProblem) -> Result<InfeasibilityDiagno
 
     let mut row_problem = highs::RowProblem::new();
     let mut columns = Vec::with_capacity(sorted_var_ids.len());
+    let mut bound_conflicts: Vec<(String, f64)> = Vec::new();
     for &var_id in &sorted_var_ids {
         // Zero objective coefficient and relaxed integrality: the elastic
         // objective is the slack sum alone, and an LP relaxation is faster and
         // more reliable than the original MIP.
-        let (_, lower, upper) = variable_bounds(problem.variables.get(&var_id).map(|v| &v.var_type));
+        let (_, mut lower, mut upper) = variable_bounds(problem.variables.get(&var_id).map(|v| &v.var_type));
+        if lower > upper {
+            // Conflicting bounds would make the elastic model itself
+            // infeasible: report the gap and relax the variable to the
+            // interval between the two values (the minimal region either
+            // bound can move into).
+            bound_conflicts.push((problem.resolve(var_id).to_string(), lower - upper));
+            (lower, upper) = (upper, lower);
+        }
         columns.push(row_problem.add_column_with_integrality(0.0, lower..=upper, false));
     }
 
@@ -724,16 +744,17 @@ pub fn diagnose_infeasibility(problem: &LpProblem) -> Result<InfeasibilityDiagno
         "elastic relaxation must solve to optimality (feasible by construction), got {status:?}"
     );
     if !matches!(status, highs::HighsModelStatus::Optimal) {
-        return Err(format!("elastic relaxation returned {status:?} — infeasibility may stem from conflicting variable bounds"));
+        return Err(format!("elastic relaxation returned {status:?} — solver failure"));
     }
 
     let solution = solved.get_solution();
     let column_values = solution.columns();
     let slack_values: Vec<f64> = slack_cols.iter().map(|col| column_values[col.index()]).collect();
-    let total_violation: f64 = slack_values.iter().sum();
+    let total_violation: f64 = slack_values.iter().sum::<f64>() + bound_conflicts.iter().map(|(_, gap)| gap).sum::<f64>();
     let violations = collect_violations(&slack_names, &slack_values, VIOLATION_TOLERANCE);
+    bound_conflicts.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal).then_with(|| a.0.cmp(&b.0)));
 
-    Ok(InfeasibilityDiagnosis { total_violation, violations, solve_time: start.elapsed() })
+    Ok(InfeasibilityDiagnosis { total_violation, violations, bound_conflicts, solve_time: start.elapsed() })
 }
 
 /// Write an `Option<f64>` into a reusable string buffer (cleared first), leaving it empty for `None`.
@@ -915,6 +936,28 @@ mod tests {
         }
         let violation_sum: f64 = diagnosis.violations.iter().map(|(_, amount)| amount).sum();
         assert!((violation_sum - 1.0).abs() < 1e-6, "violations should sum to ≈ 1, got {violation_sum}");
+    }
+
+    #[test]
+    fn test_diagnose_conflicting_variable_bounds() {
+        // x has lower > upper (gap 1); y has a negative upper bound with the
+        // implicit lower bound 0 (gap 5). Previously this errored out of the
+        // elastic relaxation; now both conflicts are reported directly.
+        let problem = LpProblem::parse("min\nobj: x + y\nst\nc1: x + y >= 0\nbounds\n2 <= x <= 1\ny <= -5\nend")
+            .expect("failed to parse conflicting-bounds LP");
+
+        let diagnosis = diagnose_infeasibility(&problem).expect("diagnosis must handle conflicting bounds");
+        assert_eq!(diagnosis.bound_conflicts.len(), 2, "both conflicting variables must be reported");
+        assert_eq!(diagnosis.bound_conflicts[0].0, "y", "conflicts must sort descending by gap");
+        assert!((diagnosis.bound_conflicts[0].1 - 5.0).abs() < 1e-9, "y gap should be 5, got {}", diagnosis.bound_conflicts[0].1);
+        assert_eq!(diagnosis.bound_conflicts[1].0, "x");
+        assert!((diagnosis.bound_conflicts[1].1 - 1.0).abs() < 1e-9, "x gap should be 1, got {}", diagnosis.bound_conflicts[1].1);
+        assert!(diagnosis.violations.is_empty(), "constraint c1 is satisfiable once bounds are relaxed, got {:?}", diagnosis.violations);
+        assert!(
+            (diagnosis.total_violation - 6.0).abs() < 1e-6,
+            "total violation should be the sum of bound gaps, got {}",
+            diagnosis.total_violation
+        );
     }
 
     #[test]

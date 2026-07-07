@@ -540,11 +540,36 @@ fn append_diagnosis_block(lines: &mut Vec<Line<'static>>, diagnosis: &DiagnosisS
                 Span::styled(format!("{:.6}", diagnosis.total_violation), Style::default().fg(t.warning).add_modifier(Modifier::BOLD)),
                 Span::styled(format!("  (elastic solve: {:.3}s)", diagnosis.solve_time.as_secs_f64()), Style::default().fg(t.muted)),
             ]));
-            if diagnosis.violations.is_empty() {
+            if !diagnosis.bound_conflicts.is_empty() {
                 lines.push(Line::from(Span::styled(
-                    "  No violated constraints found \u{2014} infeasibility may stem from variable bounds",
-                    Style::default().fg(t.warning),
+                    format!(
+                        "  Conflicting variable bounds ({} shown of {}):",
+                        diagnosis.bound_conflicts.len().min(MAX_VIOLATION_ROWS),
+                        diagnosis.bound_conflicts.len()
+                    ),
+                    Style::default().fg(t.muted),
                 )));
+                for (name, gap) in diagnosis.bound_conflicts.iter().take(MAX_VIOLATION_ROWS) {
+                    lines.push(Line::from(vec![
+                        Span::styled(format!("  {:<30}", truncate_with_ellipsis(name, 30)), Style::default().fg(t.text)),
+                        Span::styled(format!("{gap:>14.6}"), Style::default().fg(t.warning)),
+                        Span::styled("  (lower > upper)", Style::default().fg(t.muted)),
+                    ]));
+                }
+                if diagnosis.bound_conflicts.len() > MAX_VIOLATION_ROWS {
+                    lines.push(Line::from(Span::styled(
+                        format!("  ... ({} more)", diagnosis.bound_conflicts.len() - MAX_VIOLATION_ROWS),
+                        Style::default().fg(t.warning),
+                    )));
+                }
+            }
+            if diagnosis.violations.is_empty() {
+                if diagnosis.bound_conflicts.is_empty() {
+                    lines.push(Line::from(Span::styled(
+                        "  No violated constraints found \u{2014} infeasibility may stem from variable bounds",
+                        Style::default().fg(t.warning),
+                    )));
+                }
             } else {
                 lines.push(Line::from(Span::styled(
                     format!(
