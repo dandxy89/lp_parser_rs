@@ -25,6 +25,8 @@ mod inspect_model;
 mod line_index;
 mod parse;
 mod search;
+#[cfg(test)]
+mod snapshot_tests;
 mod solver;
 mod state;
 mod theme;

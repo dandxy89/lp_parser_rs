@@ -25,6 +25,21 @@ fn build_constraint_line_map(problem: &LpProblem, line_index: &LineIndex) -> Has
     map
 }
 
+/// Parse LP or MPS source text, returning the problem, analysis, and a
+/// constraint→line-number map. `label` names the source in error messages.
+///
+/// The path-free core of [`parse_file`]; also used by the snapshot tests to
+/// build an [`crate::app::App`] without touching the filesystem.
+pub fn parse_text(content: &str, is_mps: bool, label: &str) -> Result<ParsedFile, Box<dyn std::error::Error + Send + Sync>> {
+    let problem = if is_mps { LpProblem::parse_mps(content) } else { LpProblem::parse(content) }
+        .map_err(|e| format!("failed to parse '{label}': {e}"))?;
+
+    let line_index = LineIndex::new(content);
+    let line_map = build_constraint_line_map(&problem, &line_index);
+    let analysis = problem.analyze();
+    Ok((problem, analysis, line_map, content.to_owned()))
+}
+
 /// Parse an LP or MPS file, returning the problem, analysis, and a constraint→line-number map.
 ///
 /// Format is detected by file extension: `.mps` (case-insensitive) uses the MPS parser,
@@ -34,15 +49,6 @@ pub fn parse_file(path: &Path) -> Result<ParsedFile, Box<dyn std::error::Error +
     debug_assert!(path.exists(), "parse_file called with non-existent path: {}", path.display());
 
     let mapped = MappedFile::open(path).map_err(|e| format!("failed to read '{}': {e}", path.display()))?;
-    let content = mapped.as_str();
-    let raw_text = content.to_owned();
-
     let is_mps = path.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("mps"));
-    let problem = if is_mps { LpProblem::parse_mps(content) } else { LpProblem::parse(content) }
-        .map_err(|e| format!("failed to parse '{}': {e}", path.display()))?;
-
-    let line_index = LineIndex::new(content);
-    let line_map = build_constraint_line_map(&problem, &line_index);
-    let analysis = problem.analyze();
-    Ok((problem, analysis, line_map, raw_text))
+    parse_text(mapped.as_str(), is_mps, &path.display().to_string())
 }

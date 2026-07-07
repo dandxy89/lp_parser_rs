@@ -1,0 +1,14 @@
+---
+source: tui/src/snapshot_tests.rs
+expression: "render(&mut app, 40, 10).backend()"
+---
+"                                        "
+"                                        "
+"                                        "
+"                                        "
+"           Terminal too small           "
+"           Need at least 60×15          "
+"                                        "
+"                                        "
+"                                        "
+"                                        "

@@ -33,3 +33,6 @@ libc = "0.2"
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+insta = "1.48.0"
