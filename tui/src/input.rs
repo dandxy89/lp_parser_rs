@@ -390,14 +390,7 @@ impl App {
             Focus::SectionSelector => {
                 let current = self.section_selector_state.selected().unwrap_or(0);
                 let new_index = (current + 1).min(Section::ALL.len() - 1);
-                let new_section = Section::from_index(new_index);
-                if self.active_section != new_section {
-                    self.set_active_section(new_section);
-                    self.invalidate_cache();
-                    self.ensure_active_section_cache();
-                    self.reset_name_list_selection();
-                    self.detail_scroll = 0;
-                }
+                self.select_section_via_selector(Section::from_index(new_index));
             }
             Focus::NameList => {
                 let len = self.name_list_len();
@@ -421,14 +414,7 @@ impl App {
             Focus::SectionSelector => {
                 let current = self.section_selector_state.selected().unwrap_or(0);
                 let new_index = current.saturating_sub(1);
-                let new_section = Section::from_index(new_index);
-                if self.active_section != new_section {
-                    self.set_active_section(new_section);
-                    self.invalidate_cache();
-                    self.ensure_active_section_cache();
-                    self.reset_name_list_selection();
-                    self.detail_scroll = 0;
-                }
+                self.select_section_via_selector(Section::from_index(new_index));
             }
             Focus::NameList => {
                 let len = self.name_list_len();
@@ -450,14 +436,7 @@ impl App {
     fn jump_to_top(&mut self) {
         match self.focus {
             Focus::SectionSelector => {
-                let new_section = Section::Summary;
-                if self.active_section != new_section {
-                    self.set_active_section(new_section);
-                    self.invalidate_cache();
-                    self.ensure_active_section_cache();
-                    self.reset_name_list_selection();
-                    self.detail_scroll = 0;
-                }
+                self.select_section_via_selector(Section::Summary);
             }
             Focus::NameList => {
                 let len = self.name_list_len();
@@ -475,14 +454,7 @@ impl App {
     fn jump_to_bottom(&mut self) {
         match self.focus {
             Focus::SectionSelector => {
-                let new_section = Section::Numerics;
-                if self.active_section != new_section {
-                    self.set_active_section(new_section);
-                    self.invalidate_cache();
-                    self.ensure_active_section_cache();
-                    self.detail_scroll = 0;
-                    self.reset_name_list_selection();
-                }
+                self.select_section_via_selector(Section::Numerics);
             }
             Focus::NameList => {
                 let len = self.name_list_len();
@@ -792,6 +764,18 @@ impl App {
     /// Switch the solve popup to a different tab, preserving per-tab scroll position.
     const fn switch_solve_tab(&mut self, tab: SolveTab) {
         self.solver.view.tab = tab;
+    }
+
+    /// Switch to `new_section` from the section selector, refreshing caches and
+    /// selection only when the section actually changes.
+    fn select_section_via_selector(&mut self, new_section: Section) {
+        if self.active_section != new_section {
+            self.set_active_section(new_section);
+            self.invalidate_cache();
+            self.ensure_active_section_cache();
+            self.reset_name_list_selection();
+            self.detail_scroll = 0;
+        }
     }
 
     pub(crate) fn set_section(&mut self, section: Section) {

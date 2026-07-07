@@ -7,6 +7,8 @@ use ratatui::layout::{Constraint, Flex, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::widgets::{Block, BorderType, Borders, Scrollbar, ScrollbarOrientation};
 
+use lp_parser_rs::analysis::IssueSeverity;
+
 use crate::diff_model::DiffKind;
 use crate::state::Focus;
 use crate::theme::theme;
@@ -145,6 +147,21 @@ pub const fn kind_prefix(kind: DiffKind) -> &'static str {
         DiffKind::Modified => "[~]",
         DiffKind::Renamed => "[>]",
     }
+}
+
+/// Map an [`IssueSeverity`] to its theme-aware colour.
+pub fn severity_colour(severity: IssueSeverity) -> Color {
+    let t = theme();
+    match severity {
+        IssueSeverity::Error => t.error,
+        IssueSeverity::Warning => t.warning,
+        IssueSeverity::Info => t.info,
+    }
+}
+
+/// Extract the filename from a path string for compact display.
+pub fn short_filename(path: &str) -> String {
+    std::path::Path::new(path).file_name().map_or_else(|| path.to_owned(), |name| name.to_string_lossy().into_owned())
 }
 
 /// Compute a centred rectangle of the given dimensions, clamped to the terminal area.

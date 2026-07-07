@@ -14,7 +14,7 @@ use crate::diff_model::{
 use crate::solver::{SolveDiffResult, SolveResult};
 use crate::state::{Section, Side};
 use crate::widgets::detail::{fmt_bound, variable_bounds};
-use crate::widgets::rule_str;
+use crate::widgets::{rule_str, short_filename};
 
 /// Writing to a `String` via `fmt::Write` is infallible. This macro replaces
 /// `let _ = writeln!(...)` with an asserting version that satisfies Tiger Style.
@@ -435,11 +435,6 @@ fn write_issues_plain(out: &mut String, report: &crate::diff_model::LpDiffReport
     }
 }
 
-/// Extract the filename from a path string for compact display.
-fn short_filename(path: &str) -> String {
-    std::path::Path::new(path).file_name().map_or_else(|| path.to_string(), |f| f.to_string_lossy().into_owned())
-}
-
 /// Write type/bounds lines for a single-side variable (added or removed).
 fn write_variable_type_info(out: &mut String, variable_type: &lp_parser_rs::model::VariableType) {
     let label = std::str::from_utf8(variable_type.as_ref()).unwrap_or("?");
@@ -612,23 +607,11 @@ const VAL_WIDTH: usize = 12;
 ///
 /// Avoids per-row `map_or_else` / `format!` heap allocations by writing into a
 /// caller-owned `String` buffer that is cleared before each use.
-fn fmt_opt_f64_precise(buf: &mut String, value: Option<f64>) -> &str {
+fn fmt_opt_f64(buf: &mut String, value: Option<f64>, precision: usize) -> &str {
     buf.clear();
     match value {
         Some(v) => {
-            write!(buf, "{v:.6}").expect("writing to String is infallible");
-            buf.as_str()
-        }
-        None => "\u{2014}",
-    }
-}
-
-/// Like [`fmt_opt_f64_precise`] but with 4 decimal places, for constraint tables.
-fn fmt_opt_f64_short(buf: &mut String, value: Option<f64>) -> &str {
-    buf.clear();
-    match value {
-        Some(v) => {
-            write!(buf, "{v:.4}").expect("writing to String is infallible");
+            write!(buf, "{v:.precision$}").expect("writing to String is infallible");
             buf.as_str()
         }
         None => "\u{2014}",
@@ -812,10 +795,10 @@ fn write_diff_variables(text: &mut String, diff: &SolveDiffResult) {
     let mut delta_buf = String::with_capacity(24);
     for row in &diff.variable_diff {
         let name = row.name(&diff.result1, &diff.result2);
-        let v1 = fmt_opt_f64_precise(&mut buf1, row.val1);
-        let v2 = fmt_opt_f64_precise(&mut buf2, row.val2);
-        let rc1 = fmt_opt_f64_precise(&mut buf3, row.reduced_cost1);
-        let rc2 = fmt_opt_f64_precise(&mut buf4, row.reduced_cost2);
+        let v1 = fmt_opt_f64(&mut buf1, row.val1, 6);
+        let v2 = fmt_opt_f64(&mut buf2, row.val2, 6);
+        let rc1 = fmt_opt_f64(&mut buf3, row.reduced_cost1, 6);
+        let rc2 = fmt_opt_f64(&mut buf4, row.reduced_cost2, 6);
         delta_buf.clear();
         let delta: &str = match (row.val1, row.val2) {
             (None, Some(_)) => "(added)",
@@ -848,10 +831,10 @@ fn write_diff_constraints(text: &mut String, diff: &SolveDiffResult) {
     let mut buf4 = String::with_capacity(16);
     for row in &diff.constraint_diff {
         let name = row.name(&diff.result1, &diff.result2);
-        let a1 = fmt_opt_f64_short(&mut buf1, row.activity1);
-        let a2 = fmt_opt_f64_short(&mut buf2, row.activity2);
-        let s1 = fmt_opt_f64_short(&mut buf3, row.shadow_price1);
-        let s2 = fmt_opt_f64_short(&mut buf4, row.shadow_price2);
+        let a1 = fmt_opt_f64(&mut buf1, row.activity1, 4);
+        let a2 = fmt_opt_f64(&mut buf2, row.activity2, 4);
+        let s1 = fmt_opt_f64(&mut buf3, row.shadow_price1, 4);
+        let s2 = fmt_opt_f64(&mut buf4, row.shadow_price2, 4);
         let marker = if row.changed { " *" } else { "" };
         w!(text, "  {:<22} {:>13} {:>13} {:>13} {:>13}{marker}", name, a1, a2, s1, s2);
     }
