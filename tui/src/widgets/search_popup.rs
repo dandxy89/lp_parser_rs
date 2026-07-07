@@ -111,21 +111,26 @@ fn draw_search_input(frame: &mut Frame, area: Rect, query: &str, mode_label: &st
 
 /// Build pre-styled `Line`s for all search results, to be cached on `SearchPopupState`.
 ///
-/// Called once per query change rather than every frame.
-pub fn build_result_lines(results: &[SearchResult], names: &[String]) -> Vec<Line<'static>> {
+/// Called once per query change rather than every frame. `show_badges` gates the
+/// `[+]/[-]/[~]` diff prefix and its colour (mirroring the sidebar): diff mode
+/// passes `true`; inspect mode passes `false` so results render as plain,
+/// neutrally-coloured names with only the section tag.
+pub fn build_result_lines(results: &[SearchResult], names: &[String], show_badges: bool) -> Vec<Line<'static>> {
     let t = theme();
     results
         .iter()
         .map(|r| {
             let tag = section_tag(r.section);
-            let prefix = kind_prefix(r.kind);
-            let style = kind_style(r.kind);
+            let style = if show_badges { kind_style(r.kind) } else { crate::widgets::text() };
 
             debug_assert!(r.haystack_index < names.len(), "haystack_index {} out of bounds (len {})", r.haystack_index, names.len());
             let name = &names[r.haystack_index];
             let name_spans = build_highlighted_name_owned(name, &r.match_indices, style);
 
-            let mut spans = vec![Span::styled(format!("{tag} "), Style::default().fg(t.muted)), Span::styled(format!("{prefix} "), style)];
+            let mut spans = vec![Span::styled(format!("{tag} "), Style::default().fg(t.muted))];
+            if show_badges {
+                spans.push(Span::styled(format!("{} ", kind_prefix(r.kind)), style));
+            }
             spans.extend(name_spans);
 
             if r.score > 0 {
@@ -208,25 +213,40 @@ fn draw_detail_preview(frame: &mut Frame, area: Rect, app: &App) {
     let selected = app.search_popup.selected.min(app.search_popup.results.len().saturating_sub(1));
     let result = &app.search_popup.results[selected];
     let scroll = app.search_popup.scroll;
+    // Inspect mode previews through the neutral single-model renderers so no
+    // diff badge or added/removed colouring leaks into the pop-up.
+    let inspect = app.mode == crate::state::AppMode::Inspect;
 
     match result.section {
         Section::Variables => {
             if let Some(entry) = app.report.variables.entries.get(result.entry_index) {
-                detail::render_variable_detail(frame, area, entry, border_style, scroll);
+                if inspect {
+                    detail::render_inspect_variable(frame, area, entry, border_style, scroll);
+                } else {
+                    detail::render_variable_detail(frame, area, entry, border_style, scroll);
+                }
             } else {
                 sidebar::draw_empty_detail(frame, area, "Entry not found", border_style);
             }
         }
         Section::Constraints => {
             if let Some(entry) = app.report.constraints.entries.get(result.entry_index) {
-                detail::render_constraint_detail(frame, area, entry, border_style, scroll, None, &app.report.interner);
+                if inspect {
+                    detail::render_inspect_constraint(frame, area, entry, border_style, scroll, &app.report.interner);
+                } else {
+                    detail::render_constraint_detail(frame, area, entry, border_style, scroll, None, &app.report.interner);
+                }
             } else {
                 sidebar::draw_empty_detail(frame, area, "Entry not found", border_style);
             }
         }
         Section::Objectives => {
             if let Some(entry) = app.report.objectives.entries.get(result.entry_index) {
-                detail::render_objective_detail(frame, area, entry, border_style, scroll, None, &app.report.interner);
+                if inspect {
+                    detail::render_inspect_objective(frame, area, entry, border_style, scroll, &app.report.interner);
+                } else {
+                    detail::render_objective_detail(frame, area, entry, border_style, scroll, None, &app.report.interner);
+                }
             } else {
                 sidebar::draw_empty_detail(frame, area, "Entry not found", border_style);
             }
@@ -277,4 +297,46 @@ fn centred_rect(area: Rect) -> Rect {
     let height = ((area.height * 4) / 5).max(15).min(area.height);
 
     super::centred_rect(area, width, height)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::diff_model::DiffKind;
+
+    fn result(name_index: usize, kind: DiffKind) -> SearchResult {
+        SearchResult { section: Section::Variables, entry_index: 0, score: 0, match_indices: Vec::new(), haystack_index: name_index, kind }
+    }
+
+    /// Concatenate a rendered line's span contents into one string.
+    fn line_text(line: &Line<'_>) -> String {
+        line.spans.iter().map(|span| span.content.as_ref()).collect()
+    }
+
+    #[test]
+    fn test_diff_mode_result_lines_carry_kind_badges() {
+        let names = vec!["x1".to_owned()];
+        let lines = build_result_lines(&[result(0, DiffKind::Added)], &names, true);
+        assert_eq!(lines.len(), 1);
+        let text = line_text(&lines[0]);
+        assert!(text.contains("[+]"), "diff mode must show the kind badge, got {text:?}");
+        assert!(text.contains("x1"), "entry name must be present, got {text:?}");
+    }
+
+    #[test]
+    fn test_inspect_mode_result_lines_have_no_badges() {
+        let names = vec!["x1".to_owned()];
+        // Inspect entries are internally Added (diffed against an empty base);
+        // the rendered line must still be badge-free.
+        let lines = build_result_lines(&[result(0, DiffKind::Added)], &names, false);
+        assert_eq!(lines.len(), 1);
+        let text = line_text(&lines[0]);
+        assert!(!text.contains("[+]"), "inspect mode must not show a diff badge, got {text:?}");
+        assert!(text.contains("[var]"), "section tag remains, got {text:?}");
+        assert!(text.contains("x1"), "entry name must be present, got {text:?}");
+        // The name spans use the neutral text style, not the Added colour.
+        let t = theme();
+        let name_span = lines[0].spans.iter().find(|span| span.content.as_ref() == "x1").expect("name span present");
+        assert_eq!(name_span.style.fg, Some(t.text), "name must be neutrally coloured in inspect mode");
+    }
 }

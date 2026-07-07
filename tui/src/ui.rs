@@ -158,9 +158,11 @@ fn draw_status(
     // Watch-mode indicator, shown alongside the sort/tolerance indicators.
     let watch_reloading = if app.watch.enabled { Some(app.watch.is_reloading()) } else { None };
     // Inspect mode shows the filename and section entry count in place of the
-    // diff change/filter segment.
-    let inspect_file = crate::widgets::short_filename(&app.report.file1);
-    let inspect = if app.mode == AppMode::Inspect {
+    // diff change/filter segment. The filename String is only built (and the
+    // segment only shown) in inspect mode; it lives here so InspectInfo can
+    // borrow it across the draw call below.
+    let inspect_file = (app.mode == AppMode::Inspect).then(|| crate::widgets::short_filename(&app.report.file1));
+    let inspect = inspect_file.as_deref().map(|file| {
         let (label, count) = match app.active_section {
             Section::Variables => ("variables", app.report.variables.entries.len()),
             Section::Constraints => ("constraints", app.report.constraints.entries.len()),
@@ -169,10 +171,8 @@ fn draw_status(
                 ("total", app.report.variables.entries.len() + app.report.constraints.entries.len() + app.report.objectives.entries.len())
             }
         };
-        Some(status_bar::InspectInfo { file: &inspect_file, section_label: label, entry_count: count })
-    } else {
-        None
-    };
+        status_bar::InspectInfo { file, section_label: label, entry_count: count }
+    });
     status_bar::draw_status_bar(
         frame,
         area,
