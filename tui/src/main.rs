@@ -35,12 +35,16 @@ mod widgets;
 use std::io::{self, Write as _, stderr};
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use clap::Parser;
-use crossterm::event::{DisableMouseCapture, EnableMouseCapture};
+use crossterm::event::{
+    DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste, EnableMouseCapture, KeyboardEnhancementFlags,
+    PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
+};
 use crossterm::execute;
-use crossterm::terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode};
+use crossterm::terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode, supports_keyboard_enhancement};
 use ratatui::Terminal;
 use ratatui::prelude::CrosstermBackend;
 
@@ -138,6 +142,12 @@ fn build_rename_rules(raw: &[String]) -> Result<Vec<(regex::Regex, String)>, Box
     Ok(rules)
 }
 
+/// Whether the terminal accepted the kitty keyboard-enhancement flags at startup.
+///
+/// Needed by suspend/resume and the panic hook, both of which must mirror the
+/// push/pop; a global saves threading it through the event loop.
+static KEYBOARD_ENHANCED: AtomicBool = AtomicBool::new(false);
+
 /// Suspend the process (Ctrl+Z) and resume cleanly.
 ///
 /// Leaves raw mode and the alternate screen so the parent shell is intact while
@@ -146,8 +156,11 @@ fn build_rename_rules(raw: &[String]) -> Result<Vec<(regex::Regex, String)>, Box
 /// `raise` call, so no separate `SIGCONT` handler is needed.
 #[cfg(unix)]
 fn suspend<W: io::Write>(terminal: &mut Terminal<CrosstermBackend<W>>) -> io::Result<()> {
+    if KEYBOARD_ENHANCED.load(Ordering::Relaxed) {
+        execute!(io::stderr(), PopKeyboardEnhancementFlags)?;
+    }
     disable_raw_mode()?;
-    execute!(io::stderr(), LeaveAlternateScreen, DisableMouseCapture, crossterm::cursor::Show)?;
+    execute!(io::stderr(), LeaveAlternateScreen, DisableMouseCapture, DisableBracketedPaste, crossterm::cursor::Show)?;
 
     // SAFETY: raise() is async-signal-safe and SIGTSTP is a valid signal number;
     // it merely stops this process until a SIGCONT is delivered.
@@ -156,7 +169,10 @@ fn suspend<W: io::Write>(terminal: &mut Terminal<CrosstermBackend<W>>) -> io::Re
     }
 
     enable_raw_mode()?;
-    execute!(io::stderr(), EnterAlternateScreen, EnableMouseCapture)?;
+    execute!(io::stderr(), EnterAlternateScreen, EnableMouseCapture, EnableBracketedPaste)?;
+    if KEYBOARD_ENHANCED.load(Ordering::Relaxed) {
+        execute!(io::stderr(), PushKeyboardEnhancementFlags(KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES))?;
+    }
     terminal.clear()?;
     Ok(())
 }
@@ -191,6 +207,10 @@ fn run_event_loop<W: io::Write>(
             }
             Event::Mouse(mouse) => {
                 app.handle_mouse(mouse);
+                needs_redraw = true;
+            }
+            Event::Paste(text) => {
+                app.handle_paste(&text);
                 needs_redraw = true;
             }
             Event::Resize => needs_redraw = true,
@@ -353,8 +373,20 @@ fn launch_tui(mut app: App, watch: bool) -> Result<(), Box<dyn std::error::Error
     // Set up terminal — enable_raw_mode() must happen before EventHandler::new()
     // because the event thread immediately starts polling for key events.
     enable_raw_mode()?;
+
+    // Probe for the kitty keyboard protocol before the event thread starts (the
+    // probe reads the terminal's reply itself). With the flags pushed, keys like
+    // Ctrl+i are disambiguated from Tab on supporting terminals (kitty, WezTerm,
+    // Ghostty, iTerm2, foot, Windows Terminal); legacy terminals keep the old
+    // encoding.
+    let keyboard_enhanced = supports_keyboard_enhancement().unwrap_or(false);
+    KEYBOARD_ENHANCED.store(keyboard_enhanced, Ordering::Relaxed);
+
     let mut stderr_handle = stderr();
-    execute!(stderr_handle, EnterAlternateScreen, EnableMouseCapture)?;
+    execute!(stderr_handle, EnterAlternateScreen, EnableMouseCapture, EnableBracketedPaste)?;
+    if keyboard_enhanced {
+        execute!(stderr_handle, PushKeyboardEnhancementFlags(KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES))?;
+    }
     let backend = CrosstermBackend::new(stderr_handle);
     let mut terminal = Terminal::new(backend)?;
 
@@ -364,9 +396,13 @@ fn launch_tui(mut app: App, watch: bool) -> Result<(), Box<dyn std::error::Error
     // one failure cannot skip the rest.
     let original_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |panic_info| {
+        if KEYBOARD_ENHANCED.load(Ordering::Relaxed) {
+            let _ = execute!(io::stderr(), PopKeyboardEnhancementFlags);
+        }
         let _ = disable_raw_mode();
         let _ = execute!(io::stderr(), LeaveAlternateScreen);
         let _ = execute!(io::stderr(), DisableMouseCapture);
+        let _ = execute!(io::stderr(), DisableBracketedPaste);
         let _ = execute!(io::stderr(), crossterm::cursor::Show);
         original_hook(panic_info);
     }));
@@ -376,12 +412,17 @@ fn launch_tui(mut app: App, watch: bool) -> Result<(), Box<dyn std::error::Error
     }
     let events = EventHandler::new(Duration::from_millis(50));
 
-    run_event_loop(&mut terminal, &mut app, &events)?;
+    // Run the loop, then restore the terminal BEFORE propagating any error —
+    // a `?` here would leave the shell in raw mode + alt screen with the error
+    // message swallowed.
+    let result = run_event_loop(&mut terminal, &mut app, &events);
 
-    // Restore terminal
+    if keyboard_enhanced {
+        execute!(terminal.backend_mut(), PopKeyboardEnhancementFlags)?;
+    }
     disable_raw_mode()?;
-    execute!(terminal.backend_mut(), LeaveAlternateScreen, DisableMouseCapture)?;
+    execute!(terminal.backend_mut(), LeaveAlternateScreen, DisableMouseCapture, DisableBracketedPaste)?;
     terminal.show_cursor()?;
 
-    Ok(())
+    result
 }

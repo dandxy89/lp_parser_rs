@@ -1,7 +1,7 @@
 use std::sync::{Arc, mpsc};
 use std::time::Instant;
 
-use crossterm::event::{Event as CrosstermEvent, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+use crossterm::event::{Event as CrosstermEvent, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use lp_parser_rs::problem::LpProblem;
 use tui_input::backend::crossterm::EventHandler as _;
 
@@ -13,6 +13,13 @@ use crate::state::{
 
 impl App {
     pub fn handle_key(&mut self, key: KeyEvent) {
+        // Windows delivers both Press and Release events; with the kitty
+        // keyboard protocol other platforms can too. Act on Press only, or
+        // every keystroke fires twice.
+        if key.kind != KeyEventKind::Press {
+            return;
+        }
+
         // Ctrl-C is an unconditional quit regardless of any other mode.
         if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
             self.should_quit = true;
@@ -71,6 +78,31 @@ impl App {
         self.palette.query.reset();
         self.palette.selected = 0;
         self.recompute_palette();
+    }
+
+    /// Route bracketed-paste text to whichever text input is open.
+    ///
+    /// Newlines never belong in a single-line query, and a trailing one (from
+    /// copying a whole line) would otherwise confirm the input prematurely.
+    pub fn handle_paste(&mut self, text: &str) {
+        let insert = |input: &mut tui_input::Input| {
+            for character in text.chars().filter(|c| !c.is_control()) {
+                input.handle(tui_input::InputRequest::InsertChar(character));
+            }
+        };
+        if self.search_popup.visible {
+            insert(&mut self.search_popup.query);
+            self.recompute_search_popup();
+        } else if self.palette.visible {
+            insert(&mut self.palette.query);
+            self.recompute_palette();
+        } else if let Some(prompt) = &mut self.what_if {
+            for character in text.chars().filter(|c| c.is_ascii_digit() || matches!(c, '.' | '-' | '+' | 'e' | 'E')) {
+                prompt.input.handle(tui_input::InputRequest::InsertChar(character));
+            }
+            prompt.error = None;
+        }
+        // No input open: pasted text has no target — ignore.
     }
 
     /// Recompute the palette's filtered command list from the current query.

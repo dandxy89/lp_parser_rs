@@ -9,6 +9,9 @@ use crossterm::event::{self, Event as CrosstermEvent, KeyEvent, MouseEvent};
 pub enum Event {
     Key(KeyEvent),
     Mouse(MouseEvent),
+    /// Bracketed paste: the pasted text arrives as one event instead of a key
+    /// storm, and is routed to whichever text input is open.
+    Paste(String),
     /// Terminal resize event. Ratatui re-queries the terminal size automatically,
     /// so no data is needed — this variant just triggers a redraw.
     Resize,
@@ -64,18 +67,18 @@ impl EventHandler {
                         }
                     };
 
-                    match read_result {
-                        CrosstermEvent::Key(key) if event_tx.send(Event::Key(key)).is_err() => {
-                            return;
-                        }
-                        CrosstermEvent::Mouse(mouse) if event_tx.send(Event::Mouse(mouse)).is_err() => {
-                            return;
-                        }
-                        CrosstermEvent::Resize(_, _) if event_tx.send(Event::Resize).is_err() => {
-                            return;
-                        }
-                        // Paste, focus, and other crossterm events are intentionally ignored.
-                        _ => {}
+                    // Focus and other crossterm events are intentionally ignored.
+                    let forwarded = match read_result {
+                        CrosstermEvent::Key(key) => Some(Event::Key(key)),
+                        CrosstermEvent::Mouse(mouse) => Some(Event::Mouse(mouse)),
+                        CrosstermEvent::Paste(text) => Some(Event::Paste(text)),
+                        CrosstermEvent::Resize(_, _) => Some(Event::Resize),
+                        _ => None,
+                    };
+                    if let Some(event) = forwarded
+                        && event_tx.send(event).is_err()
+                    {
+                        return;
                     }
                 } else if event_tx.send(Event::Tick).is_err() {
                     return;
