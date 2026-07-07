@@ -15,8 +15,8 @@ use crate::diff_model::{DiffEntry, DiffInput, DiffKind, DiffOptions, DiffSummary
 use crate::parse::ParsedFile;
 use crate::search::{self, CompiledSearch, SearchMode};
 use crate::solver::{InfeasibilityDiagnosis, SolveResult};
+pub use crate::state::{AppMode, DiffFilter, Focus, SearchResult, Section, SectionViewState};
 use crate::state::{DetailView, DiagnosisState, JumpEntry, JumpList, PendingYank, Side, SolveState, SolveViewState, SortMode};
-pub use crate::state::{DiffFilter, Focus, SearchResult, Section, SectionViewState};
 use crate::watch::{WatchSession, WatchState};
 
 /// State for the `Ctrl+P` command palette overlay.
@@ -155,6 +155,8 @@ impl SolverSession {
 }
 
 pub struct App {
+    /// Diff (two files) or Inspect (single file). Fixed at startup.
+    pub mode: AppMode,
     pub report: LpDiffReport,
     pub active_section: Section,
     pub focus: Focus,
@@ -302,7 +304,23 @@ pub(crate) fn format_tolerance(value: f64) -> String {
     if value == 0.0 { "off".to_owned() } else { format!("{value:e}") }
 }
 
-/// Build pre-computed tab bar labels: list sections carry their change count.
+/// Build the Summary-section lines for the active mode.
+fn build_mode_summary_lines(mode: AppMode, report: &LpDiffReport, summary: &DiffSummary, problem: &LpProblem) -> Vec<Line<'static>> {
+    match mode {
+        AppMode::Diff => crate::widgets::summary::build_summary_lines(report, summary, &report.analysis1, &report.analysis2),
+        AppMode::Inspect => crate::widgets::summary::build_inspect_summary_lines(&report.file1, problem, summary, &report.analysis1),
+    }
+}
+
+/// Build the Numerics-section lines for the active mode.
+fn build_mode_numerics_lines(mode: AppMode, report: &LpDiffReport, _problem: &LpProblem) -> Vec<Line<'static>> {
+    match mode {
+        AppMode::Diff => crate::widgets::numerics::build_numerics_lines(report),
+        AppMode::Inspect => crate::widgets::numerics::build_inspect_numerics_lines(&report.file1, &report.analysis1),
+    }
+}
+
+/// Build pre-computed tab bar labels: list sections carry their entry/change count.
 pub(crate) fn build_section_labels(summary: &DiffSummary) -> [Cow<'static, str>; 5] {
     Section::ALL.map(|section| match section {
         Section::Summary | Section::Numerics => Cow::Borrowed(section.label()),
@@ -313,8 +331,66 @@ pub(crate) fn build_section_labels(summary: &DiffSummary) -> [Cow<'static, str>;
 }
 
 impl App {
+    /// Construct the diff-mode app (two files).
     #[allow(clippy::too_many_arguments)] // constructor mirrors main.rs wiring; a params struct adds noise
     pub fn new(
+        report: LpDiffReport,
+        file1_path: PathBuf,
+        file2_path: PathBuf,
+        problem1: Arc<LpProblem>,
+        problem2: Arc<LpProblem>,
+        raw_text1: Arc<str>,
+        raw_text2: Arc<str>,
+        diff_options: DiffOptions,
+        line_map1: HashMap<NameId, usize>,
+        line_map2: HashMap<NameId, usize>,
+    ) -> Self {
+        Self::build(
+            AppMode::Diff,
+            report,
+            file1_path,
+            file2_path,
+            problem1,
+            problem2,
+            raw_text1,
+            raw_text2,
+            diff_options,
+            line_map1,
+            line_map2,
+        )
+    }
+
+    /// Construct the inspect-mode app (single file).
+    ///
+    /// The unused "file 2" slots are populated from the single file so the shared
+    /// diff-oriented plumbing (solver problems, raw-text lookups, watch mtimes)
+    /// has valid values; inspect-mode presentation never surfaces them as a
+    /// second file.
+    pub fn new_inspect(
+        report: LpDiffReport,
+        file_path: PathBuf,
+        problem: Arc<LpProblem>,
+        raw_text: Arc<str>,
+        line_map: HashMap<NameId, usize>,
+    ) -> Self {
+        Self::build(
+            AppMode::Inspect,
+            report,
+            file_path.clone(),
+            file_path,
+            Arc::clone(&problem),
+            problem,
+            Arc::clone(&raw_text),
+            raw_text,
+            DiffOptions::default(),
+            line_map.clone(),
+            line_map,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)] // constructor mirrors main.rs wiring; a params struct adds noise
+    fn build(
+        mode: AppMode,
         report: LpDiffReport,
         file1_path: PathBuf,
         file2_path: PathBuf,
@@ -333,13 +409,14 @@ impl App {
 
         // Pre-build summary lines once (report data never changes).
         let report_summary = report.summary();
-        let summary_lines = crate::widgets::summary::build_summary_lines(&report, &report_summary, &report.analysis1, &report.analysis2);
-        let numerics_lines = crate::widgets::numerics::build_numerics_lines(&report);
+        let summary_lines = build_mode_summary_lines(mode, &report, &report_summary, &problem1);
+        let numerics_lines = build_mode_numerics_lines(mode, &report, &problem1);
 
         // Pre-compute tab bar labels.
         let section_labels = build_section_labels(&report_summary);
 
         Self {
+            mode,
             report,
             active_section: Section::Summary,
             focus: Focus::SectionSelector,
@@ -396,6 +473,18 @@ impl App {
         }
     }
 
+    /// Flash a transient status-bar message (reuses the yank flash channel).
+    pub(crate) fn flash_status(&mut self, message: impl Into<String>) {
+        self.yank.message = message.into();
+        self.yank.flash = Some(Instant::now());
+    }
+
+    /// A diff-only action was pressed in inspect mode: brief no-op hint.
+    pub(crate) fn flash_diff_only(&mut self) {
+        debug_assert!(matches!(self.mode, AppMode::Inspect), "flash_diff_only is only reachable in inspect mode");
+        self.flash_status("Not available in inspect mode (single file)");
+    }
+
     /// Toggle between parsed and raw text detail views.
     pub const fn toggle_detail_view(&mut self) {
         self.detail_view = match self.detail_view {
@@ -422,8 +511,7 @@ impl App {
                 counts.unchanged += counts.order_only;
             }
         }
-        self.summary_lines =
-            crate::widgets::summary::build_summary_lines(&self.report, &summary, &self.report.analysis1, &self.report.analysis2);
+        self.summary_lines = build_mode_summary_lines(self.mode, &self.report, &summary, &self.problem1);
         self.section_labels = build_section_labels(&summary);
         self.cached_summary = summary;
     }
@@ -478,19 +566,28 @@ impl App {
     /// rebuilding them every keystroke is wasted work. Watch reloads pass
     /// `true` because they install fresh analyses.
     fn rebuild_report_inner(&mut self, analyses_changed: bool) {
-        let file1 = self.file1_path.display().to_string();
-        let file2 = self.file2_path.display().to_string();
-        self.report = build_diff_report(&DiffInput {
-            file1: &file1,
-            file2: &file2,
-            p1: &self.problem1,
-            p2: &self.problem2,
-            line_map1: &self.line_map1,
-            line_map2: &self.line_map2,
-            analysis1: self.report.analysis1.clone(),
-            analysis2: self.report.analysis2.clone(),
-            options: self.diff_options.clone(),
-        });
+        match self.mode {
+            AppMode::Diff => {
+                let file1 = self.file1_path.display().to_string();
+                let file2 = self.file2_path.display().to_string();
+                self.report = build_diff_report(&DiffInput {
+                    file1: &file1,
+                    file2: &file2,
+                    p1: &self.problem1,
+                    p2: &self.problem2,
+                    line_map1: &self.line_map1,
+                    line_map2: &self.line_map2,
+                    analysis1: self.report.analysis1.clone(),
+                    analysis2: self.report.analysis2.clone(),
+                    options: self.diff_options.clone(),
+                });
+            }
+            AppMode::Inspect => {
+                let file = self.file1_path.display().to_string();
+                self.report =
+                    crate::inspect_model::build_inspect_report(&file, &self.problem1, &self.line_map1, self.report.analysis1.clone());
+            }
+        }
 
         // Report-derived caches: search haystack + name buffer.
         let (haystack, names) = build_haystack(&self.report);
@@ -503,7 +600,7 @@ impl App {
         // Numerics lines depend only on the analyses, which change on watch
         // reloads but not on tolerance changes -- skip the rebuild otherwise.
         if analyses_changed {
-            self.numerics_lines = crate::widgets::numerics::build_numerics_lines(&self.report);
+            self.numerics_lines = build_mode_numerics_lines(self.mode, &self.report, &self.problem1);
         }
 
         // Filtered indices, cached sidebar lines, and coefficient row cache.
@@ -592,10 +689,15 @@ impl App {
         let filter = self.filter;
         let ignore_order = self.ignore_order;
         let sort = self.sort_mode;
+        let badges = self.mode.shows_diff_badges();
         match section {
-            Section::Variables => self.section_states[index].recompute(&self.report.variables.entries, filter, ignore_order, sort),
-            Section::Constraints => self.section_states[index].recompute(&self.report.constraints.entries, filter, ignore_order, sort),
-            Section::Objectives => self.section_states[index].recompute(&self.report.objectives.entries, filter, ignore_order, sort),
+            Section::Variables => self.section_states[index].recompute(&self.report.variables.entries, filter, ignore_order, sort, badges),
+            Section::Constraints => {
+                self.section_states[index].recompute(&self.report.constraints.entries, filter, ignore_order, sort, badges);
+            }
+            Section::Objectives => {
+                self.section_states[index].recompute(&self.report.objectives.entries, filter, ignore_order, sort, badges);
+            }
             Section::Summary | Section::Numerics => unreachable!("static sections have no list_index"),
         }
     }
@@ -813,7 +915,11 @@ impl App {
         self.set_yank_flash(&format!("Yanked detail: {label}"), &text);
     }
 
-    /// Export the full diff report as a CSV file in the current working directory.
+    /// Export to CSV in the current working directory.
+    ///
+    /// Diff mode writes the single `lp_diff_report_<timestamp>.csv`; inspect mode
+    /// writes the model itself via the core crate's `to_csv`
+    /// (`objectives.csv`, `constraints.csv`, `variables.csv`).
     pub fn export_csv(&mut self) {
         let dir = match std::env::current_dir() {
             Ok(d) => d,
@@ -823,16 +929,21 @@ impl App {
                 return;
             }
         };
-        match crate::export::write_diff_csv(&self.report, &dir) {
-            Ok(filename) => {
-                self.yank.message = format!("Wrote {filename}");
-                self.yank.flash = Some(Instant::now());
+        let result: Result<String, String> = match self.mode {
+            AppMode::Diff => {
+                crate::export::write_diff_csv(&self.report, &dir).map(|filename| format!("Wrote {filename}")).map_err(|e| e.to_string())
             }
-            Err(e) => {
-                self.yank.message = format!("CSV export failed: {e}");
-                self.yank.flash = Some(Instant::now());
-            }
+            AppMode::Inspect => self
+                .problem1
+                .to_csv(&dir)
+                .map(|()| "Wrote objectives.csv, constraints.csv, variables.csv".to_owned())
+                .map_err(|e| e.to_string()),
+        };
+        match result {
+            Ok(message) => self.yank.message = message,
+            Err(e) => self.yank.message = format!("CSV export failed: {e}"),
         }
+        self.yank.flash = Some(Instant::now());
     }
 
     /// Return the name of an entry given section and entry index.
