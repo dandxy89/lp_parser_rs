@@ -508,7 +508,7 @@ impl App {
                 self.detail_scroll = 0;
             }
             Focus::Detail => {
-                self.detail_scroll = self.detail_scroll.saturating_add(1);
+                self.detail_scroll = self.detail_scroll.saturating_add(1).min(self.max_detail_scroll());
             }
         }
     }
@@ -568,10 +568,9 @@ impl App {
                 }
             }
             Focus::Detail => {
-                // Intentionally set to u16::MAX: ratatui's Paragraph::scroll clamps
-                // to the actual content height, so this safely scrolls to the end
-                // without needing to know the content height in advance.
-                self.detail_scroll = u16::MAX;
+                // Content height (from last frame's layout) minus the visible
+                // window: the last line of content lands on the bottom row.
+                self.detail_scroll = self.max_detail_scroll();
             }
         }
     }
@@ -1054,7 +1053,7 @@ impl App {
             }
             self.scroll_name_list(true);
         } else if over_detail {
-            self.detail_scroll = self.detail_scroll.saturating_add(3);
+            self.detail_scroll = self.detail_scroll.saturating_add(3).min(self.max_detail_scroll());
         }
     }
 

@@ -848,7 +848,7 @@ impl App {
                 debug_assert!(u16::try_from(n).is_ok(), "page scroll step {n} exceeds u16::MAX");
                 #[allow(clippy::cast_possible_truncation)]
                 let step = n as u16;
-                self.detail_scroll = self.detail_scroll.saturating_add(step);
+                self.detail_scroll = self.detail_scroll.saturating_add(step).min(self.max_detail_scroll());
             }
         }
     }
@@ -1529,5 +1529,15 @@ impl App {
 
         self.focus = Focus::NameList;
         self.detail_scroll = 0;
+    }
+
+    /// Largest useful detail-panel scroll offset: content height minus the
+    /// visible window, from the layout recorded on the previous frame. Content
+    /// height is stable for a given entry (and scroll resets on entry change),
+    /// so last frame's value is the right bound for this frame's input.
+    pub(crate) fn max_detail_scroll(&self) -> u16 {
+        let visible = self.layout.detail_height.saturating_sub(2) as usize; // borders
+        let max = self.layout.detail_content_lines.saturating_sub(visible);
+        u16::try_from(max).unwrap_or(u16::MAX)
     }
 }
