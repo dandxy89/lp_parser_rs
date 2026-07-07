@@ -181,6 +181,8 @@ pub enum ConvertFormat {
     /// LP file format
     #[default]
     Lp,
+    /// MPS file format
+    Mps,
     /// CSV files (constraints.csv, objectives.csv, variables.csv)
     #[cfg(feature = "csv")]
     Csv,

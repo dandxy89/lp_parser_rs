@@ -12,6 +12,7 @@
 //! - Owned, interned problem model (no lifetimes) built from a zero-copy grammar
 //! - Support for multiple LP file format specifications
 //! - Comprehensive parsing of all standard LP file components
+//! - Writers for both LP ([`writer`]) and MPS ([`mps::writer`]) output
 //! - Optional serialisation (`serde`) and a structural/numeric diff engine
 //!   ([`diff`], behind the `diff` feature)
 //!

@@ -12,7 +12,7 @@ Supported specifications: [IBM CPLEX v22.1.1](https://www.ibm.com/docs/en/icos/2
 
 ## Features
 
-- **Parsing & writing** — round-trip LP files (parse → modify → write → parse) with configurable formatting
+- **Parsing & writing** — round-trip LP files (parse → modify → write → parse) with configurable formatting; MPS files can also be written via [`mps::writer`](https://docs.rs/lp_parser_rs) (`write_mps_string`), letting LP and MPS problems convert to either format
 - **Problem modification** — rename / update / remove objectives, constraints, variables, coefficients, and RHS values
 - **Variable types** — integer, general, bounded, free, semi-continuous
 - **Analysis** — statistics, matrix density, sparsity, coefficient ranges, issue detection with configurable thresholds
@@ -163,12 +163,12 @@ lp_parser diff old.lp new.lp --rename '\[\d+\]$' '[N]' --format json --pretty
 
 | Option                  | Default | Description                                 |
 | ----------------------- | ------- | ------------------------------------------- |
-| `<FILE>`                | —       | Path to the LP file                         |
+| `<FILE>`                | —       | Path to the LP or MPS file (`.mps` extension reads MPS) |
 | `-o, --output <PATH>`   | stdout  | Output file or directory (required for CSV) |
-| `-f, --format <FMT>`    | `lp`    | `lp`, `csv`, `json`, `yaml`                 |
+| `-f, --format <FMT>`    | `lp`    | `lp`, `mps`, `csv`, `json`, `yaml`          |
 | `--pretty`              | off     | Pretty-print JSON/YAML                      |
 | `--precision <N>`       | `6`     | Decimal precision for numbers               |
-| `--max-line-length <N>` | `80`    | Line-wrap threshold for LP output           |
+| `--max-line-length <N>` | `80`    | Line-wrap threshold for LP output            |
 | `--no-problem-name`     | off     | Omit problem-name comment in LP output      |
 | `--compact`             | off     | No section spacing                          |
 
@@ -176,6 +176,8 @@ lp_parser diff old.lp new.lp --rename '\[\d+\]$' '[N]' --format json --pretty
 lp_parser convert problem.lp --format lp --precision 4 --compact
 lp_parser convert problem.lp --format csv --output ./out     # writes constraints.csv, objectives.csv, variables.csv
 lp_parser convert problem.lp --format json --pretty -o problem.json
+lp_parser convert problem.lp --format mps -o problem.mps     # LP -> MPS
+lp_parser convert problem.mps --format mps -o rewritten.mps  # MPS -> MPS
 ```
 
 ### `solve` — run an external solver (requires `lp-solvers` feature)

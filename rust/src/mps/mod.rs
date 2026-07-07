@@ -10,6 +10,10 @@ mod sections;
 mod state;
 #[cfg(test)]
 mod tests;
+/// MPS file writing ([`write_mps_string`](writer::write_mps_string) /
+/// [`write_mps_string_with_options`](writer::write_mps_string_with_options)),
+/// mirroring [`crate::writer`] for the LP format.
+pub mod writer;
 
 pub use state::{extract_mps_name, parse_mps};
 
