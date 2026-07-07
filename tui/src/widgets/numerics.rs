@@ -6,7 +6,7 @@
 //! in file 2. Lines are pre-built and cached on `App` (like `summary_lines`)
 //! and rebuilt whenever the report is rebuilt (tolerance change, watch reload).
 
-use lp_parser_rs::analysis::{AnalysisIssue, IssueCategory, IssueSeverity, RangeStats};
+use lp_parser_rs::analysis::{AnalysisIssue, IssueCategory, IssueSeverity, ProblemAnalysis, RangeStats};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 
@@ -234,6 +234,84 @@ pub fn build_numerics_lines(report: &LpDiffReport) -> Vec<Line<'static>> {
     }
 
     lines
+}
+
+/// Build the cached styled lines for the inspect (single-file) Numerics panel.
+///
+/// Same per-file conditioning analysis as diff mode, rendered as a single column.
+pub fn build_inspect_numerics_lines(file: &str, analysis: &ProblemAnalysis) -> Vec<Line<'static>> {
+    let t = theme();
+    let mut lines: Vec<Line<'static>> = Vec::with_capacity(32);
+
+    lines.push(Line::from(vec![Span::raw("  "), Span::styled(file.to_owned(), Style::default().fg(t.text))]));
+    lines.push(Line::from(""));
+
+    // Problem size.
+    heading(&mut lines, "Problem Size");
+    inspect_value_row(&mut lines, "Variables", &analysis.summary.variable_count.to_string());
+    inspect_value_row(&mut lines, "Constraints", &analysis.summary.constraint_count.to_string());
+    inspect_value_row(&mut lines, "Non-zeros", &analysis.summary.total_nonzeros.to_string());
+    inspect_value_row(&mut lines, "Density", &density_cell(analysis.summary.density));
+    inspect_value_row(
+        &mut lines,
+        "Vars/constraint",
+        &format!("{}\u{2013}{}", analysis.sparsity.min_vars_per_constraint, analysis.sparsity.max_vars_per_constraint),
+    );
+    lines.push(Line::from(""));
+
+    // Coefficient magnitude ranges + ratio.
+    heading(&mut lines, "Coefficient Ranges (|value|)");
+    inspect_range_rows(&mut lines, "Objective", &analysis.coefficients.objective_coeff_range);
+    inspect_range_rows(&mut lines, "Matrix", &analysis.coefficients.constraint_coeff_range);
+    inspect_range_rows(&mut lines, "RHS", &analysis.constraints.rhs_range);
+
+    let overall = Some(analysis.coefficients.coefficient_ratio);
+    lines.push(Line::from(vec![
+        Span::styled(format!("  {:<LABEL_WIDTH$}", "Overall ratio"), Style::default().fg(t.text).add_modifier(Modifier::BOLD)),
+        Span::styled(ratio_cell(overall), Style::default().fg(ratio_colour(overall))),
+    ]));
+    lines.push(Line::from(vec![Span::styled(
+        format!("  ratio > {RATIO_WARN_THRESHOLD:.0e} risks precision loss; > {RATIO_ERROR_THRESHOLD:.0e} is likely to break solvers"),
+        Style::default().fg(t.muted),
+    )]));
+    lines.push(Line::from(""));
+
+    // Issues.
+    heading(&mut lines, "Issues");
+    issue_count_row(&mut lines, "File", count_by_severity(&analysis.issues));
+    if analysis.issues.is_empty() {
+        lines.push(Line::from(vec![Span::styled("  No issues detected", Style::default().fg(t.muted))]));
+    } else {
+        lines.push(Line::from(""));
+        for issue in &analysis.issues {
+            lines.push(Line::from(vec![
+                Span::styled(format!("  [{:<7}] ", issue.severity.to_string()), Style::default().fg(severity_colour(issue.severity))),
+                Span::styled(issue.message.clone(), Style::default().fg(t.text)),
+            ]));
+        }
+    }
+
+    lines
+}
+
+/// Append a single-column labelled value row for the inspect Numerics panel.
+fn inspect_value_row(lines: &mut Vec<Line<'static>>, label: &str, value: &str) {
+    let t = theme();
+    lines.push(Line::from(vec![
+        Span::styled(format!("  {label:<LABEL_WIDTH$}"), Style::default().fg(t.text)),
+        Span::styled(format!("{value:>VALUE_WIDTH$}"), Style::default().fg(t.text)),
+    ]));
+}
+
+/// Append the min/max interval and its ratio for a single `RangeStats` (inspect).
+fn inspect_range_rows(lines: &mut Vec<Line<'static>>, label: &str, range: &RangeStats) {
+    let t = theme();
+    inspect_value_row(lines, label, &format_range(range));
+    let ratio = range_ratio(range);
+    lines.push(Line::from(vec![
+        Span::styled(format!("  {:<LABEL_WIDTH$}", format!("{label} ratio")), Style::default().fg(t.muted)),
+        Span::styled(ratio_cell(ratio), Style::default().fg(ratio_colour(ratio))),
+    ]));
 }
 
 /// Append a bold accent heading line.

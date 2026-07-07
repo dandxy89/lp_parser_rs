@@ -76,21 +76,67 @@ const HELP_TEXT: &[&str] = &[
     "",
 ];
 
+/// Inspect-mode keybindings: diff-only actions (filters, tolerance, raw view,
+/// delta sorts, side yanks) are omitted since they do not apply to a single file.
+const INSPECT_HELP_TEXT: &[&str] = &[
+    "",
+    "  Single-file inspect mode",
+    "  ───────────────────────",
+    "",
+    "  Navigation                              Other",
+    "  ─────────                               ─────",
+    "  j / ↓   Down                            /   Search",
+    "  k / ↑   Up                              Ctrl-p  Command palette",
+    "  g / Home Top                             ?   This help",
+    "  G / End  Bottom                          q   Quit",
+    "  [ / ]   Prev/next section                Ctrl-C  Force quit",
+    "  n / N   Down / Up",
+    "  Ctrl-d / Ctrl-u  Half page ↓ / ↑        Clipboard",
+    "  Ctrl-f / Ctrl-b  Full page ↓ / ↑        ─────────",
+    "  Ctrl-o / Ctrl-i  Jump back / forward    yy  Yank name",
+    "  Tab / ⇧Tab  Next / prev panel           Y   Yank detail",
+    "  Enter   Go to detail                    w   Export CSV (objectives,",
+    "  h / l   Sidebar / Detail                    constraints, variables)",
+    "  1–5     Jump to section (5: Numerics)    S   Solve this model",
+    "  Esc     Back",
+    "",
+    "  Search (Telescope-style pop-up)",
+    "  ──────────────────────────────",
+    "  /         Open search pop-up",
+    "  Tab       Complete with selected name",
+    "  Enter     Jump to selected entry",
+    "  Esc       Cancel search",
+    "  query / r:pattern / s:text   Fuzzy / regex / substring",
+    "",
+    "  Filters, tolerance, raw diff and delta sorts are diff-only",
+    "  and are unavailable when inspecting a single file.",
+    "",
+    "  Mouse: scroll wheel navigates, click selects",
+    "",
+];
+
 const POPUP_WIDTH: u16 = 60;
-/// Desired popup height: all help lines plus top/bottom borders. Clamped to the
-/// terminal at draw time, so on short terminals the content scrolls instead of
-/// being silently truncated.
-const fn desired_height() -> u16 {
+/// Desired popup height for a given help text: all lines plus top/bottom borders.
+/// Clamped to the terminal at draw time, so on short terminals the content
+/// scrolls instead of being silently truncated.
+const fn desired_height(text: &[&str]) -> u16 {
     #[allow(clippy::cast_possible_truncation)] // help text is a few dozen lines
-    let lines = HELP_TEXT.len() as u16;
+    let lines = text.len() as u16;
     lines.saturating_add(2)
 }
 
-/// Pre-built help text lines, cached to avoid per-frame allocation.
+/// Pre-built diff help text lines, cached to avoid per-frame allocation.
 static HELP_LINES: LazyLock<Vec<Line<'static>>> = LazyLock::new(|| {
     let t = theme();
     let text_style = Style::default().fg(t.text);
     HELP_TEXT.iter().map(|&s| Line::from(Span::styled(s, text_style))).collect()
+});
+
+/// Pre-built inspect help text lines, cached to avoid per-frame allocation.
+static INSPECT_HELP_LINES: LazyLock<Vec<Line<'static>>> = LazyLock::new(|| {
+    let t = theme();
+    let text_style = Style::default().fg(t.text);
+    INSPECT_HELP_TEXT.iter().map(|&s| Line::from(Span::styled(s, text_style))).collect()
 });
 
 /// Draw a centred help pop-up overlay on top of the current frame.
@@ -104,11 +150,15 @@ pub fn draw_help(frame: &mut Frame, area: Rect, app: &mut App) {
     if area.width == 0 || area.height == 0 {
         return;
     }
-    let popup = super::centred_rect(area, POPUP_WIDTH, desired_height());
+    let inspect = app.mode == crate::state::AppMode::Inspect;
+    let (help_text, help_lines): (&[&str], &LazyLock<Vec<Line<'static>>>) =
+        if inspect { (INSPECT_HELP_TEXT, &INSPECT_HELP_LINES) } else { (HELP_TEXT, &HELP_LINES) };
+
+    let popup = super::centred_rect(area, POPUP_WIDTH, desired_height(help_text));
 
     let inner_height = popup.height.saturating_sub(2) as usize;
     #[allow(clippy::cast_possible_truncation)] // help text is a few dozen lines
-    let max_scroll = HELP_TEXT.len().saturating_sub(inner_height) as u16;
+    let max_scroll = help_text.len().saturating_sub(inner_height) as u16;
     app.help_scroll = app.help_scroll.min(max_scroll);
 
     let t = theme();
@@ -116,7 +166,7 @@ pub fn draw_help(frame: &mut Frame, area: Rect, app: &mut App) {
     let title = if max_scroll > 0 { " Keybindings  (j/k scroll · Esc close) " } else { " Keybindings " };
     let block = panel_block(border_style).title(Span::styled(title, border_style));
 
-    let paragraph = Paragraph::new(HELP_LINES.clone()).block(block).scroll((app.help_scroll, 0));
+    let paragraph = Paragraph::new((**help_lines).clone()).block(block).scroll((app.help_scroll, 0));
 
     frame.render_widget(Clear, popup);
     frame.render_widget(paragraph, popup);

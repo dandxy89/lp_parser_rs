@@ -55,6 +55,125 @@ pub fn build_summary_lines(
     lines
 }
 
+/// Build pre-formatted Summary lines for inspect (single-file) mode.
+///
+/// Shows the file path, problem name and sense, per-section entry counts, and a
+/// single-column structural analysis (dimensions, variable/constraint types,
+/// coefficient scaling, issues) derived from the file's own `ProblemAnalysis`.
+pub fn build_inspect_summary_lines(
+    file: &str,
+    problem: &lp_parser_rs::problem::LpProblem,
+    summary: &DiffSummary,
+    analysis: &ProblemAnalysis,
+) -> Vec<Line<'static>> {
+    let t = theme();
+    let mut lines: Vec<Line<'static>> = Vec::with_capacity(48);
+
+    // Header: file, name, sense.
+    lines.push(Line::from(vec![Span::raw("  "), Span::styled(file.to_owned(), Style::default().fg(t.text))]));
+    let name = problem.name().unwrap_or("(unnamed)").to_owned();
+    lines.push(Line::from(vec![Span::styled("  Name:   ", muted()), Span::styled(name, Style::default().fg(t.text))]));
+    lines.push(Line::from(vec![
+        Span::styled("  Sense:  ", muted()),
+        Span::styled(problem.sense.to_string(), Style::default().fg(t.accent)),
+    ]));
+    lines.push(Line::from(""));
+
+    // Per-section entry counts (all entries are present; none are "changed").
+    section_heading(&mut lines, "Model Contents");
+    inspect_count_row(&mut lines, "Variables", summary.variables.total());
+    inspect_count_row(&mut lines, "Constraints", summary.constraints.total());
+    inspect_count_row(&mut lines, "Objectives", summary.objectives.total());
+    lines.push(Line::from(""));
+
+    // Structural analysis (single column).
+    section_heading(&mut lines, "Problem Dimensions");
+    inspect_value_row(&mut lines, "Variables", &analysis.summary.variable_count.to_string());
+    inspect_value_row(&mut lines, "Constraints", &analysis.summary.constraint_count.to_string());
+    inspect_value_row(&mut lines, "Non-zeros", &analysis.summary.total_nonzeros.to_string());
+    inspect_value_row(&mut lines, "Density", &format!("{:.4}%", analysis.summary.density * 100.0));
+    inspect_value_row(
+        &mut lines,
+        "Vars/constraint",
+        &format!("{}\u{2013}{}", analysis.sparsity.min_vars_per_constraint, analysis.sparsity.max_vars_per_constraint),
+    );
+    lines.push(Line::from(""));
+
+    section_heading(&mut lines, "Variable Types");
+    let vt = &analysis.variables.type_distribution;
+    inspect_value_row(&mut lines, "Binary", &vt.binary.to_string());
+    inspect_value_row(&mut lines, "Integer", &vt.integer.to_string());
+    inspect_value_row(&mut lines, "General", &vt.general.to_string());
+    inspect_value_row(&mut lines, "Free", &vt.free.to_string());
+    inspect_value_row(&mut lines, "Lower-bounded", &vt.lower_bounded.to_string());
+    inspect_value_row(&mut lines, "Upper-bounded", &vt.upper_bounded.to_string());
+    inspect_value_row(&mut lines, "Double-bounded", &vt.double_bounded.to_string());
+    inspect_value_row(&mut lines, "Semi-continuous", &vt.semi_continuous.to_string());
+    lines.push(Line::from(""));
+
+    section_heading(&mut lines, "Constraint Types");
+    let ct = &analysis.constraints.type_distribution;
+    inspect_value_row(&mut lines, "Equality (=)", &ct.equality.to_string());
+    inspect_value_row(&mut lines, "<= constraints", &ct.less_than_equal.to_string());
+    inspect_value_row(&mut lines, ">= constraints", &ct.greater_than_equal.to_string());
+    inspect_value_row(&mut lines, "< constraints", &ct.less_than.to_string());
+    inspect_value_row(&mut lines, "> constraints", &ct.greater_than.to_string());
+    inspect_value_row(&mut lines, "SOS1", &ct.sos1.to_string());
+    inspect_value_row(&mut lines, "SOS2", &ct.sos2.to_string());
+    lines.push(Line::from(""));
+
+    section_heading(&mut lines, "Coefficient Scaling");
+    inspect_value_row(
+        &mut lines,
+        "Coeff range",
+        &crate::widgets::numerics::format_range_prec(&analysis.coefficients.constraint_coeff_range, 1),
+    );
+    inspect_value_row(&mut lines, "Coeff ratio", &format_scientific(analysis.coefficients.coefficient_ratio));
+    inspect_value_row(&mut lines, "RHS range", &crate::widgets::numerics::format_range_prec(&analysis.constraints.rhs_range, 1));
+    lines.push(Line::from(""));
+
+    // Issues.
+    section_heading(&mut lines, "Issues");
+    let (errors, warnings, infos) = count_issues(&analysis.issues);
+    lines.push(Line::from(vec![
+        Span::raw("  "),
+        issue_count_span(errors, "error", t.error),
+        Span::styled(", ", muted()),
+        issue_count_span(warnings, "warning", t.warning),
+        Span::styled(", ", muted()),
+        issue_count_span(infos, "info", t.info),
+    ]));
+    if analysis.issues.is_empty() {
+        lines.push(Line::from(vec![Span::styled("  No issues detected", muted())]));
+    } else {
+        lines.push(Line::from(""));
+        let label = short_filename(file);
+        for issue in &analysis.issues {
+            lines.push(format_issue_line(&label, issue));
+        }
+    }
+
+    lines
+}
+
+/// Single-column count row for the inspect model-contents table.
+fn inspect_count_row(lines: &mut Vec<Line<'static>>, label: &str, count: usize) {
+    let t = theme();
+    lines.push(Line::from(vec![
+        Span::styled(format!("  {label:<16}"), Style::default().fg(t.text)),
+        Span::styled(format!("{count:>10}"), Style::default().fg(t.text)),
+    ]));
+}
+
+/// Single-column labelled value row for the inspect analysis tables.
+fn inspect_value_row(lines: &mut Vec<Line<'static>>, label: &str, value: &str) {
+    let t = theme();
+    lines.push(Line::from(vec![
+        Span::styled(format!("  {label:<16}"), Style::default().fg(t.text)),
+        Span::styled(format!("{value:>16}"), Style::default().fg(t.text)),
+    ]));
+}
+
 /// Draw the summary content into `area` using pre-built lines (no border — caller provides the border).
 ///
 /// Uses O(visible) windowed rendering instead of cloning all lines into a `Paragraph`.

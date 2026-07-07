@@ -19,7 +19,7 @@ use crate::diff_model::{
     VariableDiffEntry,
 };
 use crate::theme::theme;
-use crate::widgets::{ARROW, bold_text, kind_colour, muted, panel_block, truncate_with_ellipsis};
+use crate::widgets::{ARROW, bold_text, kind_colour, muted, panel_block, text, truncate_with_ellipsis};
 
 /// Horizontal rule used as a visual separator below the entry header.
 fn rule<'a>() -> Line<'a> {
@@ -407,6 +407,102 @@ pub fn render_objective_detail(
     }
 
     render_panel(frame, area, " Objective Detail ", lines, border_style, scroll)
+}
+
+/// Build the neutral header lines for an inspect detail panel: entity label,
+/// name (bold), and a rule. No diff badge — inspect shows a single model.
+fn inspect_header(entity_label: &str, name: &str) -> Vec<Line<'static>> {
+    vec![Line::from(vec![Span::styled(format!("{entity_label}: "), muted()), Span::styled(name.to_owned(), bold_text())]), rule()]
+}
+
+/// Render an inspect (single-file) variable detail panel: type and bounds,
+/// all in the neutral text colour. Returns the total content line count.
+pub fn render_inspect_variable(frame: &mut Frame, area: Rect, entry: &VariableDiffEntry, border_style: Style, scroll: u16) -> usize {
+    if area.width == 0 || area.height == 0 {
+        return 0;
+    }
+    let mut lines = inspect_header("Variable", &entry.name);
+    // Inspect entries always carry the single-file value on the `new` side.
+    if let Some(variable_type) = entry.new_type.as_ref() {
+        render_variable_type_info(&mut lines, variable_type, text());
+    }
+    render_panel(frame, area, " Variable Detail ", lines, border_style, scroll)
+}
+
+/// Render an inspect (single-file) constraint detail panel: operator, RHS, and
+/// coefficients (or SOS type and weights), neutrally coloured.
+pub fn render_inspect_constraint(
+    frame: &mut Frame,
+    area: Rect,
+    entry: &ConstraintDiffEntry,
+    border_style: Style,
+    scroll: u16,
+    interner: &NameInterner,
+) -> usize {
+    if area.width == 0 || area.height == 0 {
+        return 0;
+    }
+    let t = theme();
+    let mut lines = inspect_header("Constraint", &entry.name);
+
+    // Source location (inspect builds the model on the `new`/file-2 side).
+    if let Some(line) = entry.line_file2.or(entry.line_file1) {
+        lines
+            .push(Line::from(vec![Span::styled("  Location: ", muted()), Span::styled(format!("L{line}"), Style::default().fg(t.accent))]));
+    }
+
+    match &entry.detail {
+        ConstraintDiffDetail::AddedOrRemoved(ResolvedConstraint::Standard { coefficients, operator, rhs }) => {
+            lines.push(Line::from(vec![Span::styled("  Operator: ", muted()), Span::styled(format!("{operator}"), text())]));
+            lines.push(Line::from(vec![Span::styled("  RHS:      ", muted()), Span::styled(format!("{rhs}"), text())]));
+            lines.push(Line::from(""));
+            lines.push(Line::from(Span::styled("  Coefficients:", muted().add_modifier(Modifier::BOLD))));
+            render_inspect_coefficients(&mut lines, coefficients, interner);
+        }
+        ConstraintDiffDetail::AddedOrRemoved(ResolvedConstraint::Sos { sos_type, weights }) => {
+            lines.push(Line::from(vec![Span::styled("  SOS Type: ", muted()), Span::styled(format!("{sos_type}"), text())]));
+            lines.push(Line::from(""));
+            lines.push(Line::from(Span::styled("  Weights:", muted().add_modifier(Modifier::BOLD))));
+            render_inspect_coefficients(&mut lines, weights, interner);
+        }
+        // Inspect always diffs against an empty base, so every constraint is an
+        // AddedOrRemoved single-side entry; other variants cannot occur.
+        _ => {
+            debug_assert!(false, "inspect constraint detail must be AddedOrRemoved");
+            lines.push(Line::from(Span::styled("  (unavailable)", muted())));
+        }
+    }
+
+    render_panel(frame, area, " Constraint Detail ", lines, border_style, scroll)
+}
+
+/// Render an inspect (single-file) objective detail panel: coefficients, neutral.
+pub fn render_inspect_objective(
+    frame: &mut Frame,
+    area: Rect,
+    entry: &ObjectiveDiffEntry,
+    border_style: Style,
+    scroll: u16,
+    interner: &NameInterner,
+) -> usize {
+    if area.width == 0 || area.height == 0 {
+        return 0;
+    }
+    let mut lines = inspect_header("Objective", &entry.name);
+    lines.push(Line::from(Span::styled("  Coefficients:", muted().add_modifier(Modifier::BOLD))));
+    render_inspect_coefficients(&mut lines, &entry.new_coefficients, interner);
+    render_panel(frame, area, " Objective Detail ", lines, border_style, scroll)
+}
+
+/// Append neutral `name  value` rows for a resolved coefficient/weight list.
+fn render_inspect_coefficients(lines: &mut Vec<Line<'static>>, coefficients: &[ResolvedCoefficient], interner: &NameInterner) {
+    for coeff in coefficients {
+        let name = interner.resolve(coeff.name);
+        lines.push(Line::from(vec![
+            Span::styled(format!("    {:<20}", truncate_with_ellipsis(name, 20)), text()),
+            Span::styled(format!("{}", coeff.value), text()),
+        ]));
+    }
 }
 
 /// Render a side-by-side old/new coefficient comparison for modified

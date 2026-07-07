@@ -19,7 +19,7 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 
-use crate::app::{App, Focus, Section};
+use crate::app::{App, AppMode, Focus, Section};
 use crate::state::DetailView;
 use crate::theme::theme;
 use crate::widgets::{
@@ -88,6 +88,38 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     draw_detail_panel(frame, detail_area, app);
 
     // Status bar (drawn after detail so detail_content_lines is populated).
+    draw_status(frame, outer[2], app, &report_summary, total_changes, filter_count);
+
+    // Search pop-up overlay — rendered on top of main content.
+    if app.search_popup.visible {
+        search_popup::draw_search_popup(frame, frame.area(), app);
+    }
+
+    // Command palette overlay.
+    if app.palette.visible {
+        palette::draw_palette(frame, frame.area(), app);
+    }
+
+    // Solve overlay — rendered on top of main content.
+    if !matches!(app.solver.state, crate::state::SolveState::Idle) {
+        solve::draw_solve_overlay(frame, frame.area(), app);
+    }
+
+    // Help overlay — rendered last so it draws on top of everything.
+    if app.show_help {
+        help::draw_help(frame, frame.area(), app);
+    }
+}
+
+/// Draw the bottom status bar, choosing the diff or inspect left segment.
+fn draw_status(
+    frame: &mut Frame,
+    area: Rect,
+    app: &App,
+    report_summary: &crate::diff_model::DiffSummary,
+    total_changes: usize,
+    filter_count: usize,
+) {
     let detail_pos = if app.focus == Focus::Detail && app.layout.detail_content_lines > 0 {
         Some(status_bar::DetailPosition { scroll: app.detail_scroll, content_lines: app.layout.detail_content_lines })
     } else {
@@ -125,9 +157,25 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     };
     // Watch-mode indicator, shown alongside the sort/tolerance indicators.
     let watch_reloading = if app.watch.enabled { Some(app.watch.is_reloading()) } else { None };
+    // Inspect mode shows the filename and section entry count in place of the
+    // diff change/filter segment.
+    let inspect_file = crate::widgets::short_filename(&app.report.file1);
+    let inspect = if app.mode == AppMode::Inspect {
+        let (label, count) = match app.active_section {
+            Section::Variables => ("variables", app.report.variables.entries.len()),
+            Section::Constraints => ("constraints", app.report.constraints.entries.len()),
+            Section::Objectives => ("objectives", app.report.objectives.entries.len()),
+            Section::Summary | Section::Numerics => {
+                ("total", app.report.variables.entries.len() + app.report.constraints.entries.len() + app.report.objectives.entries.len())
+            }
+        };
+        Some(status_bar::InspectInfo { file: &inspect_file, section_label: label, entry_count: count })
+    } else {
+        None
+    };
     status_bar::draw_status_bar(
         frame,
-        outer[2],
+        area,
         &status_bar::StatusBarParams {
             total_changes,
             section_counts: &section_counts,
@@ -139,28 +187,9 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
             sort_label: app.sort_mode.label(),
             tolerance_label: tolerance_label.as_deref(),
             watch_reloading,
+            inspect,
         },
     );
-
-    // Search pop-up overlay — rendered on top of main content.
-    if app.search_popup.visible {
-        search_popup::draw_search_popup(frame, frame.area(), app);
-    }
-
-    // Command palette overlay.
-    if app.palette.visible {
-        palette::draw_palette(frame, frame.area(), app);
-    }
-
-    // Solve overlay — rendered on top of main content.
-    if !matches!(app.solver.state, crate::state::SolveState::Idle) {
-        solve::draw_solve_overlay(frame, frame.area(), app);
-    }
-
-    // Help overlay — rendered last so it draws on top of everything.
-    if app.show_help {
-        help::draw_help(frame, frame.area(), app);
-    }
 }
 
 /// Render a centred "terminal too small" hint for sub-minimum window sizes.
@@ -176,6 +205,28 @@ fn draw_too_small(frame: &mut Frame, area: Rect) {
     #[allow(clippy::cast_possible_truncation)] // tiny fixed message
     let popup = centred_rect(area, 24.min(area.width), (lines.len() as u16).min(area.height));
     frame.render_widget(Paragraph::new(lines).centered(), popup);
+}
+
+/// Render the neutral single-model detail for the selected inspect entry.
+/// Returns the total content line count.
+fn draw_inspect_detail(frame: &mut Frame, area: Rect, app: &App, entry_index: usize, border_style: Style) -> usize {
+    let scroll = app.detail_scroll;
+    let interner = &app.report.interner;
+    match app.active_section {
+        Section::Variables => {
+            debug_assert!(entry_index < app.report.variables.entries.len(), "variable entry_index {entry_index} out of bounds");
+            detail::render_inspect_variable(frame, area, &app.report.variables.entries[entry_index], border_style, scroll)
+        }
+        Section::Constraints => {
+            debug_assert!(entry_index < app.report.constraints.entries.len(), "constraint entry_index {entry_index} out of bounds");
+            detail::render_inspect_constraint(frame, area, &app.report.constraints.entries[entry_index], border_style, scroll, interner)
+        }
+        Section::Objectives => {
+            debug_assert!(entry_index < app.report.objectives.entries.len(), "objective entry_index {entry_index} out of bounds");
+            detail::render_inspect_objective(frame, area, &app.report.objectives.entries[entry_index], border_style, scroll, interner)
+        }
+        Section::Summary | Section::Numerics => unreachable!("static sections are handled by draw_detail_panel"),
+    }
 }
 
 /// Draw the detail panel on the right side.
@@ -194,47 +245,58 @@ fn draw_detail_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut A
         frame.render_widget(block, area);
         summary::draw_summary(frame, inner, &app.numerics_lines, app.detail_scroll)
     } else if let Some(entry_index) = app.selected_entry_index() {
-        // Check for raw view mode on supported sections (Constraints, Objectives).
-        let use_raw = app.detail_view == DetailView::Raw && matches!(app.active_section, Section::Constraints | Section::Objectives);
-
-        if use_raw {
-            let (old_text, new_text) = app.extract_raw_texts();
-            // Variables show a message; Constraints/Objectives show the raw text.
-            raw_diff::draw_raw_diff(frame, area, old_text, new_text, app.detail_scroll, border_style)
+        // Inspect mode renders each entry as a neutral single-model view.
+        if app.mode == AppMode::Inspect {
+            draw_inspect_detail(frame, area, app, entry_index, border_style)
         } else {
-            app.ensure_coeff_row_cache();
-            let scroll = app.detail_scroll;
-            let cached_rows = app.cached_coeff_rows();
-            match app.active_section {
-                Section::Variables => {
-                    debug_assert!(entry_index < app.report.variables.entries.len(), "variable entry_index {entry_index} out of bounds");
-                    detail::render_variable_detail(frame, area, &app.report.variables.entries[entry_index], border_style, scroll)
+            // Check for raw view mode on supported sections (Constraints, Objectives).
+            let use_raw = app.detail_view == DetailView::Raw && matches!(app.active_section, Section::Constraints | Section::Objectives);
+
+            if use_raw {
+                let (old_text, new_text) = app.extract_raw_texts();
+                // Variables show a message; Constraints/Objectives show the raw text.
+                raw_diff::draw_raw_diff(frame, area, old_text, new_text, app.detail_scroll, border_style)
+            } else {
+                app.ensure_coeff_row_cache();
+                let scroll = app.detail_scroll;
+                let cached_rows = app.cached_coeff_rows();
+                match app.active_section {
+                    Section::Variables => {
+                        debug_assert!(entry_index < app.report.variables.entries.len(), "variable entry_index {entry_index} out of bounds");
+                        detail::render_variable_detail(frame, area, &app.report.variables.entries[entry_index], border_style, scroll)
+                    }
+                    Section::Constraints => {
+                        debug_assert!(
+                            entry_index < app.report.constraints.entries.len(),
+                            "constraint entry_index {entry_index} out of bounds"
+                        );
+                        detail::render_constraint_detail(
+                            frame,
+                            area,
+                            &app.report.constraints.entries[entry_index],
+                            border_style,
+                            scroll,
+                            cached_rows,
+                            &app.report.interner,
+                        )
+                    }
+                    Section::Objectives => {
+                        debug_assert!(
+                            entry_index < app.report.objectives.entries.len(),
+                            "objective entry_index {entry_index} out of bounds"
+                        );
+                        detail::render_objective_detail(
+                            frame,
+                            area,
+                            &app.report.objectives.entries[entry_index],
+                            border_style,
+                            scroll,
+                            cached_rows,
+                            &app.report.interner,
+                        )
+                    }
+                    Section::Summary | Section::Numerics => unreachable!("handled above"),
                 }
-                Section::Constraints => {
-                    debug_assert!(entry_index < app.report.constraints.entries.len(), "constraint entry_index {entry_index} out of bounds");
-                    detail::render_constraint_detail(
-                        frame,
-                        area,
-                        &app.report.constraints.entries[entry_index],
-                        border_style,
-                        scroll,
-                        cached_rows,
-                        &app.report.interner,
-                    )
-                }
-                Section::Objectives => {
-                    debug_assert!(entry_index < app.report.objectives.entries.len(), "objective entry_index {entry_index} out of bounds");
-                    detail::render_objective_detail(
-                        frame,
-                        area,
-                        &app.report.objectives.entries[entry_index],
-                        border_style,
-                        scroll,
-                        cached_rows,
-                        &app.report.interner,
-                    )
-                }
-                Section::Summary | Section::Numerics => unreachable!("handled above"),
             }
         }
     } else {

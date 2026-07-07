@@ -25,6 +25,16 @@ pub struct YankFlash<'a> {
     pub message: &'a str,
 }
 
+/// Inspect-mode left segment: the single filename and current section counts.
+///
+/// When present, it replaces the diff-oriented change/filter segment entirely so
+/// no "N changes" / "+N -N ~N" / "filter" text appears in inspect mode.
+pub struct InspectInfo<'a> {
+    pub file: &'a str,
+    pub section_label: &'a str,
+    pub entry_count: usize,
+}
+
 /// Parameters for rendering the status bar.
 pub struct StatusBarParams<'a> {
     pub total_changes: usize,
@@ -40,6 +50,8 @@ pub struct StatusBarParams<'a> {
     pub tolerance_label: Option<&'a str>,
     /// Watch mode: `None` when not watching, `Some(reloading)` when active.
     pub watch_reloading: Option<bool>,
+    /// Inspect-mode left segment. `None` in diff mode (the default segment shows).
+    pub inspect: Option<InspectInfo<'a>>,
 }
 
 /// Key hints shown on the right of the status bar.
@@ -59,21 +71,31 @@ pub fn draw_status_bar(frame: &mut Frame, area: Rect, params: &StatusBarParams<'
     let t = theme();
     let separator = || Span::styled(SEPARATOR, Style::default().fg(t.border));
 
-    // Left: flowing segments — total, per-kind counts, filter, modifiers.
-    let mut spans = vec![
-        Span::styled(format!(" {} changes", params.total_changes), Style::default().fg(t.added).add_modifier(Modifier::BOLD)),
-        separator(),
-        Span::styled(format!("+{}", params.section_counts.added), Style::default().fg(t.added)),
-        Span::raw(" "),
-        Span::styled(format!("-{}", params.section_counts.removed), Style::default().fg(t.removed)),
-        Span::raw(" "),
-        Span::styled(format!("~{}", params.section_counts.modified), Style::default().fg(t.modified)),
-        Span::raw(" "),
-        Span::styled(format!(">{}", params.section_counts.renamed), Style::default().fg(t.info)),
-        separator(),
-        Span::styled("filter:", Style::default().fg(t.muted)),
-        Span::styled(format!("{} ({})", params.filter_label, params.filter_count), Style::default().fg(t.modified)),
-    ];
+    // Left: flowing segments. Inspect mode shows the filename and section count;
+    // diff mode shows total/per-kind change counts and the active filter.
+    let mut spans = if let Some(inspect) = &params.inspect {
+        let entries = if inspect.entry_count == 1 { "entry" } else { "entries" };
+        vec![
+            Span::styled(format!(" {}", inspect.file), Style::default().fg(t.accent).add_modifier(Modifier::BOLD)),
+            separator(),
+            Span::styled(format!("{} {} {}", inspect.entry_count, inspect.section_label, entries), Style::default().fg(t.text)),
+        ]
+    } else {
+        vec![
+            Span::styled(format!(" {} changes", params.total_changes), Style::default().fg(t.added).add_modifier(Modifier::BOLD)),
+            separator(),
+            Span::styled(format!("+{}", params.section_counts.added), Style::default().fg(t.added)),
+            Span::raw(" "),
+            Span::styled(format!("-{}", params.section_counts.removed), Style::default().fg(t.removed)),
+            Span::raw(" "),
+            Span::styled(format!("~{}", params.section_counts.modified), Style::default().fg(t.modified)),
+            Span::raw(" "),
+            Span::styled(format!(">{}", params.section_counts.renamed), Style::default().fg(t.info)),
+            separator(),
+            Span::styled("filter:", Style::default().fg(t.muted)),
+            Span::styled(format!("{} ({})", params.filter_label, params.filter_count), Style::default().fg(t.modified)),
+        ]
+    };
     if params.ignore_order {
         spans.push(Span::styled(" [ignoring order]", Style::default().fg(t.warning)));
     }
