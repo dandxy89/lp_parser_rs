@@ -287,7 +287,12 @@ fn build_columns<'p>(problem: &'p LpProblem, objective: Option<&'p Objective>, o
 
 /// Write the `COLUMNS` section, wrapping integer/general/binary variables in
 /// `'MARKER'` `INTORG`/`INTEND` blocks.
-fn write_columns_section(output: &mut String, problem: &LpProblem, columns: &ColumnEntries<'_>, options: &MpsWriterOptions) -> std::fmt::Result {
+fn write_columns_section(
+    output: &mut String,
+    problem: &LpProblem,
+    columns: &ColumnEntries<'_>,
+    options: &MpsWriterOptions,
+) -> std::fmt::Result {
     writeln!(output, "COLUMNS")?;
 
     for (name_id, variable) in &problem.variables {
@@ -460,8 +465,8 @@ fn write_sos_section(output: &mut String, problem: &LpProblem, options: &MpsWrit
 #[allow(clippy::float_cmp)]
 mod tests {
     use super::*;
-    use crate::mps::parse_mps;
     use crate::model::{Coefficient, ComparisonOp, SOSType};
+    use crate::mps::parse_mps;
 
     fn build_problem_with_bounds_and_sos() -> LpProblem {
         let mut problem = LpProblem::new().with_problem_name(String::from("Sample")).with_sense(Sense::Maximize);
