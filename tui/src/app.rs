@@ -25,8 +25,8 @@ use crate::watch::{WatchSession, WatchState};
 pub struct CommandPaletteState {
     /// Whether the palette overlay is visible.
     pub visible: bool,
-    /// Current fuzzy-filter query.
-    pub query: String,
+    /// Current fuzzy-filter query (readline-style editable input).
+    pub query: tui_input::Input,
     /// Indices into [`PaletteCommand::ALL`](crate::state::PaletteCommand::ALL)
     /// matching the query, in rank order.
     pub filtered: Vec<usize>,
@@ -38,8 +38,8 @@ pub struct CommandPaletteState {
 pub struct SearchPopupState {
     /// Whether the search pop-up overlay is visible.
     pub visible: bool,
-    /// Current query text in the search pop-up input.
-    pub query: String,
+    /// Current query text in the search pop-up input (readline-style editable).
+    pub query: tui_input::Input,
     /// Ranked search results spanning all sections.
     pub results: Vec<SearchResult>,
     /// Currently highlighted result index in the pop-up.
@@ -438,7 +438,7 @@ impl App {
             should_quit: false,
             show_help: false,
             help_scroll: 0,
-            palette: CommandPaletteState { visible: false, query: String::new(), filtered: Vec::new(), selected: 0 },
+            palette: CommandPaletteState { visible: false, query: tui_input::Input::default(), filtered: Vec::new(), selected: 0 },
             what_if: None,
             detail_scroll: 0,
             section_selector_state,
@@ -456,7 +456,7 @@ impl App {
             pending_yank: PendingYank::None,
             search_popup: SearchPopupState {
                 visible: false,
-                query: String::new(),
+                query: tui_input::Input::default(),
                 results: Vec::new(),
                 selected: 0,
                 scroll: 0,
@@ -1298,7 +1298,7 @@ impl App {
         self.search_popup.scroll = 0;
         self.search_popup.regex_error = None;
 
-        if self.search_popup.query.is_empty() {
+        if self.search_popup.query.value().is_empty() {
             self.populate_all_search_results();
             self.rebuild_search_result_lines();
             return;
@@ -1307,7 +1307,7 @@ impl App {
         // Parse mode and pattern. For fuzzy mode, the pattern is always the full
         // query (no prefix), so we can use the query length to detect that case
         // without holding a borrow across mutable calls.
-        let mode = search::parse_query(&self.search_popup.query).0;
+        let mode = search::parse_query(self.search_popup.query.value()).0;
 
         match mode {
             SearchMode::Fuzzy => {
@@ -1354,7 +1354,7 @@ impl App {
             self.search_haystack.len(),
         );
         let config = frizbee::Config { sort: true, ..Default::default() };
-        let matches = frizbee::match_list_indices(&self.search_popup.query, &self.search_name_buffer, &config);
+        let matches = frizbee::match_list_indices(self.search_popup.query.value(), &self.search_name_buffer, &config);
 
         for matched in matches {
             let haystack_index = matched.index as usize;
@@ -1378,10 +1378,10 @@ impl App {
     /// Must not be called for fuzzy mode — that uses `populate_fuzzy_results` instead.
     fn populate_filtered_results(&mut self) {
         debug_assert!(
-            !matches!(search::parse_query(&self.search_popup.query).0, SearchMode::Fuzzy),
+            !matches!(search::parse_query(self.search_popup.query.value()).0, SearchMode::Fuzzy),
             "populate_filtered_results called with Fuzzy query; use populate_fuzzy_results instead"
         );
-        let compiled = CompiledSearch::compile(&self.search_popup.query);
+        let compiled = CompiledSearch::compile(self.search_popup.query.value());
         // Surface an invalid regex to the pop-up UI — it would otherwise
         // silently match nothing.
         self.search_popup.regex_error = compiled.regex_error();
@@ -1425,11 +1425,11 @@ impl App {
     /// Populate search results using full-text content matching (`c:` mode).
     fn populate_content_results(&mut self) {
         debug_assert!(
-            matches!(search::parse_query(&self.search_popup.query).0, SearchMode::Content),
+            matches!(search::parse_query(self.search_popup.query.value()).0, SearchMode::Content),
             "populate_content_results called with a non-content query"
         );
         self.ensure_search_content();
-        let compiled = CompiledSearch::compile(&self.search_popup.query);
+        let compiled = CompiledSearch::compile(self.search_popup.query.value());
         for (haystack_index, entry) in self.search_haystack.iter().enumerate() {
             if compiled.matches(&self.search_content_buffer[haystack_index]) {
                 self.search_popup.results.push(SearchResult {

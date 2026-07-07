@@ -21,6 +21,7 @@ const POPUP_HEIGHT: u16 = 7;
 
 /// Draw the what-if prompt overlay on top of the current frame.
 pub fn draw_what_if(frame: &mut Frame, area: Rect, prompt: &WhatIfPrompt) {
+    const INPUT_LABEL: &str = " new rhs     ";
     if area.width == 0 || area.height == 0 {
         return;
     }
@@ -41,9 +42,8 @@ pub fn draw_what_if(frame: &mut Frame, area: Rect, prompt: &WhatIfPrompt) {
             Span::styled(format!("{}", prompt.current_rhs), Style::default().fg(t.text)),
         ]),
         Line::from(vec![
-            Span::styled(" new rhs     ", Style::default().fg(t.muted)),
-            Span::styled(prompt.input.clone(), Style::default().fg(t.accent).add_modifier(Modifier::BOLD)),
-            Span::styled("\u{2588}", Style::default().fg(t.accent)),
+            Span::styled(INPUT_LABEL, Style::default().fg(t.muted)),
+            Span::styled(prompt.input.value().to_owned(), Style::default().fg(t.accent).add_modifier(Modifier::BOLD)),
         ]),
     ];
     if let Some(error) = &prompt.error {
@@ -55,4 +55,13 @@ pub fn draw_what_if(frame: &mut Frame, area: Rect, prompt: &WhatIfPrompt) {
     let block = panel_block(Style::default().fg(t.accent))
         .title(Span::styled(" What-if: edit RHS & re-solve ", Style::default().fg(t.accent).add_modifier(Modifier::BOLD)));
     frame.render_widget(Paragraph::new(lines).block(block), popup);
+
+    // Place the real terminal cursor at the edit position on the input line
+    // (row 3 inside the border; column after the label).
+    #[allow(clippy::cast_possible_truncation)] // label and input are far narrower than u16::MAX
+    let cursor_x = popup.x + 1 + INPUT_LABEL.len() as u16 + prompt.input.visual_cursor() as u16;
+    let cursor_y = popup.y + 3;
+    if cursor_x < popup.right().saturating_sub(1) && cursor_y < popup.bottom().saturating_sub(1) {
+        frame.set_cursor_position((cursor_x, cursor_y));
+    }
 }

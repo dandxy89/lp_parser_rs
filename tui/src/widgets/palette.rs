@@ -37,25 +37,25 @@ pub fn draw_palette(frame: &mut Frame, area: Rect, app: &App) {
     draw_hints(frame, v_chunks[2]);
 }
 
-/// Draw the query input bar at the top of the palette.
-fn draw_input(frame: &mut Frame, area: Rect, query: &str, match_count: usize) {
+/// Draw the query input bar at the top of the palette: an editable query on
+/// the left (with the real terminal cursor) and the command count on the right.
+fn draw_input(frame: &mut Frame, area: Rect, query: &tui_input::Input, match_count: usize) {
     let t = theme();
-    let right_text = format!("{match_count} commands");
-    let used = 3 + query.len() + 1; // " > " + query + cursor
-    let available = area.width.saturating_sub(2) as usize;
-    let padding = available.saturating_sub(used + right_text.len());
-
-    let spans = vec![
-        Span::styled(" > ", Style::default().fg(t.accent).add_modifier(Modifier::BOLD)),
-        Span::styled(query.to_owned(), Style::default().fg(t.text)),
-        Span::styled("\u{2588}", Style::default().fg(t.accent)),
-        Span::raw(" ".repeat(padding)),
-        Span::styled(right_text, Style::default().fg(t.muted)),
-    ];
-
     let block = panel_block(Style::default().fg(t.accent))
         .title(Span::styled(" Command Palette ", Style::default().fg(t.accent).add_modifier(Modifier::BOLD)));
-    frame.render_widget(Paragraph::new(Line::from(spans)).block(block), area);
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+    if inner.width == 0 || inner.height == 0 {
+        return;
+    }
+
+    let right_text = format!("{match_count} commands");
+    #[allow(clippy::cast_possible_truncation)] // label is a few dozen columns
+    let right_len = (right_text.len() as u16).min(inner.width);
+    let chunks = Layout::horizontal([Constraint::Min(0), Constraint::Length(right_len)]).split(inner);
+
+    crate::widgets::draw_prompt_input(frame, chunks[0], query);
+    frame.render_widget(Paragraph::new(Span::styled(right_text, Style::default().fg(t.muted))), chunks[1]);
 }
 
 /// Draw the filtered command list with the key hint right-aligned per row.

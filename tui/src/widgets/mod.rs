@@ -6,6 +6,7 @@ use std::time::Duration;
 use lp_parser_rs::analysis::IssueSeverity;
 use ratatui::layout::{Constraint, Flex, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
+use ratatui::text::Span;
 use ratatui::widgets::{Block, BorderType, Borders, Scrollbar, ScrollbarOrientation};
 
 use crate::diff_model::DiffKind;
@@ -162,6 +163,38 @@ pub fn severity_colour(severity: IssueSeverity) -> Color {
 /// Extract the filename from a path string for compact display.
 pub fn short_filename(path: &str) -> String {
     std::path::Path::new(path).file_name().map_or_else(|| path.to_owned(), |name| name.to_string_lossy().into_owned())
+}
+
+/// Render a `" > "`-prompted single-line text input into `area`, placing the
+/// real terminal cursor at the edit position and scrolling horizontally so the
+/// cursor stays visible on long queries.
+pub fn draw_prompt_input(frame: &mut ratatui::Frame, area: Rect, input: &tui_input::Input) {
+    const PROMPT: &str = " > ";
+    if area.width == 0 || area.height == 0 {
+        return;
+    }
+    let t = theme();
+    #[allow(clippy::cast_possible_truncation)] // PROMPT is 3 columns
+    let prompt_width = (PROMPT.len() as u16).min(area.width);
+    let prompt_area = Rect { width: prompt_width, ..area };
+    frame.render_widget(
+        ratatui::widgets::Paragraph::new(Span::styled(PROMPT, Style::default().fg(t.accent).add_modifier(Modifier::BOLD))),
+        prompt_area,
+    );
+
+    let text_area = Rect { x: area.x + prompt_width, width: area.width - prompt_width, ..area };
+    if text_area.width == 0 {
+        return;
+    }
+    // Keep one column free so the cursor can sit past the last character.
+    let scroll = input.visual_scroll(text_area.width.saturating_sub(1) as usize);
+    #[allow(clippy::cast_possible_truncation)] // scroll is bounded by the query width
+    let paragraph = ratatui::widgets::Paragraph::new(Span::styled(input.value(), Style::default().fg(t.text))).scroll((0, scroll as u16));
+    frame.render_widget(paragraph, text_area);
+
+    #[allow(clippy::cast_possible_truncation)] // cursor offset is bounded by text_area.width
+    let cursor_x = text_area.x + (input.visual_cursor().saturating_sub(scroll)) as u16;
+    frame.set_cursor_position((cursor_x.min(text_area.right().saturating_sub(1)), text_area.y));
 }
 
 /// Compute a centred rectangle of the given dimensions, clamped to the terminal area.

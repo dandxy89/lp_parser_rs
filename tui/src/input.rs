@@ -1,8 +1,9 @@
 use std::sync::{Arc, mpsc};
 use std::time::Instant;
 
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+use crossterm::event::{Event as CrosstermEvent, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use lp_parser_rs::problem::LpProblem;
+use tui_input::backend::crossterm::EventHandler as _;
 
 use crate::app::App;
 use crate::detail_text::{format_solve_diff_result, format_solve_result};
@@ -67,7 +68,7 @@ impl App {
     /// Open the command palette, resetting its query and filtered list.
     pub(crate) fn open_command_palette(&mut self) {
         self.palette.visible = true;
-        self.palette.query.clear();
+        self.palette.query.reset();
         self.palette.selected = 0;
         self.recompute_palette();
     }
@@ -81,13 +82,13 @@ impl App {
         self.palette.filtered.clear();
         let inspect = self.mode == AppMode::Inspect;
         let available = |index: usize| !inspect || PaletteCommand::ALL[index].available_in_inspect();
-        if self.palette.query.is_empty() {
+        if self.palette.query.value().is_empty() {
             self.palette.filtered.extend((0..PaletteCommand::ALL.len()).filter(|&i| available(i)));
             return;
         }
         let labels: Vec<String> = PaletteCommand::ALL.iter().map(|c| c.label().to_owned()).collect();
         let config = frizbee::Config { sort: true, ..Default::default() };
-        for matched in frizbee::match_list_indices(&self.palette.query, &labels, &config) {
+        for matched in frizbee::match_list_indices(self.palette.query.value(), &labels, &config) {
             let index = matched.index as usize;
             if available(index) {
                 self.palette.filtered.push(index);
@@ -96,25 +97,30 @@ impl App {
     }
 
     /// Handle a key event while the command palette is visible.
+    ///
+    /// Esc/Enter/↑/↓ (plus Ctrl+p/Ctrl+n) control the palette; everything else
+    /// goes to the query input, which supports readline-style editing
+    /// (←/→, Home/End, Ctrl+W, Ctrl+U, …).
     fn handle_palette_key(&mut self, key: KeyEvent) {
-        match key.code {
-            KeyCode::Esc => self.palette.visible = false,
-            KeyCode::Enter => self.confirm_palette(),
-            KeyCode::Backspace => {
-                self.palette.query.pop();
-                self.recompute_palette();
-            }
-            KeyCode::Down => {
+        let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+        match (key.code, ctrl) {
+            (KeyCode::Esc, _) => self.palette.visible = false,
+            (KeyCode::Enter, _) => self.confirm_palette(),
+            (KeyCode::Down, _) | (KeyCode::Char('n'), true) => {
                 if !self.palette.filtered.is_empty() {
                     self.palette.selected = (self.palette.selected + 1).min(self.palette.filtered.len() - 1);
                 }
             }
-            KeyCode::Up => self.palette.selected = self.palette.selected.saturating_sub(1),
-            KeyCode::Char(character) => {
-                self.palette.query.push(character);
-                self.recompute_palette();
+            (KeyCode::Up, _) | (KeyCode::Char('p'), true) => {
+                self.palette.selected = self.palette.selected.saturating_sub(1);
             }
-            _ => {}
+            _ => {
+                if let Some(change) = self.palette.query.handle_event(&CrosstermEvent::Key(key))
+                    && change.value
+                {
+                    self.recompute_palette();
+                }
+            }
         }
     }
 
@@ -161,38 +167,45 @@ impl App {
     }
 
     /// Handle a key event while the search pop-up is visible.
+    ///
+    /// ↑/↓ (plus Ctrl+p/Ctrl+n and Ctrl+k/Ctrl+j) move through the results;
+    /// plain `j`/`k` are typed into the query — entry names routinely contain
+    /// them (`x_j`, `k_max`), so they must never be stolen for navigation.
+    /// Everything unmatched goes to the query input, which supports
+    /// readline-style editing (←/→, Home/End, Ctrl+W, Ctrl+U, …).
     fn handle_search_popup_key(&mut self, key: KeyEvent) {
-        match key.code {
-            KeyCode::Esc => {
+        let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+        match (key.code, ctrl) {
+            (KeyCode::Esc, _) => {
                 self.search_popup.visible = false;
             }
-            KeyCode::Enter => {
+            (KeyCode::Enter, _) => {
                 self.confirm_search_selection();
             }
-            KeyCode::Backspace => {
-                self.search_popup.query.pop();
-                self.recompute_search_popup();
+            (KeyCode::Down, _) | (KeyCode::Char('n' | 'j'), true) => {
+                if !self.search_popup.results.is_empty() {
+                    self.search_popup.selected = (self.search_popup.selected + 1).min(self.search_popup.results.len() - 1);
+                    self.search_popup.scroll = 0;
+                }
             }
-            KeyCode::Char('j') | KeyCode::Down if !self.search_popup.results.is_empty() => {
-                self.search_popup.selected = (self.search_popup.selected + 1).min(self.search_popup.results.len() - 1);
-                self.search_popup.scroll = 0;
-            }
-            KeyCode::Char('k') | KeyCode::Up => {
+            (KeyCode::Up, _) | (KeyCode::Char('p' | 'k'), true) => {
                 self.search_popup.selected = self.search_popup.selected.saturating_sub(1);
                 self.search_popup.scroll = 0;
             }
-            KeyCode::Tab => {
+            (KeyCode::Tab, _) => {
                 // Replace query with the selected result's full name.
                 if let Some(result) = self.search_popup.results.get(self.search_popup.selected) {
-                    self.search_popup.query = self.search_name_buffer[result.haystack_index].clone();
+                    self.search_popup.query = tui_input::Input::new(self.search_name_buffer[result.haystack_index].clone());
                     self.recompute_search_popup();
                 }
             }
-            KeyCode::Char(character) => {
-                self.search_popup.query.push(character);
-                self.recompute_search_popup();
+            _ => {
+                if let Some(change) = self.search_popup.query.handle_event(&CrosstermEvent::Key(key))
+                    && change.value
+                {
+                    self.recompute_search_popup();
+                }
             }
-            _ => {}
         }
     }
 
@@ -382,7 +395,7 @@ impl App {
 
     fn open_search_popup(&mut self) {
         self.search_popup.visible = true;
-        self.search_popup.query.clear();
+        self.search_popup.query.reset();
         self.search_popup.results.clear();
         self.search_popup.selected = 0;
         self.search_popup.scroll = 0;
@@ -842,29 +855,32 @@ impl App {
             self.flash_status("What-if: constraint is not a standard constraint in file 1");
             return;
         };
-        self.what_if = Some(crate::state::WhatIfPrompt { constraint_name: name, current_rhs, input: String::new(), error: None });
+        self.what_if =
+            Some(crate::state::WhatIfPrompt { constraint_name: name, current_rhs, input: tui_input::Input::default(), error: None });
     }
 
     /// Handle a key event while the what-if prompt is open.
+    ///
+    /// Plain characters are limited to a float literal (incl. scientific
+    /// notation); editing keys (←/→, Backspace, Ctrl+W, …) pass through to the
+    /// input unfiltered.
     fn handle_what_if_key(&mut self, key: KeyEvent) {
         debug_assert!(self.what_if.is_some(), "handle_what_if_key called without an open prompt");
+        let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
         match key.code {
             KeyCode::Esc => self.what_if = None,
             KeyCode::Enter => self.confirm_what_if(),
-            KeyCode::Backspace => {
-                if let Some(prompt) = &mut self.what_if {
-                    prompt.input.pop();
+            // Reject characters that cannot appear in a float literal (Ctrl+chars
+            // are editing shortcuts — Ctrl+W, Ctrl+U — and pass through).
+            KeyCode::Char(character) if !ctrl && !character.is_ascii_digit() && !matches!(character, '.' | '-' | '+' | 'e' | 'E') => {}
+            _ => {
+                if let Some(prompt) = &mut self.what_if
+                    && let Some(change) = prompt.input.handle_event(&CrosstermEvent::Key(key))
+                    && change.value
+                {
                     prompt.error = None;
                 }
             }
-            // Accept the characters of a float literal (incl. scientific notation).
-            KeyCode::Char(character) if character.is_ascii_digit() || matches!(character, '.' | '-' | '+' | 'e' | 'E') => {
-                if let Some(prompt) = &mut self.what_if {
-                    prompt.input.push(character);
-                    prompt.error = None;
-                }
-            }
-            _ => {}
         }
     }
 
@@ -874,7 +890,7 @@ impl App {
         let Some(prompt) = &self.what_if else {
             return;
         };
-        let new_rhs = match prompt.input.trim().parse::<f64>() {
+        let new_rhs = match prompt.input.value().trim().parse::<f64>() {
             Ok(value) if value.is_finite() => value,
             _ => {
                 if let Some(prompt) = &mut self.what_if {

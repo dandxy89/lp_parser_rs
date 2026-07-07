@@ -35,8 +35,8 @@ pub struct WhatIfPrompt {
     pub constraint_name: String,
     /// The constraint's current RHS in the baseline problem (file 1).
     pub current_rhs: f64,
-    /// Text buffer for the new RHS value being typed.
-    pub input: String,
+    /// Editable buffer for the new RHS value being typed.
+    pub input: tui_input::Input,
     /// Validation error from the last confirm attempt, if any.
     pub error: Option<String>,
 }

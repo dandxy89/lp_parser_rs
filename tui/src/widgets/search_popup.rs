@@ -41,7 +41,7 @@ pub fn draw_search_popup(frame: &mut Frame, area: Rect, app: &App) {
     // Clear the background behind the pop-up.
     frame.render_widget(Clear, popup);
 
-    let (mode, _) = search::parse_query(&app.search_popup.query);
+    let (mode, _) = search::parse_query(app.search_popup.query.value());
     let mode_label = mode.label();
     let match_count = app.search_popup.results.len();
 
@@ -82,31 +82,25 @@ pub fn draw_search_popup(frame: &mut Frame, area: Rect, app: &App) {
     draw_hints(frame, v_chunks[3]);
 }
 
-/// Draw the search input bar at the top of the pop-up.
-fn draw_search_input(frame: &mut Frame, area: Rect, query: &str, mode_label: &str, match_count: usize) {
+/// Draw the search input bar at the top of the pop-up: an editable query on
+/// the left (with the real terminal cursor) and the mode/match count on the right.
+fn draw_search_input(frame: &mut Frame, area: Rect, query: &tui_input::Input, mode_label: &str, match_count: usize) {
     let t = theme();
-    let input_spans = vec![
-        Span::styled(" > ", Style::default().fg(t.accent).add_modifier(Modifier::BOLD)),
-        Span::styled(query, Style::default().fg(t.text)),
-        // Blinking cursor block
-        Span::styled("\u{2588}", Style::default().fg(t.accent)),
-    ];
-
-    let right_text = format!("[{mode_label}] {match_count} matches");
-    // We can't easily right-align within a single Line, so we pad.
-    let used = 3 + query.len() + 1; // " > " + query + cursor
-    let available = area.width.saturating_sub(2) as usize; // subtract borders
-    let padding = available.saturating_sub(used + right_text.len());
-
-    let mut spans = input_spans;
-    spans.push(Span::raw(" ".repeat(padding)));
-    spans.push(Span::styled(right_text, Style::default().fg(t.muted)));
-
     let block = panel_block(Style::default().fg(t.accent))
         .title(Span::styled(" Search ", Style::default().fg(t.accent).add_modifier(Modifier::BOLD)));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+    if inner.width == 0 || inner.height == 0 {
+        return;
+    }
 
-    let paragraph = Paragraph::new(Line::from(spans)).block(block);
-    frame.render_widget(paragraph, area);
+    let right_text = format!("[{mode_label}] {match_count} matches");
+    #[allow(clippy::cast_possible_truncation)] // label is a few dozen columns
+    let right_len = (right_text.len() as u16).min(inner.width);
+    let chunks = Layout::horizontal([Constraint::Min(0), Constraint::Length(right_len)]).split(inner);
+
+    crate::widgets::draw_prompt_input(frame, chunks[0], query);
+    frame.render_widget(Paragraph::new(Span::styled(right_text, Style::default().fg(t.muted))), chunks[1]);
 }
 
 /// Build pre-styled `Line`s for all search results, to be cached on `SearchPopupState`.
@@ -279,7 +273,7 @@ fn draw_hints(frame: &mut Frame, area: Rect) {
         Span::styled("c:", Style::default().fg(t.accent).add_modifier(Modifier::BOLD)),
         Span::styled("content  ", Style::default().fg(t.muted)),
         Span::styled("(default: fuzzy)  ", Style::default().fg(t.muted)),
-        Span::styled("j/k", Style::default().fg(t.accent)),
+        Span::styled("\u{2191}/\u{2193}", Style::default().fg(t.accent)),
         Span::styled(" navigate  ", Style::default().fg(t.muted)),
         Span::styled("Enter", Style::default().fg(t.accent)),
         Span::styled(" select  ", Style::default().fg(t.muted)),
