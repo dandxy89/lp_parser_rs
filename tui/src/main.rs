@@ -1,8 +1,10 @@
-//! `lp_diff` — interactive terminal viewer for diffing two LP or MPS files.
+//! `lp_diff` — LP/MPS model explorer and diff viewer.
 //!
-//! Parses both files, computes a structural diff (variables, constraints,
-//! objectives), and launches a TUI for exploring the changes. With `--summary`
-//! it prints a structured summary to stdout and exits without the TUI.
+//! With two files it parses both, computes a structural diff (variables,
+//! constraints, objectives), and launches a TUI for exploring the changes. With
+//! a single file it opens an inspect view: a single-model explorer over the same
+//! sections. With `--summary` it prints a structured summary to stdout and exits
+//! without the TUI.
 //!
 //! # Exit codes
 //!
@@ -19,6 +21,7 @@ mod diff_model;
 mod event;
 mod export;
 mod input;
+mod inspect_model;
 mod line_index;
 mod parse;
 mod search;
@@ -46,19 +49,21 @@ use crate::diff_model::{DiffInput, DiffOptions, build_diff_report};
 use crate::event::{Event, EventHandler};
 use crate::parse::parse_file;
 
-/// Interactive diff viewer for LP and MPS files
+/// LP/MPS model explorer and diff viewer
+///
+/// With one file it opens a single-model explorer; with two files it diffs them.
 #[derive(Parser)]
 #[command(name = "lp_diff", version, about)]
 struct Cli {
-    /// First file (base)
+    /// Model file to inspect, or the base file when comparing two
     file1: PathBuf,
-    /// Second file (compare against)
-    file2: PathBuf,
+    /// Optional second file: when given, the two files are compared (diff mode)
+    file2: Option<PathBuf>,
     /// Print a structured summary to stdout and exit without launching the TUI
     #[arg(long)]
     summary: bool,
 
-    /// Reload and re-diff automatically when either input file changes on disk
+    /// Reload automatically when an input file changes on disk
     #[arg(long)]
     watch: bool,
 
@@ -223,11 +228,10 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     if !args.file1.exists() {
         return Err(format!("file not found: '{}'", args.file1.display()).into());
     }
-    if !args.file2.exists() {
-        return Err(format!("file not found: '{}'", args.file2.display()).into());
-    }
 
     // Validate + compile comparison options before parsing (fails fast on bad regex).
+    // These only affect diff mode, but validating unconditionally keeps the error
+    // messages consistent regardless of how many files were supplied.
     if !args.abs_tol.is_finite() || args.abs_tol < 0.0 {
         return Err(format!("--abs-tol must be a finite non-negative number, got {}", args.abs_tol).into());
     }
@@ -237,14 +241,27 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let rename_rules = build_rename_rules(&args.rename)?;
     let diff_options = DiffOptions { abs_tol: args.abs_tol, rel_tol: args.rel_tol, rename_rules };
 
-    // Parse both files in parallel using scoped threads
+    // One file → inspect (single-model explorer); two files → diff.
+    match args.file2.clone() {
+        Some(file2) => run_diff(&args, file2, diff_options),
+        None => run_inspect(&args),
+    }
+}
+
+/// Diff mode: parse both files, build the diff report, and launch (or summarise).
+fn run_diff(args: &Cli, file2: PathBuf, diff_options: DiffOptions) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    if !file2.exists() {
+        return Err(format!("file not found: '{}'", file2.display()).into());
+    }
+
+    // Parse both files in parallel using scoped threads.
     let start = Instant::now();
     eprintln!("Parsing both files in parallel...");
     stderr().flush()?;
 
     let (result1, result2) = std::thread::scope(|s| {
         let h1 = s.spawn(|| parse_file(&args.file1));
-        let h2 = s.spawn(|| parse_file(&args.file2));
+        let h2 = s.spawn(|| parse_file(&file2));
         (h1.join(), h2.join())
     });
 
@@ -256,7 +273,7 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         args.file1.display(),
         owned1.variable_count(),
         owned1.constraint_count(),
-        args.file2.display(),
+        file2.display(),
         owned2.variable_count(),
         owned2.constraint_count(),
         start.elapsed().as_secs_f64(),
@@ -266,7 +283,7 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     eprint!("Computing diff... ");
     stderr().flush()?;
     let file1_str = args.file1.display().to_string();
-    let file2_str = args.file2.display().to_string();
+    let file2_str = file2.display().to_string();
     let report = build_diff_report(&DiffInput {
         file1: &file1_str,
         file2: &file2_str,
@@ -287,6 +304,50 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         return Ok(());
     }
 
+    // Wrap parsed problems in Arc for sharing with solver threads.
+    let problem1 = Arc::new(owned1);
+    let problem2 = Arc::new(owned2);
+    let raw_text1: Arc<str> = raw_text1.into();
+    let raw_text2: Arc<str> = raw_text2.into();
+    let app = App::new(report, args.file1.clone(), file2, problem1, problem2, raw_text1, raw_text2, diff_options, line_map1, line_map2);
+
+    launch_tui(app, args.watch)
+}
+
+/// Inspect mode: parse the single file, build the inspect model, and launch (or summarise).
+fn run_inspect(args: &Cli) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let start = Instant::now();
+    eprintln!("Parsing file...");
+    stderr().flush()?;
+
+    let (owned, analysis, line_map, raw_text) = parse_file(&args.file1)?;
+
+    eprintln!(
+        "Parsed {} ({} vars, {} cons) in {:.1}s",
+        args.file1.display(),
+        owned.variable_count(),
+        owned.constraint_count(),
+        start.elapsed().as_secs_f64(),
+    );
+
+    let file_str = args.file1.display().to_string();
+    let report = inspect_model::build_inspect_report(&file_str, &owned, &line_map, analysis);
+
+    // Non-interactive summary mode: print and exit.
+    if args.summary {
+        cli_output::print_inspect_summary(&file_str, &owned, &report.analysis1);
+        return Ok(());
+    }
+
+    let problem = Arc::new(owned);
+    let raw_text: Arc<str> = raw_text.into();
+    let app = App::new_inspect(report, args.file1.clone(), problem, raw_text, line_map);
+
+    launch_tui(app, args.watch)
+}
+
+/// Shared TUI lifecycle: set up the terminal, run the event loop, and restore.
+fn launch_tui(mut app: App, watch: bool) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     eprintln!("Launching viewer...");
 
     // Set up terminal — enable_raw_mode() must happen before EventHandler::new()
@@ -310,15 +371,7 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         original_hook(panic_info);
     }));
 
-    // Wrap parsed problems in Arc for sharing with solver threads.
-    let problem1 = Arc::new(owned1);
-    let problem2 = Arc::new(owned2);
-
-    // Create app and event handler
-    let raw_text1: Arc<str> = raw_text1.into();
-    let raw_text2: Arc<str> = raw_text2.into();
-    let mut app = App::new(report, args.file1, args.file2, problem1, problem2, raw_text1, raw_text2, diff_options, line_map1, line_map2);
-    if args.watch {
+    if watch {
         app.enable_watch();
     }
     let events = EventHandler::new(Duration::from_millis(50));

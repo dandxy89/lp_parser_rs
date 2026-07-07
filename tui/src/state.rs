@@ -5,7 +5,7 @@ use ratatui::widgets::ListState;
 
 use crate::diff_model::{DiffEntry, DiffKind, sort_indices_by_delta};
 use crate::solver::{InfeasibilityDiagnosis, SolveDiffResult, SolveResult};
-use crate::widgets::{kind_prefix, kind_style};
+use crate::widgets::{kind_prefix, kind_style, text};
 
 /// State machine for the LP solver overlay.
 #[derive(Debug)]
@@ -159,6 +159,29 @@ pub struct SearchResult {
     pub haystack_index: usize,
     /// Diff kind for badge rendering.
     pub kind: DiffKind,
+}
+
+/// Which top-level mode the viewer is running in.
+///
+/// Selected once at startup from the number of positional file arguments and
+/// never changes afterwards: one file → [`AppMode::Inspect`] (a single-model
+/// explorer), two files → [`AppMode::Diff`] (the original diff viewer). An
+/// explicit enum keeps mode-specific behaviour readable instead of scattered
+/// `Option`/count checks.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AppMode {
+    /// Comparing two files: the original diff experience, unchanged.
+    Diff,
+    /// Exploring a single file: sections list every entry with no diff badges.
+    Inspect,
+}
+
+impl AppMode {
+    /// Whether diff-badges/kinds should be shown in the sidebar and detail panel.
+    /// Inspect mode lists plain entries with no `[+]/[-]/[~]` prefixes or colours.
+    pub const fn shows_diff_badges(self) -> bool {
+        matches!(self, Self::Diff)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -396,7 +419,18 @@ impl SectionViewState {
 
     /// Recompute the filtered indices and cached sidebar lines from the given
     /// entries, filter, and sort mode.
-    pub(crate) fn recompute<T: DiffEntry>(&mut self, entries: &[T], filter: DiffFilter, ignore_order: bool, sort: SortMode) {
+    ///
+    /// `show_badges` gates the `[+]/[-]/[~]` diff prefix and its colour: diff mode
+    /// passes `true`; inspect mode passes `false` so entries render as plain,
+    /// neutrally-coloured names with no diff decoration.
+    pub(crate) fn recompute<T: DiffEntry>(
+        &mut self,
+        entries: &[T],
+        filter: DiffFilter,
+        ignore_order: bool,
+        sort: SortMode,
+        show_badges: bool,
+    ) {
         debug_assert!(self.dirty, "recompute called on non-dirty SectionViewState");
         self.filtered_indices.clear();
         self.cached_lines.clear();
@@ -415,10 +449,14 @@ impl SectionViewState {
         }
         for &i in &self.filtered_indices {
             let entry = &entries[i];
-            let kind = entry.kind();
-            let style = kind_style(kind);
-            let line =
-                Line::from(vec![Span::styled(kind_prefix(kind), style), Span::raw(" "), Span::styled(entry.name().to_owned(), style)]);
+            let line = if show_badges {
+                let kind = entry.kind();
+                let style = kind_style(kind);
+                Line::from(vec![Span::styled(kind_prefix(kind), style), Span::raw(" "), Span::styled(entry.name().to_owned(), style)])
+            } else {
+                // Inspect mode: plain name, no diff badge, default text colour.
+                Line::from(vec![Span::raw("  "), Span::styled(entry.name().to_owned(), text())])
+            };
             self.cached_lines.push(line);
         }
         debug_assert_eq!(self.filtered_indices.len(), self.cached_lines.len(), "filtered indices and cached lines must be in sync");
@@ -558,6 +596,31 @@ impl PaletteCommand {
         }
     }
 
+    /// Whether this command is offered in inspect (single-file) mode.
+    ///
+    /// Diff-only actions — kind filters, ignore-order, tolerance cycling, the raw
+    /// side-by-side view, delta sorts, and the per-side (file 1 / file 2) yanks —
+    /// are hidden from the palette in inspect mode (they also no-op with a status
+    /// hint if their direct key is pressed). Everything else, including search,
+    /// solve, CSV export, name/detail yank, help and quit, remains.
+    pub const fn available_in_inspect(self) -> bool {
+        !matches!(
+            self,
+            Self::FilterAll
+                | Self::FilterAdded
+                | Self::FilterRemoved
+                | Self::FilterModified
+                | Self::FilterRenamed
+                | Self::ToggleRawView
+                | Self::ToggleIgnoreOrder
+                | Self::CycleSort
+                | Self::CycleRelTol
+                | Self::CycleAbsTol
+                | Self::YankOld
+                | Self::YankNew
+        )
+    }
+
     /// The equivalent direct keybinding, shown right-aligned in the palette.
     pub const fn hint(self) -> &'static str {
         match self {
@@ -585,6 +648,61 @@ impl PaletteCommand {
             Self::YankDetail => "Y",
             Self::ShowHelp => "?",
             Self::Quit => "q",
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_diff_mode_shows_badges_inspect_does_not() {
+        assert!(AppMode::Diff.shows_diff_badges(), "diff mode decorates entries with kind badges");
+        assert!(!AppMode::Inspect.shows_diff_badges(), "inspect mode lists plain entries");
+    }
+
+    #[test]
+    fn test_diff_only_palette_commands_hidden_in_inspect() {
+        // Diff-only actions: kind filters, ignore-order, tolerance, raw view, delta sorts.
+        let disabled = [
+            PaletteCommand::FilterAll,
+            PaletteCommand::FilterAdded,
+            PaletteCommand::FilterRemoved,
+            PaletteCommand::FilterModified,
+            PaletteCommand::FilterRenamed,
+            PaletteCommand::ToggleRawView,
+            PaletteCommand::ToggleIgnoreOrder,
+            PaletteCommand::CycleSort,
+            PaletteCommand::CycleRelTol,
+            PaletteCommand::CycleAbsTol,
+            PaletteCommand::YankOld,
+            PaletteCommand::YankNew,
+        ];
+        for command in disabled {
+            assert!(!command.available_in_inspect(), "{command:?} must be hidden in inspect mode");
+        }
+    }
+
+    #[test]
+    fn test_core_palette_commands_available_in_inspect() {
+        // Everything that still does something in a single-file view stays offered.
+        let available = [
+            PaletteCommand::GoSummary,
+            PaletteCommand::GoVariables,
+            PaletteCommand::GoConstraints,
+            PaletteCommand::GoObjectives,
+            PaletteCommand::GoNumerics,
+            PaletteCommand::OpenSearch,
+            PaletteCommand::Solve,
+            PaletteCommand::ExportCsv,
+            PaletteCommand::YankName,
+            PaletteCommand::YankDetail,
+            PaletteCommand::ShowHelp,
+            PaletteCommand::Quit,
+        ];
+        for command in available {
+            assert!(command.available_in_inspect(), "{command:?} must remain available in inspect mode");
         }
     }
 }
