@@ -198,16 +198,18 @@ lp_parser solve problem.lp --format json --pretty
 
 The selected solver binary must be installed on your `PATH`. The compatibility layer does **not** support multiple objectives (errors), strict inequalities (`<`, `>`), or SOS constraints (ignored with a warning).
 
-## Interactive TUI Diff Viewer (`lp_diff`)
+## LP Model Explorer and Diff Viewer (`lp_diff`)
 
-A terminal UI for comparing LP/MPS files with coefficient-level side-by-side diffs, fuzzy search, filtering, and integrated [HiGHS](https://highs.dev) solving. Built with [ratatui](https://ratatui.rs).
+A terminal UI for exploring a single LP/MPS model or comparing two, with coefficient-level side-by-side diffs, fuzzy search, filtering, and integrated [HiGHS](https://highs.dev) solving. Built with [ratatui](https://ratatui.rs). Pass one file to inspect a model, or two files to diff them.
 
 ![lp_diff demo](https://raw.githubusercontent.com/dandxy89/lp_parser_rs/main/tui/assets/demo.gif)
 
 ```bash
 cargo install --path tui
-lp_diff base.lp modified.lp            # interactive
-lp_diff base.lp modified.lp --summary  # non-interactive summary
+lp_diff model.lp                       # inspect a single model
+lp_diff base.lp modified.lp            # diff two files
+lp_diff model.lp --summary             # non-interactive single-model summary
+lp_diff base.lp modified.lp --summary  # non-interactive diff summary
 ```
 
 #### Tolerance & rename (parity with `lp_parser diff`)
