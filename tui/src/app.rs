@@ -1304,8 +1304,11 @@ impl App {
 
     /// Rebuild the cached styled lines for the current search results.
     fn rebuild_search_result_lines(&mut self) {
-        self.search_popup.cached_result_lines =
-            crate::widgets::search_popup::build_result_lines(&self.search_popup.results, &self.search_name_buffer);
+        self.search_popup.cached_result_lines = crate::widgets::search_popup::build_result_lines(
+            &self.search_popup.results,
+            &self.search_name_buffer,
+            self.mode.shows_diff_badges(),
+        );
     }
 
     /// Populate search results with all entries (no query filter).
