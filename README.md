@@ -16,7 +16,7 @@ Supported specifications: [IBM CPLEX v22.1.1](https://www.ibm.com/docs/en/icos/2
 - **Problem modification** — rename / update / remove objectives, constraints, variables, coefficients, and RHS values
 - **Variable types** — integer, general, bounded, free, semi-continuous
 - **Analysis** — statistics, matrix density, sparsity, coefficient ranges, issue detection with configurable thresholds
-- **Diff** (`diff` feature) — structural comparison between two LP files
+- **Diff** (`diff` feature) — structural and numeric comparison between two LP problems, callable from the library via [`LpProblem::diff`](https://docs.rs/lp_parser_rs) or `diff::compare`
 - **Serialisation** (`serde` feature) — JSON / YAML support
 - **External solvers** (`lp-solvers` feature) — CBC, Gurobi, CPLEX, GLPK via the [lp-solvers](https://crates.io/crates/lp-solvers) crate
 

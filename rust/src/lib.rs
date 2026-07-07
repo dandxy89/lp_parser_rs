@@ -12,7 +12,8 @@
 //! - Owned, interned problem model (no lifetimes) built from a zero-copy grammar
 //! - Support for multiple LP file format specifications
 //! - Comprehensive parsing of all standard LP file components
-//! - Optional serialisation and diff tracking
+//! - Optional serialisation (`serde`) and a structural/numeric diff engine
+//!   ([`diff`], behind the `diff` feature)
 //!
 //! # Quick Start
 //!
@@ -43,6 +44,9 @@ pub mod analysis;
 pub mod compat;
 #[cfg(feature = "csv")]
 pub mod csv;
+/// Structural and numeric diff engine for two [`LpProblem`]s (behind the `diff` feature).
+#[cfg(feature = "diff")]
+pub mod diff;
 /// Error types returned by the parsers ([`LpParseError`], [`LpResult`]).
 pub mod error;
 pub mod interner;
@@ -57,6 +61,8 @@ pub mod writer;
 
 // Crate-root re-exports of the primary public API, so downstream users do not
 // need deep module paths for the most common types and entry points.
+#[cfg(feature = "diff")]
+pub use diff::{DiffOptions, DiffTol, LpDiff, Normaliser, compare as compare_diff};
 pub use error::{LpParseError, LpResult};
 pub use interner::{NameId, NameInterner};
 // LALRPOP generated grammar module
