@@ -121,6 +121,7 @@ pub mod sidebar;
 pub mod solve;
 pub mod status_bar;
 pub mod summary;
+pub mod what_if;
 
 /// Map a [`DiffKind`] to its theme-aware display colour.
 pub fn kind_colour(kind: DiffKind) -> Color {

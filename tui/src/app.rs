@@ -16,7 +16,9 @@ use crate::parse::ParsedFile;
 use crate::search::{self, CompiledSearch, SearchMode};
 use crate::solver::{InfeasibilityDiagnosis, SolveResult};
 pub use crate::state::{AppMode, DiffFilter, Focus, SearchResult, Section, SectionViewState};
-use crate::state::{DetailView, DiagnosisState, JumpEntry, JumpList, PendingYank, Side, SolveState, SolveViewState, SortMode};
+use crate::state::{
+    DetailView, DiagnosisState, JumpEntry, JumpList, PendingYank, Side, SolveState, SolveViewState, SortMode, WhatIfPrompt,
+};
 use crate::watch::{WatchSession, WatchState};
 
 /// State for the `Ctrl+P` command palette overlay.
@@ -131,6 +133,9 @@ pub struct SolverSession {
     /// The problem behind the current single-solve result, kept so the
     /// diagnosis can rebuild the model without re-parsing.
     pub solved_problem: Option<Arc<LpProblem>>,
+    /// The modified problem behind side 2 of a what-if comparison solve, kept
+    /// so the diagnosis targets the edited model rather than `problem2`.
+    pub what_if_problem: Option<Arc<LpProblem>>,
 }
 
 impl SolverSession {
@@ -144,6 +149,7 @@ impl SolverSession {
             diagnosis: DiagnosisState::Idle,
             receive_diagnosis: None,
             solved_problem: None,
+            what_if_problem: None,
         }
     }
 
@@ -171,6 +177,9 @@ pub struct App {
 
     /// `Ctrl+P` command palette state.
     pub palette: CommandPaletteState,
+
+    /// What-if prompt overlay (`E` on a selected constraint), when open.
+    pub what_if: Option<WhatIfPrompt>,
 
     /// Scroll offset for the detail panel when it has focus.
     pub detail_scroll: u16,
@@ -430,6 +439,7 @@ impl App {
             show_help: false,
             help_scroll: 0,
             palette: CommandPaletteState { visible: false, query: String::new(), filtered: Vec::new(), selected: 0 },
+            what_if: None,
             detail_scroll: 0,
             section_selector_state,
             section_states: [SectionViewState::new(), SectionViewState::new(), SectionViewState::new()],

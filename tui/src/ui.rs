@@ -24,6 +24,7 @@ use crate::state::DetailView;
 use crate::theme::theme;
 use crate::widgets::{
     centred_rect, detail, focus_border_style, help, palette, panel_block, raw_diff, search_popup, sidebar, solve, status_bar, summary,
+    what_if,
 };
 
 /// Minimum width for the sidebar panel in columns.
@@ -103,6 +104,11 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     // Solve overlay — rendered on top of main content.
     if !matches!(app.solver.state, crate::state::SolveState::Idle) {
         solve::draw_solve_overlay(frame, frame.area(), app);
+    }
+
+    // What-if prompt overlay (edit constraint RHS & re-solve).
+    if let Some(prompt) = &app.what_if {
+        what_if::draw_what_if(frame, frame.area(), prompt);
     }
 
     // Help overlay — rendered last so it draws on top of everything.

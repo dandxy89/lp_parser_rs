@@ -28,6 +28,11 @@ impl App {
             return;
         }
 
+        if self.what_if.is_some() {
+            self.handle_what_if_key(key);
+            return;
+        }
+
         if !matches!(self.solver.state, SolveState::Idle) {
             self.handle_solve_key(key);
             return;
@@ -276,6 +281,9 @@ impl App {
 
             // Solve: inspect solves the single file directly; diff opens the picker.
             KeyCode::Char('S') => self.start_solve(),
+
+            // What-if: edit the selected constraint's RHS and re-solve.
+            KeyCode::Char('E') => self.open_what_if(),
 
             // Export CSV (works in both modes).
             KeyCode::Char('w') => self.export_csv(),
@@ -676,9 +684,11 @@ impl App {
             return;
         };
         let (problem, label) = if crate::solver::status_is_infeasible(&diff.result1.status) {
-            (Arc::clone(&self.problem1), self.file1_path.display().to_string())
+            (Arc::clone(&self.problem1), diff.file1_label.clone())
         } else if crate::solver::status_is_infeasible(&diff.result2.status) {
-            (Arc::clone(&self.problem2), self.file2_path.display().to_string())
+            // Side 2 is the modified model in a what-if run, `problem2` otherwise.
+            let problem = self.solver.what_if_problem.clone().unwrap_or_else(|| Arc::clone(&self.problem2));
+            (problem, diff.file2_label.clone())
         } else {
             return; // neither side is infeasible — nothing to diagnose
         };
@@ -712,6 +722,7 @@ impl App {
         self.solver.view = SolveViewState::default();
         self.solver.reset_diagnosis();
         self.solver.solved_problem = Some(Arc::clone(&problem));
+        self.solver.what_if_problem = None;
 
         let (sender, receiver) = mpsc::channel();
         self.solver.receive = Some(receiver);
@@ -779,9 +790,13 @@ impl App {
     fn spawn_both_solvers(&mut self) {
         let label1 = self.file1_path.display().to_string();
         let label2 = self.file2_path.display().to_string();
-        let problem1 = Arc::clone(&self.problem1);
-        let problem2 = Arc::clone(&self.problem2);
+        self.solver.what_if_problem = None;
+        self.spawn_solver_pair(Arc::clone(&self.problem1), label1, Arc::clone(&self.problem2), label2);
+    }
 
+    /// Spawn two solves in parallel, transitioning into `RunningBoth` with the
+    /// given side labels. Shared by "Both (diff)" and the what-if flow.
+    fn spawn_solver_pair(&mut self, problem1: Arc<LpProblem>, label1: String, problem2: Arc<LpProblem>, label2: String) {
         self.solver.state = SolveState::RunningBoth { file1: label1, file2: label2, result1: None, result2: None, started: Instant::now() };
         self.solver.view = SolveViewState::default();
         self.solver.reset_diagnosis();
@@ -806,6 +821,93 @@ impl App {
                 eprintln!("solve result 2 dropped: receiver closed");
             }
         });
+    }
+
+    /// Open the what-if prompt for the currently selected constraint.
+    ///
+    /// The edit always targets the baseline model (file 1); the constraint
+    /// must exist there as a standard (non-SOS) constraint. In diff mode with
+    /// rename rules the report name may not resolve against file 1, in which
+    /// case a hint is flashed instead.
+    fn open_what_if(&mut self) {
+        if self.active_section != Section::Constraints {
+            self.flash_status("What-if: select a constraint first (section 3)");
+            return;
+        }
+        let Some(name) = self.selected_constraint_name() else {
+            self.flash_status("What-if: select a constraint first");
+            return;
+        };
+        let Some(current_rhs) = baseline_constraint_rhs(&self.problem1, &name) else {
+            self.flash_status("What-if: constraint is not a standard constraint in file 1");
+            return;
+        };
+        self.what_if = Some(crate::state::WhatIfPrompt { constraint_name: name, current_rhs, input: String::new(), error: None });
+    }
+
+    /// Handle a key event while the what-if prompt is open.
+    fn handle_what_if_key(&mut self, key: KeyEvent) {
+        debug_assert!(self.what_if.is_some(), "handle_what_if_key called without an open prompt");
+        match key.code {
+            KeyCode::Esc => self.what_if = None,
+            KeyCode::Enter => self.confirm_what_if(),
+            KeyCode::Backspace => {
+                if let Some(prompt) = &mut self.what_if {
+                    prompt.input.pop();
+                    prompt.error = None;
+                }
+            }
+            // Accept the characters of a float literal (incl. scientific notation).
+            KeyCode::Char(character) if character.is_ascii_digit() || matches!(character, '.' | '-' | '+' | 'e' | 'E') => {
+                if let Some(prompt) = &mut self.what_if {
+                    prompt.input.push(character);
+                    prompt.error = None;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Validate the what-if input, build the modified problem, and launch the
+    /// baseline-vs-modified comparison solve.
+    fn confirm_what_if(&mut self) {
+        let Some(prompt) = &self.what_if else {
+            return;
+        };
+        let new_rhs = match prompt.input.trim().parse::<f64>() {
+            Ok(value) if value.is_finite() => value,
+            _ => {
+                if let Some(prompt) = &mut self.what_if {
+                    prompt.error = Some("enter a finite number".to_owned());
+                }
+                return;
+            }
+        };
+        let constraint_name = prompt.constraint_name.clone();
+        let current_rhs = prompt.current_rhs;
+
+        let mut modified = (*self.problem1).clone();
+        if let Err(error) = modified.update_constraint_rhs(&constraint_name, new_rhs) {
+            if let Some(prompt) = &mut self.what_if {
+                prompt.error = Some(error.to_string());
+            }
+            return;
+        }
+        let modified = Arc::new(modified);
+
+        let label1 = format!("baseline: {}", self.file1_path.display());
+        let label2 = format!("what-if: {constraint_name} rhs {current_rhs} \u{2192} {new_rhs}");
+        self.what_if = None;
+        self.spawn_solver_pair(Arc::clone(&self.problem1), label1, Arc::clone(&modified), label2);
+        // Set after spawn_solver_pair: it clears solver bookkeeping for a fresh run.
+        self.solver.what_if_problem = Some(modified);
+    }
+
+    /// Return the report name of the currently selected constraint entry.
+    fn selected_constraint_name(&self) -> Option<String> {
+        debug_assert!(self.active_section == Section::Constraints, "selected_constraint_name called outside the Constraints section");
+        let entry_index = self.selected_entry_index()?;
+        self.report.constraints.entries.get(entry_index).map(|entry| entry.name.clone())
     }
 
     /// Switch the solve popup to a different tab, preserving per-tab scroll position.
@@ -849,7 +951,7 @@ impl App {
 
     /// Handle a mouse event: scroll wheels and left-click panel selection.
     pub fn handle_mouse(&mut self, event: MouseEvent) {
-        if self.search_popup.visible || self.palette.visible {
+        if self.search_popup.visible || self.palette.visible || self.what_if.is_some() {
             return;
         }
 
@@ -939,5 +1041,32 @@ impl App {
         } else if over_detail {
             self.focus = Focus::Detail;
         }
+    }
+}
+
+/// Return the RHS of a standard constraint in `problem`, or `None` if the
+/// constraint is missing or is an SOS constraint.
+fn baseline_constraint_rhs(problem: &LpProblem, name: &str) -> Option<f64> {
+    let id = problem.name_id(name)?;
+    match problem.constraints.get(&id)? {
+        lp_parser_rs::model::Constraint::Standard { rhs, .. } => Some(*rhs),
+        lp_parser_rs::model::Constraint::SOS { .. } => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn what_if_clone_modify_leaves_baseline_untouched() {
+        let baseline = Arc::new(LpProblem::parse("min\nobj: x\nst\nc1: x >= 2\nend").expect("tiny LP must parse"));
+        assert_eq!(baseline_constraint_rhs(&baseline, "c1"), Some(2.0));
+        assert_eq!(baseline_constraint_rhs(&baseline, "missing"), None);
+
+        let mut modified = (*baseline).clone();
+        modified.update_constraint_rhs("c1", 5.0).expect("rhs update must succeed");
+        assert_eq!(baseline_constraint_rhs(&modified, "c1"), Some(5.0), "modified copy must carry the new rhs");
+        assert_eq!(baseline_constraint_rhs(&baseline, "c1"), Some(2.0), "baseline must be untouched by the what-if edit");
     }
 }

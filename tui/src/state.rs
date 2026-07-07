@@ -27,6 +27,20 @@ pub enum SolveState {
     Failed(String),
 }
 
+/// State for the what-if prompt overlay (`E` on a selected constraint):
+/// edit the constraint's RHS in memory and re-solve against the baseline.
+#[derive(Debug, Clone)]
+pub struct WhatIfPrompt {
+    /// Name of the constraint being edited.
+    pub constraint_name: String,
+    /// The constraint's current RHS in the baseline problem (file 1).
+    pub current_rhs: f64,
+    /// Text buffer for the new RHS value being typed.
+    pub input: String,
+    /// Validation error from the last confirm attempt, if any.
+    pub error: Option<String>,
+}
+
 /// State machine for the infeasibility diagnosis (elastic relaxation) run.
 #[derive(Debug)]
 pub enum DiagnosisState {
