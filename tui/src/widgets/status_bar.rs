@@ -125,17 +125,13 @@ pub fn draw_status_bar(frame: &mut Frame, area: Rect, params: &StatusBarParams<'
 
     // Right: yank flash or key hints, right-aligned in a fixed-width chunk so
     // the left segment can flow (and clip) independently.
-    // A leading space keeps a visible gap between a clipped left segment and
-    // the right-aligned hints.
-    let (right_line, right_width) = params.yank_flash.map_or_else(
-        || (Line::from(vec![Span::raw(" "), Span::styled(params.hints, Style::default().fg(t.muted))]), params.hints.len()),
-        |flash| {
-            (
-                Line::from(vec![Span::raw(" "), Span::styled(flash.message, Style::default().fg(t.added).add_modifier(Modifier::BOLD))]),
-                flash.message.len(),
-            )
-        },
+    let (right_content, right_width) = params.yank_flash.map_or_else(
+        || (Span::styled(params.hints, Style::default().fg(t.muted)), params.hints.len()),
+        |flash| (Span::styled(flash.message, Style::default().fg(t.added).add_modifier(Modifier::BOLD)), flash.message.len()),
     );
+    // A leading space keeps a visible gap between a clipped left segment and
+    // the right-aligned content.
+    let right_line = Line::from(vec![Span::raw(" "), right_content]);
 
     #[allow(clippy::cast_possible_truncation)] // hint strings are far below u16::MAX
     let right_len = (right_width as u16).saturating_add(2).min(area.width);

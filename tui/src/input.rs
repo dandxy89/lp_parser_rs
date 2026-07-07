@@ -186,18 +186,8 @@ impl App {
             PaletteCommand::OpenSearch => self.open_search_popup(),
             PaletteCommand::NextMatch => self.repeat_search(true),
             PaletteCommand::PrevMatch => self.repeat_search(false),
-            PaletteCommand::JumpBack => {
-                if let Some(entry) = self.jumplist.go_back() {
-                    let entry = *entry;
-                    self.restore_jump(entry);
-                }
-            }
-            PaletteCommand::JumpForward => {
-                if let Some(entry) = self.jumplist.go_forward() {
-                    let entry = *entry;
-                    self.restore_jump(entry);
-                }
-            }
+            PaletteCommand::JumpBack => self.jump_back(),
+            PaletteCommand::JumpForward => self.jump_forward(),
             PaletteCommand::Solve => self.start_solve(),
             PaletteCommand::WhatIf => self.open_what_if(),
             PaletteCommand::ExportCsv => self.export_csv(),
@@ -409,18 +399,8 @@ impl App {
             KeyCode::Char('u') => self.page_up(visible / 2),
             KeyCode::Char('f') => self.page_down(visible),
             KeyCode::Char('b') => self.page_up(visible),
-            KeyCode::Char('o') => {
-                if let Some(entry) = self.jumplist.go_back() {
-                    let entry = *entry;
-                    self.restore_jump(entry);
-                }
-            }
-            KeyCode::Char('i') => {
-                if let Some(entry) = self.jumplist.go_forward() {
-                    let entry = *entry;
-                    self.restore_jump(entry);
-                }
-            }
+            KeyCode::Char('o') => self.jump_back(),
+            KeyCode::Char('i') => self.jump_forward(),
             KeyCode::Char('p') => self.open_command_palette(),
             _ => return false,
         }
@@ -1008,8 +988,7 @@ impl App {
     pub(crate) fn set_filter(&mut self, filter: DiffFilter) {
         if self.filter != filter {
             self.record_jump();
-            self.filter = filter;
-            self.refresh_tab_labels();
+            self.apply_filter(filter);
             self.invalidate_cache();
             self.ensure_active_section_cache();
             self.reset_name_list_selection();

@@ -558,9 +558,10 @@ impl App {
         }
     }
 
-    /// Rebuild the cached tab labels; must follow every `filter` change since
-    /// the tab bar reflects the active kind filter.
-    pub(crate) fn refresh_tab_labels(&mut self) {
+    /// Set the kind filter and rebuild the tab labels that display it.
+    /// The single mutation point for `filter`, so the labels can never drift.
+    pub(crate) fn apply_filter(&mut self, filter: DiffFilter) {
+        self.filter = filter;
         self.section_labels = build_section_labels(&self.cached_summary, self.mode, self.filter);
     }
 
@@ -1074,11 +1075,26 @@ impl App {
         self.section_selector_state.select(Some(section.index()));
     }
 
+    /// Step back in the jumplist and restore that position (`Ctrl+o` / palette).
+    pub(crate) fn jump_back(&mut self) {
+        if let Some(entry) = self.jumplist.go_back() {
+            let entry = *entry;
+            self.restore_jump(entry);
+        }
+    }
+
+    /// Step forward in the jumplist and restore that position (`Ctrl+i` / palette).
+    pub(crate) fn jump_forward(&mut self) {
+        if let Some(entry) = self.jumplist.go_forward() {
+            let entry = *entry;
+            self.restore_jump(entry);
+        }
+    }
+
     /// Navigate to a jumplist entry, restoring section, selection, scroll, and filter.
     pub(crate) fn restore_jump(&mut self, entry: JumpEntry) {
         self.set_active_section(entry.section);
-        self.filter = entry.filter;
-        self.refresh_tab_labels();
+        self.apply_filter(entry.filter);
         self.invalidate_cache();
         self.ensure_active_section_cache();
         self.detail_scroll = entry.detail_scroll;
@@ -1577,8 +1593,7 @@ impl App {
         self.set_active_section(section);
 
         // Reset filter and recompute caches.
-        self.filter = DiffFilter::All;
-        self.refresh_tab_labels();
+        self.apply_filter(DiffFilter::All);
         self.invalidate_cache();
         self.ensure_active_section_cache();
 

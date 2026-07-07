@@ -52,7 +52,8 @@ pub fn draw_tab_bar(frame: &mut Frame, area: Rect, app: &mut App) {
                 #[allow(clippy::cast_possible_truncation)] // counts are short, far below u16::MAX
                 let count_width = count.content.chars().count() as u16;
                 width = width.saturating_add(count_width);
-                spans.push(count.clone());
+                // Borrow the cached span's content rather than cloning its String.
+                spans.push(Span::styled(count.content.as_ref(), count.style));
             }
         }
         bounds[i] = (x, x.saturating_add(width));
