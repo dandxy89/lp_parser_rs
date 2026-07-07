@@ -24,7 +24,7 @@ pub fn draw_raw_diff(
     border_style: Style,
 ) -> usize {
     let block = panel_block(border_style)
-        .title(Span::styled(" Raw Text (r to toggle) ", Style::default().fg(theme().accent).add_modifier(Modifier::BOLD)));
+        .title(Span::styled(" Raw Text \u{b7} r:parsed ", Style::default().fg(theme().accent).add_modifier(Modifier::BOLD)));
     let inner = block.inner(area);
     frame.render_widget(block, area);
 

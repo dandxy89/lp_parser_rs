@@ -3,7 +3,7 @@ source: tui/src/snapshot_tests.rs
 expression: "render(&mut app, 80, 24).backend()"
 ---
 " Summary │ Variables (2) │ Constraints (2) │ Objectives (1) │ Numerics          "
-"╭ 1/2 variables (2 ╮╭ Variable Detail ─────────────────────────────────────────╮"
+"╭ 1/2 variables (2 ╮╭ Variable: x ─────────────────────────────────────────────╮"
 "│▶   x             ││Variable: x                                               │"
 "│    y             ││──────────────────────────────────────                    │"
 "│                  ││  Type:   DoubleBound                                     │"

@@ -26,6 +26,14 @@ fn rule<'a>() -> Line<'a> {
     Line::from(Span::styled("──────────────────────────────────────", muted()))
 }
 
+/// Build the panel title: entity, entry name (truncated), and the raw-view
+/// toggle hint where the raw side-by-side view applies (diff-mode constraints
+/// and objectives). The title persists when the in-content header scrolls away.
+fn detail_title(entity_label: &str, name: &str, raw_hint: bool) -> String {
+    let name = truncate_with_ellipsis(name, 32);
+    if raw_hint { format!(" {entity_label}: {name} \u{b7} r:raw ") } else { format!(" {entity_label}: {name} ") }
+}
+
 /// Build the common header lines for a detail panel: entity label, name, kind badge, and rule.
 fn detail_header(entity_label: &str, name: &str, kind: DiffKind) -> Vec<Line<'static>> {
     vec![
@@ -145,7 +153,7 @@ pub fn render_variable_detail(frame: &mut Frame, area: Rect, entry: &VariableDif
         }
     }
 
-    render_panel(frame, area, " Variable Detail ", lines, border_style, scroll)
+    render_panel(frame, area, detail_title("Variable", &entry.name, false), lines, border_style, scroll)
 }
 
 /// Render a constraint detail panel. Returns the total content line count.
@@ -261,6 +269,7 @@ pub fn render_constraint_detail(
                 return render_constraint_side_by_side(
                     frame,
                     area,
+                    detail_title("Constraint", &entry.name, true),
                     lines,
                     coeff_changes,
                     old_coefficients,
@@ -348,7 +357,7 @@ pub fn render_constraint_detail(
         }
     }
 
-    render_panel(frame, area, " Constraint Detail ", lines, border_style, scroll)
+    render_panel(frame, area, detail_title("Constraint", &entry.name, true), lines, border_style, scroll)
 }
 
 /// Render an objective detail panel. Returns the total content line count.
@@ -406,7 +415,7 @@ pub fn render_objective_detail(
         }
     }
 
-    render_panel(frame, area, " Objective Detail ", lines, border_style, scroll)
+    render_panel(frame, area, detail_title("Objective", &entry.name, true), lines, border_style, scroll)
 }
 
 /// Build the neutral header lines for an inspect detail panel: entity label,
@@ -426,7 +435,7 @@ pub fn render_inspect_variable(frame: &mut Frame, area: Rect, entry: &VariableDi
     if let Some(variable_type) = entry.new_type.as_ref() {
         render_variable_type_info(&mut lines, variable_type, text());
     }
-    render_panel(frame, area, " Variable Detail ", lines, border_style, scroll)
+    render_panel(frame, area, detail_title("Variable", &entry.name, false), lines, border_style, scroll)
 }
 
 /// Render an inspect (single-file) constraint detail panel: operator, RHS, and
@@ -473,7 +482,7 @@ pub fn render_inspect_constraint(
         }
     }
 
-    render_panel(frame, area, " Constraint Detail ", lines, border_style, scroll)
+    render_panel(frame, area, detail_title("Constraint", &entry.name, false), lines, border_style, scroll)
 }
 
 /// Render an inspect (single-file) objective detail panel: coefficients, neutral.
@@ -491,7 +500,7 @@ pub fn render_inspect_objective(
     let mut lines = inspect_header("Objective", &entry.name);
     lines.push(Line::from(Span::styled("  Coefficients:", muted().add_modifier(Modifier::BOLD))));
     render_inspect_coefficients(&mut lines, &entry.new_coefficients, interner);
-    render_panel(frame, area, " Objective Detail ", lines, border_style, scroll)
+    render_panel(frame, area, detail_title("Objective", &entry.name, false), lines, border_style, scroll)
 }
 
 /// Append neutral `name  value` rows for a resolved coefficient/weight list.
@@ -514,6 +523,7 @@ fn render_inspect_coefficients(lines: &mut Vec<Line<'static>>, coefficients: &[R
 fn render_constraint_side_by_side(
     frame: &mut Frame,
     area: Rect,
+    title: String,
     header_lines: Vec<Line<'_>>,
     coeff_changes: &[CoefficientChange],
     old_coefficients: &[ResolvedCoefficient],
@@ -525,7 +535,7 @@ fn render_constraint_side_by_side(
 ) -> usize {
     let t = theme();
     let header_line_count = header_lines.len();
-    let block = panel_block(border_style).title(" Constraint Detail ");
+    let block = panel_block(border_style).title(title);
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
@@ -738,7 +748,7 @@ fn render_coeff_changes(
 
 /// Wrap `lines` in a bordered block with the given `title` and render it,
 /// applying vertical scroll. Returns the total content line count.
-fn render_panel(frame: &mut Frame, area: Rect, title: &'static str, lines: Vec<Line<'_>>, border_style: Style, scroll: u16) -> usize {
+fn render_panel(frame: &mut Frame, area: Rect, title: String, lines: Vec<Line<'_>>, border_style: Style, scroll: u16) -> usize {
     let line_count = lines.len();
     let block = panel_block(border_style).title(title);
     let paragraph = Paragraph::new(lines).block(block).scroll((scroll, 0));
