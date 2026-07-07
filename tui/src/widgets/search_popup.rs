@@ -276,6 +276,8 @@ fn draw_hints(frame: &mut Frame, area: Rect) {
         Span::styled("regex  ", Style::default().fg(t.muted)),
         Span::styled("s:", Style::default().fg(t.accent).add_modifier(Modifier::BOLD)),
         Span::styled("substring  ", Style::default().fg(t.muted)),
+        Span::styled("c:", Style::default().fg(t.accent).add_modifier(Modifier::BOLD)),
+        Span::styled("content  ", Style::default().fg(t.muted)),
         Span::styled("(default: fuzzy)  ", Style::default().fg(t.muted)),
         Span::styled("j/k", Style::default().fg(t.accent)),
         Span::styled(" navigate  ", Style::default().fg(t.muted)),

@@ -472,6 +472,74 @@ impl DiffEntry for ObjectiveDiffEntry {
     }
 }
 
+/// Append NUL-separated variable names and values from a coefficient list to
+/// a content-search buffer.
+fn write_coefficients_content(buf: &mut String, coefficients: &[ResolvedCoefficient], interner: &NameInterner) {
+    use std::fmt::Write as _;
+    for coefficient in coefficients {
+        write!(buf, "\0{}\0{}", interner.resolve(coefficient.name), coefficient.value).expect("fmt::Write to String is infallible");
+    }
+}
+
+impl VariableDiffEntry {
+    /// Append this entry's searchable content (its old/new variable types,
+    /// including bound values) to `buf`, NUL-separated. Used by the `c:`
+    /// content search mode.
+    pub fn write_content(&self, buf: &mut String) {
+        use std::fmt::Write as _;
+        if let Some(old_type) = &self.old_type {
+            write!(buf, "\0{old_type:?}").expect("fmt::Write to String is infallible");
+        }
+        if let Some(new_type) = &self.new_type {
+            write!(buf, "\0{new_type:?}").expect("fmt::Write to String is infallible");
+        }
+    }
+}
+
+impl ConstraintDiffEntry {
+    /// Append this entry's searchable content (referenced variable names,
+    /// coefficient values, operator, and RHS from both sides) to `buf`,
+    /// NUL-separated. Used by the `c:` content search mode.
+    pub fn write_content(&self, buf: &mut String, interner: &NameInterner) {
+        use std::fmt::Write as _;
+        match &self.detail {
+            ConstraintDiffDetail::Standard { old_coefficients, new_coefficients, old_rhs, new_rhs, old_operator, .. } => {
+                write_coefficients_content(buf, old_coefficients, interner);
+                write_coefficients_content(buf, new_coefficients, interner);
+                write!(buf, "\0{old_operator}\0{old_rhs}\0{new_rhs}").expect("fmt::Write to String is infallible");
+            }
+            ConstraintDiffDetail::Sos { old_weights, new_weights, old_sos_type, .. } => {
+                write_coefficients_content(buf, old_weights, interner);
+                write_coefficients_content(buf, new_weights, interner);
+                write!(buf, "\0{old_sos_type}").expect("fmt::Write to String is infallible");
+            }
+            ConstraintDiffDetail::TypeChanged { old_summary, new_summary } => {
+                write!(buf, "\0{old_summary}\0{new_summary}").expect("fmt::Write to String is infallible");
+            }
+            ConstraintDiffDetail::AddedOrRemoved(constraint) => match constraint {
+                ResolvedConstraint::Standard { coefficients, operator, rhs } => {
+                    write_coefficients_content(buf, coefficients, interner);
+                    write!(buf, "\0{operator}\0{rhs}").expect("fmt::Write to String is infallible");
+                }
+                ResolvedConstraint::Sos { sos_type, weights } => {
+                    write_coefficients_content(buf, weights, interner);
+                    write!(buf, "\0{sos_type}").expect("fmt::Write to String is infallible");
+                }
+            },
+        }
+    }
+}
+
+impl ObjectiveDiffEntry {
+    /// Append this entry's searchable content (referenced variable names and
+    /// coefficient values from both sides) to `buf`, NUL-separated. Used by
+    /// the `c:` content search mode.
+    pub fn write_content(&self, buf: &mut String, interner: &NameInterner) {
+        write_coefficients_content(buf, &self.old_coefficients, interner);
+        write_coefficients_content(buf, &self.new_coefficients, interner);
+    }
+}
+
 /// Extract (lower, upper) bounds from a `VariableType`, returning `None` for
 /// bounds that don't apply to that type.
 #[must_use]
@@ -1387,6 +1455,33 @@ mod tests {
     fn assert_diff_entry(entry: &impl DiffEntry, name: &str, kind: DiffKind) {
         assert_eq!(entry.name(), name);
         assert_eq!(entry.kind(), kind);
+    }
+
+    #[test]
+    fn test_constraint_content_includes_variables_operator_and_rhs() {
+        let p1 = problem_with_standard_constraint("c1", &[("flow_a", 2.0), ("flow_b", 3.0)], ComparisonOp::LTE, 10.0);
+        let p2 = problem_with_standard_constraint("c1", &[("flow_a", 2.0), ("flow_b", 3.0)], ComparisonOp::LTE, 12.0);
+        let report = quick_report(&p1, &p2);
+
+        let entry = report.constraints.entries.iter().find(|e| e.name == "c1").expect("c1 entry must exist");
+        let mut content = String::new();
+        entry.write_content(&mut content, &report.interner);
+        for needle in ["flow_a", "flow_b", "2", "3", "10", "12", "<="] {
+            assert!(content.contains(needle), "content search text must contain {needle:?}, got {content:?}");
+        }
+    }
+
+    #[test]
+    fn test_variable_content_includes_types() {
+        let p1 = empty_problem();
+        let p2 = problem_with_variable("x", &VariableType::DoubleBound(1.5, 4.0));
+        let report = quick_report(&p1, &p2);
+
+        let entry = report.variables.entries.iter().find(|e| e.name == "x").expect("x entry must exist");
+        let mut content = String::new();
+        entry.write_content(&mut content);
+        assert!(content.contains("DoubleBound"), "content must include the variable type, got {content:?}");
+        assert!(content.contains("1.5"), "content must include bound values, got {content:?}");
     }
 
     #[test]

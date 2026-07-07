@@ -1,9 +1,11 @@
 //! Search modes and compiled search cache for efficient multi-field matching.
 //!
 //! Query prefixes select the search mode:
-//! - `r:pattern` — Regex (case-insensitive)
-//! - `s:text` — Substring (case-insensitive)
-//! - anything else — Fuzzy (SIMD-accelerated via `frizbee`)
+//! - `r:pattern` — Regex (case-insensitive) over entry names
+//! - `s:text` — Substring (case-insensitive) over entry names
+//! - `c:text` — Substring (case-insensitive) over entry content (referenced
+//!   variables, coefficient/RHS values, types) as shown in the detail panel
+//! - anything else — Fuzzy (SIMD-accelerated via `frizbee`) over entry names
 
 use regex::Regex;
 
@@ -13,6 +15,8 @@ pub enum SearchMode {
     Fuzzy,
     Regex,
     Substring,
+    /// Full-text substring search over entry content rather than names.
+    Content,
 }
 
 impl SearchMode {
@@ -22,6 +26,7 @@ impl SearchMode {
             Self::Fuzzy => "fuzzy",
             Self::Regex => "regex",
             Self::Substring => "substring",
+            Self::Content => "content",
         }
     }
 }
@@ -30,6 +35,7 @@ impl SearchMode {
 ///
 /// - `r:pattern` → `(Regex, "pattern")`
 /// - `s:text` → `(Substring, "text")`
+/// - `c:text` → `(Content, "text")`
 /// - anything else → `(Fuzzy, raw)`
 #[allow(clippy::option_if_let_else)] // chained if-let is clearer than nested map_or_else
 pub fn parse_query(raw: &str) -> (SearchMode, &str) {
@@ -37,6 +43,8 @@ pub fn parse_query(raw: &str) -> (SearchMode, &str) {
         (SearchMode::Regex, pattern)
     } else if let Some(text) = raw.strip_prefix("s:") {
         (SearchMode::Substring, text)
+    } else if let Some(text) = raw.strip_prefix("c:") {
+        (SearchMode::Content, text)
     } else {
         (SearchMode::Fuzzy, raw)
     }
@@ -61,9 +69,10 @@ impl CompiledSearch {
                 let result = regex::RegexBuilder::new(pattern).case_insensitive(true).build();
                 Self::Regex(result)
             }
-            // Fuzzy is handled by the caller via frizbee; fall back to a
-            // substring match on the whole query if it ever reaches here.
-            SearchMode::Substring | SearchMode::Fuzzy => Self::Substring(pattern.to_lowercase()),
+            // Content is a substring match over content text. Fuzzy is handled
+            // by the caller via frizbee; fall back to a substring match on the
+            // whole query if it ever reaches here.
+            SearchMode::Substring | SearchMode::Content | SearchMode::Fuzzy => Self::Substring(pattern.to_lowercase()),
         }
     }
 
@@ -119,8 +128,10 @@ mod tests {
         parse_fuzzy:           "hello"    => SearchMode::Fuzzy,     "hello";
         parse_regex:           "r:^con.*" => SearchMode::Regex,     "^con.*";
         parse_substring:       "s:exact"  => SearchMode::Substring, "exact";
+        parse_content:         "c:x14"    => SearchMode::Content,   "x14";
         parse_regex_empty:     "r:"       => SearchMode::Regex,     "";
-        parse_substring_empty: "s:"       => SearchMode::Substring, ""
+        parse_substring_empty: "s:"       => SearchMode::Substring, "";
+        parse_content_empty:   "c:"       => SearchMode::Content,   ""
     }
 
     macro_rules! match_tests {

@@ -227,6 +227,11 @@ pub struct App {
     /// Rebuilt when the haystack changes (indices correspond 1:1 with `search_haystack`).
     pub(crate) search_name_buffer: Vec<String>,
 
+    /// Per-entry content text for the `c:` content search mode (indices
+    /// correspond 1:1 with `search_haystack`). Built lazily on the first
+    /// content query and cleared when the report is rebuilt; empty = unbuilt.
+    pub(crate) search_content_buffer: Vec<String>,
+
     /// Cached coefficient rows for the detail panel, avoiding per-frame `BTreeMap` + String allocations.
     /// Invalidated when the selected entry changes.
     pub(crate) coeff_row_cache: Option<CoeffRowCache>,
@@ -459,6 +464,7 @@ impl App {
             detail_view: DetailView::default(),
             search_name_buffer: names,
             search_haystack: haystack,
+            search_content_buffer: Vec::new(),
             coeff_row_cache: None,
             summary_lines,
             numerics_lines,
@@ -589,10 +595,12 @@ impl App {
             }
         }
 
-        // Report-derived caches: search haystack + name buffer.
+        // Report-derived caches: search haystack + name buffer. The content
+        // buffer is lazy — clear it and let the next `c:` query rebuild it.
         let (haystack, names) = build_haystack(&self.report);
         self.search_haystack = haystack;
         self.search_name_buffer = names;
+        self.search_content_buffer.clear();
 
         // Summary lines + cached summary (respects the active ignore_order setting).
         self.rebuild_summary();
@@ -1297,6 +1305,7 @@ impl App {
                 self.populate_fuzzy_results();
             }
             SearchMode::Regex | SearchMode::Substring => self.populate_filtered_results(),
+            SearchMode::Content => self.populate_content_results(),
         }
 
         self.rebuild_search_result_lines();
@@ -1368,6 +1377,51 @@ impl App {
         self.search_popup.regex_error = compiled.regex_error();
         for (haystack_index, entry) in self.search_haystack.iter().enumerate() {
             if compiled.matches(&self.search_name_buffer[haystack_index]) {
+                self.search_popup.results.push(SearchResult {
+                    section: entry.section,
+                    entry_index: entry.index,
+                    score: 0,
+                    match_indices: Vec::new(),
+                    haystack_index,
+                    kind: entry.kind,
+                });
+            }
+        }
+    }
+
+    /// Build the per-entry content text for the `c:` search mode, if not
+    /// already built for the current haystack.
+    fn ensure_search_content(&mut self) {
+        if self.search_content_buffer.len() == self.search_haystack.len() {
+            return;
+        }
+        self.search_content_buffer.clear();
+        self.search_content_buffer.reserve(self.search_haystack.len());
+        for (haystack_index, entry) in self.search_haystack.iter().enumerate() {
+            // Seed with the entry name so `c:` is a superset of `s:`.
+            let mut text = self.search_name_buffer[haystack_index].clone();
+            match entry.section {
+                Section::Variables => self.report.variables.entries[entry.index].write_content(&mut text),
+                Section::Constraints => self.report.constraints.entries[entry.index].write_content(&mut text, &self.report.interner),
+                Section::Objectives => self.report.objectives.entries[entry.index].write_content(&mut text, &self.report.interner),
+                Section::Summary | Section::Numerics => {
+                    debug_assert!(false, "haystack must only contain Variables/Constraints/Objectives entries");
+                }
+            }
+            self.search_content_buffer.push(text);
+        }
+    }
+
+    /// Populate search results using full-text content matching (`c:` mode).
+    fn populate_content_results(&mut self) {
+        debug_assert!(
+            matches!(search::parse_query(&self.search_popup.query).0, SearchMode::Content),
+            "populate_content_results called with a non-content query"
+        );
+        self.ensure_search_content();
+        let compiled = CompiledSearch::compile(&self.search_popup.query);
+        for (haystack_index, entry) in self.search_haystack.iter().enumerate() {
+            if compiled.matches(&self.search_content_buffer[haystack_index]) {
                 self.search_popup.results.push(SearchResult {
                     section: entry.section,
                     entry_index: entry.index,
