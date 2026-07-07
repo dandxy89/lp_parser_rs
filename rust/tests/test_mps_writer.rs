@@ -60,7 +60,8 @@ fn assert_round_trip_preserves_structure(original: &LpProblem, reparsed: &LpProb
     for (name_id, constraint) in &original.constraints {
         let name = original.resolve(*name_id);
         let reparsed_id = reparsed.name_id(name).unwrap_or_else(|| panic!("{context}: constraint '{name}' missing after round trip"));
-        let reparsed_constraint = reparsed.constraints.get(&reparsed_id).unwrap_or_else(|| panic!("{context}: constraint '{name}' vanished"));
+        let reparsed_constraint =
+            reparsed.constraints.get(&reparsed_id).unwrap_or_else(|| panic!("{context}: constraint '{name}' vanished"));
 
         match (constraint, reparsed_constraint) {
             (Constraint::Standard { operator: op1, rhs: rhs1, .. }, Constraint::Standard { operator: op2, rhs: rhs2, .. }) => {
@@ -94,8 +95,10 @@ fn mps_fixtures_round_trip_through_writer() {
         let input = parse_file(&path).unwrap_or_else(|e| panic!("failed to read {file_name}: {e}"));
         let original = LpProblem::parse_mps(&input).unwrap_or_else(|e| panic!("failed to parse {file_name}: {e}"));
 
-        let output = write_mps_string_with_options(&original, &lossless_options()).unwrap_or_else(|e| panic!("failed to write {file_name} as MPS: {e}"));
-        let reparsed = LpProblem::parse_mps(&output).unwrap_or_else(|e| panic!("failed to re-parse written {file_name}:\n{output}\n\nerror: {e}"));
+        let output = write_mps_string_with_options(&original, &lossless_options())
+            .unwrap_or_else(|e| panic!("failed to write {file_name} as MPS: {e}"));
+        let reparsed =
+            LpProblem::parse_mps(&output).unwrap_or_else(|e| panic!("failed to re-parse written {file_name}:\n{output}\n\nerror: {e}"));
 
         assert_round_trip_preserves_structure(&original, &reparsed, &file_name);
     }
@@ -127,8 +130,10 @@ fn lp_fixtures_round_trip_through_mps_writer() {
         let input = read_resource(file_name).unwrap_or_else(|e| panic!("failed to read {file_name}: {e}"));
         let original = LpProblem::parse(&input).unwrap_or_else(|e| panic!("failed to parse {file_name}: {e}"));
 
-        let output = write_mps_string_with_options(&original, &lossless_options()).unwrap_or_else(|e| panic!("failed to write {file_name} as MPS: {e}"));
-        let reparsed = LpProblem::parse_mps(&output).unwrap_or_else(|e| panic!("failed to re-parse written {file_name}:\n{output}\n\nerror: {e}"));
+        let output = write_mps_string_with_options(&original, &lossless_options())
+            .unwrap_or_else(|e| panic!("failed to write {file_name} as MPS: {e}"));
+        let reparsed =
+            LpProblem::parse_mps(&output).unwrap_or_else(|e| panic!("failed to re-parse written {file_name}:\n{output}\n\nerror: {e}"));
 
         assert_round_trip_preserves_structure(&original, &reparsed, file_name);
     }

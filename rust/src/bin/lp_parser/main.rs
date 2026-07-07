@@ -283,7 +283,7 @@ fn build_info_value(problem: &LpProblem, args: &InfoArgs) -> serde_json::Value {
 /// by [`lp_parser_rs::diff::Normaliser`]. The helper's explicit `for<'a>` bound
 /// steers closure lifetime inference, which does not converge on its own.
 #[cfg(feature = "diff")]
-fn as_normaliser<F>(f: F) -> F
+const fn as_normaliser<F>(f: F) -> F
 where
     F: for<'a> Fn(&'a str) -> Cow<'a, str>,
 {
