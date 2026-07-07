@@ -159,7 +159,7 @@ fn build_mps(output: &mut String, problem: &LpProblem, options: &MpsWriterOption
     write_columns_section(output, problem, &columns, options).expect("fmt::Write to String is infallible");
 
     write_rhs_section(output, problem, obj_row_name, options).expect("fmt::Write to String is infallible");
-    write_bounds_section(output, problem, options).expect("fmt::Write to String is infallible");
+    write_bounds_section(output, problem, options)?;
     write_sos_section(output, problem, options).expect("fmt::Write to String is infallible");
 
     writeln!(output, "ENDATA").expect("fmt::Write to String is infallible");
@@ -355,25 +355,78 @@ fn write_bound_flag(output: &mut String, bound_type: &str, var_name: &str) -> st
     writeln!(output, " {bound_type} {BOUNDS_VECTOR_LABEL:<9} {var_name}")
 }
 
+/// Build the validation error returned for a bound value that MPS cannot
+/// represent (`NaN`, or an infinite value on the "wrong" side of a bound
+/// that MPS has no flag for).
+fn invalid_bound_error(var_name: &str, message: &str) -> LpParseError {
+    LpParseError::validation_error(format!("variable '{var_name}' {message}"))
+}
+
 /// Write the bound line(s) for a single variable's [`VariableType`].
 ///
 /// See the module documentation for the `Integer`/`General`/`SemiContinuous`
-/// mapping caveats.
-fn write_variable_bound(output: &mut String, var_name: &str, var_type: &VariableType, precision: usize) -> std::fmt::Result {
+/// mapping caveats, and for the `Free`-default conversion caveat.
+///
+/// # Errors
+///
+/// Returns an error if a bound value is `NaN`, or is an infinite value MPS
+/// has no flag for (e.g. `UpperBound(-inf)`, `LowerBound(+inf)`) -- see
+/// [`write_upper_bound`], [`write_lower_bound`] and [`write_double_bound`].
+fn write_variable_bound(output: &mut String, var_name: &str, var_type: &VariableType, precision: usize) -> LpResult<()> {
     match *var_type {
-        VariableType::Free => write_bound_flag(output, "FR", var_name),
-        VariableType::LowerBound(lb) => write_bound_value(output, "LO", var_name, lb, precision),
+        VariableType::Free => {
+            write_bound_flag(output, "FR", var_name).expect("fmt::Write to String is infallible");
+            Ok(())
+        }
+        VariableType::LowerBound(lb) => write_lower_bound(output, var_name, lb, precision),
         VariableType::UpperBound(ub) => write_upper_bound(output, var_name, ub, precision),
         VariableType::DoubleBound(lb, ub) => write_double_bound(output, var_name, lb, ub, precision),
-        VariableType::Binary => write_bound_flag(output, "BV", var_name),
+        VariableType::Binary => {
+            write_bound_flag(output, "BV", var_name).expect("fmt::Write to String is infallible");
+            Ok(())
+        }
         // General has no MPS analogue: both collapse to an integer column
         // with an explicit LO 0 (see module docs).
-        VariableType::Integer | VariableType::General => write_bound_value(output, "LO", var_name, 0.0, precision),
-        VariableType::SemiContinuous => write_bound_value(output, "SC", var_name, SEMI_CONTINUOUS_SENTINEL_UPPER, precision),
+        VariableType::Integer | VariableType::General => {
+            write_bound_value(output, "LO", var_name, 0.0, precision).expect("fmt::Write to String is infallible");
+            Ok(())
+        }
+        VariableType::SemiContinuous => {
+            write_bound_value(output, "SC", var_name, SEMI_CONTINUOUS_SENTINEL_UPPER, precision)
+                .expect("fmt::Write to String is infallible");
+            Ok(())
+        }
         // SOS-membership is not an explicit bound; leave the MPS default
         // ([0, +inf)) in place, matching the LP writer's treatment.
         VariableType::SOS => Ok(()),
     }
+}
+
+/// Write the bound line for a `LowerBound(lb)` variable.
+///
+/// The MPS reader maps a bare `MI`-only bound to `LowerBound(-inf)`, so that
+/// case is written back as `MI` rather than fed to [`write_number`] (which
+/// requires a finite value).
+///
+/// # Errors
+///
+/// Returns an error if `lb` is `NaN`, or `+inf` (a lower bound of `+inf` is
+/// nonsensical -- it would leave the variable with an empty feasible region
+/// unless the upper bound is also `+inf`, which is not representable as a
+/// plain `LowerBound`).
+fn write_lower_bound(output: &mut String, var_name: &str, lb: f64, precision: usize) -> LpResult<()> {
+    if lb.is_nan() {
+        return Err(invalid_bound_error(var_name, "has a NaN lower bound, which MPS cannot represent"));
+    }
+    if lb == f64::INFINITY {
+        return Err(invalid_bound_error(var_name, "has a lower bound of +inf, which MPS cannot represent"));
+    }
+    if lb == f64::NEG_INFINITY {
+        write_bound_flag(output, "MI", var_name).expect("fmt::Write to String is infallible");
+        return Ok(());
+    }
+    write_bound_value(output, "LO", var_name, lb, precision).expect("fmt::Write to String is infallible");
+    Ok(())
 }
 
 /// Write the bound line for an `UpperBound(ub)` variable.
@@ -383,11 +436,33 @@ fn write_variable_bound(output: &mut String, var_name: &str, var_type: &Variable
 /// value and no preceding `LO` implies a lower bound of `-inf`, not the `0`
 /// that `UpperBound` means in this model -- without the explicit `LO 0` the
 /// round trip would silently widen the feasible region.
-fn write_upper_bound(output: &mut String, var_name: &str, ub: f64, precision: usize) -> std::fmt::Result {
-    if ub < 0.0 {
-        write_bound_value(output, "LO", var_name, 0.0, precision)?;
+///
+/// The MPS reader maps a bare `PL`-only bound to `UpperBound(+inf)`, so that
+/// case is written back as `PL` rather than fed to [`write_number`] (which
+/// requires a finite value).
+///
+/// # Errors
+///
+/// Returns an error if `ub` is `NaN`, or `-inf` (an upper bound of `-inf` is
+/// nonsensical -- it would leave the variable with an empty feasible region
+/// unless the lower bound is also `-inf`, which is not representable as a
+/// plain `UpperBound`).
+fn write_upper_bound(output: &mut String, var_name: &str, ub: f64, precision: usize) -> LpResult<()> {
+    if ub.is_nan() {
+        return Err(invalid_bound_error(var_name, "has a NaN upper bound, which MPS cannot represent"));
     }
-    write_bound_value(output, "UP", var_name, ub, precision)
+    if ub == f64::NEG_INFINITY {
+        return Err(invalid_bound_error(var_name, "has an upper bound of -inf, which MPS cannot represent"));
+    }
+    if ub == f64::INFINITY {
+        write_bound_flag(output, "PL", var_name).expect("fmt::Write to String is infallible");
+        return Ok(());
+    }
+    if ub < 0.0 {
+        write_bound_value(output, "LO", var_name, 0.0, precision).expect("fmt::Write to String is infallible");
+    }
+    write_bound_value(output, "UP", var_name, ub, precision).expect("fmt::Write to String is infallible");
+    Ok(())
 }
 
 /// Write the bound line(s) for a `DoubleBound(lb, ub)` variable, collapsing
@@ -400,35 +475,57 @@ fn write_upper_bound(output: &mut String, var_name: &str, ub: f64, precision: us
 /// as `DoubleBound(lb, +inf)` again. Omitting `PL` would leave the upper
 /// bound unset, and the reader would collapse the result to a plain
 /// `LowerBound(lb)` -- semantically identical, but a different variant.
-fn write_double_bound(output: &mut String, var_name: &str, lb: f64, ub: f64, precision: usize) -> std::fmt::Result {
+///
+/// # Errors
+///
+/// Returns an error if either bound is `NaN`, or if `lb` is `+inf` or `ub`
+/// is `-inf` (nonsensical combinations that MPS's `FR`/`MI`/`PL` flags
+/// cannot represent).
+fn write_double_bound(output: &mut String, var_name: &str, lb: f64, ub: f64, precision: usize) -> LpResult<()> {
+    if lb.is_nan() || ub.is_nan() {
+        return Err(invalid_bound_error(var_name, "has a NaN double bound, which MPS cannot represent"));
+    }
+    if lb == f64::INFINITY || ub == f64::NEG_INFINITY {
+        return Err(invalid_bound_error(
+            var_name,
+            &format!("has a nonsensical double bound ({lb}, {ub}), which MPS cannot represent"),
+        ));
+    }
+
     #[allow(clippy::float_cmp)]
     if lb == ub {
-        return write_bound_value(output, "FX", var_name, lb, precision);
+        write_bound_value(output, "FX", var_name, lb, precision).expect("fmt::Write to String is infallible");
+        return Ok(());
     }
     match (lb.is_infinite() && lb < 0.0, ub.is_infinite() && ub > 0.0) {
-        (true, true) => write_bound_flag(output, "FR", var_name),
+        (true, true) => write_bound_flag(output, "FR", var_name).expect("fmt::Write to String is infallible"),
         (true, false) => {
-            write_bound_flag(output, "MI", var_name)?;
-            write_bound_value(output, "UP", var_name, ub, precision)
+            write_bound_flag(output, "MI", var_name).expect("fmt::Write to String is infallible");
+            write_bound_value(output, "UP", var_name, ub, precision).expect("fmt::Write to String is infallible");
         }
         (false, true) => {
-            write_bound_value(output, "LO", var_name, lb, precision)?;
-            write_bound_flag(output, "PL", var_name)
+            write_bound_value(output, "LO", var_name, lb, precision).expect("fmt::Write to String is infallible");
+            write_bound_flag(output, "PL", var_name).expect("fmt::Write to String is infallible");
         }
         (false, false) => {
-            write_bound_value(output, "LO", var_name, lb, precision)?;
-            write_bound_value(output, "UP", var_name, ub, precision)
+            write_bound_value(output, "LO", var_name, lb, precision).expect("fmt::Write to String is infallible");
+            write_bound_value(output, "UP", var_name, ub, precision).expect("fmt::Write to String is infallible");
         }
     }
+    Ok(())
 }
 
 /// Write the `BOUNDS` section, one entry per variable (in declaration order).
-fn write_bounds_section(output: &mut String, problem: &LpProblem, options: &MpsWriterOptions) -> std::fmt::Result {
+///
+/// # Errors
+///
+/// See [`write_variable_bound`].
+fn write_bounds_section(output: &mut String, problem: &LpProblem, options: &MpsWriterOptions) -> LpResult<()> {
     if problem.variables.is_empty() {
         return Ok(());
     }
 
-    writeln!(output, "BOUNDS")?;
+    writeln!(output, "BOUNDS").expect("fmt::Write to String is infallible");
     for (name_id, variable) in &problem.variables {
         let var_name = problem.resolve(*name_id);
         write_variable_bound(output, var_name, &variable.var_type, options.decimal_precision)?;
@@ -715,6 +812,145 @@ mod tests {
         let reparsed = LpProblem::parse_mps(&output).unwrap();
         let x1 = &reparsed.variables[&reparsed.name_id("x1").unwrap()];
         assert_eq!(x1.var_type, VariableType::UpperBound(SEMI_CONTINUOUS_SENTINEL_UPPER));
+    }
+
+    #[test]
+    fn pl_only_bound_round_trips_as_upper_bound_infinity() {
+        // A `PL`-only bound (no `LO`) resolves to `UpperBound(+inf)` on
+        // parse; the writer must emit it back as a bare `PL`, not feed
+        // `+inf` to `write_number` (regression test for the panic/invalid
+        // `UP BOUND x inf` output this used to produce).
+        let input = "\
+NAME        pltest
+ROWS
+ N  obj
+ L  c1
+COLUMNS
+    x1        obj       1
+    x1        c1        1
+RHS
+    RHS_V     c1        10
+BOUNDS
+ PL BOUND     x1
+ENDATA
+";
+        let problem = LpProblem::parse_mps(input).unwrap();
+        let x1 = &problem.variables[&problem.name_id("x1").unwrap()];
+        assert_eq!(x1.var_type, VariableType::UpperBound(f64::INFINITY));
+
+        let output = write_mps_string(&problem).unwrap();
+        assert!(output.contains(" PL BOUND"));
+        assert!(!output.contains("inf"), "must not leak a raw `inf` literal into the bounds line");
+
+        let reparsed = LpProblem::parse_mps(&output).unwrap();
+        let x1 = &reparsed.variables[&reparsed.name_id("x1").unwrap()];
+        assert_eq!(x1.var_type, VariableType::UpperBound(f64::INFINITY));
+    }
+
+    #[test]
+    fn mi_only_bound_round_trips_as_lower_bound_negative_infinity() {
+        // Mirror of the `PL`-only case: an `MI`-only bound resolves to
+        // `LowerBound(-inf)` on parse and must be written back as a bare
+        // `MI`.
+        let input = "\
+NAME        mitest
+ROWS
+ N  obj
+ L  c1
+COLUMNS
+    x1        obj       1
+    x1        c1        1
+RHS
+    RHS_V     c1        10
+BOUNDS
+ MI BOUND     x1
+ENDATA
+";
+        let problem = LpProblem::parse_mps(input).unwrap();
+        let x1 = &problem.variables[&problem.name_id("x1").unwrap()];
+        assert_eq!(x1.var_type, VariableType::LowerBound(f64::NEG_INFINITY));
+
+        let output = write_mps_string(&problem).unwrap();
+        assert!(output.contains(" MI BOUND"));
+        assert!(!output.contains("inf"), "must not leak a raw `inf` literal into the bounds line");
+
+        let reparsed = LpProblem::parse_mps(&output).unwrap();
+        let x1 = &reparsed.variables[&reparsed.name_id("x1").unwrap()];
+        assert_eq!(x1.var_type, VariableType::LowerBound(f64::NEG_INFINITY));
+    }
+
+    #[test]
+    fn nan_upper_bound_returns_validation_error() {
+        let mut problem = LpProblem::new();
+        let obj_id = problem.intern("obj");
+        let x1_id = problem.intern("x1");
+        problem.add_objective(Objective { name: obj_id, coefficients: vec![Coefficient { name: x1_id, value: 1.0 }], byte_offset: None });
+        problem.update_variable_type("x1", VariableType::UpperBound(f64::NAN)).unwrap();
+
+        let err = write_mps_string(&problem).unwrap_err();
+        assert!(matches!(err, LpParseError::ValidationError { .. }));
+    }
+
+    #[test]
+    fn nan_lower_bound_returns_validation_error() {
+        let mut problem = LpProblem::new();
+        let obj_id = problem.intern("obj");
+        let x1_id = problem.intern("x1");
+        problem.add_objective(Objective { name: obj_id, coefficients: vec![Coefficient { name: x1_id, value: 1.0 }], byte_offset: None });
+        problem.update_variable_type("x1", VariableType::LowerBound(f64::NAN)).unwrap();
+
+        let err = write_mps_string(&problem).unwrap_err();
+        assert!(matches!(err, LpParseError::ValidationError { .. }));
+    }
+
+    #[test]
+    fn nonsensical_upper_bound_negative_infinity_returns_validation_error() {
+        let mut problem = LpProblem::new();
+        let obj_id = problem.intern("obj");
+        let x1_id = problem.intern("x1");
+        problem.add_objective(Objective { name: obj_id, coefficients: vec![Coefficient { name: x1_id, value: 1.0 }], byte_offset: None });
+        problem.update_variable_type("x1", VariableType::UpperBound(f64::NEG_INFINITY)).unwrap();
+
+        let err = write_mps_string(&problem).unwrap_err();
+        assert!(matches!(err, LpParseError::ValidationError { .. }));
+    }
+
+    #[test]
+    fn nonsensical_lower_bound_positive_infinity_returns_validation_error() {
+        let mut problem = LpProblem::new();
+        let obj_id = problem.intern("obj");
+        let x1_id = problem.intern("x1");
+        problem.add_objective(Objective { name: obj_id, coefficients: vec![Coefficient { name: x1_id, value: 1.0 }], byte_offset: None });
+        problem.update_variable_type("x1", VariableType::LowerBound(f64::INFINITY)).unwrap();
+
+        let err = write_mps_string(&problem).unwrap_err();
+        assert!(matches!(err, LpParseError::ValidationError { .. }));
+    }
+
+    #[test]
+    fn nan_double_bound_returns_validation_error() {
+        let mut problem = LpProblem::new();
+        let obj_id = problem.intern("obj");
+        let x1_id = problem.intern("x1");
+        problem.add_objective(Objective { name: obj_id, coefficients: vec![Coefficient { name: x1_id, value: 1.0 }], byte_offset: None });
+        problem.update_variable_type("x1", VariableType::DoubleBound(f64::NAN, 5.0)).unwrap();
+
+        let err = write_mps_string(&problem).unwrap_err();
+        assert!(matches!(err, LpParseError::ValidationError { .. }));
+    }
+
+    #[test]
+    fn nonsensical_double_bound_returns_validation_error() {
+        let mut problem = LpProblem::new();
+        let obj_id = problem.intern("obj");
+        let x1_id = problem.intern("x1");
+        problem.add_objective(Objective { name: obj_id, coefficients: vec![Coefficient { name: x1_id, value: 1.0 }], byte_offset: None });
+        // Lower bound of +inf paired with a finite upper bound is an empty,
+        // unrepresentable feasible region.
+        problem.update_variable_type("x1", VariableType::DoubleBound(f64::INFINITY, 5.0)).unwrap();
+
+        let err = write_mps_string(&problem).unwrap_err();
+        assert!(matches!(err, LpParseError::ValidationError { .. }));
     }
 
     #[test]

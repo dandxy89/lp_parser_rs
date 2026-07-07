@@ -419,6 +419,18 @@ mod tests {
         let diff = p1.diff(&p2, &opts(DiffTol::default()));
         assert_eq!(diff.objs_modified.len(), 1);
         assert_eq!(diff.objs_modified[0].0, "obj");
+
+        // Second objective `obj2` present in one problem, absent from the other.
+        let single = parse("Minimize\n obj: 2 x + 3 y\nSubject To\n c1: x + y >= 1\nEnd");
+        let double = parse("Minimize\n obj: 2 x + 3 y\n obj2: x\nSubject To\n c1: x + y >= 1\nEnd");
+
+        let diff = single.diff(&double, &opts(DiffTol::default()));
+        assert_eq!(diff.objs_added, vec!["obj2".to_string()]);
+        assert!(diff.objs_removed.is_empty());
+
+        let diff = double.diff(&single, &opts(DiffTol::default()));
+        assert_eq!(diff.objs_removed, vec!["obj2".to_string()]);
+        assert!(diff.objs_added.is_empty());
     }
 
     #[test]
