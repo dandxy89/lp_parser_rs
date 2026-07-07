@@ -93,6 +93,14 @@ fn snapshot_diff_constraints_80x24() {
 }
 
 #[test]
+fn snapshot_diff_constraints_delta_sort_80x24() {
+    let mut app = diff_app();
+    app.set_section(Section::Constraints);
+    app.cycle_sort_mode();
+    insta::assert_snapshot!(render(&mut app, 80, 24).backend());
+}
+
+#[test]
 fn snapshot_diff_constraints_filtered_80x24() {
     let mut app = diff_app();
     app.set_section(Section::Constraints);

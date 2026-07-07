@@ -117,11 +117,12 @@ fn draw_section_entry_list(frame: &mut Frame, area: Rect, app: &mut App, section
         Section::Summary | Section::Numerics => return,
     };
     let idx = section.list_index().expect("list section has a list_index");
+    let sort_label = app.sort_mode.label();
     let (filtered, cached_lines, state) = app.section_states[idx].indices_lines_and_state_mut();
     draw_entry_name_list(
         frame,
         area,
-        &NameListParams { filtered_indices: filtered, cached_lines, section_label, total_count, border_style },
+        &NameListParams { filtered_indices: filtered, cached_lines, section_label, total_count, border_style, sort_label },
         state,
     );
 }
@@ -134,6 +135,8 @@ pub struct NameListParams<'a> {
     pub section_label: &'a str,
     pub total_count: usize,
     pub border_style: Style,
+    /// Active sort indicator (e.g. "sort:|Δ|"). `None` for the default name sort.
+    pub sort_label: Option<&'a str>,
 }
 
 /// Draw a compact name list for a section's entries in the sidebar.
@@ -155,7 +158,8 @@ fn draw_entry_name_list(frame: &mut Frame, area: Rect, params: &NameListParams<'
     let inner_height = area.height.saturating_sub(2) as usize;
 
     let selected_position = state.selected().map_or(0, |s| s + 1);
-    let title = format!(" {selected_position}/{total_items} {} ({} total) ", params.section_label, params.total_count);
+    let sort = params.sort_label.map(|label| format!("\u{b7} {label} ")).unwrap_or_default();
+    let title = format!(" {selected_position}/{total_items} {} ({} total) {sort}", params.section_label, params.total_count);
     let block = panel_block(params.border_style).title(title);
 
     if total_items == 0 || inner_height == 0 {

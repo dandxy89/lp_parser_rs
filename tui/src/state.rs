@@ -5,7 +5,7 @@ use ratatui::widgets::ListState;
 
 use crate::diff_model::{DiffEntry, DiffKind, sort_indices_by_delta};
 use crate::solver::{InfeasibilityDiagnosis, SolveDiffResult, SolveResult};
-use crate::widgets::{kind_prefix, kind_style, text};
+use crate::widgets::{delta_column, kind_prefix, kind_style, text};
 
 /// State machine for the LP solver overlay.
 #[derive(Debug)]
@@ -445,6 +445,8 @@ impl SectionViewState {
         sort: SortMode,
         show_badges: bool,
     ) {
+        // Width of the delta column shown under the delta sorts ("1.00e-12" is 8).
+        const DELTA_WIDTH: usize = 8;
         debug_assert!(self.dirty, "recompute called on non-dirty SectionViewState");
         self.filtered_indices.clear();
         self.cached_lines.clear();
@@ -456,17 +458,31 @@ impl SectionViewState {
                 self.filtered_indices.push(i);
             }
         }
-        match sort {
-            SortMode::Name => {} // entries are already name-sorted in the report
-            SortMode::AbsDelta => sort_indices_by_delta(entries, &mut self.filtered_indices, false),
-            SortMode::RelDelta => sort_indices_by_delta(entries, &mut self.filtered_indices, true),
+        let relative = match sort {
+            SortMode::Name => None, // entries are already name-sorted in the report
+            SortMode::AbsDelta => Some(false),
+            SortMode::RelDelta => Some(true),
+        };
+        if let Some(relative) = relative {
+            sort_indices_by_delta(entries, &mut self.filtered_indices, relative);
         }
         for &i in &self.filtered_indices {
             let entry = &entries[i];
             let line = if show_badges {
                 let kind = entry.kind();
                 let style = kind_style(kind);
-                Line::from(vec![Span::styled(kind_prefix(kind), style), Span::raw(" "), Span::styled(entry.name().to_owned(), style)])
+                let mut spans = vec![Span::styled(kind_prefix(kind), style), Span::raw(" ")];
+                // Under a delta sort, surface the magnitude driving the order as
+                // a fixed-width column so the ranking is readable at a glance.
+                if let Some(relative) = relative {
+                    let delta = match entry.sort_delta(relative) {
+                        Some(delta) => format!("{delta:>DELTA_WIDTH$.2e} "),
+                        None => format!("{:>DELTA_WIDTH$} ", ""),
+                    };
+                    spans.push(Span::styled(delta, delta_column()));
+                }
+                spans.push(Span::styled(entry.name().to_owned(), style));
+                Line::from(spans)
             } else {
                 // Inspect mode: plain name, no diff badge, default text colour.
                 Line::from(vec![Span::raw("  "), Span::styled(entry.name().to_owned(), text())])

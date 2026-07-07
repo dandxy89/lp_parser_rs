@@ -29,6 +29,11 @@ pub fn bold_text() -> Style {
     text().add_modifier(Modifier::BOLD)
 }
 
+/// Style for the sidebar delta column shown under the delta sorts.
+pub fn delta_column() -> Style {
+    Style::new().fg(theme().info)
+}
+
 /// Arrow separator used between old → new values.
 pub const ARROW: &str = "  \u{2192}  ";
 
