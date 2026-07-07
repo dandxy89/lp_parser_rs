@@ -184,7 +184,22 @@ impl App {
             PaletteCommand::CycleRelTol => self.cycle_rel_tol(),
             PaletteCommand::CycleAbsTol => self.cycle_abs_tol(),
             PaletteCommand::OpenSearch => self.open_search_popup(),
+            PaletteCommand::NextMatch => self.repeat_search(true),
+            PaletteCommand::PrevMatch => self.repeat_search(false),
+            PaletteCommand::JumpBack => {
+                if let Some(entry) = self.jumplist.go_back() {
+                    let entry = *entry;
+                    self.restore_jump(entry);
+                }
+            }
+            PaletteCommand::JumpForward => {
+                if let Some(entry) = self.jumplist.go_forward() {
+                    let entry = *entry;
+                    self.restore_jump(entry);
+                }
+            }
             PaletteCommand::Solve => self.start_solve(),
+            PaletteCommand::WhatIf => self.open_what_if(),
             PaletteCommand::ExportCsv => self.export_csv(),
             PaletteCommand::YankName => self.yank_name(),
             PaletteCommand::YankOld => self.yank_side(Side::Old),

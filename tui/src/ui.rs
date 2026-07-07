@@ -347,7 +347,7 @@ fn draw_detail_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut A
             Section::Objectives => "Select an objective from the list",
             Section::Summary | Section::Numerics => unreachable!("handled above"),
         };
-        sidebar::draw_empty_detail(frame, area, label, border_style);
+        sidebar::draw_empty_detail_cheatsheet(frame, area, label, border_style, app.mode == AppMode::Diff);
         0
     };
 

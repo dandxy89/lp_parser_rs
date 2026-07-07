@@ -109,6 +109,15 @@ fn snapshot_diff_constraints_filtered_80x24() {
 }
 
 #[test]
+fn snapshot_diff_empty_detail_cheatsheet_80x24() {
+    let mut app = diff_app();
+    // Variables carry no changes in the test models, so the list is empty and
+    // the detail panel shows the cheat sheet.
+    app.set_section(Section::Variables);
+    insta::assert_snapshot!(render(&mut app, 80, 24).backend());
+}
+
+#[test]
 fn snapshot_help_overlay_80x24() {
     let mut app = inspect_app();
     app.show_help = true;

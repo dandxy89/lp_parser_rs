@@ -406,9 +406,7 @@ pub(crate) fn build_section_labels(summary: &DiffSummary, mode: AppMode, filter:
             (AppMode::Inspect, Some(counts)) => {
                 TabLabel { name: Cow::Owned(format!("{} ({})", section.label(), counts.changed())), counts: Vec::new() }
             }
-            (AppMode::Diff, Some(counts)) => {
-                TabLabel { name: Cow::Borrowed(section.label()), counts: tab_count_spans(counts, filter) }
-            }
+            (AppMode::Diff, Some(counts)) => TabLabel { name: Cow::Borrowed(section.label()), counts: tab_count_spans(counts, filter) },
         }
     })
 }

@@ -232,7 +232,8 @@ fn draw_entry_name_list(frame: &mut Frame, area: Rect, params: &NameListParams<'
     }
 }
 
-/// Render an empty detail panel with a hint message.
+/// Render an empty detail panel with only a hint message (used by the search
+/// pop-up preview, where a cheat sheet would be noise).
 pub fn draw_empty_detail(frame: &mut Frame, area: Rect, message: &str, border_style: Style) {
     // A zero-sized area is an environmental condition (shrunken terminal), not a
     // programming error: drawing into it is a no-op.
@@ -243,4 +244,40 @@ pub fn draw_empty_detail(frame: &mut Frame, area: Rect, message: &str, border_st
     let block = panel_block(border_style).title(" Detail ");
     let paragraph = Paragraph::new(Line::from(Span::styled(format!("  {message}"), Style::default().fg(t.muted)))).block(block);
     frame.render_widget(paragraph, area);
+}
+
+/// Render an empty detail panel with a hint message and a mini cheat sheet —
+/// the blank half-screen is the best place to teach the section's actions.
+pub fn draw_empty_detail_cheatsheet(frame: &mut Frame, area: Rect, message: &str, border_style: Style, diff_mode: bool) {
+    // A zero-sized area is an environmental condition (shrunken terminal), not a
+    // programming error: drawing into it is a no-op.
+    if area.width == 0 || area.height == 0 {
+        return;
+    }
+    let t = theme();
+    let muted = Style::default().fg(t.muted);
+    let key = Style::default().fg(t.accent);
+    let hint = |keys: &'static str, action: &'static str| {
+        Line::from(vec![Span::styled(format!("  {keys:<12}"), key), Span::styled(action, muted)])
+    };
+
+    let mut lines = vec![Line::from(Span::styled(format!("  {message}"), Style::default().fg(t.text))), Line::default()];
+    lines.push(hint("j/k Enter", "navigate the list, open detail"));
+    lines.push(hint("/", "search all sections"));
+    lines.push(hint("E", "what-if: edit constraint RHS & re-solve"));
+    if diff_mode {
+        lines.push(hint("r", "toggle raw text side-by-side view"));
+        lines.push(hint("+/-/m/=/a", "filter by change kind"));
+        lines.push(hint("s", "sort by delta magnitude"));
+        lines.push(hint("yy/yo/yn", "yank name / old side / new side"));
+    } else {
+        lines.push(hint("yy", "yank entry name"));
+    }
+    lines.push(hint("S", "solve with HiGHS"));
+    lines.push(hint("w", "export CSV"));
+    lines.push(Line::default());
+    lines.push(hint("Ctrl-p ?", "command palette, full keybindings"));
+
+    let block = panel_block(border_style).title(" Detail ");
+    frame.render_widget(Paragraph::new(lines).block(block), area);
 }
