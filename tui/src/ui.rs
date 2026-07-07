@@ -17,14 +17,14 @@ use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::Paragraph;
+use ratatui::widgets::{Paragraph, ScrollbarState};
 
 use crate::app::{App, AppMode, Focus, Section};
 use crate::state::DetailView;
 use crate::theme::theme;
 use crate::widgets::{
-    centred_rect, detail, focus_border_style, help, palette, panel_block, raw_diff, search_popup, sidebar, solve, status_bar, summary,
-    what_if,
+    centred_rect, detail, focus_border_style, help, palette, panel_block, panel_scrollbar, raw_diff, search_popup, sidebar, solve,
+    status_bar, summary, what_if,
 };
 
 /// Minimum width for the sidebar panel in columns.
@@ -87,6 +87,14 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
 
     // Detail Panel
     draw_detail_panel(frame, detail_area, app);
+
+    // Detail scrollbar — the sidebar has one; the detail panel deserves the
+    // same position feedback without needing focus.
+    let detail_inner_height = detail_area.height.saturating_sub(2) as usize;
+    if app.layout.detail_content_lines > detail_inner_height {
+        let mut scrollbar_state = ScrollbarState::new(app.layout.detail_content_lines).position(app.detail_scroll as usize);
+        frame.render_stateful_widget(panel_scrollbar(), detail_area, &mut scrollbar_state);
+    }
 
     // Status bar (drawn after detail so detail_content_lines is populated).
     draw_status(frame, outer[2], app, &report_summary, total_changes, filter_count);
