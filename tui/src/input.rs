@@ -6,7 +6,9 @@ use lp_parser_rs::problem::LpProblem;
 
 use crate::app::App;
 use crate::detail_text::{format_solve_diff_result, format_solve_result};
-use crate::state::{DiagnosisState, DiffFilter, Focus, PaletteCommand, PendingYank, Section, Side, SolveState, SolveTab, SolveViewState};
+use crate::state::{
+    AppMode, DiagnosisState, DiffFilter, Focus, PaletteCommand, PendingYank, Section, Side, SolveState, SolveTab, SolveViewState,
+};
 
 impl App {
     pub fn handle_key(&mut self, key: KeyEvent) {
@@ -66,17 +68,25 @@ impl App {
     }
 
     /// Recompute the palette's filtered command list from the current query.
+    ///
+    /// In inspect mode the diff-only commands are excluded entirely so the
+    /// palette only offers actions that actually do something.
     fn recompute_palette(&mut self) {
         self.palette.selected = 0;
         self.palette.filtered.clear();
+        let inspect = self.mode == AppMode::Inspect;
+        let available = |index: usize| !inspect || PaletteCommand::ALL[index].available_in_inspect();
         if self.palette.query.is_empty() {
-            self.palette.filtered.extend(0..PaletteCommand::ALL.len());
+            self.palette.filtered.extend((0..PaletteCommand::ALL.len()).filter(|&i| available(i)));
             return;
         }
         let labels: Vec<String> = PaletteCommand::ALL.iter().map(|c| c.label().to_owned()).collect();
         let config = frizbee::Config { sort: true, ..Default::default() };
         for matched in frizbee::match_list_indices(&self.palette.query, &labels, &config) {
-            self.palette.filtered.push(matched.index as usize);
+            let index = matched.index as usize;
+            if available(index) {
+                self.palette.filtered.push(index);
+            }
         }
     }
 
@@ -131,7 +141,7 @@ impl App {
             PaletteCommand::CycleRelTol => self.cycle_rel_tol(),
             PaletteCommand::CycleAbsTol => self.cycle_abs_tol(),
             PaletteCommand::OpenSearch => self.open_search_popup(),
-            PaletteCommand::Solve => self.solver.state = SolveState::Picking,
+            PaletteCommand::Solve => self.start_solve(),
             PaletteCommand::ExportCsv => self.export_csv(),
             PaletteCommand::YankName => self.yank_name(),
             PaletteCommand::YankOld => self.yank_side(Side::Old),
@@ -187,6 +197,11 @@ impl App {
         if self.pending_yank == PendingYank::WaitingForTarget {
             self.pending_yank = PendingYank::None;
             match key.code {
+                // Old/new side yanks are per-file (file 1 / file 2) — diff-only.
+                KeyCode::Char('o' | 'n') if self.mode == AppMode::Inspect => {
+                    self.flash_diff_only();
+                    return;
+                }
                 KeyCode::Char('o') => {
                     self.yank_side(Side::Old);
                     return;
@@ -236,19 +251,19 @@ impl App {
             KeyCode::Char('l') => self.focus_detail(),
             KeyCode::Char('h') => self.focus_sidebar(),
 
-            // Filter shortcuts.
-            KeyCode::Char('a') => self.set_filter(DiffFilter::All),
-            KeyCode::Char('+') => self.set_filter(DiffFilter::Added),
-            KeyCode::Char('-') => self.set_filter(DiffFilter::Removed),
-            KeyCode::Char('m') => self.set_filter(DiffFilter::Modified),
-            KeyCode::Char('=') => self.set_filter(DiffFilter::Renamed),
+            // Filter shortcuts (diff-only: no-op with a hint in inspect mode).
+            KeyCode::Char('a') => self.filter_or_hint(DiffFilter::All),
+            KeyCode::Char('+') => self.filter_or_hint(DiffFilter::Added),
+            KeyCode::Char('-') => self.filter_or_hint(DiffFilter::Removed),
+            KeyCode::Char('m') => self.filter_or_hint(DiffFilter::Modified),
+            KeyCode::Char('=') => self.filter_or_hint(DiffFilter::Renamed),
 
-            // Cycle the sidebar sort mode (name → |Δ| → relΔ).
-            KeyCode::Char('s') => self.cycle_sort_mode(),
+            // Cycle the sidebar sort mode (delta modes are diff-only).
+            KeyCode::Char('s') => self.diff_only_or(Self::cycle_sort_mode),
 
-            // Live tolerance adjustment — rebuilds the diff in place.
-            KeyCode::Char('t') => self.cycle_rel_tol(),
-            KeyCode::Char('T') => self.cycle_abs_tol(),
+            // Live tolerance adjustment — rebuilds the diff in place (diff-only).
+            KeyCode::Char('t') => self.diff_only_or(Self::cycle_rel_tol),
+            KeyCode::Char('T') => self.diff_only_or(Self::cycle_abs_tol),
 
             KeyCode::Char('?') => {
                 self.show_help = !self.show_help;
@@ -259,22 +274,54 @@ impl App {
             KeyCode::Char('y') => self.pending_yank = PendingYank::WaitingForTarget,
             KeyCode::Char('Y') => self.yank_detail(),
 
-            // Open the solver file picker.
-            KeyCode::Char('S') => self.solver.state = SolveState::Picking,
+            // Solve: inspect solves the single file directly; diff opens the picker.
+            KeyCode::Char('S') => self.start_solve(),
 
-            // Export the diff report as CSV.
+            // Export CSV (works in both modes).
             KeyCode::Char('w') => self.export_csv(),
 
-            // Toggle raw text side-by-side diff view.
-            KeyCode::Char('r') => self.toggle_detail_view(),
+            // Toggle raw text side-by-side diff view (diff-only).
+            KeyCode::Char('r') => self.diff_only_or(Self::toggle_detail_view),
 
-            // Toggle hiding order-only coefficient changes.
-            KeyCode::Char('o') => self.toggle_ignore_order(),
+            // Toggle hiding order-only coefficient changes (diff-only).
+            KeyCode::Char('o') => self.diff_only_or(Self::toggle_ignore_order),
 
             // Open the search pop-up.
             KeyCode::Char('/') => self.open_search_popup(),
 
             _ => {}
+        }
+    }
+
+    /// Apply a kind filter in diff mode; in inspect mode filters are diff-only,
+    /// so this shows a brief hint instead.
+    fn filter_or_hint(&mut self, filter: DiffFilter) {
+        if self.mode == AppMode::Inspect {
+            self.flash_diff_only();
+        } else {
+            self.set_filter(filter);
+        }
+    }
+
+    /// Run a diff-only action, or show a brief hint when in inspect mode.
+    fn diff_only_or(&mut self, action: fn(&mut Self)) {
+        if self.mode == AppMode::Inspect {
+            self.flash_diff_only();
+        } else {
+            action(self);
+        }
+    }
+
+    /// Start a solve: inspect mode solves the single file directly; diff mode
+    /// opens the file picker (file 1 / file 2 / both).
+    pub(crate) fn start_solve(&mut self) {
+        match self.mode {
+            AppMode::Inspect => {
+                let problem = Arc::clone(&self.problem1);
+                let label = self.file1_path.display().to_string();
+                self.spawn_solver(problem, label);
+            }
+            AppMode::Diff => self.solver.state = SolveState::Picking,
         }
     }
 

@@ -12,7 +12,7 @@ use crate::diff_model::{
     ResolvedConstraint, VariableDiffEntry,
 };
 use crate::solver::{SolveDiffResult, SolveResult};
-use crate::state::{Section, Side};
+use crate::state::{AppMode, Section, Side};
 use crate::widgets::detail::{fmt_bound, variable_bounds};
 use crate::widgets::{rule_str, short_filename};
 
@@ -30,6 +30,9 @@ macro_rules! w {
 /// Render the currently selected detail panel as plain text.
 /// Returns `None` if no entry is selected (except for Summary, which has no entry).
 pub fn render_detail_plain(app: &App) -> Option<String> {
+    if app.mode == AppMode::Inspect {
+        return render_inspect_detail_plain(app);
+    }
     match app.active_section {
         Section::Summary => Some(render_summary_plain(app)),
         Section::Numerics => Some(render_numerics_plain(app)),
@@ -52,6 +55,137 @@ pub fn render_detail_plain(app: &App) -> Option<String> {
                 Section::Summary | Section::Numerics => unreachable!("handled above"),
             }
         }
+    }
+}
+
+/// Render the selected inspect (single-file) detail as neutral plain text.
+fn render_inspect_detail_plain(app: &App) -> Option<String> {
+    let interner = &app.report.interner;
+    match app.active_section {
+        Section::Summary => Some(render_inspect_summary_plain(app)),
+        Section::Numerics => Some(render_inspect_numerics_plain(app)),
+        Section::Variables => Some(render_inspect_variable_plain(app.report.variables.entries.get(app.selected_entry_index()?)?)),
+        Section::Constraints => {
+            Some(render_inspect_constraint_plain(app.report.constraints.entries.get(app.selected_entry_index()?)?, interner))
+        }
+        Section::Objectives => {
+            Some(render_inspect_objective_plain(app.report.objectives.entries.get(app.selected_entry_index()?)?, interner))
+        }
+    }
+}
+
+/// Neutral plain text for an inspect variable entry.
+fn render_inspect_variable_plain(entry: &VariableDiffEntry) -> String {
+    let mut out = String::new();
+    w!(out, "Variable: {}", entry.name);
+    w!(out, "{}", rule_str(38));
+    if let Some(variable_type) = entry.new_type.as_ref() {
+        write_variable_type_info(&mut out, variable_type);
+    }
+    out
+}
+
+/// Neutral plain text for an inspect constraint entry (operator/RHS/coeffs or SOS).
+fn render_inspect_constraint_plain(entry: &ConstraintDiffEntry, interner: &NameInterner) -> String {
+    let mut out = String::new();
+    w!(out, "Constraint: {}", entry.name);
+    w!(out, "{}", rule_str(38));
+    if let Some(line) = entry.line_file2.or(entry.line_file1) {
+        w!(out, "  Location: L{line}");
+    }
+    match &entry.detail {
+        ConstraintDiffDetail::AddedOrRemoved(ResolvedConstraint::Standard { coefficients, operator, rhs }) => {
+            if coefficients.is_empty() {
+                w!(out, "  Operator: {operator}");
+                w!(out, "  RHS:      {rhs}");
+            } else {
+                write_lp_expression(&mut out, &entry.name, coefficients, Some((*operator, *rhs)), interner);
+            }
+        }
+        ConstraintDiffDetail::AddedOrRemoved(ResolvedConstraint::Sos { sos_type, weights }) => {
+            w!(out, "  SOS Type: {sos_type}");
+            w!(out, "  Weights:");
+            for weight in weights {
+                w!(out, "    {:<20}{}", interner.resolve(weight.name), weight.value);
+            }
+        }
+        _ => w!(out, "  (unavailable)"),
+    }
+    out
+}
+
+/// Neutral plain text for an inspect objective entry (coefficients).
+fn render_inspect_objective_plain(entry: &ObjectiveDiffEntry, interner: &NameInterner) -> String {
+    let mut out = String::new();
+    w!(out, "Objective: {}", entry.name);
+    w!(out, "{}", rule_str(38));
+    if entry.new_coefficients.is_empty() {
+        w!(out, "  (no coefficients)");
+    } else {
+        write_lp_expression(&mut out, &entry.name, &entry.new_coefficients, None, interner);
+    }
+    out
+}
+
+/// Neutral single-file plain text for the inspect Summary panel.
+fn render_inspect_summary_plain(app: &App) -> String {
+    let problem = &app.problem1;
+    let analysis = &app.report.analysis1;
+    let counts = &app.cached_summary;
+    let mut out = String::with_capacity(512);
+
+    w!(out, "  {}", app.report.file1);
+    w!(out, "  Name:   {}", problem.name().unwrap_or("(unnamed)"));
+    w!(out, "  Sense:  {}", problem.sense);
+    w!(out);
+    w!(out, "  Variables:    {}", counts.variables.total());
+    w!(out, "  Constraints:  {}", counts.constraints.total());
+    w!(out, "  Objectives:   {}", counts.objectives.total());
+    w!(out, "  Non-zeros:    {}", analysis.summary.total_nonzeros);
+    w!(out, "  Density:      {:.4}%", analysis.summary.density * 100.0);
+    w!(out);
+    write_issues_single(&mut out, &analysis.issues);
+    out
+}
+
+/// Neutral single-file plain text for the inspect Numerics panel.
+fn render_inspect_numerics_plain(app: &App) -> String {
+    use crate::widgets::numerics::{count_by_severity, format_range, format_ratio, range_ratio};
+    let analysis = &app.report.analysis1;
+    let mut out = String::with_capacity(512);
+
+    w!(out, "  {}", app.report.file1);
+    w!(out);
+    w!(out, "  Problem Size");
+    w!(out, "  Variables:    {}", analysis.summary.variable_count);
+    w!(out, "  Constraints:  {}", analysis.summary.constraint_count);
+    w!(out, "  Non-zeros:    {}", analysis.summary.total_nonzeros);
+    w!(out, "  Density:      {:.4}%", analysis.summary.density * 100.0);
+    w!(out);
+    w!(out, "  Coefficient Ranges (|value|)");
+    for (label, range) in [
+        ("Objective", &analysis.coefficients.objective_coeff_range),
+        ("Matrix", &analysis.coefficients.constraint_coeff_range),
+        ("RHS", &analysis.constraints.rhs_range),
+    ] {
+        w!(out, "  {label:<12}{:>20}  ratio {}", format_range(range), format_ratio(range_ratio(range)));
+    }
+    w!(out, "  {:<12}{:>20}", "Overall ratio", format_ratio(Some(analysis.coefficients.coefficient_ratio)));
+    w!(out);
+    let (errors, warnings, infos) = count_by_severity(&analysis.issues);
+    w!(out, "  Issues: {errors} error(s), {warnings} warning(s), {infos} info");
+    write_issues_single(&mut out, &analysis.issues);
+    out
+}
+
+/// Write a single-file issues list (used by the inspect plain renderers).
+fn write_issues_single(out: &mut String, issues: &[lp_parser_rs::analysis::AnalysisIssue]) {
+    if issues.is_empty() {
+        w!(out, "  No issues detected");
+        return;
+    }
+    for issue in issues {
+        w!(out, "  [{:<7}] {}", issue.severity, issue.message);
     }
 }
 
