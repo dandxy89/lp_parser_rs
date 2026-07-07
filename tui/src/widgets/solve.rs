@@ -698,7 +698,7 @@ fn draw_done_both(
 
     lines.push(Line::from(""));
     lines.push(Line::from(Span::styled(
-        "  1-5: tabs  Tab/S-Tab: cycle  j/k: scroll  d: toggle diff  t/T: threshold  y: yank  Esc: close",
+        "  1-5: tabs  Tab/S-Tab: cycle  j/k: scroll  d: toggle diff  t/T: threshold  w: csv  y: yank  Esc: close",
         Style::default().fg(t.muted),
     )));
 

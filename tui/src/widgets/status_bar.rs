@@ -52,10 +52,10 @@ pub struct StatusBarParams<'a> {
     pub watch_reloading: Option<bool>,
     /// Inspect-mode left segment. `None` in diff mode (the default segment shows).
     pub inspect: Option<InspectInfo<'a>>,
+    /// Context-sensitive key hints shown on the right (chosen by the caller
+    /// from focus/section/mode so the most relevant actions are advertised).
+    pub hints: &'a str,
 }
-
-/// Key hints shown on the right of the status bar.
-const HINTS: &str = "j/k:nav  [/]:section  /:search  ^p:palette  ?:help  q:quit";
 
 /// Muted separator between status bar segments.
 const SEPARATOR: &str = "  \u{2502}  ";
@@ -125,13 +125,20 @@ pub fn draw_status_bar(frame: &mut Frame, area: Rect, params: &StatusBarParams<'
 
     // Right: yank flash or key hints, right-aligned in a fixed-width chunk so
     // the left segment can flow (and clip) independently.
+    // A leading space keeps a visible gap between a clipped left segment and
+    // the right-aligned hints.
     let (right_line, right_width) = params.yank_flash.map_or_else(
-        || (Line::from(Span::styled(HINTS, Style::default().fg(t.muted))), HINTS.len()),
-        |flash| (Line::from(Span::styled(flash.message, Style::default().fg(t.added).add_modifier(Modifier::BOLD))), flash.message.len()),
+        || (Line::from(vec![Span::raw(" "), Span::styled(params.hints, Style::default().fg(t.muted))]), params.hints.len()),
+        |flash| {
+            (
+                Line::from(vec![Span::raw(" "), Span::styled(flash.message, Style::default().fg(t.added).add_modifier(Modifier::BOLD))]),
+                flash.message.len(),
+            )
+        },
     );
 
     #[allow(clippy::cast_possible_truncation)] // hint strings are far below u16::MAX
-    let right_len = (right_width as u16).saturating_add(1).min(area.width);
+    let right_len = (right_width as u16).saturating_add(2).min(area.width);
     let chunks = Layout::horizontal([Constraint::Min(0), Constraint::Length(right_len)]).split(area);
 
     frame.render_widget(Paragraph::new(Line::from(spans)), chunks[0]);

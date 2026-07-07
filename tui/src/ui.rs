@@ -20,7 +20,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Paragraph, ScrollbarState};
 
 use crate::app::{App, AppMode, Focus, Section};
-use crate::state::DetailView;
+use crate::state::{DetailView, PendingYank};
 use crate::theme::theme;
 use crate::widgets::{
     centred_rect, detail, focus_border_style, help, palette, panel_block, panel_scrollbar, raw_diff, search_popup, sidebar, solve,
@@ -125,6 +125,28 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     }
 }
 
+/// Pick the context-sensitive key hints for the status bar's right segment:
+/// the handful of most useful actions for the current mode and section, so the
+/// app's power features are advertised where they apply instead of only in `?`.
+const fn context_hints(app: &App) -> &'static str {
+    // Which-key hint for the pending `y` chord — the chord family is invisible
+    // otherwise unless memorised.
+    if matches!(app.pending_yank, PendingYank::WaitingForTarget) {
+        return match app.mode {
+            AppMode::Diff => "y \u{2192}  y:name  o:old (file 1)  n:new (file 2)",
+            AppMode::Inspect => "y \u{2192}  y:name",
+        };
+    }
+    match (app.mode, app.active_section) {
+        (_, Section::Summary | Section::Numerics) => "1-5:section  S:solve  w:csv  /:search  ^p:palette  ?:help",
+        (AppMode::Diff, Section::Constraints) => "E:what-if  r:raw  +/-/m:filter  s:sort  y:yank  ?:help",
+        (AppMode::Diff, Section::Objectives) => "r:raw  +/-/m:filter  s:sort  y:yank  /:search  ?:help",
+        (AppMode::Diff, Section::Variables) => "+/-/m:filter  s:sort  t/T:tol  y:yank  /:search  ?:help",
+        (AppMode::Inspect, Section::Constraints) => "E:what-if  y:yank  S:solve  /:search  ^p:palette  ?:help",
+        (AppMode::Inspect, Section::Variables | Section::Objectives) => "y:yank  w:csv  S:solve  /:search  ^p:palette  ?:help",
+    }
+}
+
 /// Draw the bottom status bar, choosing the diff or inspect left segment.
 fn draw_status(
     frame: &mut Frame,
@@ -139,7 +161,11 @@ fn draw_status(
     } else {
         None
     };
-    let yank_flash = if app.yank.flash.is_some() { Some(status_bar::YankFlash { message: &app.yank.message }) } else { None };
+    // A pending `y` chord shows its which-key hint in the right segment; the
+    // hint must win over a lingering yank flash or the chord keys stay hidden.
+    let pending_chord = app.pending_yank == PendingYank::WaitingForTarget;
+    let yank_flash =
+        if app.yank.flash.is_some() && !pending_chord { Some(status_bar::YankFlash { message: &app.yank.message }) } else { None };
     // Tolerance indicator — only shown when at least one tolerance is active.
     let tolerance_label = {
         let options = &app.diff_options;
@@ -202,6 +228,7 @@ fn draw_status(
             tolerance_label: tolerance_label.as_deref(),
             watch_reloading,
             inspect,
+            hints: context_hints(app),
         },
     );
 }
