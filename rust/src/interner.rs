@@ -20,6 +20,22 @@ pub struct NameInterner {
     rodeo: Rodeo,
 }
 
+impl Clone for NameInterner {
+    /// Deep-copy by re-interning every string in key order.
+    ///
+    /// `lasso::Rodeo` does not implement `Clone`; re-interning in key order
+    /// reproduces identical [`NameId`]s, so ids from the original remain valid
+    /// against the clone (required by `LpProblem::clone`).
+    fn clone(&self) -> Self {
+        let mut cloned = Self::with_capacity(self.rodeo.len());
+        for (id, name) in self.rodeo.iter() {
+            let new_id = cloned.rodeo.get_or_intern(name);
+            debug_assert_eq!(new_id, id, "clone must preserve interner ids");
+        }
+        cloned
+    }
+}
+
 impl NameInterner {
     /// Create a new empty interner.
     #[must_use]
@@ -102,6 +118,17 @@ mod tests {
         let mut interner = NameInterner::new();
         let id = interner.intern("x1");
         assert_eq!(interner.get("x1"), Some(id));
+    }
+
+    #[test]
+    fn clone_preserves_ids() {
+        let mut interner = NameInterner::new();
+        let id1 = interner.intern("x1");
+        let id2 = interner.intern("constraint_with_a_longer_name");
+        let cloned = interner.clone();
+        assert_eq!(cloned.resolve(id1), "x1");
+        assert_eq!(cloned.resolve(id2), "constraint_with_a_longer_name");
+        assert_eq!(cloned.get("x1"), Some(id1));
     }
 
     #[test]

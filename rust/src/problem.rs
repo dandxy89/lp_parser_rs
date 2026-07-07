@@ -166,7 +166,7 @@ fn intern_objective(interner: &mut NameInterner, raw: &RawObjective<'_>) -> Obje
 /// All name strings are stored in the embedded [`NameInterner`] and referenced
 /// by [`NameId`] throughout. This eliminates lifetime constraints and avoids
 /// string duplication.
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct LpProblem {
     /// The problem name (from comments), not interned.
     pub name: Option<String>,
