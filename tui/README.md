@@ -1,6 +1,6 @@
-# lp_diff — Interactive LP/MPS File Diff Viewer
+# lp_diff — LP/MPS Model Explorer and Diff Viewer
 
-A terminal-based interactive diff viewer for Linear Programming files (LP and MPS formats), built with [ratatui](https://ratatui.rs).
+A terminal-based interactive explorer and diff viewer for Linear Programming files (LP and MPS formats), built with [ratatui](https://ratatui.rs). Pass one file to explore a single model, or two files to diff them.
 
 ![lp_diff demo](assets/demo.gif)
 
@@ -20,6 +20,14 @@ cargo run -p lp_parser_tui -- file1.lp file2.mps
 
 ## Usage
 
+Inspect a single model:
+
+```sh
+lp_diff model.lp
+```
+
+Diff two files:
+
 ```sh
 lp_diff base.lp modified.lp
 ```
@@ -30,14 +38,25 @@ Both LP (`.lp`) and MPS (`.mps`) formats are supported. You can even mix formats
 lp_diff model.lp model.mps
 ```
 
-The viewer parses both files, computes a rich diff report, and launches an interactive TUI. Format is detected automatically by file extension.
+With one file the viewer parses it and launches a single-model explorer (inspect mode); with two files it computes a rich diff report and launches the diff viewer. Format is detected automatically by file extension.
+
+### Inspect Mode (single file)
+
+Given one file, the same five sections describe the single model rather than a comparison:
+
+- **Summary** — file path, problem name, sense, per-section counts, and the structural analysis (dimensions, variable/constraint types, coefficient scaling, issues).
+- **Variables / Constraints / Objectives** — every entry in the model, listed plainly (no diff badges). The detail panel shows the full entry: coefficients with names, operator and RHS, bounds and variable type, or SOS weights.
+- **Numerics** — the per-file numerical conditioning view.
+
+Search (`/`), the command palette (`Ctrl+p`), sort by name, the HiGHS solver (`S`, solving the single model directly), CSV export (`w`, writing `objectives.csv`, `constraints.csv`, `variables.csv` via the core library), and `--watch` all work. Diff-only actions — kind filters (`a`/`+`/`-`/`m`/`=`), ignore-order (`o`), tolerance cycling (`t`/`T`), delta sorts, and the raw side-by-side view (`r`) — are hidden from the help/palette and no-op with a brief status-bar hint if pressed.
 
 ### Summary Mode
 
-For non-interactive output, use the `--summary` flag to print a structured text report to stdout and exit:
+For non-interactive output, use the `--summary` flag to print a structured text report to stdout and exit. In diff mode it prints the change summary; in inspect mode it prints the model counts and top analysis issues:
 
 ```sh
-lp_diff base.lp modified.lp --summary
+lp_diff base.lp modified.lp --summary   # diff summary
+lp_diff model.lp --summary              # single-model summary
 ```
 
 Output format:
@@ -86,7 +105,7 @@ Press `r` in the detail panel to toggle between the parsed diff view and a side-
 
 ### CSV Export
 
-Press `w` to export the full diff report as a CSV file (`lp_diff_report_<timestamp>.csv`) in the current directory. The CSV includes all sections with columns for section, name, change type, and detail.
+In diff mode, press `w` to export the full diff report as a CSV file (`lp_diff_report_<timestamp>.csv`) in the current directory. The CSV includes all sections with columns for section, name, change type, and detail. In inspect mode, `w` exports the model itself as `objectives.csv`, `constraints.csv`, and `variables.csv` (via the core library's `to_csv`).
 
 ### Key Bindings
 
