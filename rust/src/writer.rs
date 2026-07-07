@@ -364,8 +364,11 @@ fn write_formatted_coefficient(output: &mut String, name: &str, value: f64, is_f
 /// Write a number with specified precision directly to the output buffer: a bare
 /// integer when the value is whole, small enough (|value| < 1e10) and round-trips
 /// through `i64`; otherwise a decimal with trailing zeros trimmed.
+///
+/// `pub(crate)` so the MPS writer ([`crate::mps::writer`]) can reuse the same
+/// numeric formatting instead of duplicating it.
 #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
-fn write_number(output: &mut String, value: f64, precision: usize) -> std::fmt::Result {
+pub(crate) fn write_number(output: &mut String, value: f64, precision: usize) -> std::fmt::Result {
     debug_assert!(value.is_finite(), "write_number called with non-finite value: {value}");
     let is_whole_number = value.fract().abs() < f64::EPSILON;
     let is_safe_for_i64 = value >= (i64::MIN as f64) && value <= (i64::MAX as f64);

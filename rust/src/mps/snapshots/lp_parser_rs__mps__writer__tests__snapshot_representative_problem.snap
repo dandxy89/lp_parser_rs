@@ -1,0 +1,33 @@
+---
+source: rust/src/mps/writer.rs
+expression: output
+---
+NAME          Sample
+OBJSENSE
+    MAX
+ROWS
+ N  profit
+ L  capacity
+COLUMNS
+    MARKER                 'MARKER'                 'INTORG'
+    x1         profit     3
+    x1         capacity   1
+    MARKER                 'MARKER'                 'INTEND'
+    x2         profit     2
+    x2         capacity   1
+    MARKER                 'MARKER'                 'INTORG'
+    x3         profit     1
+    x3         capacity   1
+    MARKER                 'MARKER'                 'INTEND'
+RHS
+    RHS        capacity   100
+BOUNDS
+ LO BOUND     x1         0
+ LO BOUND     x2         0
+ UP BOUND     x2         50
+ BV BOUND     x3
+SOS
+ S1 sos1
+    x1         1
+    x2         2
+ENDATA

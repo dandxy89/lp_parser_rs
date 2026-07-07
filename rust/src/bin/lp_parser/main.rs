@@ -449,11 +449,20 @@ fn cmd_diff(args: &DiffArgs, verbose: bool, quiet: bool) -> Result<(), BoxError>
     Ok(())
 }
 
+/// Parse `content` as MPS if `path` has a `.mps` extension (case-insensitive),
+/// otherwise as LP. Scoped to `convert` so that `MPS -> MPS` round trips work;
+/// other subcommands are unaffected and remain LP-only.
+fn parse_convert_input(path: &std::path::Path, content: &str) -> Result<LpProblem, BoxError> {
+    let is_mps = path.extension().and_then(|ext| ext.to_str()).is_some_and(|ext| ext.eq_ignore_ascii_case("mps"));
+    if is_mps { Ok(LpProblem::parse_mps(content)?) } else { Ok(LpProblem::parse(content)?) }
+}
+
 fn cmd_convert(args: ConvertArgs, verbose: bool, quiet: bool) -> Result<(), BoxError> {
+    use lp_parser_rs::mps::writer::{MpsWriterOptions, write_mps_string_with_options};
     use lp_parser_rs::writer::{LpWriterOptions, write_lp_string_with_options};
 
     let content = parse_file(&args.file)?;
-    let problem = LpProblem::parse(&content)?;
+    let problem = parse_convert_input(&args.file, &content)?;
 
     if !quiet && verbose {
         eprintln!("Converting file: {}", args.file.display());
@@ -468,6 +477,13 @@ fn cmd_convert(args: ConvertArgs, verbose: bool, quiet: bool) -> Result<(), BoxE
                 include_section_spacing: !args.compact,
             };
             let output = write_lp_string_with_options(&problem, &options);
+
+            let mut writer = OutputWriter::new(args.output)?;
+            write!(writer, "{output}")?;
+        }
+        ConvertFormat::Mps => {
+            let options = MpsWriterOptions { decimal_precision: args.precision, ..MpsWriterOptions::default() };
+            let output = write_mps_string_with_options(&problem, &options)?;
 
             let mut writer = OutputWriter::new(args.output)?;
             write!(writer, "{output}")?;
