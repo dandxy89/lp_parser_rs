@@ -537,6 +537,9 @@ fn extract_solution(
     }
 }
 
+/// Monotonic counter distinguishing concurrent solver-log temp files within one process.
+static SOLVE_LOG_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
 /// Convert an `LpProblem` to a `HiGHS` `RowProblem` and solve it.
 pub fn solve_problem(problem: &LpProblem) -> Result<SolveResult, String> {
     debug_assert!(!problem.variables.is_empty(), "cannot solve a problem with no variables");
@@ -545,9 +548,11 @@ pub fn solve_problem(problem: &LpProblem) -> Result<SolveResult, String> {
     let model = build_highs_model(problem);
     let build_time = build_start.elapsed();
 
-    // ponytail: pid-named temp file + explicit cleanup instead of the tempfile crate;
-    // one solve at a time per process, so no collision risk.
-    let log_path = std::env::temp_dir().join(format!("lp_diff_solver_{}.log", std::process::id()));
+    // ponytail: pid+sequence-named temp file + explicit cleanup instead of the
+    // tempfile crate. The sequence number keeps concurrent solves in one process
+    // ("Solve both" runs two solver threads) from clobbering each other's log.
+    let log_seq = SOLVE_LOG_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let log_path = std::env::temp_dir().join(format!("lp_diff_solver_{}_{log_seq}.log", std::process::id()));
 
     let BuiltModel { row_problem, sense, variable_names, sorted_var_ids, objective_coefficients, row_constraint_names, skipped_sos } =
         model;
@@ -926,6 +931,37 @@ mod tests {
         assert!(status_is_infeasible("UnboundedOrInfeasible"));
         assert!(!status_is_infeasible("Optimal"));
         assert!(!status_is_infeasible("Unbounded"));
+    }
+
+    #[test]
+    fn test_concurrent_solves_do_not_clobber_solver_log() {
+        // "Solve both" runs two solve_problem calls concurrently in one process:
+        // the fast solve must not delete the slow solve's log out from under it.
+        let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let slow_input = std::fs::read_to_string(root.join("../rust/resources/mps/fit2d.mps")).expect("failed to read fit2d.mps");
+        let slow = LpProblem::parse_mps(&slow_input).expect("failed to parse fit2d.mps");
+        let fast = LpProblem::parse("min\nobj: x\nst\nc1: x >= 1\nend").expect("failed to parse tiny LP");
+
+        // Stagger the fast solve across the slow solve's window so it finishes
+        // (and cleans up its log) while the slow solve is still running.
+        for stagger_ms in [0u64, 10, 25, 50, 75] {
+            std::thread::scope(|scope| {
+                let slow_handle = scope.spawn(|| solve_problem(&slow));
+                let fast_ref = &fast;
+                let fast_handle = scope.spawn(move || {
+                    std::thread::sleep(Duration::from_millis(stagger_ms));
+                    solve_problem(fast_ref)
+                });
+                fast_handle
+                    .join()
+                    .expect("fast solver thread panicked")
+                    .unwrap_or_else(|e| panic!("fast solve failed at stagger {stagger_ms}ms: {e}"));
+                slow_handle
+                    .join()
+                    .expect("slow solver thread panicked")
+                    .unwrap_or_else(|e| panic!("slow solve failed at stagger {stagger_ms}ms: {e}"));
+            });
+        }
     }
 
     #[test]
