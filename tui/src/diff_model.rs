@@ -578,18 +578,15 @@ pub fn sort_indices_by_delta<T: DiffEntry>(entries: &[T], indices: &mut [usize],
 
 /// Diff two coefficient lists using sorted merge-join and return only the changed entries.
 ///
-/// Both slices are sorted by name (resolved via `interner`) before merging. Numeric
-/// comparison respects `opts.abs_tol` / `opts.rel_tol` (with a `COEFF_EPSILON` floor).
-fn diff_coefficients(
-    old: &[ResolvedCoefficient],
-    new: &[ResolvedCoefficient],
-    interner: &NameInterner,
-    opts: &DiffOptions,
-) -> Vec<CoefficientChange> {
+/// Both slices are sorted by `NameId` before merging; since both share the report's
+/// `interner`, any consistent order gives a valid merge-join without resolving to
+/// strings. Numeric comparison respects `opts.abs_tol` / `opts.rel_tol` (with a
+/// `COEFF_EPSILON` floor).
+fn diff_coefficients(old: &[ResolvedCoefficient], new: &[ResolvedCoefficient], opts: &DiffOptions) -> Vec<CoefficientChange> {
     let mut old_sorted: Vec<(NameId, f64)> = old.iter().map(|c| (c.name, c.value)).collect();
     let mut new_sorted: Vec<(NameId, f64)> = new.iter().map(|c| (c.name, c.value)).collect();
-    old_sorted.sort_unstable_by(|a, b| interner.resolve(a.0).cmp(interner.resolve(b.0)));
-    new_sorted.sort_unstable_by(|a, b| interner.resolve(a.0).cmp(interner.resolve(b.0)));
+    old_sorted.sort_unstable_by_key(|a| a.0);
+    new_sorted.sort_unstable_by_key(|a| a.0);
 
     let mut changes = Vec::new();
     let mut i = 0;
@@ -600,7 +597,7 @@ fn diff_coefficients(
         debug_assert!(j <= new_sorted.len(), "new index out of bounds");
 
         let cmp = match (old_sorted.get(i), new_sorted.get(j)) {
-            (Some((n1, _)), Some((n2, _))) => interner.resolve(*n1).cmp(interner.resolve(*n2)),
+            (Some((n1, _)), Some((n2, _))) => n1.cmp(n2),
             (Some(_), None) => std::cmp::Ordering::Less,
             (None, Some(_)) => std::cmp::Ordering::Greater,
             (None, None) => break,
@@ -754,11 +751,11 @@ fn diff_standard_constraints(
     new_coefficients: &[ResolvedCoefficient],
     new_operator: ComparisonOp,
     new_rhs: f64,
-    interner: &NameInterner,
+    _interner: &NameInterner,
     order_changed: bool,
     opts: &DiffOptions,
 ) -> Option<ConstraintDiffDetail> {
-    let coeff_changes = diff_coefficients(old_coefficients, new_coefficients, interner, opts);
+    let coeff_changes = diff_coefficients(old_coefficients, new_coefficients, opts);
     let operator_change = if old_operator == new_operator { None } else { Some((old_operator, new_operator)) };
     let rhs_change = if opts.numeric_differs(old_rhs, new_rhs) { Some((old_rhs, new_rhs)) } else { None };
 
@@ -785,11 +782,11 @@ fn diff_sos_constraints(
     old_weights: &[ResolvedCoefficient],
     new_type: SOSType,
     new_weights: &[ResolvedCoefficient],
-    interner: &NameInterner,
+    _interner: &NameInterner,
     order_changed: bool,
     opts: &DiffOptions,
 ) -> Option<ConstraintDiffDetail> {
-    let weight_changes = diff_coefficients(old_weights, new_weights, interner, opts);
+    let weight_changes = diff_coefficients(old_weights, new_weights, opts);
     let type_change = if old_type == new_type { None } else { Some((old_type, new_type)) };
 
     if weight_changes.is_empty() && type_change.is_none() && !order_changed {
@@ -1199,7 +1196,7 @@ fn diff_objectives(p1: &LpProblem, p2: &LpProblem, interner: &mut NameInterner, 
                 let reordered = coefficients_reordered(p1, &o1_val.coefficients, p2, &o2_val.coefficients, opts);
                 let old_resolved = resolve_coefficients(p1, &o1_val.coefficients, interner, opts);
                 let new_resolved = resolve_coefficients(p2, &o2_val.coefficients, interner, opts);
-                let coeff_changes = diff_coefficients(&old_resolved, &new_resolved, interner, opts);
+                let coeff_changes = diff_coefficients(&old_resolved, &new_resolved, opts);
                 if coeff_changes.is_empty() && !reordered {
                     counts.unchanged += 1;
                 } else {

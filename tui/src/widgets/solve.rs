@@ -108,43 +108,59 @@ fn draw_done(
     let active = view.tab;
     let scroll = view.scroll[active.index()];
 
-    // Build tab bar line.
+    // Dynamic lines rebuilt each frame. Kept in owned locals so the reference
+    // list below can borrow them alongside the cached tab lines.
     let tab_bar = build_tab_bar(active);
+    let blank = Line::from("");
+    let footer = Line::from(Span::styled("  1-5: tabs  Tab/S-Tab: cycle  j/k: scroll  y: yank  Esc: close", Style::default().fg(t.muted)));
 
-    // Build content for the active tab, preferring cached lines when available.
-    let mut lines = vec![tab_bar, Line::from("")];
-
-    let cached_tabs = if let SolveRenderCache::Single(tabs) = cache { Some(tabs) } else { None };
-
-    if let Some(tabs) = cached_tabs {
-        lines.extend(tabs[active.index()].iter().cloned());
+    // Prefer cached tab lines; only build from scratch when the cache is absent
+    // (should not happen in normal flow).
+    let mut fallback: Vec<Line<'static>> = Vec::new();
+    let cached: &[Line<'static>] = if let SolveRenderCache::Single(tabs) = cache {
+        &tabs[active.index()]
     } else {
-        // Fallback: build lines from scratch (should not happen in normal flow).
         let inner_width = popup_width.saturating_sub(2);
         match active {
-            SolveTab::Summary => build_summary_tab(&mut lines, result),
-            SolveTab::Variables => build_variables_tab(&mut lines, result, name_column_width(inner_width, 2 + 12 + 14)),
-            SolveTab::Constraints => build_constraints_tab(&mut lines, result, name_column_width(inner_width, 2 + 12 + 14)),
-            SolveTab::Log => build_log_tab(&mut lines, result),
-            SolveTab::Duals => build_duals_tab(&mut lines, result, name_column_width(inner_width, 2 + 14)),
+            SolveTab::Summary => build_summary_tab(&mut fallback, result),
+            SolveTab::Variables => build_variables_tab(&mut fallback, result, name_column_width(inner_width, 2 + 12 + 14)),
+            SolveTab::Constraints => build_constraints_tab(&mut fallback, result, name_column_width(inner_width, 2 + 12 + 14)),
+            SolveTab::Log => build_log_tab(&mut fallback, result),
+            SolveTab::Duals => build_duals_tab(&mut fallback, result, name_column_width(inner_width, 2 + 14)),
         }
-    }
+        &fallback
+    };
 
     // The diagnosis block changes while the background solve runs, so it is
     // appended dynamically rather than baked into the render cache.
+    let mut diag: Vec<Line<'static>> = Vec::new();
     if active == SolveTab::Summary && status_is_infeasible(&result.status) {
-        append_diagnosis_block(&mut lines, diagnosis);
+        append_diagnosis_block(&mut diag, diagnosis);
     }
 
-    lines.push(Line::from(""));
-    lines.push(Line::from(Span::styled("  1-5: tabs  Tab/S-Tab: cycle  j/k: scroll  y: yank  Esc: close", Style::default().fg(t.muted))));
+    // Assemble the render order as references — cached line content is never cloned.
+    let mut lines: Vec<&Line> = Vec::with_capacity(cached.len() + diag.len() + 4);
+    lines.push(&tab_bar);
+    lines.push(&blank);
+    lines.extend(cached.iter());
+    lines.extend(diag.iter());
+    lines.push(&blank);
+    lines.push(&footer);
 
     let block = panel_block(Style::default().fg(t.added).add_modifier(Modifier::BOLD))
         .title(Span::styled(" Solve Results ", Style::default().fg(t.added).add_modifier(Modifier::BOLD)));
-
-    let paragraph = Paragraph::new(lines).block(block).scroll((scroll, 0));
+    let inner = block.inner(popup);
     frame.render_widget(Clear, popup);
-    frame.render_widget(paragraph, popup);
+    frame.render_widget(block, popup);
+
+    // Windowed render honouring vertical scroll (same idiom as `draw_summary`),
+    // clipping long lines to width like the previous unwrapped `Paragraph`.
+    let buf = frame.buffer_mut();
+    for (i, line) in lines.iter().skip(scroll as usize).take(inner.height as usize).enumerate() {
+        #[allow(clippy::cast_possible_truncation)] // i < inner.height (u16)
+        let y = inner.y + i as u16;
+        buf.set_line(inner.x, y, line, inner.width);
+    }
 }
 
 /// Build the tab bar line with the active tab highlighted.
