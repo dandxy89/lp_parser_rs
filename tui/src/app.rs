@@ -202,6 +202,13 @@ pub struct App {
     /// Telescope-style search pop-up state.
     pub search_popup: SearchPopupState,
 
+    /// Matches of the last confirmed search, in rank order, for `n`/`N` repeat.
+    /// Cleared on report rebuilds (the entry indices go stale).
+    pub(crate) last_search: Vec<(Section, usize)>,
+
+    /// Cursor into `last_search`: the match most recently jumped to.
+    pub(crate) last_search_cursor: usize,
+
     /// Navigation jumplist for Ctrl+o / Ctrl+i.
     pub jumplist: JumpList,
 
@@ -463,6 +470,8 @@ impl App {
                 cached_result_lines: Vec::new(),
                 regex_error: None,
             },
+            last_search: Vec::new(),
+            last_search_cursor: 0,
             jumplist: JumpList::new(),
             solver: SolverSession::new(),
             file1_path,
@@ -611,6 +620,10 @@ impl App {
         self.search_haystack = haystack;
         self.search_name_buffer = names;
         self.search_content_buffer.clear();
+
+        // The `n`/`N` repeat list holds entry indices into the old report.
+        self.last_search.clear();
+        self.last_search_cursor = 0;
 
         // Summary lines + cached summary (respects the active ignore_order setting).
         self.rebuild_summary();
@@ -1446,6 +1459,9 @@ impl App {
 
     /// Confirm the currently selected search pop-up result: close the pop-up,
     /// switch to the result's section, select the entry, and focus the name list.
+    ///
+    /// The result list is retained (as `(section, entry_index)` pairs) so `n`/`N`
+    /// can step through the remaining matches without reopening the pop-up.
     pub fn confirm_search_selection(&mut self) {
         let Some(result) = self.search_popup.results.get(self.search_popup.selected) else {
             // Nothing selected — just close.
@@ -1456,11 +1472,39 @@ impl App {
         let section = result.section;
         let entry_index = result.entry_index;
 
+        // Retain the match list for `n`/`N` repeat — but only for a real query;
+        // an empty query lists every entry, which is not a search to repeat.
+        if self.search_popup.query.value().is_empty() {
+            self.last_search.clear();
+            self.last_search_cursor = 0;
+        } else {
+            self.last_search = self.search_popup.results.iter().map(|r| (r.section, r.entry_index)).collect();
+            self.last_search_cursor = self.search_popup.selected;
+        }
+
+        self.search_popup.visible = false;
+        self.jump_to_entry(section, entry_index);
+    }
+
+    /// Jump to the next (`forward`) or previous match of the last confirmed
+    /// search, wrapping around. Bound to `n`/`N` in normal mode.
+    pub(crate) fn repeat_search(&mut self, forward: bool) {
+        if self.last_search.is_empty() {
+            self.flash_status("No previous search (press / to search)");
+            return;
+        }
+        let len = self.last_search.len();
+        self.last_search_cursor = if forward { (self.last_search_cursor + 1) % len } else { (self.last_search_cursor + len - 1) % len };
+        let (section, entry_index) = self.last_search[self.last_search_cursor];
+        self.jump_to_entry(section, entry_index);
+        self.flash_status(format!("match {}/{len}", self.last_search_cursor + 1));
+    }
+
+    /// Switch to `section`, reset the kind filter, select `entry_index` in the
+    /// name list, and focus it. Shared by search confirm and `n`/`N` repeat.
+    fn jump_to_entry(&mut self, section: Section, entry_index: usize) {
         // Record current position before jumping.
         self.record_jump();
-
-        // Close pop-up.
-        self.search_popup.visible = false;
 
         // Switch to the target section.
         self.set_active_section(section);

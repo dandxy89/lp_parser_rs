@@ -289,10 +289,14 @@ impl App {
             KeyCode::Char('[') => self.cycle_section(false),
 
             // Navigation (vi-style and arrow keys).
-            KeyCode::Char('j' | 'n') | KeyCode::Down => self.navigate_down(),
-            KeyCode::Char('k' | 'N') | KeyCode::Up => self.navigate_up(),
+            KeyCode::Char('j') | KeyCode::Down => self.navigate_down(),
+            KeyCode::Char('k') | KeyCode::Up => self.navigate_up(),
             KeyCode::Char('g') | KeyCode::Home => self.jump_to_top(),
             KeyCode::Char('G') | KeyCode::End => self.jump_to_bottom(),
+
+            // Repeat the last confirmed search: next / previous match.
+            KeyCode::Char('n') => self.repeat_search(true),
+            KeyCode::Char('N') => self.repeat_search(false),
 
             KeyCode::Enter => self.handle_enter(),
             KeyCode::Esc => self.handle_escape(),
