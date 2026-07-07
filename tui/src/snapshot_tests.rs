@@ -93,6 +93,14 @@ fn snapshot_diff_constraints_80x24() {
 }
 
 #[test]
+fn snapshot_diff_constraints_filtered_80x24() {
+    let mut app = diff_app();
+    app.set_section(Section::Constraints);
+    app.set_filter(crate::state::DiffFilter::Modified);
+    insta::assert_snapshot!(render(&mut app, 80, 24).backend());
+}
+
+#[test]
 fn snapshot_help_overlay_80x24() {
     let mut app = inspect_app();
     app.show_help = true;

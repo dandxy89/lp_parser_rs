@@ -994,6 +994,7 @@ impl App {
         if self.filter != filter {
             self.record_jump();
             self.filter = filter;
+            self.refresh_tab_labels();
             self.invalidate_cache();
             self.ensure_active_section_cache();
             self.reset_name_list_selection();

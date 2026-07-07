@@ -265,7 +265,7 @@ pub struct App {
     pub(crate) cached_summary: DiffSummary,
 
     /// Pre-computed section selector labels, avoiding per-frame `format!` allocations.
-    pub(crate) section_labels: [Cow<'static, str>; 5],
+    pub(crate) section_labels: [TabLabel; 5],
 
     /// When `true`, entries whose only change is coefficient ordering are hidden.
     pub ignore_order: bool,
@@ -341,13 +341,75 @@ fn build_mode_numerics_lines(mode: AppMode, report: &LpDiffReport, _problem: &Lp
     }
 }
 
-/// Build pre-computed tab bar labels: list sections carry their entry/change count.
-pub(crate) fn build_section_labels(summary: &DiffSummary) -> [Cow<'static, str>; 5] {
-    Section::ALL.map(|section| match section {
-        Section::Summary | Section::Numerics => Cow::Borrowed(section.label()),
-        Section::Variables => Cow::Owned(format!("{} ({})", section.label(), summary.variables.changed())),
-        Section::Constraints => Cow::Owned(format!("{} ({})", section.label(), summary.constraints.changed())),
-        Section::Objectives => Cow::Owned(format!("{} ({})", section.label(), summary.objectives.changed())),
+/// One pre-computed tab bar label: the section name plus optional pre-styled
+/// per-kind change counts (diff mode only) rendered after the name.
+pub(crate) struct TabLabel {
+    /// Section name; inspect mode appends its entry count (e.g. "Variables (8)").
+    pub name: Cow<'static, str>,
+    /// Coloured count spans (e.g. `+2 -1 ~5`, or `~5/12` under a kind filter).
+    /// Empty for static sections, inspect mode, and sections with no changes.
+    pub counts: Vec<ratatui::text::Span<'static>>,
+}
+
+/// Build the coloured change-count spans for one list section's tab.
+///
+/// With no kind filter, shows the non-zero per-kind counts in the same
+/// `+`/`-`/`~`/`>` vocabulary as the status bar. Under a kind filter, shows
+/// only that kind's count over the section total (e.g. `~5/12`) so a filtered
+/// list is never mistaken for the whole section.
+fn tab_count_spans(counts: &crate::diff_model::DiffCounts, filter: DiffFilter) -> Vec<ratatui::text::Span<'static>> {
+    use ratatui::style::Style;
+    use ratatui::text::Span;
+    let t = crate::theme::theme();
+    let kind_counts =
+        [(counts.added, "+", t.added), (counts.removed, "-", t.removed), (counts.modified, "~", t.modified), (counts.renamed, ">", t.info)];
+    match filter {
+        DiffFilter::All => {
+            let mut spans = Vec::new();
+            for (count, prefix, colour) in kind_counts {
+                if count > 0 {
+                    if !spans.is_empty() {
+                        spans.push(Span::raw(" "));
+                    }
+                    spans.push(Span::styled(format!("{prefix}{count}"), Style::default().fg(colour)));
+                }
+            }
+            spans
+        }
+        DiffFilter::Added | DiffFilter::Removed | DiffFilter::Modified | DiffFilter::Renamed => {
+            let index = match filter {
+                DiffFilter::Added => 0,
+                DiffFilter::Removed => 1,
+                DiffFilter::Modified => 2,
+                _ => 3,
+            };
+            let (count, prefix, colour) = kind_counts[index];
+            vec![
+                Span::styled(format!("{prefix}{count}"), Style::default().fg(colour)),
+                Span::styled(format!("/{}", counts.total()), Style::default().fg(t.muted)),
+            ]
+        }
+    }
+}
+
+/// Build pre-computed tab bar labels: list sections carry their entry/change counts.
+pub(crate) fn build_section_labels(summary: &DiffSummary, mode: AppMode, filter: DiffFilter) -> [TabLabel; 5] {
+    Section::ALL.map(|section| {
+        let counts = match section {
+            Section::Summary | Section::Numerics => None,
+            Section::Variables => Some(&summary.variables),
+            Section::Constraints => Some(&summary.constraints),
+            Section::Objectives => Some(&summary.objectives),
+        };
+        match (mode, counts) {
+            (_, None) => TabLabel { name: Cow::Borrowed(section.label()), counts: Vec::new() },
+            (AppMode::Inspect, Some(counts)) => {
+                TabLabel { name: Cow::Owned(format!("{} ({})", section.label(), counts.changed())), counts: Vec::new() }
+            }
+            (AppMode::Diff, Some(counts)) => {
+                TabLabel { name: Cow::Borrowed(section.label()), counts: tab_count_spans(counts, filter) }
+            }
+        }
     })
 }
 
@@ -434,7 +496,7 @@ impl App {
         let numerics_lines = build_mode_numerics_lines(mode, &report, &problem1);
 
         // Pre-compute tab bar labels.
-        let section_labels = build_section_labels(&report_summary);
+        let section_labels = build_section_labels(&report_summary, mode, DiffFilter::All);
 
         Self {
             mode,
@@ -498,6 +560,12 @@ impl App {
         }
     }
 
+    /// Rebuild the cached tab labels; must follow every `filter` change since
+    /// the tab bar reflects the active kind filter.
+    pub(crate) fn refresh_tab_labels(&mut self) {
+        self.section_labels = build_section_labels(&self.cached_summary, self.mode, self.filter);
+    }
+
     /// Flash a transient status-bar message (reuses the yank flash channel).
     pub(crate) fn flash_status(&mut self, message: impl Into<String>) {
         self.yank.message = message.into();
@@ -537,7 +605,7 @@ impl App {
             }
         }
         self.summary_lines = build_mode_summary_lines(self.mode, &self.report, &summary, &self.problem1);
-        self.section_labels = build_section_labels(&summary);
+        self.section_labels = build_section_labels(&summary, self.mode, self.filter);
         self.cached_summary = summary;
     }
 
@@ -1012,6 +1080,7 @@ impl App {
     pub(crate) fn restore_jump(&mut self, entry: JumpEntry) {
         self.set_active_section(entry.section);
         self.filter = entry.filter;
+        self.refresh_tab_labels();
         self.invalidate_cache();
         self.ensure_active_section_cache();
         self.detail_scroll = entry.detail_scroll;
@@ -1511,6 +1580,7 @@ impl App {
 
         // Reset filter and recompute caches.
         self.filter = DiffFilter::All;
+        self.refresh_tab_labels();
         self.invalidate_cache();
         self.ensure_active_section_cache();
 

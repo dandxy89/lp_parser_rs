@@ -40,9 +40,21 @@ pub fn draw_tab_bar(frame: &mut Frame, area: Rect, app: &mut App) {
         } else {
             Style::default().fg(t.muted)
         };
-        spans.push(Span::styled(label.as_ref(), style));
+        spans.push(Span::styled(label.name.as_ref(), style));
         #[allow(clippy::cast_possible_truncation)] // labels are short, far below u16::MAX
-        let width = label.chars().count() as u16;
+        let mut width = label.name.chars().count() as u16;
+        // Coloured per-kind change counts keep their own colours regardless of
+        // tab state — they are information, not chrome.
+        if !label.counts.is_empty() {
+            spans.push(Span::raw(" "));
+            width = width.saturating_add(1);
+            for count in &label.counts {
+                #[allow(clippy::cast_possible_truncation)] // counts are short, far below u16::MAX
+                let count_width = count.content.chars().count() as u16;
+                width = width.saturating_add(count_width);
+                spans.push(count.clone());
+            }
+        }
         bounds[i] = (x, x.saturating_add(width));
         x = x.saturating_add(width);
     }

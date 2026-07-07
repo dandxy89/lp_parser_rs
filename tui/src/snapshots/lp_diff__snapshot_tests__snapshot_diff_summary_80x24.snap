@@ -2,7 +2,7 @@
 source: tui/src/snapshot_tests.rs
 expression: "render(&mut app, 80, 24).backend()"
 ---
-" Summary │ Variables (0) │ Constraints (3) │ Objectives (1) │ Numerics          "
+" Summary │ Variables │ Constraints +1 -1 ~1 │ Objectives ~1 │ Numerics          "
 "╭ Overview ────────╮╭ Summary ─────────────────────────────────────────────────▲"
 "│  Variables    (0)││  a.lp  →  b.lp                                           █"
 "│  Constraints  (3)││                                                          █"
