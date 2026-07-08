@@ -4,7 +4,7 @@ A terminal-based interactive explorer and diff viewer for Linear Programming fil
 
 ![lp_diff demo](assets/demo.gif)
 
-The demo compares `fit1d.lp` against `fit2d.lp`: browsing the coefficient-level side-by-side constraint diff, telescope-style fuzzy search, and an on-demand HiGHS solve. Regenerate it with `vhs scripts/demo.tape && gifsicle -O3 --batch assets/demo.gif` (run from the repo root).
+The demo diffs `fit2d.mps` against `fit1d.lp` (mixed MPS/LP formats) and tours the main features: the coefficient-level side-by-side constraint diff, raw text view, change-kind filters, sort and live tolerance cycling, telescope-style fuzzy search, the Numerics view, the keybindings pop-up, and a parallel HiGHS solve of both files with a solution diff. Regenerate it with `vhs tui/scripts/demo.tape && gifsicle -O3 --batch tui/assets/demo.gif` (run from the repo root).
 
 ## Installation
 

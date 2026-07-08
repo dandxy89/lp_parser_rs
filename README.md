@@ -232,6 +232,8 @@ A terminal UI for exploring a single LP/MPS model or comparing two, with coeffic
 
 ![lp_diff demo](https://raw.githubusercontent.com/dandxy89/lp_parser_rs/main/tui/assets/demo.gif)
 
+*The demo diffs an MPS file against an LP file: side-by-side constraint diffs, filters, sort and live tolerance cycling, fuzzy search, Numerics, the keybindings pop-up, and a parallel HiGHS solve of both files with a solution diff.*
+
 ```bash
 cargo install --path tui
 lp_diff model.lp                       # inspect a single model
