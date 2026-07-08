@@ -173,7 +173,7 @@ fn draw_entry_name_list(frame: &mut Frame, area: Rect, params: &NameListParams<'
         state.select(Some(total_items.saturating_sub(1)));
     }
 
-    // --- Compute the visible window, replicating List's scroll-to-selection. ---
+    // Compute the visible window, replicating List's scroll-to-selection.
     let selected = state.selected().unwrap_or(0);
     let mut offset = state.offset();
 

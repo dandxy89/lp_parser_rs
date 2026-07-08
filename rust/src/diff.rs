@@ -78,6 +78,10 @@ impl DiffTol {
     pub fn differ(self, a: f64, b: f64) -> bool {
         debug_assert!(self.abs.is_finite() && self.abs >= 0.0, "abs tolerance must be finite and non-negative");
         debug_assert!(self.rel.is_finite() && self.rel >= 0.0, "rel tolerance must be finite and non-negative");
+        if a.is_nan() || b.is_nan() {
+            // A value that became NaN is a change; NaN on both sides is not.
+            return a.is_nan() != b.is_nan();
+        }
         let diff = (a - b).abs();
         if diff == 0.0 {
             return false;
@@ -317,8 +321,6 @@ mod tests {
         DiffOptions { tol, normalise: None }
     }
 
-    // --- DiffTol tolerance edges ---------------------------------------------
-
     #[test]
     fn tol_zero_reports_any_nonzero_difference() {
         let tol = DiffTol::default();
@@ -356,6 +358,16 @@ mod tests {
     }
 
     #[test]
+    fn tol_nan_operands() {
+        let tol = DiffTol::default();
+        // A value that became NaN must be reported as changed.
+        assert!(tol.differ(f64::NAN, 1.0));
+        assert!(tol.differ(1.0, f64::NAN));
+        // NaN on both sides means nothing changed.
+        assert!(!tol.differ(f64::NAN, f64::NAN));
+    }
+
+    #[test]
     fn tol_zero_baseline() {
         let tol = DiffTol::new(0.0, 0.5);
         // Relative scale is max(|0|, |1|) = 1; diff 1 > 0.5 -> different.
@@ -363,8 +375,6 @@ mod tests {
         // Both zero -> no difference.
         assert!(!tol.differ(0.0, 0.0));
     }
-
-    // --- structural diff -----------------------------------------------------
 
     fn parse(src: &str) -> LpProblem {
         LpProblem::parse(src).expect("test LP must parse")
@@ -464,5 +474,51 @@ mod tests {
         assert!(diff.cons_removed.is_empty());
         // Constraint c is unchanged after normalisation.
         assert!(diff.cons_modified.is_empty());
+    }
+
+    #[test]
+    fn detects_sos_weight_change() {
+        // Same SOS constraint on both sides, but one weight differs.
+        let p1 = parse("Minimize\n obj: x + y\nSubject To\n c1: x + y >= 1\nSOS\n sos_a: S1:: x:1 y:2\nEnd");
+        let p2 = parse("Minimize\n obj: x + y\nSubject To\n c1: x + y >= 1\nSOS\n sos_a: S1:: x:1 y:3\nEnd");
+        let diff = p1.diff(&p2, &opts(DiffTol::default()));
+        assert_eq!(diff.cons_modified.len(), 1);
+        let (name, changes) = &diff.cons_modified[0];
+        assert_eq!(name, "sos_a");
+        assert_eq!(changes, &vec!["SOS definition changed".to_string()]);
+    }
+
+    #[test]
+    fn detects_constraint_kind_change() {
+        // `mix` is a standard constraint in p1 and an SOS constraint in p2.
+        let p1 = parse("Minimize\n obj: x + y\nSubject To\n c1: x + y >= 1\n mix: x + y <= 5\nEnd");
+        let p2 = parse("Minimize\n obj: x + y\nSubject To\n c1: x + y >= 1\nSOS\n mix: S1:: x:1 y:2\nEnd");
+        let diff = p1.diff(&p2, &opts(DiffTol::default()));
+        assert_eq!(diff.cons_modified.len(), 1);
+        let (name, changes) = &diff.cons_modified[0];
+        assert_eq!(name, "mix");
+        assert_eq!(changes, &vec!["constraint kind changed (Standard <-> SOS)".to_string()]);
+    }
+
+    #[test]
+    fn identical_problems_produce_empty_diff() {
+        let src = "Minimize\n obj: 2 x + 3 y\nSubject To\n c1: x + y >= 1\nBounds\n x <= 4\nSOS\n sos_a: S1:: x:1 y:2\nEnd";
+        let p1 = parse(src);
+        let p2 = parse(src);
+        let diff = p1.diff(&p2, &opts(DiffTol::default()));
+        assert!(diff.is_empty(), "identical problems must diff empty: {diff:?}");
+    }
+
+    #[test]
+    fn objective_coefficient_additions_and_removals_are_counted() {
+        // `y` is removed from the objective and `z` is added: two coefficient
+        // changes even though `x`'s value is untouched.
+        let p1 = parse("Minimize\n obj: 2 x + 3 y\nSubject To\n c1: x >= 1\nEnd");
+        let p2 = parse("Minimize\n obj: 2 x + 4 z\nSubject To\n c1: x >= 1\nEnd");
+        let diff = p1.diff(&p2, &opts(DiffTol::default()));
+        assert_eq!(diff.objs_modified.len(), 1);
+        let (name, changes) = &diff.objs_modified[0];
+        assert_eq!(name, "obj");
+        assert_eq!(changes, &vec!["2 coefficient change(s)".to_string()]);
     }
 }

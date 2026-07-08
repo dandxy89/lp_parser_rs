@@ -682,10 +682,6 @@ fn draw_done_both(
     frame.render_widget(paragraph, popup);
 }
 
-// ---------------------------------------------------------------------------
-// Cache-building functions — called once when solve completes
-// ---------------------------------------------------------------------------
-
 /// Pre-format all 5 tab contents for a single solve result.
 ///
 /// `inner_width` is the solve popup's inner width at solve completion; name
@@ -854,10 +850,6 @@ fn format_constraint_diff_line(row: &crate::solver::ConstraintDiffRow, name: &st
     }
     Some(Line::from(spans))
 }
-
-// ---------------------------------------------------------------------------
-// Cached diff tab rendering — uses pre-formatted row Lines
-// ---------------------------------------------------------------------------
 
 /// Visible data-row window `(first_index, count)` for a list whose header
 /// occupies `header_count` lines, given the scroll offset and viewport height.

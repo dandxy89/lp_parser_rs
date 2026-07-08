@@ -122,13 +122,16 @@ fn register_variables_from_coefficients(
 }
 
 /// Intern a slice of raw coefficients into model coefficients.
+///
+/// Repeated terms for the same variable (`x + x`) are summed, matching
+/// solver LP readers; first-occurrence order is preserved.
 #[inline]
 fn intern_coefficients(interner: &mut NameInterner, raw: &[RawCoefficient<'_>]) -> Vec<Coefficient> {
-    let mut coefficients = Vec::with_capacity(raw.len());
+    let mut merged: IndexMap<NameId, f64> = IndexMap::with_capacity(raw.len());
     for rc in raw {
-        coefficients.push(Coefficient { name: interner.intern(rc.name), value: rc.value });
+        *merged.entry(interner.intern(rc.name)).or_insert(0.0) += rc.value;
     }
-    coefficients
+    merged.into_iter().map(|(name, value)| Coefficient { name, value }).collect()
 }
 
 /// Intern a raw constraint into a model constraint.
@@ -951,7 +954,10 @@ fn intern_objectives(
         }
 
         register_variables_from_coefficients(variables, &obj.coefficients, None);
-        objectives.insert(obj.name, obj);
+        let name = obj.name;
+        if objectives.insert(name, obj).is_some() {
+            eprintln!("duplicate objective name '{}': the later definition replaces the earlier one", interner.resolve(name));
+        }
     }
 
     objectives
@@ -971,7 +977,9 @@ fn intern_constraints(
         let mut con = intern_constraint(interner, raw_con);
         let final_id = assign_constraint_name(interner, &mut con, constraint_counter, "C", &mut name_buf);
         register_constraint_variables(variables, &con);
-        constraints.insert(final_id, con);
+        if constraints.insert(final_id, con).is_some() {
+            eprintln!("duplicate constraint name '{}': the later definition replaces the earlier one", interner.resolve(final_id));
+        }
     }
 
     constraints
@@ -982,11 +990,28 @@ fn process_bounds(interner: &mut NameInterner, bounds: &[(&str, VariableType)], 
     for &(var_name, ref var_type) in bounds {
         let var_id = interner.intern(var_name);
         match variables.entry(var_id) {
-            Entry::Occupied(mut entry) => entry.get_mut().set_var_type(var_type.clone()),
+            Entry::Occupied(mut entry) => {
+                let merged = merge_bound_types(&entry.get().var_type, var_type);
+                entry.get_mut().set_var_type(merged);
+            }
             Entry::Vacant(entry) => {
                 entry.insert(Variable::new(var_id).with_var_type(var_type.clone()));
             }
         }
+    }
+}
+
+/// Merge a new bound declaration with a variable's existing type.
+///
+/// Complementary single-sided bounds (`x >= lb` on one line, `x <= ub` on
+/// another) combine into a [`VariableType::DoubleBound`]; every other
+/// combination keeps last-declaration-wins semantics.
+fn merge_bound_types(existing: &VariableType, new: &VariableType) -> VariableType {
+    match (existing, new) {
+        (VariableType::LowerBound(lb), VariableType::UpperBound(ub)) | (VariableType::UpperBound(ub), VariableType::LowerBound(lb)) => {
+            VariableType::DoubleBound(*lb, *ub)
+        }
+        _ => new.clone(),
     }
 }
 
@@ -1233,6 +1258,68 @@ End";
         assert!(LpProblem::parse("minimize\nx1\nsubject to\nend").is_ok());
     }
 
+    // Parsed coefficients round-trip bit-exactly from source text.
+    #[allow(clippy::float_cmp)]
+    #[test]
+    fn test_duplicate_variable_terms_sum() {
+        // Repeated terms for the same variable sum, matching solver LP readers.
+        let p = LpProblem::parse("minimize\nobj: x1 + x1\nsubject to\nc1: 2 x1 + 3 x1 - x1 <= 8\nend").unwrap();
+        let obj = p.objectives.values().next().unwrap();
+        assert_eq!(obj.coefficients.len(), 1);
+        assert_eq!(obj.coefficients[0].value, 2.0);
+        let Constraint::Standard { coefficients, .. } = p.constraints.values().next().unwrap() else {
+            panic!("expected standard constraint");
+        };
+        assert_eq!(coefficients.len(), 1);
+        assert_eq!(coefficients[0].value, 4.0);
+    }
+
+    // Parsed values round-trip bit-exactly from source text.
+    #[allow(clippy::float_cmp)]
+    #[test]
+    fn test_duplicate_names_last_wins() {
+        // A repeated constraint name replaces the earlier definition.
+        let p = LpProblem::parse("minimize\nx1\nsubject to\nc1: x1 <= 1\nc1: x1 >= 2\nend").unwrap();
+        assert_eq!(p.constraint_count(), 1);
+        let Constraint::Standard { operator, rhs, .. } = p.constraints.values().next().unwrap() else {
+            panic!("expected standard constraint");
+        };
+        assert_eq!(*operator, ComparisonOp::GTE);
+        assert_eq!(*rhs, 2.0);
+
+        // Same for objective names.
+        let p = LpProblem::parse("minimize\nobj: x1\nobj: 3 x2\nsubject to\nc1: x1 <= 1\nend").unwrap();
+        assert_eq!(p.objective_count(), 1);
+        let obj = p.objectives.values().next().unwrap();
+        assert_eq!(obj.coefficients.len(), 1);
+        assert_eq!(obj.coefficients[0].value, 3.0);
+    }
+
+    #[test]
+    fn test_keyword_as_constraint_label_is_rejected() {
+        // `end` lexes as the End keyword, so it cannot silently become a
+        // constraint name; the parse must fail rather than misparse.
+        assert!(LpProblem::parse("minimize\nx1\nsubject to\nend: x1 <= 1\nend").is_err());
+    }
+
+    #[test]
+    fn test_separate_bound_lines_merge_into_double_bound() {
+        // `x >= lb` followed by `x <= ub` must merge, not overwrite.
+        let p = LpProblem::parse("minimize\nx1\nsubject to\nc1: x1 <= 10\nbounds\nx1 >= 2\nx1 <= 8\nend").unwrap();
+        let x1 = p.name_id("x1").unwrap();
+        assert_eq!(p.variables[&x1].var_type, VariableType::DoubleBound(2.0, 8.0));
+
+        // Reverse declaration order merges too.
+        let p = LpProblem::parse("minimize\nx1\nsubject to\nc1: x1 <= 10\nbounds\nx1 <= 8\nx1 >= 2\nend").unwrap();
+        let x1 = p.name_id("x1").unwrap();
+        assert_eq!(p.variables[&x1].var_type, VariableType::DoubleBound(2.0, 8.0));
+
+        // Same-side redeclaration keeps last-wins semantics.
+        let p = LpProblem::parse("minimize\nx1\nsubject to\nc1: x1 <= 10\nbounds\nx1 >= 2\nx1 >= 3\nend").unwrap();
+        let x1 = p.name_id("x1").unwrap();
+        assert_eq!(p.variables[&x1].var_type, VariableType::LowerBound(3.0));
+    }
+
     #[test]
     fn test_parse_errors() {
         let invalid = [
@@ -1313,6 +1400,163 @@ End";
         }
         assert_eq!(problem.variable_count(), 100);
         assert_eq!(problem.constraint_count(), 100);
+    }
+
+    #[test]
+    fn test_fixed_bounds_forms() {
+        // `x1 = 5` fixes the variable at 5 via a degenerate double bound.
+        let p = LpProblem::parse("minimize\nx1\nsubject to\nc1: x1 <= 10\nbounds\nx1 = 5\nend").unwrap();
+        let x1 = p.name_id("x1").unwrap();
+        assert_eq!(p.variables[&x1].var_type, VariableType::DoubleBound(5.0, 5.0));
+
+        // The reversed `5 = x1` form is accepted too.
+        let p = LpProblem::parse("minimize\nx1\nsubject to\nc1: x1 <= 10\nbounds\n5 = x1\nend").unwrap();
+        let x1 = p.name_id("x1").unwrap();
+        assert_eq!(p.variables[&x1].var_type, VariableType::DoubleBound(5.0, 5.0));
+    }
+
+    #[test]
+    fn test_reversed_upper_bound() {
+        // `5 >= x1` reads as an upper bound of 5 on x1.
+        let p = LpProblem::parse("minimize\nx1\nsubject to\nc1: x1 <= 10\nbounds\n5 >= x1\nend").unwrap();
+        let x1 = p.name_id("x1").unwrap();
+        assert_eq!(p.variables[&x1].var_type, VariableType::UpperBound(5.0));
+    }
+
+    // Parsed RHS values round-trip bit-exactly from source text.
+    #[allow(clippy::float_cmp)]
+    #[test]
+    fn test_strict_comparison_operators() {
+        let p = LpProblem::parse("minimize\nx1\nsubject to\nc1: x1 < 1\nc2: x1 > 1\nend").unwrap();
+        let c1 = p.name_id("c1").unwrap();
+        let c2 = p.name_id("c2").unwrap();
+        let Constraint::Standard { operator, rhs, .. } = &p.constraints[&c1] else {
+            panic!("expected standard constraint");
+        };
+        assert_eq!(*operator, ComparisonOp::LT);
+        assert_eq!(*rhs, 1.0);
+        let Constraint::Standard { operator, .. } = &p.constraints[&c2] else {
+            panic!("expected standard constraint");
+        };
+        assert_eq!(*operator, ComparisonOp::GT);
+    }
+
+    #[test]
+    fn test_strict_double_bounds() {
+        // All mixes of strict and non-strict operators collapse to a DoubleBound.
+        for bound_line in ["0 < x1 < 5", "0 <= x1 < 5", "0 < x1 <= 5"] {
+            let input = format!("minimize\nx1\nsubject to\nc1: x1 <= 10\nbounds\n{bound_line}\nend");
+            let p = LpProblem::parse(&input).unwrap();
+            let x1 = p.name_id("x1").unwrap();
+            assert_eq!(p.variables[&x1].var_type, VariableType::DoubleBound(0.0, 5.0), "failed for bound line: {bound_line}");
+        }
+    }
+
+    #[test]
+    fn test_double_colon_constraint_separator() {
+        // `::` is accepted as a named-constraint separator, as some writers emit it.
+        let p = LpProblem::parse("minimize\nx1\nsubject to\nc1:: x1 <= 1\nend").unwrap();
+        assert_eq!(p.constraint_count(), 1);
+        let c1 = p.name_id("c1").unwrap();
+        assert!(matches!(&p.constraints[&c1], Constraint::Standard { operator: ComparisonOp::LTE, .. }));
+    }
+
+    #[test]
+    fn test_missing_end_keyword() {
+        // The trailing `End` keyword is optional.
+        let p = LpProblem::parse("minimize\nx1\nsubject to\nc1: x1 <= 1").unwrap();
+        assert_eq!((p.objective_count(), p.constraint_count()), (1, 1));
+    }
+
+    #[test]
+    fn test_repeated_optional_sections_extend() {
+        // Two `bounds` blocks both apply.
+        let p = LpProblem::parse("minimize\nx1 + x2\nsubject to\nc1: x1 <= 10\nbounds\nx1 >= 1\nbounds\nx2 <= 5\nend").unwrap();
+        let x1 = p.name_id("x1").unwrap();
+        let x2 = p.name_id("x2").unwrap();
+        assert_eq!(p.variables[&x1].var_type, VariableType::LowerBound(1.0));
+        assert_eq!(p.variables[&x2].var_type, VariableType::UpperBound(5.0));
+
+        // Interleaved binaries/generals/binaries blocks all accumulate.
+        let p = LpProblem::parse("minimize\nx1\nsubject to\nc1: x1 <= 1\nbinaries\nb1\ngenerals\ng1\nbinaries\nb2\nend").unwrap();
+        let b1 = p.name_id("b1").unwrap();
+        let b2 = p.name_id("b2").unwrap();
+        let g1 = p.name_id("g1").unwrap();
+        assert_eq!(p.variables[&b1].var_type, VariableType::Binary);
+        assert_eq!(p.variables[&b2].var_type, VariableType::Binary);
+        assert_eq!(p.variables[&g1].var_type, VariableType::General);
+    }
+
+    #[test]
+    fn test_section_aliases_full_parse() {
+        // `max`, `st`, `bound`, `gen`, and `bin` are all accepted aliases.
+        let p = LpProblem::parse("max\nx1\nst\nc1: x1 <= 1\nbound\nx1 <= 4\ngen\ng1\nbin\nb1\nend").unwrap();
+        assert_eq!(p.sense, Sense::Maximize);
+        let x1 = p.name_id("x1").unwrap();
+        let g1 = p.name_id("g1").unwrap();
+        let b1 = p.name_id("b1").unwrap();
+        assert_eq!(p.variables[&x1].var_type, VariableType::UpperBound(4.0));
+        assert_eq!(p.variables[&g1].var_type, VariableType::General);
+        assert_eq!(p.variables[&b1].var_type, VariableType::Binary);
+
+        // `such that` is a multi-word alias for `subject to`.
+        let p = LpProblem::parse("minimize\nx1\nsuch that\nc1: x1 <= 1\nend").unwrap();
+        assert_eq!(p.constraint_count(), 1);
+    }
+
+    #[test]
+    fn test_auto_generated_names() {
+        // An unnamed objective resolves to OBJ1; unnamed constraints to C1, C2, ...
+        let p = LpProblem::parse("minimize\nx1\nsubject to\nx1 <= 1\nx1 >= 0\nend").unwrap();
+        let obj1 = p.name_id("OBJ1").expect("auto-generated objective name missing");
+        assert!(p.objectives.contains_key(&obj1));
+        let c1 = p.name_id("C1").expect("auto-generated constraint name C1 missing");
+        let c2 = p.name_id("C2").expect("auto-generated constraint name C2 missing");
+        assert!(p.constraints.contains_key(&c1));
+        assert!(p.constraints.contains_key(&c2));
+    }
+
+    // Infinity comparisons are exact by definition.
+    #[allow(clippy::float_cmp)]
+    #[test]
+    fn test_overflowing_literal_becomes_infinite_coefficient() {
+        // 1e400 overflows f64 and saturates to positive infinity rather than erroring.
+        let p = LpProblem::parse("minimize\n1e400 x1\nsubject to\nc1: x1 <= 1\nend").unwrap();
+        let obj = p.objectives.values().next().unwrap();
+        assert_eq!(obj.coefficients.len(), 1);
+        assert_eq!(obj.coefficients[0].value, f64::INFINITY);
+    }
+
+    #[test]
+    fn test_empty_variable_type_sections() {
+        // `generals`/`binaries` headers with zero identifiers still parse.
+        let p = LpProblem::parse("minimize\nx1\nsubject to\nc1: x1 <= 1\ngenerals\nbinaries\nend").unwrap();
+        assert_eq!(p.constraint_count(), 1);
+        let x1 = p.name_id("x1").unwrap();
+        assert_eq!(p.variables[&x1].var_type, VariableType::Free);
+    }
+
+    // Parsed RHS values round-trip bit-exactly from source text.
+    #[allow(clippy::float_cmp)]
+    #[test]
+    fn test_signed_rhs_values() {
+        let p = LpProblem::parse("minimize\nx1\nsubject to\nc1: x1 <= +5\nc2: x1 >= -5\nc3: x1 <= inf\nend").unwrap();
+        let expected = [("c1", 5.0), ("c2", -5.0), ("c3", f64::INFINITY)];
+        for (name, want) in expected {
+            let id = p.name_id(name).unwrap();
+            let Constraint::Standard { rhs, .. } = &p.constraints[&id] else {
+                panic!("expected standard constraint for {name}");
+            };
+            assert_eq!(*rhs, want, "wrong RHS for {name}");
+        }
+    }
+
+    #[test]
+    fn test_lexer_error_surfaces_as_parse_error() {
+        // A standalone `|` cannot start any token, so the lexer error must
+        // propagate out of `parse` rather than panic or be swallowed.
+        assert!(LpProblem::parse("minimize\nx1\nsubject to\nc1: x1 <= | 1\nend").is_err());
+        assert!(LpProblem::parse("minimize\n| x1\nsubject to\nc1: x1 <= 1\nend").is_err());
     }
 }
 

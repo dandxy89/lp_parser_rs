@@ -464,6 +464,10 @@ mod tests {
             (VariableType::LowerBound(5.0), 5.0, f64::INFINITY, false),
             (VariableType::UpperBound(10.0), 0.0, 10.0, false),
             (VariableType::DoubleBound(-10.0, 10.0), -10.0, 10.0, false),
+            // Semi-continuous is approximated as a continuous non-negative variable.
+            (VariableType::SemiContinuous, 0.0, f64::INFINITY, false),
+            // SOS membership carries no bounds of its own.
+            (VariableType::SOS, 0.0, f64::INFINITY, false),
         ];
         for (vt, lb, ub, is_int) in cases {
             let a = adapter(vt.clone());
@@ -494,6 +498,30 @@ mod tests {
         let c = LpSolversCompat::try_new(&p).unwrap();
         assert!(matches!(lp_solvers::lp_format::LpProblem::sense(&c), LpObjective::Maximize));
         assert_eq!(lp_solvers::lp_format::LpProblem::name(&c), "test");
+    }
+
+    #[test]
+    fn test_constraint_iterator_skips_sos_constraints() {
+        let mut p = simple_problem();
+        let x_id = p.name_id("x").unwrap();
+        let sos_id = p.intern("sos_a");
+        p.constraints.insert(
+            sos_id,
+            Constraint::SOS {
+                name: sos_id,
+                sos_type: SOSType::S1,
+                weights: vec![Coefficient { name: x_id, value: 1.0 }],
+                byte_offset: None,
+            },
+        );
+
+        let compat = LpSolversCompat::try_new(&p).unwrap();
+        let constraints: Vec<_> = lp_solvers::lp_format::LpProblem::constraints(&compat).collect();
+
+        // Only the standard constraint `c1` is yielded; the SOS one is skipped.
+        assert_eq!(constraints.len(), 1, "iterator must skip the SOS constraint");
+        assert_eq!(constraints[0].operator, Ordering::Less);
+        assert!((constraints[0].rhs - 10.0).abs() < f64::EPSILON, "yielded constraint must be c1 (rhs 10)");
     }
 
     #[test]

@@ -946,6 +946,7 @@ impl LpProblem {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::model::{Coefficient, Constraint, Objective, Variable};
 
     #[test]
     fn test_range_stats_empty() {
@@ -1004,5 +1005,126 @@ mod tests {
         let config = AnalysisConfig::default();
         assert_eq!(config.large_coefficient_threshold, 1e9);
         assert_eq!(config.small_coefficient_threshold, 1e-9);
+    }
+
+    /// Add a standard constraint over the named variables with unit coefficients.
+    fn add_standard_constraint(problem: &mut LpProblem, name: &str, variables: &[&str], operator: ComparisonOp, rhs: f64) {
+        let name_id = problem.intern(name);
+        let coefficients = variables.iter().map(|v| Coefficient { name: problem.intern(v), value: 1.0 }).collect();
+        problem.add_constraint(Constraint::Standard { name: name_id, coefficients, operator, rhs, byte_offset: None });
+    }
+
+    #[test]
+    #[allow(clippy::float_cmp)]
+    fn test_analyze_truly_empty_problem() {
+        let analysis = LpProblem::new().analyze();
+        assert_eq!(analysis.summary.objective_count, 0);
+        assert_eq!(analysis.summary.constraint_count, 0);
+        assert_eq!(analysis.summary.variable_count, 0);
+        assert_eq!(analysis.summary.total_nonzeros, 0);
+        assert_eq!(analysis.summary.density, 0.0);
+        assert_eq!(analysis.coefficients.coefficient_ratio, 1.0);
+        assert!(analysis.issues.is_empty(), "an empty problem must raise no issues: {:?}", analysis.issues);
+    }
+
+    #[test]
+    #[allow(clippy::float_cmp)]
+    fn test_fixed_variable_reports_info_issue() {
+        let mut problem = LpProblem::new();
+        let x_id = problem.intern("x");
+        problem.add_variable(Variable::new(x_id).with_var_type(VariableType::DoubleBound(5.0, 5.0)));
+
+        let analysis = problem.analyze();
+        assert_eq!(analysis.variables.fixed_variables.len(), 1);
+        assert_eq!(analysis.variables.fixed_variables[0].name, "x");
+        assert_eq!(analysis.variables.fixed_variables[0].value, 5.0);
+        assert!(
+            analysis.issues.iter().any(|i| i.severity == IssueSeverity::Info && i.category == IssueCategory::FixedVariable),
+            "expected a FixedVariable Info issue: {:?}",
+            analysis.issues
+        );
+    }
+
+    #[test]
+    #[allow(clippy::float_cmp)]
+    fn test_invalid_bounds_report_error_issue() {
+        let mut problem = LpProblem::new();
+        let x_id = problem.intern("x");
+        problem.add_variable(Variable::new(x_id).with_var_type(VariableType::DoubleBound(10.0, 1.0)));
+
+        let analysis = problem.analyze();
+        assert_eq!(analysis.variables.invalid_bounds.len(), 1);
+        assert_eq!(analysis.variables.invalid_bounds[0].name, "x");
+        assert_eq!(analysis.variables.invalid_bounds[0].lower, 10.0);
+        assert_eq!(analysis.variables.invalid_bounds[0].upper, 1.0);
+        assert!(
+            analysis.issues.iter().any(|i| i.severity == IssueSeverity::Error && i.category == IssueCategory::InvalidBounds),
+            "expected an InvalidBounds Error issue: {:?}",
+            analysis.issues
+        );
+    }
+
+    #[test]
+    fn test_empty_constraint_reports_warning_issue() {
+        let mut problem = LpProblem::new();
+        add_standard_constraint(&mut problem, "empty_c", &[], ComparisonOp::LTE, 5.0);
+        // A second, populated constraint so the problem is not degenerate.
+        add_standard_constraint(&mut problem, "c1", &["x", "y", "z"], ComparisonOp::LTE, 10.0);
+
+        let analysis = problem.analyze();
+        assert_eq!(analysis.constraints.empty_constraints, vec!["empty_c".to_string()]);
+        assert!(
+            analysis.issues.iter().any(|i| i.severity == IssueSeverity::Warning && i.category == IssueCategory::EmptyConstraint),
+            "expected an EmptyConstraint Warning issue: {:?}",
+            analysis.issues
+        );
+    }
+
+    #[test]
+    fn test_over_constrained_warning_boundary() {
+        // Exactly as many constraints as variables: warning fires.
+        let mut equal = LpProblem::new();
+        add_standard_constraint(&mut equal, "c1", &["x", "y"], ComparisonOp::LTE, 10.0);
+        add_standard_constraint(&mut equal, "c2", &["x"], ComparisonOp::GTE, 1.0);
+        let analysis = equal.analyze();
+        assert_eq!(analysis.summary.constraint_count, analysis.summary.variable_count);
+        assert!(
+            analysis.issues.iter().any(|i| i.category == IssueCategory::Other && i.message.contains("over-constrained")),
+            "expected an over-constrained warning at the boundary: {:?}",
+            analysis.issues
+        );
+
+        // One fewer constraint than variables: no warning.
+        let mut under = LpProblem::new();
+        add_standard_constraint(&mut under, "c1", &["x", "y"], ComparisonOp::LTE, 10.0);
+        let analysis = under.analyze();
+        assert!(
+            !analysis.issues.iter().any(|i| i.message.contains("over-constrained")),
+            "no over-constrained warning expected below the boundary: {:?}",
+            analysis.issues
+        );
+    }
+
+    #[test]
+    fn test_unused_variable_reports_info_issue() {
+        let mut problem = LpProblem::new();
+        let obj_id = problem.intern("obj");
+        let x_id = problem.intern("x");
+        problem.add_objective(Objective { name: obj_id, coefficients: vec![Coefficient { name: x_id, value: 1.0 }], byte_offset: None });
+        add_standard_constraint(&mut problem, "c1", &["x"], ComparisonOp::GTE, 1.0);
+        // `unused` is declared (as if via Bounds) but referenced nowhere.
+        let unused_id = problem.intern("unused");
+        problem.add_variable(Variable::new(unused_id).with_var_type(VariableType::LowerBound(0.0)));
+
+        let analysis = problem.analyze();
+        assert_eq!(analysis.variables.unused_variables, vec!["unused".to_string()]);
+        assert!(
+            analysis
+                .issues
+                .iter()
+                .any(|i| i.severity == IssueSeverity::Info && i.category == IssueCategory::UnusedVariable && i.message.contains("unused")),
+            "expected an UnusedVariable Info issue: {:?}",
+            analysis.issues
+        );
     }
 }

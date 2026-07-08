@@ -1,0 +1,356 @@
+---
+source: rust/tests/test_from_file.rs
+expression: parsed
+---
+sense: Minimize
+objectives:
+  - name: obj
+    coefficients:
+      - name: X9
+        value: 1
+constraints:
+  - type: Standard
+    name: C1
+    coefficients:
+      - name: X0
+        value: -1
+    operator: GTE
+    rhs: -5
+  - type: Standard
+    name: C10
+    coefficients:
+      - name: X2
+        value: -1
+    operator: GTE
+    rhs: -5
+  - type: Standard
+    name: C11
+    coefficients:
+      - name: X2
+        value: 1
+    operator: GTE
+    rhs: 0
+  - type: Standard
+    name: C12
+    coefficients:
+      - name: X2
+        value: 1
+      - name: X1
+        value: 1
+      - name: X0
+        value: 1
+    operator: EQ
+    rhs: 5
+  - type: Standard
+    name: C13
+    coefficients:
+      - name: X2
+        value: -1
+      - name: X5
+        value: -1
+      - name: X8
+        value: -1
+    operator: GTE
+    rhs: -5
+  - type: Standard
+    name: C14
+    coefficients:
+      - name: X2
+        value: 1
+    operator: GTE
+    rhs: 0
+  - type: Standard
+    name: C15
+    coefficients:
+      - name: X3
+        value: -1
+    operator: GTE
+    rhs: -7
+  - type: Standard
+    name: C16
+    coefficients:
+      - name: X3
+        value: 1
+    operator: GTE
+    rhs: 0
+  - type: Standard
+    name: C17
+    coefficients:
+      - name: X3
+        value: 1
+    operator: GTE
+    rhs: 0
+  - type: Standard
+    name: C18
+    coefficients:
+      - name: X4
+        value: -1
+    operator: GTE
+    rhs: -3
+  - type: Standard
+    name: C19
+    coefficients:
+      - name: X4
+        value: 1
+    operator: GTE
+    rhs: 0
+  - type: Standard
+    name: C2
+    coefficients:
+      - name: X0
+        value: 1
+    operator: GTE
+    rhs: 0
+  - type: Standard
+    name: C20
+    coefficients:
+      - name: X4
+        value: 1
+    operator: GTE
+    rhs: 0
+  - type: Standard
+    name: C21
+    coefficients:
+      - name: X5
+        value: -1
+    operator: GTE
+    rhs: -5
+  - type: Standard
+    name: C22
+    coefficients:
+      - name: X5
+        value: 1
+    operator: GTE
+    rhs: 0
+  - type: Standard
+    name: C23
+    coefficients:
+      - name: X5
+        value: 1
+      - name: X4
+        value: 1
+      - name: X3
+        value: 1
+    operator: EQ
+    rhs: 7
+  - type: Standard
+    name: C24
+    coefficients:
+      - name: X5
+        value: 1
+    operator: GTE
+    rhs: 0
+  - type: Standard
+    name: C25
+    coefficients:
+      - name: X6
+        value: -1
+    operator: GTE
+    rhs: -3
+  - type: Standard
+    name: C26
+    coefficients:
+      - name: X6
+        value: 1
+    operator: GTE
+    rhs: 0
+  - type: Standard
+    name: C27
+    coefficients:
+      - name: X6
+        value: 1
+    operator: GTE
+    rhs: 0
+  - type: Standard
+    name: C28
+    coefficients:
+      - name: X7
+        value: -1
+    operator: GTE
+    rhs: -3
+  - type: Standard
+    name: C29
+    coefficients:
+      - name: X7
+        value: 1
+    operator: GTE
+    rhs: 0
+  - type: Standard
+    name: C3
+    coefficients:
+      - name: X0
+        value: -1
+      - name: X3
+        value: -1
+      - name: X6
+        value: -1
+    operator: GTE
+    rhs: -7
+  - type: Standard
+    name: C30
+    coefficients:
+      - name: X7
+        value: 1
+    operator: GTE
+    rhs: 0
+  - type: Standard
+    name: C31
+    coefficients:
+      - name: X8
+        value: -1
+    operator: GTE
+    rhs: -3
+  - type: Standard
+    name: C32
+    coefficients:
+      - name: X8
+        value: 1
+    operator: GTE
+    rhs: 0
+  - type: Standard
+    name: C33
+    coefficients:
+      - name: X8
+        value: 1
+      - name: X7
+        value: 1
+      - name: X6
+        value: 1
+    operator: EQ
+    rhs: 3
+  - type: Standard
+    name: C34
+    coefficients:
+      - name: X8
+        value: 1
+    operator: GTE
+    rhs: 0
+  - type: Standard
+    name: C35
+    coefficients:
+      - name: X9
+        value: -1
+    operator: GTE
+    rhs: -80082
+  - type: Standard
+    name: C36
+    coefficients:
+      - name: X9
+        value: 1
+    operator: GTE
+    rhs: 0
+  - type: Standard
+    name: C4
+    coefficients:
+      - name: X0
+        value: 1
+    operator: GTE
+    rhs: 0
+  - type: Standard
+    name: C5
+    coefficients:
+      - name: X1
+        value: -1
+    operator: GTE
+    rhs: -3
+  - type: Standard
+    name: C6
+    coefficients:
+      - name: X1
+        value: 1
+    operator: GTE
+    rhs: 0
+  - type: Standard
+    name: C7
+    coefficients:
+      - name: X1
+        value: -1
+      - name: X4
+        value: -1
+      - name: X7
+        value: -1
+    operator: GTE
+    rhs: -3
+  - type: Standard
+    name: C8
+    coefficients:
+      - name: X1
+        value: 1
+    operator: GTE
+    rhs: 0
+  - type: Standard
+    name: C9
+    coefficients:
+      - name: X1
+        value: -1
+      - name: X4
+        value: -2
+      - name: X0
+        value: -3
+      - name: X7
+        value: -3
+      - name: X8
+        value: -3
+      - name: X3
+        value: -4
+      - name: X5
+        value: -4
+      - name: X2
+        value: -9999
+      - name: X6
+        value: -9999
+      - name: X9
+        value: 1
+    operator: EQ
+    rhs: 0
+variables:
+  - name: X0
+    var_type:
+      DoubleBound:
+        - 0
+        - 5
+  - name: X1
+    var_type:
+      DoubleBound:
+        - 0
+        - 3
+  - name: X2
+    var_type:
+      DoubleBound:
+        - 0
+        - 5
+  - name: X3
+    var_type:
+      DoubleBound:
+        - 0
+        - 7
+  - name: X4
+    var_type:
+      DoubleBound:
+        - 0
+        - 3
+  - name: X5
+    var_type:
+      DoubleBound:
+        - 0
+        - 5
+  - name: X6
+    var_type:
+      DoubleBound:
+        - 0
+        - 3
+  - name: X7
+    var_type:
+      DoubleBound:
+        - 0
+        - 3
+  - name: X8
+    var_type:
+      DoubleBound:
+        - 0
+        - 3
+  - name: X9
+    var_type:
+      DoubleBound:
+        - 0
+        - 80082

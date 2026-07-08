@@ -14,7 +14,7 @@ use std::error::Error;
 use std::fs;
 use std::path::PathBuf;
 
-use lp_parser_rs::model::Constraint;
+use lp_parser_rs::model::{Constraint, VariableType};
 use lp_parser_rs::mps::writer::{MpsWriterOptions, write_mps_string_with_options};
 use lp_parser_rs::parser::parse_file;
 use lp_parser_rs::problem::LpProblem;
@@ -137,6 +137,73 @@ fn lp_fixtures_round_trip_through_mps_writer() {
 
         assert_round_trip_preserves_structure(&original, &reparsed, file_name);
     }
+}
+
+/// A multi-N-row MPS file parses into multiple objectives; writing it back
+/// with `allow_multiple_objectives` is documented as lossy: only the first
+/// objective (in insertion order) survives the round trip.
+#[test]
+fn multi_objective_mps_round_trip_keeps_first_objective_only() {
+    let input = "\
+NAME        multiobj
+ROWS
+ N  obj1
+ N  obj2
+ L  c1
+COLUMNS
+    x1        obj1      1
+    x1        obj2      2
+    x1        c1        3
+RHS
+    RHS_V     c1        10
+ENDATA
+";
+    let problem = LpProblem::parse_mps(input).unwrap();
+    assert_eq!(problem.objective_count(), 2, "both N rows must parse into objectives");
+
+    let options = MpsWriterOptions { allow_multiple_objectives: true, ..lossless_options() };
+    let output = write_mps_string_with_options(&problem, &options).unwrap();
+
+    let reparsed = LpProblem::parse_mps(&output).unwrap();
+    assert_eq!(reparsed.objective_count(), 1, "documented lossy behaviour: only the first objective is written");
+    let obj1_id = reparsed.name_id("obj1").expect("first objective 'obj1' must survive");
+    let obj1 = &reparsed.objectives[&obj1_id];
+    assert_eq!(obj1.coefficients.len(), 1);
+    assert_eq!(obj1.coefficients[0].value, 1.0);
+    assert!(reparsed.name_id("obj2").is_none(), "second objective must be dropped entirely");
+}
+
+/// An external `SC` bound with a meaningful finite upper bound has that value
+/// dropped on parse (the model's `SemiContinuous` carries no bound value);
+/// the writer then emits the `1e30` sentinel, so the semi-continuity itself
+/// survives the round trip but the original `50` does not.
+#[test]
+fn external_sc_bound_value_dropped_on_round_trip() {
+    let input = "\
+NAME        sctest
+ROWS
+ N  obj
+ L  c1
+COLUMNS
+    x1        obj       1
+    x1        c1        1
+RHS
+    RHS_V     c1        10
+BOUNDS
+ SC BOUND     x1        50
+ENDATA
+";
+    let problem = LpProblem::parse_mps(input).unwrap();
+    let x1 = &problem.variables[&problem.name_id("x1").unwrap()];
+    assert_eq!(x1.var_type, VariableType::SemiContinuous, "SC bound must resolve to SemiContinuous, dropping the 50");
+
+    let output = write_mps_string_with_options(&problem, &lossless_options()).unwrap();
+    let sc_line = output.lines().find(|line| line.trim_start().starts_with("SC ")).expect("written MPS must contain an SC bound line");
+    assert!(!sc_line.contains("50"), "documented value-drop behaviour: the original upper bound must not reappear: {sc_line}");
+
+    let reparsed = LpProblem::parse_mps(&output).unwrap();
+    let x1 = &reparsed.variables[&reparsed.name_id("x1").unwrap()];
+    assert_eq!(x1.var_type, VariableType::SemiContinuous);
 }
 
 /// `test.lp` contains a strict inequality (`c3:: x2 > 1`), which MPS has no

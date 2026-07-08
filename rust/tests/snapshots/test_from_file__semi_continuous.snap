@@ -1,0 +1,54 @@
+---
+source: rust/tests/test_from_file.rs
+expression: parsed
+---
+sense: Minimize
+objectives:
+  - name: OBJ1
+    coefficients:
+      - name: b_5829890_x2
+        value: 1
+      - name: b_5880854_x2
+        value: 1
+constraints:
+  - type: Standard
+    name: C1
+    coefficients:
+      - name: b_5829890_x2
+        value: -2
+      - name: b_5829890_x1
+        value: 2
+    operator: LTE
+    rhs: -64
+  - type: Standard
+    name: C2
+    coefficients:
+      - name: b_5880854_x2
+        value: 1
+      - name: b_5880854_x1
+        value: -1
+    operator: GTE
+    rhs: 32
+variables:
+  - name: b_5829890_x1
+    var_type:
+      LowerBound: 10
+  - name: b_5829890_x2
+    var_type:
+      DoubleBound:
+        - 1014
+        - 1917
+  - name: b_5880854_x1
+    var_type:
+      UpperBound: 10
+  - name: b_5880854_x2
+    var_type:
+      DoubleBound:
+        - 1014
+        - 1917
+  - name: x1
+    var_type: SemiContinuous
+  - name: x2
+    var_type: SemiContinuous
+  - name: x3
+    var_type: SemiContinuous

@@ -57,6 +57,144 @@ ENDATA
 }
 
 #[test]
+fn test_objsense_inline() {
+    // Gurobi/CPLEX write the sense on the OBJSENSE header line itself.
+    let input = "\
+NAME        test
+OBJSENSE    MAXIMIZE
+ROWS
+ N  obj
+ L  c1
+COLUMNS
+    x1        obj       1
+    x1        c1        1
+RHS
+    RHS_V     c1        5
+ENDATA
+";
+    let result = parse_mps(input).unwrap();
+    assert_eq!(result.sense, Sense::Maximize);
+
+    let input = input.replace("OBJSENSE    MAXIMIZE", "OBJSENSE MAX");
+    let result = parse_mps(&input).unwrap();
+    assert_eq!(result.sense, Sense::Maximize);
+
+    let input = input.replace("OBJSENSE MAX", "OBJSENSE BOGUS");
+    assert!(parse_mps(&input).is_err());
+}
+
+#[test]
+fn test_unclosed_intorg_block() {
+    // A missing INTEND must not panic; trailing columns stay integer.
+    let input = "\
+NAME        test
+ROWS
+ N  obj
+ L  c1
+COLUMNS
+    MARK0000  'MARKER'                 'INTORG'
+    x1        obj       1
+    x1        c1        2
+ENDATA
+";
+    let result = parse_mps(input).unwrap();
+    assert!(result.integers.contains(&"x1"));
+}
+
+#[test]
+fn test_sos_section_parsing() {
+    let input = "\
+NAME        test
+ROWS
+ N  obj
+ L  c1
+COLUMNS
+    x1        obj       1
+    x1        c1        1
+    x2        obj       1
+    x2        c1        1
+RHS
+    RHS_V     c1        5
+SOS
+ S1 set1
+    x1        1
+    x2        2
+ENDATA
+";
+    let result = parse_mps(input).unwrap();
+    assert_eq!(result.sos.len(), 1);
+    let RawConstraint::SOS { name, weights, .. } = &result.sos[0] else {
+        panic!("expected SOS constraint");
+    };
+    assert_eq!(name.as_ref(), "set1");
+    assert_eq!(weights.len(), 2);
+    assert_eq!((weights[0].name, weights[0].value), ("x1", 1.0));
+    assert_eq!((weights[1].name, weights[1].value), ("x2", 2.0));
+}
+
+#[test]
+fn test_sos_weight_variable_named_like_header() {
+    // A weight entry whose variable name starts with "S1" must not be
+    // misread as a new SOS set header.
+    let input = "\
+NAME        test
+ROWS
+ N  obj
+ L  c1
+COLUMNS
+    x1        obj       1
+    x1        c1        1
+    S1X       obj       1
+    S1X       c1        1
+RHS
+    RHS_V     c1        5
+SOS
+ S1 set1
+    x1        1
+    S1X       2
+ENDATA
+";
+    let result = parse_mps(input).unwrap();
+    assert_eq!(result.sos.len(), 1);
+    let RawConstraint::SOS { weights, .. } = &result.sos[0] else {
+        panic!("expected SOS constraint");
+    };
+    assert_eq!(weights.len(), 2);
+    assert_eq!((weights[1].name, weights[1].value), ("S1X", 2.0));
+}
+
+#[test]
+fn test_sos_orphan_weights_and_empty_sets_dropped() {
+    // Weights before any header must not bleed into the next set, and a
+    // header with no weights must not emit a constraint.
+    let input = "\
+NAME        test
+ROWS
+ N  obj
+ L  c1
+COLUMNS
+    x1        obj       1
+    x1        c1        1
+RHS
+    RHS_V     c1        5
+SOS
+    x9        1
+ S1 set1
+    x1        1
+ S2 empty_set
+ENDATA
+";
+    let result = parse_mps(input).unwrap();
+    assert_eq!(result.sos.len(), 1);
+    let RawConstraint::SOS { name, weights, .. } = &result.sos[0] else {
+        panic!("expected SOS constraint");
+    };
+    assert_eq!(name.as_ref(), "set1");
+    assert_eq!(weights.len(), 1);
+    assert_eq!(weights[0].name, "x1");
+}
+
+#[test]
 fn test_integer_markers() {
     let input = "\
 NAME        test
@@ -285,8 +423,6 @@ ENDATA
         assert_eq!(*rhs, 0.0);
     }
 }
-
-// --- New spec-compliance tests ---
 
 #[test]
 fn test_default_bounds_zero_to_inf() {
@@ -830,6 +966,313 @@ ENDATA
     let result = parse_mps(input).unwrap();
     assert_eq!(result.objectives.len(), 1);
     assert_eq!(result.constraints.len(), 1);
+}
+
+/// Assert that every input in the slice fails to parse.
+fn assert_all_err(inputs: &[&str]) {
+    for input in inputs {
+        assert!(parse_mps(input).is_err(), "expected parse error for input:\n{input}");
+    }
+}
+
+#[test]
+fn test_rows_section_errors() {
+    assert_all_err(&[
+        // Unknown row type
+        "ROWS\n X  foo\nCOLUMNS\n    x1        foo       1\nENDATA\n",
+        // ROWS data line with only one field
+        "ROWS\n N\nCOLUMNS\n    x1        obj       1\nENDATA\n",
+    ]);
+}
+
+#[test]
+fn test_columns_section_errors() {
+    assert_all_err(&[
+        // Unknown MARKER type
+        "ROWS\n N  obj\nCOLUMNS\n    MARK0000  'MARKER'  'INTBAD'\nENDATA\n",
+        // Fewer than three fields on a data line
+        "ROWS\n N  obj\nCOLUMNS\n    x1        obj\nENDATA\n",
+        // Reference to an undefined row
+        "ROWS\n N  obj\nCOLUMNS\n    x1        nosuchrow 1\nENDATA\n",
+        // Invalid number
+        "ROWS\n N  obj\nCOLUMNS\n    x1        obj       abc\nENDATA\n",
+    ]);
+}
+
+#[test]
+fn test_rhs_section_errors() {
+    let skeleton = "ROWS\n N  obj\n L  c1\nCOLUMNS\n    x1        obj       1\n    x1        c1        1\nRHS\n";
+    assert_all_err(&[
+        // Reference to an undefined row
+        &format!("{skeleton}    RHS_V     nosuchrow 1\nENDATA\n"),
+        // Fewer than three fields
+        &format!("{skeleton}    RHS_V     c1\nENDATA\n"),
+        // Invalid number
+        &format!("{skeleton}    RHS_V     c1        abc\nENDATA\n"),
+    ]);
+}
+
+#[test]
+fn test_ranges_section_errors() {
+    let skeleton = "ROWS\n N  obj\n G  c1\nCOLUMNS\n    x1        obj       1\n    x1        c1        1\nRANGES\n";
+    assert_all_err(&[
+        // Reference to an undefined row
+        &format!("{skeleton}    RNG_V     nosuchrow 1\nENDATA\n"),
+        // Fewer than three fields
+        &format!("{skeleton}    RNG_V     c1\nENDATA\n"),
+        // Invalid number
+        &format!("{skeleton}    RNG_V     c1        abc\nENDATA\n"),
+    ]);
+}
+
+#[test]
+fn test_bounds_section_errors() {
+    let skeleton = "ROWS\n N  obj\n L  c1\nCOLUMNS\n    x1        obj       1\n    x1        c1        1\nBOUNDS\n";
+    assert_all_err(&[
+        // Fewer than three fields
+        &format!("{skeleton} LO BOUND\nENDATA\n"),
+        // Unknown bound type
+        &format!("{skeleton} XX BOUND     x1        1\nENDATA\n"),
+        // Bound type requiring a value, with no value
+        &format!("{skeleton} LO BOUND     x1\nENDATA\n"),
+        // Invalid number
+        &format!("{skeleton} LO BOUND     x1        abc\nENDATA\n"),
+    ]);
+}
+
+#[test]
+fn test_structural_errors() {
+    assert_all_err(&[
+        // Invalid OBJSENSE value on a data line
+        "OBJSENSE\n  BOGUS\nROWS\n N  obj\nCOLUMNS\n    x1        obj       1\nENDATA\n",
+        // Unknown section header
+        "GARBAGE\nROWS\n N  obj\nCOLUMNS\n    x1        obj       1\nENDATA\n",
+        // Data line before any section header
+        "    x1        obj       1\nROWS\n N  obj\nCOLUMNS\n    x1        obj       1\nENDATA\n",
+        // Empty input
+        "",
+    ]);
+}
+
+#[test]
+fn test_li_bound_makes_integer_with_lower_bound() {
+    let input = "\
+NAME        test
+ROWS
+ N  obj
+ L  c1
+COLUMNS
+    x1        obj       1
+    x1        c1        1
+BOUNDS
+ LI BOUND     x1        3
+ENDATA
+";
+    let result = parse_mps(input).unwrap();
+    assert!(result.integers.contains(&"x1"), "LI bound must mark the variable integer");
+    assert!(
+        result.bounds.iter().any(|(n, t)| *n == "x1" && *t == VariableType::LowerBound(3.0)),
+        "x1 should have LowerBound(3.0), got: {:?}",
+        result.bounds.iter().find(|(n, _)| *n == "x1")
+    );
+}
+
+#[test]
+fn test_ui_bound_makes_integer_with_upper_bound() {
+    let input = "\
+NAME        test
+ROWS
+ N  obj
+ L  c1
+COLUMNS
+    x1        obj       1
+    x1        c1        1
+BOUNDS
+ UI BOUND     x1        5
+ENDATA
+";
+    let result = parse_mps(input).unwrap();
+    assert!(result.integers.contains(&"x1"), "UI bound must mark the variable integer");
+    assert!(
+        result.bounds.iter().any(|(n, t)| *n == "x1" && *t == VariableType::UpperBound(5.0)),
+        "x1 should have UpperBound(5.0), got: {:?}",
+        result.bounds.iter().find(|(n, _)| *n == "x1")
+    );
+}
+
+#[test]
+fn test_duplicate_mi_after_lo_and_pl_after_up_rejected() {
+    let skeleton = "ROWS\n N  obj\n L  c1\nCOLUMNS\n    x1        obj       1\n    x1        c1        1\nBOUNDS\n";
+
+    let mi_input = format!("{skeleton} LO BOUND     x1        5\n MI BOUND     x1\nENDATA\n");
+    let err = parse_mps(&mi_input).unwrap_err().to_string();
+    assert!(err.contains("duplicate lower bound (MI)"), "unexpected error: {err}");
+
+    let pl_input = format!("{skeleton} UP BOUND     x1        5\n PL BOUND     x1\nENDATA\n");
+    let err = parse_mps(&pl_input).unwrap_err().to_string();
+    assert!(err.contains("duplicate upper bound (PL)"), "unexpected error: {err}");
+}
+
+#[test]
+fn test_duplicate_coefficients_accumulate_additively() {
+    // MPS allows split entries: duplicate (variable, row) coefficients sum.
+    let input = "\
+NAME        test
+ROWS
+ N  obj
+ L  c1
+COLUMNS
+    x1        c1        2
+    x1        obj       1
+    x1        c1        3
+RHS
+    RHS_V     c1        10
+ENDATA
+";
+    let result = parse_mps(input).unwrap();
+    let RawConstraint::Standard { coefficients, .. } = &result.constraints[0] else {
+        panic!("expected Standard constraint");
+    };
+    assert_eq!(coefficients.len(), 1);
+    assert_eq!((coefficients[0].name, coefficients[0].value), ("x1", 5.0));
+}
+
+#[test]
+fn test_zero_n_rows_gets_synthetic_objective() {
+    // A file with no N row still parses, with a synthetic empty objective.
+    let input = "\
+NAME        test
+ROWS
+ L  c1
+COLUMNS
+    x1        c1        1
+RHS
+    RHS_V     c1        10
+ENDATA
+";
+    let result = parse_mps(input).unwrap();
+    assert_eq!(result.objectives.len(), 1);
+    assert_eq!(result.objectives[0].name.as_ref(), "__obj__");
+    assert!(result.objectives[0].coefficients.is_empty());
+    assert_eq!(result.constraints.len(), 1);
+}
+
+#[test]
+fn test_scientific_notation_and_leading_dot_values() {
+    let input = "\
+NAME        test
+ROWS
+ N  obj
+ L  c1
+COLUMNS
+    x1        obj       1.5E-5
+    x1        c1        1
+RHS
+    RHS_V     c1        1e+30
+BOUNDS
+ LO BOUND     x1        .5
+ENDATA
+";
+    let result = parse_mps(input).unwrap();
+    assert_eq!(result.objectives[0].coefficients[0].value, 1.5e-5);
+    let RawConstraint::Standard { rhs, .. } = &result.constraints[0] else {
+        panic!("expected Standard constraint");
+    };
+    assert_eq!(*rhs, 1e30);
+    assert!(result.bounds.iter().any(|(n, t)| *n == "x1" && *t == VariableType::LowerBound(0.5)));
+}
+
+#[test]
+fn test_negative_rhs() {
+    let input = "\
+NAME        test
+ROWS
+ N  obj
+ G  c1
+COLUMNS
+    x1        obj       1
+    x1        c1        1
+RHS
+    RHS_V     c1        -10
+ENDATA
+";
+    let result = parse_mps(input).unwrap();
+    let RawConstraint::Standard { rhs, .. } = &result.constraints[0] else {
+        panic!("expected Standard constraint");
+    };
+    assert_eq!(*rhs, -10.0);
+}
+
+#[test]
+fn test_two_range_pairs_on_one_line() {
+    // A RANGES data line may carry two (row, value) pairs.
+    let input = "\
+NAME        test
+ROWS
+ N  obj
+ G  c1
+ G  c2
+COLUMNS
+    x1        obj       1
+    x1        c1        1
+    x1        c2        1
+RHS
+    RHS_V     c1        5          c2        10
+RANGES
+    RNG_V     c1        4          c2        6
+ENDATA
+";
+    let result = parse_mps(input).unwrap();
+    assert_eq!(result.constraints.len(), 4, "two ranged rows must expand to four constraints");
+
+    let expected = [
+        ("c1", ComparisonOp::GTE, 5.0),
+        ("c1_rng", ComparisonOp::LTE, 9.0),
+        ("c2", ComparisonOp::GTE, 10.0),
+        ("c2_rng", ComparisonOp::LTE, 16.0),
+    ];
+    for (constraint, (name, op, rhs_val)) in result.constraints.iter().zip(expected) {
+        let RawConstraint::Standard { name: n, operator, rhs, .. } = constraint else {
+            panic!("expected Standard constraint");
+        };
+        assert_eq!(n.as_ref(), name);
+        assert_eq!(*operator, op, "operator mismatch for '{name}'");
+        assert_eq!(*rhs, rhs_val, "rhs mismatch for '{name}'");
+    }
+}
+
+#[test]
+fn test_inline_comment_only_data_lines_tolerated() {
+    // A data line consisting solely of a `$` inline comment yields zero
+    // fields; every section must skip it rather than reject the file.
+    let input = "\
+NAME        test
+ROWS
+    $ comment only
+ N  obj
+ L  c1
+COLUMNS
+    $ comment only
+    x1        obj       1
+    x1        c1        1
+RHS
+    $ comment only
+    RHS_V     c1        10
+RANGES
+    $ comment only
+BOUNDS
+    $ comment only
+ UP BOUND     x1        5
+ENDATA
+";
+    let result = parse_mps(input).unwrap();
+    assert_eq!(result.objectives.len(), 1);
+    assert_eq!(result.constraints.len(), 1);
+    let RawConstraint::Standard { rhs, .. } = &result.constraints[0] else {
+        panic!("expected Standard constraint");
+    };
+    assert_eq!(*rhs, 10.0);
+    assert!(result.bounds.iter().any(|(n, t)| *n == "x1" && *t == VariableType::UpperBound(5.0)));
 }
 
 #[test]

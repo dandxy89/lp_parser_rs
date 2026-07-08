@@ -91,6 +91,11 @@ impl<'input> MpsParseState<'input> {
             }
             "OBJSENSE" => {
                 self.section = Some(MpsSection::ObjSense);
+                // Gurobi/CPLEX may write the sense on the header line itself:
+                // `OBJSENSE MAXIMIZE` rather than on the following data line.
+                if let Some(value) = line.split_whitespace().nth(1) {
+                    self.sense = parse_objsense_value(value, line_num)?;
+                }
             }
             "ROWS" => {
                 self.section = Some(MpsSection::Rows);
@@ -142,14 +147,7 @@ impl<'input> MpsParseState<'input> {
 
         match current_section {
             MpsSection::ObjSense => {
-                let trimmed = line.trim();
-                match trimmed.to_ascii_uppercase().as_str() {
-                    "MIN" | "MINIMIZE" => self.sense = Sense::Minimize,
-                    "MAX" | "MAXIMIZE" => self.sense = Sense::Maximize,
-                    _ => {
-                        return Err(LpParseError::parse_error(line_num, format!("Invalid OBJSENSE value: '{trimmed}'")));
-                    }
-                }
+                self.sense = parse_objsense_value(line.trim(), line_num)?;
             }
             MpsSection::Rows => {
                 parse_rows_line(line, line_num, &mut self.objective_rows, &mut self.row_types, &mut self.row_order)?;
@@ -192,7 +190,9 @@ impl<'input> MpsParseState<'input> {
     /// Validate required sections and build the final [`ParseResult`].
     fn build_result(mut self) -> LpResult<ParseResult<'input>> {
         debug_assert!(self.has_rows || !self.has_columns, "COLUMNS without ROWS is inconsistent state");
-        debug_assert!(!self.columns.in_integer_block, "unclosed INTORG/INTEND block at end of parse");
+        if self.columns.in_integer_block {
+            eprintln!("unclosed INTORG marker block at end of MPS input; trailing columns treated as integer");
+        }
 
         if !self.has_rows {
             return Err(LpParseError::missing_section("ROWS"));
@@ -247,6 +247,15 @@ impl<'input> MpsParseState<'input> {
             semi_continuous: self.bounds_state.semi_continuous_vars,
             sos: self.sos_constraints,
         })
+    }
+}
+
+/// Parse an OBJSENSE value (`MIN`/`MINIMIZE`/`MAX`/`MAXIMIZE`, case-insensitive).
+fn parse_objsense_value(value: &str, line_num: usize) -> LpResult<Sense> {
+    match value.to_ascii_uppercase().as_str() {
+        "MIN" | "MINIMIZE" => Ok(Sense::Minimize),
+        "MAX" | "MAXIMIZE" => Ok(Sense::Maximize),
+        _ => Err(LpParseError::parse_error(line_num, format!("Invalid OBJSENSE value: '{value}'"))),
     }
 }
 

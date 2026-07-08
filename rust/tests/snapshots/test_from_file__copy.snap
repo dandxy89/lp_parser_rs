@@ -1,0 +1,76 @@
+---
+source: rust/tests/test_from_file.rs
+expression: parsed
+---
+name: classroomAssignmentSP
+sense: Maximize
+objectives:
+  - name: obj
+    coefficients:
+      - name: x1
+        value: 1
+      - name: sdfdf5343
+        value: 1
+constraints:
+  - type: Standard
+    name: c1
+    coefficients:
+      - name: x1
+        value: 1
+    operator: LTE
+    rhs: 1
+  - type: Standard
+    name: c2
+    coefficients:
+      - name: x2
+        value: -3.01
+      - name: x3
+        value: 6
+    operator: EQ
+    rhs: 1
+  - type: Standard
+    name: c2b
+    coefficients:
+      - name: x2x3x4
+        value: -3.0000000002
+    operator: EQ
+    rhs: 1
+  - type: Standard
+    name: c3
+    coefficients:
+      - name: x2
+        value: 1
+    operator: GT
+    rhs: 1
+variables:
+  - name: qwer
+    var_type:
+      DoubleBound:
+        - -inf
+        - inf
+  - name: sdfdf5343
+    var_type: Free
+  - name: sdfdfdf
+    var_type: General
+  - name: that
+    var_type: Binary
+  - name: this
+    var_type: Binary
+  - name: x1
+    var_type: Free
+  - name: x2
+    var_type:
+      LowerBound: 1
+  - name: x2dfsdf
+    var_type:
+      DoubleBound:
+        - 100
+        - -1
+  - name: x2x3x4
+    var_type: Free
+  - name: x3
+    var_type: Free
+  - name: x4
+    var_type: General
+  - name: x6
+    var_type: General

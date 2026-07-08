@@ -1,0 +1,31 @@
+---
+source: rust/tests/test_from_file.rs
+expression: parsed
+---
+sense: Minimize
+objectives:
+  - name: OBJ1
+    coefficients:
+      - name: x
+        value: 1
+      - name: y
+        value: 10
+constraints:
+  - type: Standard
+    name: C1
+    coefficients:
+      - name: x
+        value: -1
+      - name: y
+        value: 2
+    operator: GTE
+    rhs: 1
+variables:
+  - name: a
+    var_type: Binary
+  - name: x
+    var_type: Binary
+  - name: y
+    var_type: Binary
+  - name: z
+    var_type: Binary

@@ -56,6 +56,7 @@ mps_test!(mps_output2_1, "output2_1.mps");
 mps_test!(mps_output2_2, "output2_2.mps");
 mps_test!(mps_output2_3, "output2_3.mps");
 mps_test!(mps_output2_4, "output2_4.mps");
+mps_test!(mps_pl_mi_only_bounds, "pl_mi_only_bounds.mps");
 mps_test!(mps_pulp, "pulp.mps");
 mps_test!(mps_pulp2, "pulp2.mps");
 mps_test!(mps_ranges, "ranges.mps");

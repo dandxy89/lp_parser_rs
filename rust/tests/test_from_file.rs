@@ -68,13 +68,14 @@ macro_rules! generate_test {
 generate_test!(pulp, "pulp.lp");
 generate_test!(pulp2, "pulp2.lp");
 generate_test!(limbo, "limbo.lp");
-// generate_test!(semi_continuous, "semi_continuous.lp");
+generate_test!(semi_continuous, "semi_continuous.lp");
 generate_test!(sos, "sos.lp");
 generate_test!(test, "test.lp");
 generate_test!(test2, "test2.lp");
+generate_test!(test_copy, "test_copy.lp");
 generate_test!(empty_bounds, "empty_bounds.lp");
 generate_test!(blank_lines, "blank_lines.lp");
-// generate_test!(optional_labels, "optional_labels.lp");
+generate_test!(optional_labels, "optional_labels.lp");
 generate_test!(infile_comments, "infile_comments.lp");
 generate_test!(infile_comments2, "infile_comments2.lp");
 generate_test!(missing_signs, "missing_signs.lp");
@@ -98,7 +99,7 @@ generate_test!(milo1, "milo1.lp");
 // From <https://github.com/asbestian/jplex>
 generate_test!(obj3_2cons, "3obj_2cons.lp");
 
-// generate_test!(no_end_section, "no_end_section.lp");
+generate_test!(no_end_section, "no_end_section.lp");
 generate_test!(obj_2cons_only_binary_vars, "2obj_2cons_only_binary_vars.lp");
 generate_test!(obj_2cons_all_variable_types, "2obj_2cons_all_variable_types.lp");
 generate_test!(obj_1cons_all_variables_with_bounds, "1obj_1cons_all_variables_with_bounds.lp");
@@ -131,7 +132,7 @@ generate_test!(wbm, "wbm.lp");
 generate_test!(diet, "diet.lp");
 
 // From <https://github.com/claudiosa/CCS>
-// generate_test!(output_cplex_2, "output_cplex_2.lp");
+generate_test!(output_cplex_2, "output_cplex_2.lp");
 
 // From <https://github.com/coin-or/pulp>
 generate_test!(american_steel_problem, "AmericanSteelProblem.lp");

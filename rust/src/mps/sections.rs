@@ -21,6 +21,10 @@ pub(super) fn parse_rows_line<'input>(
 
     let (buf, len) = split_fields(line);
     let fields = &buf[..len];
+    if fields.is_empty() {
+        // A data line consisting solely of a `$` inline comment yields no fields.
+        return Ok(());
+    }
     if fields.len() < 2 {
         return Err(LpParseError::parse_error(line_num, format!("ROWS line requires type and name, got {} field(s)", fields.len())));
     }
@@ -183,6 +187,10 @@ pub(super) fn parse_rhs_line<'input>(
 
     let (buf, len) = split_fields(line);
     let fields = &buf[..len];
+    if fields.is_empty() {
+        // A data line consisting solely of a `$` inline comment yields no fields.
+        return Ok(());
+    }
     if fields.len() < 3 {
         return Err(LpParseError::parse_error(line_num, format!("RHS data line requires at least 3 fields, got {}", fields.len())));
     }
@@ -242,6 +250,10 @@ pub(super) fn parse_ranges_line<'input>(
 
     let (buf, len) = split_fields(line);
     let fields = &buf[..len];
+    if fields.is_empty() {
+        // A data line consisting solely of a `$` inline comment yields no fields.
+        return Ok(());
+    }
     if fields.len() < 3 {
         return Err(LpParseError::parse_error(line_num, format!("RANGES data line requires at least 3 fields, got {}", fields.len())));
     }
@@ -313,6 +325,10 @@ impl<'input> BoundsState<'input> {
 
         let (buf, len) = split_fields(line);
         let fields = &buf[..len];
+        if fields.is_empty() {
+            // A data line consisting solely of a `$` inline comment yields no fields.
+            return Ok(());
+        }
         if fields.len() < 3 {
             return Err(LpParseError::parse_error(line_num, format!("BOUNDS line requires at least 3 fields, got {}", fields.len())));
         }
@@ -455,18 +471,21 @@ pub(super) fn parse_sos_line<'input>(
 
     let trimmed = line.trim();
 
-    // Check if this is an SOS set header line (e.g., "S1" or "S2")
-    let upper = trimmed.to_ascii_uppercase();
-    if upper.starts_with("S1") || upper.starts_with("S2") {
+    // An SOS set header line has "S1"/"S2" as its first whole token. A prefix
+    // match would misread a weight entry for a variable named e.g. "S1X" as a
+    // new set header, so compare the full token.
+    let mut fields = trimmed.split_whitespace();
+    let Some(type_token) = fields.next() else {
+        return Ok(());
+    };
+    let upper = type_token.to_ascii_uppercase();
+    if upper == "S1" || upper == "S2" {
         // Flush previous SOS constraint
         flush_sos_constraint(sos_constraints, current_name, current_type, current_weights);
 
-        let sos_type = if upper.starts_with("S1") { SOSType::S1 } else { SOSType::S2 };
-
+        let sos_type = if upper == "S1" { SOSType::S1 } else { SOSType::S2 };
         // The rest of the header might contain a name; the fields borrow from
         // `line`, so no re-slicing or allocation is needed.
-        let mut fields = trimmed.split_whitespace();
-        let type_token = fields.next().expect("non-empty SOS header line must have a first field");
         let name = fields.next().unwrap_or("");
 
         *current_type = Some(sos_type);
@@ -495,7 +514,9 @@ pub(super) fn flush_sos_constraint<'input>(
     current_weights: &mut Vec<RawCoefficient<'input>>,
 ) {
     if let (Some(name), Some(sos_type)) = (*current_name, *current_type) {
-        if !current_weights.is_empty() {
+        if current_weights.is_empty() {
+            eprintln!("SOS set '{name}' declares no weight entries and will be dropped");
+        } else {
             sos_constraints.push(RawConstraint::SOS {
                 name: Cow::Borrowed(name),
                 sos_type,
@@ -505,6 +526,11 @@ pub(super) fn flush_sos_constraint<'input>(
         }
         *current_name = None;
         *current_type = None;
+    } else if !current_weights.is_empty() {
+        // Weight entries seen before any set header cannot belong to a set;
+        // clearing them stops them bleeding into the next declared set.
+        eprintln!("{} SOS weight entr(ies) with no preceding SOS set header were ignored", current_weights.len());
+        current_weights.clear();
     }
 
     debug_assert!(current_name.is_none(), "current_name must be None after flush");
