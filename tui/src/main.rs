@@ -137,9 +137,9 @@ fn build_rename_rules(raw: &[String]) -> Result<Vec<(regex::Regex, String)>, Box
         return Err("--rename requires pairs of PATTERN REPLACEMENT".into());
     }
     let mut rules = Vec::with_capacity(raw.len() / 2);
-    for chunk in raw.chunks_exact(2) {
-        let re = regex::Regex::new(&chunk[0]).map_err(|e| format!("invalid --rename pattern '{}': {e}", chunk[0]))?;
-        rules.push((re, chunk[1].clone()));
+    for [pattern, replacement] in raw.as_chunks::<2>().0 {
+        let re = regex::Regex::new(pattern).map_err(|e| format!("invalid --rename pattern '{pattern}': {e}"))?;
+        rules.push((re, replacement.clone()));
     }
     Ok(rules)
 }
