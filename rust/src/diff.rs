@@ -239,8 +239,15 @@ fn diff_modified_objectives(
         let o1 = &p1.objectives[&cobjs1[name]];
         let o2 = &p2.objectives[&cobjs2[name]];
         let coef_diffs = count_coeff_diffs(&coeff_map(p1, &o1.coefficients, normalise), &coeff_map(p2, &o2.coefficients, normalise), tol);
+        let mut changes = Vec::new();
         if coef_diffs > 0 {
-            modified.push((name.clone(), vec![format!("{coef_diffs} coefficient change(s)")]));
+            changes.push(format!("{coef_diffs} coefficient change(s)"));
+        }
+        if tol.differ(o1.constant, o2.constant) {
+            changes.push(format!("constant: {} -> {}", o1.constant, o2.constant));
+        }
+        if !changes.is_empty() {
+            modified.push((name.clone(), changes));
         }
     }
     modified
