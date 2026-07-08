@@ -201,6 +201,13 @@ lp_parser convert problem.mps --format mps -o rewritten.mps  # MPS -> MPS
 > explicitly (even a redundant `x >= 0`) in the LP source if this distinction
 > matters to the downstream solver.
 
+> **Caveat (MPS integer defaults):** an integer variable declared inside
+> `'MARKER'` `INTORG`/`INTEND` with no explicit BOUNDS entry defaults to
+> `[0, 1]`, following the CPLEX MPS specification. Gurobi instead defaults
+> such variables to `[0, +inf)`, so the same file can yield different models
+> in different readers. Declare bounds explicitly if the wider range is
+> intended.
+
 ### `solve` — run an external solver (requires `lp-solvers` feature)
 
 | Option                | Default | Description                      |
