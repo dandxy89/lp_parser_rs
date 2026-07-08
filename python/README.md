@@ -32,8 +32,8 @@ parser.parse()
 # Access problem information
 print(f"Problem: {parser.name}")
 print(f"Sense: {parser.sense}")
-print(f"Variables: {parser.variable_count()}")
-print(f"Constraints: {parser.constraint_count()}")
+print(f"Variables: {len(parser.variables)}")
+print(f"Constraints: {len(parser.constraints)}")
 
 # Modify the problem
 parser.update_objective_coefficient("OBJ", "x1", 5.0)
@@ -66,9 +66,9 @@ parser.parse()
 # Get problem overview
 print(f"Problem Name: {parser.name}")
 print(f"Optimization Sense: {parser.sense}")
-print(f"Variables: {parser.variable_count()}")
-print(f"Constraints: {parser.constraint_count()}")
-print(f"Objectives: {parser.objective_count()}")
+print(f"Variables: {len(parser.variables)}")
+print(f"Constraints: {len(parser.constraints)}")
+print(f"Objectives: {len(parser.objectives)}")
 ```
 
 ### Accessing Problem Data
@@ -158,7 +158,7 @@ for issue in analysis['issues']:
 
 ```python
 # Customize thresholds for issue detection
-analysis = parser.analyze_with_config(
+analysis = parser.analyze(
     large_coeff_threshold=1e8,      # Flag coefficients above this
     small_coeff_threshold=1e-10,    # Flag coefficients below this
     ratio_threshold=1e5             # Flag if max/min ratio exceeds this
@@ -168,8 +168,8 @@ analysis = parser.analyze_with_config(
 **Get issues only:**
 
 ```python
-# Get just the detected issues without full analysis
-issues = parser.get_issues()
+# Get just the detected issues
+issues = parser.analyze()["issues"]
 
 for issue in issues:
     print(f"[{issue['severity']}] {issue['category']}: {issue['message']}")
@@ -302,15 +302,12 @@ print(f"Successfully modified and re-parsed: {new_parser.name}")
 
 ### Writing Methods
 
-- `to_lp_string()` - Generate LP format string
-- `to_lp_string_with_options(**options)` - Generate with custom formatting
+- `to_lp_string(**options)` - Generate LP format string, optionally with custom formatting
 - `save_to_file(filepath)` - Save to LP file
 
 ### Analysis Methods
 
-- `analyze()` - Get complete problem analysis including statistics and issues
-- `analyze_with_config(large_coeff_threshold, small_coeff_threshold, ratio_threshold)` - Analysis with custom thresholds
-- `get_issues()` - Get only detected issues/warnings without full analysis
+- `analyze(large_coeff_threshold, small_coeff_threshold, ratio_threshold)` - Get complete problem analysis including statistics and issues, with optional custom thresholds
 
 ### Variable Types
 

@@ -86,15 +86,9 @@ pub fn truncate_with_ellipsis(name: &str, max_width: usize) -> Cow<'_, str> {
     Cow::Owned(truncated)
 }
 
-/// A long horizontal rule sliced by [`rule_str`]; 120 `─` characters.
-const RULE: &str =
-    "────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────";
-
-/// Return a `─` rule of the given display width (clamped to 120 columns)
-/// without allocating. `─` is 3 bytes in UTF-8, so the slice is exact.
-pub fn rule_str(width: usize) -> &'static str {
-    let width = width.min(RULE.len() / 3);
-    &RULE[..width * 3]
+/// Return a `─` rule of the given display width (clamped to 120 columns).
+pub fn rule_str(width: usize) -> String {
+    "\u{2500}".repeat(width.min(120))
 }
 
 /// Build an inline gauge bar like `▐███░░░░░▌` for a fraction in `[0, 1]`.

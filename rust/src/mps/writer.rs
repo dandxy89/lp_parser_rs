@@ -67,7 +67,7 @@
 //!   is written instead, and the reader resolves any `SC` bound back to
 //!   `SemiContinuous`, so the type round trips. The flip side: an `SC` bound
 //!   in an *external* MPS file with a meaningful finite upper bound has that
-//!   bound dropped on parse (with a `log::warn`), because the model cannot
+//!   bound dropped on parse (with a warning on stderr), because the model cannot
 //!   carry both the semi-continuity flag and a bound value.
 //! - Strict inequalities (`ComparisonOp::LT` / `ComparisonOp::GT`) have no MPS
 //!   representation (only `L`/`G`/`E` rows exist); writing a problem with such

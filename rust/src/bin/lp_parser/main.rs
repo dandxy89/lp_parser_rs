@@ -3,7 +3,6 @@
 mod cli;
 
 #[cfg(feature = "diff")]
-use std::borrow::Cow;
 use std::fs;
 use std::io::{self, Stdout, Write};
 use std::path::PathBuf;
@@ -282,17 +281,6 @@ fn build_info_value(problem: &LpProblem, args: &InfoArgs) -> serde_json::Value {
     info
 }
 
-/// Coerce a closure into the higher-ranked `Fn(&str) -> Cow<str>` shape expected
-/// by [`lp_parser_rs::diff::Normaliser`]. The helper's explicit `for<'a>` bound
-/// steers closure lifetime inference, which does not converge on its own.
-#[cfg(feature = "diff")]
-const fn as_normaliser<F>(f: F) -> F
-where
-    F: for<'a> Fn(&'a str) -> Cow<'a, str>,
-{
-    f
-}
-
 /// Apply each rename rule in turn, returning the canonical form of `name`.
 ///
 /// This is the CLI's regex-based `--rename` normaliser; it is wrapped in a
@@ -426,8 +414,8 @@ fn cmd_diff(args: &DiffArgs, verbose: bool, quiet: bool) -> Result<ExitCode, Box
 
     // Hand the CLI's regex rename rules to the library engine as a normaliser
     // closure, keeping `regex` out of the core crate.
-    let normalise = as_normaliser(|name: &str| Cow::Owned(apply_rename_rules(name, &rules)));
-    let options = DiffOptions { tol, normalise: &normalise };
+    let normalise = |name: &str| apply_rename_rules(name, &rules);
+    let options = DiffOptions { tol, normalise: Some(&normalise) };
     let diff = p1.diff(&p2, &options);
 
     let mut writer = OutputWriter::new(args.output.clone())?;

@@ -1,4 +1,4 @@
-from typing import Literal, TypedDict
+from typing import Any, Literal, TypedDict
 
 from typing_extensions import TypeAlias
 
@@ -19,7 +19,6 @@ class LpInvalidValueError(RuntimeError):
 Sense: TypeAlias = Literal["maximize", "minimize"]
 SenseInput: TypeAlias = Literal["maximize", "max", "minimize", "min"]
 VariableType: TypeAlias = Literal["binary", "integer", "general", "free", "semicontinuous"]
-IssueSeverity: TypeAlias = Literal["ERROR", "WARNING", "INFO"]
 
 class Coefficient(TypedDict):
     name: str
@@ -48,107 +47,9 @@ class SOSConstraint(TypedDict):
 
 Constraint: TypeAlias = StandardConstraint | SOSConstraint
 
-# Analysis result structures (mirroring the dictionaries built in src/lib.rs)
-class AnalysisSummary(TypedDict):
-    name: str | None
-    sense: str
-    objective_count: int
-    constraint_count: int
-    variable_count: int
-    total_nonzeros: int
-    density: float
-
-class SparsityMetrics(TypedDict):
-    min_vars_per_constraint: int
-    max_vars_per_constraint: int
-
-class VariableTypeDistribution(TypedDict):
-    free: int
-    general: int
-    lower_bounded: int
-    upper_bounded: int
-    double_bounded: int
-    binary: int
-    integer: int
-    semi_continuous: int
-    sos: int
-
-class FixedVariable(TypedDict):
-    name: str
-    value: float
-
-class InvalidBound(TypedDict):
-    name: str
-    lower: float
-    upper: float
-
-class VariableAnalysis(TypedDict):
-    type_distribution: VariableTypeDistribution
-    free_variables: list[str]
-    fixed_variables: list[FixedVariable]
-    invalid_bounds: list[InvalidBound]
-    unused_variables: list[str]
-    discrete_variable_count: int
-
-class ConstraintTypeDistribution(TypedDict):
-    equality: int
-    less_than_equal: int
-    greater_than_equal: int
-    less_than: int
-    greater_than: int
-    sos1: int
-    sos2: int
-
-class SingletonConstraint(TypedDict):
-    name: str
-    variable: str
-    coefficient: float
-    operator: str
-    rhs: float
-
-class RangeStats(TypedDict):
-    min: float
-    max: float
-    count: int
-
-class SOSSummary(TypedDict):
-    s1_count: int
-    s2_count: int
-    total_sos_variables: int
-
-class ConstraintAnalysis(TypedDict):
-    type_distribution: ConstraintTypeDistribution
-    empty_constraints: list[str]
-    singleton_constraints: list[SingletonConstraint]
-    rhs_range: RangeStats
-    sos_summary: SOSSummary
-
-class CoefficientLocation(TypedDict):
-    location: str
-    is_objective: bool
-    variable: str
-    value: float
-
-class CoefficientAnalysis(TypedDict):
-    constraint_coeff_range: RangeStats
-    objective_coeff_range: RangeStats
-    large_coefficients: list[CoefficientLocation]
-    small_coefficients: list[CoefficientLocation]
-    coefficient_ratio: float
-
-class AnalysisIssue(TypedDict):
-    severity: IssueSeverity
-    category: str
-    message: str
-    details: str | None
-
-class ProblemAnalysis(TypedDict):
-    summary: AnalysisSummary
-    sparsity: SparsityMetrics
-    variables: VariableAnalysis
-    constraints: ConstraintAnalysis
-    coefficients: CoefficientAnalysis
-    issues: list[AnalysisIssue]
+# Analysis result dictionary as built in src/lib.rs; see analyze() docs for the
+# keys (summary, sparsity, variables, constraints, coefficients, issues).
+ProblemAnalysis: TypeAlias = dict[str, Any]
 
 class LpParser:
     """Parser, modifier and writer for LP format files, powered by Rust."""
@@ -186,19 +87,7 @@ class LpParser:
     def to_csv(self, base_directory: str) -> None:
         """Export the problem to CSV files in the given directory (parses lazily if needed)."""
 
-    def variable_count(self) -> int:
-        """Number of variables in the problem."""
-
-    def constraint_count(self) -> int:
-        """Number of constraints in the problem."""
-
-    def objective_count(self) -> int:
-        """Number of objectives in the problem."""
-
-    def to_lp_string(self) -> str:
-        """Write the current problem to an LP format string."""
-
-    def to_lp_string_with_options(
+    def to_lp_string(
         self,
         *,
         include_problem_name: bool = True,
@@ -206,7 +95,7 @@ class LpParser:
         decimal_precision: int = 6,
         include_section_spacing: bool = True,
     ) -> str:
-        """Write the current problem to an LP format string with custom formatting options."""
+        """Write the current problem to an LP format string, with optional custom formatting."""
 
     def save_to_file(self, filepath: str) -> None:
         """Save the current problem to an LP file."""
@@ -257,17 +146,11 @@ class LpParser:
     def set_sense(self, sense: SenseInput) -> None:
         """Set the optimisation sense ('maximize' or 'minimize')."""
 
-    def analyze(self) -> ProblemAnalysis:
-        """Perform comprehensive analysis of the problem (statistics, structure and issues)."""
-
-    def analyze_with_config(
+    def analyze(
         self,
         *,
         large_coeff_threshold: float = 1e9,
         small_coeff_threshold: float = 1e-9,
         ratio_threshold: float = 1e6,
     ) -> ProblemAnalysis:
-        """Perform analysis with custom thresholds for issue detection."""
-
-    def get_issues(self) -> list[AnalysisIssue]:
-        """Get only the detected issues/warnings without the full analysis."""
+        """Perform comprehensive analysis of the problem (statistics, structure and issues)."""

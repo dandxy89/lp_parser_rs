@@ -30,9 +30,7 @@ clap = { version = "4.6", features = ["derive"], optional = true }
 csv = { version = "1.4", optional = true }
 indexmap = "2.7"
 lalrpop-util = { version = "0.23" }
-lasso = "0.7"
 lp-solvers = { version = "1.2", optional = true }
-log = "0.4"
 memmap2 = { version = "0.9", optional = true }
 logos = "0.16"
 regex = { version = "1.10", optional = true }

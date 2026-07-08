@@ -29,7 +29,7 @@ class TestLpWriter:
             assert expected in lp_string
 
         # With options
-        lp_string = parser.to_lp_string_with_options(
+        lp_string = parser.to_lp_string(
             include_problem_name=False,
             max_line_length=80,
             decimal_precision=2,
@@ -54,8 +54,8 @@ class TestLpWriter:
         parser2 = LpParser(str(output_path))
         parser2.parse()
         assert parser1.sense == parser2.sense
-        assert parser1.variable_count() == parser2.variable_count()
-        assert parser1.constraint_count() == parser2.constraint_count()
+        assert len(parser1.variables) == len(parser2.variables)
+        assert len(parser1.constraints) == len(parser2.constraints)
 
 
 class TestLpModification:
@@ -69,9 +69,9 @@ class TestLpModification:
         assert coeffs["x1"] == 5.0
 
         # Add new variable via objective
-        original_count = parser.variable_count()
+        original_count = len(parser.variables)
         parser.update_objective_coefficient("OBJ", "x3", 3.0)
-        assert parser.variable_count() == original_count + 1
+        assert len(parser.variables) == original_count + 1
 
         # Update constraint coefficient and RHS
         parser.update_constraint_coefficient("C1", "x1", 2.0)
@@ -104,15 +104,15 @@ class TestLpModification:
         parser.parse()
 
         # Remove constraint
-        original_count = parser.constraint_count()
+        original_count = len(parser.constraints)
         parser.remove_constraint("C1")
-        assert parser.constraint_count() == original_count - 1
+        assert len(parser.constraints) == original_count - 1
         assert "C1" not in {c["name"] for c in parser.constraints}
 
         # Remove variable
-        original_count = parser.variable_count()
+        original_count = len(parser.variables)
         parser.remove_variable("x2")
-        assert parser.variable_count() == original_count - 1
+        assert len(parser.variables) == original_count - 1
         assert "x2" not in parser.variables
 
     def test_variable_type_and_problem_settings(self, simple_lp_file: Path) -> None:

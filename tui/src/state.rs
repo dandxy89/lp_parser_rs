@@ -573,72 +573,61 @@ pub enum PaletteCommand {
 }
 
 impl PaletteCommand {
-    /// Every command, in display order.
-    pub const ALL: [Self; 29] = [
-        Self::GoSummary,
-        Self::GoVariables,
-        Self::GoConstraints,
-        Self::GoObjectives,
-        Self::GoNumerics,
-        Self::FilterAll,
-        Self::FilterAdded,
-        Self::FilterRemoved,
-        Self::FilterModified,
-        Self::FilterRenamed,
-        Self::ToggleRawView,
-        Self::ToggleIgnoreOrder,
-        Self::CycleSort,
-        Self::CycleRelTol,
-        Self::CycleAbsTol,
-        Self::OpenSearch,
-        Self::NextMatch,
-        Self::PrevMatch,
-        Self::JumpBack,
-        Self::JumpForward,
-        Self::Solve,
-        Self::WhatIf,
-        Self::ExportCsv,
-        Self::YankName,
-        Self::YankOld,
-        Self::YankNew,
-        Self::YankDetail,
-        Self::ShowHelp,
-        Self::Quit,
+    /// Every command with its palette label and direct-key hint, in display order.
+    const CMDS: [(Self, &'static str, &'static str); 29] = [
+        (Self::GoSummary, "Go to Summary", "1"),
+        (Self::GoVariables, "Go to Variables", "2"),
+        (Self::GoConstraints, "Go to Constraints", "3"),
+        (Self::GoObjectives, "Go to Objectives", "4"),
+        (Self::GoNumerics, "Go to Numerics", "5"),
+        (Self::FilterAll, "Filter: All", "a"),
+        (Self::FilterAdded, "Filter: Added", "+"),
+        (Self::FilterRemoved, "Filter: Removed", "-"),
+        (Self::FilterModified, "Filter: Modified", "m"),
+        (Self::FilterRenamed, "Filter: Renamed", "="),
+        (Self::ToggleRawView, "Toggle raw text view", "r"),
+        (Self::ToggleIgnoreOrder, "Toggle ignore coefficient order", "o"),
+        (Self::CycleSort, "Cycle sort mode", "s"),
+        (Self::CycleRelTol, "Cycle relative tolerance", "t"),
+        (Self::CycleAbsTol, "Cycle absolute tolerance", "T"),
+        (Self::OpenSearch, "Search entries", "/"),
+        (Self::NextMatch, "Next search match", "n"),
+        (Self::PrevMatch, "Previous search match", "N"),
+        (Self::JumpBack, "Jump back (jumplist)", "^o"),
+        (Self::JumpForward, "Jump forward (jumplist)", "^i"),
+        (Self::Solve, "Solve problem (HiGHS)", "S"),
+        (Self::WhatIf, "What-if: edit constraint RHS & re-solve", "E"),
+        (Self::ExportCsv, "Export diff to CSV", "w"),
+        (Self::YankName, "Yank entry name", "yy"),
+        (Self::YankOld, "Yank old side (file 1)", "yo"),
+        (Self::YankNew, "Yank new side (file 2)", "yn"),
+        (Self::YankDetail, "Yank detail panel", "Y"),
+        (Self::ShowHelp, "Show help", "?"),
+        (Self::Quit, "Quit", "q"),
     ];
 
-    /// Human-readable label shown in the palette and matched against the query.
-    pub const fn label(self) -> &'static str {
-        match self {
-            Self::GoSummary => "Go to Summary",
-            Self::GoVariables => "Go to Variables",
-            Self::GoConstraints => "Go to Constraints",
-            Self::GoObjectives => "Go to Objectives",
-            Self::GoNumerics => "Go to Numerics",
-            Self::FilterAll => "Filter: All",
-            Self::FilterAdded => "Filter: Added",
-            Self::FilterRemoved => "Filter: Removed",
-            Self::FilterModified => "Filter: Modified",
-            Self::FilterRenamed => "Filter: Renamed",
-            Self::ToggleRawView => "Toggle raw text view",
-            Self::ToggleIgnoreOrder => "Toggle ignore coefficient order",
-            Self::CycleSort => "Cycle sort mode",
-            Self::CycleRelTol => "Cycle relative tolerance",
-            Self::CycleAbsTol => "Cycle absolute tolerance",
-            Self::OpenSearch => "Search entries",
-            Self::NextMatch => "Next search match",
-            Self::PrevMatch => "Previous search match",
-            Self::JumpBack => "Jump back (jumplist)",
-            Self::JumpForward => "Jump forward (jumplist)",
-            Self::Solve => "Solve problem (HiGHS)",
-            Self::WhatIf => "What-if: edit constraint RHS & re-solve",
-            Self::ExportCsv => "Export diff to CSV",
-            Self::YankName => "Yank entry name",
-            Self::YankOld => "Yank old side (file 1)",
-            Self::YankNew => "Yank new side (file 2)",
-            Self::YankDetail => "Yank detail panel",
-            Self::ShowHelp => "Show help",
-            Self::Quit => "Quit",
+    /// Every command, in display order.
+    pub const ALL: [Self; 29] = {
+        let mut all = [Self::Quit; 29];
+        let mut i = 0;
+        while i < Self::CMDS.len() {
+            all[i] = Self::CMDS[i].0;
+            i += 1;
         }
+        all
+    };
+
+    /// Look up this command's row in [`Self::CMDS`], which mirrors the enum
+    /// declaration order so the discriminant doubles as the table index.
+    fn entry(self) -> (Self, &'static str, &'static str) {
+        let entry = Self::CMDS[self as usize];
+        debug_assert!(entry.0 == self, "CMDS row order must match the enum declaration order");
+        entry
+    }
+
+    /// Human-readable label shown in the palette and matched against the query.
+    pub fn label(self) -> &'static str {
+        self.entry().1
     }
 
     /// Whether this command is offered in inspect (single-file) mode.
@@ -667,38 +656,8 @@ impl PaletteCommand {
     }
 
     /// The equivalent direct keybinding, shown right-aligned in the palette.
-    pub const fn hint(self) -> &'static str {
-        match self {
-            Self::GoSummary => "1",
-            Self::GoVariables => "2",
-            Self::GoConstraints => "3",
-            Self::GoObjectives => "4",
-            Self::GoNumerics => "5",
-            Self::FilterAll => "a",
-            Self::FilterAdded => "+",
-            Self::FilterRemoved => "-",
-            Self::FilterModified => "m",
-            Self::FilterRenamed => "=",
-            Self::ToggleRawView => "r",
-            Self::ToggleIgnoreOrder => "o",
-            Self::CycleSort => "s",
-            Self::CycleRelTol => "t",
-            Self::CycleAbsTol => "T",
-            Self::OpenSearch => "/",
-            Self::NextMatch => "n",
-            Self::PrevMatch => "N",
-            Self::JumpBack => "^o",
-            Self::JumpForward => "^i",
-            Self::Solve => "S",
-            Self::WhatIf => "E",
-            Self::ExportCsv => "w",
-            Self::YankName => "yy",
-            Self::YankOld => "yo",
-            Self::YankNew => "yn",
-            Self::YankDetail => "Y",
-            Self::ShowHelp => "?",
-            Self::Quit => "q",
-        }
+    pub fn hint(self) -> &'static str {
+        self.entry().2
     }
 }
 

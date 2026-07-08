@@ -9,6 +9,16 @@ use std::path::Path;
 
 use crate::diff_model::{ConstraintDiffDetail, DiffKind, LpDiffReport};
 
+/// Writing to a `String` via `fmt::Write` is infallible. This macro replaces
+/// `let _ = write!(...)` with an asserting version that satisfies Tiger Style.
+/// (No trailing newline — CSV fields must stay single-line, so this is
+/// deliberately `write!` rather than `detail_text`'s `writeln!`-based `w!`.)
+macro_rules! w {
+    ($dst:expr, $($arg:tt)*) => {
+        write!($dst, $($arg)*).expect("writing to String is infallible")
+    };
+}
+
 /// Write the full diff report as a CSV file in `dir`.
 ///
 /// Returns the filename on success.
@@ -34,18 +44,18 @@ pub fn write_diff_csv(report: &LpDiffReport, dir: &Path) -> Result<String, Box<d
         match entry.kind {
             DiffKind::Added => {
                 if let Some(ref new_type) = entry.new_type {
-                    write!(detail_buf, "{new_type}").expect("writing to String cannot fail");
+                    w!(detail_buf, "{new_type}");
                 }
             }
             DiffKind::Removed => {
                 if let Some(ref old_type) = entry.old_type {
-                    write!(detail_buf, "{old_type}").expect("writing to String cannot fail");
+                    w!(detail_buf, "{old_type}");
                 }
             }
             DiffKind::Modified => {
                 let old_label = entry.old_type.as_ref().map_or_else(|| "?".to_owned(), ToString::to_string);
                 let new_label = entry.new_type.as_ref().map_or_else(|| "?".to_owned(), ToString::to_string);
-                write!(detail_buf, "{old_label} -> {new_label}").expect("writing to String cannot fail");
+                w!(detail_buf, "{old_label} -> {new_label}");
             }
             DiffKind::Renamed => {
                 // Rename detection applies to constraints only; variables never carry Renamed.
@@ -59,9 +69,9 @@ pub fn write_diff_csv(report: &LpDiffReport, dir: &Path) -> Result<String, Box<d
     for entry in &report.constraints.entries {
         detail_buf.clear();
         if let Some(old_name) = &entry.renamed_from {
-            write!(detail_buf, "renamed from {old_name}").expect("writing to String cannot fail");
+            w!(detail_buf, "renamed from {old_name}");
         } else if entry.order_only {
-            write!(detail_buf, "order change only").expect("writing to String cannot fail");
+            w!(detail_buf, "order change only");
         } else {
             match &entry.detail {
                 ConstraintDiffDetail::Standard { operator_change, rhs_change, coeff_changes, old_rhs, new_rhs, order_changed, .. } => {
@@ -80,7 +90,7 @@ pub fn write_diff_csv(report: &LpDiffReport, dir: &Path) -> Result<String, Box<d
                         if *order_changed {
                             parts.push("order changed".to_owned());
                         }
-                        write!(detail_buf, "{}", parts.join("; ")).expect("writing to String cannot fail");
+                        w!(detail_buf, "{}", parts.join("; "));
                     }
                 }
                 ConstraintDiffDetail::Sos { weight_changes, type_change, order_changed, .. } => {
@@ -95,11 +105,11 @@ pub fn write_diff_csv(report: &LpDiffReport, dir: &Path) -> Result<String, Box<d
                         if *order_changed {
                             parts.push("order changed".to_owned());
                         }
-                        write!(detail_buf, "{}", parts.join("; ")).expect("writing to String cannot fail");
+                        w!(detail_buf, "{}", parts.join("; "));
                     }
                 }
                 ConstraintDiffDetail::TypeChanged { old_summary, new_summary } => {
-                    write!(detail_buf, "{old_summary} -> {new_summary}").expect("writing to String cannot fail");
+                    w!(detail_buf, "{old_summary} -> {new_summary}");
                 }
                 ConstraintDiffDetail::AddedOrRemoved(_) => {
                     // No extra detail needed for purely added/removed constraints.
@@ -113,15 +123,15 @@ pub fn write_diff_csv(report: &LpDiffReport, dir: &Path) -> Result<String, Box<d
     for entry in &report.objectives.entries {
         detail_buf.clear();
         if entry.order_only {
-            write!(detail_buf, "order change only").expect("writing to String cannot fail");
+            w!(detail_buf, "order change only");
         } else if !entry.coeff_changes.is_empty() {
             let mut msg = format!("{} coefficient(s) changed", entry.coeff_changes.len());
             if entry.order_changed {
                 msg.push_str("; order changed");
             }
-            write!(detail_buf, "{msg}").expect("writing to String cannot fail");
+            w!(detail_buf, "{msg}");
         } else if entry.order_changed {
-            write!(detail_buf, "order changed").expect("writing to String cannot fail");
+            w!(detail_buf, "order changed");
         }
         wtr.write_record(["Objectives", &entry.name, &entry.kind.to_string(), &detail_buf])?;
     }

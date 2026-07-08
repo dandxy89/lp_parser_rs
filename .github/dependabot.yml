@@ -17,25 +17,6 @@ updates:
         patterns:
           - "*"
 
-  # Rust/Cargo dependencies - Root
-  - package-ecosystem: cargo
-    directory: /
-    schedule:
-      interval: weekly
-    commit-message:
-      prefix: "chore"
-      include: "scope"
-    ignore:
-      - dependency-name: "*"
-        update-types:
-          - "version-update:semver-patch"
-    groups:
-      cargo-dependencies:
-        patterns:
-          - "*"
-        exclude-patterns:
-          - "maturin"  # Handle separately due to build system importance
-
   # Rust/Cargo dependencies - Rust subdirectory
   - package-ecosystem: cargo
     directory: /rust

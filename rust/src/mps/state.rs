@@ -123,7 +123,7 @@ impl<'input> MpsParseState<'input> {
                 return Ok(true);
             }
             "LAZYCONS" | "USERCUTS" | "QUADOBJ" | "QCMATRIX" | "QMATRIX" | "PWLOBJ" | "INDICATORS" | "GENCONS" | "SCENARIOS" => {
-                log::warn!("Line {line_num}: unsupported section '{header}' will be skipped");
+                eprintln!("Line {line_num}: unsupported section '{header}' will be skipped");
                 self.section = Some(MpsSection::Unsupported);
             }
             _ => {
@@ -204,7 +204,7 @@ impl<'input> MpsParseState<'input> {
         // Warn about objective constant (RHS on N-row)
         for &obj_row in &self.objective_rows {
             if let Some(&value) = self.rhs_values.get(obj_row) {
-                log::warn!(
+                eprintln!(
                     "RHS value {value} on objective row '{obj_row}' represents an objective \
                      constant, which is not supported by the model and will be ignored"
                 );

@@ -213,14 +213,6 @@ impl LpProblem {
         self.interner.get(name)
     }
 
-    /// Deprecated alias for [`Self::name_id`].
-    #[deprecated(since = "3.6.0", note = "renamed to `name_id` to match Rust getter conventions")]
-    #[inline]
-    #[must_use]
-    pub fn get_name_id(&self, name: &str) -> Option<NameId> {
-        self.name_id(name)
-    }
-
     /// Ensure a variable exists in the problem, creating it with the given type if not present.
     #[inline]
     fn ensure_variable_exists(&mut self, name_id: NameId, var_type: Option<VariableType>) {
@@ -290,7 +282,6 @@ impl LpProblem {
     ///
     /// Returns an error if the input string is not a valid LP file format.
     pub fn parse(input: &str) -> LpResult<Self> {
-        log::debug!("Starting to parse LP problem");
         Self::try_from(input)
     }
 
@@ -325,7 +316,6 @@ impl LpProblem {
     /// Returns an error if the input string is not valid MPS format.
     pub fn parse_mps(input: &str) -> LpResult<Self> {
         // Empty-input validation is owned by the inner MPS parser.
-        log::debug!("Starting to parse MPS problem");
         let problem_name = extract_mps_name(input);
         let parsed = parse_mps(input)?;
         Ok(from_parse_result(parsed, problem_name))
@@ -930,8 +920,6 @@ impl TryFrom<&str> for LpProblem {
     type Error = LpParseError;
 
     fn try_from(input: &str) -> Result<Self, Self::Error> {
-        log::debug!("Starting to parse LP problem with LALRPOP parser");
-
         let problem_name = extract_problem_name(input);
 
         let lexer = Lexer::new(input);

@@ -9,10 +9,10 @@
 //!
 //! - [`DiffTol`] carries the absolute and relative tolerances that decide when
 //!   two floats count as different.
-//! - [`DiffOptions`] bundles a [`DiffTol`] with a caller-supplied name
-//!   normaliser so callers can rewrite variable/constraint/objective names
-//!   (e.g. the CLI's regex `--rename` rules) *without* forcing a `regex`
-//!   dependency onto this crate.
+//! - [`DiffOptions`] bundles a [`DiffTol`] with an optional caller-supplied
+//!   name normaliser so callers can rewrite variable/constraint/objective
+//!   names (e.g. the CLI's regex `--rename` rules) *without* forcing a
+//!   `regex` dependency onto this crate.
 //! - [`compare`] (or the convenience [`LpProblem::diff`] method) walks both
 //!   problems and returns an [`LpDiff`] describing every added, removed, or
 //!   modified variable, constraint, and objective.
@@ -20,41 +20,29 @@
 //! # Example
 //!
 //! ```rust
-//! use std::borrow::Cow;
 //! use lp_parser_rs::LpProblem;
-//! use lp_parser_rs::diff::{DiffOptions, DiffTol};
+//! use lp_parser_rs::diff::DiffOptions;
 //!
 //! let a = LpProblem::parse("Minimize\n obj: 2 x\nSubject To\n c1: x >= 1\nEnd")?;
 //! let b = LpProblem::parse("Minimize\n obj: 3 x\nSubject To\n c1: x >= 2\nEnd")?;
 //!
-//! // Identity normaliser: no renaming. Prefer a named `fn` over a closure —
-//! // closure lifetime inference does not converge on the higher-ranked
-//! // `Fn(&str) -> Cow<str>` signature the normaliser requires.
-//! fn identity(name: &str) -> Cow<'_, str> {
-//!     Cow::Borrowed(name)
-//! }
-//! let options = DiffOptions { tol: DiffTol::default(), normalise: &identity };
-//!
-//! let diff = a.diff(&b, &options);
+//! let diff = a.diff(&b, &DiffOptions::default());
 //! assert_eq!(diff.cons_modified.len(), 1); // c1's rhs changed
 //! assert_eq!(diff.objs_modified.len(), 1); // obj's coefficient changed
 //! # Ok::<(), lp_parser_rs::LpParseError>(())
 //! ```
 
-use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use crate::interner::NameId;
 use crate::model::{Coefficient, Constraint};
 use crate::problem::LpProblem;
 
-/// A name normaliser: rewrites a name before matching, returning the original
-/// borrowed unchanged when no rewrite applies (avoiding an allocation).
+/// A name normaliser: rewrites a name before matching.
 ///
-/// The CLI passes a closure wrapping its regex `--rename` rules; consumers that
-/// do not rename names can pass an identity closure such as
-/// `|name: &str| std::borrow::Cow::Borrowed(name)`.
-pub type Normaliser<'a> = &'a dyn Fn(&str) -> Cow<'_, str>;
+/// The CLI passes a closure wrapping its regex `--rename` rules; consumers
+/// that do not rename names leave [`DiffOptions::normalise`] as `None`.
+pub type Normaliser<'a> = &'a dyn Fn(&str) -> String;
 
 /// Absolute and relative tolerances for treating two floats as different.
 ///
@@ -104,11 +92,13 @@ impl DiffTol {
 ///
 /// The normaliser lets callers rewrite names (e.g. to strip volatile row/column
 /// indices) before matching, without this crate depending on `regex`.
+#[derive(Default)]
 pub struct DiffOptions<'a> {
     /// Numeric tolerances for RHS and coefficient comparisons.
     pub tol: DiffTol,
-    /// Name rewrite applied to every variable, constraint, and objective name.
-    pub normalise: Normaliser<'a>,
+    /// Name rewrite applied to every variable, constraint, and objective name;
+    /// `None` compares names as-is.
+    pub normalise: Option<Normaliser<'a>>,
 }
 
 /// The computed differences between two LP problems, keyed by canonical
@@ -168,7 +158,7 @@ impl LpProblem {
 
 /// Build a coefficient map keyed by canonical (normalised) variable name.
 fn coeff_map(problem: &LpProblem, coeffs: &[Coefficient], normalise: Normaliser) -> BTreeMap<String, f64> {
-    coeffs.iter().map(|c| (normalise(problem.resolve(c.name)).into_owned(), c.value)).collect()
+    coeffs.iter().map(|c| (normalise(problem.resolve(c.name)), c.value)).collect()
 }
 
 /// Count coefficients that changed value, were removed, or were added.
@@ -262,19 +252,18 @@ fn diff_modified_objectives(
 // The paired 1/2-suffixed bindings are the domain language of a two-file diff.
 #[allow(clippy::similar_names)]
 pub fn compare(p1: &LpProblem, p2: &LpProblem, options: &DiffOptions) -> LpDiff {
-    let normalise = options.normalise;
+    let identity = |name: &str| name.to_string();
+    let normalise: Normaliser = options.normalise.unwrap_or(&identity);
     let tol = options.tol;
 
     let canon = |problem: &LpProblem, ids: Vec<NameId>| -> HashMap<String, NameId> {
-        ids.iter().map(|id| (normalise(problem.resolve(*id)).into_owned(), *id)).collect()
+        ids.iter().map(|id| (normalise(problem.resolve(*id)), *id)).collect()
     };
 
     let cvars1 = canon(p1, p1.variables.keys().copied().collect());
     let cvars2 = canon(p2, p2.variables.keys().copied().collect());
-    let ccons1: HashMap<String, NameId> =
-        p1.constraints.values().map(|c| (normalise(p1.resolve(c.name())).into_owned(), c.name())).collect();
-    let ccons2: HashMap<String, NameId> =
-        p2.constraints.values().map(|c| (normalise(p2.resolve(c.name())).into_owned(), c.name())).collect();
+    let ccons1: HashMap<String, NameId> = p1.constraints.values().map(|c| (normalise(p1.resolve(c.name())), c.name())).collect();
+    let ccons2: HashMap<String, NameId> = p2.constraints.values().map(|c| (normalise(p2.resolve(c.name())), c.name())).collect();
     let cobjs1 = canon(p1, p1.objectives.keys().copied().collect());
     let cobjs2 = canon(p2, p2.objectives.keys().copied().collect());
 
@@ -316,23 +305,16 @@ pub fn compare(p1: &LpProblem, p2: &LpProblem, options: &DiffOptions) -> LpDiff 
 mod tests {
     use super::*;
 
-    /// Identity normaliser: no renaming.
-    fn identity(name: &str) -> Cow<'_, str> {
-        Cow::Borrowed(name)
-    }
-
     /// Strip a trailing `_<digits>` suffix from a name (a volatile index).
-    fn strip_index_suffix(name: &str) -> Cow<'_, str> {
+    fn strip_index_suffix(name: &str) -> String {
         match name.rfind('_') {
-            Some(idx) if idx + 1 < name.len() && name[idx + 1..].chars().all(|ch| ch.is_ascii_digit()) => {
-                Cow::Owned(name[..idx].to_string())
-            }
-            _ => Cow::Borrowed(name),
+            Some(idx) if idx + 1 < name.len() && name[idx + 1..].chars().all(|ch| ch.is_ascii_digit()) => name[..idx].to_string(),
+            _ => name.to_string(),
         }
     }
 
     fn opts(tol: DiffTol) -> DiffOptions<'static> {
-        DiffOptions { tol, normalise: &identity }
+        DiffOptions { tol, normalise: None }
     }
 
     // --- DiffTol tolerance edges ---------------------------------------------
@@ -474,7 +456,7 @@ mod tests {
         assert_eq!(diff.vars_removed, vec!["x_1".to_string()]);
 
         // Strip the trailing `_<digits>` on both sides: names now match.
-        let options = DiffOptions { tol: DiffTol::default(), normalise: &strip_index_suffix };
+        let options = DiffOptions { tol: DiffTol::default(), normalise: Some(&strip_index_suffix) };
         let diff = p1.diff(&p2, &options);
         assert!(diff.vars_added.is_empty());
         assert!(diff.vars_removed.is_empty());

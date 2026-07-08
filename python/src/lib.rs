@@ -7,7 +7,7 @@ use lp_parser_rs::analysis::AnalysisConfig;
 use lp_parser_rs::model::{Constraint, Sense, VariableType};
 use lp_parser_rs::parser::parse_file;
 use lp_parser_rs::problem::LpProblem;
-use lp_parser_rs::writer::{LpWriterOptions, write_lp_string, write_lp_string_with_options};
+use lp_parser_rs::writer::{LpWriterOptions, write_lp_string_with_options};
 use pyo3::create_exception;
 use pyo3::exceptions::{PyFileNotFoundError, PyNotADirectoryError, PyRuntimeError};
 use pyo3::prelude::*;
@@ -155,31 +155,9 @@ impl LpParser {
         Ok(dict.into())
     }
 
-    fn variable_count(&self) -> PyResult<usize> {
-        let problem = self.get_problem()?;
-        Ok(problem.variable_count())
-    }
-
-    fn constraint_count(&self) -> PyResult<usize> {
-        let problem = self.get_problem()?;
-        Ok(problem.constraint_count())
-    }
-
-    fn objective_count(&self) -> PyResult<usize> {
-        let problem = self.get_problem()?;
-        Ok(problem.objective_count())
-    }
-
-    /// Write the current problem to LP format string
-    #[pyo3(text_signature = "($self)")]
-    fn to_lp_string(&self) -> PyResult<String> {
-        let problem = self.get_problem()?;
-        Ok(write_lp_string(problem))
-    }
-
-    /// Write the current problem to LP format string with custom options
+    /// Write the current problem to LP format string, with optional custom formatting
     #[pyo3(signature = (*, include_problem_name=true, max_line_length=80, decimal_precision=6, include_section_spacing=true))]
-    fn to_lp_string_with_options(
+    fn to_lp_string(
         &self,
         include_problem_name: bool,
         max_line_length: usize,
@@ -194,7 +172,8 @@ impl LpParser {
     /// Save the current problem to an LP file
     #[pyo3(text_signature = "($self, filepath)")]
     fn save_to_file(&self, filepath: String) -> PyResult<()> {
-        let lp_content = self.to_lp_string()?;
+        let problem = self.get_problem()?;
+        let lp_content = write_lp_string_with_options(problem, &LpWriterOptions::default());
         std::fs::write(&filepath, lp_content).map_err(|err| PyRuntimeError::new_err(format!("Failed to write file: {err}")))
     }
 
@@ -354,27 +333,13 @@ impl LpParser {
     /// - constraints: Constraint analysis (type distribution, empty/singleton)
     /// - coefficients: Coefficient range analysis
     /// - issues: List of detected issues/warnings
-    #[pyo3(text_signature = "($self)")]
-    fn analyze(&self, py: Python) -> PyResult<Py<PyAny>> {
-        let problem = self.get_problem()?;
-        let analysis = problem.analyze_with_config(&AnalysisConfig::default());
-        self.analysis_to_dict(py, &analysis)
-    }
-
-    /// Perform analysis with custom thresholds.
     ///
     /// Args:
     ///     `large_coeff_threshold`: Threshold for large coefficient warnings (default: 1e9)
     ///     `small_coeff_threshold`: Threshold for small coefficient warnings (default: 1e-9)
     ///     `ratio_threshold`: Coefficient ratio threshold for scaling warnings (default: 1e6)
     #[pyo3(signature = (*, large_coeff_threshold=1e9, small_coeff_threshold=1e-9, ratio_threshold=1e6))]
-    fn analyze_with_config(
-        &self,
-        py: Python,
-        large_coeff_threshold: f64,
-        small_coeff_threshold: f64,
-        ratio_threshold: f64,
-    ) -> PyResult<Py<PyAny>> {
+    fn analyze(&self, py: Python, large_coeff_threshold: f64, small_coeff_threshold: f64, ratio_threshold: f64) -> PyResult<Py<PyAny>> {
         let problem = self.get_problem()?;
         let config = AnalysisConfig {
             large_coefficient_threshold: large_coeff_threshold,
@@ -384,20 +349,6 @@ impl LpParser {
         };
         let analysis = problem.analyze_with_config(&config);
         self.analysis_to_dict(py, &analysis)
-    }
-
-    /// Get only the issues/warnings from the analysis.
-    ///
-    /// Returns a list of issue dictionaries, each containing:
-    /// - severity: "ERROR", "WARNING", or "INFO"
-    /// - category: Issue category
-    /// - message: Human-readable message
-    /// - details: Optional additional details
-    #[pyo3(text_signature = "($self)")]
-    fn get_issues(&self, py: Python) -> PyResult<Py<PyAny>> {
-        let problem = self.get_problem()?;
-        let analysis = problem.analyze();
-        Ok(issues_to_list(py, &analysis.issues)?.into())
     }
 
     fn __repr__(&self) -> String {

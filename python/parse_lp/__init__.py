@@ -21,8 +21,8 @@ Example Usage:
     >>>
     >>> # Access problem information
     >>> print(f"Problem name: {parser.name}")
-    >>> print(f"Variables: {parser.variable_count()}")
-    >>> print(f"Constraints: {parser.constraint_count()}")
+    >>> print(f"Variables: {len(parser.variables)}")
+    >>> print(f"Constraints: {len(parser.constraints)}")
     >>>
     >>> # Modify the problem
     >>> parser.update_objective_coefficient("profit", "x1", 5.0)
@@ -62,7 +62,6 @@ Modification Methods:
 
 from importlib.metadata import version as _version
 
-# pyrefly: ignore [missing-import]
 from .parse_lp import (
     LpInvalidValueError,
     LpNotParsedError,

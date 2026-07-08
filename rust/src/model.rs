@@ -29,28 +29,28 @@ pub enum ComparisonOp {
     LTE,
 }
 
+impl ComparisonOp {
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::GT => ">",
+            Self::GTE => ">=",
+            Self::EQ => "=",
+            Self::LT => "<",
+            Self::LTE => "<=",
+        }
+    }
+}
+
 impl AsRef<[u8]> for ComparisonOp {
     fn as_ref(&self) -> &[u8] {
-        match self {
-            Self::GT => b">",
-            Self::GTE => b">=",
-            Self::EQ => b"=",
-            Self::LT => b"<",
-            Self::LTE => b"<=",
-        }
+        self.as_str().as_bytes()
     }
 }
 
 impl Display for ComparisonOp {
     #[inline]
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        match self {
-            Self::GT => write!(f, ">"),
-            Self::GTE => write!(f, ">="),
-            Self::EQ => write!(f, "="),
-            Self::LT => write!(f, "<"),
-            Self::LTE => write!(f, "<="),
-        }
+        f.write_str(self.as_str())
     }
 }
 
@@ -95,22 +95,25 @@ pub enum SOSType {
     S2,
 }
 
+impl SOSType {
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::S1 => "S1",
+            Self::S2 => "S2",
+        }
+    }
+}
+
 impl AsRef<[u8]> for SOSType {
     fn as_ref(&self) -> &[u8] {
-        match self {
-            Self::S1 => b"S1",
-            Self::S2 => b"S2",
-        }
+        self.as_str().as_bytes()
     }
 }
 
 impl Display for SOSType {
     #[inline]
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        match self {
-            Self::S1 => write!(f, "S1"),
-            Self::S2 => write!(f, "S2"),
-        }
+        f.write_str(self.as_str())
     }
 }
 
@@ -224,36 +227,32 @@ pub enum VariableType {
     SOS,
 }
 
+impl VariableType {
+    const fn as_str(&self) -> &'static str {
+        match self {
+            Self::Free => "Free",
+            Self::General => "General",
+            Self::LowerBound(_) => "LowerBound",
+            Self::UpperBound(_) => "UpperBound",
+            Self::DoubleBound(_, _) => "DoubleBound",
+            Self::Binary => "Binary",
+            Self::Integer => "Integer",
+            Self::SemiContinuous => "Semi-Continuous",
+            Self::SOS => "SOS",
+        }
+    }
+}
+
 impl AsRef<[u8]> for VariableType {
     fn as_ref(&self) -> &[u8] {
-        match self {
-            Self::Free => b"Free",
-            Self::General => b"General",
-            Self::LowerBound(_) => b"LowerBound",
-            Self::UpperBound(_) => b"UpperBound",
-            Self::DoubleBound(_, _) => b"DoubleBound",
-            Self::Binary => b"Binary",
-            Self::Integer => b"Integer",
-            Self::SemiContinuous => b"Semi-Continuous",
-            Self::SOS => b"SOS",
-        }
+        self.as_str().as_bytes()
     }
 }
 
 impl Display for VariableType {
     #[inline]
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        match self {
-            Self::Free => write!(f, "Free"),
-            Self::General => write!(f, "General"),
-            Self::LowerBound(_) => write!(f, "LowerBound"),
-            Self::UpperBound(_) => write!(f, "UpperBound"),
-            Self::DoubleBound(_, _) => write!(f, "DoubleBound"),
-            Self::Binary => write!(f, "Binary"),
-            Self::Integer => write!(f, "Integer"),
-            Self::SemiContinuous => write!(f, "Semi-Continuous"),
-            Self::SOS => write!(f, "SOS"),
-        }
+        f.write_str(self.as_str())
     }
 }
 

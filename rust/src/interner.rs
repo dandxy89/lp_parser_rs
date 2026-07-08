@@ -3,61 +3,52 @@
 //! All variable, constraint, and objective names are stored once in a
 //! [`NameInterner`] and referenced by a cheap, copyable [`NameId`].
 
-use std::num::NonZeroUsize;
-
-use lasso::{Capacity, Rodeo, Spur};
+use rustc_hash::FxHashMap;
 
 /// Opaque handle to an interned name string.
 /// Implements `Copy`, `Eq`, `Ord`, `Hash` — suitable for use as `HashMap` key.
-pub type NameId = Spur;
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct NameId(u32);
 
 /// Mutable string interner for LP problem names.
 ///
-/// Wraps [`lasso::Rodeo`] and provides convenience methods.
-/// Used during parsing and problem construction.
-#[derive(Debug, Default)]
+/// Used during parsing and problem construction. Ids are dense indices in
+/// interning order, so `Clone` preserves them.
+#[derive(Debug, Default, Clone)]
 pub struct NameInterner {
-    rodeo: Rodeo,
-}
-
-impl Clone for NameInterner {
-    /// Deep-copy by re-interning every string in key order.
-    ///
-    /// `lasso::Rodeo` does not implement `Clone`; re-interning in key order
-    /// reproduces identical [`NameId`]s, so ids from the original remain valid
-    /// against the clone (required by `LpProblem::clone`).
-    fn clone(&self) -> Self {
-        let mut cloned = Self::with_capacity(self.rodeo.len());
-        for (id, name) in self.rodeo.iter() {
-            let new_id = cloned.rodeo.get_or_intern(name);
-            debug_assert_eq!(new_id, id, "clone must preserve interner ids");
-        }
-        cloned
-    }
+    names: Vec<String>,
+    ids: FxHashMap<String, NameId>,
 }
 
 impl NameInterner {
     /// Create a new empty interner.
     #[must_use]
     pub fn new() -> Self {
-        Self { rodeo: Rodeo::default() }
+        Self::default()
     }
 
     /// Create an interner pre-sized for the expected number of names.
     #[must_use]
     pub fn with_capacity(capacity: usize) -> Self {
-        // Estimate ~32 bytes average per name for byte capacity; the max(1)
-        // keeps the value non-zero even for capacity == 0.
-        let bytes = NonZeroUsize::new(capacity.saturating_mul(32).max(1)).unwrap_or(NonZeroUsize::MIN);
-        Self { rodeo: Rodeo::with_capacity(Capacity::new(capacity, bytes)) }
+        Self { names: Vec::with_capacity(capacity), ids: FxHashMap::with_capacity_and_hasher(capacity, rustc_hash::FxBuildHasher) }
     }
 
     /// Intern a string, returning its [`NameId`]. Idempotent — interning
     /// the same string twice returns the same ID.
+    ///
+    /// # Panics
+    ///
+    /// Panics if more than `u32::MAX` distinct names are interned.
     #[inline]
     pub fn intern(&mut self, name: &str) -> NameId {
         debug_assert!(!name.is_empty(), "must not intern an empty string");
-        self.rodeo.get_or_intern(name)
+        if let Some(&id) = self.ids.get(name) {
+            return id;
+        }
+        let id = NameId(u32::try_from(self.names.len()).expect("more than u32::MAX interned names"));
+        self.names.push(name.to_owned());
+        self.ids.insert(name.to_owned(), id);
+        id
     }
 
     /// Resolve a [`NameId`] back to its string.
@@ -68,7 +59,7 @@ impl NameInterner {
     #[inline]
     #[must_use]
     pub fn resolve(&self, id: NameId) -> &str {
-        self.rodeo.resolve(&id)
+        &self.names[id.0 as usize]
     }
 
     /// Try to look up a string without interning it.
@@ -76,7 +67,7 @@ impl NameInterner {
     #[inline]
     #[must_use]
     pub fn get(&self, name: &str) -> Option<NameId> {
-        self.rodeo.get(name)
+        self.ids.get(name).copied()
     }
 }
 

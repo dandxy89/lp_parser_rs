@@ -297,36 +297,26 @@ fn write_coefficients_line(
 ) -> std::fmt::Result {
     const CONTINUATION_INDENT: &str = "        ";
     let mut current_line_length: usize = 0;
+    let mut piece = String::new();
 
     for (i, coeff) in coefficients.iter().enumerate() {
         let var_name = interner.resolve(coeff.name);
 
-        // Estimate the length of the formatted coefficient to decide on line wrapping.
-        let estimated_len = estimate_coefficient_len(var_name, coeff.value, i == 0);
+        // Format into a scratch buffer so wrapping decisions use the real width.
+        piece.clear();
+        write_formatted_coefficient(&mut piece, var_name, coeff.value, i == 0, options.decimal_precision)?;
 
-        if current_line_length + estimated_len > options.max_line_length && i > 0 {
+        if current_line_length + piece.len() > options.max_line_length && i > 0 {
             writeln!(output)?;
             write!(output, "{CONTINUATION_INDENT}")?;
             current_line_length = CONTINUATION_INDENT.len();
         }
 
-        let len_before = output.len();
-        write_formatted_coefficient(output, var_name, coeff.value, i == 0, options.decimal_precision)?;
-        current_line_length += output.len() - len_before;
+        output.push_str(&piece);
+        current_line_length += piece.len();
     }
 
     Ok(())
-}
-
-/// Estimate the display length of a formatted coefficient (for line-wrapping decisions).
-fn estimate_coefficient_len(name: &str, value: f64, is_first: bool) -> usize {
-    let abs_value = value.abs();
-    let is_one = (abs_value - 1.0).abs() < NUMERIC_EPSILON;
-    // " + " or " - " prefix = 3 chars, number ~= up to 12 chars, space + name
-    let number_len = if is_one { 0 } else { 12 };
-    let prefix_len = if is_first { if value < 0.0 { 2 } else { 0 } } else { 3 };
-    let space_before_name = usize::from(!(is_one && is_first && value >= 0.0));
-    prefix_len + number_len + space_before_name + name.len()
 }
 
 /// Write a formatted coefficient directly to the output buffer, avoiding intermediate `String` allocation.

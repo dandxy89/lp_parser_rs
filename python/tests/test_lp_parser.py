@@ -43,9 +43,9 @@ class TestLpParserBasic:
         parser.parse()
 
         assert parser.sense == expected_sense
-        assert parser.variable_count() == expected_vars
-        assert parser.constraint_count() == expected_constraints
-        assert parser.objective_count() == 1
+        assert len(parser.variables) == expected_vars
+        assert len(parser.constraints) == expected_constraints
+        assert len(parser.objectives) == 1
 
 
 class TestLpParserComponents:
@@ -171,11 +171,11 @@ End"""
         with temp_lp_file(content) as filepath:
             parser = LpParser(filepath)
             with pytest.raises(RuntimeError, match="Must call parse\\(\\) first"):
-                parser.variable_count()
+                _ = parser.variables
             with pytest.raises(RuntimeError, match="Must call parse\\(\\) first"):
-                parser.constraint_count()
+                _ = parser.constraints
             with pytest.raises(RuntimeError, match="Must call parse\\(\\) first"):
-                parser.objective_count()
+                _ = parser.objectives
 
 
 class TestAllResourceFiles:
@@ -188,8 +188,8 @@ class TestAllResourceFiles:
     def test_parse_succeeds(self, lp_file: Path) -> None:
         parser = LpParser(str(lp_file))
         parser.parse()
-        assert parser.objective_count() >= 1
-        assert parser.variable_count() >= 1
+        assert len(parser.objectives) >= 1
+        assert len(parser.variables) >= 1
 
     @pytest.mark.parametrize(
         "lp_file",

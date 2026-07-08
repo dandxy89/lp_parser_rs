@@ -114,22 +114,13 @@ fn draw_done(
     let blank = Line::from("");
     let footer = Line::from(Span::styled("  1-5: tabs  Tab/S-Tab: cycle  j/k: scroll  y: yank  Esc: close", Style::default().fg(t.muted)));
 
-    // Prefer cached tab lines; only build from scratch when the cache is absent
-    // (should not happen in normal flow).
-    let mut fallback: Vec<Line<'static>> = Vec::new();
-    let cached: &[Line<'static>] = if let SolveRenderCache::Single(tabs) = cache {
-        &tabs[active.index()]
-    } else {
-        let inner_width = popup_width.saturating_sub(2);
-        match active {
-            SolveTab::Summary => build_summary_tab(&mut fallback, result),
-            SolveTab::Variables => build_variables_tab(&mut fallback, result, name_column_width(inner_width, 2 + 12 + 14)),
-            SolveTab::Constraints => build_constraints_tab(&mut fallback, result, name_column_width(inner_width, 2 + 12 + 14)),
-            SolveTab::Log => build_log_tab(&mut fallback, result),
-            SolveTab::Duals => build_duals_tab(&mut fallback, result, name_column_width(inner_width, 2 + 14)),
-        }
-        &fallback
+    // The cache is always populated before the state becomes `Done`, so the
+    // cached tab lines are the only source of content.
+    let SolveRenderCache::Single(tabs) = cache else {
+        debug_assert!(false, "render cache must be Single when solve state is Done");
+        return;
     };
+    let cached: &[Line<'static>] = &tabs[active.index()];
 
     // The diagnosis block changes while the background solve runs, so it is
     // appended dynamically rather than baked into the render cache.
@@ -653,42 +644,23 @@ fn draw_done_both(
     let tab_bar = build_tab_bar(active);
     let mut lines = vec![tab_bar, Line::from("")];
 
+    // The cache is always populated before the state becomes `DoneBoth`, so
+    // the cached tab lines are the only source of content.
+    let SolveRenderCache::Diff { summary, log, duals, variable_rows, constraint_rows, variable_count_label, constraint_count_label } =
+        cache
+    else {
+        debug_assert!(false, "render cache must be Diff when solve state is DoneBoth");
+        return;
+    };
+
     match active {
-        SolveTab::Summary => {
-            if let SolveRenderCache::Diff { summary, .. } = cache {
-                lines.extend(summary.iter().cloned());
-            } else {
-                build_diff_summary_tab(&mut lines, diff);
-            }
-        }
-        SolveTab::Variables => {
-            if let SolveRenderCache::Diff { variable_rows, variable_count_label, .. } = cache {
-                build_diff_variables_tab_cached(&mut lines, variable_count_label, variable_rows, view, scroll, popup_height);
-            } else {
-                build_diff_variables_tab(&mut lines, diff, view, scroll, popup_height);
-            }
-        }
+        SolveTab::Summary => lines.extend(summary.iter().cloned()),
+        SolveTab::Variables => build_diff_variables_tab_cached(&mut lines, variable_count_label, variable_rows, view, scroll, popup_height),
         SolveTab::Constraints => {
-            if let SolveRenderCache::Diff { constraint_rows, constraint_count_label, .. } = cache {
-                build_diff_constraints_tab_cached(&mut lines, constraint_count_label, constraint_rows, view, scroll, popup_height);
-            } else {
-                build_diff_constraints_tab(&mut lines, diff, view, scroll, popup_height);
-            }
+            build_diff_constraints_tab_cached(&mut lines, constraint_count_label, constraint_rows, view, scroll, popup_height);
         }
-        SolveTab::Log => {
-            if let SolveRenderCache::Diff { log, .. } = cache {
-                lines.extend(log.iter().cloned());
-            } else {
-                build_diff_log_tab(&mut lines, diff);
-            }
-        }
-        SolveTab::Duals => {
-            if let SolveRenderCache::Diff { duals, .. } = cache {
-                lines.extend(duals.iter().cloned());
-            } else {
-                build_diff_duals_tab(&mut lines, diff, name_column_width(popup_width.saturating_sub(2), 2 + 14 * 3));
-            }
-        }
+        SolveTab::Log => lines.extend(log.iter().cloned()),
+        SolveTab::Duals => lines.extend(duals.iter().cloned()),
     }
 
     // Diagnosis block for infeasible sides (`e` diagnoses file 1 when both are infeasible).
@@ -979,10 +951,6 @@ fn build_diff_constraints_tab_cached(
     push_cached_window(lines, cached_rows, diff_only, scroll, visible_height);
 }
 
-// ---------------------------------------------------------------------------
-// Uncached diff tab rendering — fallback when cache is not available
-// ---------------------------------------------------------------------------
-
 /// Format the cached diff counts as a human-readable summary string.
 fn diff_counts_summary_label(counts: &DiffCounts) -> String {
     let mut parts = Vec::new();
@@ -1167,103 +1135,6 @@ fn build_diff_summary_tab(lines: &mut Vec<Line<'static>>, diff: &SolveDiffResult
 fn diff_filter_label(diff_only: bool, threshold: f64) -> String {
     let toggle = if diff_only { "press d for all" } else { "press d for changed only" };
     if threshold == 0.0 { format!(" (threshold: exact, {toggle})") } else { format!(" (threshold: {threshold}, {toggle})") }
-}
-
-fn build_diff_variables_tab(
-    lines: &mut Vec<Line<'static>>,
-    diff: &SolveDiffResult,
-    view: &SolveViewState,
-    scroll: u16,
-    visible_height: u16,
-) {
-    let t = theme();
-    let counts = &diff.variable_counts;
-    let summary = diff_counts_summary_label(counts);
-    let filter_label = diff_filter_label(view.diff_only, view.delta_threshold);
-    let diff_only = view.diff_only;
-
-    lines.push(Line::from(Span::styled(
-        format!("  Variables: {summary} (of {} total){filter_label}", counts.total),
-        Style::default().fg(t.muted).add_modifier(Modifier::BOLD),
-    )));
-    lines.push(Line::from(""));
-
-    let name_w = 24;
-    let value_w = 14;
-    lines.push(Line::from(vec![
-        Span::styled(format!("  {:<name_w$}", "Name"), Style::default().fg(t.muted).add_modifier(Modifier::BOLD)),
-        Span::styled(format!("{:>value_w$}", "File 1"), Style::default().fg(t.muted).add_modifier(Modifier::BOLD)),
-        Span::styled(format!("{:>value_w$}", "File 2"), Style::default().fg(t.muted).add_modifier(Modifier::BOLD)),
-        Span::styled(format!("{:>value_w$}", "\u{0394}"), Style::default().fg(t.muted).add_modifier(Modifier::BOLD)),
-    ]));
-    lines.push(Line::from(Span::styled(format!("  {}", rule_str(72)), Style::default().fg(t.muted))));
-
-    // Windowed rendering: only build styled Lines for visible data rows.
-    let (first_visible_data, visible_data_count) = window_range(lines.len(), scroll, visible_height);
-    let mut data_index: usize = 0;
-    for row in &diff.variable_diff {
-        if diff_only && !row.changed {
-            continue;
-        }
-        if data_index >= first_visible_data && data_index < first_visible_data + visible_data_count {
-            let name = row.name(&diff.result1, &diff.result2);
-            if let Some(line) = format_variable_diff_line(row, name, name_w, value_w) {
-                lines.push(line);
-            }
-        } else {
-            lines.push(Line::default());
-        }
-        data_index += 1;
-    }
-}
-
-fn build_diff_constraints_tab(
-    lines: &mut Vec<Line<'static>>,
-    diff: &SolveDiffResult,
-    view: &SolveViewState,
-    scroll: u16,
-    visible_height: u16,
-) {
-    let t = theme();
-    let counts = &diff.constraint_counts;
-    let summary = diff_counts_summary_label(counts);
-    let filter_label = diff_filter_label(view.diff_only, view.delta_threshold);
-    let diff_only = view.diff_only;
-
-    lines.push(Line::from(Span::styled(
-        format!("  Constraints: {summary} (of {} total){filter_label}", counts.total),
-        Style::default().fg(t.muted).add_modifier(Modifier::BOLD),
-    )));
-    lines.push(Line::from(""));
-
-    let name_w = 22;
-    let value_w = 13;
-    lines.push(Line::from(vec![
-        Span::styled(format!("  {:<name_w$}", "Name"), Style::default().fg(t.muted).add_modifier(Modifier::BOLD)),
-        Span::styled(format!("{:>value_w$}", "Activity 1"), Style::default().fg(t.muted).add_modifier(Modifier::BOLD)),
-        Span::styled(format!("{:>value_w$}", "Activity 2"), Style::default().fg(t.muted).add_modifier(Modifier::BOLD)),
-        Span::styled(format!("{:>value_w$}", "Shadow 1"), Style::default().fg(t.muted).add_modifier(Modifier::BOLD)),
-        Span::styled(format!("{:>value_w$}", "Shadow 2"), Style::default().fg(t.muted).add_modifier(Modifier::BOLD)),
-    ]));
-    lines.push(Line::from(Span::styled(format!("  {}", rule_str(82)), Style::default().fg(t.muted))));
-
-    // Windowed rendering: only build styled Lines for visible data rows.
-    let (first_visible_data, visible_data_count) = window_range(lines.len(), scroll, visible_height);
-    let mut data_index: usize = 0;
-    for row in &diff.constraint_diff {
-        if diff_only && !row.changed {
-            continue;
-        }
-        if data_index >= first_visible_data && data_index < first_visible_data + visible_data_count {
-            let name = row.name(&diff.result1, &diff.result2);
-            if let Some(line) = format_constraint_diff_line(row, name, name_w, value_w) {
-                lines.push(line);
-            }
-        } else {
-            lines.push(Line::default());
-        }
-        data_index += 1;
-    }
 }
 
 fn build_diff_log_tab(lines: &mut Vec<Line<'static>>, diff: &SolveDiffResult) {

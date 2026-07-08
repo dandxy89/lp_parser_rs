@@ -40,7 +40,6 @@ pub struct SolveResult {
 /// Pre-computed diff counts, avoiding per-frame iteration.
 #[derive(Debug, Clone, Copy)]
 pub struct DiffCounts {
-    pub total: usize,
     pub added: usize,
     pub removed: usize,
     pub modified: usize,
@@ -147,7 +146,7 @@ pub fn diff_results(
 
 /// Count variable-level diff statistics in a single pass.
 fn count_var_diffs(rows: &[VarDiffRow]) -> DiffCounts {
-    let mut counts = DiffCounts { total: rows.len(), added: 0, removed: 0, modified: 0 };
+    let mut counts = DiffCounts { added: 0, removed: 0, modified: 0 };
     for row in rows {
         if row.val1.is_none() {
             counts.added += 1;
@@ -162,7 +161,7 @@ fn count_var_diffs(rows: &[VarDiffRow]) -> DiffCounts {
 
 /// Count constraint-level diff statistics in a single pass.
 fn count_constraint_diffs_from_rows(rows: &[ConstraintDiffRow]) -> DiffCounts {
-    let mut counts = DiffCounts { total: rows.len(), added: 0, removed: 0, modified: 0 };
+    let mut counts = DiffCounts { added: 0, removed: 0, modified: 0 };
     for row in rows {
         if row.activity1.is_none() {
             counts.added += 1;

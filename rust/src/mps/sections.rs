@@ -39,7 +39,7 @@ pub(super) fn parse_rows_line<'input>(
 
     if row_type == RowType::N {
         if fields.len() > 2 {
-            log::warn!(
+            eprintln!(
                 "Line {line_num}: N-row '{row_name}' has extra fields (priority/weight/tolerance) \
                  which are not supported and will be ignored"
             );
@@ -409,7 +409,7 @@ impl<'input> BoundsState<'input> {
                 // bound value is dropped; warn when it is a meaningful finite bound
                 // rather than the conventional 1e30/infinity sentinel.
                 if value.is_finite() && value < crate::mps::writer::SEMI_CONTINUOUS_SENTINEL_UPPER {
-                    log::warn!("line {line_num}: SC upper bound {value} on '{var_name}' cannot be represented and is dropped");
+                    eprintln!("line {line_num}: SC upper bound {value} on '{var_name}' cannot be represented and is dropped");
                 }
                 self.semi_continuous_vars.push(var_name);
             }
