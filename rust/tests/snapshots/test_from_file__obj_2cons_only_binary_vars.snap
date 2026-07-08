@@ -12,6 +12,7 @@ objectives:
         value: -2
       - name: z
         value: -8
+    constant: 0
   - name: obj2
     coefficients:
       - name: y
@@ -20,6 +21,7 @@ objectives:
         value: 1
       - name: z
         value: 1
+    constant: 0
 constraints:
   - type: Standard
     name: cons1

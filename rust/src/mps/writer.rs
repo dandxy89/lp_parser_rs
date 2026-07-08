@@ -180,7 +180,7 @@ fn build_mps(output: &mut String, problem: &LpProblem, options: &MpsWriterOption
     let columns = build_columns(problem, objective, obj_row_name, &range_pairs);
     write_columns_section(output, problem, &columns, options).expect("fmt::Write to String is infallible");
 
-    write_rhs_section(output, problem, obj_row_name, options, &range_pairs).expect("fmt::Write to String is infallible");
+    write_rhs_section(output, problem, objective, obj_row_name, options, &range_pairs).expect("fmt::Write to String is infallible");
     write_ranges_section(output, problem, options, &range_pairs).expect("fmt::Write to String is infallible");
     write_bounds_section(output, problem, options)?;
     write_sos_section(output, problem, options).expect("fmt::Write to String is infallible");
@@ -418,16 +418,27 @@ fn write_columns_section(
 
 /// Write the `RHS` section. Zero-valued RHS entries are omitted -- the reader
 /// already defaults missing rows to an RHS of zero. Ranged companion rows are
-/// omitted (their upper RHS is carried by the `RANGES` section).
+/// omitted (their upper RHS is carried by the `RANGES` section). An objective
+/// constant is written as a negated RHS entry on the objective row, per the
+/// CPLEX MPS specification.
 fn write_rhs_section(
     output: &mut String,
     problem: &LpProblem,
+    objective: Option<&Objective>,
     obj_row_name: &str,
     options: &MpsWriterOptions,
     range_pairs: &RangePairs,
 ) -> std::fmt::Result {
     debug_assert!(!obj_row_name.is_empty(), "obj_row_name must not be empty");
     writeln!(output, "RHS")?;
+
+    if let Some(obj) = objective {
+        if obj.constant != 0.0 {
+            write!(output, "    {RHS_VECTOR_LABEL:<10} {obj_row_name:<10} ")?;
+            write_number(output, -obj.constant, options.decimal_precision)?;
+            writeln!(output)?;
+        }
+    }
 
     for (constraint_id, constraint) in &problem.constraints {
         if range_pairs.skip.contains(constraint_id) {
@@ -713,6 +724,7 @@ mod tests {
                 Coefficient { name: x2_id, value: 2.0 },
                 Coefficient { name: x3_id, value: 1.0 },
             ],
+            constant: 0.0,
             byte_offset: None,
         });
 
@@ -768,6 +780,7 @@ mod tests {
         problem.add_objective(Objective {
             name: profit_id,
             coefficients: vec![Coefficient { name: x1_id, value: 3.0 }, Coefficient { name: x2_id, value: 2.0 }],
+            constant: 0.0,
             byte_offset: None,
         });
         problem.add_constraint(Constraint::Standard {
@@ -837,7 +850,12 @@ mod tests {
         let mut problem = LpProblem::new();
         let obj_id = problem.intern("obj");
         let x1_id = problem.intern("x1");
-        problem.add_objective(Objective { name: obj_id, coefficients: vec![Coefficient { name: x1_id, value: 1.0 }], byte_offset: None });
+        problem.add_objective(Objective {
+            name: obj_id,
+            coefficients: vec![Coefficient { name: x1_id, value: 1.0 }],
+            constant: 0.0,
+            byte_offset: None,
+        });
         problem.update_variable_type("x1", VariableType::DoubleBound(5.5, f64::INFINITY)).unwrap();
 
         let output = write_mps_string(&problem).unwrap();
@@ -853,7 +871,12 @@ mod tests {
         let mut problem = LpProblem::new();
         let obj_id = problem.intern("obj");
         let x1_id = problem.intern("x1");
-        problem.add_objective(Objective { name: obj_id, coefficients: vec![Coefficient { name: x1_id, value: 1.0 }], byte_offset: None });
+        problem.add_objective(Objective {
+            name: obj_id,
+            coefficients: vec![Coefficient { name: x1_id, value: 1.0 }],
+            constant: 0.0,
+            byte_offset: None,
+        });
         problem.update_variable_type("x1", VariableType::UpperBound(-5.0)).unwrap();
 
         let output = write_mps_string(&problem).unwrap();
@@ -871,8 +894,18 @@ mod tests {
         let a = problem.intern("a");
         let b = problem.intern("b");
         let x1_id = problem.intern("x1");
-        problem.add_objective(Objective { name: a, coefficients: vec![Coefficient { name: x1_id, value: 1.0 }], byte_offset: None });
-        problem.add_objective(Objective { name: b, coefficients: vec![Coefficient { name: x1_id, value: 2.0 }], byte_offset: None });
+        problem.add_objective(Objective {
+            name: a,
+            coefficients: vec![Coefficient { name: x1_id, value: 1.0 }],
+            constant: 0.0,
+            byte_offset: None,
+        });
+        problem.add_objective(Objective {
+            name: b,
+            coefficients: vec![Coefficient { name: x1_id, value: 2.0 }],
+            constant: 0.0,
+            byte_offset: None,
+        });
 
         let err = write_mps_string(&problem).unwrap_err();
         assert!(matches!(err, LpParseError::ValidationError { .. }));
@@ -884,8 +917,18 @@ mod tests {
         let a = problem.intern("a");
         let b = problem.intern("b");
         let x1_id = problem.intern("x1");
-        problem.add_objective(Objective { name: a, coefficients: vec![Coefficient { name: x1_id, value: 1.0 }], byte_offset: None });
-        problem.add_objective(Objective { name: b, coefficients: vec![Coefficient { name: x1_id, value: 2.0 }], byte_offset: None });
+        problem.add_objective(Objective {
+            name: a,
+            coefficients: vec![Coefficient { name: x1_id, value: 1.0 }],
+            constant: 0.0,
+            byte_offset: None,
+        });
+        problem.add_objective(Objective {
+            name: b,
+            coefficients: vec![Coefficient { name: x1_id, value: 2.0 }],
+            constant: 0.0,
+            byte_offset: None,
+        });
 
         let options = MpsWriterOptions { allow_multiple_objectives: true, ..MpsWriterOptions::default() };
         let output = write_mps_string_with_options(&problem, &options).unwrap();
@@ -918,7 +961,7 @@ mod tests {
         // round-trip as Integer, not fall back to the MPS [0, 1] default.
         let mut problem = LpProblem::new();
         let obj_id = problem.intern("obj");
-        problem.add_objective(Objective { name: obj_id, coefficients: vec![], byte_offset: None });
+        problem.add_objective(Objective { name: obj_id, coefficients: vec![], constant: 0.0, byte_offset: None });
         let x1_id = problem.intern("x1");
         problem.add_variable(crate::model::Variable::new(x1_id).with_var_type(VariableType::General));
 
@@ -998,7 +1041,7 @@ End
     fn test_semi_continuous_round_trips() {
         let mut problem = LpProblem::new();
         let obj_id = problem.intern("obj");
-        problem.add_objective(Objective { name: obj_id, coefficients: vec![], byte_offset: None });
+        problem.add_objective(Objective { name: obj_id, coefficients: vec![], constant: 0.0, byte_offset: None });
         let x1_id = problem.intern("x1");
         problem.add_variable(crate::model::Variable::new(x1_id).with_var_type(VariableType::SemiContinuous));
 
@@ -1080,7 +1123,12 @@ ENDATA
         let mut problem = LpProblem::new();
         let obj_id = problem.intern("obj");
         let x1_id = problem.intern("x1");
-        problem.add_objective(Objective { name: obj_id, coefficients: vec![Coefficient { name: x1_id, value: 1.0 }], byte_offset: None });
+        problem.add_objective(Objective {
+            name: obj_id,
+            coefficients: vec![Coefficient { name: x1_id, value: 1.0 }],
+            constant: 0.0,
+            byte_offset: None,
+        });
         problem.update_variable_type("x1", VariableType::UpperBound(f64::NAN)).unwrap();
 
         let err = write_mps_string(&problem).unwrap_err();
@@ -1092,7 +1140,12 @@ ENDATA
         let mut problem = LpProblem::new();
         let obj_id = problem.intern("obj");
         let x1_id = problem.intern("x1");
-        problem.add_objective(Objective { name: obj_id, coefficients: vec![Coefficient { name: x1_id, value: 1.0 }], byte_offset: None });
+        problem.add_objective(Objective {
+            name: obj_id,
+            coefficients: vec![Coefficient { name: x1_id, value: 1.0 }],
+            constant: 0.0,
+            byte_offset: None,
+        });
         problem.update_variable_type("x1", VariableType::LowerBound(f64::NAN)).unwrap();
 
         let err = write_mps_string(&problem).unwrap_err();
@@ -1104,7 +1157,12 @@ ENDATA
         let mut problem = LpProblem::new();
         let obj_id = problem.intern("obj");
         let x1_id = problem.intern("x1");
-        problem.add_objective(Objective { name: obj_id, coefficients: vec![Coefficient { name: x1_id, value: 1.0 }], byte_offset: None });
+        problem.add_objective(Objective {
+            name: obj_id,
+            coefficients: vec![Coefficient { name: x1_id, value: 1.0 }],
+            constant: 0.0,
+            byte_offset: None,
+        });
         problem.update_variable_type("x1", VariableType::UpperBound(f64::NEG_INFINITY)).unwrap();
 
         let err = write_mps_string(&problem).unwrap_err();
@@ -1116,7 +1174,12 @@ ENDATA
         let mut problem = LpProblem::new();
         let obj_id = problem.intern("obj");
         let x1_id = problem.intern("x1");
-        problem.add_objective(Objective { name: obj_id, coefficients: vec![Coefficient { name: x1_id, value: 1.0 }], byte_offset: None });
+        problem.add_objective(Objective {
+            name: obj_id,
+            coefficients: vec![Coefficient { name: x1_id, value: 1.0 }],
+            constant: 0.0,
+            byte_offset: None,
+        });
         problem.update_variable_type("x1", VariableType::LowerBound(f64::INFINITY)).unwrap();
 
         let err = write_mps_string(&problem).unwrap_err();
@@ -1128,7 +1191,12 @@ ENDATA
         let mut problem = LpProblem::new();
         let obj_id = problem.intern("obj");
         let x1_id = problem.intern("x1");
-        problem.add_objective(Objective { name: obj_id, coefficients: vec![Coefficient { name: x1_id, value: 1.0 }], byte_offset: None });
+        problem.add_objective(Objective {
+            name: obj_id,
+            coefficients: vec![Coefficient { name: x1_id, value: 1.0 }],
+            constant: 0.0,
+            byte_offset: None,
+        });
         problem.update_variable_type("x1", VariableType::DoubleBound(f64::NAN, 5.0)).unwrap();
 
         let err = write_mps_string(&problem).unwrap_err();
@@ -1140,7 +1208,12 @@ ENDATA
         let mut problem = LpProblem::new();
         let obj_id = problem.intern("obj");
         let x1_id = problem.intern("x1");
-        problem.add_objective(Objective { name: obj_id, coefficients: vec![Coefficient { name: x1_id, value: 1.0 }], byte_offset: None });
+        problem.add_objective(Objective {
+            name: obj_id,
+            coefficients: vec![Coefficient { name: x1_id, value: 1.0 }],
+            constant: 0.0,
+            byte_offset: None,
+        });
         // Lower bound of +inf paired with a finite upper bound is an empty,
         // unrepresentable feasible region.
         problem.update_variable_type("x1", VariableType::DoubleBound(f64::INFINITY, 5.0)).unwrap();

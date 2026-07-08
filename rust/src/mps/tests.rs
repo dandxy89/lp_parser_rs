@@ -1325,3 +1325,85 @@ ENDATA
     let result = parse_mps(input).unwrap();
     assert_eq!(result.constraints.len(), 1);
 }
+
+#[test]
+fn test_columns_more_than_two_pairs() {
+    // Free-format writers emit more than the strict two pairs per line; every
+    // pair must be parsed rather than silently truncated.
+    let input = "\
+NAME t
+ROWS
+ N obj
+ L r1
+ L r2
+ L r3
+COLUMNS
+    x obj 1 r1 1 r2 2 r3 3
+RHS
+    rhs r1 10
+ENDATA
+";
+    let result = parse_mps(input).unwrap();
+    assert_eq!(result.constraints.len(), 3);
+    for (idx, expected) in [("r1", 1.0), ("r2", 2.0), ("r3", 3.0)].iter().enumerate() {
+        let RawConstraint::Standard { name, coefficients, .. } = &result.constraints[idx] else {
+            panic!("Expected Standard constraint");
+        };
+        assert_eq!(name.as_ref(), expected.0);
+        assert_eq!(coefficients.len(), 1);
+        assert_eq!(coefficients[0].value, expected.1);
+    }
+}
+
+#[test]
+fn test_dangling_field_is_error() {
+    // A trailing row name without a value is malformed input, not data to drop.
+    let input = "NAME t\nROWS\n N obj\n L r1\n L r2\nCOLUMNS\n    x r1 1 r2\nRHS\n    rhs r1 10\nENDATA\n";
+    assert!(parse_mps(input).is_err());
+
+    let input = "NAME t\nROWS\n N obj\n L r1\n L r2\nCOLUMNS\n    x r1 1\nRHS\n    rhs r1 10 r2\nENDATA\n";
+    assert!(parse_mps(input).is_err());
+}
+
+#[test]
+fn test_label_less_rhs_and_bounds() {
+    // The RHS/BOUNDS vector label is a blank field in fixed format; free-format
+    // files omitting it must still parse.
+    let input = "\
+NAME t
+ROWS
+ N obj
+ G r1
+COLUMNS
+    x obj 1 r1 1
+RHS
+    r1 10
+BOUNDS
+ UP x 5
+ENDATA
+";
+    let result = parse_mps(input).unwrap();
+    let RawConstraint::Standard { rhs, .. } = &result.constraints[0] else { panic!("Expected Standard constraint") };
+    assert_eq!(*rhs, 10.0);
+    assert_eq!(result.bounds, vec![("x", VariableType::UpperBound(5.0))]);
+}
+
+#[test]
+fn test_duplicate_row_name_is_error() {
+    let input = "NAME t\nROWS\n N obj\n L r1\n G r1\nCOLUMNS\n    x obj 1 r1 1\nRHS\n    rhs r1 10\nENDATA\n";
+    assert!(parse_mps(input).is_err());
+}
+
+#[test]
+fn test_ranges_on_objective_row_is_error() {
+    let input = "NAME t\nROWS\n N obj\n E r1\nCOLUMNS\n    x obj 1 r1 1\nRHS\n    rhs r1 10\nRANGES\n    rng obj 4\nENDATA\n";
+    assert!(parse_mps(input).is_err());
+}
+
+#[test]
+fn test_objective_constant_from_rhs() {
+    // An RHS entry on the objective row is the negated objective constant.
+    let input = "NAME t\nROWS\n N obj\n L r1\nCOLUMNS\n    x obj 1 r1 1\nRHS\n    rhs r1 10 obj -2.5\nENDATA\n";
+    let result = parse_mps(input).unwrap();
+    assert_eq!(result.objectives[0].constant, 2.5);
+}

@@ -103,7 +103,10 @@ impl<'input> From<lalrpop_util::ParseError<usize, Token<'input>, LexerError>> fo
                 Self::parse_error(start, format!("Unexpected token {tok:?}{expected_str}"))
             }
             lalrpop_util::ParseError::ExtraToken { token: (start, tok, _) } => Self::parse_error(start, format!("Extra token {tok:?}")),
-            lalrpop_util::ParseError::User { error } => Self::parse_error(0, format!("Lexer error: {error:?}")),
+            lalrpop_util::ParseError::User { error } => {
+                let message = error.message.clone().unwrap_or_else(|| "Lexer error".to_string());
+                Self::parse_error(error.position, message)
+            }
         }
     }
 }

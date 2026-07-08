@@ -10,9 +10,15 @@ use logos::Logos;
 
 use crate::model::{ComparisonOp, SOSType, Sense, VariableType};
 
-/// Lexer error type
+/// Lexer error type, also used for semantic errors raised while assembling
+/// objective/constraint bodies (see [`crate::assemble`]).
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct LexerError;
+pub struct LexerError {
+    /// Byte position of the error in the input, when known.
+    pub position: usize,
+    /// Human-readable description; `None` for plain tokenisation failures.
+    pub message: Option<String>,
+}
 
 // === Raw intermediate types ===
 //
@@ -65,6 +71,8 @@ pub struct RawObjective<'input> {
     pub name: Cow<'input, str>,
     /// Coefficients of the objective function.
     pub coefficients: Vec<RawCoefficient<'input>>,
+    /// Constant term of the objective function.
+    pub constant: f64,
     /// Byte offset of this objective in the source text (for line number mapping).
     pub byte_offset: Option<usize>,
 }
@@ -76,36 +84,6 @@ pub enum SosEntryKind<'input> {
     Header(&'input str, SOSType, usize),
     /// SOS weight: variable and weight value.
     Weight(RawCoefficient<'input>),
-}
-
-/// Helper enum for constraint continuation parsing.
-#[derive(Debug, Clone, PartialEq)]
-pub enum ConstraintCont<'input> {
-    /// Named constraint: the leading identifier was the constraint name.
-    Named(Vec<RawCoefficient<'input>>, ComparisonOp, f64),
-    /// Unnamed constraint: the leading identifier was the first variable.
-    Unnamed(Vec<(f64, RawCoefficient<'input>)>, ComparisonOp, f64),
-}
-
-impl<'input> ConstraintCont<'input> {
-    /// Convert to a `RawConstraint`, using the given identifier as either name or first variable.
-    ///
-    /// `byte_offset` is the position of the constraint in the source text.
-    #[must_use]
-    pub fn into_constraint(self, id: &'input str, byte_offset: Option<usize>) -> RawConstraint<'input> {
-        match self {
-            ConstraintCont::Named(coeffs, op, rhs) => {
-                RawConstraint::Standard { name: Cow::Borrowed(id), coefficients: coeffs, operator: op, rhs, byte_offset }
-            }
-            ConstraintCont::Unnamed(rest, op, rhs) => {
-                let mut coeffs = vec![RawCoefficient { name: id, value: 1.0 }];
-                for (s, c) in rest {
-                    coeffs.push(RawCoefficient { name: c.name, value: s * c.value });
-                }
-                RawConstraint::Standard { name: Cow::Borrowed("__c__"), coefficients: coeffs, operator: op, rhs, byte_offset }
-            }
-        }
-    }
 }
 
 /// Helper enum for optional sections that can appear in any order.
@@ -150,7 +128,7 @@ pub struct ParseResult<'input> {
 
 impl Display for LexerError {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        write!(f, "lexer error")
+        f.write_str(self.message.as_deref().unwrap_or("lexer error"))
     }
 }
 
@@ -222,12 +200,14 @@ pub enum Token<'input> {
     Number(f64),
 
     // === Operators ===
-    /// Less than or equal
+    /// Less than or equal (CPLEX accepts both `<=` and `=<`)
     #[token("<=")]
+    #[token("=<")]
     Lte,
 
-    /// Greater than or equal
+    /// Greater than or equal (CPLEX accepts both `>=` and `=>`)
     #[token(">=")]
+    #[token("=>")]
     Gte,
 
     /// Less than
@@ -267,14 +247,16 @@ pub enum Token<'input> {
     #[regex(r"\\\*[^*]*\*\\")]
     BlockComment,
 
-    /// Line comment: \ ...
+    /// Line comment: \ ... (a lone `\` before a newline is an empty comment)
     #[regex(r"\\[^\n*][^\n]*", allow_greedy = true)]
+    #[token("\\")]
     LineComment,
 
     // === Identifiers ===
     /// Variable/constraint name identifier
-    /// Allowed characters: alphanumeric and !#$%&()_,.;?@\{}~'[]
-    #[regex(r"[a-zA-Z_!#$%&(),.;?@\\{}~'\[\]]([a-zA-Z0-9_!#$%&(),.;?@\\{}~'|>\[\]]|-[a-zA-Z0-9_!#$%&(),.;?@\\{}~'|>\[\]])*", |lex| lex.slice(), priority = 5)]
+    /// Allowed characters: alphanumeric and !#$%&()_,.;?@{}~'[]
+    /// (`\` is excluded: per the CPLEX spec it starts a comment anywhere on a line)
+    #[regex(r"[a-zA-Z_!#$%&(),.;?@{}~'\[\]]([a-zA-Z0-9_!#$%&(),.;?@{}~'|>\[\]]|-[a-zA-Z0-9_!#$%&(),.;?@{}~'|>\[\]])*", |lex| lex.slice(), priority = 5)]
     Identifier(&'input str),
 }
 
@@ -455,7 +437,9 @@ mod tests {
     #[test]
     fn test_operators() {
         assert_eq!(tokenize("<="), vec![Token::Lte]);
+        assert_eq!(tokenize("=<"), vec![Token::Lte]);
         assert_eq!(tokenize(">="), vec![Token::Gte]);
+        assert_eq!(tokenize("=>"), vec![Token::Gte]);
         assert_eq!(tokenize("<"), vec![Token::Lt]);
         assert_eq!(tokenize(">"), vec![Token::Gt]);
         assert_eq!(tokenize("="), vec![Token::Eq]);
@@ -667,10 +651,13 @@ mod tests {
     }
 
     #[test]
-    fn test_backslash_is_identifier() {
-        // Standalone `\` matches the identifier regex (backslash is in the allowed set)
+    fn test_backslash_starts_comment() {
+        // Per the CPLEX spec, `\` starts a comment anywhere on a line
         let tokens = tokenize_raw("\\");
-        assert_eq!(tokens, vec![Some(Token::Identifier("\\"))]);
+        assert_eq!(tokens, vec![Some(Token::LineComment)]);
+
+        // Glued to an identifier: the identifier ends and the comment swallows the rest
+        assert_eq!(tokenize("x\\y + z"), vec![Token::Identifier("x")]);
     }
 
     #[test]

@@ -27,16 +27,28 @@ fn row_coefficients<'input>(columns: &ColumnsState<'input>, row_name: &'input st
 /// Build objective(s) from the parsed MPS data.
 ///
 /// Produces one `RawObjective` per N-row, supporting multi-objective MPS files.
-pub(super) fn build_objectives<'input>(objective_rows: &[&'input str], columns: &ColumnsState<'input>) -> Vec<RawObjective<'input>> {
+/// An RHS entry on an objective row is the negated objective constant, per the
+/// CPLEX MPS specification.
+pub(super) fn build_objectives<'input>(
+    objective_rows: &[&'input str],
+    columns: &ColumnsState<'input>,
+    rhs_values: &FxHashMap<&'input str, f64>,
+) -> Vec<RawObjective<'input>> {
     debug_assert!(objective_rows.iter().all(|r| !r.is_empty()), "objective_rows must not contain empty row names");
 
     if objective_rows.is_empty() {
-        return vec![RawObjective { name: Cow::Borrowed("__obj__"), coefficients: Vec::new(), byte_offset: None }];
+        return vec![RawObjective { name: Cow::Borrowed("__obj__"), coefficients: Vec::new(), constant: 0.0, byte_offset: None }];
     }
 
     let mut objectives = Vec::with_capacity(objective_rows.len());
     for &obj_row in objective_rows {
-        objectives.push(RawObjective { name: Cow::Borrowed(obj_row), coefficients: row_coefficients(columns, obj_row), byte_offset: None });
+        let constant = rhs_values.get(obj_row).map_or(0.0, |&rhs| -rhs);
+        objectives.push(RawObjective {
+            name: Cow::Borrowed(obj_row),
+            coefficients: row_coefficients(columns, obj_row),
+            constant,
+            byte_offset: None,
+        });
     }
 
     debug_assert!(objectives.len() == objective_rows.len(), "should produce one objective per N-row");
@@ -129,8 +141,10 @@ pub(super) fn build_constraints<'input>(
 ///
 /// Applies MPS default bounds: variables without explicit BOUNDS entries get
 /// `[0, +inf]`. Integer variables (INTORG/INTEND) without explicit bounds get
-/// `[0, 1]`. When an UP bound is negative with no explicit LO, the lower
-/// bound is set to `-inf` per CPLEX spec.
+/// `[0, 1]` per the CPLEX MPS spec (note: Gurobi defaults these to
+/// `[0, +inf)` instead -- a documented dialect divergence). When an UP bound
+/// is negative with no explicit LO, the lower bound is set to `-inf` per
+/// CPLEX spec.
 // Binary detection compares bounds strictly against the sentinel values 0/1
 // written in the MPS text; an epsilon comparison would misclassify variables.
 #[allow(clippy::float_cmp)]

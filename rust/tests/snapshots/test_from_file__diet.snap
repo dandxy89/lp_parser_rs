@@ -25,6 +25,7 @@ objectives:
         value: 0.34
       - name: Hotdog
         value: 0.31
+    constant: 0
 constraints:
   - type: Standard
     name: c1

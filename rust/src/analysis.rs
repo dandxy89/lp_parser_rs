@@ -1110,7 +1110,12 @@ mod tests {
         let mut problem = LpProblem::new();
         let obj_id = problem.intern("obj");
         let x_id = problem.intern("x");
-        problem.add_objective(Objective { name: obj_id, coefficients: vec![Coefficient { name: x_id, value: 1.0 }], byte_offset: None });
+        problem.add_objective(Objective {
+            name: obj_id,
+            coefficients: vec![Coefficient { name: x_id, value: 1.0 }],
+            constant: 0.0,
+            byte_offset: None,
+        });
         add_standard_constraint(&mut problem, "c1", &["x"], ComparisonOp::GTE, 1.0);
         // `unused` is declared (as if via Bounds) but referenced nowhere.
         let unused_id = problem.intern("unused");

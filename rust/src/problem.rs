@@ -160,6 +160,7 @@ fn intern_objective(interner: &mut NameInterner, raw: &RawObjective<'_>) -> Obje
     Objective {
         name: interner.intern(&raw.name),
         coefficients: intern_coefficients(interner, &raw.coefficients),
+        constant: raw.constant,
         byte_offset: raw.byte_offset,
     }
 }
@@ -743,6 +744,9 @@ mod serde_support {
     struct SerdeObjective {
         name: String,
         coefficients: Vec<SerdeCoefficient>,
+        // Default keeps pre-constant serialised problems deserialisable.
+        #[serde(default)]
+        constant: f64,
     }
 
     #[derive(Serialize, Deserialize)]
@@ -788,6 +792,7 @@ mod serde_support {
                     .map(|obj| SerdeObjective {
                         name: self.interner.resolve(obj.name).to_string(),
                         coefficients: coeffs_to_serde(&obj.coefficients, &self.interner),
+                        constant: obj.constant,
                     })
                     .collect(),
                 constraints: self
@@ -827,8 +832,12 @@ mod serde_support {
                 .iter()
                 .map(|so| {
                     let name_id = interner.intern(&so.name);
-                    let obj =
-                        Objective { name: name_id, coefficients: coeffs_from_serde(&so.coefficients, &mut interner), byte_offset: None };
+                    let obj = Objective {
+                        name: name_id,
+                        coefficients: coeffs_from_serde(&so.coefficients, &mut interner),
+                        constant: so.constant,
+                        byte_offset: None,
+                    };
                     (name_id, obj)
                 })
                 .collect();
@@ -891,7 +900,7 @@ impl Display for LpProblem {
 /// Convert a [`ParseResult`] into an [`LpProblem`], interning all names and
 /// building the full model. Shared by both LP and MPS parse paths.
 fn from_parse_result(parsed: ParseResult<'_>, problem_name: Option<String>) -> LpProblem {
-    debug_assert!(!parsed.objectives.is_empty() || !parsed.constraints.is_empty(), "parse result should have objectives or constraints");
+    // An empty objective section with no constraints is degenerate but valid LP.
     debug_assert!(parsed.objectives.iter().all(|o| !o.name.is_empty()), "all objectives must have non-empty names");
 
     // Double the constraint count as a heuristic: one entry for the constraint
@@ -1199,7 +1208,12 @@ End";
 
         // Add objective
         let obj1 = problem.intern("obj1");
-        problem.add_objective(Objective { name: obj1, coefficients: vec![Coefficient { name: x3, value: 1.0 }], byte_offset: None });
+        problem.add_objective(Objective {
+            name: obj1,
+            coefficients: vec![Coefficient { name: x3, value: 1.0 }],
+            constant: 0.0,
+            byte_offset: None,
+        });
         assert_eq!(problem.objective_count(), 1);
         assert_eq!(problem.variable_count(), 3);
 
@@ -1327,12 +1341,18 @@ End";
             "   \n\t  ",
             "invalid_sense\nx1\nsubject to\nend",
             "minimize\nend",
-            "minimize\nsubject to\nx1 <= 1\nend",
             "minimize\nx1\nsubject",
+            "minimize\nx1 x2\nsubject to\nend",
+            "minimize\nx1\nsubject to\nx1 <= x2\nend",
+            "minimize\nx1\nsubject to\nx1 2 <= 1\nend",
         ];
         for input in invalid {
             assert!(LpProblem::parse(input).is_err(), "Should fail: {input}");
         }
+
+        // An empty objective is valid per the CPLEX spec.
+        let p = LpProblem::parse("minimize\nsubject to\nx1 <= 1\nend").unwrap();
+        assert_eq!((p.objective_count(), p.constraint_count()), (0, 1));
     }
 
     #[test]
@@ -1423,6 +1443,96 @@ End";
         assert_eq!(p.variables[&x1].var_type, VariableType::UpperBound(5.0));
     }
 
+    // Parsed values round-trip bit-exactly from source text.
+    #[allow(clippy::float_cmp)]
+    #[test]
+    fn test_objective_constant() {
+        // Trailing constant term (CPLEX: the objective may include a constant).
+        let p = LpProblem::parse("minimize\nobj: x + 2 y + 10\nsubject to\nc1: x >= 1\nend").unwrap();
+        let obj = p.objectives.values().next().unwrap();
+        assert_eq!(obj.constant, 10.0);
+        assert_eq!(obj.coefficients.len(), 2);
+
+        // A trailing constant followed by another named objective binds as a
+        // constant, not as a coefficient of the next objective's name.
+        let p = LpProblem::parse("minimize\nobj1: x + 5\nobj2: y\nsubject to\nc1: x >= 1\nend").unwrap();
+        let objs: Vec<_> = p.objectives.values().collect();
+        assert_eq!(objs.len(), 2);
+        assert_eq!(objs[0].constant, 5.0);
+        assert_eq!(objs[0].coefficients.len(), 1);
+        assert_eq!(objs[1].constant, 0.0);
+        assert_eq!(objs[1].coefficients.len(), 1);
+    }
+
+    #[test]
+    fn test_empty_objective() {
+        // CPLEX permits an empty objective function, named or not.
+        let p = LpProblem::parse("minimize\nsubject to\nc1: x + y >= 1\nend").unwrap();
+        assert_eq!(p.objective_count(), 0);
+        let p = LpProblem::parse("minimize\nobj:\nsubject to\nc1: x + y >= 1\nend").unwrap();
+        assert_eq!(p.objective_count(), 1);
+        assert!(p.objectives.values().next().unwrap().coefficients.is_empty());
+    }
+
+    // Parsed values round-trip bit-exactly from source text.
+    #[allow(clippy::float_cmp)]
+    #[test]
+    fn test_constraint_lhs_constant_folds_into_rhs() {
+        let p = LpProblem::parse("minimize\nobj: x\nsubject to\nc1: x + 2 <= 10\nend").unwrap();
+        let c1 = p.name_id("c1").unwrap();
+        let Constraint::Standard { rhs, .. } = &p.constraints[&c1] else { panic!("expected standard constraint") };
+        assert_eq!(*rhs, 8.0);
+    }
+
+    #[test]
+    fn test_eq_prefixed_operators() {
+        // CPLEX accepts `=<` and `=>` as synonyms of `<=` and `>=`.
+        let p = LpProblem::parse("minimize\nobj: x\nsubject to\nc1: x =< 10\nc2: x => 1\nend").unwrap();
+        let c1 = p.name_id("c1").unwrap();
+        let c2 = p.name_id("c2").unwrap();
+        let Constraint::Standard { operator, .. } = &p.constraints[&c1] else { panic!("expected standard constraint") };
+        assert_eq!(*operator, ComparisonOp::LTE);
+        let Constraint::Standard { operator, .. } = &p.constraints[&c2] else { panic!("expected standard constraint") };
+        assert_eq!(*operator, ComparisonOp::GTE);
+    }
+
+    // Parsed values round-trip bit-exactly from source text.
+    #[allow(clippy::float_cmp)]
+    #[test]
+    fn test_ranged_and_flipped_constraints() {
+        // `lo <= expr <= hi` expands into two constraints, like MPS RANGES.
+        let p = LpProblem::parse("minimize\nobj: x + y\nsubject to\nc1: -2 <= x + y <= 10\nend").unwrap();
+        assert_eq!(p.constraint_count(), 2);
+        let lower = p.name_id("c1").unwrap();
+        let upper = p.name_id("c1_rng").unwrap();
+        let Constraint::Standard { operator, rhs, .. } = &p.constraints[&lower] else { panic!("expected standard constraint") };
+        assert_eq!((*operator, *rhs), (ComparisonOp::GTE, -2.0));
+        let Constraint::Standard { operator, rhs, .. } = &p.constraints[&upper] else { panic!("expected standard constraint") };
+        assert_eq!((*operator, *rhs), (ComparisonOp::LTE, 10.0));
+
+        // Reversed range: `hi >= expr >= lo`.
+        let p = LpProblem::parse("minimize\nobj: x\nsubject to\nc1: 10 >= x >= 2\nend").unwrap();
+        assert_eq!(p.constraint_count(), 2);
+
+        // Flipped single constraint: `10 >= x` normalises to `x <= 10`.
+        let p = LpProblem::parse("minimize\nobj: x\nsubject to\nc1: 10 >= x\nend").unwrap();
+        let c1 = p.name_id("c1").unwrap();
+        let Constraint::Standard { operator, rhs, .. } = &p.constraints[&c1] else { panic!("expected standard constraint") };
+        assert_eq!((*operator, *rhs), (ComparisonOp::LTE, 10.0));
+
+        // A flipped/ranged entry must not swallow the following constraint.
+        let p = LpProblem::parse("minimize\nobj: x\nsubject to\nc1: x <= 10\ny + z >= 3\nend").unwrap();
+        assert_eq!(p.constraint_count(), 2);
+    }
+
+    #[test]
+    fn test_backslash_comment_inside_token_stream() {
+        // Per CPLEX, `\` starts a comment anywhere on a line, even glued to a name.
+        let p = LpProblem::parse("minimize\nobj: x\\y + z\nsubject to\nc1: x >= 1\nend").unwrap();
+        assert!(p.name_id("x").is_some());
+        assert!(p.name_id("x\\y").is_none());
+    }
+
     // Parsed RHS values round-trip bit-exactly from source text.
     #[allow(clippy::float_cmp)]
     #[test]
@@ -1439,6 +1549,23 @@ End";
             panic!("expected standard constraint");
         };
         assert_eq!(*operator, ComparisonOp::GT);
+    }
+
+    #[test]
+    fn test_strict_and_reversed_bounds() {
+        // Strict operators in single bounds are synonyms of `<=` / `>=`.
+        let p = LpProblem::parse("minimize\nx1\nsubject to\nc1: x1 >= 0\nbounds\nx1 < 5\nend").unwrap();
+        let x1 = p.name_id("x1").unwrap();
+        assert_eq!(p.variables[&x1].var_type, VariableType::UpperBound(5.0));
+
+        let p = LpProblem::parse("minimize\nx1\nsubject to\nc1: x1 <= 9\nbounds\nx1 > 1\nend").unwrap();
+        let x1 = p.name_id("x1").unwrap();
+        assert_eq!(p.variables[&x1].var_type, VariableType::LowerBound(1.0));
+
+        // Reversed double bound: `10 >= x1 >= 0`.
+        let p = LpProblem::parse("minimize\nx1\nsubject to\nc1: x1 >= 0\nbounds\n10 >= x1 >= 0\nend").unwrap();
+        let x1 = p.name_id("x1").unwrap();
+        assert_eq!(p.variables[&x1].var_type, VariableType::DoubleBound(0.0, 10.0));
     }
 
     #[test]
@@ -1575,6 +1702,7 @@ mod modification_tests {
         problem.add_objective(Objective {
             name: obj1,
             coefficients: vec![Coefficient { name: x1, value: 2.0 }, Coefficient { name: x2, value: 3.0 }],
+            constant: 0.0,
             byte_offset: None,
         });
         problem.add_constraint(Constraint::Standard {

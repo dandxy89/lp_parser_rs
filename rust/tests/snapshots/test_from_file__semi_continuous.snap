@@ -10,6 +10,7 @@ objectives:
         value: 1
       - name: b_5880854_x2
         value: 1
+    constant: 0
 constraints:
   - type: Standard
     name: C1

@@ -8,6 +8,12 @@ use crate::error::{LpParseError, LpResult};
 use crate::lexer::{RawCoefficient, RawConstraint};
 use crate::model::SOSType;
 
+/// Iterate the whitespace-separated fields of an MPS data line, honouring `$`
+/// inline comments (a `$`-prefixed field truncates the rest of the line).
+fn data_fields(line: &str) -> impl Iterator<Item = &str> {
+    line.split_whitespace().take_while(|f| !f.starts_with('$'))
+}
+
 /// Parse a single ROWS data line.
 pub(super) fn parse_rows_line<'input>(
     line: &'input str,
@@ -41,6 +47,12 @@ pub(super) fn parse_rows_line<'input>(
 
     let row_name = fields[1];
 
+    // The MPS spec requires row names to be unique; a silent overwrite would
+    // change the meaning of the model.
+    if row_types.insert(row_name, row_type).is_some() {
+        return Err(LpParseError::parse_error(line_num, format!("Duplicate row name: '{row_name}'")));
+    }
+
     if row_type == RowType::N {
         if fields.len() > 2 {
             eprintln!(
@@ -52,8 +64,6 @@ pub(super) fn parse_rows_line<'input>(
     } else {
         row_order.push(row_name);
     }
-
-    row_types.insert(row_name, row_type);
 
     Ok(())
 }
@@ -69,7 +79,7 @@ pub(super) struct ColumnsState<'input> {
     /// probing every (row, column) combination.
     pub(super) row_entries: FxHashMap<&'input str, Vec<(u32, &'input str)>>,
     pub(super) column_order: Vec<&'input str>,
-    column_index: FxHashMap<&'input str, u32>,
+    pub(super) column_index: FxHashMap<&'input str, u32>,
     pub(super) in_integer_block: bool,
     pub(super) integer_vars: Vec<&'input str>,
     pub(super) integer_vars_set: FxHashSet<&'input str>,
@@ -77,6 +87,10 @@ pub(super) struct ColumnsState<'input> {
 
 impl<'input> ColumnsState<'input> {
     /// Parse a single COLUMNS data line.
+    ///
+    /// The strict MPS format allows at most two (row, value) pairs per line,
+    /// but free-format writers emit more; all pairs are parsed. A trailing row
+    /// name without a value is an error rather than silent data loss.
     pub(super) fn parse_line(
         &mut self,
         line: &'input str,
@@ -87,31 +101,35 @@ impl<'input> ColumnsState<'input> {
         debug_assert!(!line.is_empty(), "ColumnsState::parse_line called with empty line");
         debug_assert!(line_num > 0, "line_num must be 1-based");
 
-        let (buf, len) = split_fields(line);
-        let fields = &buf[..len];
-        if fields.is_empty() {
+        let mut fields = data_fields(line);
+        let Some(var_name) = fields.next() else {
+            // A data line consisting solely of a `$` inline comment yields no fields.
             return Ok(());
-        }
+        };
+        let second = fields.next();
 
         // Check for MARKER lines (integer block markers)
-        if fields.len() >= 3 && fields[1] == "'MARKER'" {
-            let marker_type = fields[2].trim_matches('\'');
-            match marker_type {
-                "INTORG" => self.in_integer_block = true,
-                "INTEND" => self.in_integer_block = false,
-                other => {
+        if second == Some("'MARKER'") {
+            match fields.next().map(|f| f.trim_matches('\'')) {
+                Some("INTORG") => self.in_integer_block = true,
+                Some("INTEND") => self.in_integer_block = false,
+                Some(other) => {
                     return Err(LpParseError::parse_error(line_num, format!("Unknown MARKER type: '{other}'")));
+                }
+                None => {
+                    return Err(LpParseError::parse_error(line_num, "MARKER line is missing its INTORG/INTEND field"));
                 }
             }
             return Ok(());
         }
 
-        // Normal data line: var_name row_name value [row_name value]
-        if fields.len() < 3 {
-            return Err(LpParseError::parse_error(line_num, format!("COLUMNS data line requires at least 3 fields, got {}", fields.len())));
-        }
-
-        let var_name = fields[0];
+        // Normal data line: var_name (row_name value)+
+        let (Some(first_row), Some(first_value)) = (second, fields.next()) else {
+            return Err(LpParseError::parse_error(
+                line_num,
+                "COLUMNS data line requires a variable name and at least one (row, value) pair",
+            ));
+        };
 
         // Track column order
         if let Entry::Vacant(entry) = self.column_index.entry(var_name) {
@@ -126,12 +144,12 @@ impl<'input> ColumnsState<'input> {
             self.integer_vars.push(var_name);
         }
 
-        // Parse first (row_name, value) pair
-        self.parse_entry(fields[1], fields[2], var_name, line_num, row_types, objective_rows)?;
-
-        // Parse optional second (row_name, value) pair
-        if fields.len() >= 5 {
-            self.parse_entry(fields[3], fields[4], var_name, line_num, row_types, objective_rows)?;
+        self.parse_entry(first_row, first_value, var_name, line_num, row_types, objective_rows)?;
+        while let Some(row_name) = fields.next() {
+            let Some(value) = fields.next() else {
+                return Err(LpParseError::parse_error(line_num, format!("COLUMNS row '{row_name}' has no value field")));
+            };
+            self.parse_entry(row_name, value, var_name, line_num, row_types, objective_rows)?;
         }
 
         Ok(())
@@ -173,7 +191,9 @@ impl<'input> ColumnsState<'input> {
 /// Parse a single RHS data line.
 ///
 /// Only the first RHS vector is used; subsequent vectors with different labels
-/// are silently skipped per the CPLEX spec.
+/// are silently skipped per the CPLEX spec. The vector label may be omitted
+/// (it is a blank field in fixed-format files): when the first field names a
+/// known row, the whole line is read as (row, value) pairs.
 pub(super) fn parse_rhs_line<'input>(
     line: &'input str,
     line_num: usize,
@@ -185,27 +205,34 @@ pub(super) fn parse_rhs_line<'input>(
     debug_assert!(!line.is_empty(), "parse_rhs_line called with empty line");
     debug_assert!(line_num > 0, "line_num must be 1-based");
 
-    let (buf, len) = split_fields(line);
-    let fields = &buf[..len];
-    if fields.is_empty() {
+    let mut fields = data_fields(line);
+    let Some(first) = fields.next() else {
         // A data line consisting solely of a `$` inline comment yields no fields.
         return Ok(());
-    }
-    if fields.len() < 3 {
-        return Err(LpParseError::parse_error(line_num, format!("RHS data line requires at least 3 fields, got {}", fields.len())));
-    }
+    };
 
-    let label = fields[0];
+    // A vector label that collides with a row name is misread as label-less
+    // here, but the following field then fails to parse as a value, so the
+    // mistake is loud rather than silent.
+    let is_row = row_types.contains_key(first) || objective_rows.contains(&first);
+    let (label, mut pending_row) = if is_row { ("", Some(first)) } else { (first, None) };
+
     match *first_vector_label {
         None => *first_vector_label = Some(label),
-        Some(first) if first != label => return Ok(()),
+        Some(seen) if seen != label => return Ok(()),
         _ => {}
     }
 
-    parse_rhs_entry(fields[1], fields[2], line_num, row_types, objective_rows, rhs_values)?;
-
-    if fields.len() >= 5 {
-        parse_rhs_entry(fields[3], fields[4], line_num, row_types, objective_rows, rhs_values)?;
+    let mut pairs = 0usize;
+    while let Some(row_name) = pending_row.take().or_else(|| fields.next()) {
+        let Some(value) = fields.next() else {
+            return Err(LpParseError::parse_error(line_num, format!("RHS row '{row_name}' has no value field")));
+        };
+        parse_rhs_entry(row_name, value, line_num, row_types, objective_rows, rhs_values)?;
+        pairs += 1;
+    }
+    if pairs == 0 {
+        return Err(LpParseError::parse_error(line_num, "RHS data line requires at least one (row, value) pair"));
     }
 
     Ok(())
@@ -237,7 +264,8 @@ fn parse_rhs_entry<'input>(
 /// Parse a single RANGES data line.
 ///
 /// Only the first RANGES vector is used; subsequent vectors with different
-/// labels are silently skipped per the CPLEX spec.
+/// labels are silently skipped per the CPLEX spec. As with RHS, the vector
+/// label may be omitted when the first field names a known row.
 pub(super) fn parse_ranges_line<'input>(
     line: &'input str,
     line_num: usize,
@@ -248,27 +276,31 @@ pub(super) fn parse_ranges_line<'input>(
     debug_assert!(!line.is_empty(), "parse_ranges_line called with empty line");
     debug_assert!(line_num > 0, "line_num must be 1-based");
 
-    let (buf, len) = split_fields(line);
-    let fields = &buf[..len];
-    if fields.is_empty() {
+    let mut fields = data_fields(line);
+    let Some(first) = fields.next() else {
         // A data line consisting solely of a `$` inline comment yields no fields.
         return Ok(());
-    }
-    if fields.len() < 3 {
-        return Err(LpParseError::parse_error(line_num, format!("RANGES data line requires at least 3 fields, got {}", fields.len())));
-    }
+    };
 
-    let label = fields[0];
+    let is_row = row_types.contains_key(first);
+    let (label, mut pending_row) = if is_row { ("", Some(first)) } else { (first, None) };
+
     match *first_vector_label {
         None => *first_vector_label = Some(label),
-        Some(first) if first != label => return Ok(()),
+        Some(seen) if seen != label => return Ok(()),
         _ => {}
     }
 
-    parse_range_entry(fields[1], fields[2], line_num, row_types, range_values)?;
-
-    if fields.len() >= 5 {
-        parse_range_entry(fields[3], fields[4], line_num, row_types, range_values)?;
+    let mut pairs = 0usize;
+    while let Some(row_name) = pending_row.take().or_else(|| fields.next()) {
+        let Some(value) = fields.next() else {
+            return Err(LpParseError::parse_error(line_num, format!("RANGES row '{row_name}' has no value field")));
+        };
+        parse_range_entry(row_name, value, line_num, row_types, range_values)?;
+        pairs += 1;
+    }
+    if pairs == 0 {
+        return Err(LpParseError::parse_error(line_num, "RANGES data line requires at least one (row, value) pair"));
     }
 
     Ok(())
@@ -285,8 +317,14 @@ fn parse_range_entry<'input>(
     debug_assert!(!row_name.is_empty(), "parse_range_entry called with empty row_name");
     debug_assert!(line_num > 0, "line_num must be 1-based");
 
-    if !row_types.contains_key(row_name) {
-        return Err(LpParseError::parse_error(line_num, format!("RANGES reference to undefined row: '{row_name}'")));
+    match row_types.get(row_name) {
+        None => {
+            return Err(LpParseError::parse_error(line_num, format!("RANGES reference to undefined row: '{row_name}'")));
+        }
+        Some(RowType::N) => {
+            return Err(LpParseError::parse_error(line_num, format!("RANGES entry on objective (N) row '{row_name}' is not allowed")));
+        }
+        Some(_) => {}
     }
 
     let value: f64 = value_str.parse().map_err(|_| LpParseError::invalid_number(value_str, line_num))?;
@@ -310,12 +348,15 @@ impl<'input> BoundsState<'input> {
     /// Parse a single BOUNDS data line.
     ///
     /// Only the first BOUNDS vector is used; subsequent vectors with different
-    /// labels are silently skipped per the CPLEX spec. Duplicate lower or upper
-    /// bounds on the same variable are rejected.
+    /// labels are silently skipped per the CPLEX spec. The vector label may be
+    /// omitted: when the field after the bound type names a known column, the
+    /// line is read as `TYPE var [value]`. Duplicate lower or upper bounds on
+    /// the same variable are rejected.
     pub(super) fn parse_line(
         &mut self,
         line: &'input str,
         line_num: usize,
+        columns: &FxHashMap<&str, u32>,
         integer_vars: &mut Vec<&'input str>,
         integer_vars_set: &mut FxHashSet<&'input str>,
         first_vector_label: &mut Option<&'input str>,
@@ -329,17 +370,22 @@ impl<'input> BoundsState<'input> {
             // A data line consisting solely of a `$` inline comment yields no fields.
             return Ok(());
         }
-        if fields.len() < 3 {
-            return Err(LpParseError::parse_error(line_num, format!("BOUNDS line requires at least 3 fields, got {}", fields.len())));
+        if fields.len() < 2 {
+            return Err(LpParseError::parse_error(line_num, format!("BOUNDS line requires at least 2 fields, got {}", fields.len())));
         }
 
         let bound_type = fields[0];
-        let label = fields[1];
-        let var_name = fields[2];
+        // Label-less detection: a bound label that collides with a column name
+        // is misread as label-less, but such files are already ambiguous.
+        let label_less = columns.contains_key(fields[1]);
+        let (label, var_idx) = if label_less { ("", 1) } else { (fields[1], 2) };
+        let Some(&var_name) = fields.get(var_idx) else {
+            return Err(LpParseError::parse_error(line_num, "BOUNDS line requires a variable name"));
+        };
 
         match *first_vector_label {
             None => *first_vector_label = Some(label),
-            Some(first) if first != label => return Ok(()),
+            Some(seen) if seen != label => return Ok(()),
             _ => {}
         }
 
@@ -348,7 +394,7 @@ impl<'input> BoundsState<'input> {
             self.order.push(var_name);
         }
 
-        self.apply_bound(bound_type, var_name, fields, line_num, integer_vars, integer_vars_set)
+        self.apply_bound(bound_type, var_name, fields.get(var_idx + 1).copied(), line_num, integer_vars, integer_vars_set)
     }
 
     /// Apply a single bound directive to the accumulator for `var_name`.
@@ -356,7 +402,7 @@ impl<'input> BoundsState<'input> {
         &mut self,
         bound_type: &str,
         var_name: &'input str,
-        fields: &[&'input str],
+        value_field: Option<&'input str>,
         line_num: usize,
         integer_vars: &mut Vec<&'input str>,
         integer_vars_set: &mut FxHashSet<&'input str>,
@@ -373,7 +419,7 @@ impl<'input> BoundsState<'input> {
                     let label = if upper == "LI" { "(LI) " } else { "" };
                     return Err(LpParseError::invalid_bounds(var_name, format!("duplicate lower bound {label}at line {line_num}")));
                 }
-                let value = parse_bound_value(fields.get(3), line_num, bound_type)?;
+                let value = parse_bound_value(value_field, line_num, bound_type)?;
                 accumulator.lower = Some(value);
                 if upper == "LI" && integer_vars_set.insert(var_name) {
                     integer_vars.push(var_name);
@@ -384,7 +430,7 @@ impl<'input> BoundsState<'input> {
                     let label = if upper == "UI" { "(UI) " } else { "" };
                     return Err(LpParseError::invalid_bounds(var_name, format!("duplicate upper bound {label}at line {line_num}")));
                 }
-                let value = parse_bound_value(fields.get(3), line_num, bound_type)?;
+                let value = parse_bound_value(value_field, line_num, bound_type)?;
                 accumulator.upper = Some(value);
                 if upper == "UI" && integer_vars_set.insert(var_name) {
                     integer_vars.push(var_name);
@@ -394,7 +440,7 @@ impl<'input> BoundsState<'input> {
                 if accumulator.fixed.is_some() {
                     return Err(LpParseError::invalid_bounds(var_name, format!("duplicate fixed bound at line {line_num}")));
                 }
-                let value = parse_bound_value(fields.get(3), line_num, bound_type)?;
+                let value = parse_bound_value(value_field, line_num, bound_type)?;
                 accumulator.fixed = Some(value);
             }
             "FR" => {
@@ -417,7 +463,7 @@ impl<'input> BoundsState<'input> {
                 self.binary_vars.push(var_name);
             }
             "SC" => {
-                let value = parse_bound_value(fields.get(3), line_num, bound_type)?;
+                let value = parse_bound_value(value_field, line_num, bound_type)?;
                 // Semi-continuity is represented by `VariableType::SemiContinuous`,
                 // which carries no bound value: recording the SC upper bound in the
                 // accumulator would resolve the variable to `UpperBound` instead and
@@ -432,7 +478,7 @@ impl<'input> BoundsState<'input> {
             "SI" => {
                 // Semi-integer: the model has no semi-integer type, so the closest
                 // representation is an integer variable with the given upper bound.
-                let value = parse_bound_value(fields.get(3), line_num, bound_type)?;
+                let value = parse_bound_value(value_field, line_num, bound_type)?;
                 accumulator.upper = Some(value);
                 if integer_vars_set.insert(var_name) {
                     integer_vars.push(var_name);
@@ -448,13 +494,13 @@ impl<'input> BoundsState<'input> {
 }
 
 /// Parse the value field from a BOUNDS line.
-fn parse_bound_value(field: Option<&&str>, line_num: usize, bound_type: &str) -> LpResult<f64> {
+fn parse_bound_value(field: Option<&str>, line_num: usize, bound_type: &str) -> LpResult<f64> {
     debug_assert!(line_num > 0, "line_num must be 1-based");
     debug_assert!(!bound_type.is_empty(), "parse_bound_value called with empty bound_type");
 
     let value_str = field.ok_or_else(|| LpParseError::parse_error(line_num, format!("Bound type '{bound_type}' requires a value")))?;
 
-    value_str.parse().map_err(|_| LpParseError::invalid_number(*value_str, line_num))
+    value_str.parse().map_err(|_| LpParseError::invalid_number(value_str, line_num))
 }
 
 /// Parse a single SOS data line.

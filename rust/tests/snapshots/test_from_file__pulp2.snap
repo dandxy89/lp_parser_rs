@@ -27,6 +27,7 @@ objectives:
         value: -0.333333333333
       - name: x_9_5_9
         value: -0.333333333333
+    constant: 0
 constraints:
   - type: Standard
     name: c1_0_0_0

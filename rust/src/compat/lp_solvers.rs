@@ -385,8 +385,10 @@ mod tests {
         let obj_id = p.intern("obj");
         let x_id = p.intern("x");
         let c1_id = p.intern("c1");
-        p.objectives
-            .insert(obj_id, Objective { name: obj_id, coefficients: vec![Coefficient { name: x_id, value: 2.0 }], byte_offset: None });
+        p.objectives.insert(
+            obj_id,
+            Objective { name: obj_id, coefficients: vec![Coefficient { name: x_id, value: 2.0 }], constant: 0.0, byte_offset: None },
+        );
         p.constraints.insert(
             c1_id,
             Constraint::Standard {
@@ -423,7 +425,7 @@ mod tests {
         // Multiple objectives
         let mut p = simple_problem();
         let obj2_id = p.intern("obj2");
-        p.objectives.insert(obj2_id, Objective { name: obj2_id, coefficients: vec![], byte_offset: None });
+        p.objectives.insert(obj2_id, Objective { name: obj2_id, coefficients: vec![], constant: 0.0, byte_offset: None });
         assert!(matches!(LpSolversCompat::try_new(&p), Err(LpSolversCompatError::MultipleObjectives { count: 2 })));
 
         // Strict inequalities

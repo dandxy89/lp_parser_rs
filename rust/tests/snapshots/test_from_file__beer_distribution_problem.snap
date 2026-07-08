@@ -27,6 +27,7 @@ objectives:
         value: 2
       - name: Route_B_5
         value: 3
+    constant: 0
 constraints:
   - type: Standard
     name: Sum_of_Products_into_Bar1

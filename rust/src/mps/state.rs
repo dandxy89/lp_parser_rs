@@ -165,6 +165,7 @@ impl<'input> MpsParseState<'input> {
                 self.bounds_state.parse_line(
                     line,
                     line_num,
+                    &self.columns.column_index,
                     &mut self.columns.integer_vars,
                     &mut self.columns.integer_vars_set,
                     &mut self.bounds_vector_label,
@@ -201,23 +202,13 @@ impl<'input> MpsParseState<'input> {
             return Err(LpParseError::missing_section("COLUMNS"));
         }
 
-        // Warn about objective constant (RHS on N-row)
-        for &obj_row in &self.objective_rows {
-            if let Some(&value) = self.rhs_values.get(obj_row) {
-                eprintln!(
-                    "RHS value {value} on objective row '{obj_row}' represents an objective \
-                     constant, which is not supported by the model and will be ignored"
-                );
-            }
-        }
-
         // Sort each row's entries by column index so builders emit
         // coefficients in column order, matching the original file layout.
         for entries in self.columns.row_entries.values_mut() {
             entries.sort_unstable_by_key(|&(col_idx, _)| col_idx);
         }
 
-        let objectives = build_objectives(&self.objective_rows, &self.columns);
+        let objectives = build_objectives(&self.objective_rows, &self.columns, &self.rhs_values);
         let constraints = build_constraints(&self.row_types, &self.row_order, &self.columns, &self.rhs_values, &self.range_values);
         let bounds = build_bounds(
             &self.bounds_state.accumulators,

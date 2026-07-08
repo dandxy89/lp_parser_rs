@@ -2059,6 +2059,7 @@ objectives:
         value: 9.5
       - name: R0100627
         value: 9.5
+    constant: 0
 constraints:
   - type: Standard
     name: CONSTANT

@@ -17,6 +17,7 @@ objectives:
         value: 0.08757
       - name: QPB73RBW
         value: 0.08757
+    constant: 0
 constraints:
   - type: Standard
     name: B3E...BW

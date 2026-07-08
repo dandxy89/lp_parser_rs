@@ -11,6 +11,7 @@ objectives:
         value: 1
       - name: sdfdf5343
         value: 1
+    constant: 0
 constraints:
   - type: Standard
     name: c1

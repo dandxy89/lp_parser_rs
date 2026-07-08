@@ -293,6 +293,7 @@ objectives:
         value: 0.72047
       - name: N1201AC4
         value: 0.5698
+    constant: 0
 constraints:
   - type: Standard
     name: ACMILES

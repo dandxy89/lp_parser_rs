@@ -35,6 +35,7 @@ objectives:
         value: 0.35
       - name: "Route_('Youngstown',_'Kansas_City')"
         value: 0.45
+    constant: 0
 constraints:
   - type: Standard
     name: Steel_Flow_Conservation_in_Node_Albany

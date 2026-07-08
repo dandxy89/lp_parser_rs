@@ -47,6 +47,7 @@ objectives:
         value: 5
       - name: Route_San_Francisco_Tucson
         value: 2
+    constant: 0
 constraints:
   - type: Standard
     name: Sum_of_Products_into_Stores_Barstow

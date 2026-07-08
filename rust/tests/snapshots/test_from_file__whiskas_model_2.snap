@@ -19,6 +19,7 @@ objectives:
         value: 0.002
       - name: Ingr_WHEAT
         value: 0.005
+    constant: 0
 constraints:
   - type: Standard
     name: FatRequirement

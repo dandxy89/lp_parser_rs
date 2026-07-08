@@ -28,6 +28,7 @@ objectives:
         value: 0.2
       - name: Gen_001d01h11
         value: 0.2
+    constant: 0
 constraints:
   - type: Standard
     name: dummy_constraint

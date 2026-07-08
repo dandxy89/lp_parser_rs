@@ -31,6 +31,7 @@ objectives:
         value: 1000
       - name: x14
         value: 1000
+    constant: 0
 constraints:
   - type: Standard
     name: cons0

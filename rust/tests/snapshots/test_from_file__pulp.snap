@@ -9,6 +9,7 @@ objectives:
     coefficients:
       - name: PenaltyTree_48
         value: 1
+    constant: 0
 constraints:
   - type: Standard
     name: _C1

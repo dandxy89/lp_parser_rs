@@ -187,7 +187,12 @@ End
         // A name containing both a comma and a double quote must be quoted.
         let awkward_name = "x,\"1\"";
         let var_id = problem.intern(awkward_name);
-        problem.add_objective(Objective { name: obj_id, coefficients: vec![Coefficient { name: var_id, value: 1.0 }], byte_offset: None });
+        problem.add_objective(Objective {
+            name: obj_id,
+            coefficients: vec![Coefficient { name: var_id, value: 1.0 }],
+            constant: 0.0,
+            byte_offset: None,
+        });
 
         let dir = unique_temp_dir("quoting");
         problem.to_csv(&dir).expect("to_csv must succeed");

@@ -12,6 +12,7 @@ objectives:
         value: -3
       - name: z
         value: 4
+    constant: 0
 constraints:
   - type: Standard
     name: cons

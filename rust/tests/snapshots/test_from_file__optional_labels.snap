@@ -10,6 +10,7 @@ objectives:
         value: 1
       - name: y
         value: 10
+    constant: 0
 constraints:
   - type: Standard
     name: C1

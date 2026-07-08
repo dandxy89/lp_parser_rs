@@ -129,14 +129,24 @@ fn write_objectives_section(output: &mut String, problem: &LpProblem, options: &
 /// Write a single objective
 fn write_objective(output: &mut String, objective: &Objective, interner: &NameInterner, options: &LpWriterOptions) -> std::fmt::Result {
     let name = interner.resolve(objective.name);
-    if objective.coefficients.is_empty() {
-        // A dangling ` name: ` line is not valid LP syntax.
+    if objective.coefficients.is_empty() && objective.constant == 0.0 {
+        // CPLEX accepts an empty objective, but a bare ` name: ` line adds
+        // nothing; skip it and keep the historical warning.
         eprintln!("objective '{name}' has no coefficients and will be omitted from the LP output");
         return Ok(());
     }
     write!(output, " {name}: ")?;
 
     write_coefficients_line(output, &objective.coefficients, interner, options)?;
+
+    if objective.constant != 0.0 {
+        if objective.coefficients.is_empty() {
+            write_number(output, objective.constant, options.decimal_precision)?;
+        } else {
+            write!(output, " {} ", if objective.constant < 0.0 { "-" } else { "+" })?;
+            write_number(output, objective.constant.abs(), options.decimal_precision)?;
+        }
+    }
     writeln!(output)
 }
 
@@ -463,7 +473,12 @@ mod tests {
         let x1 = problem.intern("x1");
         let x2 = problem.intern("x2");
         let x3 = problem.intern("x3");
-        problem.add_objective(Objective { name: obj_id, coefficients: vec![Coefficient { name: x1, value: 1.0 }], byte_offset: None });
+        problem.add_objective(Objective {
+            name: obj_id,
+            coefficients: vec![Coefficient { name: x1, value: 1.0 }],
+            constant: 0.0,
+            byte_offset: None,
+        });
         let c1 = problem.intern("c1");
         problem.add_constraint(Constraint::Standard {
             name: c1,
@@ -499,8 +514,13 @@ mod tests {
         let x1 = problem.intern("x1");
         let c1 = problem.intern("c1");
         let empty_c = problem.intern("empty_c");
-        problem.add_objective(Objective { name: obj_id, coefficients: vec![Coefficient { name: x1, value: 1.0 }], byte_offset: None });
-        problem.add_objective(Objective { name: empty_obj_id, coefficients: vec![], byte_offset: None });
+        problem.add_objective(Objective {
+            name: obj_id,
+            coefficients: vec![Coefficient { name: x1, value: 1.0 }],
+            constant: 0.0,
+            byte_offset: None,
+        });
+        problem.add_objective(Objective { name: empty_obj_id, coefficients: vec![], constant: 0.0, byte_offset: None });
         problem.add_constraint(Constraint::Standard {
             name: c1,
             coefficients: vec![Coefficient { name: x1, value: 1.0 }],
@@ -550,6 +570,7 @@ mod tests {
         let objective = Objective {
             name: profit_id,
             coefficients: vec![Coefficient { name: x1_id, value: 3.0 }, Coefficient { name: x2_id, value: 2.0 }],
+            constant: 0.0,
             byte_offset: None,
         };
         problem.add_objective(objective);
@@ -663,6 +684,7 @@ End";
                 Coefficient { name: x2_id, value: 15.0 },
                 Coefficient { name: x3_id, value: 20.0 },
             ],
+            constant: 0.0,
             byte_offset: None,
         };
         problem.add_objective(objective);
@@ -847,7 +869,7 @@ End
                 Coefficient { name: id, value: f64::from(i + 1) * 1.5 }
             })
             .collect();
-        problem.add_objective(Objective { name: obj_id, coefficients, byte_offset: None });
+        problem.add_objective(Objective { name: obj_id, coefficients, constant: 0.0, byte_offset: None });
         let c1 = problem.intern("c1");
         let x0 = problem.name_id("very_long_variable_name_00").unwrap();
         problem.add_constraint(Constraint::Standard {
@@ -875,7 +897,12 @@ End
         let mut problem = LpProblem::new();
         let obj_id = problem.intern("obj");
         let x_id = problem.intern("x");
-        problem.add_objective(Objective { name: obj_id, coefficients: vec![Coefficient { name: x_id, value: 1.0 }], byte_offset: None });
+        problem.add_objective(Objective {
+            name: obj_id,
+            coefficients: vec![Coefficient { name: x_id, value: 1.0 }],
+            constant: 0.0,
+            byte_offset: None,
+        });
         let c1 = problem.intern("c1");
         problem.add_constraint(Constraint::Standard {
             name: c1,

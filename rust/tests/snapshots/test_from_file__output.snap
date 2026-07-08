@@ -17,6 +17,7 @@ objectives:
         value: 7
       - name: x4
         value: 4
+    constant: 0
 constraints:
   - type: Standard
     name: cons0

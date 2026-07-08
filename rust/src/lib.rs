@@ -41,6 +41,8 @@
 //! [`LpProblem::parse`] or [`LpProblem::parse_mps`].
 
 pub mod analysis;
+/// Assembly of flat LP section bodies into raw objectives/constraints.
+pub mod assemble;
 /// Compatibility adapters for external solver crates.
 pub mod compat;
 #[cfg(feature = "csv")]
@@ -77,6 +79,7 @@ pub use problem::LpProblem;
     clippy::cloned_instead_of_copied,
     clippy::cognitive_complexity,
     clippy::elidable_lifetime_names,
+    clippy::ignored_unit_patterns,
     clippy::match_same_arms,
     clippy::missing_const_for_fn,
     clippy::missing_errors_doc,

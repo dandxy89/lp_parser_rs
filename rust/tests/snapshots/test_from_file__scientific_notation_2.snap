@@ -10,6 +10,7 @@ objectives:
         value: 0.015
       - name: x2
         value: 3200
+    constant: 0
 constraints:
   - type: Standard
     name: c1

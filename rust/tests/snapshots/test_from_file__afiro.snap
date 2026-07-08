@@ -17,6 +17,7 @@ objectives:
         value: -0.48
       - name: X39
         value: 10
+    constant: 0
   - name: OBJ2
     coefficients:
       - name: X03
@@ -25,6 +26,7 @@ objectives:
         value: 2.5
       - name: X08
         value: -5
+    constant: 0
   - name: OBJ3
     coefficients:
       - name: X03
@@ -33,6 +35,7 @@ objectives:
         value: -2.5
       - name: X10
         value: 2.1
+    constant: 0
 constraints:
   - type: Standard
     name: R09

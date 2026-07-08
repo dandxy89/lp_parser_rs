@@ -767,6 +767,7 @@ objectives:
         value: 1.38382
       - name: N1051AC6
         value: 1.06688
+    constant: 0
 constraints:
   - type: Standard
     name: ACMILES
