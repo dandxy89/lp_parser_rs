@@ -366,7 +366,16 @@ fn write_coefficients_line(
 }
 
 /// Write a formatted coefficient directly to the output buffer, avoiding intermediate `String` allocation.
-fn write_formatted_coefficient(output: &mut String, name: &str, value: f64, is_first: bool, precision: usize) -> std::fmt::Result {
+///
+/// `pub(crate)` so the `lp-solvers` compat adapter ([`crate::compat::lp_solvers`])
+/// emits coefficients identically to the LP writer.
+pub(crate) fn write_formatted_coefficient(
+    output: &mut String,
+    name: &str,
+    value: f64,
+    is_first: bool,
+    precision: usize,
+) -> std::fmt::Result {
     debug_assert!(!name.is_empty(), "coefficient name must not be empty");
     debug_assert!(value.is_finite(), "coefficient value must be finite, got: {value}");
     let abs_value = value.abs();

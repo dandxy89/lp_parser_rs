@@ -1,5 +1,3 @@
-use std::io;
-
 use thiserror::Error;
 
 use crate::lexer::{LexerError, Token};
@@ -111,20 +109,6 @@ impl<'input> From<lalrpop_util::ParseError<usize, Token<'input>, LexerError>> fo
     }
 }
 
-/// Convert from standard I/O errors
-impl From<io::Error> for LpParseError {
-    fn from(err: io::Error) -> Self {
-        Self::io_error(err.to_string())
-    }
-}
-
-/// Convert from boxed errors (used by CSV module)
-impl From<Box<dyn std::error::Error + 'static>> for LpParseError {
-    fn from(err: Box<dyn std::error::Error + 'static>) -> Self {
-        Self::io_error(err.to_string())
-    }
-}
-
 /// Result type alias for LP parsing operations
 pub type LpResult<T> = Result<T, LpParseError>;
 
@@ -136,16 +120,5 @@ mod tests {
     fn test_error_creation() {
         let err = LpParseError::invalid_bounds("x", "lower exceeds upper");
         assert_eq!(err.to_string(), "Invalid bounds for variable 'x': lower exceeds upper");
-    }
-
-    #[test]
-    fn test_io_error_conversion() {
-        let io_err = io::Error::new(io::ErrorKind::NotFound, "file not found");
-        let lp_err: LpParseError = io_err.into();
-
-        match lp_err {
-            LpParseError::IoError { message } => assert!(message.contains("file not found")),
-            _ => panic!("Expected IoError"),
-        }
     }
 }

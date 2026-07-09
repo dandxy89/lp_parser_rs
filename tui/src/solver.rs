@@ -547,7 +547,7 @@ pub fn solve_problem(problem: &LpProblem) -> Result<SolveResult, String> {
     let model = build_highs_model(problem);
     let build_time = build_start.elapsed();
 
-    // ponytail: pid+sequence-named temp file + explicit cleanup instead of the
+    // pid+sequence-named temp file + explicit cleanup instead of the
     // tempfile crate. The sequence number keeps concurrent solves in one process
     // ("Solve both" runs two solver threads) from clobbering each other's log.
     let log_seq = SOLVE_LOG_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);

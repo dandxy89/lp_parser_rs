@@ -13,10 +13,9 @@ use std::fmt::{Display, Formatter, Result as FmtResult};
 use crate::interner::NameId;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 /// Represents comparison operations that can be used to compare values.
 pub enum ComparisonOp {
-    #[default]
     /// Greater than
     GT,
     /// Greater than or equal
@@ -63,15 +62,6 @@ pub enum Sense {
     Minimize,
     /// Maximise the objective function.
     Maximize,
-}
-
-impl Sense {
-    #[inline]
-    #[must_use]
-    /// Determines if the current optimisation sense is minimisation.
-    pub const fn is_minimisation(&self) -> bool {
-        matches!(self, Self::Minimize)
-    }
 }
 
 impl Display for Sense {
@@ -296,8 +286,6 @@ mod tests {
 
     #[test]
     fn test_comparison_op() {
-        assert_eq!(ComparisonOp::default(), ComparisonOp::GT);
-
         let test_cases = [
             (ComparisonOp::GT, b">".as_slice(), ">"),
             (ComparisonOp::GTE, b">=".as_slice(), ">="),
@@ -316,8 +304,6 @@ mod tests {
     #[test]
     fn test_sense() {
         assert_eq!(Sense::default(), Sense::Minimize);
-        assert!(Sense::Minimize.is_minimisation());
-        assert!(!Sense::Maximize.is_minimisation());
         assert_eq!(format!("{}", Sense::Minimize), "Minimize");
         assert_eq!(format!("{}", Sense::Maximize), "Maximize");
         assert_ne!(Sense::Minimize, Sense::Maximize);

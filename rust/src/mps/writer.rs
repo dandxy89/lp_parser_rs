@@ -62,8 +62,7 @@
 //!   is an LP-format-only distinction that has no MPS analogue.
 //! - [`SemiContinuous`](crate::model::VariableType::SemiContinuous) carries no
 //!   explicit upper bound in this model, but the MPS `SC` bound type requires
-//!   one. A sentinel value
-//!   ([`SEMI_CONTINUOUS_SENTINEL_UPPER`](crate::mps::writer::SEMI_CONTINUOUS_SENTINEL_UPPER))
+//!   one. A sentinel value (`SEMI_CONTINUOUS_SENTINEL_UPPER`, `1e30`)
 //!   is written instead, and the reader resolves any `SC` bound back to
 //!   `SemiContinuous`, so the type round trips. The flip side: an `SC` bound
 //!   in an *external* MPS file with a meaningful finite upper bound has that
@@ -80,10 +79,10 @@
 //!   keeps it correct at the cost of re-parsing as `DoubleBound(0, ub)`
 //!   rather than `UpperBound(ub)` (the same feasible region, a different
 //!   variant).
-//! - **Free-default conversion caveat**: [`LpProblem`] defaults an
+//! - **Free-default conversion caveat**: [`LpProblem`](crate::problem::LpProblem) defaults an
 //!   undeclared variable that only appears in constraints (never in a
 //!   `Bounds`/`Free`/etc. section, and never given an explicit bound) to
-//!   [`VariableType::Free`], which this writer faithfully emits as an `FR`
+//!   [`VariableType::Free`](crate::model::VariableType::Free), which this writer faithfully emits as an `FR`
 //!   bound. LP format's own default for such a variable is `[0, +inf)`, not
 //!   free -- so converting an LP file straight through this writer without
 //!   ever having declared the variable's bounds widens its feasible region
@@ -112,7 +111,7 @@ pub const EMPTY_OBJECTIVE_ROW_NAME: &str = "OBJ";
 /// Sentinel upper bound written for [`VariableType::SemiContinuous`] variables,
 /// which carry no explicit upper bound in this model. `1e30` is the
 /// conventional "infinity" sentinel used by CPLEX/Gurobi-style MPS files.
-pub const SEMI_CONTINUOUS_SENTINEL_UPPER: f64 = 1e30;
+pub(crate) const SEMI_CONTINUOUS_SENTINEL_UPPER: f64 = 1e30;
 
 /// Fixed vector label written in the RHS section (the first field of each
 /// RHS data line). The MPS reader accepts any label; only the first

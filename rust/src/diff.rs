@@ -13,7 +13,7 @@
 //!   name normaliser so callers can rewrite variable/constraint/objective
 //!   names (e.g. the CLI's regex `--rename` rules) *without* forcing a
 //!   `regex` dependency onto this crate.
-//! - [`compare`] (or the convenience [`LpProblem::diff`] method) walks both
+//! - [`compare`](crate::diff::compare) (or the convenience [`LpProblem::diff`] method) walks both
 //!   problems and returns an [`LpDiff`] describing every added, removed, or
 //!   modified variable, constraint, and objective.
 //!
@@ -65,14 +65,6 @@ impl Default for DiffTol {
 }
 
 impl DiffTol {
-    /// Construct a tolerance from an absolute and a relative component.
-    #[must_use]
-    pub fn new(abs: f64, rel: f64) -> Self {
-        debug_assert!(abs.is_finite() && abs >= 0.0, "abs tolerance must be finite and non-negative");
-        debug_assert!(rel.is_finite() && rel >= 0.0, "rel tolerance must be finite and non-negative");
-        Self { abs, rel }
-    }
-
     /// Return true if `a` and `b` differ beyond both tolerances.
     #[must_use]
     pub fn differ(self, a: f64, b: f64) -> bool {
@@ -337,7 +329,7 @@ mod tests {
 
     #[test]
     fn tol_equal_within_absolute() {
-        let tol = DiffTol::new(0.5, 0.0);
+        let tol = DiffTol { abs: 0.5, rel: 0.0 };
         // Difference of 0.4 is within abs=0.5.
         assert!(!tol.differ(1.0, 1.4));
         // Difference of 0.6 exceeds abs=0.5.
@@ -347,7 +339,7 @@ mod tests {
     #[test]
     fn tol_relative_scales_with_magnitude() {
         // 1% relative tolerance.
-        let tol = DiffTol::new(0.0, 0.01);
+        let tol = DiffTol { abs: 0.0, rel: 0.01 };
         // 0.5% change is within tolerance.
         assert!(!tol.differ(1000.0, 1005.0));
         // 2% change exceeds tolerance.
@@ -357,7 +349,7 @@ mod tests {
     #[test]
     fn tol_requires_both_tolerances_exceeded() {
         // Differs only if BEYOND both abs AND rel.
-        let tol = DiffTol::new(10.0, 0.5);
+        let tol = DiffTol { abs: 10.0, rel: 0.5 };
         // diff 8: below abs(10) -> not different even though 8 > 0.5*10.
         assert!(!tol.differ(10.0, 18.0));
         // diff 12: above abs(10) but 12 < 0.5*24 -> not different.
@@ -376,7 +368,7 @@ mod tests {
 
     #[test]
     fn tol_zero_baseline() {
-        let tol = DiffTol::new(0.0, 0.5);
+        let tol = DiffTol { abs: 0.0, rel: 0.5 };
         // Relative scale is max(|0|, |1|) = 1; diff 1 > 0.5 -> different.
         assert!(tol.differ(0.0, 1.0));
         // Both zero -> no difference.
@@ -454,7 +446,7 @@ mod tests {
         let p1 = parse("Minimize\n obj: x\nSubject To\n c1: x >= 100\nEnd");
         let p2 = parse("Minimize\n obj: x\nSubject To\n c1: x >= 100.4\nEnd");
         // abs tolerance 0.5 suppresses the 0.4 rhs change.
-        let diff = p1.diff(&p2, &opts(DiffTol::new(0.5, 0.0)));
+        let diff = p1.diff(&p2, &opts(DiffTol { abs: 0.5, rel: 0.0 }));
         assert!(diff.cons_modified.is_empty());
         // Without tolerance the change is reported.
         let diff = p1.diff(&p2, &opts(DiffTol::default()));

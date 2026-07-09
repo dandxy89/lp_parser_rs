@@ -70,13 +70,7 @@ impl SolveTab {
     pub const ALL: [Self; 5] = [Self::Summary, Self::Variables, Self::Constraints, Self::Log, Self::Duals];
 
     pub const fn index(self) -> usize {
-        match self {
-            Self::Summary => 0,
-            Self::Variables => 1,
-            Self::Constraints => 2,
-            Self::Log => 3,
-            Self::Duals => 4,
-        }
+        self as usize
     }
 
     pub const fn label(self) -> &'static str {
@@ -213,17 +207,10 @@ impl Section {
     pub const ALL: [Self; 5] = [Self::Summary, Self::Variables, Self::Constraints, Self::Objectives, Self::Numerics];
 
     pub const fn index(self) -> usize {
-        match self {
-            Self::Summary => 0,
-            Self::Variables => 1,
-            Self::Constraints => 2,
-            Self::Objectives => 3,
-            Self::Numerics => 4,
-        }
+        self as usize
     }
 
     pub fn from_index(i: usize) -> Self {
-        debug_assert!(i < Self::ALL.len(), "Section::from_index called with out-of-range index {i}");
         match i {
             0 => Self::Summary,
             1 => Self::Variables,

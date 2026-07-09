@@ -46,7 +46,6 @@ impl LpParser {
         self.lp_file.clone()
     }
 
-    #[pyo3(text_signature = "($self)")]
     fn parse(&mut self, py: Python) -> PyResult<()> {
         let path = PathBuf::from(&self.lp_file);
         // Release the GIL while reading and parsing so other Python threads
@@ -60,7 +59,6 @@ impl LpParser {
     }
 
     #[allow(clippy::wrong_self_convention)]
-    #[pyo3(text_signature = "($self, base_directory)")]
     fn to_csv(&mut self, py: Python, base_directory: &str) -> PyResult<()> {
         if !Path::new(&base_directory).is_dir() {
             return Err(PyNotADirectoryError::new_err(format!("Path {base_directory} is not a directory.")));
@@ -170,7 +168,6 @@ impl LpParser {
     }
 
     /// Save the current problem to an LP file
-    #[pyo3(text_signature = "($self, filepath)")]
     fn save_to_file(&self, filepath: String) -> PyResult<()> {
         let problem = self.get_problem()?;
         let lp_content = write_lp_string_with_options(problem, &LpWriterOptions::default());
@@ -178,7 +175,6 @@ impl LpParser {
     }
 
     /// Update coefficient in an objective
-    #[pyo3(text_signature = "($self, objective_name, variable_name, coefficient)")]
     fn update_objective_coefficient(&mut self, objective_name: String, variable_name: String, coefficient: f64) -> PyResult<()> {
         let problem = self.get_problem_mut()?;
         problem
@@ -188,7 +184,6 @@ impl LpParser {
     }
 
     /// Rename an objective
-    #[pyo3(text_signature = "($self, old_name, new_name)")]
     fn rename_objective(&mut self, old_name: String, new_name: String) -> PyResult<()> {
         let problem = self.get_problem_mut()?;
         problem
@@ -199,7 +194,6 @@ impl LpParser {
     }
 
     /// Remove an objective
-    #[pyo3(text_signature = "($self, objective_name)")]
     fn remove_objective(&mut self, objective_name: String) -> PyResult<()> {
         let problem = self.get_problem_mut()?;
         problem
@@ -210,7 +204,6 @@ impl LpParser {
     }
 
     /// Update coefficient in a constraint
-    #[pyo3(text_signature = "($self, constraint_name, variable_name, coefficient)")]
     fn update_constraint_coefficient(&mut self, constraint_name: String, variable_name: String, coefficient: f64) -> PyResult<()> {
         let problem = self.get_problem_mut()?;
         problem
@@ -221,7 +214,6 @@ impl LpParser {
     }
 
     /// Update the right-hand side value of a constraint
-    #[pyo3(text_signature = "($self, constraint_name, new_rhs)")]
     fn update_constraint_rhs(&mut self, constraint_name: String, new_rhs: f64) -> PyResult<()> {
         let problem = self.get_problem_mut()?;
         problem
@@ -232,7 +224,6 @@ impl LpParser {
     }
 
     /// Rename a constraint
-    #[pyo3(text_signature = "($self, old_name, new_name)")]
     fn rename_constraint(&mut self, old_name: String, new_name: String) -> PyResult<()> {
         let problem = self.get_problem_mut()?;
         problem
@@ -243,7 +234,6 @@ impl LpParser {
     }
 
     /// Remove a constraint
-    #[pyo3(text_signature = "($self, constraint_name)")]
     fn remove_constraint(&mut self, constraint_name: String) -> PyResult<()> {
         let problem = self.get_problem_mut()?;
         problem
@@ -254,7 +244,6 @@ impl LpParser {
     }
 
     /// Rename a variable across all objectives and constraints
-    #[pyo3(text_signature = "($self, old_name, new_name)")]
     fn rename_variable(&mut self, old_name: String, new_name: String) -> PyResult<()> {
         let problem = self.get_problem_mut()?;
         problem
@@ -265,7 +254,6 @@ impl LpParser {
     }
 
     /// Update variable type (e.g., Binary, Integer, etc.)
-    #[pyo3(text_signature = "($self, variable_name, var_type)")]
     fn update_variable_type(&mut self, variable_name: String, var_type: String) -> PyResult<()> {
         let problem = self.get_problem_mut()?;
 
@@ -275,7 +263,7 @@ impl LpParser {
             "integer" => VariableType::Integer,
             "general" => VariableType::General,
             "free" => VariableType::Free,
-            "semicontinuous" | "semi_continuous" => VariableType::SemiContinuous,
+            "semicontinuous" => VariableType::SemiContinuous,
             _ => {
                 return Err(LpInvalidValueError::new_err(format!(
                     "Unknown variable type: {var_type}. Supported types: binary, integer, general, free, semicontinuous",
@@ -291,7 +279,6 @@ impl LpParser {
     }
 
     /// Remove a variable from all objectives and constraints
-    #[pyo3(text_signature = "($self, variable_name)")]
     fn remove_variable(&mut self, variable_name: String) -> PyResult<()> {
         let problem = self.get_problem_mut()?;
         problem
@@ -302,7 +289,6 @@ impl LpParser {
     }
 
     /// Set problem name
-    #[pyo3(text_signature = "($self, name)")]
     fn set_problem_name(&mut self, name: String) -> PyResult<()> {
         let problem = self.get_problem_mut()?;
         problem.name = Some(name);
@@ -311,13 +297,12 @@ impl LpParser {
     }
 
     /// Set problem sense (maximize or minimize)
-    #[pyo3(text_signature = "($self, sense)")]
     fn set_sense(&mut self, sense: String) -> PyResult<()> {
         let problem = self.get_problem_mut()?;
 
         problem.sense = match sense.to_lowercase().as_str() {
-            "maximize" | "max" => Sense::Maximize,
-            "minimize" | "min" => Sense::Minimize,
+            "maximize" => Sense::Maximize,
+            "minimize" => Sense::Minimize,
             _ => return Err(LpInvalidValueError::new_err(format!("Invalid sense: {sense}. Use 'maximize' or 'minimize'"))),
         };
 
@@ -348,7 +333,7 @@ impl LpParser {
             coefficient_ratio_threshold: ratio_threshold,
         };
         let analysis = problem.analyze_with_config(&config);
-        self.analysis_to_dict(py, &analysis)
+        analysis_to_dict(py, &analysis)
     }
 
     fn __repr__(&self) -> String {
@@ -369,19 +354,18 @@ impl LpParser {
     fn get_problem_mut(&mut self) -> PyResult<&mut LpProblem> {
         self.problem.as_mut().ok_or_else(|| LpNotParsedError::new_err("Must call parse() first"))
     }
+}
 
-    #[allow(clippy::unused_self)]
-    fn analysis_to_dict(&self, py: Python, analysis: &lp_parser_rs::analysis::ProblemAnalysis) -> PyResult<Py<PyAny>> {
-        // The struct field names match the public dict schema, so serialise the
-        // whole analysis in one step.
-        let dict =
-            pythonize::pythonize(py, analysis).map_err(|err| PyRuntimeError::new_err(format!("Unable to serialise analysis: {err}")))?;
-        // serde serialises the issue severity/category enums by their variant
-        // names; the Python API instead exposes the human-readable Display form,
-        // so overwrite the issues list to preserve that contract.
-        dict.cast::<PyDict>()?.set_item("issues", issues_to_list(py, &analysis.issues)?)?;
-        Ok(dict.into())
-    }
+/// Serialise a [`ProblemAnalysis`](lp_parser_rs::analysis::ProblemAnalysis) to a Python dict.
+fn analysis_to_dict(py: Python, analysis: &lp_parser_rs::analysis::ProblemAnalysis) -> PyResult<Py<PyAny>> {
+    // The struct field names match the public dict schema, so serialise the
+    // whole analysis in one step.
+    let dict = pythonize::pythonize(py, analysis).map_err(|err| PyRuntimeError::new_err(format!("Unable to serialise analysis: {err}")))?;
+    // serde serialises the issue severity/category enums by their variant
+    // names; the Python API instead exposes the human-readable Display form,
+    // so overwrite the issues list to preserve that contract.
+    dict.cast::<PyDict>()?.set_item("issues", issues_to_list(py, &analysis.issues)?)?;
+    Ok(dict.into())
 }
 
 /// Build a list of `{name, value}` dicts from coefficients, resolving interned names.
