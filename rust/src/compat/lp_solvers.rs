@@ -171,6 +171,11 @@ pub struct ExpressionAdapter<'a> {
     interner: &'a NameInterner,
 }
 
+/// Decimal precision for coefficients emitted to `lp-solvers`. High enough to
+/// preserve solver-relevant fidelity; `write_formatted_coefficient` trims
+/// trailing zeros so whole numbers stay compact.
+const COEFFICIENT_PRECISION: usize = 15;
+
 impl WriteToLpFileFormat for ExpressionAdapter<'_> {
     fn to_lp_file_format(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Filter out zero and non-finite coefficients
@@ -181,36 +186,19 @@ impl WriteToLpFileFormat for ExpressionAdapter<'_> {
             return write!(f, "0");
         }
 
+        // Reuse the LP writer's coefficient formatter so both front-ends emit
+        // identical output. It writes to a `String`, so buffer then flush.
+        let mut out = String::new();
         for (i, coeff) in non_zero.iter().enumerate() {
-            let value = coeff.value;
-            let name = self.interner.resolve(coeff.name);
-
-            if i == 0 {
-                // First term
-                if value < 0.0 {
-                    if (value.abs() - 1.0).abs() < NUMERIC_EPSILON {
-                        write!(f, "- {name}")?;
-                    } else {
-                        write!(f, "- {} {name}", value.abs())?;
-                    }
-                } else if (value - 1.0).abs() < NUMERIC_EPSILON {
-                    write!(f, "{name}")?;
-                } else {
-                    write!(f, "{value} {name}")?;
-                }
-            } else {
-                // Subsequent terms
-                let sign = if value < 0.0 { "-" } else { "+" };
-                let abs_val = value.abs();
-
-                if (abs_val - 1.0).abs() < NUMERIC_EPSILON {
-                    write!(f, " {sign} {name}")?;
-                } else {
-                    write!(f, " {sign} {abs_val} {name}")?;
-                }
-            }
+            crate::writer::write_formatted_coefficient(
+                &mut out,
+                self.interner.resolve(coeff.name),
+                coeff.value,
+                i == 0,
+                COEFFICIENT_PRECISION,
+            )?;
         }
-        Ok(())
+        f.write_str(&out)
     }
 }
 
@@ -337,12 +325,6 @@ impl<'a> LpSolversCompat<'a> {
     pub fn warnings(&self) -> &[LpSolversCompatWarning] {
         &self.warnings
     }
-
-    /// Returns `true` if there are no warnings.
-    #[must_use]
-    pub fn is_fully_compatible(&self) -> bool {
-        self.warnings.is_empty()
-    }
 }
 
 impl<'a> lp_solvers::lp_format::LpProblem<'a> for LpSolversCompat<'a> {
@@ -445,7 +427,7 @@ mod tests {
         let sos1_id = p.intern("sos1");
         p.constraints.insert(sos1_id, Constraint::SOS { name: sos1_id, sos_type: SOSType::S1, weights: vec![], byte_offset: None });
         let c = LpSolversCompat::try_new(&p).unwrap();
-        assert!(!c.is_fully_compatible());
+        assert!(!c.warnings().is_empty());
         assert!(matches!(&c.warnings()[0], LpSolversCompatWarning::SosConstraintIgnored { .. }));
 
         // Semi-continuous

@@ -22,7 +22,7 @@ fn test_diet_file_converts_to_lp_solvers() {
 
     let compat = LpSolversCompat::try_new(&problem).expect("failed to convert to lp-solvers format");
 
-    assert!(compat.is_fully_compatible());
+    assert!(compat.warnings().is_empty());
     assert_eq!(compat.name(), "diet");
     assert!(matches!(LpSolversProblem::sense(&compat), LpObjective::Minimize));
 }
@@ -45,7 +45,7 @@ fn test_sos_file_converts_with_warning() {
 
     let compat = LpSolversCompat::try_new(&problem).expect("failed to convert to lp-solvers format");
 
-    assert!(!compat.is_fully_compatible());
+    assert!(!compat.warnings().is_empty());
     assert!(!compat.warnings().is_empty());
 }
 

@@ -1166,12 +1166,12 @@ End";
     fn test_problem_lifecycle() {
         let problem = LpProblem::new();
         assert_eq!(problem.name(), None);
-        assert!(problem.sense.is_minimisation());
+        assert_eq!(problem.sense, Sense::Minimize);
         assert_eq!((problem.objective_count(), problem.constraint_count(), problem.variable_count()), (0, 0, 0));
 
         let problem = LpProblem::new().with_problem_name("test").with_sense(Sense::Maximize);
         assert_eq!(problem.name(), Some("test"));
-        assert!(!problem.sense.is_minimisation());
+        assert_eq!(problem.sense, Sense::Maximize);
 
         let display = format!("{problem}");
         assert!(display.contains("Problem name: test") && display.contains("Sense: Maximize"));

@@ -65,7 +65,7 @@ pub mod writer;
 // Crate-root re-exports of the primary public API, so downstream users do not
 // need deep module paths for the most common types and entry points.
 #[cfg(feature = "diff")]
-pub use diff::{DiffOptions, DiffTol, LpDiff, Normaliser, compare as compare_diff};
+pub use diff::{DiffOptions, DiffTol, LpDiff, Normaliser};
 pub use error::{LpParseError, LpResult};
 pub use interner::{NameId, NameInterner};
 // LALRPOP generated grammar module
