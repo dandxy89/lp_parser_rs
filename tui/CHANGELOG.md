@@ -1,5 +1,61 @@
 # Changelog
 
+## [3.6.0](https://github.com/dandxy89/lp_parser_rs/compare/lp_diff-v3.5.0...lp_diff-v3.6.0) (2026-07-09)
+
+
+### Documentation
+
+* tighten demo captions in both READMEs ([d2dd437](https://github.com/dandxy89/lp_parser_rs/commit/d2dd4376e7c82cdff8c3f3a80ad9014f77cfb428))
+* **tui:** document single-file inspect mode ([72953ed](https://github.com/dandxy89/lp_parser_rs/commit/72953ed89ae6c21f9cffc4f0553ccc847a9573c4))
+* **tui:** redo demo GIF as a full feature tour of an MPS vs LP diff ([9ef549f](https://github.com/dandxy89/lp_parser_rs/commit/9ef549f15b89f0a4b3a9d98511dba86755e60856))
+
+
+### Features
+
+* **core:** extract LP diff engine into library behind diff feature ([bb6a7a5](https://github.com/dandxy89/lp_parser_rs/commit/bb6a7a57311ae6c31bec92ffd351cb48b0f7bdc5))
+* **tui:** add single-file inspect mode selection and model ([9473c76](https://github.com/dandxy89/lp_parser_rs/commit/9473c76b0d825ab0cacf750154df5c52658af911))
+* **tui:** bracketed paste, kitty keyboard protocol, and clean error restore ([66d9622](https://github.com/dandxy89/lp_parser_rs/commit/66d962293e04c583aa8ffdfdfe715642dbc5702d))
+* **tui:** breadcrumb detail-panel titles with raw-view toggle hint ([85b0f7d](https://github.com/dandxy89/lp_parser_rs/commit/85b0f7d3ae4d2371a6c64e9a1cb3958f36d1c2f8))
+* **tui:** c: prefix for full-text content search ([44579a6](https://github.com/dandxy89/lp_parser_rs/commit/44579a6c0eb60796ebb0f862ce11196b8b36816b))
+* **tui:** context-sensitive status-bar hints and yank which-key ([58378d3](https://github.com/dandxy89/lp_parser_rs/commit/58378d3c8cbcdc9bdca6f6d0fb81950e58aa9963))
+* **tui:** delta column and sort indicator under the delta sorts ([5e08098](https://github.com/dandxy89/lp_parser_rs/commit/5e080986f1ff22e7198697e7692c6b2044ea56b0))
+* **tui:** empty-detail cheat sheet and palette gaps filled ([7729fd0](https://github.com/dandxy89/lp_parser_rs/commit/7729fd0677a310efd59ecfd85a3835687a906a5b))
+* **tui:** n/N to jump between matches of the last search ([04a06a2](https://github.com/dandxy89/lp_parser_rs/commit/04a06a2f124426a2c39ab47a0071960700b2b3c7))
+* **tui:** per-kind change counts and active filter in the tab bar ([09a5437](https://github.com/dandxy89/lp_parser_rs/commit/09a54373be0ee05694ef23484af7edc5762fbafd))
+* **tui:** readline-style editing for query and what-if inputs ([7ebd5b3](https://github.com/dandxy89/lp_parser_rs/commit/7ebd5b300d2c7c932921806abb66fe95bdeea642))
+* **tui:** render inspect mode neutrally and gate diff-only actions ([6a2c98d](https://github.com/dandxy89/lp_parser_rs/commit/6a2c98df49a72b07962a19b135caa34a0e4f69fb))
+* **tui:** report conflicting variable bounds in infeasibility diagnosis ([a2698dc](https://github.com/dandxy89/lp_parser_rs/commit/a2698dc1807d7179203b49a26f2fbcd7533d584b))
+* **tui:** scrollbar on the detail panel ([f6ba364](https://github.com/dandxy89/lp_parser_rs/commit/f6ba3642cedf6d121ad90f9911c59587680b4761))
+* **tui:** what-if constraint RHS editing with baseline re-solve ([6cc0b74](https://github.com/dandxy89/lp_parser_rs/commit/6cc0b746d0b0a08f2d944be4d6a4e5cb4e52069c))
+
+
+### Bug Fixes
+
+* parser, MPS, writer, and diff edge-case bugs found by test audit ([5d5a073](https://github.com/dandxy89/lp_parser_rs/commit/5d5a0730e901367db62ff1b03f4bd21b39d7b45b))
+* **python:** declare dual MIT OR Apache-2.0 licence on PyPI ([de7d14e](https://github.com/dandxy89/lp_parser_rs/commit/de7d14e503f01ceb1b52259283f4049d46a9db42))
+* **tui:** clamp detail-panel scroll to content height ([9a2bd67](https://github.com/dandxy89/lp_parser_rs/commit/9a2bd6707c8d9a2c02b2b281e2a9b9171f11c856))
+* **tui:** give each solve its own solver-log temp file ([c3becc9](https://github.com/dandxy89/lp_parser_rs/commit/c3becc9e6de215f77bdb1eb2d7fb715aa0b8760f))
+* **tui:** neutralise search pop-up in inspect mode ([b6c7ae9](https://github.com/dandxy89/lp_parser_rs/commit/b6c7ae9a23fdb7e8df365e19d984d0a8c8910ea7))
+* **tui:** use as_chunks for rename-rule pairs to satisfy clippy ([e37a5ab](https://github.com/dandxy89/lp_parser_rs/commit/e37a5ab508791f12c4d9f3054a04463ae6783aaf))
+
+
+### Performance Improvements
+
+* **tui:** order coefficient diff by NameId and window the solve overlay ([552670b](https://github.com/dandxy89/lp_parser_rs/commit/552670b698f9d523c3fb40ea9f34dd5a657851d8))
+
+
+### Code Refactoring
+
+* remove over-engineering flagged by repo audit ([5d3ec69](https://github.com/dandxy89/lp_parser_rs/commit/5d3ec6951243ec27362992240bc839e10753892c))
+* strip over-engineering found by repo-wide audit ([c842456](https://github.com/dandxy89/lp_parser_rs/commit/c842456c5fdd1d67ed16fea3dd17d9de71d6393a))
+* **tui:** dedupe jumplist handlers and centralise filter mutation ([c29978d](https://github.com/dandxy89/lp_parser_rs/commit/c29978d2e44a0be940de8b952dd2d80a74832155))
+* **tui:** dedupe shared helpers and avoid rename-rewrite allocation ([2afc5b2](https://github.com/dandxy89/lp_parser_rs/commit/2afc5b2f22a8238cce9c3d612cd0ae99a8ac5d42))
+
+
+### Tests
+
+* **tui:** UI snapshot tests for the main layouts ([da9000d](https://github.com/dandxy89/lp_parser_rs/commit/da9000d48947e7619fe9425240a55d77cc13c168))
+
 ## [3.5.0](https://github.com/dandxy89/lp_parser_rs/compare/lp_diff-v3.4.0...lp_diff-v3.5.0) (2026-07-03)
 
 

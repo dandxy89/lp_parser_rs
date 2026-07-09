@@ -1,5 +1,45 @@
 # Changelog
 
+## [4.1.0](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v4.0.0...lp_parser_rs-v4.1.0) (2026-07-09)
+
+
+### Documentation
+
+* **core:** document Free-default LP-to-MPS conversion caveat ([e900e23](https://github.com/dandxy89/lp_parser_rs/commit/e900e23ef84d80ae2a4bf7f2b0a9ec726de4c774))
+
+
+### Features
+
+* **cli:** CI-friendly exit codes for diff and analyze ([8a86728](https://github.com/dandxy89/lp_parser_rs/commit/8a867284b44f8dfaad04c19b1b9b516b183cb6a3))
+* **core:** add MPS writer and wire convert --format mps ([3529ec3](https://github.com/dandxy89/lp_parser_rs/commit/3529ec3255e5e1ea6615b56690a702050b67894c))
+* **core:** extract LP diff engine into library behind diff feature ([bb6a7a5](https://github.com/dandxy89/lp_parser_rs/commit/bb6a7a57311ae6c31bec92ffd351cb48b0f7bdc5))
+* **core:** implement Clone for LpProblem and NameInterner ([6d36895](https://github.com/dandxy89/lp_parser_rs/commit/6d368953b98c161ae7d46527c6e88d180568aee9))
+* **diff:** report objective constant changes ([07b09ff](https://github.com/dandxy89/lp_parser_rs/commit/07b09ff66cac3ad7cff654c31fbe4ffaa2ba1dcd))
+* **parser:** align LP and MPS parsing with published format specs ([162c0d5](https://github.com/dandxy89/lp_parser_rs/commit/162c0d5a707197241445313f34ecdbd804b4eeef))
+
+
+### Bug Fixes
+
+* **core:** reject non-finite single-sided MPS bounds instead of emitting inf ([7951182](https://github.com/dandxy89/lp_parser_rs/commit/7951182388599e2a53bfbee0b84b788a4ba5b3d9))
+* **core:** round-trip semi-continuous and RANGES through MPS ([2e3b9f8](https://github.com/dandxy89/lp_parser_rs/commit/2e3b9f828772449db2470f56808b801a20ece4d2))
+* parser, MPS, writer, and diff edge-case bugs found by test audit ([5d5a073](https://github.com/dandxy89/lp_parser_rs/commit/5d5a0730e901367db62ff1b03f4bd21b39d7b45b))
+
+
+### Performance Improvements
+
+* **tui:** order coefficient diff by NameId and window the solve overlay ([552670b](https://github.com/dandxy89/lp_parser_rs/commit/552670b698f9d523c3fb40ea9f34dd5a657851d8))
+
+
+### Code Refactoring
+
+* remove over-engineering flagged by repo audit ([5d3ec69](https://github.com/dandxy89/lp_parser_rs/commit/5d3ec6951243ec27362992240bc839e10753892c))
+* strip over-engineering found by repo-wide audit ([c842456](https://github.com/dandxy89/lp_parser_rs/commit/c842456c5fdd1d67ed16fea3dd17d9de71d6393a))
+
+
+### Styles
+
+* **core:** rustfmt and const fn tidy-ups in MPS writer and CLI ([0332a08](https://github.com/dandxy89/lp_parser_rs/commit/0332a08c636f827f0959c1f65e9a67314ff591d3))
+
 ## [4.0.0](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v3.5.0...lp_parser_rs-v4.0.0) (2026-07-03)
 
 
