@@ -2,6 +2,7 @@
 name = "lp_parser_tui"
 version = "3.6.0"
 edition = "2024"
+rust-version = "1.88.0"
 description = "Interactive TUI model explorer and diff viewer for LP/MPS files"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/dandxy89/lp_parser_rs"
