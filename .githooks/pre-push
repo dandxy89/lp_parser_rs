@@ -3,5 +3,7 @@
 set -e
 
 cargo fmt --all -- --check
-cargo clippy --all-targets -- -D warnings
-cargo test
+cargo clippy --locked --all-targets --all-features -- -D warnings
+cargo test --locked --all-features
+cargo doc --locked --workspace --no-deps --all-features
+cd python && make pre_commit
