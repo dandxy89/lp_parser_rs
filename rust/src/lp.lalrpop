@@ -184,15 +184,15 @@ SosSection: Vec<RawConstraint<'input>> = {
             match entry {
                 SosEntryKind::Header(name, sos_type, offset) => {
                     // Save previous constraint if exists
-                    if let (Some(n), Some(t)) = (current_name.take(), current_type.take()) {
-                        if !current_weights.is_empty() {
-                            constraints.push(RawConstraint::SOS {
-                                name: std::borrow::Cow::Borrowed(n),
-                                sos_type: t,
-                                weights: std::mem::take(&mut current_weights),
-                                byte_offset: current_offset,
-                            });
-                        }
+                    if let (Some(n), Some(t)) = (current_name.take(), current_type.take())
+                        && !current_weights.is_empty()
+                    {
+                        constraints.push(RawConstraint::SOS {
+                            name: std::borrow::Cow::Borrowed(n),
+                            sos_type: t,
+                            weights: std::mem::take(&mut current_weights),
+                            byte_offset: current_offset,
+                        });
                     }
                     current_name = Some(name);
                     current_type = Some(sos_type);
@@ -205,15 +205,15 @@ SosSection: Vec<RawConstraint<'input>> = {
         }
 
         // Save last constraint
-        if let (Some(n), Some(t)) = (current_name, current_type) {
-            if !current_weights.is_empty() {
-                constraints.push(RawConstraint::SOS {
-                    name: std::borrow::Cow::Borrowed(n),
-                    sos_type: t,
-                    weights: current_weights,
-                    byte_offset: current_offset,
-                });
-            }
+        if let (Some(n), Some(t)) = (current_name, current_type)
+            && !current_weights.is_empty()
+        {
+            constraints.push(RawConstraint::SOS {
+                name: std::borrow::Cow::Borrowed(n),
+                sos_type: t,
+                weights: current_weights,
+                byte_offset: current_offset,
+            });
         }
 
         constraints

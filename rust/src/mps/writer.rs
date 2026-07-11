@@ -431,12 +431,12 @@ fn write_rhs_section(
     debug_assert!(!obj_row_name.is_empty(), "obj_row_name must not be empty");
     writeln!(output, "RHS")?;
 
-    if let Some(obj) = objective {
-        if obj.constant != 0.0 {
-            write!(output, "    {RHS_VECTOR_LABEL:<10} {obj_row_name:<10} ")?;
-            write_number(output, -obj.constant, options.decimal_precision)?;
-            writeln!(output)?;
-        }
+    if let Some(obj) = objective
+        && obj.constant != 0.0
+    {
+        write!(output, "    {RHS_VECTOR_LABEL:<10} {obj_row_name:<10} ")?;
+        write_number(output, -obj.constant, options.decimal_precision)?;
+        writeln!(output)?;
     }
 
     for (constraint_id, constraint) in &problem.constraints {

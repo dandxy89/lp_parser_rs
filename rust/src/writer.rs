@@ -79,12 +79,12 @@ pub fn write_lp_string_with_options(problem: &LpProblem, options: &LpWriterOptio
 /// Build the full LP document into `output`.
 fn build_lp(output: &mut String, problem: &LpProblem, options: &LpWriterOptions) -> std::fmt::Result {
     // Write problem name comment if requested
-    if options.include_problem_name {
-        if let Some(name) = problem.name() {
-            writeln!(output, "\\Problem name: {name}")?;
-            if options.include_section_spacing {
-                writeln!(output)?;
-            }
+    if options.include_problem_name
+        && let Some(name) = problem.name()
+    {
+        writeln!(output, "\\Problem name: {name}")?;
+        if options.include_section_spacing {
+            writeln!(output)?;
         }
     }
 

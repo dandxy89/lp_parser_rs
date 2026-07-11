@@ -394,11 +394,16 @@ fn build_diff_json(args: &DiffArgs, p1: &LpProblem, p2: &LpProblem, diff: &LpDif
 #[cfg(feature = "diff")]
 fn cmd_diff(args: &DiffArgs, verbose: bool, quiet: bool) -> Result<ExitCode, BoxError> {
     // Rename rules arrive as a flat list of PATTERN REPLACEMENT pairs.
-    if args.rename.len() % 2 != 0 {
+    if !args.rename.len().is_multiple_of(2) {
         return Err("--rename requires pairs of PATTERN REPLACEMENT".into());
     }
-    let rules: Vec<(regex::Regex, String)> =
-        args.rename.chunks_exact(2).map(|c| Ok::<_, BoxError>((regex::Regex::new(&c[0])?, c[1].clone()))).collect::<Result<_, _>>()?;
+    let rules: Vec<(regex::Regex, String)> = args
+        .rename
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|c| Ok::<_, BoxError>((regex::Regex::new(&c[0])?, c[1].clone())))
+        .collect::<Result<_, _>>()?;
 
     let tol = DiffTol { abs: args.abs_tol, rel: args.rel_tol };
 
