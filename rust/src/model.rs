@@ -287,7 +287,7 @@ impl VariableBounds {
     /// Complementary single-sided bounds combine; when both sides are already
     /// set (or the new declaration is free), the new declaration wins.
     #[must_use]
-    pub fn merge(self, new: Self) -> Self {
+    pub const fn merge(self, new: Self) -> Self {
         match (self.lower, self.upper, new.lower, new.upper) {
             // Existing lower-only + new upper-only (or vice versa) → range
             (Some(lb), None, None, Some(ub)) | (None, Some(ub), Some(lb), None) => Self::range(lb, ub),
@@ -305,7 +305,7 @@ impl VariableBounds {
     /// A binary variable is canonically `[0, 1]`, so any explicit (redundant or
     /// contradictory) bound stored alongside the `Binary` kind is ignored here.
     #[must_use]
-    pub fn effective_lower(self, kind: VariableKind) -> f64 {
+    pub const fn effective_lower(self, kind: VariableKind) -> f64 {
         if matches!(kind, VariableKind::Binary) {
             return 0.0;
         }
@@ -386,7 +386,7 @@ impl VariableType {
 
     /// Split into kind and bounds components.
     #[must_use]
-    pub fn into_kind_and_bounds(self) -> (VariableKind, VariableBounds) {
+    pub const fn into_kind_and_bounds(self) -> (VariableKind, VariableBounds) {
         match self {
             Self::Free => (VariableKind::Continuous, VariableBounds::free()),
             Self::General => (VariableKind::General, VariableBounds::free()),
@@ -402,7 +402,7 @@ impl VariableType {
 
     /// Reconstruct a legacy `VariableType` from kind + bounds (lossy for mixed cases).
     #[must_use]
-    pub fn from_kind_and_bounds(kind: VariableKind, bounds: VariableBounds) -> Self {
+    pub const fn from_kind_and_bounds(kind: VariableKind, bounds: VariableBounds) -> Self {
         // Prefer kind for discrete types when bounds are free; otherwise prefer bounds shape.
         match kind {
             VariableKind::Binary if bounds.is_free() => Self::Binary,
@@ -455,19 +455,19 @@ impl Variable {
     #[must_use]
     #[inline]
     /// Initialise a new continuous free `Variable`.
-    pub fn new(name: NameId) -> Self {
+    pub const fn new(name: NameId) -> Self {
         Self { name, kind: VariableKind::Continuous, bounds: VariableBounds::free() }
     }
 
     /// Legacy view as a single [`VariableType`] (lossy when kind and bounds both set).
     #[must_use]
-    pub fn var_type(&self) -> VariableType {
+    pub const fn var_type(&self) -> VariableType {
         VariableType::from_kind_and_bounds(self.kind, self.bounds)
     }
 
     #[inline]
     /// Set kind and bounds from a legacy [`VariableType`].
-    pub fn set_var_type(&mut self, var_type: VariableType) {
+    pub const fn set_var_type(&mut self, var_type: VariableType) {
         let (kind, bounds) = var_type.into_kind_and_bounds();
         self.kind = kind;
         self.bounds = bounds;
@@ -476,7 +476,7 @@ impl Variable {
     #[must_use]
     #[inline]
     /// Builder: set kind and bounds from a legacy [`VariableType`].
-    pub fn with_var_type(mut self, var_type: VariableType) -> Self {
+    pub const fn with_var_type(mut self, var_type: VariableType) -> Self {
         self.set_var_type(var_type);
         self
     }
