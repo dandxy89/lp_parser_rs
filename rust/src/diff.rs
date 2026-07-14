@@ -129,7 +129,7 @@ impl LpDiff {
     /// Returns `true` when the two problems are identical under the diff
     /// options used, i.e. no additions, removals, or modifications were found.
     #[must_use]
-    pub fn is_empty(&self) -> bool {
+    pub const fn is_empty(&self) -> bool {
         self.vars_added.is_empty()
             && self.vars_removed.is_empty()
             && self.vars_type_changed.is_empty()

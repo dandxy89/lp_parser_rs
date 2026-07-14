@@ -721,7 +721,7 @@ impl LpProblem {
     }
 
     /// Set the optimisation sense.
-    pub fn set_sense(&mut self, sense: Sense) {
+    pub const fn set_sense(&mut self, sense: Sense) {
         self.sense = sense;
     }
 }

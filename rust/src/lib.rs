@@ -43,6 +43,8 @@
 pub mod analysis;
 /// Assembly of flat LP section bodies into raw objectives/constraints.
 pub mod assemble;
+/// Ergonomic programmatic construction of an [`LpProblem`] ([`ProblemBuilder`]).
+pub mod builder;
 /// Compatibility adapters for external solver crates.
 pub mod compat;
 #[cfg(feature = "csv")]
@@ -66,6 +68,7 @@ pub mod writer;
 
 // Crate-root re-exports of the primary public API, so downstream users do not
 // need deep module paths for the most common types and entry points.
+pub use builder::ProblemBuilder;
 #[cfg(feature = "diff")]
 pub use diff::{DiffOptions, DiffTol, LpDiff, Normaliser};
 pub use error::{EntityKind, LpParseError, LpResult, ParseContext};

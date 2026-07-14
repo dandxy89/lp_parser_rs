@@ -65,7 +65,7 @@ use lp_solvers::lp_format::{AsVariable, LpObjective, WriteToLpFileFormat};
 
 use crate::NUMERIC_EPSILON;
 use crate::interner::{NameId, NameInterner};
-use crate::model::{Coefficient, ComparisonOp, Constraint, Objective, Sense, Variable, VariableKind};
+use crate::model::{Coefficient, ComparisonOp, Constraint, Objective, Sense, Variable, VariableType};
 use crate::problem::LpProblem;
 
 /// Errors that can occur when converting an `LpProblem` to lp-solvers format.
@@ -194,7 +194,7 @@ impl<'a> Iterator for VariableIterator<'a> {
     type Item = VariableAdapter<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.inner.next().map(|v| VariableAdapter { name: self.interner.resolve(v.name), var_type: &v.var_type() })
+        self.inner.next().map(|v| VariableAdapter { name: self.interner.resolve(v.name), variable: v })
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
@@ -368,7 +368,8 @@ mod tests {
     }
 
     fn adapter(var_type: VariableType) -> VariableAdapter<'static> {
-        VariableAdapter { name: "x", var_type: Box::leak(Box::new(var_type)) }
+        let name = NameInterner::new().intern("x");
+        VariableAdapter { name: "x", variable: Box::leak(Box::new(Variable::new(name).with_var_type(var_type))) }
     }
 
     fn expr_fmt(problem: &LpProblem, coeffs: &[Coefficient]) -> String {
@@ -432,8 +433,9 @@ mod tests {
             (VariableType::DoubleBound(-10.0, 10.0), -10.0, 10.0, false),
             // Semi-continuous is approximated as a continuous non-negative variable.
             (VariableType::SemiContinuous, 0.0, f64::INFINITY, false),
-            // SOS membership carries no bounds of its own.
-            (VariableType::SOS, 0.0, f64::INFINITY, false),
+            // SOS membership carries no bounds of its own; a free SOS variable is
+            // unbounded below like any continuous free variable.
+            (VariableType::SOS, f64::NEG_INFINITY, f64::INFINITY, false),
         ];
         for (vt, lb, ub, is_int) in cases {
             let a = adapter(vt.clone());
