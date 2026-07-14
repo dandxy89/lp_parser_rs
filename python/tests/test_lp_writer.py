@@ -121,7 +121,7 @@ class TestLpModification:
 
         # Update variable type
         parser.update_variable_type("x1", "integer")
-        assert "Integer" in parser.variables["x1"]["var_type"]
+        assert parser.variables["x1"]["kind"] == "Integer"
 
         # Invalid type
         with pytest.raises(RuntimeError, match="Unknown variable type"):
@@ -165,7 +165,7 @@ class TestLpModification:
         capacity: StandardConstraint = next(c for c in parser.constraints if c["name"] == "CAPACITY")  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
         assert capacity["rhs"] == 10.0
 
-        assert "Integer" in parser.variables["x1"]["var_type"]
+        assert parser.variables["x1"]["kind"] == "Integer"
         assert "production" in parser.variables
         assert "x2" not in parser.variables
 

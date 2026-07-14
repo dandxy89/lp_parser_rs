@@ -19,6 +19,7 @@ class LpInvalidValueError(RuntimeError):
 Sense: TypeAlias = Literal["maximize", "minimize"]
 SenseInput: TypeAlias = Literal["maximize", "max", "minimize", "min"]
 VariableType: TypeAlias = Literal["binary", "integer", "general", "free", "semicontinuous"]
+Format: TypeAlias = Literal["lp", "mps"]
 
 class Coefficient(TypedDict):
     name: str
@@ -30,7 +31,21 @@ class Objective(TypedDict):
 
 class VariableInfo(TypedDict):
     name: str
-    var_type: str
+    kind: str  # Continuous | General | Integer | Binary | SemiContinuous | Sos
+    lower: float | None  # None when unbounded below
+    upper: float | None  # None when unbounded above
+
+class LpDiffResult(TypedDict):
+    vars_added: list[str]
+    vars_removed: list[str]
+    vars_type_changed: list[tuple[str, str, str]]
+    cons_added: list[str]
+    cons_removed: list[str]
+    cons_modified: list[tuple[str, list[str]]]
+    objs_added: list[str]
+    objs_removed: list[str]
+    objs_modified: list[tuple[str, list[str]]]
+    is_empty: bool
 
 class StandardConstraint(TypedDict):
     name: str
@@ -57,9 +72,17 @@ class LpParser:
     def __init__(self, lp_file: str) -> None:
         """Create a parser for the given LP file path; raises FileNotFoundError if it is not a file."""
 
+    @staticmethod
+    def from_string(text: str, format: Format = "lp") -> LpParser:
+        """Construct a parser from in-memory LP or MPS text, parsing it immediately."""
+
+    @staticmethod
+    def from_file(path: str, format: Format | None = None) -> LpParser:
+        """Construct a parser from a file, parsing immediately; format inferred from the extension when omitted (.mps -> MPS)."""
+
     @property
     def lp_file(self) -> str:
-        """Path to the LP file backing this parser."""
+        """Path to the file backing this parser ('<string>' for from_string)."""
 
     @property
     def name(self) -> str | None:
@@ -99,6 +122,17 @@ class LpParser:
 
     def save_to_file(self, filepath: str) -> None:
         """Save the current problem to an LP file."""
+
+    def to_mps_string(self, *, decimal_precision: int = 6, allow_multiple_objectives: bool = False) -> str:
+        """Write the current problem to an MPS format string."""
+
+    def save_to_mps(
+        self, filepath: str, *, decimal_precision: int = 6, allow_multiple_objectives: bool = False
+    ) -> None:
+        """Save the current problem to an MPS file."""
+
+    def diff(self, other: LpParser) -> LpDiffResult:
+        """Compare this problem against another parser's problem, returning added/removed/modified items."""
 
     def update_objective_coefficient(
         self,
