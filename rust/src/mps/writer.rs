@@ -99,7 +99,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::error::{LpParseError, LpResult};
 use crate::interner::NameId;
-use crate::model::{Coefficient, ComparisonOp, Constraint, Objective, Sense, VariableType};
+use crate::model::{Coefficient, ComparisonOp, Constraint, Objective, Sense, VariableKind, VariableType};
 use crate::problem::LpProblem;
 use crate::writer::write_number;
 
@@ -316,8 +316,11 @@ fn write_rows_section(output: &mut String, problem: &LpProblem, obj_row_name: &s
 
 /// Whether a variable type must be wrapped in an `INTORG`/`INTEND` marker
 /// block in the `COLUMNS` section.
-const fn needs_marker(var_type: &VariableType) -> bool {
-    matches!(var_type, VariableType::Integer | VariableType::General | VariableType::Binary)
+const fn needs_marker(kind: VariableKind) -> bool {
+    // Key off kind, not the lossy legacy VariableType: an integer variable with
+    // explicit bounds collapses to DoubleBound under var_type(), which would
+    // otherwise be mistaken for continuous and written without a marker block.
+    kind.is_integer()
 }
 
 /// Per-variable list of (row name, coefficient) pairs, in the order rows are
@@ -367,7 +370,7 @@ fn build_columns<'p>(
     }
 
     for (name_id, variable) in &problem.variables {
-        if needs_marker(&variable.var_type) {
+        if needs_marker(variable.kind) {
             let entries = columns.entry(*name_id).or_default();
             if entries.is_empty() {
                 entries.push((obj_row_name, 0.0));
@@ -397,7 +400,7 @@ fn write_columns_section(
         }
 
         let var_name = problem.resolve(*name_id);
-        let wrap = needs_marker(&variable.var_type);
+        let wrap = needs_marker(variable.kind);
 
         if wrap {
             writeln!(output, "    MARKER                 'MARKER'                 'INTORG'")?;
@@ -669,7 +672,15 @@ fn write_bounds_section(output: &mut String, problem: &LpProblem, options: &MpsW
     writeln!(output, "BOUNDS").expect("fmt::Write to String is infallible");
     for (name_id, variable) in &problem.variables {
         let var_name = problem.resolve(*name_id);
-        write_variable_bound(output, var_name, &variable.var_type, options.decimal_precision)?;
+        if matches!(variable.kind, VariableKind::Binary) {
+            // Binary is canonically [0, 1]; emit BV regardless of any redundant
+            // or contradictory explicit bounds carried alongside the kind (the
+            // lossy `var_type()` view would otherwise render those bounds and
+            // drop the binary designation).
+            write_bound_flag(output, "BV", var_name).expect("fmt::Write to String is infallible");
+        } else {
+            write_variable_bound(output, var_name, &variable.var_type(), options.decimal_precision)?;
+        }
     }
 
     Ok(())
@@ -827,13 +838,13 @@ mod tests {
         assert_eq!(reparsed.constraint_count(), 2); // 1 standard + 1 SOS
 
         let x1 = &reparsed.variables[&reparsed.name_id("x1").unwrap()];
-        assert_eq!(x1.var_type, VariableType::Integer);
+        assert_eq!(x1.var_type(), VariableType::Integer);
 
         let x2 = &reparsed.variables[&reparsed.name_id("x2").unwrap()];
-        assert_eq!(x2.var_type, VariableType::DoubleBound(0.0, 50.0));
+        assert_eq!(x2.var_type(), VariableType::DoubleBound(0.0, 50.0));
 
         let x3 = &reparsed.variables[&reparsed.name_id("x3").unwrap()];
-        assert_eq!(x3.var_type, VariableType::Binary);
+        assert_eq!(x3.var_type(), VariableType::Binary);
 
         let sos = reparsed.constraints.get(&reparsed.name_id("sos1").unwrap()).unwrap();
         if let Constraint::SOS { sos_type, weights, .. } = sos {
@@ -862,7 +873,7 @@ mod tests {
 
         let reparsed = LpProblem::parse_mps(&output).unwrap();
         let x1 = &reparsed.variables[&reparsed.name_id("x1").unwrap()];
-        assert_eq!(x1.var_type, VariableType::DoubleBound(5.5, f64::INFINITY));
+        assert_eq!(x1.var_type(), VariableType::DoubleBound(5.5, f64::INFINITY));
     }
 
     #[test]
@@ -884,7 +895,7 @@ mod tests {
         let x1 = &reparsed.variables[&reparsed.name_id("x1").unwrap()];
         // Documented variant collapse: same feasible region (lower 0), but
         // DoubleBound rather than UpperBound (see module docs).
-        assert_eq!(x1.var_type, VariableType::DoubleBound(0.0, -5.0));
+        assert_eq!(x1.var_type(), VariableType::DoubleBound(0.0, -5.0));
     }
 
     #[test]
@@ -967,7 +978,7 @@ mod tests {
         let output = write_mps_string(&problem).unwrap();
         let reparsed = LpProblem::parse_mps(&output).unwrap();
         let x1 = &reparsed.variables[&reparsed.name_id("x1").unwrap()];
-        assert_eq!(x1.var_type, VariableType::Integer);
+        assert_eq!(x1.var_type(), VariableType::Integer);
     }
 
     #[test]
@@ -1049,7 +1060,7 @@ End
 
         let reparsed = LpProblem::parse_mps(&output).unwrap();
         let x1 = &reparsed.variables[&reparsed.name_id("x1").unwrap()];
-        assert_eq!(x1.var_type, VariableType::SemiContinuous);
+        assert_eq!(x1.var_type(), VariableType::SemiContinuous);
     }
 
     #[test]
@@ -1074,7 +1085,7 @@ ENDATA
 ";
         let problem = LpProblem::parse_mps(input).unwrap();
         let x1 = &problem.variables[&problem.name_id("x1").unwrap()];
-        assert_eq!(x1.var_type, VariableType::UpperBound(f64::INFINITY));
+        assert_eq!(x1.var_type(), VariableType::UpperBound(f64::INFINITY));
 
         let output = write_mps_string(&problem).unwrap();
         assert!(output.contains(" PL BOUND"));
@@ -1082,7 +1093,7 @@ ENDATA
 
         let reparsed = LpProblem::parse_mps(&output).unwrap();
         let x1 = &reparsed.variables[&reparsed.name_id("x1").unwrap()];
-        assert_eq!(x1.var_type, VariableType::UpperBound(f64::INFINITY));
+        assert_eq!(x1.var_type(), VariableType::UpperBound(f64::INFINITY));
     }
 
     #[test]
@@ -1106,7 +1117,7 @@ ENDATA
 ";
         let problem = LpProblem::parse_mps(input).unwrap();
         let x1 = &problem.variables[&problem.name_id("x1").unwrap()];
-        assert_eq!(x1.var_type, VariableType::LowerBound(f64::NEG_INFINITY));
+        assert_eq!(x1.var_type(), VariableType::LowerBound(f64::NEG_INFINITY));
 
         let output = write_mps_string(&problem).unwrap();
         assert!(output.contains(" MI BOUND"));
@@ -1114,7 +1125,7 @@ ENDATA
 
         let reparsed = LpProblem::parse_mps(&output).unwrap();
         let x1 = &reparsed.variables[&reparsed.name_id("x1").unwrap()];
-        assert_eq!(x1.var_type, VariableType::LowerBound(f64::NEG_INFINITY));
+        assert_eq!(x1.var_type(), VariableType::LowerBound(f64::NEG_INFINITY));
     }
 
     #[test]
@@ -1258,7 +1269,7 @@ ENDATA
         assert_eq!(original.constraints.len(), reparsed.constraint_count());
 
         let x1 = &reparsed.variables[&reparsed.name_id("x1").unwrap()];
-        assert_eq!(x1.var_type, VariableType::DoubleBound(0.0, 20.0));
+        assert_eq!(x1.var_type(), VariableType::DoubleBound(0.0, 20.0));
     }
 
     #[test]

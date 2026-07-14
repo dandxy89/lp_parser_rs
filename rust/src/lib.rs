@@ -54,6 +54,8 @@ pub mod diff;
 pub mod error;
 pub mod interner;
 pub mod lexer;
+/// Byte-offset to line/column mapping for diagnostics.
+pub mod line_index;
 pub mod model;
 pub mod mps;
 /// File reading helpers (plain or memory-mapped with the `mmap` feature).
@@ -66,11 +68,13 @@ pub mod writer;
 // need deep module paths for the most common types and entry points.
 #[cfg(feature = "diff")]
 pub use diff::{DiffOptions, DiffTol, LpDiff, Normaliser};
-pub use error::{LpParseError, LpResult};
+pub use error::{EntityKind, LpParseError, LpResult, ParseContext};
 pub use interner::{NameId, NameInterner};
 // LALRPOP generated grammar module
 use lalrpop_util::lalrpop_mod;
 pub use lexer::ParseResult;
+pub use line_index::{LineIndex, SourceLocation};
+pub use model::{VariableBounds, VariableKind};
 pub use mps::{extract_mps_name, parse_mps};
 pub use problem::LpProblem;
 

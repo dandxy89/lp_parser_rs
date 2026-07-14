@@ -656,165 +656,312 @@ constraints:
     rhs: 0
 variables:
   - name: A_0
-    var_type:
-      DoubleBound:
-        - 0
-        - 4
+    kind: General
+    bounds:
+      lower: 0
+      upper: 4
   - name: A_3
-    var_type:
-      DoubleBound:
-        - 0
-        - 4
+    kind: General
+    bounds:
+      lower: 0
+      upper: 4
   - name: A_7
-    var_type:
-      DoubleBound:
-        - 0
-        - 4
+    kind: General
+    bounds:
+      lower: 0
+      upper: 4
   - name: B_0
-    var_type:
-      DoubleBound:
-        - 0
-        - 4
+    kind: General
+    bounds:
+      lower: 0
+      upper: 4
   - name: B_3
-    var_type:
-      DoubleBound:
-        - 0
-        - 4
+    kind: General
+    bounds:
+      lower: 0
+      upper: 4
   - name: B_7
-    var_type:
-      DoubleBound:
-        - 0
-        - 4
+    kind: General
+    bounds:
+      lower: 0
+      upper: 4
   - name: C_0
-    var_type:
-      DoubleBound:
-        - 0
-        - 4
+    kind: General
+    bounds:
+      lower: 0
+      upper: 4
   - name: C_7
-    var_type:
-      DoubleBound:
-        - 0
-        - 4
+    kind: General
+    bounds:
+      lower: 0
+      upper: 4
   - name: D_0
-    var_type:
-      DoubleBound:
-        - 0
-        - 4
+    kind: General
+    bounds:
+      lower: 0
+      upper: 4
   - name: D_3
-    var_type:
-      DoubleBound:
-        - 0
-        - 4
+    kind: General
+    bounds:
+      lower: 0
+      upper: 4
   - name: N_0
-    var_type:
-      DoubleBound:
-        - 0
-        - 4
+    kind: General
+    bounds:
+      lower: 0
+      upper: 4
   - name: N_3
-    var_type:
-      DoubleBound:
-        - 0
-        - 4
+    kind: General
+    bounds:
+      lower: 0
+      upper: 4
   - name: N_7
-    var_type:
-      DoubleBound:
-        - 0
-        - 4
+    kind: General
+    bounds:
+      lower: 0
+      upper: 4
   - name: PenaltyTree_48
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: over_0
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: over_10
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: over_12
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: over_14
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: over_16
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: over_18
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: over_2
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: over_20
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: over_22
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: over_24
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: over_26
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: over_28
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: over_30
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: over_32
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: over_34
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: over_36
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: over_38
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: over_4
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: over_40
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: over_42
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: over_44
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: over_46
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: over_6
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: over_8
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: under_1
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: under_11
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: under_13
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: under_15
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: under_17
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: under_19
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: under_21
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: under_23
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: under_25
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: under_27
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: under_29
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: under_3
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: under_31
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: under_33
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: under_35
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: under_37
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: under_39
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: under_41
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: under_43
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: under_45
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: under_47
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: under_5
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: under_7
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: under_9
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~

@@ -21,7 +21,7 @@ use std::fmt::Write;
 
 use crate::NUMERIC_EPSILON;
 use crate::interner::NameInterner;
-use crate::model::{Coefficient, Constraint, Objective, Variable, VariableType};
+use crate::model::{Coefficient, Constraint, Objective, Variable};
 use crate::problem::LpProblem;
 
 /// Options for controlling LP file output format
@@ -221,7 +221,7 @@ fn write_constraint(output: &mut String, constraint: &Constraint, interner: &Nam
 
 /// Write the bounds section
 fn write_bounds_section(output: &mut String, problem: &LpProblem, options: &LpWriterOptions) -> std::fmt::Result {
-    let has_bounds = problem.variables.values().any(|v| needs_bounds_declaration(&v.var_type));
+    let has_bounds = problem.variables.values().any(needs_bounds_declaration);
 
     if has_bounds {
         if options.include_section_spacing {
@@ -237,35 +237,49 @@ fn write_bounds_section(output: &mut String, problem: &LpProblem, options: &LpWr
     Ok(())
 }
 
-/// Check if a variable type needs bounds declaration
-const fn needs_bounds_declaration(var_type: &VariableType) -> bool {
-    matches!(var_type, VariableType::LowerBound(_) | VariableType::UpperBound(_) | VariableType::DoubleBound(_, _) | VariableType::Free)
+/// Whether a variable should appear in the Bounds section.
+///
+/// Continuous free variables are emitted as `x free` so round-trips preserve
+/// the explicit free declaration. Discrete kinds with free bounds rely on
+/// type sections instead and skip the Bounds section.
+fn needs_bounds_declaration(variable: &Variable) -> bool {
+    use crate::model::VariableKind;
+    if !variable.bounds.is_free() {
+        return true;
+    }
+    // Explicit free continuous variables are written as `x free`.
+    variable.kind == VariableKind::Continuous
 }
 
 /// Write bounds for a single variable
 fn write_variable_bounds(output: &mut String, variable: &Variable, interner: &NameInterner, options: &LpWriterOptions) -> std::fmt::Result {
+    use crate::model::VariableKind;
+    if !needs_bounds_declaration(variable) {
+        return Ok(());
+    }
+
     let var_name = interner.resolve(variable.name);
-    match &variable.var_type {
-        VariableType::Free => {
+    match (variable.bounds.lower, variable.bounds.upper) {
+        (None, None) if variable.kind == VariableKind::Continuous => {
             writeln!(output, "{var_name} free")?;
         }
-        VariableType::LowerBound(bound) => {
+        (Some(bound), None) => {
             write!(output, "{var_name} >= ")?;
-            write_number(output, *bound, options.decimal_precision)?;
+            write_number(output, bound, options.decimal_precision)?;
             writeln!(output)?;
         }
-        VariableType::UpperBound(bound) => {
+        (None, Some(bound)) => {
             write!(output, "{var_name} <= ")?;
-            write_number(output, *bound, options.decimal_precision)?;
+            write_number(output, bound, options.decimal_precision)?;
             writeln!(output)?;
         }
-        VariableType::DoubleBound(lower, upper) => {
-            write_number(output, *lower, options.decimal_precision)?;
+        (Some(lower), Some(upper)) => {
+            write_number(output, lower, options.decimal_precision)?;
             write!(output, " <= {var_name} <= ")?;
-            write_number(output, *upper, options.decimal_precision)?;
+            write_number(output, upper, options.decimal_precision)?;
             writeln!(output)?;
         }
-        _ => {} // Other types don't need bounds declarations
+        (None, None) => {}
     }
 
     Ok(())
@@ -273,7 +287,9 @@ fn write_variable_bounds(output: &mut String, variable: &Variable, interner: &Na
 
 /// Write variable type sections (binaries, integers, etc.)
 fn write_variable_types_sections(output: &mut String, problem: &LpProblem, options: &LpWriterOptions) -> std::fmt::Result {
-    // Group variables by type, resolving names
+    use crate::model::VariableKind;
+
+    // Group variables by kind, resolving names
     let mut binaries = Vec::new();
     let mut integers = Vec::new();
     let mut generals = Vec::new();
@@ -281,12 +297,12 @@ fn write_variable_types_sections(output: &mut String, problem: &LpProblem, optio
 
     for variable in problem.variables.values() {
         let var_name = problem.interner.resolve(variable.name);
-        match variable.var_type {
-            VariableType::Binary => binaries.push(var_name),
-            VariableType::Integer => integers.push(var_name),
-            VariableType::General => generals.push(var_name),
-            VariableType::SemiContinuous => semi_continuous.push(var_name),
-            _ => {} // Other types handled elsewhere
+        match variable.kind {
+            VariableKind::Binary => binaries.push(var_name),
+            VariableKind::Integer => integers.push(var_name),
+            VariableKind::General => generals.push(var_name),
+            VariableKind::SemiContinuous => semi_continuous.push(var_name),
+            VariableKind::Continuous | VariableKind::Sos => {}
         }
     }
 
@@ -510,9 +526,9 @@ mod tests {
         let x1 = reparsed.name_id("x1").unwrap();
         let x2 = reparsed.name_id("x2").unwrap();
         let x3 = reparsed.name_id("x3").unwrap();
-        assert_eq!(reparsed.variables[&x1].var_type, VariableType::UpperBound(f64::INFINITY));
-        assert_eq!(reparsed.variables[&x2].var_type, VariableType::LowerBound(f64::NEG_INFINITY));
-        assert_eq!(reparsed.variables[&x3].var_type, VariableType::DoubleBound(f64::NEG_INFINITY, 5.0));
+        assert_eq!(reparsed.variables[&x1].var_type(), VariableType::UpperBound(f64::INFINITY));
+        assert_eq!(reparsed.variables[&x2].var_type(), VariableType::LowerBound(f64::NEG_INFINITY));
+        assert_eq!(reparsed.variables[&x3].var_type(), VariableType::DoubleBound(f64::NEG_INFINITY, 5.0));
     }
 
     #[test]
@@ -753,8 +769,8 @@ End";
         // Verify the parsed variables are General
         let x1_id = problem.name_id("x1").unwrap();
         let x2_id = problem.name_id("x2").unwrap();
-        assert_eq!(problem.variables.get(&x1_id).unwrap().var_type, VariableType::General);
-        assert_eq!(problem.variables.get(&x2_id).unwrap().var_type, VariableType::General);
+        assert_eq!(problem.variables.get(&x1_id).unwrap().var_type(), VariableType::General);
+        assert_eq!(problem.variables.get(&x2_id).unwrap().var_type(), VariableType::General);
 
         // Write back to LP format
         let output = write_lp_string(&problem);
@@ -768,8 +784,8 @@ End";
         let reparsed = crate::problem::LpProblem::parse(&output).unwrap();
         let x1_id = reparsed.name_id("x1").unwrap();
         let x2_id = reparsed.name_id("x2").unwrap();
-        assert_eq!(reparsed.variables.get(&x1_id).unwrap().var_type, VariableType::General);
-        assert_eq!(reparsed.variables.get(&x2_id).unwrap().var_type, VariableType::General);
+        assert_eq!(reparsed.variables.get(&x1_id).unwrap().var_type(), VariableType::General);
+        assert_eq!(reparsed.variables.get(&x2_id).unwrap().var_type(), VariableType::General);
     }
 
     /// Assert that two problems are structurally identical: same sense, and the
@@ -816,7 +832,7 @@ End";
         for (id, var) in &a.variables {
             let name = a.resolve(*id);
             let b_id = b.name_id(name).unwrap_or_else(|| panic!("variable '{name}' missing after round-trip"));
-            assert_eq!(var.var_type, b.variables[&b_id].var_type, "variable '{name}' type");
+            assert_eq!(var.var_type(), b.variables[&b_id].var_type(), "variable '{name}' type");
         }
     }
 
@@ -852,7 +868,7 @@ End
         let original = LpProblem::parse(input).unwrap();
 
         // Sanity-check the parse picked up the interesting variable types.
-        let vt = |name: &str| original.variables[&original.name_id(name).unwrap()].var_type.clone();
+        let vt = |name: &str| original.variables[&original.name_id(name).unwrap()].var_type().clone();
         assert_eq!(vt("x1"), VariableType::LowerBound(2.0));
         assert_eq!(vt("x2"), VariableType::UpperBound(8.0));
         assert_eq!(vt("f"), VariableType::Free);
@@ -936,7 +952,7 @@ End
         let reparsed = LpProblem::parse(&written).unwrap_or_else(|e| panic!("wrapped LP must re-parse: {e}\n---\n{written}"));
         for name in &names {
             let id = reparsed.name_id(name).unwrap_or_else(|| panic!("binary '{name}' missing after round-trip"));
-            assert_eq!(reparsed.variables[&id].var_type, VariableType::Binary, "variable '{name}'");
+            assert_eq!(reparsed.variables[&id].var_type(), VariableType::Binary, "variable '{name}'");
         }
     }
 

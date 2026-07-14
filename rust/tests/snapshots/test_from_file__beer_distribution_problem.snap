@@ -131,47 +131,77 @@ constraints:
     rhs: 100
 variables:
   - name: Route_A_1
-    var_type:
-      LowerBound: 0
+    kind: General
+    bounds:
+      lower: 0
+      upper: ~
   - name: Route_A_2
-    var_type:
-      LowerBound: 0
+    kind: General
+    bounds:
+      lower: 0
+      upper: ~
   - name: Route_A_3
-    var_type:
-      LowerBound: 0
+    kind: General
+    bounds:
+      lower: 0
+      upper: ~
   - name: Route_A_4
-    var_type:
-      LowerBound: 0
+    kind: General
+    bounds:
+      lower: 0
+      upper: ~
   - name: Route_A_5
-    var_type:
-      LowerBound: 0
+    kind: General
+    bounds:
+      lower: 0
+      upper: ~
   - name: Route_B_1
-    var_type:
-      LowerBound: 0
+    kind: General
+    bounds:
+      lower: 0
+      upper: ~
   - name: Route_B_2
-    var_type:
-      LowerBound: 0
+    kind: General
+    bounds:
+      lower: 0
+      upper: ~
   - name: Route_B_3
-    var_type:
-      LowerBound: 0
+    kind: General
+    bounds:
+      lower: 0
+      upper: ~
   - name: Route_B_4
-    var_type:
-      LowerBound: 0
+    kind: General
+    bounds:
+      lower: 0
+      upper: ~
   - name: Route_B_5
-    var_type:
-      LowerBound: 0
+    kind: General
+    bounds:
+      lower: 0
+      upper: ~
   - name: Route_C_1
-    var_type:
-      LowerBound: 0
+    kind: General
+    bounds:
+      lower: 0
+      upper: ~
   - name: Route_C_2
-    var_type:
-      LowerBound: 0
+    kind: General
+    bounds:
+      lower: 0
+      upper: ~
   - name: Route_C_3
-    var_type:
-      LowerBound: 0
+    kind: General
+    bounds:
+      lower: 0
+      upper: ~
   - name: Route_C_4
-    var_type:
-      LowerBound: 0
+    kind: General
+    bounds:
+      lower: 0
+      upper: ~
   - name: Route_C_5
-    var_type:
-      LowerBound: 0
+    kind: General
+    bounds:
+      lower: 0
+      upper: ~

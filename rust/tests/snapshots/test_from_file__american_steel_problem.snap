@@ -140,72 +140,72 @@ constraints:
     rhs: -10000
 variables:
   - name: "Route_('Chicago',_'Gary')"
-    var_type:
-      DoubleBound:
-        - 0
-        - 4000
+    kind: General
+    bounds:
+      lower: 0
+      upper: 4000
   - name: "Route_('Chicago',_'Tempe')"
-    var_type:
-      DoubleBound:
-        - 0
-        - 2000
+    kind: General
+    bounds:
+      lower: 0
+      upper: 2000
   - name: "Route_('Cincinatti',_'Albany')"
-    var_type:
-      DoubleBound:
-        - 1000
-        - 5000
+    kind: General
+    bounds:
+      lower: 1000
+      upper: 5000
   - name: "Route_('Cincinatti',_'Houston')"
-    var_type:
-      DoubleBound:
-        - 0
-        - 6000
+    kind: General
+    bounds:
+      lower: 0
+      upper: 6000
   - name: "Route_('Kansas_City',_'Houston')"
-    var_type:
-      DoubleBound:
-        - 0
-        - 4000
+    kind: General
+    bounds:
+      lower: 0
+      upper: 4000
   - name: "Route_('Kansas_City',_'Tempe')"
-    var_type:
-      DoubleBound:
-        - 0
-        - 4000
+    kind: General
+    bounds:
+      lower: 0
+      upper: 4000
   - name: "Route_('Pittsburgh',_'Chicago')"
-    var_type:
-      DoubleBound:
-        - 0
-        - 4000
+    kind: General
+    bounds:
+      lower: 0
+      upper: 4000
   - name: "Route_('Pittsburgh',_'Cincinatti')"
-    var_type:
-      DoubleBound:
-        - 0
-        - 2000
+    kind: General
+    bounds:
+      lower: 0
+      upper: 2000
   - name: "Route_('Pittsburgh',_'Gary')"
-    var_type:
-      DoubleBound:
-        - 0
-        - 2000
+    kind: General
+    bounds:
+      lower: 0
+      upper: 2000
   - name: "Route_('Pittsburgh',_'Kansas_City')"
-    var_type:
-      DoubleBound:
-        - 2000
-        - 3000
+    kind: General
+    bounds:
+      lower: 2000
+      upper: 3000
   - name: "Route_('Youngstown',_'Albany')"
-    var_type:
-      DoubleBound:
-        - 0
-        - 1000
+    kind: General
+    bounds:
+      lower: 0
+      upper: 1000
   - name: "Route_('Youngstown',_'Chicago')"
-    var_type:
-      DoubleBound:
-        - 0
-        - 5000
+    kind: General
+    bounds:
+      lower: 0
+      upper: 5000
   - name: "Route_('Youngstown',_'Cincinatti')"
-    var_type:
-      DoubleBound:
-        - 0
-        - 3000
+    kind: General
+    bounds:
+      lower: 0
+      upper: 3000
   - name: "Route_('Youngstown',_'Kansas_City')"
-    var_type:
-      DoubleBound:
-        - 1000
-        - 5000
+    kind: General
+    bounds:
+      lower: 1000
+      upper: 5000

@@ -3,7 +3,7 @@
 use std::error::Error;
 use std::path::Path;
 
-use crate::model::{Constraint, VariableType};
+use crate::model::Constraint;
 use crate::problem::LpProblem;
 
 impl LpProblem {
@@ -89,13 +89,14 @@ impl LpProblem {
         for (name_id, var) in &self.variables {
             let name = self.interner.resolve(*name_id);
             let name_bytes = name.as_bytes();
-            let (lb, ub) = match var.var_type {
-                VariableType::LowerBound(lb) => (lb.to_string(), String::new()),
-                VariableType::UpperBound(ub) => (String::new(), ub.to_string()),
-                VariableType::DoubleBound(lb, ub) => (lb.to_string(), ub.to_string()),
-                _ => (String::new(), String::new()),
+            let (lb, ub) = match (var.bounds.lower, var.bounds.upper) {
+                (Some(lb), None) => (lb.to_string(), String::new()),
+                (None, Some(ub)) => (String::new(), ub.to_string()),
+                (Some(lb), Some(ub)) => (lb.to_string(), ub.to_string()),
+                (None, None) => (String::new(), String::new()),
             };
-            let vals: [&[u8]; 4] = [name_bytes, var.var_type.as_ref(), lb.as_bytes(), ub.as_bytes()];
+            let kind = var.kind.to_string();
+            let vals: [&[u8]; 4] = [name_bytes, kind.as_bytes(), lb.as_bytes(), ub.as_bytes()];
             var_writer.write_record(vals)?;
         }
         var_writer.flush()?;
@@ -168,13 +169,15 @@ End
         assert!(con_lines.contains(&"sos_a,SOS,y,2.5,,,S1".to_string()), "got: {con_lines:?}");
         assert_eq!(con_lines.len(), 5);
 
-        // Variables: the bound-column mapping per variable type.
+        // Variables: the `type` column reports the variable kind; bound shape
+        // lives in the separate lower_bound/upper_bound columns. These are all
+        // continuous variables that differ only in their bounds.
         let var_lines = read_lines(&dir.join("variables.csv"));
         assert_eq!(var_lines[0], "variable_name,type,lower_bound,upper_bound");
-        assert!(var_lines.contains(&"x,LowerBound,1,".to_string()), "got: {var_lines:?}");
-        assert!(var_lines.contains(&"y,UpperBound,,5".to_string()), "got: {var_lines:?}");
-        assert!(var_lines.contains(&"z,DoubleBound,2,8".to_string()), "got: {var_lines:?}");
-        assert!(var_lines.contains(&"w,Free,,".to_string()), "got: {var_lines:?}");
+        assert!(var_lines.contains(&"x,Continuous,1,".to_string()), "got: {var_lines:?}");
+        assert!(var_lines.contains(&"y,Continuous,,5".to_string()), "got: {var_lines:?}");
+        assert!(var_lines.contains(&"z,Continuous,2,8".to_string()), "got: {var_lines:?}");
+        assert!(var_lines.contains(&"w,Continuous,,".to_string()), "got: {var_lines:?}");
         assert_eq!(var_lines.len(), 5);
 
         fs::remove_dir_all(&dir).expect("cleanup failed");

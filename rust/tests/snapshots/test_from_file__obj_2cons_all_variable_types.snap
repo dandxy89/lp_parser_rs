@@ -45,8 +45,17 @@ constraints:
     rhs: 0
 variables:
   - name: x
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: y
-    var_type: General
+    kind: General
+    bounds:
+      lower: ~
+      upper: ~
   - name: z
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~

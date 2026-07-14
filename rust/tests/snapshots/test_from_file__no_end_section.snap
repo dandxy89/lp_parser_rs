@@ -54,8 +54,17 @@ constraints:
     rhs: 0
 variables:
   - name: x
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: y
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: z
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~

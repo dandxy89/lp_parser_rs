@@ -32,18 +32,22 @@ constraints:
     rhs: 32
 variables:
   - name: b_5829890_x1
-    var_type:
-      LowerBound: 10
+    kind: Binary
+    bounds:
+      lower: 10
+      upper: ~
   - name: b_5829890_x2
-    var_type:
-      DoubleBound:
-        - 1014
-        - 1917
+    kind: General
+    bounds:
+      lower: 1014
+      upper: 1917
   - name: b_5880854_x1
-    var_type:
-      UpperBound: 10
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: 10
   - name: b_5880854_x2
-    var_type:
-      DoubleBound:
-        - 1014
-        - 1917
+    kind: General
+    bounds:
+      lower: 1014
+      upper: 1917

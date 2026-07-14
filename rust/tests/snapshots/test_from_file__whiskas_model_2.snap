@@ -98,14 +98,32 @@ constraints:
     rhs: 0.4
 variables:
   - name: Ingr_BEEF
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: Ingr_CHICKEN
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: Ingr_GEL
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: Ingr_MUTTON
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: Ingr_RICE
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: Ingr_WHEAT
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~

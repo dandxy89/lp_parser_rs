@@ -27,11 +27,17 @@ constraints:
     rhs: 120
 variables:
   - name: x
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: y
-    var_type:
-      DoubleBound:
-        - 10
-        - 12
+    kind: General
+    bounds:
+      lower: 10
+      upper: 12
   - name: z
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~

@@ -284,10 +284,10 @@ pub fn compare(p1: &LpProblem, p2: &LpProblem, options: &DiffOptions) -> LpDiff 
 
     let mut vars_type_changed = Vec::new();
     for name in vars1.intersection(&vars2) {
-        let t1 = &p1.variables[&cvars1[name]].var_type;
-        let t2 = &p2.variables[&cvars2[name]].var_type;
-        if t1 != t2 {
-            vars_type_changed.push((name.clone(), format!("{t1:?}"), format!("{t2:?}")));
+        let v1 = &p1.variables[&cvars1[name]];
+        let v2 = &p2.variables[&cvars2[name]];
+        if v1.kind != v2.kind || v1.bounds != v2.bounds {
+            vars_type_changed.push((name.clone(), format!("{:?}/{}", v1.kind, v1.bounds), format!("{:?}/{}", v2.kind, v2.bounds)));
         }
     }
 

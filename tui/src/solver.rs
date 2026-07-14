@@ -7,7 +7,7 @@ use std::path::Path;
 use std::time::{Duration, Instant};
 
 use lp_parser_rs::interner::NameId;
-use lp_parser_rs::model::{ComparisonOp, Constraint, VariableType};
+use lp_parser_rs::model::{ComparisonOp, Constraint, Variable, VariableKind};
 use lp_parser_rs::problem::LpProblem;
 
 /// Result returned after a successful solve.
@@ -370,16 +370,18 @@ struct SolveMetadata {
     skipped_sos: usize,
 }
 
-/// Map a variable's declared type to `(is_integer, lower, upper)` bounds for `HiGHS`.
-const fn variable_bounds(var_type: Option<&VariableType>) -> (bool, f64, f64) {
-    match var_type {
-        Some(VariableType::Binary) => (true, 0.0, 1.0),
-        Some(VariableType::Integer | VariableType::General) => (true, 0.0, f64::INFINITY),
-        Some(VariableType::Free | VariableType::SemiContinuous | VariableType::SOS) | None => (false, 0.0, f64::INFINITY),
-        Some(VariableType::LowerBound(lb)) => (false, *lb, f64::INFINITY),
-        Some(VariableType::UpperBound(ub)) => (false, 0.0, *ub),
-        Some(VariableType::DoubleBound(lb, ub)) => (false, *lb, *ub),
-    }
+/// Map a variable's kind + bounds to `(is_integer, lower, upper)` bounds for `HiGHS`.
+///
+/// Keyed off `kind`/`bounds` directly rather than the lossy legacy `VariableType`
+/// so an integer variable carrying explicit bounds (e.g. `0 <= x <= 10`) is still
+/// reported as integer. An unbounded side falls back to the LP default of
+/// `[0, +inf)` (binary defaults to `[0, 1]`).
+fn variable_bounds(variable: Option<&Variable>) -> (bool, f64, f64) {
+    let Some(v) = variable else {
+        return (false, 0.0, f64::INFINITY);
+    };
+    let upper_default = if matches!(v.kind, VariableKind::Binary) { 1.0 } else { f64::INFINITY };
+    (v.kind.is_integer(), v.bounds.lower.unwrap_or(0.0), v.bounds.upper.unwrap_or(upper_default))
 }
 
 /// Sort variable `NameId`s by resolved name for deterministic column ordering.
@@ -425,7 +427,7 @@ fn build_highs_model(problem: &LpProblem) -> BuiltModel {
         let objective_coefficient = objective_coefficients.get(&var_id).copied().unwrap_or(0.0);
         let variable = problem.variables.get(&var_id);
 
-        let (is_integer, lower, upper) = variable_bounds(variable.map(|v| &v.var_type));
+        let (is_integer, lower, upper) = variable_bounds(variable);
 
         let col = row_problem.add_column_with_integrality(objective_coefficient, lower..=upper, is_integer);
         columns.push(col);
@@ -667,7 +669,7 @@ pub fn diagnose_infeasibility(problem: &LpProblem) -> Result<InfeasibilityDiagno
         // Zero objective coefficient and relaxed integrality: the elastic
         // objective is the slack sum alone, and an LP relaxation is faster and
         // more reliable than the original MIP.
-        let (_, mut lower, mut upper) = variable_bounds(problem.variables.get(&var_id).map(|v| &v.var_type));
+        let (_, mut lower, mut upper) = variable_bounds(problem.variables.get(&var_id));
         if lower > upper {
             // Conflicting bounds would make the elastic model itself
             // infeasible: report the gap and relax the variable to the

@@ -45,33 +45,62 @@ constraints:
     rhs: 1
 variables:
   - name: qwer
-    var_type:
-      DoubleBound:
-        - -inf
-        - inf
+    kind: Continuous
+    bounds:
+      lower: -inf
+      upper: inf
   - name: sdfdf5343
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: sdfdfdf
-    var_type: General
+    kind: General
+    bounds:
+      lower: ~
+      upper: ~
   - name: that
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: this
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: x1
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: x2
-    var_type:
-      LowerBound: 1
+    kind: Continuous
+    bounds:
+      lower: 1
+      upper: ~
   - name: x2dfsdf
-    var_type:
-      DoubleBound:
-        - 100
-        - -1
+    kind: Continuous
+    bounds:
+      lower: 100
+      upper: -1
   - name: x2x3x4
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: x3
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: x4
-    var_type: General
+    kind: General
+    bounds:
+      lower: ~
+      upper: ~
   - name: x6
-    var_type: General
+    kind: General
+    bounds:
+      lower: ~
+      upper: ~

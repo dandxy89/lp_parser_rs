@@ -54,7 +54,22 @@ fn assert_round_trip_preserves_structure(original: &LpProblem, reparsed: &LpProb
         let name = original.resolve(*name_id);
         let reparsed_id = reparsed.name_id(name).unwrap_or_else(|| panic!("{context}: variable '{name}' missing after round trip"));
         let reparsed_var = &reparsed.variables[&reparsed_id];
-        assert_eq!(reparsed_var.var_type, var.var_type, "{context}: bound/type mismatch for variable '{name}'");
+        // Compare the semantic shape (integrality + effective feasible region)
+        // rather than the lossy `VariableType` view. MPS cannot distinguish
+        // `General` from `Integer`, and normalises a binary variable's redundant
+        // explicit `[0, 1]` bounds away -- both preserve integrality and the
+        // feasible region, which is what a structural round trip must keep.
+        assert_eq!(
+            reparsed_var.kind.is_integer(),
+            var.kind.is_integer(),
+            "{context}: integrality mismatch for variable '{name}' ({:?} vs {:?})",
+            reparsed_var.kind,
+            var.kind
+        );
+        let orig_bounds = (var.bounds.effective_lower(var.kind), var.bounds.effective_upper(var.kind));
+        let reparsed_bounds =
+            (reparsed_var.bounds.effective_lower(reparsed_var.kind), reparsed_var.bounds.effective_upper(reparsed_var.kind));
+        assert_eq!(reparsed_bounds, orig_bounds, "{context}: effective bounds mismatch for variable '{name}'");
     }
 
     for (name_id, constraint) in &original.constraints {
@@ -195,7 +210,7 @@ ENDATA
 ";
     let problem = LpProblem::parse_mps(input).unwrap();
     let x1 = &problem.variables[&problem.name_id("x1").unwrap()];
-    assert_eq!(x1.var_type, VariableType::SemiContinuous, "SC bound must resolve to SemiContinuous, dropping the 50");
+    assert_eq!(x1.var_type(), VariableType::SemiContinuous, "SC bound must resolve to SemiContinuous, dropping the 50");
 
     let output = write_mps_string_with_options(&problem, &lossless_options()).unwrap();
     let sc_line = output.lines().find(|line| line.trim_start().starts_with("SC ")).expect("written MPS must contain an SC bound line");
@@ -203,7 +218,7 @@ ENDATA
 
     let reparsed = LpProblem::parse_mps(&output).unwrap();
     let x1 = &reparsed.variables[&reparsed.name_id("x1").unwrap()];
-    assert_eq!(x1.var_type, VariableType::SemiContinuous);
+    assert_eq!(x1.var_type(), VariableType::SemiContinuous);
 }
 
 /// `test.lp` contains a strict inequality (`c3:: x2 > 1`), which MPS has no

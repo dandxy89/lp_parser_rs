@@ -32,12 +32,12 @@ constraints:
     rhs: -4
 variables:
   - name: x1
-    var_type:
-      DoubleBound:
-        - 0
-        - inf
+    kind: General
+    bounds:
+      lower: 0
+      upper: inf
   - name: x2
-    var_type:
-      DoubleBound:
-        - 0
-        - inf
+    kind: General
+    bounds:
+      lower: 0
+      upper: inf
