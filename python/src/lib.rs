@@ -4,7 +4,9 @@
 use std::path::{Path, PathBuf};
 
 use lp_parser_rs::analysis::AnalysisConfig;
+use lp_parser_rs::diff::DiffOptions;
 use lp_parser_rs::model::{Constraint, Sense, VariableType};
+use lp_parser_rs::mps::writer::{MpsWriterOptions, write_mps_string_with_options};
 use lp_parser_rs::parser::parse_file;
 use lp_parser_rs::problem::LpProblem;
 use lp_parser_rs::writer::{LpWriterOptions, write_lp_string_with_options};
@@ -39,6 +41,38 @@ impl LpParser {
         }
 
         Ok(Self { lp_file, problem: None })
+    }
+
+    /// Construct a parser from an in-memory string, parsing it immediately.
+    ///
+    /// `format` is `"lp"` (default) or `"mps"`.
+    #[staticmethod]
+    #[pyo3(signature = (text, format="lp"))]
+    fn from_string(py: Python, text: String, format: &str) -> PyResult<Self> {
+        let problem = py.detach(|| parse_source(&text, format))?;
+        Ok(Self { lp_file: "<string>".to_string(), problem: Some(problem) })
+    }
+
+    /// Construct a parser from a file, parsing it immediately.
+    ///
+    /// The format is taken from `format` when given, otherwise inferred from the
+    /// extension (`.mps` -> MPS, everything else -> LP).
+    #[staticmethod]
+    #[pyo3(signature = (path, format=None))]
+    fn from_file(py: Python, path: String, format: Option<&str>) -> PyResult<Self> {
+        if !Path::new(&path).is_file() {
+            return Err(PyFileNotFoundError::new_err(format!("File '{path}' does not exist or is not a file")));
+        }
+        let inferred = format.map_or_else(
+            || if Path::new(&path).extension().is_some_and(|ext| ext.eq_ignore_ascii_case("mps")) { "mps" } else { "lp" },
+            |fmt| fmt,
+        );
+        let file_path = PathBuf::from(&path);
+        let problem = py.detach(move || {
+            let input = parse_file(&file_path).map_err(|err| LpParseError::new_err(format!("Unable to read file: {err}")))?;
+            parse_source(&input, inferred)
+        })?;
+        Ok(Self { lp_file: path, problem: Some(problem) })
     }
 
     #[getter]
@@ -146,7 +180,11 @@ impl LpParser {
             let resolved_name = problem.resolve(*name_id);
             let var_dict = PyDict::new(py);
             var_dict.set_item("name", resolved_name)?;
-            var_dict.set_item("var_type", format!("{:?}", var.var_type))?;
+            // Structured kind + bounds rather than a Debug string: `lower`/`upper`
+            // are `None` when unbounded on that side.
+            var_dict.set_item("kind", var.kind.to_string())?;
+            var_dict.set_item("lower", var.bounds.lower)?;
+            var_dict.set_item("upper", var.bounds.upper)?;
             dict.set_item(resolved_name, var_dict)?;
         }
 
@@ -172,6 +210,46 @@ impl LpParser {
         let problem = self.get_problem()?;
         let lp_content = write_lp_string_with_options(problem, &LpWriterOptions::default());
         std::fs::write(&filepath, lp_content).map_err(|err| PyRuntimeError::new_err(format!("Failed to write file: {err}")))
+    }
+
+    /// Write the current problem to an MPS format string.
+    #[pyo3(signature = (*, decimal_precision=6, allow_multiple_objectives=false))]
+    fn to_mps_string(&self, decimal_precision: usize, allow_multiple_objectives: bool) -> PyResult<String> {
+        let problem = self.get_problem()?;
+        let options = MpsWriterOptions { decimal_precision, allow_multiple_objectives };
+        write_mps_string_with_options(problem, &options).map_err(|err| PyRuntimeError::new_err(format!("Unable to write MPS: {err}")))
+    }
+
+    /// Save the current problem to an MPS file.
+    #[pyo3(signature = (filepath, *, decimal_precision=6, allow_multiple_objectives=false))]
+    fn save_to_mps(&self, filepath: String, decimal_precision: usize, allow_multiple_objectives: bool) -> PyResult<()> {
+        let content = self.to_mps_string(decimal_precision, allow_multiple_objectives)?;
+        std::fs::write(&filepath, content).map_err(|err| PyRuntimeError::new_err(format!("Failed to write file: {err}")))
+    }
+
+    /// Compare this problem against another parser's problem.
+    ///
+    /// Returns a dict with `vars_added`, `vars_removed`, `vars_type_changed`,
+    /// `cons_added`, `cons_removed`, `cons_modified`, `objs_added`,
+    /// `objs_removed`, `objs_modified`, and `is_empty`.
+    fn diff(&self, py: Python, other: &Self) -> PyResult<Py<PyAny>> {
+        let problem = self.get_problem()?;
+        let other_problem = other.get_problem()?;
+        let result = problem.diff(other_problem, &DiffOptions::default());
+        let is_empty = result.is_empty();
+
+        let dict = PyDict::new(py);
+        dict.set_item("vars_added", result.vars_added)?;
+        dict.set_item("vars_removed", result.vars_removed)?;
+        dict.set_item("vars_type_changed", result.vars_type_changed)?;
+        dict.set_item("cons_added", result.cons_added)?;
+        dict.set_item("cons_removed", result.cons_removed)?;
+        dict.set_item("cons_modified", result.cons_modified)?;
+        dict.set_item("objs_added", result.objs_added)?;
+        dict.set_item("objs_removed", result.objs_removed)?;
+        dict.set_item("objs_modified", result.objs_modified)?;
+        dict.set_item("is_empty", is_empty)?;
+        Ok(dict.into())
     }
 
     /// Update coefficient in an objective
@@ -353,6 +431,16 @@ impl LpParser {
 
     fn get_problem_mut(&mut self) -> PyResult<&mut LpProblem> {
         self.problem.as_mut().ok_or_else(|| LpNotParsedError::new_err("Must call parse() first"))
+    }
+}
+
+/// Parse LP or MPS source text into an [`LpProblem`], selecting the parser by
+/// `format` (`"lp"` or `"mps"`, case-insensitive).
+fn parse_source(text: &str, format: &str) -> PyResult<LpProblem> {
+    match format.to_lowercase().as_str() {
+        "lp" => LpProblem::parse(text).map_err(|err| LpParseError::new_err(format!("Unable to parse LpProblem: {err}"))),
+        "mps" => LpProblem::parse_mps(text).map_err(|err| LpParseError::new_err(format!("Unable to parse MPS: {err}"))),
+        other => Err(LpInvalidValueError::new_err(format!("Unknown format: {other}. Use 'lp' or 'mps'"))),
     }
 }
 

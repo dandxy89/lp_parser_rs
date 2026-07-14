@@ -46,8 +46,9 @@ ignore = ["E501", "SIM108", "D", "S", "PLR2004", "COM"]
 
 [tool.ruff.lint.per-file-ignores]
 # The extension module has no Python source, so stub docstrings are the only
-# docs IDEs can surface for it.
-"parse_lp/*.pyi" = ["PYI021"]
+# docs IDEs can surface for it. `format` is a deliberate public keyword argument
+# (from_string/from_file) mirroring the LP/MPS selector, so A002 is expected.
+"parse_lp/*.pyi" = ["PYI021", "A002"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["parse_lp"]

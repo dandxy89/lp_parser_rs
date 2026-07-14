@@ -96,7 +96,8 @@ class TestLpParserComponents:
 
         x1 = variables["x1"]
         assert x1["name"] == "x1"
-        assert "LowerBound" in x1["var_type"]
+        assert x1["kind"] == "Continuous"
+        assert x1["lower"] is not None
 
 
 class TestLpParserCSV:
