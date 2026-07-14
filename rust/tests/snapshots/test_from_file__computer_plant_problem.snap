@@ -163,58 +163,102 @@ constraints:
     rhs: 0
 variables:
   - name: BuildaPlant_Denver
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: BuildaPlant_Los_Angeles
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: BuildaPlant_Phoenix
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: BuildaPlant_San_Francisco
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: Route_Denver_Barstow
-    var_type:
-      LowerBound: 0
+    kind: General
+    bounds:
+      lower: 0
+      upper: ~
   - name: Route_Denver_Dallas
-    var_type:
-      LowerBound: 0
+    kind: General
+    bounds:
+      lower: 0
+      upper: ~
   - name: Route_Denver_San_Diego
-    var_type:
-      LowerBound: 0
+    kind: General
+    bounds:
+      lower: 0
+      upper: ~
   - name: Route_Denver_Tucson
-    var_type:
-      LowerBound: 0
+    kind: General
+    bounds:
+      lower: 0
+      upper: ~
   - name: Route_Los_Angeles_Barstow
-    var_type:
-      LowerBound: 0
+    kind: General
+    bounds:
+      lower: 0
+      upper: ~
   - name: Route_Los_Angeles_Dallas
-    var_type:
-      LowerBound: 0
+    kind: General
+    bounds:
+      lower: 0
+      upper: ~
   - name: Route_Los_Angeles_San_Diego
-    var_type:
-      LowerBound: 0
+    kind: General
+    bounds:
+      lower: 0
+      upper: ~
   - name: Route_Los_Angeles_Tucson
-    var_type:
-      LowerBound: 0
+    kind: General
+    bounds:
+      lower: 0
+      upper: ~
   - name: Route_Phoenix_Barstow
-    var_type:
-      LowerBound: 0
+    kind: General
+    bounds:
+      lower: 0
+      upper: ~
   - name: Route_Phoenix_Dallas
-    var_type:
-      LowerBound: 0
+    kind: General
+    bounds:
+      lower: 0
+      upper: ~
   - name: Route_Phoenix_San_Diego
-    var_type:
-      LowerBound: 0
+    kind: General
+    bounds:
+      lower: 0
+      upper: ~
   - name: Route_Phoenix_Tucson
-    var_type:
-      LowerBound: 0
+    kind: General
+    bounds:
+      lower: 0
+      upper: ~
   - name: Route_San_Francisco_Barstow
-    var_type:
-      LowerBound: 0
+    kind: General
+    bounds:
+      lower: 0
+      upper: ~
   - name: Route_San_Francisco_Dallas
-    var_type:
-      LowerBound: 0
+    kind: General
+    bounds:
+      lower: 0
+      upper: ~
   - name: Route_San_Francisco_San_Diego
-    var_type:
-      LowerBound: 0
+    kind: General
+    bounds:
+      lower: 0
+      upper: ~
   - name: Route_San_Francisco_Tucson
-    var_type:
-      LowerBound: 0
+    kind: General
+    bounds:
+      lower: 0
+      upper: ~

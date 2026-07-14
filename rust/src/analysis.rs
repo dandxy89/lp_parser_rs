@@ -27,7 +27,7 @@ use std::fmt::{Display, Formatter, Result as FmtResult};
 use rustc_hash::FxHashSet;
 
 use crate::interner::NameId;
-use crate::model::{ComparisonOp, Constraint, SOSType, VariableType};
+use crate::model::{ComparisonOp, Constraint, SOSType, VariableKind};
 use crate::problem::LpProblem;
 
 /// Configuration for analysis behaviour and thresholds.
@@ -634,26 +634,39 @@ impl LpProblem {
 
         for (name_id, variable) in &self.variables {
             let name_str = self.interner.resolve(*name_id);
-            match &variable.var_type {
-                VariableType::Free => {
-                    type_distribution.free += 1;
-                    free_variables.push(name_str.to_string());
-                }
-                VariableType::General => type_distribution.general += 1,
-                VariableType::LowerBound(_) => type_distribution.lower_bounded += 1,
-                VariableType::UpperBound(_) => type_distribution.upper_bounded += 1,
-                VariableType::DoubleBound(lower, upper) => {
-                    type_distribution.double_bounded += 1;
-                    if (lower - upper).abs() < f64::EPSILON {
-                        fixed_variables.push(FixedVariable { name: name_str.to_string(), value: *lower });
-                    } else if lower > upper {
-                        invalid_bounds.push(InvalidBound { name: name_str.to_string(), lower: *lower, upper: *upper });
+            // Count kind and bounds shape separately so integer-with-bounds is visible.
+            match variable.kind {
+                VariableKind::Binary => type_distribution.binary += 1,
+                VariableKind::Integer => type_distribution.integer += 1,
+                VariableKind::General => type_distribution.general += 1,
+                VariableKind::SemiContinuous => type_distribution.semi_continuous += 1,
+                VariableKind::Sos => type_distribution.sos += 1,
+                VariableKind::Continuous => match (variable.bounds.lower, variable.bounds.upper) {
+                    (None, None) => {
+                        type_distribution.free += 1;
+                        free_variables.push(name_str.to_string());
                     }
+                    (Some(_), None) => type_distribution.lower_bounded += 1,
+                    (None, Some(_)) => type_distribution.upper_bounded += 1,
+                    (Some(lower), Some(upper)) => {
+                        type_distribution.double_bounded += 1;
+                        if (lower - upper).abs() < f64::EPSILON {
+                            fixed_variables.push(FixedVariable { name: name_str.to_string(), value: lower });
+                        } else if lower > upper {
+                            invalid_bounds.push(InvalidBound { name: name_str.to_string(), lower, upper });
+                        }
+                    }
+                },
+            }
+            // Also flag fixed/invalid bounds on non-continuous kinds.
+            if variable.kind != VariableKind::Continuous
+                && let (Some(lower), Some(upper)) = (variable.bounds.lower, variable.bounds.upper)
+            {
+                if (lower - upper).abs() < f64::EPSILON {
+                    fixed_variables.push(FixedVariable { name: name_str.to_string(), value: lower });
+                } else if lower > upper {
+                    invalid_bounds.push(InvalidBound { name: name_str.to_string(), lower, upper });
                 }
-                VariableType::Binary => type_distribution.binary += 1,
-                VariableType::Integer => type_distribution.integer += 1,
-                VariableType::SemiContinuous => type_distribution.semi_continuous += 1,
-                VariableType::SOS => type_distribution.sos += 1,
             }
         }
 
@@ -946,7 +959,7 @@ impl LpProblem {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{Coefficient, Constraint, Objective, Variable};
+    use crate::model::{Coefficient, Constraint, Objective, Variable, VariableType};
 
     #[test]
     fn test_range_stats_empty() {

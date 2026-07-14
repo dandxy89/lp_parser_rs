@@ -306,52 +306,52 @@ constraints:
     rhs: 0
 variables:
   - name: X0
-    var_type:
-      DoubleBound:
-        - 0
-        - 5
+    kind: Integer
+    bounds:
+      lower: 0
+      upper: 5
   - name: X1
-    var_type:
-      DoubleBound:
-        - 0
-        - 3
+    kind: Integer
+    bounds:
+      lower: 0
+      upper: 3
   - name: X2
-    var_type:
-      DoubleBound:
-        - 0
-        - 5
+    kind: Integer
+    bounds:
+      lower: 0
+      upper: 5
   - name: X3
-    var_type:
-      DoubleBound:
-        - 0
-        - 7
+    kind: Integer
+    bounds:
+      lower: 0
+      upper: 7
   - name: X4
-    var_type:
-      DoubleBound:
-        - 0
-        - 3
+    kind: Integer
+    bounds:
+      lower: 0
+      upper: 3
   - name: X5
-    var_type:
-      DoubleBound:
-        - 0
-        - 5
+    kind: Integer
+    bounds:
+      lower: 0
+      upper: 5
   - name: X6
-    var_type:
-      DoubleBound:
-        - 0
-        - 3
+    kind: Integer
+    bounds:
+      lower: 0
+      upper: 3
   - name: X7
-    var_type:
-      DoubleBound:
-        - 0
-        - 3
+    kind: Integer
+    bounds:
+      lower: 0
+      upper: 3
   - name: X8
-    var_type:
-      DoubleBound:
-        - 0
-        - 3
+    kind: Integer
+    bounds:
+      lower: 0
+      upper: 3
   - name: X9
-    var_type:
-      DoubleBound:
-        - 0
-        - 80082
+    kind: Integer
+    bounds:
+      lower: 0
+      upper: 80082

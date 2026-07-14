@@ -152,38 +152,47 @@ constraints:
     rhs: 0
 variables:
   - name: x0
-    var_type:
-      DoubleBound:
-        - 0
-        - 21.1
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 21.1
   - name: x1
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: x2
-    var_type:
-      DoubleBound:
-        - 0
-        - 22.2
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 22.2
   - name: x3
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: x4
-    var_type:
-      DoubleBound:
-        - 0
-        - 23.3
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 23.3
   - name: x5
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: x6
-    var_type:
-      DoubleBound:
-        - 0
-        - 11.1
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 11.1
   - name: x7
-    var_type:
-      DoubleBound:
-        - 0
-        - 12.2
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 12.2
   - name: x8
-    var_type:
-      DoubleBound:
-        - 0
-        - 13.3
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 13.3

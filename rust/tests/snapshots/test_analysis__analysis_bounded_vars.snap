@@ -16,10 +16,10 @@ sparsity:
 variables:
   type_distribution:
     free: 1
-    general: 0
+    general: 1
     lower_bounded: 0
     upper_bounded: 0
-    double_bounded: 1
+    double_bounded: 0
     binary: 1
     integer: 0
     semi_continuous: 0

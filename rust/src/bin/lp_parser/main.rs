@@ -166,7 +166,7 @@ fn count_variable_types(problem: &LpProblem) -> (usize, usize, usize) {
     let mut binary = 0;
 
     for var in problem.variables.values() {
-        match var.var_type {
+        match var.var_type() {
             VariableType::Binary => binary += 1,
             VariableType::Integer => integer += 1,
             _ => continuous += 1,
@@ -225,7 +225,7 @@ fn write_info_text<W: Write>(writer: &mut W, problem: &LpProblem, args: &InfoArg
         writeln!(writer, "Variables:")?;
         for (name_id, var) in &problem.variables {
             let name = problem.resolve(*name_id);
-            writeln!(writer, "  {name}: {:?}", var.var_type)?;
+            writeln!(writer, "  {name}: {:?}", var.var_type())?;
         }
     }
 
@@ -274,7 +274,7 @@ fn build_info_value(problem: &LpProblem, args: &InfoArgs) -> serde_json::Value {
         info["variables"] = problem
             .variables
             .iter()
-            .map(|(name_id, var)| serde_json::json!({ "name": problem.resolve(*name_id), "var_type": format!("{:?}", var.var_type) }))
+            .map(|(name_id, var)| serde_json::json!({ "name": problem.resolve(*name_id), "var_type": format!("{:?}", var.var_type()) }))
             .collect();
     }
 

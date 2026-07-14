@@ -766,8 +766,12 @@ fn diff_variables(p1: &LpProblem, p2: &LpProblem, opts: &DiffOptions) -> Section
             std::cmp::Ordering::Less => {
                 let (name, v1) = &vars1[i];
                 counts.removed += 1;
-                let entry =
-                    VariableDiffEntry { name: name.clone(), kind: DiffKind::Removed, old_type: Some(v1.var_type.clone()), new_type: None };
+                let entry = VariableDiffEntry {
+                    name: name.clone(),
+                    kind: DiffKind::Removed,
+                    old_type: Some(v1.var_type().clone()),
+                    new_type: None,
+                };
                 debug_assert!(entry.old_type.is_some(), "Removed variable must have old_type");
                 debug_assert!(entry.new_type.is_none(), "Removed variable must not have new_type");
                 entries.push(entry);
@@ -777,7 +781,7 @@ fn diff_variables(p1: &LpProblem, p2: &LpProblem, opts: &DiffOptions) -> Section
                 let (name, v2) = &vars2[j];
                 counts.added += 1;
                 let entry =
-                    VariableDiffEntry { name: name.clone(), kind: DiffKind::Added, old_type: None, new_type: Some(v2.var_type.clone()) };
+                    VariableDiffEntry { name: name.clone(), kind: DiffKind::Added, old_type: None, new_type: Some(v2.var_type().clone()) };
                 debug_assert!(entry.new_type.is_some(), "Added variable must have new_type");
                 debug_assert!(entry.old_type.is_none(), "Added variable must not have old_type");
                 entries.push(entry);
@@ -786,15 +790,15 @@ fn diff_variables(p1: &LpProblem, p2: &LpProblem, opts: &DiffOptions) -> Section
             std::cmp::Ordering::Equal => {
                 let (name, v1) = &vars1[i];
                 let v2 = vars2[j].1;
-                if v1.var_type == v2.var_type {
+                if v1.var_type() == v2.var_type() {
                     counts.unchanged += 1;
                 } else {
                     counts.modified += 1;
                     let entry = VariableDiffEntry {
                         name: name.clone(),
                         kind: DiffKind::Modified,
-                        old_type: Some(v1.var_type.clone()),
-                        new_type: Some(v2.var_type.clone()),
+                        old_type: Some(v1.var_type().clone()),
+                        new_type: Some(v2.var_type().clone()),
                     };
                     debug_assert!(entry.old_type.is_some(), "Modified variable must have old_type");
                     debug_assert!(entry.new_type.is_some(), "Modified variable must have new_type");

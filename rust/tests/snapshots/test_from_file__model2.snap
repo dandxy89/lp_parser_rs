@@ -46,42 +46,42 @@ constraints:
     rhs: 1
 variables:
   - name: V1
-    var_type:
-      DoubleBound:
-        - -inf
-        - 3
+    kind: Continuous
+    bounds:
+      lower: -inf
+      upper: 3
   - name: V2
-    var_type:
-      DoubleBound:
-        - -inf
-        - 3
+    kind: Continuous
+    bounds:
+      lower: -inf
+      upper: 3
   - name: V3
-    var_type:
-      DoubleBound:
-        - -inf
-        - 3
+    kind: Continuous
+    bounds:
+      lower: -inf
+      upper: 3
   - name: V4
-    var_type:
-      DoubleBound:
-        - 5.5
-        - inf
+    kind: General
+    bounds:
+      lower: 5.5
+      upper: inf
   - name: V5
-    var_type:
-      DoubleBound:
-        - 0
-        - 1
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 1
   - name: V6
-    var_type:
-      DoubleBound:
-        - 0
-        - 1
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 1
   - name: V7
-    var_type:
-      DoubleBound:
-        - 0
-        - 1
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 1
   - name: V8
-    var_type:
-      DoubleBound:
-        - 0
-        - 1
+    kind: Binary
+    bounds:
+      lower: 0
+      upper: 1

@@ -51,16 +51,22 @@ constraints:
     rhs: 0
 variables:
   - name: x1
-    var_type:
-      DoubleBound:
-        - 0
-        - 40
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 40
   - name: x2
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: x3
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: x4
-    var_type:
-      DoubleBound:
-        - 2
-        - 3
+    kind: General
+    bounds:
+      lower: 2
+      upper: 3

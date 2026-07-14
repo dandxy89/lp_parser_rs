@@ -24,12 +24,12 @@ constraints:
     rhs: 0
 variables:
   - name: x
-    var_type:
-      DoubleBound:
-        - 0
-        - 1
+    kind: General
+    bounds:
+      lower: 0
+      upper: 1
   - name: y
-    var_type:
-      DoubleBound:
-        - 0.2
-        - 1
+    kind: SemiContinuous
+    bounds:
+      lower: 0.2
+      upper: 1

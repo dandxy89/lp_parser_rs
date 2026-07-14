@@ -65,7 +65,7 @@ use lp_solvers::lp_format::{AsVariable, LpObjective, WriteToLpFileFormat};
 
 use crate::NUMERIC_EPSILON;
 use crate::interner::{NameId, NameInterner};
-use crate::model::{Coefficient, ComparisonOp, Constraint, Objective, Sense, Variable, VariableType};
+use crate::model::{Coefficient, ComparisonOp, Constraint, Objective, Sense, Variable, VariableKind};
 use crate::problem::LpProblem;
 
 /// Errors that can occur when converting an `LpProblem` to lp-solvers format.
@@ -125,7 +125,7 @@ impl fmt::Display for LpSolversCompatWarning {
 #[derive(Debug, Clone)]
 pub struct VariableAdapter<'a> {
     name: &'a str,
-    var_type: &'a VariableType,
+    variable: &'a Variable,
 }
 
 impl AsVariable for VariableAdapter<'_> {
@@ -134,33 +134,15 @@ impl AsVariable for VariableAdapter<'_> {
     }
 
     fn is_integer(&self) -> bool {
-        matches!(self.var_type, VariableType::Binary | VariableType::Integer | VariableType::General)
+        self.variable.kind.is_integer()
     }
 
     fn lower_bound(&self) -> f64 {
-        match self.var_type {
-            VariableType::Free => f64::NEG_INFINITY,
-            VariableType::General
-            | VariableType::Binary
-            | VariableType::Integer
-            | VariableType::UpperBound(_)
-            | VariableType::SemiContinuous
-            | VariableType::SOS => 0.0,
-            VariableType::LowerBound(lb) | VariableType::DoubleBound(lb, _) => *lb,
-        }
+        self.variable.bounds.effective_lower(self.variable.kind)
     }
 
     fn upper_bound(&self) -> f64 {
-        match self.var_type {
-            VariableType::Free
-            | VariableType::General
-            | VariableType::Integer
-            | VariableType::LowerBound(_)
-            | VariableType::SemiContinuous
-            | VariableType::SOS => f64::INFINITY,
-            VariableType::Binary => 1.0,
-            VariableType::UpperBound(ub) | VariableType::DoubleBound(_, ub) => *ub,
-        }
+        self.variable.bounds.effective_upper(self.variable.kind)
     }
 }
 
@@ -212,7 +194,7 @@ impl<'a> Iterator for VariableIterator<'a> {
     type Item = VariableAdapter<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.inner.next().map(|v| VariableAdapter { name: self.interner.resolve(v.name), var_type: &v.var_type })
+        self.inner.next().map(|v| VariableAdapter { name: self.interner.resolve(v.name), var_type: &v.var_type() })
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
@@ -311,7 +293,7 @@ impl<'a> LpSolversCompat<'a> {
 
         // Check for semi-continuous variables
         for variable in problem.variables.values() {
-            if matches!(variable.var_type, VariableType::SemiContinuous) {
+            if matches!(variable.var_type(), VariableType::SemiContinuous) {
                 warnings
                     .push(LpSolversCompatWarning::SemiContinuousApproximated { name: problem.interner.resolve(variable.name).to_string() });
             }

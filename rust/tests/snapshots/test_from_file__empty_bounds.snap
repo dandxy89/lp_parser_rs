@@ -23,6 +23,12 @@ constraints:
     rhs: 1
 variables:
   - name: x
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: y
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~

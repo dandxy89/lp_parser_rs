@@ -194,9 +194,159 @@ pub struct Objective {
     pub byte_offset: Option<usize>,
 }
 
+/// Discrete / structural kind of a decision variable (independent of bounds).
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum VariableKind {
+    /// Continuous variable (default).
+    #[default]
+    Continuous,
+    /// General integer variable (LP Generals section; typically non-negative integer).
+    General,
+    /// Integer variable.
+    Integer,
+    /// Binary (0/1) variable.
+    Binary,
+    /// Semi-continuous variable.
+    SemiContinuous,
+    /// Variable participating in an SOS set.
+    Sos,
+}
+
+impl VariableKind {
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::Continuous => "Continuous",
+            Self::General => "General",
+            Self::Integer => "Integer",
+            Self::Binary => "Binary",
+            Self::SemiContinuous => "SemiContinuous",
+            Self::Sos => "Sos",
+        }
+    }
+
+    /// Whether this kind is treated as integer-valued by solvers.
+    #[must_use]
+    pub const fn is_integer(self) -> bool {
+        matches!(self, Self::Integer | Self::General | Self::Binary)
+    }
+}
+
+impl Display for VariableKind {
+    #[inline]
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        f.write_str(self.as_str())
+    }
+}
+
+/// Finite bounds on a variable. `None` on a side means unbounded on that side.
+///
+/// Free variables have both sides `None`. A fixed variable has `lower == upper`.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct VariableBounds {
+    /// Lower bound, if finite.
+    pub lower: Option<f64>,
+    /// Upper bound, if finite.
+    pub upper: Option<f64>,
+}
+
+impl VariableBounds {
+    /// Fully free (unbounded) bounds.
+    #[must_use]
+    pub const fn free() -> Self {
+        Self { lower: None, upper: None }
+    }
+
+    /// Lower-bounded only (`x >= lb`).
+    #[must_use]
+    pub const fn lower(lb: f64) -> Self {
+        Self { lower: Some(lb), upper: None }
+    }
+
+    /// Upper-bounded only (`x <= ub`).
+    #[must_use]
+    pub const fn upper(ub: f64) -> Self {
+        Self { lower: None, upper: Some(ub) }
+    }
+
+    /// Double-sided bounds (`lb <= x <= ub`).
+    #[must_use]
+    pub const fn range(lb: f64, ub: f64) -> Self {
+        Self { lower: Some(lb), upper: Some(ub) }
+    }
+
+    /// Whether both sides are unbounded.
+    #[must_use]
+    pub const fn is_free(self) -> bool {
+        self.lower.is_none() && self.upper.is_none()
+    }
+
+    /// Merge a new bound declaration into existing bounds.
+    ///
+    /// Complementary single-sided bounds combine; when both sides are already
+    /// set (or the new declaration is free), the new declaration wins.
+    #[must_use]
+    pub fn merge(self, new: Self) -> Self {
+        match (self.lower, self.upper, new.lower, new.upper) {
+            // Existing lower-only + new upper-only (or vice versa) → range
+            (Some(lb), None, None, Some(ub)) | (None, Some(ub), Some(lb), None) => Self::range(lb, ub),
+            // Free existing: take new entirely
+            (None, None, _, _) => new,
+            // New free: take free
+            (_, _, None, None) => Self::free(),
+            // Otherwise last-declaration-wins
+            _ => new,
+        }
+    }
+
+    /// Default lower bound assumed by solvers when none is set for integer-like kinds.
+    ///
+    /// A binary variable is canonically `[0, 1]`, so any explicit (redundant or
+    /// contradictory) bound stored alongside the `Binary` kind is ignored here.
+    #[must_use]
+    pub fn effective_lower(self, kind: VariableKind) -> f64 {
+        if matches!(kind, VariableKind::Binary) {
+            return 0.0;
+        }
+        if let Some(lb) = self.lower {
+            return lb;
+        }
+        match kind {
+            VariableKind::Continuous | VariableKind::Sos if self.is_free() => f64::NEG_INFINITY,
+            _ => 0.0,
+        }
+    }
+
+    /// Default upper bound assumed by solvers when none is set.
+    ///
+    /// A binary variable is canonically `[0, 1]` (see [`Self::effective_lower`]).
+    #[must_use]
+    pub fn effective_upper(self, kind: VariableKind) -> f64 {
+        if matches!(kind, VariableKind::Binary) {
+            return 1.0;
+        }
+        self.upper.unwrap_or(f64::INFINITY)
+    }
+}
+
+impl Display for VariableBounds {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        match (self.lower, self.upper) {
+            (None, None) => f.write_str("free"),
+            (Some(lb), None) => write!(f, ">= {lb}"),
+            (None, Some(ub)) => write!(f, "<= {ub}"),
+            (Some(lb), Some(ub)) => write!(f, "{lb} .. {ub}"),
+        }
+    }
+}
+
+/// Intermediate / legacy bound-or-type declaration used by the LP grammar and
+/// MPS builders when assembling a [`ParseResult`](crate::lexer::ParseResult).
+///
+/// Prefer [`VariableKind`] + [`VariableBounds`] on the public [`Variable`] model.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default, PartialEq)]
-/// Represents different types of variables that can be used in optimisation models.
 pub enum VariableType {
     #[default]
     /// Unbounded variable (-Infinity, +Infinity)
@@ -233,6 +383,48 @@ impl VariableType {
             Self::SOS => "SOS",
         }
     }
+
+    /// Split into kind and bounds components.
+    #[must_use]
+    pub fn into_kind_and_bounds(self) -> (VariableKind, VariableBounds) {
+        match self {
+            Self::Free => (VariableKind::Continuous, VariableBounds::free()),
+            Self::General => (VariableKind::General, VariableBounds::free()),
+            Self::LowerBound(lb) => (VariableKind::Continuous, VariableBounds::lower(lb)),
+            Self::UpperBound(ub) => (VariableKind::Continuous, VariableBounds::upper(ub)),
+            Self::DoubleBound(lb, ub) => (VariableKind::Continuous, VariableBounds::range(lb, ub)),
+            Self::Binary => (VariableKind::Binary, VariableBounds::free()),
+            Self::Integer => (VariableKind::Integer, VariableBounds::free()),
+            Self::SemiContinuous => (VariableKind::SemiContinuous, VariableBounds::free()),
+            Self::SOS => (VariableKind::Sos, VariableBounds::free()),
+        }
+    }
+
+    /// Reconstruct a legacy `VariableType` from kind + bounds (lossy for mixed cases).
+    #[must_use]
+    pub fn from_kind_and_bounds(kind: VariableKind, bounds: VariableBounds) -> Self {
+        // Prefer kind for discrete types when bounds are free; otherwise prefer bounds shape.
+        match kind {
+            VariableKind::Binary if bounds.is_free() => Self::Binary,
+            VariableKind::Integer if bounds.is_free() => Self::Integer,
+            VariableKind::General if bounds.is_free() => Self::General,
+            VariableKind::SemiContinuous if bounds.is_free() => Self::SemiContinuous,
+            VariableKind::Sos if bounds.is_free() => Self::SOS,
+            _ => match (bounds.lower, bounds.upper) {
+                (None, None) => match kind {
+                    VariableKind::Binary => Self::Binary,
+                    VariableKind::Integer => Self::Integer,
+                    VariableKind::General => Self::General,
+                    VariableKind::SemiContinuous => Self::SemiContinuous,
+                    VariableKind::Sos => Self::SOS,
+                    VariableKind::Continuous => Self::Free,
+                },
+                (Some(lb), None) => Self::LowerBound(lb),
+                (None, Some(ub)) => Self::UpperBound(ub),
+                (Some(lb), Some(ub)) => Self::DoubleBound(lb, ub),
+            },
+        }
+    }
 }
 
 impl AsRef<[u8]> for VariableType {
@@ -253,29 +445,68 @@ impl Display for VariableType {
 pub struct Variable {
     /// Interned name of the variable.
     pub name: NameId,
-    /// The type of the variable.
-    pub var_type: VariableType,
+    /// Discrete / structural kind.
+    pub kind: VariableKind,
+    /// Finite bounds (independent of kind).
+    pub bounds: VariableBounds,
 }
 
 impl Variable {
     #[must_use]
     #[inline]
-    /// Initialise a new `Variable` with default (Free) type.
+    /// Initialise a new continuous free `Variable`.
     pub fn new(name: NameId) -> Self {
-        Self { name, var_type: VariableType::default() }
+        Self { name, kind: VariableKind::Continuous, bounds: VariableBounds::free() }
+    }
+
+    /// Legacy view as a single [`VariableType`] (lossy when kind and bounds both set).
+    #[must_use]
+    pub fn var_type(&self) -> VariableType {
+        VariableType::from_kind_and_bounds(self.kind, self.bounds)
     }
 
     #[inline]
-    /// Setter to override `VariableType`.
-    pub const fn set_var_type(&mut self, var_type: VariableType) {
-        self.var_type = var_type;
+    /// Set kind and bounds from a legacy [`VariableType`].
+    pub fn set_var_type(&mut self, var_type: VariableType) {
+        let (kind, bounds) = var_type.into_kind_and_bounds();
+        self.kind = kind;
+        self.bounds = bounds;
     }
 
     #[must_use]
     #[inline]
-    /// Builder method for constructing a `Variable` with a non-default `VariableType`.
-    pub const fn with_var_type(self, var_type: VariableType) -> Self {
-        Self { var_type, ..self }
+    /// Builder: set kind and bounds from a legacy [`VariableType`].
+    pub fn with_var_type(mut self, var_type: VariableType) -> Self {
+        self.set_var_type(var_type);
+        self
+    }
+
+    #[must_use]
+    #[inline]
+    /// Builder: set the variable kind.
+    pub const fn with_kind(mut self, kind: VariableKind) -> Self {
+        self.kind = kind;
+        self
+    }
+
+    #[must_use]
+    #[inline]
+    /// Builder: set the variable bounds.
+    pub const fn with_bounds(mut self, bounds: VariableBounds) -> Self {
+        self.bounds = bounds;
+        self
+    }
+
+    #[inline]
+    /// Set the variable kind without changing bounds.
+    pub const fn set_kind(&mut self, kind: VariableKind) {
+        self.kind = kind;
+    }
+
+    #[inline]
+    /// Set the variable bounds without changing kind.
+    pub const fn set_bounds(&mut self, bounds: VariableBounds) {
+        self.bounds = bounds;
     }
 }
 
@@ -417,16 +648,31 @@ mod tests {
 
         let var = Variable::new(x1);
         assert_eq!(interner.resolve(var.name), "x1");
-        assert_eq!(var.var_type, VariableType::Free);
+        assert_eq!(var.kind, VariableKind::Continuous);
+        assert!(var.bounds.is_free());
+        assert_eq!(var.var_type(), VariableType::Free);
 
         let var_binary = Variable::new(x).with_var_type(VariableType::Binary);
-        assert_eq!(var_binary.var_type, VariableType::Binary);
+        assert_eq!(var_binary.kind, VariableKind::Binary);
+        assert_eq!(var_binary.var_type(), VariableType::Binary);
 
         let mut var_mut = Variable::new(y);
         var_mut.set_var_type(VariableType::Integer);
-        assert_eq!(var_mut.var_type, VariableType::Integer);
+        assert_eq!(var_mut.kind, VariableKind::Integer);
+
+        let mixed = Variable::new(x).with_kind(VariableKind::Integer).with_bounds(VariableBounds::range(0.0, 10.0));
+        assert_eq!(mixed.kind, VariableKind::Integer);
+        assert_eq!(mixed.bounds, VariableBounds::range(0.0, 10.0));
 
         assert_eq!(Variable::new(x).with_var_type(VariableType::Binary), Variable::new(x).with_var_type(VariableType::Binary));
         assert_ne!(Variable::new(x).with_var_type(VariableType::Binary), Variable::new(y).with_var_type(VariableType::Binary));
+    }
+
+    #[test]
+    fn test_bounds_merge() {
+        let merged = VariableBounds::lower(2.0).merge(VariableBounds::upper(8.0));
+        assert_eq!(merged, VariableBounds::range(2.0, 8.0));
+        let free = VariableBounds::range(0.0, 1.0).merge(VariableBounds::free());
+        assert!(free.is_free());
     }
 }

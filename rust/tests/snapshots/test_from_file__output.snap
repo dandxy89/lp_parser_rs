@@ -41,27 +41,27 @@ constraints:
     rhs: 11
 variables:
   - name: x0
-    var_type:
-      DoubleBound:
-        - 0
-        - 1
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 1
   - name: x1
-    var_type:
-      DoubleBound:
-        - 0
-        - 1
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 1
   - name: x2
-    var_type:
-      DoubleBound:
-        - 0
-        - 1
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 1
   - name: x3
-    var_type:
-      DoubleBound:
-        - 0
-        - 1
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 1
   - name: x4
-    var_type:
-      DoubleBound:
-        - 0
-        - 1
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 1

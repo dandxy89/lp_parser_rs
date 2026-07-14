@@ -3427,545 +3427,812 @@ constraints:
     rhs: 50
 variables:
   - name: BBOSCLE0
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: BBOSCLE1
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: BBOSORD0
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: BBOSORD1
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: BORDBOS0
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: CBOSCLE0
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: CBOSCLE1
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: CBOSCLE2
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: CBOSCLE3
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: CBOSORD0
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: CBOSORD1
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: CBOSORD2
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: CBOSORD3
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: CBOSORD4
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: CCLELGA0
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: CCLELGA1
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: CCLELGA2
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: CCLELGA3
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: CLGACLE0
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: CLGACLE1
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: CLGACLE2
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: CLGAORD0
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: CLGAORD1
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: CLGAORD2
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: CLGAORD3
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: CORDBOS0
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: CORDBOS1
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: CORDBOS2
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: CORDBOS3
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: CORDBOS4
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: CORDLGA0
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: CORDLGA1
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: CORDLGA2
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: CORDLGA3
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: GRDTIMN1
-    var_type:
-      DoubleBound:
-        - -100
-        - 0
+    kind: Continuous
+    bounds:
+      lower: -100
+      upper: 0
   - name: GRDTIMN2
-    var_type:
-      DoubleBound:
-        - -90
-        - 0
+    kind: Continuous
+    bounds:
+      lower: -90
+      upper: 0
   - name: GRDTIMN3
-    var_type:
-      DoubleBound:
-        - -45
-        - 0
+    kind: Continuous
+    bounds:
+      lower: -45
+      upper: 0
   - name: GRDTIMN4
-    var_type:
-      DoubleBound:
-        - -45
-        - 0
+    kind: Continuous
+    bounds:
+      lower: -45
+      upper: 0
   - name: GRDTIMO1
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: GRDTIMO2
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: N1002AC1
-    var_type:
-      DoubleBound:
-        - 0
-        - 7
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 7
   - name: N1002AC2
-    var_type:
-      DoubleBound:
-        - 0
-        - 7
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 7
   - name: N1002AC3
-    var_type:
-      DoubleBound:
-        - 0
-        - 2
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 2
   - name: N1002AC4
-    var_type:
-      DoubleBound:
-        - 0
-        - 2
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 2
   - name: N1003AC1
-    var_type:
-      DoubleBound:
-        - 0
-        - 7
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 7
   - name: N1003AC2
-    var_type:
-      DoubleBound:
-        - 0
-        - 7
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 7
   - name: N1003AC3
-    var_type:
-      DoubleBound:
-        - 0
-        - 2
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 2
   - name: N1003AC4
-    var_type:
-      DoubleBound:
-        - 0
-        - 2
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 2
   - name: N1004AC2
-    var_type:
-      DoubleBound:
-        - 0
-        - 7
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 7
   - name: N1004AC4
-    var_type:
-      DoubleBound:
-        - 0
-        - 2
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 2
   - name: N1005AC1
-    var_type:
-      DoubleBound:
-        - 0
-        - 7
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 7
   - name: N1005AC2
-    var_type:
-      DoubleBound:
-        - 0
-        - 7
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 7
   - name: N1005AC3
-    var_type:
-      DoubleBound:
-        - 0
-        - 2
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 2
   - name: N1005AC4
-    var_type:
-      DoubleBound:
-        - 0
-        - 2
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 2
   - name: N1006AC1
-    var_type:
-      DoubleBound:
-        - 0
-        - 7
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 7
   - name: N1006AC2
-    var_type:
-      DoubleBound:
-        - 0
-        - 7
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 7
   - name: N1006AC3
-    var_type:
-      DoubleBound:
-        - 0
-        - 2
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 2
   - name: N1006AC4
-    var_type:
-      DoubleBound:
-        - 0
-        - 2
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 2
   - name: N1008AC2
-    var_type:
-      DoubleBound:
-        - 0
-        - 14
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 14
   - name: N1008AC4
-    var_type:
-      DoubleBound:
-        - 0
-        - 2
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 2
   - name: N1010AC2
-    var_type:
-      DoubleBound:
-        - 0
-        - 14
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 14
   - name: N1010AC4
-    var_type:
-      DoubleBound:
-        - 0
-        - 2
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 2
   - name: N1011AC1
-    var_type:
-      DoubleBound:
-        - 0
-        - 7
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 7
   - name: N1011AC2
-    var_type:
-      DoubleBound:
-        - 0
-        - 7
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 7
   - name: N1011AC3
-    var_type:
-      DoubleBound:
-        - 0
-        - 2
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 2
   - name: N1011AC4
-    var_type:
-      DoubleBound:
-        - 0
-        - 2
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 2
   - name: N1012AC2
-    var_type:
-      DoubleBound:
-        - 0
-        - 7
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 7
   - name: N1012AC4
-    var_type:
-      DoubleBound:
-        - 0
-        - 2
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 2
   - name: N1013AC2
-    var_type:
-      DoubleBound:
-        - 0
-        - 14
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 14
   - name: N1013AC4
-    var_type:
-      DoubleBound:
-        - 0
-        - 2
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 2
   - name: N1014AC2
-    var_type:
-      DoubleBound:
-        - 0
-        - 14
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 14
   - name: N1014AC4
-    var_type:
-      DoubleBound:
-        - 0
-        - 2
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 2
   - name: N1015AC2
-    var_type:
-      DoubleBound:
-        - 0
-        - 7
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 7
   - name: N1015AC4
-    var_type:
-      DoubleBound:
-        - 0
-        - 2
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 2
   - name: N1017AC2
-    var_type:
-      DoubleBound:
-        - 0
-        - 7
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 7
   - name: N1017AC4
-    var_type:
-      DoubleBound:
-        - 0
-        - 2
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 2
   - name: N1019AC2
-    var_type:
-      DoubleBound:
-        - 0
-        - 7
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 7
   - name: N1019AC4
-    var_type:
-      DoubleBound:
-        - 0
-        - 2
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 2
   - name: N1021AC1
-    var_type:
-      DoubleBound:
-        - 0
-        - 7
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 7
   - name: N1021AC2
-    var_type:
-      DoubleBound:
-        - 0
-        - 7
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 7
   - name: N1021AC3
-    var_type:
-      DoubleBound:
-        - 0
-        - 2
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 2
   - name: N1021AC4
-    var_type:
-      DoubleBound:
-        - 0
-        - 2
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 2
   - name: N1100AC2
-    var_type:
-      DoubleBound:
-        - 0
-        - 7
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 7
   - name: N1100AC4
-    var_type:
-      DoubleBound:
-        - 0
-        - 7
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 7
   - name: N1102AC2
-    var_type:
-      DoubleBound:
-        - 0
-        - 7
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 7
   - name: N1102AC4
-    var_type:
-      DoubleBound:
-        - 0
-        - 7
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 7
   - name: N1200AC2
-    var_type:
-      DoubleBound:
-        - 0
-        - 14
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 14
   - name: N1200AC4
-    var_type:
-      DoubleBound:
-        - 0
-        - 7
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 7
   - name: N1201AC2
-    var_type:
-      DoubleBound:
-        - 0
-        - 14
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 14
   - name: N1201AC4
-    var_type:
-      DoubleBound:
-        - 0
-        - 7
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 7
   - name: PBOSCLE0
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: PBOSCLE1
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: PBOSCLE2
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: PBOSCLE3
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: PBOSLGA0
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: PBOSLGA1
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: PBOSLGA2
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: PBOSLGA3
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: PBOSORD0
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: PBOSORD1
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: PBOSORD2
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: PBOSORD3
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: PBOSORD4
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: PCLEBOS0
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: PCLEBOS1
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: PCLEBOS2
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: PCLEBOS3
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: PCLEBOS4
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: PCLELGA0
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: PCLELGA1
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: PCLELGA2
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: PCLELGA3
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: PCLEORD0
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: PCLEORD1
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: PCLEORD2
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: PCLEORD3
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: PCLEORD4
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: PLGABOS0
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: PLGABOS1
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: PLGABOS2
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: PLGABOS3
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: PLGABOS4
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: PLGABOS5
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: PLGACLE0
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: PLGACLE1
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: PLGACLE2
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: PLGAORD0
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: PLGAORD1
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: PLGAORD2
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: PLGAORD3
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: PORDBOS0
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: PORDBOS1
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: PORDBOS2
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: PORDBOS3
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: PORDBOS4
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: PORDCLE0
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: PORDCLE1
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: PORDCLE2
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: PORDCLE3
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: PORDLGA0
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: PORDLGA1
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: PORDLGA2
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: PORDLGA3
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: RgDCBOSCLE
-    var_type:
-      DoubleBound:
-        - -3.2
-        - 0
+    kind: Continuous
+    bounds:
+      lower: -3.2
+      upper: 0
   - name: RgDCBOSORD
-    var_type:
-      DoubleBound:
-        - -12
-        - 0
+    kind: Continuous
+    bounds:
+      lower: -12
+      upper: 0
   - name: RgDCCLELGA
-    var_type:
-      DoubleBound:
-        - -5
-        - 0
+    kind: Continuous
+    bounds:
+      lower: -5
+      upper: 0
   - name: RgDCLGACLE
-    var_type:
-      DoubleBound:
-        - -3.2
-        - 0
+    kind: Continuous
+    bounds:
+      lower: -3.2
+      upper: 0
   - name: RgDCLGAORD
-    var_type:
-      DoubleBound:
-        - -9
-        - 0
+    kind: Continuous
+    bounds:
+      lower: -9
+      upper: 0
   - name: RgDCORDBOS
-    var_type:
-      DoubleBound:
-        - -4.8
-        - 0
+    kind: Continuous
+    bounds:
+      lower: -4.8
+      upper: 0
   - name: RgDCORDLGA
-    var_type:
-      DoubleBound:
-        - -2.6
-        - 0
+    kind: Continuous
+    bounds:
+      lower: -2.6
+      upper: 0
   - name: RgDMBOSCLE
-    var_type:
-      DoubleBound:
-        - -29
-        - 0
+    kind: Continuous
+    bounds:
+      lower: -29
+      upper: 0
   - name: RgDMBOSLGA
-    var_type:
-      DoubleBound:
-        - -471
-        - 0
+    kind: Continuous
+    bounds:
+      lower: -471
+      upper: 0
   - name: RgDMBOSORD
-    var_type:
-      DoubleBound:
-        - -61
-        - 0
+    kind: Continuous
+    bounds:
+      lower: -61
+      upper: 0
   - name: RgDMCLEBOS
-    var_type:
-      DoubleBound:
-        - -27
-        - 0
+    kind: Continuous
+    bounds:
+      lower: -27
+      upper: 0
   - name: RgDMCLELGA
-    var_type:
-      DoubleBound:
-        - -82
-        - 0
+    kind: Continuous
+    bounds:
+      lower: -82
+      upper: 0
   - name: RgDMCLEORD
-    var_type:
-      DoubleBound:
-        - -143
-        - 0
+    kind: Continuous
+    bounds:
+      lower: -143
+      upper: 0
   - name: RgDMLGABOS
-    var_type:
-      DoubleBound:
-        - -549
-        - 0
+    kind: Continuous
+    bounds:
+      lower: -549
+      upper: 0
   - name: RgDMLGACLE
-    var_type:
-      DoubleBound:
-        - -104
-        - 0
+    kind: Continuous
+    bounds:
+      lower: -104
+      upper: 0
   - name: RgDMLGAORD
-    var_type:
-      DoubleBound:
-        - -143
-        - 0
+    kind: Continuous
+    bounds:
+      lower: -143
+      upper: 0
   - name: RgDMORDBOS
-    var_type:
-      DoubleBound:
-        - -61
-        - 0
+    kind: Continuous
+    bounds:
+      lower: -61
+      upper: 0
   - name: RgDMORDCLE
-    var_type:
-      DoubleBound:
-        - -124
-        - 0
+    kind: Continuous
+    bounds:
+      lower: -124
+      upper: 0
   - name: RgDMORDLGA
-    var_type:
-      DoubleBound:
-        - -103
-        - 0
+    kind: Continuous
+    bounds:
+      lower: -103
+      upper: 0

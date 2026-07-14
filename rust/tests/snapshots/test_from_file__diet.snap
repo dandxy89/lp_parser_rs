@@ -192,64 +192,82 @@ constraints:
     rhs: 100
 variables:
   - name: "Apple,Raw,W_Skin"
-    var_type:
-      UpperBound: 10
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: 10
   - name: Chocolate_Chip_Cookies
-    var_type:
-      UpperBound: 10
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: 10
   - name: Grapes
-    var_type:
-      UpperBound: 10
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: 10
   - name: Hotdog
-    var_type:
-      UpperBound: 10
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: 10
   - name: Lowfat_Milk
-    var_type:
-      UpperBound: 10
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: 10
   - name: Raisin_Brn
-    var_type:
-      UpperBound: 10
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: 10
   - name: Rgc1
-    var_type:
-      DoubleBound:
-        - -500
-        - 0
+    kind: Continuous
+    bounds:
+      lower: -500
+      upper: 0
   - name: Rgc2
-    var_type:
-      DoubleBound:
-        - -800
-        - 0
+    kind: Continuous
+    bounds:
+      lower: -800
+      upper: 0
   - name: Rgc3
-    var_type:
-      DoubleBound:
-        - -20
-        - 0
+    kind: Continuous
+    bounds:
+      lower: -20
+      upper: 0
   - name: Rgc4
-    var_type:
-      DoubleBound:
-        - -45000
-        - 0
+    kind: Continuous
+    bounds:
+      lower: -45000
+      upper: 0
   - name: Rgc5
-    var_type:
-      DoubleBound:
-        - -75
-        - 0
+    kind: Continuous
+    bounds:
+      lower: -75
+      upper: 0
   - name: Rgc6
-    var_type:
-      DoubleBound:
-        - -300
-        - 0
+    kind: Continuous
+    bounds:
+      lower: -300
+      upper: 0
   - name: Rgc7
-    var_type:
-      DoubleBound:
-        - -50
-        - 0
+    kind: Continuous
+    bounds:
+      lower: -50
+      upper: 0
   - name: Roasted_Chicken
-    var_type:
-      UpperBound: 10
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: 10
   - name: Spaghetti_W__Sauce
-    var_type:
-      UpperBound: 10
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: 10
   - name: "Tomato,Red,Ripe,Raw"
-    var_type:
-      UpperBound: 10
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: 10

@@ -808,111 +808,207 @@ constraints:
     rhs: 0
 variables:
   - name: BAL.3EBW
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: BAL.3PBW
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: BAL.3RBW
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: BHC.3EBW
-    var_type:
-      DoubleBound:
-        - 0
-        - 10
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 10
   - name: BHC.3PBW
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: BHC.3RBW
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: BLC.3EBW
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: BLC.3PBW
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: BLC.3RBW
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: BLV.3EBW
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: BLV.3PBW
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: BLV.3RBW
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: BN4.3EBW
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: BN4.3PBW
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: BN4.3RBW
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: BP8.3EBW
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: BP8.3PBW
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: BP8.3RBW
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: BTO.3EBW
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: BTO.3PBW
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: BTO.3RBW
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: D3T...BW
-    var_type:
-      DoubleBound:
-        - 0
-        - 200
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 200
   - name: M3..3TBW
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: QPB73EBW
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: QPB73RBW
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: QVO73EBW
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: QVO73PBW
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: QVO73RBW
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: WMO73EBW
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: WMO73PBW
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: WMO73RBW
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: WRO73EBW
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: WRO73PBW
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: WRO73RBW
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: _EAL...BW
-    var_type:
-      DoubleBound:
-        - 0
-        - 10
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 10
   - name: _EHC...BW
-    var_type:
-      DoubleBound:
-        - 0
-        - 20
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 20
   - name: _ELC...BW
-    var_type:
-      DoubleBound:
-        - 0
-        - 25
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 25
   - name: _ELV...BW
-    var_type:
-      DoubleBound:
-        - 0
-        - 12
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 12
   - name: _EN4...BW
-    var_type:
-      DoubleBound:
-        - 0
-        - 100
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 100
   - name: _EP8...BW
-    var_type:
-      DoubleBound:
-        - 0
-        - 35
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 35
   - name: _ETO...BW
-    var_type:
-      DoubleBound:
-        - 0
-        - 5
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 5

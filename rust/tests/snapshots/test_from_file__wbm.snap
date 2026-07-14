@@ -11457,324 +11457,807 @@ constraints:
     rhs: 2
 variables:
   - name: e_0_10
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_0_12
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_0_13
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_0_14
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_0_15
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_0_16
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_0_17
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_0_18
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_0_19
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_0_2
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_0_20
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_0_21
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_0_22
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_0_23
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_0_24
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_0_25
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_0_26
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_0_29
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_0_4
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_0_6
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_0_7
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_0_8
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_0_9
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_11_10
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_11_12
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_11_13
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_11_14
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_11_15
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_11_16
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_11_17
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_11_18
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_11_19
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_11_2
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_11_20
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_11_21
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_11_22
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_11_23
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_11_24
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_11_25
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_11_26
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_11_29
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_11_4
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_11_6
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_11_7
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_11_8
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_11_9
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_1_10
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_1_12
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_1_13
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_1_14
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_1_15
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_1_16
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_1_17
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_1_18
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_1_19
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_1_2
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_1_20
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_1_21
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_1_22
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_1_23
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_1_24
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_1_25
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_1_26
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_1_29
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_1_4
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_1_6
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_1_7
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_1_8
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_1_9
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_27_10
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_27_12
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_27_13
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_27_14
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_27_15
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_27_16
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_27_17
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_27_18
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_27_19
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_27_2
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_27_20
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_27_21
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_27_22
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_27_23
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_27_24
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_27_25
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_27_26
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_27_29
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_27_4
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_27_6
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_27_7
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_27_8
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_27_9
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_28_10
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_28_12
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_28_13
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_28_14
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_28_15
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_28_16
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_28_17
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_28_18
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_28_19
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_28_2
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_28_20
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_28_21
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_28_22
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_28_23
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_28_24
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_28_25
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_28_26
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_28_29
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_28_4
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_28_6
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_28_7
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_28_8
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_28_9
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_3_10
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_3_12
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_3_13
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_3_14
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_3_15
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_3_16
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_3_17
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_3_18
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_3_19
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_3_2
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_3_20
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_3_21
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_3_22
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_3_23
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_3_24
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_3_25
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_3_26
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_3_29
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_3_4
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_3_6
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_3_7
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_3_8
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_3_9
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_5_10
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_5_12
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_5_13
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_5_14
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_5_15
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_5_16
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_5_17
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_5_18
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_5_19
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_5_2
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_5_20
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_5_21
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_5_22
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_5_23
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_5_24
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_5_25
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_5_26
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_5_29
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_5_4
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_5_6
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_5_7
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_5_8
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~
   - name: e_5_9
-    var_type: Binary
+    kind: Binary
+    bounds:
+      lower: ~
+      upper: ~

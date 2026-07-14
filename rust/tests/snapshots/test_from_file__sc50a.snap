@@ -518,98 +518,242 @@ constraints:
     rhs: 0
 variables:
   - name: COL00001
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: COL00002
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: COL00003
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: COL00004
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: COL00005
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: COL00006
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: COL00007
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: COL00008
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: COL00009
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: COL00010
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: COL00011
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: COL00012
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: COL00013
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: COL00014
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: COL00015
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: COL00016
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: COL00017
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: COL00018
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: COL00019
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: COL00020
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: COL00021
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: COL00022
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: COL00023
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: COL00024
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: COL00025
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: COL00026
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: COL00027
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: COL00028
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: COL00029
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: COL00030
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: COL00031
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: COL00032
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: COL00033
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: COL00034
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: COL00035
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: COL00036
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: COL00037
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: COL00038
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: COL00039
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: COL00040
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: COL00041
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: COL00042
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: COL00043
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: COL00044
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: COL00045
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: COL00046
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: COL00047
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~
   - name: COL00048
-    var_type: Free
+    kind: Continuous
+    bounds:
+      lower: ~
+      upper: ~

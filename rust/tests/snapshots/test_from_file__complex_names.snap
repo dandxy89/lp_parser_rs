@@ -36,22 +36,22 @@ constraints:
     rhs: 200
 variables:
   - name: Production_A_1
-    var_type:
-      DoubleBound:
-        - 0
-        - 300
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 300
   - name: Production_B_2
-    var_type:
-      DoubleBound:
-        - 0
-        - 400
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 400
   - name: Storage_Facility_1
-    var_type:
-      DoubleBound:
-        - 0
-        - 1000
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 1000
   - name: Transport_X_Y
-    var_type:
-      DoubleBound:
-        - 0
-        - inf
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: inf

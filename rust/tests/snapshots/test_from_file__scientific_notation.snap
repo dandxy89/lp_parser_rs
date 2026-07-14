@@ -40,22 +40,22 @@ constraints:
     rhs: 0
 variables:
   - name: x1
-    var_type:
-      DoubleBound:
-        - 0
-        - 1000
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 1000
   - name: x2
-    var_type:
-      DoubleBound:
-        - 0
-        - 200
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 200
   - name: x3
-    var_type:
-      DoubleBound:
-        - 0
-        - 35
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 35
   - name: x4
-    var_type:
-      DoubleBound:
-        - 0
-        - 400
+    kind: Continuous
+    bounds:
+      lower: 0
+      upper: 400

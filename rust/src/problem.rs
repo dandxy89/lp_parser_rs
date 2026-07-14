@@ -4,11 +4,11 @@ use indexmap::IndexMap;
 use indexmap::map::Entry;
 
 use crate::NUMERIC_EPSILON;
-use crate::error::{LpParseError, LpResult};
+use crate::error::{EntityKind, LpParseError, LpResult};
 use crate::interner::{NameId, NameInterner};
 use crate::lexer::{Lexer, ParseResult, RawCoefficient, RawConstraint, RawObjective};
 use crate::lp::LpProblemParser;
-use crate::model::{Coefficient, Constraint, Objective, Sense, Variable, VariableType};
+use crate::model::{Coefficient, Constraint, Objective, Sense, Variable, VariableBounds, VariableKind, VariableType};
 use crate::mps::{extract_mps_name, parse_mps};
 
 /// Check if a floating-point value is effectively zero using both absolute
@@ -31,20 +31,21 @@ fn is_effectively_zero(value: f64, reference: f64) -> bool {
     false
 }
 
-/// Apply a variable type to names, interning each and updating the variable map.
-/// Only overrides if the variable doesn't already have explicit bounds set.
+/// Apply a discrete kind to names, interning each and updating the variable map.
+/// Kind is set without clobbering existing bounds.
 #[inline]
-fn apply_variable_type(interner: &mut NameInterner, variables: &mut IndexMap<NameId, Variable>, names: &[&str], var_type: &VariableType) {
+fn apply_variable_kind(interner: &mut NameInterner, variables: &mut IndexMap<NameId, Variable>, names: &[&str], kind: VariableKind) {
     for &name in names {
         let id = interner.intern(name);
         match variables.entry(id) {
             Entry::Occupied(mut entry) => {
-                if matches!(entry.get().var_type, VariableType::Free) {
-                    entry.get_mut().set_var_type(var_type.clone());
+                // Only override continuous (default) kind so explicit SOS/binary from bounds wins.
+                if entry.get().kind == VariableKind::Continuous {
+                    entry.get_mut().set_kind(kind);
                 }
             }
             Entry::Vacant(entry) => {
-                entry.insert(Variable::new(id).with_var_type(var_type.clone()));
+                entry.insert(Variable::new(id).with_kind(kind));
             }
         }
     }
@@ -351,6 +352,7 @@ impl LpProblem {
             Constraint::SOS { weights, .. } => {
                 for coeff in weights {
                     self.ensure_variable_exists(coeff.name, Some(VariableType::SOS));
+                    // SOS membership sets kind without wiping bounds.
                 }
             }
         }
@@ -383,17 +385,11 @@ impl LpProblem {
         debug_assert!(!variable_name.is_empty(), "variable_name must not be empty");
         debug_assert!(new_coefficient.is_finite(), "new_coefficient must be finite, got: {new_coefficient}");
 
-        let obj_id = self
-            .interner
-            .get(objective_name)
-            .ok_or_else(|| LpParseError::validation_error(format!("Objective '{objective_name}' not found")))?;
+        let obj_id = self.interner.get(objective_name).ok_or_else(|| LpParseError::not_found(EntityKind::Objective, objective_name))?;
 
         let var_id = self.interner.intern(variable_name);
 
-        let objective = self
-            .objectives
-            .get_mut(&obj_id)
-            .ok_or_else(|| LpParseError::validation_error(format!("Objective '{objective_name}' not found")))?;
+        let objective = self.objectives.get_mut(&obj_id).ok_or_else(|| LpParseError::not_found(EntityKind::Objective, objective_name))?;
 
         update_coefficient_vec(&mut objective.coefficients, var_id, new_coefficient);
 
@@ -413,17 +409,12 @@ impl LpProblem {
         debug_assert!(!variable_name.is_empty(), "variable_name must not be empty");
         debug_assert!(new_coefficient.is_finite(), "new_coefficient must be finite, got: {new_coefficient}");
 
-        let con_id = self
-            .interner
-            .get(constraint_name)
-            .ok_or_else(|| LpParseError::validation_error(format!("Constraint '{constraint_name}' not found")))?;
+        let con_id = self.interner.get(constraint_name).ok_or_else(|| LpParseError::not_found(EntityKind::Constraint, constraint_name))?;
 
         let var_id = self.interner.intern(variable_name);
 
-        let constraint = self
-            .constraints
-            .get_mut(&con_id)
-            .ok_or_else(|| LpParseError::validation_error(format!("Constraint '{constraint_name}' not found")))?;
+        let constraint =
+            self.constraints.get_mut(&con_id).ok_or_else(|| LpParseError::not_found(EntityKind::Constraint, constraint_name))?;
 
         match constraint {
             Constraint::Standard { coefficients, .. } => {
@@ -434,7 +425,7 @@ impl LpProblem {
                 }
             }
             Constraint::SOS { .. } => {
-                return Err(LpParseError::validation_error("Cannot update coefficients in SOS constraints using this method"));
+                return Err(LpParseError::invalid_operation("Cannot update coefficients in SOS constraints using this method"));
             }
         }
 
@@ -464,22 +455,17 @@ impl LpProblem {
     pub fn update_constraint_rhs(&mut self, constraint_name: &str, new_rhs: f64) -> LpResult<()> {
         debug_assert!(!constraint_name.is_empty(), "constraint_name must not be empty");
         debug_assert!(new_rhs.is_finite(), "new_rhs must be finite, got: {new_rhs}");
-        let con_id = self
-            .interner
-            .get(constraint_name)
-            .ok_or_else(|| LpParseError::validation_error(format!("Constraint '{constraint_name}' not found")))?;
+        let con_id = self.interner.get(constraint_name).ok_or_else(|| LpParseError::not_found(EntityKind::Constraint, constraint_name))?;
 
-        let constraint = self
-            .constraints
-            .get_mut(&con_id)
-            .ok_or_else(|| LpParseError::validation_error(format!("Constraint '{constraint_name}' not found")))?;
+        let constraint =
+            self.constraints.get_mut(&con_id).ok_or_else(|| LpParseError::not_found(EntityKind::Constraint, constraint_name))?;
 
         match constraint {
             Constraint::Standard { rhs, .. } => {
                 *rhs = new_rhs;
                 Ok(())
             }
-            Constraint::SOS { .. } => Err(LpParseError::validation_error("SOS constraints do not have right-hand side values")),
+            Constraint::SOS { .. } => Err(LpParseError::invalid_operation("SOS constraints do not have right-hand side values")),
         }
     }
 
@@ -499,17 +485,16 @@ impl LpProblem {
             .interner
             .get(old_name)
             .filter(|id| self.variables.contains_key(id))
-            .ok_or_else(|| LpParseError::validation_error(format!("Variable '{old_name}' not found")))?;
+            .ok_or_else(|| LpParseError::not_found(EntityKind::Variable, old_name))?;
 
         let new_id = self.interner.intern(new_name);
 
         if old_id != new_id && self.variables.contains_key(&new_id) {
-            return Err(LpParseError::validation_error(format!("Variable '{new_name}' already exists")));
+            return Err(LpParseError::already_exists(EntityKind::Variable, new_name));
         }
 
         let variable = self.variables.shift_remove(&old_id).expect("variable must exist: filter check passed");
-        let mut new_variable = Variable::new(new_id);
-        new_variable.var_type = variable.var_type;
+        let new_variable = Variable::new(new_id).with_kind(variable.kind).with_bounds(variable.bounds);
         self.variables.insert(new_id, new_variable);
 
         // PERF: O(n*m) scan over all objectives and constraints to rename the variable.
@@ -563,12 +548,12 @@ impl LpProblem {
             .interner
             .get(old_name)
             .filter(|id| self.constraints.contains_key(id))
-            .ok_or_else(|| LpParseError::validation_error(format!("Constraint '{old_name}' not found")))?;
+            .ok_or_else(|| LpParseError::not_found(EntityKind::Constraint, old_name))?;
 
         let new_id = self.interner.intern(new_name);
 
         if old_id != new_id && self.constraints.contains_key(&new_id) {
-            return Err(LpParseError::validation_error(format!("Constraint '{new_name}' already exists")));
+            return Err(LpParseError::already_exists(EntityKind::Constraint, new_name));
         }
 
         let mut constraint = self.constraints.shift_remove(&old_id).expect("constraint must exist: filter check passed");
@@ -602,12 +587,12 @@ impl LpProblem {
             .interner
             .get(old_name)
             .filter(|id| self.objectives.contains_key(id))
-            .ok_or_else(|| LpParseError::validation_error(format!("Objective '{old_name}' not found")))?;
+            .ok_or_else(|| LpParseError::not_found(EntityKind::Objective, old_name))?;
 
         let new_id = self.interner.intern(new_name);
 
         if old_id != new_id && self.objectives.contains_key(&new_id) {
-            return Err(LpParseError::validation_error(format!("Objective '{new_name}' already exists")));
+            return Err(LpParseError::already_exists(EntityKind::Objective, new_name));
         }
 
         let mut objective = self.objectives.shift_remove(&old_id).expect("objective must exist: filter check passed");
@@ -630,7 +615,7 @@ impl LpProblem {
             .interner
             .get(variable_name)
             .filter(|id| self.variables.contains_key(id))
-            .ok_or_else(|| LpParseError::validation_error(format!("Variable '{variable_name}' not found")))?;
+            .ok_or_else(|| LpParseError::not_found(EntityKind::Variable, variable_name))?;
 
         self.variables.shift_remove(&var_id);
 
@@ -663,13 +648,10 @@ impl LpProblem {
     /// Returns an error if the constraint does not exist.
     pub fn remove_constraint(&mut self, constraint_name: &str) -> LpResult<()> {
         debug_assert!(!constraint_name.is_empty(), "constraint_name must not be empty");
-        let con_id = self
-            .interner
-            .get(constraint_name)
-            .ok_or_else(|| LpParseError::validation_error(format!("Constraint '{constraint_name}' not found")))?;
+        let con_id = self.interner.get(constraint_name).ok_or_else(|| LpParseError::not_found(EntityKind::Constraint, constraint_name))?;
 
         if self.constraints.shift_remove(&con_id).is_none() {
-            return Err(LpParseError::validation_error(format!("Constraint '{constraint_name}' not found")));
+            return Err(LpParseError::not_found(EntityKind::Constraint, constraint_name));
         }
         Ok(())
     }
@@ -681,36 +663,66 @@ impl LpProblem {
     /// Returns an error if the objective does not exist.
     pub fn remove_objective(&mut self, objective_name: &str) -> LpResult<()> {
         debug_assert!(!objective_name.is_empty(), "objective_name must not be empty");
-        let obj_id = self
-            .interner
-            .get(objective_name)
-            .ok_or_else(|| LpParseError::validation_error(format!("Objective '{objective_name}' not found")))?;
+        let obj_id = self.interner.get(objective_name).ok_or_else(|| LpParseError::not_found(EntityKind::Objective, objective_name))?;
 
         if self.objectives.shift_remove(&obj_id).is_none() {
-            return Err(LpParseError::validation_error(format!("Objective '{objective_name}' not found")));
+            return Err(LpParseError::not_found(EntityKind::Objective, objective_name));
         }
         Ok(())
     }
 
-    /// Update the type of a variable.
+    /// Update the type of a variable from a legacy [`VariableType`].
+    ///
+    /// Prefer [`Self::update_variable_kind`] / [`Self::update_variable_bounds`] when
+    /// only one aspect should change.
     ///
     /// # Errors
     ///
     /// Returns an error if the variable does not exist.
     pub fn update_variable_type(&mut self, variable_name: &str, new_type: VariableType) -> LpResult<()> {
         debug_assert!(!variable_name.is_empty(), "variable_name must not be empty");
-        let var_id = self
-            .interner
-            .get(variable_name)
-            .ok_or_else(|| LpParseError::validation_error(format!("Variable '{variable_name}' not found")))?;
+        let var_id = self.interner.get(variable_name).ok_or_else(|| LpParseError::not_found(EntityKind::Variable, variable_name))?;
 
-        let variable = self
-            .variables
-            .get_mut(&var_id)
-            .ok_or_else(|| LpParseError::validation_error(format!("Variable '{variable_name}' not found")))?;
+        let variable = self.variables.get_mut(&var_id).ok_or_else(|| LpParseError::not_found(EntityKind::Variable, variable_name))?;
 
-        variable.var_type = new_type;
+        variable.set_var_type(new_type);
         Ok(())
+    }
+
+    /// Update only the discrete kind of a variable (bounds are preserved).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the variable does not exist.
+    pub fn update_variable_kind(&mut self, variable_name: &str, kind: VariableKind) -> LpResult<()> {
+        debug_assert!(!variable_name.is_empty(), "variable_name must not be empty");
+        let var_id = self.interner.get(variable_name).ok_or_else(|| LpParseError::not_found(EntityKind::Variable, variable_name))?;
+        let variable = self.variables.get_mut(&var_id).ok_or_else(|| LpParseError::not_found(EntityKind::Variable, variable_name))?;
+        variable.set_kind(kind);
+        Ok(())
+    }
+
+    /// Update only the bounds of a variable (kind is preserved).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the variable does not exist.
+    pub fn update_variable_bounds(&mut self, variable_name: &str, bounds: VariableBounds) -> LpResult<()> {
+        debug_assert!(!variable_name.is_empty(), "variable_name must not be empty");
+        let var_id = self.interner.get(variable_name).ok_or_else(|| LpParseError::not_found(EntityKind::Variable, variable_name))?;
+        let variable = self.variables.get_mut(&var_id).ok_or_else(|| LpParseError::not_found(EntityKind::Variable, variable_name))?;
+        variable.set_bounds(bounds);
+        Ok(())
+    }
+
+    /// Set the problem name.
+    pub fn set_name(&mut self, name: impl Into<String>) {
+        self.name = Some(name.into());
+    }
+
+    /// Set the optimisation sense.
+    pub fn set_sense(&mut self, sense: Sense) {
+        self.sense = sense;
     }
 }
 
@@ -752,7 +764,13 @@ mod serde_support {
     #[derive(Serialize, Deserialize)]
     struct SerdeVariable {
         name: String,
-        var_type: VariableType,
+        #[serde(default)]
+        kind: crate::model::VariableKind,
+        #[serde(default)]
+        bounds: crate::model::VariableBounds,
+        /// Legacy field retained for deserialising pre-split snapshots.
+        #[serde(default, skip_serializing)]
+        var_type: Option<VariableType>,
     }
 
     #[derive(Serialize, Deserialize)]
@@ -815,7 +833,12 @@ mod serde_support {
                 variables: self
                     .variables
                     .values()
-                    .map(|var| SerdeVariable { name: self.interner.resolve(var.name).to_string(), var_type: var.var_type.clone() })
+                    .map(|var| SerdeVariable {
+                        name: self.interner.resolve(var.name).to_string(),
+                        kind: var.kind,
+                        bounds: var.bounds,
+                        var_type: None,
+                    })
                     .collect(),
             };
             proxy.serialize(serializer)
@@ -875,7 +898,11 @@ mod serde_support {
                 .iter()
                 .map(|sv| {
                     let name_id = interner.intern(&sv.name);
-                    let var = Variable::new(name_id).with_var_type(sv.var_type.clone());
+                    let var = if let Some(ref vt) = sv.var_type {
+                        Variable::new(name_id).with_var_type(vt.clone())
+                    } else {
+                        Variable::new(name_id).with_kind(sv.kind).with_bounds(sv.bounds)
+                    };
                     (name_id, var)
                 })
                 .collect();
@@ -936,7 +963,7 @@ impl TryFrom<&str> for LpProblem {
 
         let lexer = Lexer::new(input);
         let parser = LpProblemParser::new();
-        let parsed = parser.parse(lexer).map_err(LpParseError::from)?;
+        let parsed = parser.parse(lexer).map_err(|e| LpParseError::from(e).with_source(input))?;
 
         Ok(from_parse_result(parsed, problem_name))
     }
@@ -995,41 +1022,40 @@ fn intern_constraints(
 }
 
 /// Process bounds declarations into the variables map.
+///
+/// Bound-shaped declarations update [`VariableBounds`]; kind-shaped declarations
+/// (Binary/Integer/…) update [`VariableKind`] without clobbering bounds.
 fn process_bounds(interner: &mut NameInterner, bounds: &[(&str, VariableType)], variables: &mut IndexMap<NameId, Variable>) {
-    for &(var_name, ref var_type) in bounds {
+    for &(var_name, ref decl) in bounds {
         let var_id = interner.intern(var_name);
+        let is_bound_decl = matches!(
+            decl,
+            VariableType::Free | VariableType::LowerBound(_) | VariableType::UpperBound(_) | VariableType::DoubleBound(_, _)
+        );
+        let (kind, bounds_decl) = decl.clone().into_kind_and_bounds();
         match variables.entry(var_id) {
             Entry::Occupied(mut entry) => {
-                let merged = merge_bound_types(&entry.get().var_type, var_type);
-                entry.get_mut().set_var_type(merged);
+                let var = entry.get_mut();
+                // Apply the kind for kind-only declarations (e.g. BV → Binary); for
+                // bound-shaped declarations only override a still-default kind.
+                if !is_bound_decl || kind != VariableKind::Continuous {
+                    var.set_kind(kind);
+                }
+                var.set_bounds(var.bounds.merge(bounds_decl));
             }
             Entry::Vacant(entry) => {
-                entry.insert(Variable::new(var_id).with_var_type(var_type.clone()));
+                entry.insert(Variable::new(var_id).with_kind(kind).with_bounds(bounds_decl));
             }
         }
-    }
-}
-
-/// Merge a new bound declaration with a variable's existing type.
-///
-/// Complementary single-sided bounds (`x >= lb` on one line, `x <= ub` on
-/// another) combine into a [`VariableType::DoubleBound`]; every other
-/// combination keeps last-declaration-wins semantics.
-fn merge_bound_types(existing: &VariableType, new: &VariableType) -> VariableType {
-    match (existing, new) {
-        (VariableType::LowerBound(lb), VariableType::UpperBound(ub)) | (VariableType::UpperBound(ub), VariableType::LowerBound(lb)) => {
-            VariableType::DoubleBound(*lb, *ub)
-        }
-        _ => new.clone(),
     }
 }
 
 /// Apply generals, integers, binaries, and semi-continuous type declarations.
 fn process_variable_types(interner: &mut NameInterner, parsed: &ParseResult<'_>, variables: &mut IndexMap<NameId, Variable>) {
-    apply_variable_type(interner, variables, &parsed.generals, &VariableType::General);
-    apply_variable_type(interner, variables, &parsed.integers, &VariableType::Integer);
-    apply_variable_type(interner, variables, &parsed.binaries, &VariableType::Binary);
-    apply_variable_type(interner, variables, &parsed.semi_continuous, &VariableType::SemiContinuous);
+    apply_variable_kind(interner, variables, &parsed.generals, VariableKind::General);
+    apply_variable_kind(interner, variables, &parsed.integers, VariableKind::Integer);
+    apply_variable_kind(interner, variables, &parsed.binaries, VariableKind::Binary);
+    apply_variable_kind(interner, variables, &parsed.semi_continuous, VariableKind::SemiContinuous);
 }
 
 /// Intern SOS constraints and add them to the constraints map.
@@ -1192,7 +1218,7 @@ End";
         // Replace variable
         problem.add_variable(Variable::new(x1).with_var_type(VariableType::Integer));
         assert_eq!(problem.variable_count(), 1);
-        assert_eq!(problem.variables[&x1].var_type, VariableType::Integer);
+        assert_eq!(problem.variables[&x1].var_type(), VariableType::Integer);
 
         // Add constraint (auto-creates variables)
         let c1 = problem.intern("c1");
@@ -1225,7 +1251,7 @@ End";
             weights: vec![Coefficient { name: s1, value: 1.0 }],
             byte_offset: None,
         });
-        assert_eq!(problem.variables[&s1].var_type, VariableType::SOS);
+        assert_eq!(problem.variables[&s1].var_type(), VariableType::SOS);
     }
 
     #[test]
@@ -1244,29 +1270,29 @@ End";
         let input = "minimize\nx1\nsubject to\nx1 <= 1\nintegers\nx1\nend";
         let p = LpProblem::parse(input).unwrap();
         let x1 = p.name_id("x1").unwrap();
-        assert_eq!(p.variables[&x1].var_type, VariableType::Integer);
+        assert_eq!(p.variables[&x1].var_type(), VariableType::Integer);
 
         let input = "minimize\nx1\nsubject to\nx1 <= 1\nbinaries\nx1\nend";
         let p = LpProblem::parse(input).unwrap();
         let x1 = p.name_id("x1").unwrap();
-        assert_eq!(p.variables[&x1].var_type, VariableType::Binary);
+        assert_eq!(p.variables[&x1].var_type(), VariableType::Binary);
 
         let input = "minimize\nx1\nsubject to\nx1 <= 1\ngenerals\nx1\nend";
         let p = LpProblem::parse(input).unwrap();
         let x1 = p.name_id("x1").unwrap();
-        assert_eq!(p.variables[&x1].var_type, VariableType::General);
+        assert_eq!(p.variables[&x1].var_type(), VariableType::General);
 
         let input = "minimize\nx1\nsubject to\nx1 <= 1\nsemi-continuous\nx1\nend";
         let p = LpProblem::parse(input).unwrap();
         let x1 = p.name_id("x1").unwrap();
-        assert_eq!(p.variables[&x1].var_type, VariableType::SemiContinuous);
+        assert_eq!(p.variables[&x1].var_type(), VariableType::SemiContinuous);
 
         // Bounds
         let p = LpProblem::parse("minimize\nx1 + x2\nsubject to\nx1 <= 10\nbounds\nx1 >= 0\nx2 <= 5\nend").unwrap();
         let x1 = p.name_id("x1").unwrap();
         let x2 = p.name_id("x2").unwrap();
-        assert!(matches!(p.variables[&x1].var_type, VariableType::LowerBound(0.0)));
-        assert!(matches!(p.variables[&x2].var_type, VariableType::UpperBound(5.0)));
+        assert!(matches!(p.variables[&x1].var_type(), VariableType::LowerBound(0.0)));
+        assert!(matches!(p.variables[&x2].var_type(), VariableType::UpperBound(5.0)));
 
         // Empty constraints section is valid
         assert!(LpProblem::parse("minimize\nx1\nsubject to\nend").is_ok());
@@ -1321,17 +1347,17 @@ End";
         // `x >= lb` followed by `x <= ub` must merge, not overwrite.
         let p = LpProblem::parse("minimize\nx1\nsubject to\nc1: x1 <= 10\nbounds\nx1 >= 2\nx1 <= 8\nend").unwrap();
         let x1 = p.name_id("x1").unwrap();
-        assert_eq!(p.variables[&x1].var_type, VariableType::DoubleBound(2.0, 8.0));
+        assert_eq!(p.variables[&x1].var_type(), VariableType::DoubleBound(2.0, 8.0));
 
         // Reverse declaration order merges too.
         let p = LpProblem::parse("minimize\nx1\nsubject to\nc1: x1 <= 10\nbounds\nx1 <= 8\nx1 >= 2\nend").unwrap();
         let x1 = p.name_id("x1").unwrap();
-        assert_eq!(p.variables[&x1].var_type, VariableType::DoubleBound(2.0, 8.0));
+        assert_eq!(p.variables[&x1].var_type(), VariableType::DoubleBound(2.0, 8.0));
 
         // Same-side redeclaration keeps last-wins semantics.
         let p = LpProblem::parse("minimize\nx1\nsubject to\nc1: x1 <= 10\nbounds\nx1 >= 2\nx1 >= 3\nend").unwrap();
         let x1 = p.name_id("x1").unwrap();
-        assert_eq!(p.variables[&x1].var_type, VariableType::LowerBound(3.0));
+        assert_eq!(p.variables[&x1].var_type(), VariableType::LowerBound(3.0));
     }
 
     #[test]
@@ -1427,12 +1453,12 @@ End";
         // `x1 = 5` fixes the variable at 5 via a degenerate double bound.
         let p = LpProblem::parse("minimize\nx1\nsubject to\nc1: x1 <= 10\nbounds\nx1 = 5\nend").unwrap();
         let x1 = p.name_id("x1").unwrap();
-        assert_eq!(p.variables[&x1].var_type, VariableType::DoubleBound(5.0, 5.0));
+        assert_eq!(p.variables[&x1].var_type(), VariableType::DoubleBound(5.0, 5.0));
 
         // The reversed `5 = x1` form is accepted too.
         let p = LpProblem::parse("minimize\nx1\nsubject to\nc1: x1 <= 10\nbounds\n5 = x1\nend").unwrap();
         let x1 = p.name_id("x1").unwrap();
-        assert_eq!(p.variables[&x1].var_type, VariableType::DoubleBound(5.0, 5.0));
+        assert_eq!(p.variables[&x1].var_type(), VariableType::DoubleBound(5.0, 5.0));
     }
 
     #[test]
@@ -1440,7 +1466,7 @@ End";
         // `5 >= x1` reads as an upper bound of 5 on x1.
         let p = LpProblem::parse("minimize\nx1\nsubject to\nc1: x1 <= 10\nbounds\n5 >= x1\nend").unwrap();
         let x1 = p.name_id("x1").unwrap();
-        assert_eq!(p.variables[&x1].var_type, VariableType::UpperBound(5.0));
+        assert_eq!(p.variables[&x1].var_type(), VariableType::UpperBound(5.0));
     }
 
     // Parsed values round-trip bit-exactly from source text.
@@ -1556,16 +1582,16 @@ End";
         // Strict operators in single bounds are synonyms of `<=` / `>=`.
         let p = LpProblem::parse("minimize\nx1\nsubject to\nc1: x1 >= 0\nbounds\nx1 < 5\nend").unwrap();
         let x1 = p.name_id("x1").unwrap();
-        assert_eq!(p.variables[&x1].var_type, VariableType::UpperBound(5.0));
+        assert_eq!(p.variables[&x1].var_type(), VariableType::UpperBound(5.0));
 
         let p = LpProblem::parse("minimize\nx1\nsubject to\nc1: x1 <= 9\nbounds\nx1 > 1\nend").unwrap();
         let x1 = p.name_id("x1").unwrap();
-        assert_eq!(p.variables[&x1].var_type, VariableType::LowerBound(1.0));
+        assert_eq!(p.variables[&x1].var_type(), VariableType::LowerBound(1.0));
 
         // Reversed double bound: `10 >= x1 >= 0`.
         let p = LpProblem::parse("minimize\nx1\nsubject to\nc1: x1 >= 0\nbounds\n10 >= x1 >= 0\nend").unwrap();
         let x1 = p.name_id("x1").unwrap();
-        assert_eq!(p.variables[&x1].var_type, VariableType::DoubleBound(0.0, 10.0));
+        assert_eq!(p.variables[&x1].var_type(), VariableType::DoubleBound(0.0, 10.0));
     }
 
     #[test]
@@ -1575,7 +1601,7 @@ End";
             let input = format!("minimize\nx1\nsubject to\nc1: x1 <= 10\nbounds\n{bound_line}\nend");
             let p = LpProblem::parse(&input).unwrap();
             let x1 = p.name_id("x1").unwrap();
-            assert_eq!(p.variables[&x1].var_type, VariableType::DoubleBound(0.0, 5.0), "failed for bound line: {bound_line}");
+            assert_eq!(p.variables[&x1].var_type(), VariableType::DoubleBound(0.0, 5.0), "failed for bound line: {bound_line}");
         }
     }
 
@@ -1601,17 +1627,17 @@ End";
         let p = LpProblem::parse("minimize\nx1 + x2\nsubject to\nc1: x1 <= 10\nbounds\nx1 >= 1\nbounds\nx2 <= 5\nend").unwrap();
         let x1 = p.name_id("x1").unwrap();
         let x2 = p.name_id("x2").unwrap();
-        assert_eq!(p.variables[&x1].var_type, VariableType::LowerBound(1.0));
-        assert_eq!(p.variables[&x2].var_type, VariableType::UpperBound(5.0));
+        assert_eq!(p.variables[&x1].var_type(), VariableType::LowerBound(1.0));
+        assert_eq!(p.variables[&x2].var_type(), VariableType::UpperBound(5.0));
 
         // Interleaved binaries/generals/binaries blocks all accumulate.
         let p = LpProblem::parse("minimize\nx1\nsubject to\nc1: x1 <= 1\nbinaries\nb1\ngenerals\ng1\nbinaries\nb2\nend").unwrap();
         let b1 = p.name_id("b1").unwrap();
         let b2 = p.name_id("b2").unwrap();
         let g1 = p.name_id("g1").unwrap();
-        assert_eq!(p.variables[&b1].var_type, VariableType::Binary);
-        assert_eq!(p.variables[&b2].var_type, VariableType::Binary);
-        assert_eq!(p.variables[&g1].var_type, VariableType::General);
+        assert_eq!(p.variables[&b1].var_type(), VariableType::Binary);
+        assert_eq!(p.variables[&b2].var_type(), VariableType::Binary);
+        assert_eq!(p.variables[&g1].var_type(), VariableType::General);
     }
 
     #[test]
@@ -1622,9 +1648,9 @@ End";
         let x1 = p.name_id("x1").unwrap();
         let g1 = p.name_id("g1").unwrap();
         let b1 = p.name_id("b1").unwrap();
-        assert_eq!(p.variables[&x1].var_type, VariableType::UpperBound(4.0));
-        assert_eq!(p.variables[&g1].var_type, VariableType::General);
-        assert_eq!(p.variables[&b1].var_type, VariableType::Binary);
+        assert_eq!(p.variables[&x1].var_type(), VariableType::UpperBound(4.0));
+        assert_eq!(p.variables[&g1].var_type(), VariableType::General);
+        assert_eq!(p.variables[&b1].var_type(), VariableType::Binary);
 
         // `such that` is a multi-word alias for `subject to`.
         let p = LpProblem::parse("minimize\nx1\nsuch that\nc1: x1 <= 1\nend").unwrap();
@@ -1660,7 +1686,7 @@ End";
         let p = LpProblem::parse("minimize\nx1\nsubject to\nc1: x1 <= 1\ngenerals\nbinaries\nend").unwrap();
         assert_eq!(p.constraint_count(), 1);
         let x1 = p.name_id("x1").unwrap();
-        assert_eq!(p.variables[&x1].var_type, VariableType::Free);
+        assert_eq!(p.variables[&x1].var_type(), VariableType::Free);
     }
 
     // Parsed RHS values round-trip bit-exactly from source text.
@@ -1796,7 +1822,7 @@ mod modification_tests {
         let mut p = create_test_problem();
         p.update_variable_type("x1", VariableType::Binary).unwrap();
         let x1 = p.name_id("x1").unwrap();
-        assert_eq!(p.variables[&x1].var_type, VariableType::Binary);
+        assert_eq!(p.variables[&x1].var_type(), VariableType::Binary);
     }
 
     #[test]
