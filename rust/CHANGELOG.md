@@ -1,5 +1,27 @@
 # Changelog
 
+## [5.0.0](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v4.1.0...lp_parser_rs-v5.0.0) (2026-07-14)
+
+
+### ⚠ BREAKING CHANGES
+
+* Variable.var_type is now a var_type() method; Variable exposes public kind and bounds fields. Analysis type_distribution counts variables by kind rather than by bound shape.
+
+### Miscellaneous Chores
+
+* Fixing linting issues ([3c40ec4](https://github.com/dandxy89/lp_parser_rs/commit/3c40ec43fd68d705402a137a110f4ff999feec3c))
+* set MSRV to 1.88.0 across workspace crates ([071c612](https://github.com/dandxy89/lp_parser_rs/commit/071c612c5f76b37db24119dea8debe8c9332e163))
+
+
+### Features
+
+* add ProblemBuilder for programmatic construction ([b330374](https://github.com/dandxy89/lp_parser_rs/commit/b3303742a7a842b746ac2e3327ebbda8195a7456))
+
+
+### Code Refactoring
+
+* separate variable kind from bounds, add typed errors and line diagnostics ([91ba367](https://github.com/dandxy89/lp_parser_rs/commit/91ba3673fba00447e174d1430d34ef67198b74bf))
+
 ## [4.1.0](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v4.0.0...lp_parser_rs-v4.1.0) (2026-07-09)
 
 

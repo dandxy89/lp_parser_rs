@@ -1,5 +1,21 @@
 # Changelog
 
+## [4.0.0](https://github.com/dandxy89/lp_parser_rs/compare/lp_diff-v3.6.0...lp_diff-v4.0.0) (2026-07-14)
+
+
+### ⚠ BREAKING CHANGES
+
+* Variable.var_type is now a var_type() method; Variable exposes public kind and bounds fields. Analysis type_distribution counts variables by kind rather than by bound shape.
+
+### Miscellaneous Chores
+
+* set MSRV to 1.88.0 across workspace crates ([071c612](https://github.com/dandxy89/lp_parser_rs/commit/071c612c5f76b37db24119dea8debe8c9332e163))
+
+
+### Code Refactoring
+
+* separate variable kind from bounds, add typed errors and line diagnostics ([91ba367](https://github.com/dandxy89/lp_parser_rs/commit/91ba3673fba00447e174d1430d34ef67198b74bf))
+
 ## [3.6.0](https://github.com/dandxy89/lp_parser_rs/compare/lp_diff-v3.5.0...lp_diff-v3.6.0) (2026-07-09)
 
 
