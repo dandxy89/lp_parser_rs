@@ -5,257 +5,58 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>lp_parser_rs — Rust LP file parser, writer &amp; diff toolkit</title>
 <meta name="description" content="A Rust library, CLI, interactive TUI, and Python package for parsing, analysing, modifying, diffing, and solving Linear Programming (LP) files.">
+<link rel="canonical" href="https://dandxy89.github.io/lp_parser_rs/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="lp_parser_rs">
+<meta property="og:url" content="https://dandxy89.github.io/lp_parser_rs/">
+<meta property="og:title" content="lp_parser_rs — Rust LP file parser, writer &amp; diff toolkit">
+<meta property="og:description" content="A Rust library, CLI, interactive TUI, and Python package for parsing, analysing, modifying, diffing, and solving Linear Programming (LP) files.">
+<meta property="og:image" content="https://dandxy89.github.io/lp_parser_rs/assets/demo.gif">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="lp_parser_rs — Rust LP file parser, writer &amp; diff toolkit">
+<meta name="twitter:description" content="A Rust library, CLI, interactive TUI, and Python package for parsing, analysing, modifying, diffing, and solving Linear Programming (LP) files.">
+<meta name="twitter:image" content="https://dandxy89.github.io/lp_parser_rs/assets/demo.gif">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebSite",
+      "@id": "https://dandxy89.github.io/lp_parser_rs/#website",
+      "url": "https://dandxy89.github.io/lp_parser_rs/",
+      "name": "lp_parser_rs",
+      "description": "Rust library, CLI, TUI and Python package for Linear Programming (LP) files.",
+      "inLanguage": "en"
+    },
+    {
+      "@type": "SoftwareSourceCode",
+      "@id": "https://dandxy89.github.io/lp_parser_rs/#source",
+      "name": "lp_parser_rs",
+      "description": "A Rust library, CLI, interactive TUI, and Python package for parsing, analysing, modifying, diffing, and solving Linear Programming (LP) files, built on a LALRPOP grammar covering the CPLEX 22.1.1, Gurobi, FICO Xpress and Mosek LP specifications.",
+      "codeRepository": "https://github.com/dandxy89/lp_parser_rs",
+      "programmingLanguage": ["Rust", "Python"],
+      "license": ["https://opensource.org/licenses/MIT", "https://www.apache.org/licenses/LICENSE-2.0"],
+      "author": {"@type": "Person", "name": "Dan Dixey", "url": "https://github.com/dandxy89"},
+      "isPartOf": {"@id": "https://dandxy89.github.io/lp_parser_rs/#website"}
+    },
+    {
+      "@type": "SoftwareApplication",
+      "@id": "https://dandxy89.github.io/lp_parser_rs/#app",
+      "name": "lp_parser_rs",
+      "applicationCategory": "DeveloperApplication",
+      "operatingSystem": "Linux, macOS, Windows",
+      "url": "https://dandxy89.github.io/lp_parser_rs/",
+      "downloadUrl": "https://crates.io/crates/lp_parser_rs",
+      "softwareHelp": "https://docs.rs/lp_parser_rs",
+      "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}
+    }
+  ]
+}
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Inter+Tight:wght@400;500;600&display=swap" rel="stylesheet">
-<style>
-:root {
-  --white: #ffffff;
-  --charcoal: #222222;
-  --evergreen: #1b370e;
-  --kelly: #15b757;
-  --steel: #c9d1d8;
-  --steel-2: #e4e7ea;
-  --mineral: #3a668f;
-  --lava: #fb4a00;
-  --grey: #5d6c7b;
-  --grey-2: #8b98a5;
-  --wash: #eef0f2;
-  --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
-  --sans: "Inter", Arial, sans-serif;
-  --display: "Inter Tight", "Inter", Arial, sans-serif;
-}
-* { margin: 0; padding: 0; box-sizing: border-box; }
-html { scroll-behavior: smooth; scroll-padding-top: 5rem; -webkit-text-size-adjust: 100%; }
-@media (prefers-reduced-motion: reduce) {
-  html { scroll-behavior: auto; }
-  *, *::before, *::after { animation: none !important; transition: none !important; }
-}
-body {
-  background: var(--white);
-  color: var(--charcoal);
-  font-family: var(--sans);
-  font-size: 1rem;
-  line-height: 1.6;
-  -webkit-font-smoothing: antialiased;
-}
-::selection { background: var(--kelly); color: var(--white); }
-a { color: var(--evergreen); text-decoration: none; text-underline-offset: 3px; }
-a:hover, a:focus-visible { text-decoration: underline; text-decoration-color: var(--kelly); }
-:focus-visible { outline: 2px solid var(--kelly); outline-offset: 2px; }
-code, pre, kbd { font-family: var(--mono); }
-code {
-  background: var(--wash); border: 1px solid var(--steel-2); border-radius: 2px;
-  padding: 0.1em 0.35em; font-size: 0.85em; color: #2b4a2a;
-}
-pre {
-  background: #eaecef;
-  color: var(--charcoal);
-  border: 1px solid var(--steel);
-  border-radius: 2px;
-  padding: 1.25rem 1.4rem;
-  overflow-x: auto;
-  font-size: 0.82rem;
-  line-height: 1.7;
-}
-pre code { background: none; border: none; padding: 0; font-size: inherit; color: inherit; }
-kbd {
-  background: var(--white); color: var(--charcoal);
-  border: 1px solid var(--steel); border-bottom-width: 2px; border-radius: 2px;
-  padding: 0.06em 0.4em; font-size: 0.78em; white-space: nowrap;
-}
-
-/* LP + code syntax colours (on the pale code panel) */
-.k  { color: #0d7a3c; font-weight: 600; }
-.n  { color: #2f5a80; }
-.v  { color: #8a5a12; }
-.c  { color: #7c8b99; font-style: italic; }
-.op { color: #c23c06; }
-.g  { color: #0d7a3c; }
-.r  { color: #c23c06; }
-.y  { color: #8a5a12; }
-
-/* ---- page frame: the thin vertical rules AlterG runs down the page ---- */
-.wrap {
-  max-width: 78rem; margin: 0 auto; padding: 0 3.5rem;
-  border-left: 1px solid var(--steel); border-right: 1px solid var(--steel);
-}
-@media (max-width: 760px) { .wrap { padding: 0 1.25rem; } }
-
-/* ---- nav ---- */
-nav {
-  position: sticky; top: 0; z-index: 20;
-  background: color-mix(in srgb, var(--white) 88%, transparent);
-  backdrop-filter: saturate(180%) blur(10px);
-  border-bottom: 1px solid var(--steel);
-}
-nav .row {
-  max-width: 78rem; margin: 0 auto; padding: 1.05rem 3.5rem;
-  border-left: 1px solid var(--steel); border-right: 1px solid var(--steel);
-  display: flex; gap: 1.75rem; align-items: center; flex-wrap: wrap;
-}
-@media (max-width: 760px) { nav .row { padding: 0.9rem 1.25rem; gap: 1rem; } }
-nav .brand {
-  font-family: var(--mono); font-size: 0.9rem; font-weight: 600;
-  color: var(--charcoal); margin-right: auto; letter-spacing: -0.02em;
-}
-nav a { color: var(--charcoal); font-size: 0.9rem; transition: color .25s ease; }
-nav a:hover { color: var(--lava); text-decoration: none; }
-
-/* ---- hero ---- */
-header.hero {
-  background-image: linear-gradient(#f6f7f8, #fdfdfd 20% 80%, #eceef0);
-  border-bottom: 1px solid var(--steel);
-  padding: 6.5rem 0 5rem;
-  text-align: center;
-}
-.hero-grid { display: block; }
-.eyebrow {
-  font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.14em;
-  text-transform: uppercase; color: var(--grey-2); margin-bottom: 2rem;
-}
-h1 {
-  font-family: var(--display);
-  font-size: clamp(2rem, 5.2vw, 4rem);
-  line-height: 1.08;
-  font-weight: 400;
-  letter-spacing: -0.025em;
-  color: var(--grey-2);
-}
-h1 .mono { display: block; color: var(--charcoal); font-family: var(--display); font-weight: 500; }
-.hero p.sub {
-  margin: 1.5rem auto 0; color: var(--grey);
-  font-size: 1.0625rem; max-width: 33rem;
-}
-.hero p.sub a { color: var(--evergreen); text-decoration: underline; text-decoration-color: var(--steel); }
-.badges {
-  display: flex; gap: 0; flex-wrap: wrap; justify-content: center;
-  margin: 2.25rem auto 0; font-size: 0.75rem; width: fit-content;
-  border: 1px solid var(--steel); background: var(--white);
-}
-.badges span {
-  padding: 0.45rem 1rem; color: var(--grey);
-  border-right: 1px solid var(--steel);
-}
-.badges span:last-child { border-right: none; }
-.badges span b { color: var(--charcoal); font-weight: 600; font-family: var(--mono); font-size: 0.95em; }
-.cta { margin-top: 2.25rem; display: flex; gap: 0.75rem; flex-wrap: wrap; justify-content: center; }
-
-/* square outline button with its own arrow tile */
-.cta a {
-  position: relative; display: inline-flex; align-items: center; gap: 1.5rem;
-  font-size: 0.9rem; font-weight: 600; color: var(--evergreen);
-  border: 1px solid var(--steel); background: var(--white);
-  padding: 0 0 0 1.25rem; overflow: hidden;
-  transition: background .25s ease, border-color .25s ease, color .25s ease;
-}
-.cta a::after {
-  content: "↗"; display: flex; align-items: center; justify-content: center;
-  width: 3rem; height: 3rem; flex: none;
-  border-left: 1px solid var(--steel); color: var(--kelly);
-  font-size: 1.05rem; font-weight: 400;
-  transition: border-color .25s ease, color .25s ease, background .25s ease;
-}
-.cta a:hover { background: var(--wash); text-decoration: none; }
-.cta a.primary { background: var(--kelly); border-color: var(--kelly); color: var(--evergreen); }
-.cta a.primary::after { border-left-color: var(--evergreen); color: var(--evergreen); }
-.cta a.primary:hover { background: #12a44e; border-color: #12a44e; }
-.hero pre { text-align: left; max-width: 46rem; margin: 3.5rem auto 0; }
-
-/* ---- sections ---- */
-body { counter-reset: sec; }
-section { padding: 5.5rem 0; border-bottom: 1px solid var(--steel); }
-.sec-label {
-  counter-increment: sec;
-  font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.14em;
-  text-transform: uppercase; color: var(--grey-2); margin-bottom: 1.25rem;
-  display: flex; align-items: baseline; gap: 0.9rem;
-}
-.sec-label::before {
-  content: "0" counter(sec); color: var(--kelly); font-weight: 600; letter-spacing: 0.04em;
-}
-.sec-label .k { color: var(--grey-2); }
-h2 {
-  font-family: var(--display);
-  font-size: clamp(1.75rem, 3.4vw, 2.5rem);
-  font-weight: 400; letter-spacing: -0.025em; line-height: 1.1;
-  color: var(--charcoal); margin-bottom: 1rem; max-width: 30rem;
-}
-h2 code { font-size: 0.68em; background: var(--wash); border-color: var(--steel-2); }
-h3 {
-  font-family: var(--display); font-size: 1.2rem; margin: 3rem 0 0.9rem;
-  color: var(--charcoal); font-weight: 500; letter-spacing: -0.015em;
-  padding-top: 0.9rem; border-top: 1px solid var(--steel-2);
-}
-section > .wrap > p, section p.lead { color: var(--grey); max-width: 44rem; }
-section p.lead { font-size: 1.05rem; }
-p + pre, p + table, ul + pre, p + .tablewrap { margin-top: 1.1rem; }
-pre + p, table + p, pre + h3, .tablewrap + p { margin-top: 1.4rem; }
-
-/* cards — flat, hairline-bordered, sharp */
-.cards {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 0;
-  margin-top: 2.5rem; border: 1px solid var(--steel);
-}
-.card {
-  background: var(--white); padding: 2rem 2rem 2.25rem;
-  border-right: 1px solid var(--steel); border-bottom: 1px solid var(--steel);
-  transition: background .25s ease;
-}
-.card:nth-child(2n) { border-right: none; }
-.card:nth-last-child(-n+2) { border-bottom: none; }
-.card:hover { background: #fafbfc; }
-.card h4 { font-family: var(--mono); font-size: 0.9rem; margin-bottom: 0.6rem; font-weight: 600; }
-.card h4 a { color: var(--charcoal); }
-.card h4 a:hover { color: var(--mineral); }
-.card p { font-size: 0.92rem; color: var(--grey); }
-@media (max-width: 640px) {
-  .cards { grid-template-columns: 1fr; }
-  .card { border-right: none; }
-  .card:nth-last-child(-n+2) { border-bottom: 1px solid var(--steel); }
-  .card:last-child { border-bottom: none; }
-}
-
-/* constraint list — capabilities rendered as LP constraints */
-ul.constraints { list-style: none; margin-top: 2.5rem; border-top: 1px solid var(--steel); }
-ul.constraints li {
-  padding: 1.1rem 0; border-bottom: 1px solid var(--steel-2);
-  display: grid; grid-template-columns: 13rem 1fr; gap: 2rem;
-}
-ul.constraints .cname { font-family: var(--mono); font-size: 0.8rem; color: var(--mineral); font-weight: 500; }
-ul.constraints .cname::after { content: ":"; color: var(--grey-2); }
-ul.constraints .cbody { font-size: 0.95rem; color: var(--grey); }
-@media (max-width: 700px) { ul.constraints li { grid-template-columns: 1fr; gap: 0.3rem; } }
-
-/* tables */
-.tablewrap { overflow-x: auto; border: 1px solid var(--steel); margin-top: 1.25rem; }
-table { border-collapse: collapse; width: 100%; font-size: 0.88rem; }
-th, td { text-align: left; padding: 0.75rem 1.1rem; border-bottom: 1px solid var(--steel-2); vertical-align: top; }
-tr:last-child td { border-bottom: none; }
-th {
-  font-family: var(--mono); font-size: 0.68rem; text-transform: uppercase;
-  letter-spacing: 0.12em; color: var(--grey-2); font-weight: 600;
-  background: var(--wash); border-bottom-color: var(--steel);
-}
-td { color: var(--grey); }
-td:first-child { font-family: var(--mono); font-size: 0.8rem; color: var(--charcoal); }
-
-img.demo { max-width: 100%; border: 1px solid var(--steel); margin-top: 2.5rem; display: block; }
-
-/* footer — evergreen band, like the site's CTA section */
-footer {
-  background: var(--evergreen); color: #b9c8b2;
-  padding: 5rem 0 5.5rem;
-}
-footer .wrap { border-color: rgba(255,255,255,.14); }
-footer .end {
-  font-family: var(--display); font-weight: 400; letter-spacing: -0.025em;
-  color: var(--white); font-size: clamp(1.75rem, 3.4vw, 2.5rem); line-height: 1.1;
-}
-footer p { color: #91a48b; font-size: 0.88rem; margin-top: 1.25rem; }
-footer a { color: #dcebd6; text-decoration: underline; text-decoration-color: rgba(220,235,214,.35); }
-footer a:hover { color: var(--kelly); }
-</style>
+<link rel="stylesheet" href="assets/site.css">
 </head>
 <body>
 
@@ -264,7 +65,7 @@ footer a:hover { color: var(--kelly); }
     <span class="brand">lp_parser_rs</span>
     <a href="#library">Library</a>
     <a href="#cli">CLI</a>
-    <a href="#tui">TUI</a>
+    <a href="tui.html">TUI</a>
     <a href="#python">Python</a>
     <a href="#install">Install</a>
     <a href="https://github.com/dandxy89/lp_parser_rs">GitHub ↗</a>
@@ -434,25 +235,20 @@ lp_parser convert problem.lp --format csv --output ./out</code></pre>
   <div class="wrap">
     <p class="sec-label"><span class="k">Subject To</span> \* the terminal UI *\</p>
     <h2>TUI: <code>lp_diff</code></h2>
-    <p class="lead">An interactive <a href="https://ratatui.rs">ratatui</a> diff viewer for LP <em>and</em> MPS files — mix formats freely (<code>lp_diff model.lp model.mps</code>; format auto-detected by extension). Add <code>--summary</code> for a non-interactive report, and the same <code>--abs-tol</code> / <code>--rel-tol</code> / <code>--rename</code> flags as the CLI diff.</p>
-    <img class="demo" src="assets/demo.gif" alt="Animated demo of lp_diff: browsing a side-by-side constraint diff, fuzzy searching, and running a HiGHS solve" loading="lazy">
+    <p class="lead">An interactive <a href="https://ratatui.rs">ratatui</a> explorer and diff viewer for LP <em>and</em> MPS files. One file opens a single-model explorer; two files diff them, in any mix of formats (<code>lp_diff model.lp model.mps</code>). It has grown well past a diff viewer: there is a background solver, in-memory what-if edits, solution-preserving rewrites, and a diagnostics pane that names the constraints slowing a solve down.</p>
+    <img class="demo" src="assets/demo.gif" alt="Animated demo of lp_diff: diffing an MPS file against an LP file with a coefficient-level constraint diff, raw text view, fuzzy search and a parallel HiGHS solve, then inspecting a single model to apply presolve rewrites and open the diagnostics pane" loading="lazy">
     <ul class="constraints">
-      <li><span class="cname">layout</span><span class="cbody">Three panels — section selector, filterable name list, and detail — across five sections: Summary, Variables, Constraints, Objectives, and Numerics (per-file numerical conditioning).</span></li>
-      <li><span class="cname">side_by_side</span><span class="cbody">Modified constraints show old and new coefficients in two columns — added in green, removed in red, modified in yellow. Press <kbd>r</kbd> for the raw LP text of both files.</span></li>
-      <li><span class="cname">search</span><span class="cbody">Telescope-style pop-up across all sections: fuzzy by default, <code>r:</code> for regex, <code>s:</code> for substring; <kbd>n</kbd>/<kbd>N</kbd> step through committed matches.</span></li>
-      <li><span class="cname">filters_and_sort</span><span class="cbody">Filter to added <kbd>+</kbd>, removed <kbd>-</kbd>, modified <kbd>m</kbd>, or renamed <kbd>=</kbd> entries; <kbd>o</kbd> ignores coefficient order; <kbd>s</kbd> cycles sort (name → |Δ| → relΔ).</span></li>
-      <li><span class="cname">live_tolerance</span><span class="cbody"><kbd>t</kbd>/<kbd>T</kbd> cycle relative and absolute tolerances and rebuild the diff on the fly; active options appear on the Summary panel for reproducibility.</span></li>
-      <li><span class="cname">solver</span><span class="cbody"><kbd>S</kbd> solves either file (or both, diffed) with <a href="https://highs.dev">HiGHS</a> in a background thread — results tabbed into Summary, Variables, Constraints, Log, and Duals, with delta thresholds, a diff-only toggle, CSV export, and <kbd>e</kbd> for infeasibility diagnosis.</span></li>
-      <li><span class="cname">navigation</span><span class="cbody">Vim-style keys, half/full-page scrolling, a 100-entry jumplist (<kbd>Ctrl+o</kbd>/<kbd>Ctrl+i</kbd>), section hotkeys <kbd>1</kbd>–<kbd>5</kbd>, <kbd>[</kbd>/<kbd>]</kbd> section cycling, mouse wheel and click, and a command palette.</span></li>
-      <li><span class="cname">clipboard_export</span><span class="cbody">Yank entry names or either file's version (<kbd>yy</kbd>/<kbd>yo</kbd>/<kbd>yn</kbd>), the full detail panel (<kbd>Y</kbd>), or export the entire report as CSV (<kbd>w</kbd>).</span></li>
-      <li><span class="cname">terminal_manners</span><span class="cbody">Honours <code>NO_COLOR</code>, handles <kbd>Ctrl+Z</kbd> suspend, guards against too-small terminals, and ships scrollable in-app help (<kbd>?</kbd>).</span></li>
+      <li><span class="cname">explore_and_diff</span><span class="cbody">Five sections (Summary, Variables, Constraints, Objectives, Numerics), coefficient-level side-by-side diffs, raw LP text view, kind filters, delta sorts, and tolerances you can cycle live.</span></li>
+      <li><span class="cname">search</span><span class="cbody">Telescope-style pop-up across every section: fuzzy by default, with <code>r:</code> regex, <code>s:</code> substring, and <code>c:</code> content modes. Plus a command palette and a 100-entry jumplist.</span></li>
+      <li><span class="cname">solve</span><span class="cbody"><kbd>S</kbd> solves either file, or both in parallel, with <a href="https://highs.dev">HiGHS</a> on a background thread. Results tab into Summary, Variables, Constraints, Log and Duals, with solution diffing, ranked duals, CSV export, and <kbd>e</kbd> for infeasibility diagnosis.</span></li>
+      <li><span class="cname">what_if</span><span class="cbody"><kbd>E</kbd> edits a constraint's RHS in memory and re-solves it against the baseline, so you can test how far a shadow price actually holds.</span></li>
+      <li><span class="cname">rewrite</span><span class="cbody"><kbd>P</kbd> applies solution-preserving presolve rules (singleton rows to bounds, bound propagation, integer rounding, redundant and forcing rows, empty rows and columns) to a fixpoint, then compares the original and rewritten solves.</span></li>
+      <li><span class="cname">diagnostics</span><span class="cbody"><kbd>D</kbd> joins solver telemetry to the model, giving every row and column its coefficient spread alongside its shadow price, and ranking the worst-conditioned, most degenerate and densest by name.</span></li>
     </ul>
-<pre><code><span class="c"># collapse indexed names so structural diffs survive renumbering</span>
-lp_diff base.lp modified.lp --rename <span class="g">'\[\d+,\d+,[^]]*\]$'</span> <span class="g">'[idx]'</span>
-
-<span class="c"># hide near-equal numeric drift, non-interactively</span>
-lp_diff base.lp modified.lp --summary --abs-tol 1e-4 --rel-tol 1e-6</code></pre>
-    <p>The complete key-binding reference lives in the <a href="https://github.com/dandxy89/lp_parser_rs/blob/main/tui/README.md">tui README</a>.</p>
+    <div class="cta" style="justify-content:flex-start;margin-top:2.5rem;">
+      <a class="primary" href="tui.html">Deep dive on the TUI</a>
+      <a href="https://github.com/dandxy89/lp_parser_rs/blob/main/tui/README.md">tui README</a>
+    </div>
   </div>
 </section>
 
