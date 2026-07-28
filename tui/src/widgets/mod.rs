@@ -112,6 +112,7 @@ pub fn gauge_bar(fraction: f64, cells: usize) -> String {
 }
 
 pub mod detail;
+pub mod diagnostics;
 pub mod help;
 pub mod numerics;
 pub mod palette;

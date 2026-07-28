@@ -137,3 +137,13 @@ fn snapshot_presolve_picker_100x30() {
     insta::assert_snapshot!(render(&mut app, 100, 30).backend());
 }
 
+#[test]
+fn snapshot_diagnostics_pane_120x40() {
+    let mut app = inspect_app();
+    // No solve: exercises the "no solve recorded yet" path and the structural
+    // tables, which need no solver to populate.
+    let diagnostics = crate::diagnostics::analyse(&app.problem1, None);
+    let lines = crate::widgets::diagnostics::build_lines(&diagnostics);
+    app.diagnostics = Some(crate::state::DiagnosticsPane { lines, scroll: 0 });
+    insta::assert_snapshot!(render(&mut app, 120, 40).backend());
+}

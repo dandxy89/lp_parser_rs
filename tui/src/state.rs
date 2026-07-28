@@ -41,6 +41,19 @@ pub struct WhatIfPrompt {
     pub error: Option<String>,
 }
 
+/// Diagnostics pane state (`D`), held only while the pane is open.
+///
+/// The lines are built once when the pane opens: the analysis is a full pass
+/// over the matrix, and its result only changes when the model or the last
+/// solve does.
+#[derive(Debug, Clone)]
+pub struct DiagnosticsPane {
+    /// Pre-built display lines.
+    pub lines: Vec<Line<'static>>,
+    /// Scroll offset, clamped to the content height when the pane is drawn.
+    pub scroll: u16,
+}
+
 /// State machine for the infeasibility diagnosis (elastic relaxation) run.
 #[derive(Debug)]
 pub enum DiagnosisState {
@@ -551,6 +564,7 @@ pub enum PaletteCommand {
     Solve,
     WhatIf,
     Presolve,
+    Diagnostics,
     ExportCsv,
     YankName,
     YankOld,
@@ -562,7 +576,7 @@ pub enum PaletteCommand {
 
 impl PaletteCommand {
     /// Every command with its palette label and direct-key hint, in display order.
-    const CMDS: [(Self, &'static str, &'static str); 30] = [
+    const CMDS: [(Self, &'static str, &'static str); 31] = [
         (Self::GoSummary, "Go to Summary", "1"),
         (Self::GoVariables, "Go to Variables", "2"),
         (Self::GoConstraints, "Go to Constraints", "3"),
@@ -586,6 +600,7 @@ impl PaletteCommand {
         (Self::Solve, "Solve problem (HiGHS)", "S"),
         (Self::WhatIf, "What-if: edit constraint RHS & re-solve", "E"),
         (Self::Presolve, "Rewrite: presolve & compare solves", "P"),
+        (Self::Diagnostics, "Diagnostics: why is the solve slow?", "D"),
         (Self::ExportCsv, "Export diff to CSV", "w"),
         (Self::YankName, "Yank entry name", "yy"),
         (Self::YankOld, "Yank old side (file 1)", "yo"),
@@ -596,8 +611,8 @@ impl PaletteCommand {
     ];
 
     /// Every command, in display order.
-    pub const ALL: [Self; 30] = {
-        let mut all = [Self::Quit; 30];
+    pub const ALL: [Self; 31] = {
+        let mut all = [Self::Quit; 31];
         let mut i = 0;
         while i < Self::CMDS.len() {
             all[i] = Self::CMDS[i].0;

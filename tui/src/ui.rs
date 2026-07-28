@@ -23,7 +23,7 @@ use crate::app::{App, AppMode, Focus, Section};
 use crate::state::{DetailView, PendingYank};
 use crate::theme::theme;
 use crate::widgets::{
-    centred_rect, detail, focus_border_style, help, palette, panel_block, panel_scrollbar, presolve, raw_diff, search_popup,
+    centred_rect, detail, diagnostics, focus_border_style, help, palette, panel_block, panel_scrollbar, presolve, raw_diff, search_popup,
     sidebar, solve, status_bar, summary, what_if,
 };
 
@@ -122,6 +122,11 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     // Presolve rule picker overlay (rewrite & compare).
     if app.presolve_cursor.is_some() {
         presolve::draw_presolve(frame, frame.area(), app);
+    }
+
+    // Diagnostics pane (why is the solve slow, and which rows/vars are to blame).
+    if app.diagnostics.is_some() {
+        diagnostics::draw_diagnostics(frame, frame.area(), app);
     }
 
     // Help overlay — rendered last so it draws on top of everything.

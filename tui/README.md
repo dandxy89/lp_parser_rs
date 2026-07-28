@@ -197,6 +197,7 @@ Search mode prefixes (type in the pop-up input):
 | ------- | ------------------------------------------------------------------- |
 | `E`     | What-if: edit the selected constraint's RHS and re-solve            |
 | `P`     | Rewrite: pick presolve rules, then compare original vs rewritten    |
+| `D`     | Diagnostics: why the solve is slow, and which rows/variables to blame |
 
 **Export**
 
@@ -253,6 +254,32 @@ Rows are removed; columns are only ever *fixed*, never removed. Keeping the vari
 makes the comparison trustworthy: every variable still appears in both results, so a difference in the diff is real and
 not an artefact of the rewrite. The objective values must agree, and that agreement is the check that the rewrite was
 sound.
+
+## Diagnostics (`D`)
+
+`D` answers why a solve is taking so many iterations, and which rows and variables are responsible. Every constraint and
+variable gets one record carrying both its structure (density, coefficient spread, bound width) and its behaviour in the
+last solve (activity, shadow price, whether it sat at a bound with a zero dual).
+
+The pane leads with a verdict, then the solver's own telemetry parsed from its log (iterations, HiGHS presolve
+reductions, run time, primal-dual objective error), then the model's magnitude ranges, then ranked tables for
+worst-conditioned, degenerate and densest, rows and columns each.
+
+Three signals are kept separate because they have different cures:
+
+- **Conditioning** — a row spanning many orders of magnitude makes the ratio test pick badly. Cured by scaling.
+- **Density** — a dense row or column destroys basis-factorisation sparsity. It makes each iteration *cost* more; it does
+  not make the solver take more of them.
+- **Degeneracy** — many constraints active at the same vertex, so the simplex shuffles between bases without improving
+  the objective. The usual cause of a runaway iteration count, and scaling will not fix it.
+
+The verdict judges on iterations *per row*, not the raw count: 200k iterations is unremarkable at 100k rows and alarming
+at 500. Degeneracy is checked before conditioning, since it is the more common cause and the one where rescaling is
+wasted effort.
+
+The degeneracy figures are proxies computed from the final solution, not a basis inspection (HiGHS does not expose the
+basis through this binding). The pane says so on screen. Solver telemetry is parsed from the log, which is not an API:
+every field is optional, so a format change leaves a gap rather than breaking the pane.
 
 ## Jumplist
 
