@@ -1,6 +1,15 @@
-# VHS tape for the lp_diff TUI demo — a tour of the main features.
-# Render:  vhs tui/scripts/demo.tape   (run from the repo root)
-# Then optimise the GIF losslessly:  gifsicle -O3 --batch tui/assets/demo.gif
+# VHS tape for the lp_diff TUI demo.
+#
+# Two scenes, one story: explore a diff, then interrogate a model.
+#   1. Diff an MPS file against an LP file (mixed formats) and solve both.
+#   2. Inspect a single model, rewrite it, and diagnose why it solves as it does.
+#
+# Scene 2 uses boeing2.lp deliberately: it is large enough that presolve finds
+# real reductions and the diagnostics tables have something to rank. The fit2d
+# model in scene 1 presolves to no change, so it would film an empty result.
+#
+# Render:   vhs tui/scripts/demo.tape          (from the repo root)
+# Optimise: gifsicle -O3 --batch tui/assets/demo.gif
 
 Output tui/assets/demo.gif
 
@@ -20,79 +29,96 @@ Type "clear"
 Enter
 Show
 
-# --- launch: diff an MPS file against an LP file (mixed formats, opens on Summary) ---
+# ===========================================================================
+# Scene 1 — diff two models across formats
+# ===========================================================================
+
 Type "lp_diff rust/resources/mps/fit2d.mps rust/resources/fit1d.lp --theme dark"
 Sleep 600ms
 Enter
 Sleep 2.5s
 
-# --- Constraints: coefficient-level side-by-side diff ---
+# Constraints: coefficient-level side-by-side diff
 Type "3"
 Sleep 2s
 Type "j"
-Sleep 1s
+Sleep 900ms
 Type "j"
 Sleep 1.5s
 
-# --- raw text view: the actual file lines, side by side ---
+# Raw text view: the actual file lines, side by side
 Type "r"
 Sleep 2.2s
 Type "r"
 Sleep 1s
 
-# --- filters: modified-only, then back to all ---
-Type "m"
-Sleep 1.5s
-Type "a"
-Sleep 1s
-
-# --- sort cycling: name -> |delta| ---
-Type "s"
-Sleep 1.5s
-
-# --- live tolerance cycling: rebuilds the diff on the fly ---
+# Live tolerance cycling: rebuilds the diff on the fly
 Type "t"
 Sleep 1.8s
 
-# --- telescope-style fuzzy search across all sections ---
+# Telescope-style fuzzy search across all sections
 Type "/"
-Sleep 800ms
+Sleep 700ms
 Type "R0100003"
-Sleep 1.8s
+Sleep 1.6s
 Enter
-Sleep 1.5s
+Sleep 1.4s
 
-# --- Numerics: per-file numerical conditioning ---
+# Numerics: per-file numerical conditioning
 Type "5"
 Sleep 2s
 
-# --- help pop-up: every key binding in one place ---
-Type "?"
-Sleep 2.5s
-Escape
-Sleep 600ms
-
-# --- HiGHS solve: solve BOTH files and diff the solutions ---
+# HiGHS solve: solve BOTH files and diff the solutions
 Type "S"
 Sleep 1.2s
 Type "3"
 Sleep 3.5s
 
-# browse the result tabs: Variables, then diff-only + threshold cycling
+# Variables tab, then changed-rows-only
 Type "2"
-Sleep 2s
+Sleep 1.8s
 Type "d"
 Sleep 1.8s
-Type "t"
-Sleep 1.8s
+Escape
+Sleep 800ms
 
-# Log tab, then back to Summary
-Type "4"
-Sleep 1.6s
-Type "1"
-Sleep 2s
+# ===========================================================================
+# Scene 2 — inspect one model, rewrite it, diagnose it
+# ===========================================================================
 
-# --- quit off camera so the demo ends on the solver results ---
+# Swap files off camera so the demo never cuts to a bare shell prompt.
+Hide
+Type "q"
+Sleep 400ms
+Type "clear"
+Enter
+Show
+
+Type "lp_diff rust/resources/boeing2.lp --theme dark"
+Sleep 600ms
+Enter
+Sleep 2.5s
+
+# Rewrite: the presolve rule picker, then original vs rewritten
+Type "P"
+Sleep 2.5s
+Enter
+Sleep 3.5s
+
+# The comparison header carries what the rewrite achieved
+Sleep 1.5s
+Escape
+Sleep 800ms
+
+# Diagnostics: which rows and variables are behind the solve behaviour
+Type "D"
+Sleep 3.2s
+Type "j"
+Sleep 400ms
+Type "j"
+Sleep 2.8s
+
+# End on the diagnostics tables; quit off camera.
 Hide
 Escape
 Type "q"
