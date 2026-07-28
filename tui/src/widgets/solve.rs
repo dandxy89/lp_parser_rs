@@ -590,9 +590,20 @@ fn append_diagnosis_block(lines: &mut Vec<Line<'static>>, diagnosis: &DiagnosisS
     }
 }
 
+/// Width of the side-label column in the running-both popup. A label is a file
+/// path, a what-if edit, or a presolve summary; it is truncated to this so it
+/// can never run into the status column beside it.
+const LABEL_WIDTH: usize = 46;
+
+/// Width of the running-both popup: the label column plus icon, gutter, status
+/// and borders.
+const LABEL_POPUP_WIDTH: u16 = 70;
+
 fn draw_running_both(frame: &mut Frame, area: Rect, file1: &str, file2: &str, done1: bool, done2: bool, elapsed: std::time::Duration) {
     let t = theme();
-    let popup = super::centred_rect(area, 60, 7);
+    // Wide enough for a what-if or presolve label, which describe an edit
+    // rather than naming a file and so run much longer than a path.
+    let popup = super::centred_rect(area, LABEL_POPUP_WIDTH, 7);
     let running_label = format!("solving\u{2026} ({}s)", elapsed.as_secs());
     let spinner = spinner_frame(elapsed);
     let icon1 = if done1 { "\u{2713}" } else { spinner };
@@ -606,12 +617,18 @@ fn draw_running_both(frame: &mut Frame, area: Rect, file1: &str, file2: &str, do
         Line::from(""),
         Line::from(vec![
             Span::styled(format!("  {icon1} "), if done1 { style_done } else { style_running }),
-            Span::styled(format!("{file1:<30}"), Style::default().fg(t.text)),
+            Span::styled(
+                format!("{:<width$}", truncate_with_ellipsis(file1, LABEL_WIDTH), width = LABEL_WIDTH + 2),
+                Style::default().fg(t.text),
+            ),
             Span::styled(status1, if done1 { style_done } else { style_running }),
         ]),
         Line::from(vec![
             Span::styled(format!("  {icon2} "), if done2 { style_done } else { style_running }),
-            Span::styled(format!("{file2:<30}"), Style::default().fg(t.text)),
+            Span::styled(
+                format!("{:<width$}", truncate_with_ellipsis(file2, LABEL_WIDTH), width = LABEL_WIDTH + 2),
+                Style::default().fg(t.text),
+            ),
             Span::styled(status2, if done2 { style_done } else { style_running }),
         ]),
         Line::from(""),
