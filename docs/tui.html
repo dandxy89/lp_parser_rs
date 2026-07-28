@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>lp_diff — the terminal LP/MPS model explorer · lp_parser_rs</title>
+<meta name="description" content="Deep dive into lp_diff: an interactive terminal explorer and diff viewer for LP and MPS models, with a HiGHS solver, what-if analysis, solution-preserving rewrites, and conditioning diagnostics.">
+<link rel="canonical" href="https://dandxy89.github.io/lp_parser_rs/tui.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="lp_parser_rs">
+<meta property="og:url" content="https://dandxy89.github.io/lp_parser_rs/tui.html">
+<meta property="og:title" content="lp_diff — the terminal LP/MPS model explorer">
+<meta property="og:description" content="An interactive terminal explorer and diff viewer for LP and MPS models, with a HiGHS solver, what-if analysis, solution-preserving rewrites, and conditioning diagnostics.">
+<meta property="og:image" content="https://dandxy89.github.io/lp_parser_rs/assets/demo.gif">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="lp_diff — the terminal LP/MPS model explorer">
+<meta name="twitter:description" content="An interactive terminal explorer and diff viewer for LP and MPS models, with a HiGHS solver, what-if analysis, solution-preserving rewrites, and conditioning diagnostics.">
+<meta name="twitter:image" content="https://dandxy89.github.io/lp_parser_rs/assets/demo.gif">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "SoftwareApplication",
+      "@id": "https://dandxy89.github.io/lp_parser_rs/tui.html#app",
+      "name": "lp_diff",
+      "applicationCategory": "DeveloperApplication",
+      "operatingSystem": "Linux, macOS, Windows",
+      "url": "https://dandxy89.github.io/lp_parser_rs/tui.html",
+      "description": "An interactive terminal explorer and diff viewer for LP and MPS models, with coefficient-level diffs, fuzzy search, a background HiGHS solver, what-if edits, solution-preserving rewrites and conditioning diagnostics.",
+      "screenshot": "https://dandxy89.github.io/lp_parser_rs/assets/demo.gif",
+      "isPartOf": {"@id": "https://dandxy89.github.io/lp_parser_rs/#website"},
+      "author": {"@type": "Person", "name": "Dan Dixey", "url": "https://github.com/dandxy89"},
+      "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}
+    },
+    {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        {"@type": "ListItem", "position": 1, "name": "lp_parser_rs", "item": "https://dandxy89.github.io/lp_parser_rs/"},
+        {"@type": "ListItem", "position": 2, "name": "lp_diff TUI", "item": "https://dandxy89.github.io/lp_parser_rs/tui.html"}
+      ]
+    }
+  ]
+}
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Inter+Tight:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+
+<nav aria-label="Sections">
+  <div class="row">
+    <span class="brand"><a href="index.html" style="color:inherit">lp_parser_rs</a></span>
+    <a href="index.html#library">Library</a>
+    <a href="index.html#cli">CLI</a>
+    <a href="tui.html">TUI</a>
+    <a href="index.html#python">Python</a>
+    <a href="index.html#install">Install</a>
+    <a href="https://github.com/dandxy89/lp_parser_rs">GitHub ↗</a>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap hero-grid">
+    <div>
+      <a class="backlink" href="index.html">← back to overview</a>
+      <p class="eyebrow">\* the terminal model explorer *\</p>
+      <h1>Read the model.<span class="mono">Not the diff output.</span></h1>
+      <p class="sub"><code>lp_diff</code> opens an LP or MPS file (or two, in any combination) and gives you a
+        navigable model: coefficient-level diffs, fuzzy search, a background <a href="https://highs.dev">HiGHS</a> solver,
+        what-if edits, solution-preserving rewrites, and a diagnostics pane that names the constraints slowing your solve down.</p>
+      <div class="badges">
+        <span><b>binary</b> lp_diff</span>
+        <span><b>built on</b> ratatui</span>
+        <span><b>formats</b> LP · MPS</span>
+      </div>
+      <div class="cta">
+        <a class="primary" href="#install">Install</a>
+        <a href="https://github.com/dandxy89/lp_parser_rs/blob/main/tui/README.md">tui README</a>
+      </div>
+    </div>
+    <img class="demo" src="assets/demo.gif" alt="Animated demo of lp_diff: diffing an MPS file against an LP file with a coefficient-level constraint diff, raw text view, fuzzy search and a parallel HiGHS solve, then inspecting a single model to apply presolve rewrites and open the diagnostics pane" loading="lazy" style="max-width:52rem;margin-left:auto;margin-right:auto;">
+  </div>
+</header>
+
+<section id="modes">
+  <div class="wrap">
+    <p class="sec-label"><span class="k">Minimize</span> \* getting oriented *\</p>
+    <h2>One file explores. Two files diff.</h2>
+    <p class="lead">The file count decides the mode. Format is detected by extension, and the two files do not have to
+      match: comparing an LP against an MPS is a first-class case, not a workaround.</p>
+
+    <div class="subnav">
+      <a href="#modes">Modes</a>
+      <a href="#layout">Layout</a>
+      <a href="#diffing">Diffing</a>
+      <a href="#search">Search &amp; navigation</a>
+      <a href="#solve">Solving</a>
+      <a href="#whatif">What-if</a>
+      <a href="#rewrite">Rewrites</a>
+      <a href="#diagnostics">Diagnostics</a>
+      <a href="#manners">Terminal manners</a>
+      <a href="#keys">Key reference</a>
+    </div>
+
+<pre><code><span class="c"># inspect a single model</span>
+lp_diff model.lp
+
+<span class="c"># diff two models; formats may differ</span>
+lp_diff base.lp modified.mps
+
+<span class="c"># non-interactive report, then exit</span>
+lp_diff base.lp modified.lp --summary</code></pre>
+
+    <h3>Inspect mode</h3>
+    <p>With one file the five sections describe the model rather than a comparison. Every variable, constraint and
+      objective is listed plainly, and the detail panel carries the full entry: coefficients with names, operator and
+      RHS, bounds and variable type, or SOS weights.</p>
+    <p>Everything that still makes sense for a single model keeps working: search, the command palette, sorting, the
+      solver, CSV export, rewrites, diagnostics and <code>--watch</code>. The diff-only actions (kind filters,
+      ignore-order, tolerance cycling, delta sorts and the raw side-by-side view) are hidden from the help and the
+      palette, and no-op with a brief status-bar hint if their key is pressed. There are no dead keys advertised.</p>
+
+    <h3>Flags</h3>
+    <div class="tablewrap"><table>
+      <tr><th>Flag</th><th>Effect</th></tr>
+      <tr><td>--summary</td><td>Print a structured report to stdout and exit without launching the TUI.</td></tr>
+      <tr><td>--watch</td><td>Reload automatically when an input file changes on disk.</td></tr>
+      <tr><td>--abs-tol</td><td>Absolute tolerance: equal when <code>|a - b| &lt;= abs_tol</code>. An epsilon floor always applies, so ordinary float noise never registers as a change.</td></tr>
+      <tr><td>--rel-tol</td><td>Relative tolerance, scaled by magnitude: equal when <code>|a - b| &lt;= rel_tol * max(|a|, |b|)</code>.</td></tr>
+      <tr><td>--rename</td><td>Regex rewrite applied to names in <em>both</em> files before matching. Repeatable; rules apply in order.</td></tr>
+      <tr><td>--theme</td><td><code>auto</code> (detects from <code>COLORFGBG</code>), <code>dark</code>, or <code>light</code>.</td></tr>
+    </table></div>
+
+    <div class="note"><b>Why <code>--rename</code> exists.</b> Renumbering a model, whether inserting a time period or reindexing a
+      set, changes every generated name and turns a small structural change into a diff where nothing matches. Collapsing
+      the indices first lets the real change surface:
+      <code>--rename '\[\d+,\d+,[^]]*\]$' '[idx]'</code>.</div>
+  </div>
+</section>
+
+<section id="layout">
+  <div class="wrap">
+    <p class="sec-label"><span class="k">Subject To</span> \* the three panels *\</p>
+    <h2>Layout</h2>
+    <p class="lead">A section selector, a filterable name list, and a detail panel. The status bar carries total changes,
+      per-section statistics, the active filter, and scroll position.</p>
+
+    <div class="tablewrap"><table>
+      <tr><th>#</th><th>Section</th><th>Contents</th></tr>
+      <tr><td>1</td><td>Summary</td><td>Change counts, problem dimensions, and the structural analysis: variable and constraint types, coefficient scaling, detected issues.</td></tr>
+      <tr><td>2</td><td>Variables</td><td>Variable type and bound changes.</td></tr>
+      <tr><td>3</td><td>Constraints</td><td>Constraint changes with coefficient-level detail, side-by-side for modified rows.</td></tr>
+      <tr><td>4</td><td>Objectives</td><td>Objective function changes.</td></tr>
+      <tr><td>5</td><td>Numerics</td><td>Per-file numerical conditioning: coefficient scaling, magnitude ranges, and analysis issues, including issues that are new in file 2.</td></tr>
+    </table></div>
+    <p>Jump directly with <kbd>1</kbd>–<kbd>5</kbd>, cycle with <kbd>[</kbd> and <kbd>]</kbd>, and press <kbd>?</kbd>
+      anywhere for scrollable in-app help.</p>
+  </div>
+</section>
+
+<section id="diffing">
+  <div class="wrap">
+    <p class="sec-label"><span class="k">Subject To</span> \* comparing models *\</p>
+    <h2>Diffing down to the coefficient</h2>
+    <p class="lead">A modified constraint is not just "modified". The two-column view puts old and new coefficients
+      beside each other, so you can see which term moved and by how much.</p>
+
+    <h3>Side-by-side and raw text</h3>
+    <p>Added coefficients render green, removed red, modified yellow, unchanged grey. Press <kbd>r</kbd> to swap the
+      parsed view for the actual LP source lines of both files, side by side, useful when the parse is not what you
+      expected, or when formatting matters.</p>
+
+    <h3>Filters and sort</h3>
+    <div class="tablewrap"><table class="keys">
+      <tr><th>Key</th><th>Action</th></tr>
+      <tr><td><kbd>a</kbd> <kbd>+</kbd> <kbd>-</kbd> <kbd>m</kbd> <kbd>=</kbd></td><td>Show all / added / removed / modified / renamed entries.</td></tr>
+      <tr><td><kbd>o</kbd></td><td>Ignore coefficient <em>order</em>: hide rows whose terms were merely reordered.</td></tr>
+      <tr><td><kbd>s</kbd></td><td>Cycle sort: name → |Δ| → relative Δ. The delta sorts surface the biggest movers first.</td></tr>
+    </table></div>
+
+    <h3>Tolerance, live</h3>
+    <p><kbd>t</kbd> and <kbd>T</kbd> cycle the relative and absolute tolerances and rebuild the diff in place, so you can
+      dial numeric noise out interactively rather than restarting with different flags. The active values appear on the
+      Summary panel, so a screenshot of the diff records the settings that produced it.</p>
+  </div>
+</section>
+
+<section id="search">
+  <div class="wrap">
+    <p class="sec-label"><span class="k">Subject To</span> \* finding things *\</p>
+    <h2>Search and navigation</h2>
+    <p class="lead">A Telescope-style pop-up searches every section at once, with four modes chosen by prefix.</p>
+
+    <div class="tablewrap"><table>
+      <tr><th>Prefix</th><th>Mode</th></tr>
+      <tr><td><em>(none)</em></td><td>Fuzzy match, ranked by score. The default.</td></tr>
+      <tr><td>r:</td><td>Regex, case-insensitive.</td></tr>
+      <tr><td>s:</td><td>Substring, case-insensitive.</td></tr>
+      <tr><td>c:</td><td>Content: searches variable names, coefficients and RHS values inside entries, not just entry names.</td></tr>
+    </table></div>
+
+    <p><kbd>Tab</kbd> completes the query with the highlighted result, <kbd>Enter</kbd> jumps to it, and once a search is
+      committed <kbd>n</kbd>/<kbd>N</kbd> step through matches from the main view.</p>
+
+    <h3>Jumplist and palette</h3>
+    <p>Positions are recorded automatically when you change section, apply a filter, or jump to a search result.
+      <kbd>Ctrl+o</kbd> goes back and <kbd>Ctrl+i</kbd> forward through up to 100 positions, the same muscle memory as
+      a vim jumplist. <kbd>Ctrl+p</kbd> opens a fuzzy command palette listing every action with its direct key, so
+      nothing is discoverable only by reading the manual.</p>
+  </div>
+</section>
+
+<section id="solve">
+  <div class="wrap">
+    <p class="sec-label"><span class="k">Subject To</span> \* running the model *\</p>
+    <h2>Solving, in the background</h2>
+    <p class="lead"><kbd>S</kbd> solves with <a href="https://highs.dev">HiGHS</a> on a background thread. The interface
+      stays responsive, and the elapsed time ticks while a long solve runs.</p>
+
+    <p>In diff mode a picker offers file 1, file 2, or <em>both</em>. "Both" runs the two solves in parallel and lands in
+      a comparison view. Results are organised into five tabs (Summary, Variables, Constraints, Log, and Duals),
+      switchable with <kbd>1</kbd>–<kbd>5</kbd> or <kbd>Tab</kbd>.</p>
+
+    <div class="cards">
+      <div class="card">
+        <h4>Solution diffing</h4>
+        <p>Variables and constraints are matched by name and compared. A configurable delta threshold (<kbd>t</kbd>/<kbd>T</kbd>,
+          presets from <code>0.0</code> to <code>1.0</code>) decides what counts as changed, and <kbd>d</kbd> hides
+          everything that did not.</p>
+      </div>
+      <div class="card">
+        <h4>Duals, ranked</h4>
+        <p>The Duals tab ranks constraints by |shadow price| and variables by |reduced cost|, or, in comparison mode, by
+          the <em>change</em> in each. The binding constraints come to you.</p>
+      </div>
+      <div class="card">
+        <h4>Infeasibility diagnosis</h4>
+        <p><kbd>e</kbd> runs an elastic relaxation to find which constraints have to give, so an infeasible model
+          produces a named culprit instead of a status string.</p>
+      </div>
+      <div class="card">
+        <h4>Cached across closes</h4>
+        <p>Closing the overlay files the result away; reopening the same target restores it instead of re-solving.
+          Editing an input invalidates the cache by reloading the files.</p>
+      </div>
+    </div>
+
+    <p style="margin-top:1.5rem;"><kbd>y</kbd> yanks the results to the clipboard and <kbd>w</kbd> writes them to CSV:
+      the full comparison in "both" mode, the single solution otherwise.</p>
+  </div>
+</section>
+
+<section id="whatif">
+  <div class="wrap">
+    <p class="sec-label"><span class="k">Subject To</span> \* asking questions *\</p>
+    <h2>What-if: move a bound, re-solve</h2>
+    <p class="lead">Select a constraint, press <kbd>E</kbd>, type a new right-hand side. The baseline problem is cloned
+      in memory, the RHS is changed, and both versions are solved in parallel into the standard comparison view.</p>
+    <p>Nothing is written to disk and the file on disk is untouched. The edit lives only in the clone. The comparison
+      label records the change (<code>capacity rhs 200 → 260</code>), so a screenshot carries its own provenance.</p>
+    <div class="note"><b>The point is the duals.</b> A shadow price tells you the marginal value of a constraint at the
+      current solution; it does not tell you how far that stays true. Actually moving the bound and re-solving does.</div>
+  </div>
+</section>
+
+<section id="rewrite">
+  <div class="wrap">
+    <p class="sec-label"><span class="k">Subject To</span> \* making it smaller *\</p>
+    <h2>Rewrites: presolve, then compare</h2>
+    <p class="lead"><kbd>P</kbd> opens a rule picker. Each rule is a <em>solution-preserving</em> rewrite: it removes
+      work from the model without changing the set of optimal solutions. Pick a set, press <kbd>Enter</kbd>, and the
+      original and the rewritten model are solved side by side.</p>
+
+    <div class="tablewrap"><table>
+      <tr><th>Rule</th><th>What it does</th></tr>
+      <tr><td>Singleton → bound</td><td>A row with one term is a bound in disguise: <code>3x &lt;= 12</code> becomes <code>x &lt;= 4</code>, and the row goes.</td></tr>
+      <tr><td>Bound propagation</td><td>Derives implied bounds from each row's minimum and maximum activity, tightening the box every other rule reasons about.</td></tr>
+      <tr><td>Integer rounding</td><td>Rounds fractional bounds inwards on integer variables: <code>x &lt;= 3.7</code> becomes <code>x &lt;= 3</code>.</td></tr>
+      <tr><td>Redundant &amp; forcing rows</td><td>Drops rows that can never bind; pins every variable in a row that is only satisfiable at a single point.</td></tr>
+      <tr><td>Empty rows &amp; columns</td><td>Drops termless rows; fixes variables that appear in no row at whichever bound the objective prefers.</td></tr>
+    </table></div>
+
+    <p>The rules feed each other (a singleton becomes a bound, the tighter bound makes another row redundant), so they
+      run to a fixpoint rather than once each. Reopening the picker shows the previous run's per-pass breakdown, which is
+      where the cascade becomes visible.</p>
+
+    <div class="note"><b>Rows are removed; columns are only ever fixed.</b> Keeping the variable set identical on both
+      sides is what makes the comparison trustworthy: every variable still appears in both results, so a difference in
+      the diff is a real difference and not an artefact of the rewrite. The objective values must agree, and that agreement
+      is the check that the rewrite was sound, and the solve times are the answer to whether it was worth it.</div>
+  </div>
+</section>
+
+<section id="diagnostics">
+  <div class="wrap">
+    <p class="sec-label"><span class="k">Subject To</span> \* why is it slow *\</p>
+    <h2>Diagnostics: name the offender</h2>
+    <p class="lead">A solver log saying "200,000 iterations" and a numerics panel saying "coefficients span 1e-4 to 1e6"
+      are both true and neither tells you which constraint to go and fix. <kbd>D</kbd> joins them.</p>
+
+    <p>Every constraint and every variable gets one record carrying <em>both</em> its structure (density, coefficient
+      spread, bound width) and its behaviour in the last solve (activity, shadow price, whether it sat at a bound with
+      a zero dual). The tables put those on the same line.</p>
+
+<pre class="tty"><code><span class="hdr">  Worst-conditioned constraints</span>
+  <span class="dim">coefficient spread within the row</span>
+  <span class="dim">constraint          nnz    ratio       rhs        dual  state</span>
+  FLAVa3                7    <span class="warn">3.0e3</span>         0   -3.611e-2  <span class="warn">binding</span>
+  FLAVa2               21    <span class="warn">2.5e3</span>   45.0000   -2.889e-2  <span class="warn">binding</span>
+  LFRPMASM             78    1.2e3         0           0  <span class="dim">slack</span>
+
+<span class="hdr">  Degenerate constraints</span>
+  <span class="dim">active at the optimum but with a zero dual — the simplex pivots around these</span>
+  <span class="dim">constraint          nnz    ratio       rhs        dual  state</span>
+  CONTBOS4             10    1.0e0         0           0  <span class="bad">degenerate</span>
+  CONTLGA2              7    1.0e0         0           0  <span class="bad">degenerate</span></code></pre>
+
+    <p>The pane leads with a verdict rather than a table, then the solver's own telemetry (iterations, its internal
+      presolve reductions, run time, primal-dual objective error), then the model's magnitude ranges, then ranked tables
+      for worst-conditioned, degenerate and densest, rows and columns each.</p>
+
+    <h3>Three signals, three different cures</h3>
+    <div class="cards three">
+      <div class="card">
+        <h4>Conditioning</h4>
+        <p>A row spanning many orders of magnitude makes the ratio test pick badly. Cured by scaling, or by re-expressing
+          the row's units so coefficients sit nearer 1.</p>
+      </div>
+      <div class="card">
+        <h4>Density</h4>
+        <p>A dense row or column destroys the sparsity of the basis factorisation. It makes each iteration <em>cost</em>
+          more. It does not make the solver take more of them.</p>
+      </div>
+      <div class="card">
+        <h4>Degeneracy</h4>
+        <p>Many constraints active at the same vertex, so the simplex shuffles between bases without improving the
+          objective. The usual cause of a runaway iteration count, and scaling will not touch it.</p>
+      </div>
+    </div>
+
+    <p style="margin-top:1.5rem;">The verdict checks degeneracy <em>before</em> conditioning, deliberately: it is both
+      the more common cause and the one where rescaling is wasted effort. The number it judges on is iterations
+      <em>per row</em>, not the raw count. 200,000 iterations is unremarkable at 100,000 rows and alarming at 500.</p>
+
+    <div class="note"><b>The degeneracy figures are proxies.</b> They are computed from the final solution, not from a
+      basis inspection, because HiGHS does not expose the basis through this binding. A binding row with a zero dual is strong
+      evidence of a degenerate vertex, not proof, and the pane says so on screen. The solver telemetry is parsed from the
+      log, which is not an API: every field is optional, so a format change leaves a gap rather than breaking the pane.</div>
+  </div>
+</section>
+
+<section id="manners">
+  <div class="wrap">
+    <p class="sec-label"><span class="k">Bounds</span> \* living in a terminal *\</p>
+    <h2>Terminal manners</h2>
+    <ul class="constraints">
+      <li><span class="cname">theme</span><span class="cbody">Detects light or dark from <code>COLORFGBG</code>, or force it with <code>--theme</code>. <a href="https://no-color.org"><code>NO_COLOR</code></a> forces monochrome, unless you passed <code>--theme</code> explicitly, which is treated as the deliberate override it is.</span></li>
+      <li><span class="cname">watch</span><span class="cbody"><code>--watch</code> reloads when a file changes on disk and rebuilds the diff in place, keeping your position. Stale solve results are discarded rather than shown against a model that has moved.</span></li>
+      <li><span class="cname">suspend</span><span class="cbody"><kbd>Ctrl+Z</kbd> suspends and resumes cleanly, restoring the alternate screen and raw mode on the way back.</span></li>
+      <li><span class="cname">small_terminals</span><span class="cbody">Guards against terminals too small to draw into, and every overlay scrolls rather than silently truncating.</span></li>
+      <li><span class="cname">mouse</span><span class="cbody">Scroll wheel navigates lists, clicking selects, without giving up any keyboard control.</span></li>
+      <li><span class="cname">clipboard</span><span class="cbody"><kbd>yy</kbd> yanks an entry name, <kbd>yo</kbd>/<kbd>yn</kbd> either file's version, <kbd>Y</kbd> the whole detail panel.</span></li>
+    </ul>
+  </div>
+</section>
+
+<section id="keys">
+  <div class="wrap">
+    <p class="sec-label"><span class="k">Bounds</span> \* the whole keyboard *\</p>
+    <h2>Key reference</h2>
+    <p class="lead">The in-app help (<kbd>?</kbd>) is the authoritative copy and adapts to the mode you are in. This is
+      the summary.</p>
+
+    <h3>Navigation</h3>
+    <div class="tablewrap"><table class="keys">
+      <tr><th>Key</th><th>Action</th></tr>
+      <tr><td><kbd>j</kbd> <kbd>k</kbd> / <kbd>↓</kbd> <kbd>↑</kbd></td><td>Move down / up</td></tr>
+      <tr><td><kbd>g</kbd> / <kbd>G</kbd></td><td>Top / bottom</td></tr>
+      <tr><td><kbd>Ctrl+d</kbd> <kbd>Ctrl+u</kbd></td><td>Half page down / up</td></tr>
+      <tr><td><kbd>Ctrl+f</kbd> <kbd>Ctrl+b</kbd></td><td>Full page down / up</td></tr>
+      <tr><td><kbd>Ctrl+o</kbd> <kbd>Ctrl+i</kbd></td><td>Jumplist back / forward</td></tr>
+      <tr><td><kbd>Tab</kbd> / <kbd>⇧Tab</kbd></td><td>Next / previous panel</td></tr>
+      <tr><td><kbd>h</kbd> <kbd>l</kbd></td><td>Sidebar / detail</td></tr>
+      <tr><td><kbd>1</kbd>–<kbd>5</kbd>, <kbd>[</kbd> <kbd>]</kbd></td><td>Jump to section / cycle sections</td></tr>
+    </table></div>
+
+    <h3>Analysis</h3>
+    <div class="tablewrap"><table class="keys">
+      <tr><th>Key</th><th>Action</th></tr>
+      <tr><td><kbd>S</kbd></td><td>Solve with HiGHS (picker in diff mode)</td></tr>
+      <tr><td><kbd>E</kbd></td><td>What-if: edit the selected constraint's RHS and re-solve</td></tr>
+      <tr><td><kbd>P</kbd></td><td>Rewrite: pick presolve rules, then compare original vs rewritten</td></tr>
+      <tr><td><kbd>D</kbd></td><td>Diagnostics: why is the solve slow, and which rows and variables are to blame</td></tr>
+      <tr><td><kbd>e</kbd></td><td>Diagnose infeasibility (in the solve overlay)</td></tr>
+    </table></div>
+
+    <h3>Diff, search and export</h3>
+    <div class="tablewrap"><table class="keys">
+      <tr><th>Key</th><th>Action</th></tr>
+      <tr><td><kbd>a</kbd> <kbd>+</kbd> <kbd>-</kbd> <kbd>m</kbd> <kbd>=</kbd></td><td>Filter: all / added / removed / modified / renamed</td></tr>
+      <tr><td><kbd>o</kbd> <kbd>s</kbd> <kbd>t</kbd> <kbd>T</kbd></td><td>Ignore order · cycle sort · cycle relative / absolute tolerance</td></tr>
+      <tr><td><kbd>r</kbd></td><td>Toggle raw side-by-side text view</td></tr>
+      <tr><td><kbd>/</kbd> · <kbd>n</kbd> <kbd>N</kbd></td><td>Open search · next / previous match</td></tr>
+      <tr><td><kbd>Ctrl+p</kbd></td><td>Command palette</td></tr>
+      <tr><td><kbd>yy</kbd> <kbd>yo</kbd> <kbd>yn</kbd> <kbd>Y</kbd></td><td>Yank name · old side · new side · detail panel</td></tr>
+      <tr><td><kbd>w</kbd></td><td>Export CSV</td></tr>
+      <tr><td><kbd>?</kbd> · <kbd>q</kbd> · <kbd>Ctrl+C</kbd></td><td>Help · quit · force quit</td></tr>
+    </table></div>
+  </div>
+</section>
+
+<section id="install">
+  <div class="wrap">
+    <p class="sec-label"><span class="k">End</span> \* getting it *\</p>
+    <h2>Install</h2>
+<pre><code><span class="c"># from a clone of the repository</span>
+cargo install --path tui
+
+<span class="c"># or run straight from the workspace</span>
+cargo run -p lp_parser_tui -- base.lp modified.mps</code></pre>
+    <p style="margin-top:1.4rem;">Requires a terminal with colour support. The complete key-binding reference lives in
+      the <a href="https://github.com/dandxy89/lp_parser_rs/blob/main/tui/README.md">tui README</a>, and in the app under
+      <kbd>?</kbd>.</p>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p class="end">End</p>
+    <p>lp_parser_rs · dual-licensed MIT / Apache-2.0 ·
+      <a href="index.html">overview</a> ·
+      <a href="https://crates.io/crates/lp_parser_rs">crates.io</a> ·
+      <a href="https://docs.rs/lp_parser_rs">docs.rs</a> ·
+      <a href="https://pypi.org/project/parse-lp/">PyPI</a> ·
+      <a href="https://github.com/dandxy89/lp_parser_rs">GitHub</a></p>
+  </div>
+</footer>
+
+</body>
+</html>
