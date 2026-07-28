@@ -683,8 +683,30 @@ impl App {
                 }
             }
             KeyCode::Char('e') => self.start_diagnosis_single(),
+            KeyCode::Char('w') => {
+                let written = match &self.solver.state {
+                    SolveState::Done(result) => Some(
+                        std::env::current_dir()
+                            .map_err(|e| e.to_string())
+                            .and_then(|dir| crate::solver::write_result_csv(result, &dir).map_err(|e| e.to_string())),
+                    ),
+                    _ => None,
+                };
+                if let Some(written) = written {
+                    self.flash_csv_write(written);
+                }
+            }
             _ => {}
         }
+    }
+
+    /// Flash the status bar with the outcome of a solve CSV write.
+    fn flash_csv_write(&mut self, written: Result<(String, String), String>) {
+        self.yank.message = match written {
+            Ok((file1, file2)) => format!("Wrote {file1} and {file2}"),
+            Err(e) => format!("CSV write failed: {e}"),
+        };
+        self.yank.flash = Some(std::time::Instant::now());
     }
 
     /// Start an infeasibility diagnosis for the single-solve result, if it is
@@ -830,25 +852,16 @@ impl App {
             }
             KeyCode::Char('e') => self.start_diagnosis_both(),
             KeyCode::Char('w') => {
-                if let SolveState::DoneBoth(diff) = &self.solver.state {
-                    let dir = match std::env::current_dir() {
-                        Ok(d) => d,
-                        Err(e) => {
-                            self.yank.message = format!("CSV write failed: {e}");
-                            self.yank.flash = Some(std::time::Instant::now());
-                            return;
-                        }
-                    };
-                    match crate::solver::write_diff_csv(diff, &dir) {
-                        Ok((var_file, con_file)) => {
-                            self.yank.message = format!("Wrote {var_file} and {con_file}");
-                            self.yank.flash = Some(std::time::Instant::now());
-                        }
-                        Err(e) => {
-                            self.yank.message = format!("CSV write failed: {e}");
-                            self.yank.flash = Some(std::time::Instant::now());
-                        }
-                    }
+                let written = match &self.solver.state {
+                    SolveState::DoneBoth(diff) => Some(
+                        std::env::current_dir()
+                            .map_err(|e| e.to_string())
+                            .and_then(|dir| crate::solver::write_diff_csv(diff, &dir).map_err(|e| e.to_string())),
+                    ),
+                    _ => None,
+                };
+                if let Some(written) = written {
+                    self.flash_csv_write(written);
                 }
             }
             _ => {}

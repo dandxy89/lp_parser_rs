@@ -112,7 +112,8 @@ fn draw_done(
     // list below can borrow them alongside the cached tab lines.
     let tab_bar = build_tab_bar(active);
     let blank = Line::from("");
-    let footer = Line::from(Span::styled("  1-5: tabs  Tab/S-Tab: cycle  j/k: scroll  y: yank  Esc: close", Style::default().fg(t.muted)));
+    let footer =
+        Line::from(Span::styled("  1-5: tabs  Tab/S-Tab: cycle  j/k: scroll  w: csv  y: yank  Esc: close", Style::default().fg(t.muted)));
 
     // The cache is always populated before the state becomes `Done`, so the
     // cached tab lines are the only source of content.

@@ -842,6 +842,55 @@ pub fn write_diff_csv(diff: &SolveDiffResult, dir: &Path) -> Result<(String, Str
     Ok((var_filename, con_filename))
 }
 
+/// Write a single solve result to two timestamped CSV files in `dir`.
+///
+/// Returns the filenames of the two written files on success.
+///
+/// # Errors
+///
+/// Returns an error if the CSV files cannot be created or written to.
+pub fn write_result_csv(result: &SolveResult, dir: &Path) -> Result<(String, String), Box<dyn Error>> {
+    debug_assert!(dir.is_dir(), "write_result_csv: dir must be an existing directory");
+    debug_assert_eq!(result.variables.len(), result.reduced_costs.len(), "variables and reduced_costs must have equal length");
+    debug_assert_eq!(result.row_values.len(), result.shadow_prices.len(), "row_values and shadow_prices must have equal length");
+
+    let ts = chrono::Local::now().format("%Y%m%d_%H%M%S");
+    let var_filename = format!("solve_variables_{ts}.csv");
+    let con_filename = format!("solve_constraints_{ts}.csv");
+
+    {
+        let mut wtr = csv::Writer::from_path(dir.join(&var_filename))?;
+        wtr.write_record(["name", "value", "reduced_cost"])?;
+
+        let mut buf_value = String::with_capacity(24);
+        let mut buf_rc = String::with_capacity(24);
+
+        for (i, (name, value)) in result.variables.iter().enumerate() {
+            write_opt_f64_to_buf(&mut buf_value, Some(*value));
+            write_opt_f64_to_buf(&mut buf_rc, result.reduced_costs.get(i).map(|(_, v)| *v));
+            wtr.write_record([name, &buf_value, &buf_rc])?;
+        }
+        wtr.flush()?;
+    }
+
+    {
+        let mut wtr = csv::Writer::from_path(dir.join(&con_filename))?;
+        wtr.write_record(["name", "activity", "shadow_price"])?;
+
+        let mut buf_activity = String::with_capacity(24);
+        let mut buf_sp = String::with_capacity(24);
+
+        for (i, (name, activity)) in result.row_values.iter().enumerate() {
+            write_opt_f64_to_buf(&mut buf_activity, Some(*activity));
+            write_opt_f64_to_buf(&mut buf_sp, result.shadow_prices.get(i).map(|(_, v)| *v));
+            wtr.write_record([name, &buf_activity, &buf_sp])?;
+        }
+        wtr.flush()?;
+    }
+
+    Ok((var_filename, con_filename))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1022,5 +1071,33 @@ mod tests {
             "enlight4 should be infeasible when integers are correctly applied, got: {}",
             result.status
         );
+    }
+
+    #[test]
+    fn test_write_result_csv() {
+        let result = SolveResult {
+            status: "Optimal".to_owned(),
+            objective_value: Some(12.5),
+            variables: vec![("x".to_owned(), 1.5), ("y".to_owned(), 0.0)],
+            reduced_costs: vec![("x".to_owned(), 0.0), ("y".to_owned(), -2.0)],
+            shadow_prices: vec![("c1".to_owned(), 3.0)],
+            row_values: vec![("c1".to_owned(), 4.0)],
+            build_time: std::time::Duration::ZERO,
+            solve_time: std::time::Duration::ZERO,
+            extract_time: std::time::Duration::ZERO,
+            solver_log: String::new(),
+            skipped_sos: 0,
+        };
+
+        let dir = std::env::temp_dir().join(format!("lp_diff_csv_test_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("failed to create temp dir");
+
+        let (var_file, con_file) = write_result_csv(&result, &dir).expect("write_result_csv should succeed");
+        let vars = std::fs::read_to_string(dir.join(&var_file)).expect("failed to read variables CSV");
+        let cons = std::fs::read_to_string(dir.join(&con_file)).expect("failed to read constraints CSV");
+        std::fs::remove_dir_all(&dir).expect("failed to remove temp dir");
+
+        assert_eq!(vars, "name,value,reduced_cost\nx,1.5,0\ny,0,-2\n", "variable CSV mismatch");
+        assert_eq!(cons, "name,activity,shadow_price\nc1,4,3\n", "constraint CSV mismatch");
     }
 }

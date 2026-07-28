@@ -68,7 +68,7 @@ const HELP_TEXT: &[&str] = &[
     "  Solver Results (after S → solve)",
     "  ────────────────────────────────",
     "  y         Yank results to clipboard",
-    "  w         Write diff to CSV (both mode)",
+    "  w         Write results to CSV (diff in both mode)",
     "  d         Toggle diff-only (both mode)",
     "  t / T     Cycle delta threshold (both mode)",
     "  e         Diagnose infeasibility",
