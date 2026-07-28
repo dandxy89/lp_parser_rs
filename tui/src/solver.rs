@@ -376,12 +376,28 @@ struct SolveMetadata {
 /// so an integer variable carrying explicit bounds (e.g. `0 <= x <= 10`) is still
 /// reported as integer. An unbounded side falls back to the LP default of
 /// `[0, +inf)` (binary defaults to `[0, 1]`).
-fn variable_bounds(variable: Option<&Variable>) -> (bool, f64, f64) {
+pub(crate) fn variable_bounds(variable: Option<&Variable>) -> (bool, f64, f64) {
     let Some(v) = variable else {
         return (false, 0.0, f64::INFINITY);
     };
     let upper_default = if matches!(v.kind, VariableKind::Binary) { 1.0 } else { f64::INFINITY };
     (v.kind.is_integer(), v.bounds.lower.unwrap_or(0.0), v.bounds.upper.unwrap_or(upper_default))
+}
+
+/// Objective coefficients of the problem's primary objective, keyed by variable.
+///
+/// "Primary" is the alphabetically first objective by resolved name — the same
+/// choice the solve makes, so presolve reasons about the objective that will
+/// actually be optimised.
+pub(crate) fn primary_objective_coefficients(problem: &LpProblem) -> HashMap<NameId, f64> {
+    let Some((_, objective)) = problem.objectives.iter().min_by_key(|(id, _)| problem.resolve(**id)) else {
+        return HashMap::new();
+    };
+    let mut map = HashMap::with_capacity(objective.coefficients.len());
+    for coefficient in &objective.coefficients {
+        map.insert(coefficient.name, coefficient.value);
+    }
+    map
 }
 
 /// Sort variable `NameId`s by resolved name for deterministic column ordering.
@@ -406,19 +422,7 @@ fn build_highs_model(problem: &LpProblem) -> BuiltModel {
         map
     };
 
-    let objective_coefficients: HashMap<NameId, f64> = {
-        // Find the primary objective (alphabetically first by resolved name).
-        let primary = problem.objectives.iter().min_by_key(|(id, _)| problem.resolve(**id));
-        if let Some((_, objective)) = primary {
-            let mut map = HashMap::with_capacity(objective.coefficients.len());
-            for coefficient in &objective.coefficients {
-                map.insert(coefficient.name, coefficient.value);
-            }
-            map
-        } else {
-            HashMap::new()
-        }
-    };
+    let objective_coefficients = primary_objective_coefficients(problem);
 
     let mut row_problem = highs::RowProblem::new();
     let mut columns = Vec::with_capacity(sorted_var_ids.len());
