@@ -1,0 +1,6 @@
+# Only honoured if this site ever moves to its own domain — on a github.io
+# project page the host root robots.txt wins. Kept so it is correct either way.
+User-agent: *
+Allow: /
+
+Sitemap: https://dandxy89.github.io/lp_parser_rs/sitemap.xml

@@ -33,3 +33,16 @@ jobs:
           path: docs
       - id: deployment
         uses: actions/deploy-pages@v5
+      - name: Ping IndexNow
+        run: |
+          curl -sS -f -X POST https://api.indexnow.org/IndexNow \
+            -H 'Content-Type: application/json; charset=utf-8' \
+            -d '{
+              "host": "dandxy89.github.io",
+              "key": "40f03b6cfc141f4ff79e06e0f2b09600",
+              "keyLocation": "https://dandxy89.github.io/lp_parser_rs/40f03b6cfc141f4ff79e06e0f2b09600.txt",
+              "urlList": [
+                "https://dandxy89.github.io/lp_parser_rs/",
+                "https://dandxy89.github.io/lp_parser_rs/tui.html"
+              ]
+            }'
