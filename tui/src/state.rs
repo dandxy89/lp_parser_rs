@@ -550,6 +550,7 @@ pub enum PaletteCommand {
     JumpForward,
     Solve,
     WhatIf,
+    Presolve,
     ExportCsv,
     YankName,
     YankOld,
@@ -561,7 +562,7 @@ pub enum PaletteCommand {
 
 impl PaletteCommand {
     /// Every command with its palette label and direct-key hint, in display order.
-    const CMDS: [(Self, &'static str, &'static str); 29] = [
+    const CMDS: [(Self, &'static str, &'static str); 30] = [
         (Self::GoSummary, "Go to Summary", "1"),
         (Self::GoVariables, "Go to Variables", "2"),
         (Self::GoConstraints, "Go to Constraints", "3"),
@@ -584,6 +585,7 @@ impl PaletteCommand {
         (Self::JumpForward, "Jump forward (jumplist)", "^i"),
         (Self::Solve, "Solve problem (HiGHS)", "S"),
         (Self::WhatIf, "What-if: edit constraint RHS & re-solve", "E"),
+        (Self::Presolve, "Rewrite: presolve & compare solves", "P"),
         (Self::ExportCsv, "Export diff to CSV", "w"),
         (Self::YankName, "Yank entry name", "yy"),
         (Self::YankOld, "Yank old side (file 1)", "yo"),
@@ -594,8 +596,8 @@ impl PaletteCommand {
     ];
 
     /// Every command, in display order.
-    pub const ALL: [Self; 29] = {
-        let mut all = [Self::Quit; 29];
+    pub const ALL: [Self; 30] = {
+        let mut all = [Self::Quit; 30];
         let mut i = 0;
         while i < Self::CMDS.len() {
             all[i] = Self::CMDS[i].0;

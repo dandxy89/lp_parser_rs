@@ -129,3 +129,11 @@ fn snapshot_too_small_terminal_40x10() {
     let mut app = inspect_app();
     insta::assert_snapshot!(render(&mut app, 40, 10).backend());
 }
+
+#[test]
+fn snapshot_presolve_picker_100x30() {
+    let mut app = inspect_app();
+    app.presolve_cursor = Some(0);
+    insta::assert_snapshot!(render(&mut app, 100, 30).backend());
+}
+

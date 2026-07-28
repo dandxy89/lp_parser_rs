@@ -41,6 +41,7 @@ const HELP_TEXT: &[&str] = &[
     "          a non-preset CLI value restarts at off)",
     "  S       Solve problem",
     "  E       What-if: edit constraint RHS & re-solve",
+    "  P       Rewrite: presolve & compare solves",
     "  Tab     Next panel",
     "  ⇧Tab    Prev panel",
     "  Enter   Go to detail",
@@ -101,7 +102,7 @@ const INSPECT_HELP_TEXT: &[&str] = &[
     "  Enter   Go to detail                    w   Export CSV (objectives,",
     "  h / l   Sidebar / Detail                    constraints, variables)",
     "  1–5     Jump to section (5: Numerics)    S   Solve this model",
-    "  Esc     Back",
+    "  Esc     Back                             P   Rewrite: presolve & compare",
     "",
     "  Search (Telescope-style pop-up)",
     "  ──────────────────────────────",
@@ -118,7 +119,18 @@ const INSPECT_HELP_TEXT: &[&str] = &[
     "",
 ];
 
-const POPUP_WIDTH: u16 = 60;
+/// Narrowest the help pop-up ever gets, even for short text.
+const MIN_POPUP_WIDTH: u16 = 60;
+
+/// Desired popup width for a given help text: the longest line plus borders and
+/// padding. The inspect help lays its keys out in two columns and needs more
+/// room than the diff help; deriving the width keeps both legible instead of
+/// silently cutting the right-hand column off mid-word.
+fn desired_width(text: &[&str]) -> u16 {
+    let longest = text.iter().map(|line| line.chars().count()).max().unwrap_or(0);
+    let longest = u16::try_from(longest).unwrap_or(u16::MAX);
+    longest.saturating_add(4).max(MIN_POPUP_WIDTH)
+}
 /// Desired popup height for a given help text: all lines plus top/bottom borders.
 /// Clamped to the terminal at draw time, so on short terminals the content
 /// scrolls instead of being silently truncated.
@@ -157,7 +169,7 @@ pub fn draw_help(frame: &mut Frame, area: Rect, app: &mut App) {
     let (help_text, help_lines): (&[&str], &LazyLock<Vec<Line<'static>>>) =
         if inspect { (INSPECT_HELP_TEXT, &INSPECT_HELP_LINES) } else { (HELP_TEXT, &HELP_LINES) };
 
-    let popup = super::centred_rect(area, POPUP_WIDTH, desired_height(help_text));
+    let popup = super::centred_rect(area, desired_width(help_text), desired_height(help_text));
 
     let inner_height = popup.height.saturating_sub(2) as usize;
     #[allow(clippy::cast_possible_truncation)] // help text is a few dozen lines

@@ -24,6 +24,7 @@ mod input;
 mod inspect_model;
 mod line_index;
 mod parse;
+mod presolve;
 mod search;
 #[cfg(test)]
 mod snapshot_tests;

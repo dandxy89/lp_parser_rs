@@ -4,7 +4,7 @@ A terminal-based interactive explorer and diff viewer for Linear Programming fil
 
 ![lp_diff demo](assets/demo.gif)
 
-The demo diffs `fit2d.mps` against `fit1d.lp` (mixed formats), touring the coefficient-level constraint diff, raw text view, filters, sort and live tolerance cycling, fuzzy search, Numerics, the keybindings pop-up, and a parallel HiGHS solve with solution diff.
+The demo runs two scenes. First it diffs `fit2d.mps` against `fit1d.lp` (mixed formats), touring the coefficient-level constraint diff, the raw text view, live tolerance cycling, fuzzy search, Numerics, and a parallel HiGHS solve with solution diff. Then it inspects `boeing2.lp` on its own to apply the presolve rewrites (`P`) and open the diagnostics pane (`D`).
 
 Regenerate it with `vhs tui/scripts/demo.tape && gifsicle -O3 --batch tui/assets/demo.gif` (from the repo root).
 
@@ -191,6 +191,13 @@ Search mode prefixes (type in the pop-up input):
 | `y`                 | Yank solve results to clipboard                                                |
 | `Esc`               | Close solver overlay                                                           |
 
+**Rewrite & Diagnostics**
+
+| Key     | Action                                                              |
+| ------- | ------------------------------------------------------------------- |
+| `E`     | What-if: edit the selected constraint's RHS and re-solve            |
+| `P`     | Rewrite: pick presolve rules, then compare original vs rewritten    |
+
 **Export**
 
 | Key | Action                         |
@@ -215,6 +222,37 @@ Search mode prefixes (type in the pop-up input):
 Press `S` to solve either file on demand using the [HiGHS](https://highs.dev) solver. Pick file 1 or 2, and the solver runs in a background thread. Results are organised into tabs — Summary, Variables, Constraints, Log, and Duals — switchable with `1`–`5` or `Tab`/`Shift+Tab`. The Summary tab shows optimisation status, objective value, and solve time. Press `e` to run an infeasibility diagnosis when a problem does not solve.
 
 Option 3 ("Both") solves both files and shows a side-by-side comparison. Rows are marked as "changed" when their absolute difference exceeds a configurable delta threshold. Press `t` to cycle forward through preset thresholds (`0.0`, `0.0001`, `0.001`, `0.01`, `0.1`, `1.0`) and `T` to cycle backward. The default threshold is `0.0001`. Press `d` to toggle between showing all rows and changed-only rows, and `w` to export the diff to CSV.
+
+## What-if (`E`)
+
+Select a constraint and press `E` to edit its right-hand side. The baseline problem (file 1) is cloned in memory, the
+RHS is changed, and both versions are solved in parallel into the standard comparison view. Nothing is written to disk.
+
+The comparison label records the change (`capacity rhs 200 -> 260`), so the result carries its own provenance. A shadow
+price tells you the marginal value of a constraint at the current solution but not how far that stays true; moving the
+bound and re-solving does.
+
+## Rewrite (`P`)
+
+`P` opens a picker of solution-preserving rewrites. Each removes work from the model without changing the set of optimal
+solutions. Space toggles a rule, `a` toggles all, and `Enter` rewrites the baseline and launches an
+original-vs-rewritten comparison solve.
+
+| Rule                       | Effect                                                                            |
+| -------------------------- | --------------------------------------------------------------------------------- |
+| Singleton rows -> bounds   | A row with one term is a bound: `3x <= 12` becomes `x <= 4`, and the row goes      |
+| Bound propagation          | Implied bounds derived from each row's minimum and maximum activity                |
+| Integer bound rounding     | Fractional bounds on integer variables rounded inwards: `x <= 3.7` becomes `x <= 3` |
+| Redundant & forcing rows   | Drops rows that can never bind; fixes variables pinned by a forcing row            |
+| Empty rows & columns       | Drops termless rows; fixes variables appearing in no row at their preferred bound  |
+
+The rules feed each other, so they run to a fixpoint (at most 10 passes) rather than once each. Reopening the picker
+shows the previous run's per-pass breakdown.
+
+Rows are removed; columns are only ever *fixed*, never removed. Keeping the variable set identical on both sides is what
+makes the comparison trustworthy: every variable still appears in both results, so a difference in the diff is real and
+not an artefact of the rewrite. The objective values must agree, and that agreement is the check that the rewrite was
+sound.
 
 ## Jumplist
 
