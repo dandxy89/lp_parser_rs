@@ -101,9 +101,8 @@ fn draw_done(
     diagnosis: &DiagnosisState,
 ) {
     let t = theme();
-    let popup_width = (area.width * 4 / 5).max(60).min(area.width);
-    let popup_height = (area.height * 4 / 5).max(20).min(area.height);
-    let popup = super::centred_rect(area, popup_width, popup_height);
+    // Full screen bar the bottom row, so the status bar stays visible.
+    let popup = Rect { height: area.height.saturating_sub(1), ..area };
 
     let active = view.tab;
     let scroll = view.scroll[active.index()];
@@ -635,9 +634,8 @@ fn draw_done_both(
     diagnosis: &DiagnosisState,
 ) {
     let t = theme();
-    let popup_width = (area.width * 4 / 5).max(60).min(area.width);
-    let popup_height = (area.height * 4 / 5).max(20).min(area.height);
-    let popup = super::centred_rect(area, popup_width, popup_height);
+    // Full screen bar the bottom row, so the status bar stays visible.
+    let popup = Rect { height: area.height.saturating_sub(1), ..area };
 
     let active = view.tab;
     let scroll = view.scroll[active.index()];
@@ -656,9 +654,9 @@ fn draw_done_both(
 
     match active {
         SolveTab::Summary => lines.extend(summary.iter().cloned()),
-        SolveTab::Variables => build_diff_variables_tab_cached(&mut lines, variable_count_label, variable_rows, view, scroll, popup_height),
+        SolveTab::Variables => build_diff_variables_tab_cached(&mut lines, variable_count_label, variable_rows, view, scroll, popup.height),
         SolveTab::Constraints => {
-            build_diff_constraints_tab_cached(&mut lines, constraint_count_label, constraint_rows, view, scroll, popup_height);
+            build_diff_constraints_tab_cached(&mut lines, constraint_count_label, constraint_rows, view, scroll, popup.height);
         }
         SolveTab::Log => lines.extend(log.iter().cloned()),
         SolveTab::Duals => lines.extend(duals.iter().cloned()),
