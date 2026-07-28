@@ -5,7 +5,7 @@ use crossterm::event::{Event as CrosstermEvent, KeyCode, KeyEvent, KeyEventKind,
 use lp_parser_rs::problem::LpProblem;
 use tui_input::backend::crossterm::EventHandler as _;
 
-use crate::app::App;
+use crate::app::{App, SolveRenderCache};
 use crate::detail_text::{format_solve_diff_result, format_solve_result};
 use crate::state::{
     AppMode, DiagnosisState, DiffFilter, Focus, PaletteCommand, PendingYank, Section, Side, SolveState, SolveTab, SolveViewState,
@@ -649,10 +649,7 @@ impl App {
     /// Returns `true` if the key was consumed by shared navigation.
     fn handle_solve_results_nav(&mut self, key: KeyEvent) -> bool {
         match key.code {
-            KeyCode::Esc => {
-                self.solver.state = SolveState::Idle;
-                self.solver.reset_diagnosis();
-            }
+            KeyCode::Esc => self.solver.close_overlay(),
             KeyCode::Char('1') => self.switch_solve_tab(SolveTab::Summary),
             KeyCode::Char('2') => self.switch_solve_tab(SolveTab::Variables),
             KeyCode::Char('3') => self.switch_solve_tab(SolveTab::Constraints),
@@ -759,9 +756,38 @@ impl App {
         });
     }
 
+    /// Reopen the cached solve for `key`, if one is held. Returns `true` when
+    /// the overlay was restored and no solve is needed.
+    ///
+    /// The formatted lines are rebuilt rather than cached: the terminal may
+    /// have been resized since the solve ran. `view` is deliberately left
+    /// alone so the user lands back on the tab and scroll offset they closed.
+    fn restore_cached_solve(&mut self, key: &str) -> bool {
+        let Some(cached) = self.solver.take_cached(key) else {
+            return false;
+        };
+        let width = self.solve_popup_inner_width();
+        self.solver.render_cache = match &cached.state {
+            SolveState::Done(result) => SolveRenderCache::Single(crate::widgets::solve::build_single_solve_cache(result, width)),
+            SolveState::DoneBoth(diff) => crate::widgets::solve::build_diff_solve_cache(diff, width),
+            other => unreachable!("only completed solves are cached, got {other:?}"),
+        };
+        self.solver.state = cached.state;
+        self.solver.solved_problem = cached.solved_problem;
+        self.solver.what_if_problem = cached.what_if_problem;
+        key.clone_into(&mut self.solver.key);
+        self.solver.reset_diagnosis();
+        self.flash_status("Restored cached solve (unchanged input)");
+        true
+    }
+
     /// Spawn the solver in a background thread for the given problem.
     fn spawn_solver(&mut self, problem: Arc<LpProblem>, file_label: String) {
-        self.solver.state = SolveState::Running { file: file_label, started: Instant::now() };
+        if self.restore_cached_solve(&file_label) {
+            return;
+        }
+        self.solver.state = SolveState::Running { file: file_label.clone(), started: Instant::now() };
+        self.solver.key = file_label;
         self.solver.view = SolveViewState::default();
         self.solver.reset_diagnosis();
         self.solver.solved_problem = Some(Arc::clone(&problem));
@@ -840,7 +866,13 @@ impl App {
     /// Spawn two solves in parallel, transitioning into `RunningBoth` with the
     /// given side labels. Shared by "Both (diff)" and the what-if flow.
     fn spawn_solver_pair(&mut self, problem1: Arc<LpProblem>, label1: String, problem2: Arc<LpProblem>, label2: String) {
+        // Unit separator: labels are file paths or what-if descriptions, neither of which contains it.
+        let key = format!("{label1}\u{1f}{label2}");
+        if self.restore_cached_solve(&key) {
+            return;
+        }
         self.solver.state = SolveState::RunningBoth { file1: label1, file2: label2, result1: None, result2: None, started: Instant::now() };
+        self.solver.key = key;
         self.solver.view = SolveViewState::default();
         self.solver.reset_diagnosis();
         self.solver.solved_problem = None;

@@ -114,6 +114,22 @@ pub enum SolveRenderCache {
     },
 }
 
+/// A completed solve retained after its overlay was closed, so reopening it
+/// does not re-run the solver.
+pub struct CachedSolve {
+    /// Labels of the solved side(s) — identifies which input produced this.
+    pub key: String,
+    /// Always [`SolveState::Done`] or [`SolveState::DoneBoth`].
+    pub state: SolveState,
+    /// Problem behind a single-solve result, for the infeasibility diagnosis.
+    pub solved_problem: Option<Arc<LpProblem>>,
+    /// Modified problem behind side 2 of a what-if comparison.
+    pub what_if_problem: Option<Arc<LpProblem>>,
+}
+
+/// Cache capacity: file 1, file 2, both, and one what-if edit.
+const SOLVE_CACHE_CAPACITY: usize = 4;
+
 /// Bundles solver-related state: lifecycle, view, and result channel.
 pub struct SolverSession {
     /// `HiGHS` solver state machine.
@@ -136,6 +152,17 @@ pub struct SolverSession {
     /// The modified problem behind side 2 of a what-if comparison solve, kept
     /// so the diagnosis targets the edited model rather than `problem2`.
     pub what_if_problem: Option<Arc<LpProblem>>,
+    /// Labels of the solve currently running or displayed — the cache key the
+    /// result is filed under when its overlay is closed.
+    pub key: String,
+    /// Completed solves kept across overlay closes, newest last. Never
+    /// invalidated piecemeal: an input change reloads the files, which
+    /// replaces the whole session (see `apply_reload`), and any edit that does
+    /// not reload (a what-if RHS) produces a different key.
+    ///
+    /// ponytail: linear scan over at most `SOLVE_CACHE_CAPACITY` entries; make
+    /// it a map if the number of distinct solve targets ever grows.
+    pub cache: Vec<CachedSolve>,
 }
 
 impl SolverSession {
@@ -150,6 +177,8 @@ impl SolverSession {
             receive_diagnosis: None,
             solved_problem: None,
             what_if_problem: None,
+            key: String::new(),
+            cache: Vec::new(),
         }
     }
 
@@ -157,6 +186,33 @@ impl SolverSession {
     pub(crate) fn reset_diagnosis(&mut self) {
         self.diagnosis = DiagnosisState::Idle;
         self.receive_diagnosis = None;
+    }
+
+    /// Reset to `Idle`, filing a completed result under the current key so the
+    /// overlay can be reopened without re-solving. In-flight, failed and
+    /// picker states are simply dropped.
+    pub(crate) fn close_overlay(&mut self) {
+        let state = std::mem::replace(&mut self.state, SolveState::Idle);
+        if matches!(state, SolveState::Done(_) | SolveState::DoneBoth(_)) {
+            let key = std::mem::take(&mut self.key);
+            self.cache.retain(|entry| entry.key != key);
+            if self.cache.len() >= SOLVE_CACHE_CAPACITY {
+                self.cache.remove(0);
+            }
+            self.cache.push(CachedSolve {
+                key,
+                state,
+                solved_problem: self.solved_problem.clone(),
+                what_if_problem: self.what_if_problem.clone(),
+            });
+        }
+        self.reset_diagnosis();
+    }
+
+    /// Take back the cached solve for `key`, if one is held.
+    pub(crate) fn take_cached(&mut self, key: &str) -> Option<CachedSolve> {
+        let index = self.cache.iter().position(|entry| entry.key == key)?;
+        Some(self.cache.remove(index))
     }
 }
 
@@ -1265,7 +1321,7 @@ impl App {
     /// Inner width of the solve results popup, derived from the last drawn
     /// layout. Mirrors the popup sizing in `widgets::solve` (4/5 of the frame
     /// width, at least 60 columns, minus the borders).
-    fn solve_popup_inner_width(&self) -> u16 {
+    pub(crate) fn solve_popup_inner_width(&self) -> u16 {
         let frame_width = self.layout.detail.x + self.layout.detail.width;
         (frame_width * 4 / 5).max(60).min(frame_width).saturating_sub(2)
     }
@@ -1622,5 +1678,46 @@ impl App {
         let visible = self.layout.detail_height.saturating_sub(2) as usize; // borders
         let max = self.layout.detail_content_lines.saturating_sub(visible);
         u16::try_from(max).unwrap_or(u16::MAX)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Closing a completed overlay must file the result under its key, serve it
+    /// back once for the same input, and never serve it for a different one.
+    #[test]
+    fn solve_cache_round_trip_and_eviction() {
+        let problem = LpProblem::parse("min\nobj: x\nst\nc1: x >= 1\nend").expect("tiny LP must parse");
+        let result = crate::solver::solve_problem(&problem).expect("tiny LP must solve");
+
+        let mut session = SolverSession::new();
+        session.key = "file1".to_owned();
+        session.state = SolveState::Done(Box::new(result.clone()));
+        session.close_overlay();
+
+        assert!(matches!(session.state, SolveState::Idle), "closing must leave the overlay idle");
+        assert!(session.take_cached("file2").is_none(), "a different input must miss the cache");
+
+        let cached = session.take_cached("file1").expect("the closed result must be cached");
+        assert!(matches!(cached.state, SolveState::Done(_)), "the cached state must be the completed solve");
+        assert!(session.take_cached("file1").is_none(), "a restored entry must leave the cache");
+
+        // An in-flight solve holds nothing worth keeping.
+        session.key = "file1".to_owned();
+        session.state = SolveState::Running { file: "file1".to_owned(), started: Instant::now() };
+        session.close_overlay();
+        assert!(session.take_cached("file1").is_none(), "an abandoned running solve must not be cached");
+
+        // Past capacity the oldest entry is dropped, the newest kept.
+        for index in 0..=SOLVE_CACHE_CAPACITY {
+            session.key = format!("file{index}");
+            session.state = SolveState::Done(Box::new(result.clone()));
+            session.close_overlay();
+        }
+        assert_eq!(session.cache.len(), SOLVE_CACHE_CAPACITY, "the cache must not grow past its capacity");
+        assert!(session.take_cached("file0").is_none(), "the oldest entry must be evicted");
+        assert!(session.take_cached(&format!("file{SOLVE_CACHE_CAPACITY}")).is_some(), "the newest entry must survive");
     }
 }

@@ -73,7 +73,7 @@ const HELP_TEXT: &[&str] = &[
     "  t / T     Cycle delta threshold (both mode)",
     "  e         Diagnose infeasibility",
     "  1–5       Switch tab",
-    "  Esc       Close solver overlay",
+    "  Esc       Close overlay (result cached until input changes)",
     "",
     "  Mouse: scroll wheel navigates, click selects",
     "",
