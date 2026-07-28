@@ -47,6 +47,11 @@ impl App {
             return;
         }
 
+        if self.diagnostics.is_some() {
+            self.handle_diagnostics_key(key);
+            return;
+        }
+
         if !matches!(self.solver.state, SolveState::Idle) {
             self.handle_solve_key(key);
             return;
@@ -197,6 +202,7 @@ impl App {
             PaletteCommand::Solve => self.start_solve(),
             PaletteCommand::WhatIf => self.open_what_if(),
             PaletteCommand::Presolve => self.open_presolve(),
+            PaletteCommand::Diagnostics => self.open_diagnostics(),
             PaletteCommand::ExportCsv => self.export_csv(),
             PaletteCommand::YankName => self.yank_name(),
             PaletteCommand::YankOld => self.yank_side(Side::Old),
@@ -348,6 +354,9 @@ impl App {
 
             // Rewrite: pick presolve rules, then compare original vs rewritten.
             KeyCode::Char('P') => self.open_presolve(),
+
+            // Diagnostics: why is the solve slow, and which rows/vars are to blame.
+            KeyCode::Char('D') => self.open_diagnostics(),
 
             // Export CSV (works in both modes).
             KeyCode::Char('w') => self.export_csv(),
@@ -1066,6 +1075,54 @@ impl App {
         self.spawn_solver_pair(Arc::clone(&self.problem1), label1, Arc::clone(&rewritten), label2);
         // Set after spawn_solver_pair: it clears solver bookkeeping for a fresh run.
         self.solver.what_if_problem = Some(rewritten);
+    }
+
+    /// Open the diagnostics pane, analysing the baseline problem against the
+    /// most recent solve.
+    ///
+    /// The analysis runs here rather than per frame: it is a full pass over the
+    /// matrix, and the result only changes when the model or the solve does.
+    fn open_diagnostics(&mut self) {
+        let diagnostics = crate::diagnostics::analyse(&self.problem1, self.latest_solve_result());
+        let lines = crate::widgets::diagnostics::build_lines(&diagnostics);
+        self.diagnostics = Some(crate::state::DiagnosticsPane { lines, scroll: 0 });
+    }
+
+    /// Handle a key event while the diagnostics pane is open.
+    fn handle_diagnostics_key(&mut self, key: KeyEvent) {
+        let page_size = self.layout.detail_height.max(1);
+        let Some(pane) = &mut self.diagnostics else {
+            debug_assert!(false, "handle_diagnostics_key called with the pane closed");
+            return;
+        };
+        match key.code {
+            KeyCode::Char('j') | KeyCode::Down => pane.scroll = pane.scroll.saturating_add(1),
+            KeyCode::Char('k') | KeyCode::Up => pane.scroll = pane.scroll.saturating_sub(1),
+            KeyCode::Char('g') | KeyCode::Home => pane.scroll = 0,
+            // Clamped against the real content height when the pane is drawn.
+            KeyCode::Char('G') | KeyCode::End => pane.scroll = u16::MAX,
+            KeyCode::PageDown => pane.scroll = pane.scroll.saturating_add(page_size),
+            KeyCode::PageUp => pane.scroll = pane.scroll.saturating_sub(page_size),
+            _ => self.diagnostics = None,
+        }
+    }
+
+    /// The most recent single-file solve result, if one is still to hand.
+    ///
+    /// Prefers the live overlay state, then the newest cached solve. A "both"
+    /// comparison contributes its first side, which is the one that pairs with
+    /// `problem1`.
+    fn latest_solve_result(&self) -> Option<&crate::solver::SolveResult> {
+        match &self.solver.state {
+            SolveState::Done(result) => return Some(result),
+            SolveState::DoneBoth(diff) => return Some(&diff.result1),
+            _ => {}
+        }
+        self.solver.cache.iter().rev().find_map(|cached| match &cached.state {
+            SolveState::Done(result) => Some(&**result),
+            SolveState::DoneBoth(diff) => Some(&diff.result1),
+            _ => None,
+        })
     }
 
     /// Return the report name of the currently selected constraint entry.

@@ -17,6 +17,7 @@ mod app;
 mod cli_output;
 mod detail_model;
 mod detail_text;
+mod diagnostics;
 mod diff_model;
 mod event;
 mod export;

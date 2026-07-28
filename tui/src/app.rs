@@ -17,7 +17,7 @@ use crate::search::{self, CompiledSearch, SearchMode};
 use crate::solver::{InfeasibilityDiagnosis, SolveResult};
 pub use crate::state::{AppMode, DiffFilter, Focus, SearchResult, Section, SectionViewState};
 use crate::state::{
-    DetailView, DiagnosisState, JumpEntry, JumpList, PendingYank, Side, SolveState, SolveViewState, SortMode, WhatIfPrompt,
+    DetailView, DiagnosisState, DiagnosticsPane, JumpEntry, JumpList, PendingYank, Side, SolveState, SolveViewState, SortMode, WhatIfPrompt,
 };
 use crate::watch::{WatchSession, WatchState};
 
@@ -238,6 +238,9 @@ pub struct App {
 
     /// What-if prompt overlay (`E` on a selected constraint), when open.
     pub what_if: Option<WhatIfPrompt>,
+
+    /// Diagnostics pane (`D`), when open.
+    pub diagnostics: Option<DiagnosticsPane>,
 
     /// Presolve rule picker overlay (`P`): the highlighted rule when open.
     pub presolve_cursor: Option<usize>,
@@ -574,6 +577,7 @@ impl App {
             help_scroll: 0,
             palette: CommandPaletteState { visible: false, query: tui_input::Input::default(), filtered: Vec::new(), selected: 0 },
             what_if: None,
+            diagnostics: None,
             presolve_cursor: None,
             presolve_rules: crate::presolve::ALL_RULES,
             last_presolve: None,
