@@ -123,7 +123,8 @@ pub struct CachedSolve {
     pub state: SolveState,
     /// Problem behind a single-solve result, for the infeasibility diagnosis.
     pub solved_problem: Option<Arc<LpProblem>>,
-    /// Modified problem behind side 2 of a what-if comparison.
+    /// Modified problem behind side 2 of a comparison solve — a what-if RHS
+    /// edit or a presolve rewrite.
     pub what_if_problem: Option<Arc<LpProblem>>,
 }
 
@@ -149,8 +150,9 @@ pub struct SolverSession {
     /// The problem behind the current single-solve result, kept so the
     /// diagnosis can rebuild the model without re-parsing.
     pub solved_problem: Option<Arc<LpProblem>>,
-    /// The modified problem behind side 2 of a what-if comparison solve, kept
-    /// so the diagnosis targets the edited model rather than `problem2`.
+    /// The modified problem behind side 2 of a comparison solve — a what-if
+    /// RHS edit or a presolve rewrite — kept so the diagnosis targets the
+    /// modified model rather than `problem2`.
     pub what_if_problem: Option<Arc<LpProblem>>,
     /// Labels of the solve currently running or displayed — the cache key the
     /// result is filed under when its overlay is closed.
@@ -236,6 +238,15 @@ pub struct App {
 
     /// What-if prompt overlay (`E` on a selected constraint), when open.
     pub what_if: Option<WhatIfPrompt>,
+
+    /// Presolve rule picker overlay (`P`): the highlighted rule when open.
+    pub presolve_cursor: Option<usize>,
+
+    /// Which presolve rules are enabled, persisted across openings of the picker.
+    pub presolve_rules: crate::presolve::RuleSet,
+
+    /// Stats from the most recent presolve run, shown when the picker reopens.
+    pub last_presolve: Option<crate::presolve::PresolveStats>,
 
     /// Scroll offset for the detail panel when it has focus.
     pub detail_scroll: u16,
@@ -563,6 +574,9 @@ impl App {
             help_scroll: 0,
             palette: CommandPaletteState { visible: false, query: tui_input::Input::default(), filtered: Vec::new(), selected: 0 },
             what_if: None,
+            presolve_cursor: None,
+            presolve_rules: crate::presolve::ALL_RULES,
+            last_presolve: None,
             detail_scroll: 0,
             section_selector_state,
             section_states: [SectionViewState::new(), SectionViewState::new(), SectionViewState::new()],

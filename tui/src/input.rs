@@ -7,6 +7,7 @@ use tui_input::backend::crossterm::EventHandler as _;
 
 use crate::app::{App, SolveRenderCache};
 use crate::detail_text::{format_solve_diff_result, format_solve_result};
+use crate::presolve::{Rule, presolve};
 use crate::state::{
     AppMode, DiagnosisState, DiffFilter, Focus, PaletteCommand, PendingYank, Section, Side, SolveState, SolveTab, SolveViewState,
 };
@@ -38,6 +39,11 @@ impl App {
 
         if self.what_if.is_some() {
             self.handle_what_if_key(key);
+            return;
+        }
+
+        if self.presolve_cursor.is_some() {
+            self.handle_presolve_key(key);
             return;
         }
 
@@ -190,6 +196,7 @@ impl App {
             PaletteCommand::JumpForward => self.jump_forward(),
             PaletteCommand::Solve => self.start_solve(),
             PaletteCommand::WhatIf => self.open_what_if(),
+            PaletteCommand::Presolve => self.open_presolve(),
             PaletteCommand::ExportCsv => self.export_csv(),
             PaletteCommand::YankName => self.yank_name(),
             PaletteCommand::YankOld => self.yank_side(Side::Old),
@@ -338,6 +345,9 @@ impl App {
 
             // What-if: edit the selected constraint's RHS and re-solve.
             KeyCode::Char('E') => self.open_what_if(),
+
+            // Rewrite: pick presolve rules, then compare original vs rewritten.
+            KeyCode::Char('P') => self.open_presolve(),
 
             // Export CSV (works in both modes).
             KeyCode::Char('w') => self.export_csv(),
@@ -992,6 +1002,70 @@ impl App {
         self.spawn_solver_pair(Arc::clone(&self.problem1), label1, Arc::clone(&modified), label2);
         // Set after spawn_solver_pair: it clears solver bookkeeping for a fresh run.
         self.solver.what_if_problem = Some(modified);
+    }
+
+    /// Open the presolve rule picker (`P`).
+    const fn open_presolve(&mut self) {
+        self.presolve_cursor = Some(0);
+    }
+
+    /// Handle a key event while the presolve rule picker is open.
+    fn handle_presolve_key(&mut self, key: KeyEvent) {
+        let Some(cursor) = self.presolve_cursor else {
+            debug_assert!(false, "handle_presolve_key called without an open picker");
+            return;
+        };
+        debug_assert!(cursor < Rule::COUNT, "presolve cursor {cursor} out of range");
+        match key.code {
+            KeyCode::Esc | KeyCode::Char('q') => self.presolve_cursor = None,
+            KeyCode::Char('j') | KeyCode::Down => self.presolve_cursor = Some((cursor + 1) % Rule::COUNT),
+            KeyCode::Char('k') | KeyCode::Up => self.presolve_cursor = Some((cursor + Rule::COUNT - 1) % Rule::COUNT),
+            KeyCode::Char(' ') => self.presolve_rules[cursor] = !self.presolve_rules[cursor],
+            // `a` toggles the whole set: all off if any are on, else all on.
+            KeyCode::Char('a') => {
+                let any_on = self.presolve_rules.iter().any(|on| *on);
+                self.presolve_rules = [!any_on; Rule::COUNT];
+            }
+            KeyCode::Enter => self.confirm_presolve(),
+            _ => {}
+        }
+    }
+
+    /// Rewrite the baseline problem with the selected rules and launch an
+    /// original-vs-rewritten comparison solve.
+    ///
+    /// The rewrite preserves the optimal solution set, so the comparison is a
+    /// check as much as a benchmark: the objective values must agree, and the
+    /// solve times say whether the rewrite was worth it.
+    fn confirm_presolve(&mut self) {
+        if self.presolve_rules.iter().all(|on| !on) {
+            self.flash_status("Rewrite: enable at least one rule (space toggles)");
+            return;
+        }
+
+        let (rewritten, stats) = presolve(&self.problem1, self.presolve_rules);
+        self.presolve_cursor = None;
+
+        // An infeasible or unchanged model has nothing to compare against.
+        if let Some(reason) = &stats.infeasible {
+            self.flash_status(format!("Rewrite proved the model infeasible: {reason}"));
+            self.last_presolve = Some(stats);
+            return;
+        }
+        if stats.is_noop() {
+            self.flash_status("Rewrite: no rule fired \u{2014} the model is already reduced");
+            self.last_presolve = Some(stats);
+            return;
+        }
+
+        let label1 = format!("original: {}", self.file1_path.display());
+        let label2 = stats.headline();
+        self.last_presolve = Some(stats);
+
+        let rewritten = Arc::new(rewritten);
+        self.spawn_solver_pair(Arc::clone(&self.problem1), label1, Arc::clone(&rewritten), label2);
+        // Set after spawn_solver_pair: it clears solver bookkeeping for a fresh run.
+        self.solver.what_if_problem = Some(rewritten);
     }
 
     /// Return the report name of the currently selected constraint entry.
