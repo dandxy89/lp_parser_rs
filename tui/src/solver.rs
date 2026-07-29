@@ -545,6 +545,61 @@ fn extract_solution(
 /// Monotonic counter distinguishing concurrent solver-log temp files within one process.
 static SOLVE_LOG_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
+/// `HiGHS` options file picked up from the current directory, if present.
+const OPTIONS_FILE: &str = "highs.opt";
+
+/// Options we set ourselves; a file must not redirect the log the pane reads back.
+const RESERVED_OPTIONS: [&str; 2] = ["log_file", "output_flag"];
+
+/// Parse a `HiGHS` options file: `key = value` per line, `#` comments, blanks skipped.
+///
+/// Same format as the `highs` CLI's `--options_file`, so one file serves both.
+/// Reserved keys are dropped here rather than at the call site so the test covers it.
+fn parse_options(text: &str) -> Vec<(&str, &str)> {
+    text.lines()
+        .map(|line| line.split_once('#').map_or(line, |(before, _)| before))
+        .filter_map(|line| line.split_once('='))
+        .map(|(key, value)| (key.trim(), value.trim()))
+        .filter(|(key, value)| !key.is_empty() && !value.is_empty() && !RESERVED_OPTIONS.contains(key))
+        .collect()
+}
+
+/// Apply `highs.opt` from the current directory. Returns the options applied.
+///
+/// Absent file is the normal case, not an error; anything else is surfaced.
+fn apply_options_file(model: &mut highs::Model) -> Result<Vec<String>, String> {
+    let text = match std::fs::read_to_string(OPTIONS_FILE) {
+        Ok(text) => text,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(e) => return Err(format!("failed to read {OPTIONS_FILE}: {e}")),
+    };
+
+    let options = parse_options(&text);
+    for (key, value) in &options {
+        match *value {
+            "true" => model.set_option(*key, true),
+            "false" => model.set_option(*key, false),
+            // `HiGHS` types each option and rejects a mismatched setter, and the crate's
+            // `set_option` returns nothing, so we cannot ask which type it wanted. An
+            // integral value goes out as both: the wrong one is rejected into the solver
+            // log, the right one sticks. Keeps `time_limit = 300` working alongside
+            // `simplex_strategy = 4`.
+            _ => {
+                if let Ok(int) = value.parse::<i32>() {
+                    model.set_option(*key, int);
+                    model.set_option(*key, f64::from(int));
+                } else if let Ok(float) = value.parse::<f64>() {
+                    model.set_option(*key, float);
+                } else {
+                    model.set_option(*key, *value);
+                }
+            }
+        }
+    }
+
+    Ok(options.iter().map(|(key, value)| format!("{key} = {value}")).collect())
+}
+
 /// Convert an `LpProblem` to a `HiGHS` `RowProblem` and solve it.
 pub fn solve_problem(problem: &LpProblem) -> Result<SolveResult, String> {
     debug_assert!(!problem.variables.is_empty(), "cannot solve a problem with no variables");
@@ -567,12 +622,20 @@ pub fn solve_problem(problem: &LpProblem) -> Result<SolveResult, String> {
     let mut highs_model = row_problem.optimise(sense);
     highs_model.set_option("output_flag", true);
     highs_model.set_option("log_file", log_path.to_str().ok_or_else(|| "temp file path is not valid UTF-8".to_owned())?);
+    // After `log_file`, so anything `HiGHS` rejects is written to the log the pane
+    // shows rather than to the terminal the TUI owns.
+    let applied_options = apply_options_file(&mut highs_model)?;
 
     let solve_start = Instant::now();
     let solved = highs_model.solve();
     let solve_time = solve_start.elapsed();
 
     let mut solver_log = std::fs::read_to_string(&log_path).map_err(|e| format!("failed to read solver log: {e}"))?;
+    // Options applied silently would be indistinguishable from a default solve, so
+    // record them alongside the log the pane shows.
+    if !applied_options.is_empty() {
+        solver_log.insert_str(0, &format!("[lp_diff] {OPTIONS_FILE}: {}\n\n", applied_options.join(", ")));
+    }
     // Cleanup failure is non-fatal (overwritten next solve, reaped by the OS); surface it in the log.
     if let Err(e) = std::fs::remove_file(&log_path) {
         write!(solver_log, "\n[lp_diff] warning: failed to remove solver log {}: {e}\n", log_path.display())
@@ -898,6 +961,26 @@ pub fn write_result_csv(result: &SolveResult, dir: &Path) -> Result<(String, Str
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parse_options_handles_comments_blanks_and_reserved_keys() {
+        let text = "\
+# a comment\n\
+solver = ipm\n\
+\n\
+run_crossover=off   # trailing comment\n\
+time_limit = 300\n\
+log_file = /tmp/hijack.log\n\
+output_flag = false\n\
+malformed line\n\
+empty =\n";
+
+        assert_eq!(
+            parse_options(text),
+            vec![("solver", "ipm"), ("run_crossover", "off"), ("time_limit", "300")],
+            "comments, blanks, malformed and reserved keys must all be dropped"
+        );
+    }
 
     /// Build a constraint diff row with the given shadow prices (other fields immaterial to ranking).
     fn constraint_row(sp1: Option<f64>, sp2: Option<f64>) -> ConstraintDiffRow {

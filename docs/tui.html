@@ -250,6 +250,23 @@ lp_diff base.lp modified.lp --summary</code></pre>
 
     <p style="margin-top:1.5rem;"><kbd>y</kbd> yanks the results to the clipboard and <kbd>w</kbd> writes them to CSV:
       the full comparison in "both" mode, the single solution otherwise.</p>
+
+    <h3>Solver options</h3>
+    <p>A <code>highs.opt</code> in the directory you launch from is applied to every solve. It is the same
+      <code>key = value</code> format as the HiGHS CLI's <code>--options_file</code>, so one file serves both. No file is
+      the normal case, not an error.</p>
+<pre><code><span class="c"># highs.opt</span>
+solver = ipm
+run_crossover = off
+user_objective_scale = -8
+time_limit = 300</code></pre>
+    <p>This is where a model that solves slowly gets interrogated: switch to the interior point solver, scale a wide
+      objective, cap a run that would otherwise outlast your patience. Values are typed by parse, so integers, floats,
+      booleans and strings all pass through without a per-option table.</p>
+    <div class="note"><b>Applied options are never silent.</b> The first line of the Log tab records what was read
+      (<code>[lp_diff] highs.opt: solver = ipm, run_crossover = off</code>), so a run with a stray file cannot be
+      mistaken for a default one. Anything HiGHS rejects is written to the same log. <code>log_file</code> and
+      <code>output_flag</code> are ignored from the file; the Log tab needs both.</div>
   </div>
 </section>
 
