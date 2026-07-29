@@ -237,18 +237,48 @@ bound and re-solving does.
 
 `P` opens a picker of solution-preserving rewrites. Each removes work from the model without changing the set of optimal
 solutions. Space toggles a rule, `a` toggles all, and `Enter` rewrites the baseline and launches an
-original-vs-rewritten comparison solve.
+original-vs-rewritten comparison solve. `w` writes the rewritten model to `<file>_presolved.lp` in the working directory
+instead of solving it.
+
+Paired solves run **one at a time**: the timings are the point of the comparison, and solving both at once would have
+them compete for the machine and mask the speed-up.
 
 | Rule                       | Effect                                                                            |
 | -------------------------- | --------------------------------------------------------------------------------- |
+| Fixed columns -> rhs       | A fixed variable's term is a constant: it moves to the rhs and the non-zero goes   |
 | Singleton rows -> bounds   | A row with one term is a bound: `3x <= 12` becomes `x <= 4`, and the row goes      |
 | Bound propagation          | Implied bounds derived from each row's minimum and maximum activity                |
 | Integer bound rounding     | Fractional bounds on integer variables rounded inwards: `x <= 3.7` becomes `x <= 3` |
 | Redundant & forcing rows   | Drops rows that can never bind; fixes variables pinned by a forcing row            |
 | Empty rows & columns       | Drops termless rows; fixes variables appearing in no row at their preferred bound  |
+| Row scaling                | Divides each row by a power of two so its largest coefficient sits near 1           |
+| Column scaling             | Rescales each continuous variable's units by a power of two, largest coefficient near 1 |
 
 The rules feed each other, so they run to a fixpoint (at most 10 passes) rather than once each. Reopening the picker
 shows the previous run's per-pass breakdown.
+
+The last three rules target what the diagnostics pane ranks rather than the row count. **Fixed columns -> rhs** is the
+one that thins the densest rows: the other rules fix columns but leave their now-constant terms in the matrix, and each
+new fix feeds back through this rule on the next pass.
+
+**Row and column scaling** equilibrate the matrix, and they only work as a pair. A single factor per row cannot improve
+the worst-conditioned *rows*, because a row's own max-to-min ratio is scale-invariant; it takes a different factor per
+column to change it. Both factors are powers of two, so every mantissa survives and the rewrite adds no rounding error
+of its own. Scaling never fires on a row or column already within a factor of two of 1 (which is what makes the fixpoint
+terminate), and it skips anything that would sink a coefficient into the zero tolerance. Column scaling applies to
+continuous variables only: integrality, binariness, the semi-continuous rule and SOS weights are all statements about a
+variable's own units.
+
+Scaling is the one rewrite that leaves the model in different units, and it is undone before you see it. The factors are
+kept with the run and applied to the rewritten side's solve result on the way back: variable values, reduced costs, row
+activities and shadow prices are all reported in the original model's units, so the comparison diffs like for like. The
+objective value is invariant under both scalings anyway.
+
+Measured on the bundled fixtures (`boeing2.lp`): worst column ratio 3.5e4 -> 3.9e3, at the cost of the worst row ratio
+moving 3.0e3 -> 3.9e3. Equilibration is a redistribution, not a free win.
+
+The one place the units *do* escape is `w`: a file on disk has nothing to unscale it, so a model written after a scaling
+rule fired is in rewritten units, and the status line says so.
 
 Rows are removed; columns are only ever *fixed*, never removed. Keeping the variable set identical on both sides is what
 makes the comparison trustworthy: every variable still appears in both results, so a difference in the diff is real and

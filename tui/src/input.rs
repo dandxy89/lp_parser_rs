@@ -7,7 +7,7 @@ use tui_input::backend::crossterm::EventHandler as _;
 
 use crate::app::{App, SolveRenderCache};
 use crate::detail_text::{format_solve_diff_result, format_solve_result};
-use crate::presolve::{Rule, presolve};
+use crate::presolve::{Rule, Scaling, presolve};
 use crate::state::{
     AppMode, DiagnosisState, DiffFilter, Focus, PaletteCommand, PendingYank, Section, Side, SolveState, SolveTab, SolveViewState,
 };
@@ -130,8 +130,8 @@ impl App {
             return;
         }
         let labels: Vec<String> = PaletteCommand::ALL.iter().map(|c| c.label().to_owned()).collect();
-        let config = frizbee::Config { sort: true, ..Default::default() };
-        for matched in frizbee::match_list_indices(self.palette.query.value(), &labels, &config) {
+        let config = frizbee::Config::default();
+        for matched in frizbee::Matcher::new(self.palette.query.value(), &config).match_list_indices(&labels) {
             let index = matched.index as usize;
             if available(index) {
                 self.palette.filtered.push(index);
@@ -892,12 +892,17 @@ impl App {
         let label1 = self.file1_path.display().to_string();
         let label2 = self.file2_path.display().to_string();
         self.solver.what_if_problem = None;
-        self.spawn_solver_pair(Arc::clone(&self.problem1), label1, Arc::clone(&self.problem2), label2);
+        self.spawn_solver_pair(Arc::clone(&self.problem1), label1, Arc::clone(&self.problem2), label2, Scaling::default());
     }
 
-    /// Spawn two solves in parallel, transitioning into `RunningBoth` with the
-    /// given side labels. Shared by "Both (diff)" and the what-if flow.
-    fn spawn_solver_pair(&mut self, problem1: Arc<LpProblem>, label1: String, problem2: Arc<LpProblem>, label2: String) {
+    /// Spawn two solves, transitioning into `RunningBoth` with the given side
+    /// labels. Shared by "Both (diff)", the what-if flow and the rewrite
+    /// comparison.
+    ///
+    /// `scaling2` undoes any change of units the second problem was rewritten
+    /// with, so both sides of the comparison report the same quantities. It is
+    /// the identity for every caller but the rewrite.
+    fn spawn_solver_pair(&mut self, problem1: Arc<LpProblem>, label1: String, problem2: Arc<LpProblem>, label2: String, scaling2: Scaling) {
         // Unit separator: labels are file paths or what-if descriptions, neither of which contains it.
         let key = format!("{label1}\u{1f}{label2}");
         if self.restore_cached_solve(&key) {
@@ -914,16 +919,18 @@ impl App {
         self.solver.receive = Some(receiver1);
         self.solver.receive2 = Some(receiver2);
 
+        // One thread, in order: side 1's result reaches the UI while side 2 is
+        // still running, and the two solves never compete for the machine.
+        // Receivers may be dropped if the user dismissed the overlay.
         std::thread::spawn(move || {
             let result = crate::solver::solve_problem(&problem1);
-            // Receiver may be dropped if the user dismissed the overlay — this is expected.
             if sender1.send(result).is_err() {
                 eprintln!("solve result 1 dropped: receiver closed");
             }
-        });
-        std::thread::spawn(move || {
-            let result = crate::solver::solve_problem(&problem2);
-            // Receiver may be dropped if the user dismissed the overlay — this is expected.
+            let mut result = crate::solver::solve_problem(&problem2);
+            if let Ok(solved) = &mut result {
+                scaling2.unscale(solved);
+            }
             if sender2.send(result).is_err() {
                 eprintln!("solve result 2 dropped: receiver closed");
             }
@@ -1008,7 +1015,7 @@ impl App {
         let label1 = format!("baseline: {}", self.file1_path.display());
         let label2 = format!("what-if: {constraint_name} rhs {current_rhs} \u{2192} {new_rhs}");
         self.what_if = None;
-        self.spawn_solver_pair(Arc::clone(&self.problem1), label1, Arc::clone(&modified), label2);
+        self.spawn_solver_pair(Arc::clone(&self.problem1), label1, Arc::clone(&modified), label2, Scaling::default());
         // Set after spawn_solver_pair: it clears solver bookkeeping for a fresh run.
         self.solver.what_if_problem = Some(modified);
     }
@@ -1036,8 +1043,59 @@ impl App {
                 self.presolve_rules = [!any_on; Rule::COUNT];
             }
             KeyCode::Enter => self.confirm_presolve(),
+            KeyCode::Char('w') => self.write_presolved(),
             _ => {}
         }
+    }
+
+    /// Apply the enabled rules to the baseline problem.
+    ///
+    /// Returns `None` — after flashing why — when the result is not worth
+    /// using: no rule selected, the model proved infeasible, or nothing fired.
+    fn rewrite_baseline(&mut self) -> Option<(LpProblem, crate::presolve::PresolveStats)> {
+        if self.presolve_rules.iter().all(|on| !on) {
+            self.flash_status("Rewrite: enable at least one rule (space toggles)");
+            return None;
+        }
+
+        let (rewritten, stats) = presolve(&self.problem1, self.presolve_rules);
+        self.presolve_cursor = None;
+
+        if let Some(reason) = &stats.infeasible {
+            self.flash_status(format!("Rewrite proved the model infeasible: {reason}"));
+            self.last_presolve = Some(stats);
+            return None;
+        }
+        if stats.is_noop() {
+            self.flash_status("Rewrite: no rule fired \u{2014} the model is already reduced");
+            self.last_presolve = Some(stats);
+            return None;
+        }
+        Some((rewritten, stats))
+    }
+
+    /// Write the rewritten model to `<file1 stem>_presolved.lp` in the working
+    /// directory, so it can be fed to a solver or diffed outside the TUI.
+    ///
+    /// Always LP format, whatever the input was: the rewrite is a model, and LP
+    /// is the readable way to look at one.
+    fn write_presolved(&mut self) {
+        let Some((rewritten, stats)) = self.rewrite_baseline() else {
+            return;
+        };
+        let stem = self.file1_path.file_stem().unwrap_or_else(|| std::ffi::OsStr::new("model")).to_string_lossy().into_owned();
+        let filename = format!("{stem}_presolved.lp");
+        // Unlike the comparison solve, a file on disk has nothing to unscale
+        // it: whoever solves it gets the rewritten units, so say so.
+        let units = if stats.scaling.cols.is_empty() { "" } else { " (scaled units)" };
+        let written =
+            std::env::current_dir().and_then(|dir| std::fs::write(dir.join(&filename), lp_parser_rs::writer::write_lp_string(&rewritten)));
+        let message = match written {
+            Ok(()) => format!("Wrote {filename}{units} \u{2014} {}", stats.headline()),
+            Err(error) => format!("Rewrite write failed: {error}"),
+        };
+        self.last_presolve = Some(stats);
+        self.flash_status(message);
     }
 
     /// Rewrite the baseline problem with the selected rules and launch an
@@ -1047,32 +1105,21 @@ impl App {
     /// check as much as a benchmark: the objective values must agree, and the
     /// solve times say whether the rewrite was worth it.
     fn confirm_presolve(&mut self) {
-        if self.presolve_rules.iter().all(|on| !on) {
-            self.flash_status("Rewrite: enable at least one rule (space toggles)");
+        let Some((rewritten, stats)) = self.rewrite_baseline() else {
             return;
-        }
-
-        let (rewritten, stats) = presolve(&self.problem1, self.presolve_rules);
-        self.presolve_cursor = None;
-
-        // An infeasible or unchanged model has nothing to compare against.
-        if let Some(reason) = &stats.infeasible {
-            self.flash_status(format!("Rewrite proved the model infeasible: {reason}"));
-            self.last_presolve = Some(stats);
-            return;
-        }
-        if stats.is_noop() {
-            self.flash_status("Rewrite: no rule fired \u{2014} the model is already reduced");
-            self.last_presolve = Some(stats);
-            return;
-        }
+        };
 
         let label1 = format!("original: {}", self.file1_path.display());
         let label2 = stats.headline();
+        // The scaling rules leave the rewritten model in different units; the
+        // pair undoes them on the way back so both sides diff like for like.
+        let scaling = stats.scaling.clone();
         self.last_presolve = Some(stats);
 
         let rewritten = Arc::new(rewritten);
-        self.spawn_solver_pair(Arc::clone(&self.problem1), label1, Arc::clone(&rewritten), label2);
+        // Sequential: the whole point of the comparison is the solve times, so
+        // the two runs must not compete for the machine.
+        self.spawn_solver_pair(Arc::clone(&self.problem1), label1, Arc::clone(&rewritten), label2, scaling);
         // Set after spawn_solver_pair: it clears solver bookkeeping for a fresh run.
         self.solver.what_if_problem = Some(rewritten);
     }

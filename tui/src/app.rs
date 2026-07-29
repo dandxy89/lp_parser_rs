@@ -1523,14 +1523,14 @@ impl App {
             self.search_name_buffer.len(),
             self.search_haystack.len(),
         );
-        let config = frizbee::Config { sort: true, ..Default::default() };
-        let matches = frizbee::match_list_indices(self.search_popup.query.value(), &self.search_name_buffer, &config);
+        let config = frizbee::Config::default();
+        let matches = frizbee::Matcher::new(self.search_popup.query.value(), &config).match_list_indices(&self.search_name_buffer);
 
         for matched in matches {
             let haystack_index = matched.index as usize;
             let entry = &self.search_haystack[haystack_index];
             // frizbee returns indices in reverse order; sort ascending for highlighting.
-            let mut indices = matched.indices;
+            let mut indices: Vec<usize> = matched.indices.into_iter().map(|i| i as usize).collect();
             indices.sort_unstable();
             self.search_popup.results.push(SearchResult {
                 section: entry.section,

@@ -14,16 +14,32 @@
 //!
 //! Bounds are interpreted exactly as [`crate::solver::variable_bounds`]
 //! interprets them, so presolve reasons about the same box `HiGHS` will see.
+//!
+//! Three of the rules target what the diagnostics pane (`D`) ranks rather than
+//! the row count: [`Rule::FixedToRhs`] thins the densest rows, and
+//! [`Rule::RowScaling`] and [`Rule::ColumnScaling`] equilibrate the matrix.
+//! Because each row is divided by its own factor and each column multiplied by
+//! its own, the two together move both the worst-conditioned rows and the
+//! worst-conditioned columns — a single row factor alone cannot, since a row's
+//! max-to-min ratio is scale-invariant.
+//!
+//! Scaling is the one rewrite that does not leave the solution in the original
+//! units: a column multiplied by 8 reports its variable at an eighth of its
+//! real value, and a divided row reports a proportionally larger shadow price.
+//! [`PresolveStats::scaling`] carries the factors, and [`Scaling::unscale`] puts
+//! a [`SolveResult`] back into the original model's units before it reaches the
+//! comparison view. Everything the user sees is therefore in the units they
+//! wrote, whichever rules ran.
 
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::time::{Duration, Instant};
 
 use lp_parser_rs::interner::NameId;
-use lp_parser_rs::model::{Coefficient, ComparisonOp, Constraint, Sense};
+use lp_parser_rs::model::{Coefficient, ComparisonOp, Constraint, Sense, VariableKind};
 use lp_parser_rs::problem::LpProblem;
 
-use crate::solver::{primary_objective_coefficients, variable_bounds};
+use crate::solver::{SolveResult, primary_objective_coefficients, variable_bounds};
 
 /// Absolute tolerance for treating a coefficient as zero and for comparing a
 /// row activity against its right-hand side.
@@ -39,11 +55,14 @@ const MIN_TIGHTENING: f64 = 1e-7;
 pub const MAX_PASSES: usize = 10;
 
 /// A single rewrite rule. Declaration order is application order within a pass:
-/// singleton rows become bounds, propagation tightens from those bounds,
-/// rounding sharpens integer bounds, and the two removal rules act on the
-/// result.
+/// fixed columns fold into the right-hand side, singleton rows become bounds,
+/// propagation tightens from those bounds, rounding sharpens integer bounds,
+/// the two removal rules act on the result, and scaling equilibrates whatever
+/// rows survive.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Rule {
+    /// Fold fixed variables into the right-hand side and drop their terms.
+    FixedToRhs,
     /// A row with one variable is a bound in disguise: `3x <= 12` ⇒ `x <= 4`.
     SingletonToBound,
     /// Derive implied bounds from each row's minimum and maximum activity.
@@ -55,12 +74,25 @@ pub enum Rule {
     RedundantRows,
     /// Drop rows with no terms; fix variables that appear in no row.
     EmptyRowsCols,
+    /// Divide each row by a power of two so its largest coefficient is near 1.
+    RowScaling,
+    /// Rescale each continuous variable's units by a power of two so its
+    /// largest coefficient is near 1. Undone in the reported solution.
+    ColumnScaling,
 }
 
 impl Rule {
     /// Every rule, in application order.
-    pub const ALL: [Self; 5] =
-        [Self::SingletonToBound, Self::BoundPropagation, Self::IntegerRounding, Self::RedundantRows, Self::EmptyRowsCols];
+    pub const ALL: [Self; 8] = [
+        Self::FixedToRhs,
+        Self::SingletonToBound,
+        Self::BoundPropagation,
+        Self::IntegerRounding,
+        Self::RedundantRows,
+        Self::EmptyRowsCols,
+        Self::RowScaling,
+        Self::ColumnScaling,
+    ];
 
     /// Number of rules — the width of a [`RuleSet`].
     pub const COUNT: usize = Self::ALL.len();
@@ -68,22 +100,28 @@ impl Rule {
     /// Short name shown in the picker.
     pub const fn label(self) -> &'static str {
         match self {
+            Self::FixedToRhs => "Fixed columns \u{2192} rhs (thins rows)",
             Self::SingletonToBound => "Singleton rows \u{2192} bounds",
             Self::BoundPropagation => "Bound propagation",
             Self::IntegerRounding => "Integer bound rounding",
             Self::RedundantRows => "Redundant & forcing rows",
             Self::EmptyRowsCols => "Empty rows & columns",
+            Self::RowScaling => "Row scaling (powers of two)",
+            Self::ColumnScaling => "Column scaling (powers of two)",
         }
     }
 
     /// One-line explanation shown under the picker.
     pub const fn detail(self) -> &'static str {
         match self {
+            Self::FixedToRhs => "a fixed variable's term is a constant: move it to the rhs and drop it",
             Self::SingletonToBound => "a row with one term is a bound: 3x <= 12 becomes x <= 4",
             Self::BoundPropagation => "implied bounds from each row's min/max activity",
             Self::IntegerRounding => "round fractional bounds inwards on integer variables",
             Self::RedundantRows => "drop rows that can never bind; fix variables pinned by forcing rows",
             Self::EmptyRowsCols => "drop termless rows; fix variables appearing in no row",
+            Self::RowScaling => "divide each row by 2^k so its largest coefficient is near 1",
+            Self::ColumnScaling => "rescale continuous variables by 2^k; the solution is unscaled back",
         }
     }
 }
@@ -105,12 +143,70 @@ pub struct PassStats {
     pub rows_removed: usize,
     pub cols_fixed: usize,
     pub bounds_tightened: usize,
+    /// Non-zeros dropped from rows by folding fixed columns into the rhs.
+    pub terms_removed: usize,
+    /// Rows divided by a power of two by the scaling rule.
+    pub rows_scaled: usize,
+    /// Columns rescaled by a power of two by the scaling rule.
+    pub cols_scaled: usize,
 }
 
 impl PassStats {
     /// Whether the pass changed nothing — the fixpoint has been reached.
     const fn is_empty(self) -> bool {
-        self.rows_removed == 0 && self.cols_fixed == 0 && self.bounds_tightened == 0
+        self.rows_removed == 0
+            && self.cols_fixed == 0
+            && self.bounds_tightened == 0
+            && self.terms_removed == 0
+            && self.rows_scaled == 0
+            && self.cols_scaled == 0
+    }
+}
+
+/// The scale factors a run applied, keyed by resolved row and column name.
+///
+/// A row's factor is what its coefficients and rhs were multiplied by; a
+/// column's factor `s` is the change of units `x = s * x'`, so the rewritten
+/// model's coefficients for that column were multiplied by `s` and its bounds
+/// divided by it. [`Scaling::unscale`] is the inverse, applied to a solve
+/// result before anything looks at it.
+#[derive(Debug, Clone, Default)]
+pub struct Scaling {
+    pub rows: HashMap<String, f64>,
+    pub cols: HashMap<String, f64>,
+}
+
+impl Scaling {
+    /// Put a solve result of the rewritten model back into the original
+    /// model's units, in place.
+    ///
+    /// Each of the four quantities needs exactly one of the two factors: the
+    /// other cancels. A row's activity is `sum_j a_ij x_j`, and column scaling
+    /// multiplies `a_ij` by `s_j` exactly as it divides `x_j`, so activities
+    /// only see the row factor. Reduced costs are `c_j - sum_i a_ij y_i`, and
+    /// row scaling divides `y_i` exactly as it multiplies `a_ij`, so they only
+    /// see the column factor. The objective value is invariant under both.
+    pub fn unscale(&self, result: &mut SolveResult) {
+        for (name, value) in &mut result.variables {
+            if let Some(scale) = self.cols.get(name) {
+                *value *= scale;
+            }
+        }
+        for (name, value) in &mut result.reduced_costs {
+            if let Some(scale) = self.cols.get(name) {
+                *value /= scale;
+            }
+        }
+        for (name, value) in &mut result.row_values {
+            if let Some(scale) = self.rows.get(name) {
+                *value /= scale;
+            }
+        }
+        for (name, value) in &mut result.shadow_prices {
+            if let Some(scale) = self.rows.get(name) {
+                *value *= scale;
+            }
+        }
     }
 }
 
@@ -130,6 +226,9 @@ pub struct PresolveStats {
     /// Set when a rule proved the model infeasible. The rewritten problem is
     /// not usable in that case and the run stops immediately.
     pub infeasible: Option<String>,
+    /// Scale factors applied, for putting the rewritten model's solution back
+    /// into the original's units. Empty unless a scaling rule fired.
+    pub scaling: Scaling,
 }
 
 impl PresolveStats {
@@ -151,6 +250,24 @@ impl PresolveStats {
         self.per_pass.iter().map(|p| p.bounds_tightened).sum()
     }
 
+    /// Total non-zeros dropped from rows across all passes.
+    #[must_use]
+    pub fn terms_removed(&self) -> usize {
+        self.per_pass.iter().map(|p| p.terms_removed).sum()
+    }
+
+    /// Total rows rescaled across all passes.
+    #[must_use]
+    pub fn rows_scaled(&self) -> usize {
+        self.per_pass.iter().map(|p| p.rows_scaled).sum()
+    }
+
+    /// Total columns rescaled across all passes.
+    #[must_use]
+    pub fn cols_scaled(&self) -> usize {
+        self.per_pass.iter().map(|p| p.cols_scaled).sum()
+    }
+
     /// Whether the rewrite left the model untouched.
     #[must_use]
     pub const fn is_noop(&self) -> bool {
@@ -166,8 +283,16 @@ impl PresolveStats {
         if self.is_noop() {
             return "presolve: no change".to_owned();
         }
+        // The two structural counts only appear when their rule fired, so the
+        // headline stays readable as a comparison label.
+        let nnz = if self.terms_removed() > 0 { format!(", -{} nnz", self.terms_removed()) } else { String::new() };
+        let scaled = if self.rows_scaled() + self.cols_scaled() > 0 {
+            format!(", {}r/{}c scaled", self.rows_scaled(), self.cols_scaled())
+        } else {
+            String::new()
+        };
         format!(
-            "presolve: -{} rows, {} cols fixed, {} bounds, {} pass(es), {:.1}ms",
+            "presolve: -{} rows, {} cols fixed, {} bounds{nnz}{scaled}, {} pass(es), {:.1}ms",
             self.rows_removed(),
             self.cols_fixed(),
             self.bounds_tightened(),
@@ -190,10 +315,17 @@ pub fn presolve(problem: &LpProblem, rules: RuleSet) -> (LpProblem, PresolveStat
     let rows_before = out.constraints.len();
     let mut per_pass = Vec::new();
     let mut infeasible = None;
+    // Accumulated as products: a row or column can be rescaled on more than one
+    // pass as the other dimension's scaling shifts what its largest entry is.
+    let mut row_factors: HashMap<NameId, f64> = HashMap::new();
+    let mut col_factors: HashMap<NameId, f64> = HashMap::new();
 
     for _ in 0..MAX_PASSES {
         let mut pass = PassStats::default();
 
+        if enabled(rules, Rule::FixedToRhs) {
+            fixed_to_rhs(&mut out, &mut pass);
+        }
         if enabled(rules, Rule::SingletonToBound) {
             singleton_to_bound(&mut out, &mut pass, &mut infeasible);
         }
@@ -209,6 +341,12 @@ pub fn presolve(problem: &LpProblem, rules: RuleSet) -> (LpProblem, PresolveStat
         if infeasible.is_none() && enabled(rules, Rule::EmptyRowsCols) {
             empty_rows_cols(&mut out, &mut pass, &mut infeasible);
         }
+        if infeasible.is_none() && enabled(rules, Rule::RowScaling) {
+            row_scaling(&mut out, &mut pass, &mut row_factors);
+        }
+        if infeasible.is_none() && enabled(rules, Rule::ColumnScaling) {
+            column_scaling(&mut out, &mut pass, &mut col_factors);
+        }
 
         let converged = pass.is_empty();
         if !converged {
@@ -219,6 +357,13 @@ pub fn presolve(problem: &LpProblem, rules: RuleSet) -> (LpProblem, PresolveStat
         }
     }
 
+    // Resolved to names here: a solve result identifies rows and columns by
+    // name, and the interner belongs to the problem, not to the result.
+    let resolve_factors = |factors: HashMap<NameId, f64>| -> HashMap<String, f64> {
+        factors.into_iter().map(|(id, scale)| (out.resolve(id).to_owned(), scale)).collect()
+    };
+    let scaling = Scaling { rows: resolve_factors(row_factors), cols: resolve_factors(col_factors) };
+
     let stats = PresolveStats {
         per_pass,
         rows_before,
@@ -226,6 +371,7 @@ pub fn presolve(problem: &LpProblem, rules: RuleSet) -> (LpProblem, PresolveStat
         cols: out.variables.len(),
         duration: started.elapsed(),
         infeasible,
+        scaling,
     };
     debug_assert_eq!(stats.cols, problem.variables.len(), "presolve fixes columns but must never remove them");
     debug_assert!(stats.rows_after <= stats.rows_before, "presolve must not add rows");
@@ -685,12 +831,226 @@ fn empty_rows_cols(problem: &mut LpProblem, pass: &mut PassStats, infeasible: &m
     pass.cols_fixed += newly_fixed;
 }
 
+/// Fold fixed variables into the right-hand side and drop their terms.
+///
+/// A variable whose box has collapsed to a point contributes a constant to
+/// every row it appears in, so `a x + rest <op> rhs` becomes
+/// `rest <op> rhs - a v`. The variable itself stays declared and fixed, so the
+/// column set is untouched and the comparison view still lines both sides up.
+///
+/// This is the rule that thins the densest rows: the other rules fix columns
+/// (forcing rows, singleton rows, unused columns) but leave their now-constant
+/// terms sitting in the matrix, and the fixpoint loop feeds each new fix back
+/// through here.
+fn fixed_to_rhs(problem: &mut LpProblem, pass: &mut PassStats) {
+    let fixed: HashMap<NameId, f64> = problem
+        .variables
+        .iter()
+        .filter_map(|(id, variable)| {
+            let (_, lower, upper) = variable_bounds(Some(variable));
+            (lower.is_finite() && (upper - lower).abs() <= EPS).then_some((*id, lower))
+        })
+        .collect();
+    if fixed.is_empty() {
+        return;
+    }
+
+    for constraint in problem.constraints.values_mut() {
+        // SOS sets carry weights, not an activity, so there is no rhs to fold into.
+        let Constraint::Standard { coefficients, rhs, .. } = constraint else {
+            continue;
+        };
+        let before = coefficients.len();
+        let mut shift = 0.0;
+        coefficients.retain(|coefficient| match fixed.get(&coefficient.name) {
+            Some(value) => {
+                shift += coefficient.value * value;
+                false
+            }
+            None => true,
+        });
+        let removed = before - coefficients.len();
+        if removed > 0 {
+            *rhs -= shift;
+            pass.terms_removed += removed;
+        }
+    }
+}
+
+/// Half-width of the band a row's largest coefficient is left in: scaling only
+/// fires when `max` is outside `[1/BAND, BAND]`, and always lands inside it, so
+/// a rescaled row is never rescaled again and the fixpoint loop terminates.
+const SCALE_BAND: f64 = 2.0;
+
+/// A scaled-down row must keep its smallest coefficient this far above [`EPS`].
+/// Below it the term would read as zero to the activity rules, which would let
+/// them derive bounds that cut off feasible points.
+const MIN_SCALED_COEFF: f64 = 1e-7;
+
+/// Divide each row by a power of two so its largest coefficient sits near 1.
+///
+/// A model whose rows span many orders of magnitude gives the simplex ratio
+/// test nothing to compare: this pulls the rows onto a common magnitude. On its
+/// own it moves the global range and the worst-conditioned *columns*; a row's
+/// own max-to-min ratio is scale-invariant, so improving that needs
+/// [`column_scaling`] alongside it, which divides the row's entries by
+/// different factors.
+///
+/// The factor is a power of two so every coefficient's mantissa survives
+/// untouched: the rewrite introduces no rounding error of its own.
+fn row_scaling(problem: &mut LpProblem, pass: &mut PassStats, factors: &mut HashMap<NameId, f64>) {
+    for (row_id, constraint) in &mut problem.constraints {
+        let Constraint::Standard { coefficients, rhs, .. } = constraint else {
+            continue;
+        };
+        let (mut min, mut max) = (f64::INFINITY, 0.0_f64);
+        for coefficient in coefficients.iter() {
+            let magnitude = coefficient.value.abs();
+            if magnitude > EPS {
+                min = min.min(magnitude);
+                max = max.max(magnitude);
+            }
+        }
+        if max <= EPS || (1.0 / SCALE_BAND..=SCALE_BAND).contains(&max) {
+            continue;
+        }
+        let scale = (-max.log2().round()).exp2();
+        debug_assert!(scale.is_finite() && scale > 0.0, "scale must be a finite positive power of two");
+        if min * scale <= MIN_SCALED_COEFF {
+            continue;
+        }
+        for coefficient in coefficients.iter_mut() {
+            coefficient.value *= scale;
+        }
+        // The rhs scales with the row, so the feasible set is unchanged; a
+        // positive factor also leaves the comparison operator alone.
+        *rhs *= scale;
+        *factors.entry(*row_id).or_insert(1.0) *= scale;
+        pass.rows_scaled += 1;
+    }
+}
+
+/// Rescale each continuous variable's units by a power of two, so its largest
+/// coefficient sits near 1.
+///
+/// This is the substitution `x = s x'`: every coefficient in the column is
+/// multiplied by `s` and the variable's bounds divided by it, which leaves the
+/// feasible set and the objective value untouched but reports `x'` in place of
+/// `x`. The factors are kept in [`PresolveStats::scaling`] and undone by
+/// [`Scaling::unscale`] before the solution is shown, so the change of units
+/// never escapes the rewrite.
+///
+/// Only continuous columns qualify. Integrality, binariness and the
+/// semi-continuous "zero or in range" rule are all statements about a
+/// variable's own units, and rescaling would silently redefine them; an SOS
+/// set's weights order the original variable in the same way.
+///
+/// Missing bounds need no attention: the solver's implicit `0` and `+inf` are
+/// both fixed points of division by a positive factor.
+fn column_scaling(problem: &mut LpProblem, pass: &mut PassStats, factors: &mut HashMap<NameId, f64>) {
+    let mut spread: HashMap<NameId, (f64, f64)> = HashMap::new();
+    // A variable first seen in an ordinary row keeps its Continuous kind even
+    // when a later SOS set names it, so membership has to be checked here too.
+    // ponytail: linear scan, sorted lookup if a model ever carries many SOS sets.
+    let mut in_sos: Vec<NameId> = Vec::new();
+    for constraint in problem.constraints.values() {
+        match constraint {
+            Constraint::Standard { coefficients, .. } => {
+                for coefficient in coefficients {
+                    let magnitude = coefficient.value.abs();
+                    if magnitude <= EPS {
+                        continue;
+                    }
+                    let entry = spread.entry(coefficient.name).or_insert((f64::INFINITY, 0.0));
+                    entry.0 = entry.0.min(magnitude);
+                    entry.1 = entry.1.max(magnitude);
+                }
+            }
+            Constraint::SOS { weights, .. } => in_sos.extend(weights.iter().map(|weight| weight.name)),
+        }
+    }
+
+    let mut scales: HashMap<NameId, f64> = HashMap::new();
+    for (var, (min, max)) in &spread {
+        let Some(variable) = problem.variables.get(var) else {
+            continue;
+        };
+        if variable.kind != VariableKind::Continuous || in_sos.contains(var) {
+            continue;
+        }
+        if (1.0 / SCALE_BAND..=SCALE_BAND).contains(max) {
+            continue;
+        }
+        let scale = (-max.log2().round()).exp2();
+        debug_assert!(scale.is_finite() && scale > 0.0, "scale must be a finite positive power of two");
+        if min * scale <= MIN_SCALED_COEFF {
+            continue;
+        }
+        scales.insert(*var, scale);
+    }
+    if scales.is_empty() {
+        return;
+    }
+
+    for constraint in problem.constraints.values_mut() {
+        let Constraint::Standard { coefficients, .. } = constraint else {
+            continue;
+        };
+        for coefficient in coefficients.iter_mut() {
+            if let Some(scale) = scales.get(&coefficient.name) {
+                coefficient.value *= scale;
+            }
+        }
+    }
+    // The objective is in the same units as the columns: `c_j x_j` is
+    // `(c_j s_j) x'_j`, so its value comes out unchanged.
+    for objective in problem.objectives.values_mut() {
+        for coefficient in &mut objective.coefficients {
+            if let Some(scale) = scales.get(&coefficient.name) {
+                coefficient.value *= scale;
+            }
+        }
+    }
+    for (var, scale) in &scales {
+        let Some(variable) = problem.variables.get_mut(var) else {
+            continue;
+        };
+        if let Some(lower) = variable.bounds.lower {
+            variable.bounds.lower = Some(lower / scale);
+        }
+        if let Some(upper) = variable.bounds.upper {
+            variable.bounds.upper = Some(upper / scale);
+        }
+        *factors.entry(*var).or_insert(1.0) *= scale;
+        pass.cols_scaled += 1;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn parse(source: &str) -> LpProblem {
         LpProblem::parse(source).expect("test fixture must parse")
+    }
+
+    /// A rule set with only the named rules on, so a test exercises one rule
+    /// without a positional literal that every new rule would have to widen.
+    fn only(rules: &[Rule]) -> RuleSet {
+        let mut set = [false; Rule::COUNT];
+        for rule in rules {
+            set[*rule as usize] = true;
+        }
+        set
+    }
+
+    /// The row's coefficients and rhs, for the scaling tests.
+    fn row_of(problem: &LpProblem, name: &str) -> (Vec<f64>, f64) {
+        let id = problem.name_id(name).expect("row must exist");
+        match problem.constraints.get(&id).expect("row must exist") {
+            Constraint::Standard { coefficients, rhs, .. } => (coefficients.iter().map(|c| c.value).collect(), *rhs),
+            Constraint::SOS { .. } => panic!("row {name} is an SOS set"),
+        }
     }
 
     fn bounds_of(problem: &LpProblem, name: &str) -> (f64, f64) {
@@ -715,7 +1075,7 @@ mod tests {
     #[test]
     fn singleton_row_becomes_a_bound_and_the_row_goes() {
         let problem = parse("Minimize\n obj: x + y\nSubject To\n c1: 3 x <= 12\n c2: x + y >= 2\nEnd");
-        let (out, stats) = presolve(&problem, [true, false, false, false, false]);
+        let (out, stats) = presolve(&problem, only(&[Rule::SingletonToBound]));
 
         assert_eq!(out.constraint_count(), 1, "the singleton row is removed");
         assert_bound(bounds_of(&out, "x").1, 4.0, "3x <= 12 tightens x's upper bound to 4");
@@ -725,7 +1085,7 @@ mod tests {
     #[test]
     fn singleton_with_a_negative_coefficient_flips_the_comparison() {
         let problem = parse("Minimize\n obj: x\nSubject To\n c1: -2 x <= -6\n c2: x + y >= 0\nEnd");
-        let (out, _) = presolve(&problem, [true, false, false, false, false]);
+        let (out, _) = presolve(&problem, only(&[Rule::SingletonToBound]));
 
         assert_bound(bounds_of(&out, "x").0, 3.0, "-2x <= -6 is x >= 3, a lower bound");
     }
@@ -734,7 +1094,7 @@ mod tests {
     fn propagation_derives_an_implied_upper_bound() {
         // y >= 0 by default, so x + y <= 10 forces x <= 10.
         let problem = parse("Minimize\n obj: x + y\nSubject To\n c1: x + y <= 10\nEnd");
-        let (out, stats) = presolve(&problem, [false, true, false, false, false]);
+        let (out, stats) = presolve(&problem, only(&[Rule::BoundPropagation]));
 
         assert_bound(bounds_of(&out, "x").1, 10.0, "the other term's minimum activity caps x at 10");
         assert!(stats.bounds_tightened() >= 1);
@@ -744,7 +1104,7 @@ mod tests {
     fn propagation_leaves_unbounded_rows_alone() {
         // y is free above, so nothing caps x.
         let problem = parse("Minimize\n obj: x\nSubject To\n c1: x - y <= 10\nEnd");
-        let (out, stats) = presolve(&problem, [false, true, false, false, false]);
+        let (out, stats) = presolve(&problem, only(&[Rule::BoundPropagation]));
 
         assert_bound(bounds_of(&out, "x").1, f64::INFINITY, "an unbounded partner term yields no implied bound");
         assert_eq!(stats.bounds_tightened(), 0);
@@ -753,7 +1113,7 @@ mod tests {
     #[test]
     fn integer_bounds_round_inwards() {
         let problem = parse("Maximize\n obj: x\nSubject To\n c1: x + y <= 9\nBounds\n 0.4 <= x <= 3.7\nGenerals\n x\nEnd");
-        let (out, _) = presolve(&problem, [false, false, true, false, false]);
+        let (out, _) = presolve(&problem, only(&[Rule::IntegerRounding]));
 
         assert_eq!(bounds_of(&out, "x"), (1.0, 3.0), "an integer variable's fractional bounds round inwards");
     }
@@ -761,7 +1121,7 @@ mod tests {
     #[test]
     fn a_row_that_can_never_bind_is_removed() {
         let problem = parse("Minimize\n obj: x + y\nSubject To\n c1: x + y <= 1000\nBounds\n x <= 5\n y <= 5\nEnd");
-        let (out, stats) = presolve(&problem, [false, false, false, true, false]);
+        let (out, stats) = presolve(&problem, only(&[Rule::RedundantRows]));
 
         assert_eq!(out.constraint_count(), 0, "maximum activity 10 never reaches a rhs of 1000");
         assert_eq!(stats.rows_removed(), 1);
@@ -771,7 +1131,7 @@ mod tests {
     fn a_forcing_row_pins_its_variables() {
         // x, y >= 0 and x + y <= 0 leaves only the origin.
         let problem = parse("Minimize\n obj: x + y\nSubject To\n c1: x + y <= 0\nEnd");
-        let (out, stats) = presolve(&problem, [false, false, false, true, false]);
+        let (out, stats) = presolve(&problem, only(&[Rule::RedundantRows]));
 
         assert_eq!(bounds_of(&out, "x"), (0.0, 0.0), "a forcing row fixes every variable in it");
         assert_eq!(bounds_of(&out, "y"), (0.0, 0.0));
@@ -790,7 +1150,7 @@ mod tests {
     #[test]
     fn a_variable_in_no_row_is_fixed_at_its_preferred_bound() {
         let problem = parse("Minimize\n obj: x + 2 z\nSubject To\n c1: x + y >= 1\nBounds\n 0 <= z <= 8\nEnd");
-        let (out, stats) = presolve(&problem, [false, false, false, false, true]);
+        let (out, stats) = presolve(&problem, only(&[Rule::EmptyRowsCols]));
 
         assert_eq!(bounds_of(&out, "z"), (0.0, 0.0), "minimising a positive cost drives z to its lower bound");
         assert_eq!(stats.cols_fixed(), 1);
@@ -800,9 +1160,59 @@ mod tests {
     #[test]
     fn a_maximised_variable_in_no_row_goes_to_its_upper_bound() {
         let problem = parse("Maximize\n obj: x + 2 z\nSubject To\n c1: x + y >= 1\nBounds\n 0 <= z <= 8\nEnd");
-        let (out, _) = presolve(&problem, [false, false, false, false, true]);
+        let (out, _) = presolve(&problem, only(&[Rule::EmptyRowsCols]));
 
         assert_eq!(bounds_of(&out, "z"), (8.0, 8.0), "maximising a positive cost drives z to its upper bound");
+    }
+
+    #[test]
+    fn a_fixed_column_folds_into_the_rhs() {
+        let problem = parse("Minimize\n obj: x + y\nSubject To\n c1: 2 x + y <= 10\nBounds\n 2 <= x <= 2\nEnd");
+        let (out, stats) = presolve(&problem, only(&[Rule::FixedToRhs]));
+
+        assert_eq!(row_of(&out, "c1"), (vec![1.0], 6.0), "x is fixed at 2, so 2x moves to the rhs");
+        assert_eq!(stats.terms_removed(), 1);
+        assert_eq!(out.variable_count(), problem.variable_count(), "the fixed column stays declared");
+    }
+
+    #[test]
+    fn folding_fixed_columns_thins_a_dense_row_across_passes() {
+        // c2 forces y to 0, and the next pass folds y out of the dense row.
+        let problem = parse("Minimize\n obj: x + y + z\nSubject To\n c1: x + y + z >= 1\n c2: y <= 0\nEnd");
+        let (out, stats) = presolve(&problem, only(&[Rule::FixedToRhs, Rule::SingletonToBound]));
+
+        assert_eq!(row_of(&out, "c1").0.len(), 2, "the fixed column is gone from the dense row");
+        assert!(stats.terms_removed() >= 1);
+    }
+
+    #[test]
+    fn row_scaling_divides_by_a_power_of_two() {
+        let problem = parse("Minimize\n obj: x + y\nSubject To\n c1: 1024 x + 512 y <= 2048\nEnd");
+        let (out, stats) = presolve(&problem, only(&[Rule::RowScaling]));
+
+        assert_eq!(row_of(&out, "c1"), (vec![1.0, 0.5], 2.0), "the row is divided by 2^10, exactly");
+        assert_eq!(stats.rows_scaled(), 1);
+    }
+
+    #[test]
+    fn a_scaled_row_is_not_scaled_again() {
+        let problem = parse("Minimize\n obj: x + y\nSubject To\n c1: 1024 x + 512 y <= 2048\nEnd");
+        let (once, _) = presolve(&problem, only(&[Rule::RowScaling]));
+        let (_, again) = presolve(&once, only(&[Rule::RowScaling]));
+
+        assert!(again.is_noop(), "scaling lands inside the band it tests against, so it reaches a fixpoint");
+    }
+
+    #[test]
+    fn scaling_leaves_a_row_alone_when_it_would_sink_a_term_into_the_noise() {
+        // Scaling by 2^-30 would drag 1e-3 down to ~1e-12, where the activity
+        // rules would read it as zero and derive bounds that cut off feasible points.
+        let source = "Minimize\n obj: x + y\nSubject To\n c1: 1e9 x + 0.001 y <= 1e9\nEnd";
+        let problem = parse(source);
+        let (out, stats) = presolve(&problem, only(&[Rule::RowScaling]));
+
+        assert_eq!(stats.rows_scaled(), 0);
+        assert_eq!(row_of(&out, "c1"), row_of(&problem, "c1"), "the row is left exactly as it was");
     }
 
     #[test]
@@ -812,7 +1222,7 @@ mod tests {
         let source = "Minimize\n obj: x + y\nSubject To\n c1: 5 x <= 10\n c2: x + 2 y <= 50\nBounds\n y <= 2\nEnd";
         let problem = parse(source);
 
-        let (alone, _) = presolve(&problem, [false, false, false, true, false]);
+        let (alone, _) = presolve(&problem, only(&[Rule::RedundantRows]));
         assert_eq!(alone.constraint_count(), 2, "without the singleton rewrite x is unbounded and neither row can be dropped");
 
         let (out, _) = presolve(&problem, ALL_RULES);
@@ -864,6 +1274,106 @@ mod tests {
                 (None, None) => {}
                 (original, reduced) => panic!("{fixture}: one side has an objective and the other does not: {original:?} vs {reduced:?}"),
             }
+        }
+    }
+
+    #[test]
+    fn column_scaling_rescales_the_column_its_bounds_and_its_objective() {
+        let source = "Minimize\n obj: 3 x + y\nSubject To\n c1: 1024 x + y >= 2048\n c2: 512 x + y >= 0\nBounds\n x <= 8192\nEnd";
+        let problem = parse(source);
+        let (out, stats) = presolve(&problem, only(&[Rule::ColumnScaling]));
+
+        // x's largest coefficient is 1024, so the column is multiplied by
+        // 2^-10 and x' counts in units of 1/1024 of an x.
+        let scale = 1.0 / 1024.0;
+        assert_eq!(row_of(&out, "c1"), (vec![1.0, 1.0], 2048.0), "the column is scaled, the rhs is not");
+        assert_eq!(row_of(&out, "c2").0, vec![0.5, 1.0]);
+        assert_bound(bounds_of(&out, "x").1, 8192.0 / scale, "bounds move with the units");
+        assert_eq!(stats.cols_scaled(), 1);
+        assert_bound(*stats.scaling.cols.get("x").expect("x was scaled"), scale, "x = s x'");
+        assert!(!stats.scaling.cols.contains_key("y"), "y's coefficients are already near 1");
+
+        let objective = out.objectives.values().next().expect("one objective");
+        let x_cost = objective.coefficients.iter().find(|c| out.resolve(c.name) == "x").expect("x in the objective");
+        assert_bound(x_cost.value, 3.0 * scale, "the objective moves with the units so its value is unchanged");
+    }
+
+    #[test]
+    fn integer_columns_keep_their_units() {
+        let source = "Minimize\n obj: x + y\nSubject To\n c1: 1024 x + 1024 y >= 2048\nGenerals\n x\nEnd";
+        let problem = parse(source);
+        let (out, stats) = presolve(&problem, only(&[Rule::ColumnScaling]));
+
+        assert!(!stats.scaling.cols.contains_key("x"), "rescaling an integer variable would redefine integrality");
+        assert_eq!(row_of(&out, "c1").0, vec![1024.0, 1.0], "the continuous column is scaled, the integer one is not");
+    }
+
+    /// The end-to-end promise of the scaling rules: the rewritten model is
+    /// solved in different units, and what the comparison view sees is back in
+    /// the original's — values, duals, activities and all.
+    #[test]
+    fn unscaling_puts_the_solution_back_in_the_original_units() {
+        // A unique optimum, so the two solves have nothing to disagree about
+        // beyond the scaling itself.
+        // Row scaling pulls both rows down by 2^-12, which leaves y's column
+        // far below 1 and gives column scaling something to do.
+        let source = "Maximize\n obj: 3 x + 2 y\nSubject To\n c1: 4096 x + y <= 8192\n c2: 4096 x + 2 y <= 9000\nEnd";
+        let problem = parse(source);
+        let (rewritten, stats) = presolve(&problem, only(&[Rule::RowScaling, Rule::ColumnScaling]));
+        assert!(stats.rows_scaled() > 0 && stats.cols_scaled() > 0, "both scalings must fire for this to prove anything");
+
+        let original = crate::solver::solve_problem(&problem).expect("original solve");
+        let mut scaled = crate::solver::solve_problem(&rewritten).expect("rewritten solve");
+
+        // Before unscaling the two disagree; that is the whole reason for it.
+        assert!(scaled.variables != original.variables, "the rewritten model reports its own units");
+
+        stats.scaling.unscale(&mut scaled);
+
+        let close = |a: f64, b: f64| (a - b).abs() <= 1e-6 * (1.0 + a.abs());
+        for ((name, value), (original_name, original_value)) in scaled.variables.iter().zip(&original.variables) {
+            assert_eq!(name, original_name);
+            assert!(close(*value, *original_value), "{name}: {value} != {original_value}");
+        }
+        for ((name, value), (original_name, original_value)) in scaled.reduced_costs.iter().zip(&original.reduced_costs) {
+            assert_eq!(name, original_name);
+            assert!(close(*value, *original_value), "reduced cost {name}: {value} != {original_value}");
+        }
+        for ((name, value), (original_name, original_value)) in scaled.row_values.iter().zip(&original.row_values) {
+            assert_eq!(name, original_name);
+            assert!(close(*value, *original_value), "activity {name}: {value} != {original_value}");
+        }
+        for ((name, value), (original_name, original_value)) in scaled.shadow_prices.iter().zip(&original.shadow_prices) {
+            assert_eq!(name, original_name);
+            assert!(close(*value, *original_value), "shadow price {name}: {value} != {original_value}");
+        }
+    }
+
+    /// `w` in the picker writes the rewritten model out as LP, so the rewrite
+    /// has to survive a round trip through the writer and the parser.
+    #[test]
+    fn the_rewritten_model_round_trips_through_the_lp_writer() {
+        let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let source = std::fs::read_to_string(root.join("../rust/resources/afiro.lp")).expect("fixture must read");
+        let problem = LpProblem::parse(&source).expect("fixture must parse");
+
+        let (rewritten, stats) = presolve(&problem, ALL_RULES);
+        assert!(!stats.is_noop(), "a no-op rewrite would make the round trip prove nothing");
+
+        let written = lp_parser_rs::writer::write_lp_string(&rewritten);
+        let reparsed = LpProblem::parse(&written).expect("the written rewrite must parse back");
+
+        assert_eq!(reparsed.constraint_count(), rewritten.constraint_count());
+        assert_eq!(reparsed.variable_count(), rewritten.variable_count());
+
+        let before = crate::solver::solve_problem(&rewritten).expect("rewritten solve");
+        let after = crate::solver::solve_problem(&reparsed).expect("round-tripped solve");
+        match (before.objective_value, after.objective_value) {
+            (Some(original), Some(round_tripped)) => {
+                let tolerance = 1e-6 * (1.0 + original.abs());
+                assert!((original - round_tripped).abs() <= tolerance, "objective moved from {original} to {round_tripped}");
+            }
+            (original, round_tripped) => panic!("one side has an objective and the other does not: {original:?} vs {round_tripped:?}"),
         }
     }
 

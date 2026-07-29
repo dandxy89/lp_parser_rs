@@ -16,10 +16,11 @@ use crate::presolve::{PresolveStats, Rule};
 use crate::theme::theme;
 use crate::widgets::{centred_rect, panel_block};
 
-/// Overlay dimensions: wide enough for a rule label plus its one-line detail.
-const POPUP_WIDTH: u16 = 78;
+/// Overlay dimensions: wide enough for a rule label plus its one-line detail,
+/// and for the key hint that sits on the bottom border.
+const POPUP_WIDTH: u16 = 92;
 /// Border, the rule rows, the detail line, the last-run block, and the key hint.
-const POPUP_HEIGHT: u16 = 15;
+const POPUP_HEIGHT: u16 = 18;
 
 /// Draw the presolve rule picker on top of the current frame.
 pub fn draw_presolve(frame: &mut Frame, area: Rect, app: &App) {
@@ -69,7 +70,8 @@ pub fn draw_presolve(frame: &mut Frame, area: Rect, app: &App) {
     frame.render_widget(Paragraph::new(lines).block(block), popup);
 
     // The hint sits on the bottom border so the rule list keeps the full body.
-    let hint = " j/k move \u{2022} space toggle \u{2022} a all/none \u{2022} Enter rewrite & solve \u{2022} Esc cancel ";
+    let hint =
+        " j/k move \u{2022} space toggle \u{2022} a all/none \u{2022} Enter rewrite & solve \u{2022} w write .lp \u{2022} Esc cancel ";
     let hint_width = u16::try_from(hint.chars().count()).unwrap_or(u16::MAX);
     if popup.width > hint_width && popup.height > 0 {
         let hint_area = Rect { x: popup.x + 2, y: popup.bottom() - 1, width: hint_width, height: 1 };
@@ -88,11 +90,14 @@ fn last_run_lines(stats: &PresolveStats, muted: ratatui::style::Color, text: rat
     for (index, pass) in stats.per_pass.iter().enumerate() {
         lines.push(Line::from(Span::styled(
             format!(
-                "    pass {}: -{} rows, {} cols fixed, {} bounds",
+                "    pass {}: -{} rows, {} cols fixed, {} bounds, -{} nnz, {}r/{}c scaled",
                 index + 1,
                 pass.rows_removed,
                 pass.cols_fixed,
-                pass.bounds_tightened
+                pass.bounds_tightened,
+                pass.terms_removed,
+                pass.rows_scaled,
+                pass.cols_scaled
             ),
             Style::default().fg(muted),
         )));

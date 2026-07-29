@@ -272,16 +272,38 @@ lp_diff base.lp modified.lp --summary</code></pre>
     <h2>Rewrites: presolve, then compare</h2>
     <p class="lead"><kbd>P</kbd> opens a rule picker. Each rule is a <em>solution-preserving</em> rewrite: it removes
       work from the model without changing the set of optimal solutions. Pick a set, press <kbd>Enter</kbd>, and the
-      original and the rewritten model are solved side by side.</p>
+      original and the rewritten model are solved one after the other. Unlike "Both (diff)", the two runs are never in
+      flight at once, so they cannot compete for the machine and the timings mean something.</p>
 
     <div class="tablewrap"><table>
       <tr><th>Rule</th><th>What it does</th></tr>
+      <tr><td>Fixed column → rhs</td><td>A fixed variable's term is a constant, so it moves to the right-hand side and the non-zero disappears. This is what thins the densest rows: the other rules fix columns but leave their terms in the matrix, and every new fix feeds back through here on the next pass.</td></tr>
       <tr><td>Singleton → bound</td><td>A row with one term is a bound in disguise: <code>3x &lt;= 12</code> becomes <code>x &lt;= 4</code>, and the row goes.</td></tr>
       <tr><td>Bound propagation</td><td>Derives implied bounds from each row's minimum and maximum activity, tightening the box every other rule reasons about.</td></tr>
       <tr><td>Integer rounding</td><td>Rounds fractional bounds inwards on integer variables: <code>x &lt;= 3.7</code> becomes <code>x &lt;= 3</code>.</td></tr>
       <tr><td>Redundant &amp; forcing rows</td><td>Drops rows that can never bind; pins every variable in a row that is only satisfiable at a single point.</td></tr>
       <tr><td>Empty rows &amp; columns</td><td>Drops termless rows; fixes variables that appear in no row at whichever bound the objective prefers.</td></tr>
+      <tr><td>Row scaling</td><td>Divides each row by a power of two so its largest coefficient sits near 1, pulling the rows onto a common magnitude. Powers of two leave every mantissa intact, so the rewrite adds no rounding error of its own.</td></tr>
+      <tr><td>Column scaling</td><td>Rescales a continuous variable's units by a power of two, again so its largest coefficient sits near 1. Restricted to continuous columns: integrality, binariness, the semi-continuous rule and SOS weights are all statements about a variable's own units.</td></tr>
     </table></div>
+
+    <p>Those last three target what the diagnostics pane ranks rather than the row count, and the two scaling rules only
+      work as a pair. One factor per row cannot improve the worst-conditioned <em>rows</em>, because a row's own
+      max-to-min ratio is scale-invariant; it takes a different factor per column to change it. Neither fires on a row or
+      column already within a factor of two of 1, which is what makes the fixpoint terminate, and both skip anything that
+      would sink a coefficient into the zero tolerance. On <code>boeing2.lp</code> the worst column ratio drops from
+      3.5e4 to 3.9e3, at the cost of the worst row ratio moving from 3.0e3 to 3.9e3: equilibration redistributes
+      conditioning, it does not conjure it away.</p>
+
+    <div class="note"><b>The change of units never escapes the rewrite.</b> Scaling leaves the model in different units,
+      so the factors are kept with the run and applied to the rewritten side's result on the way back. Variable values,
+      reduced costs, row activities and shadow prices all arrive in the units you wrote, and the comparison diffs like
+      for like. The objective value is invariant under both scalings anyway.</div>
+
+    <p><kbd>w</kbd> in the picker writes the rewritten model to <code>&lt;file&gt;_presolved.lp</code> in the working
+      directory instead of solving it, for feeding to a solver or diffing outside the TUI. This is the one place the
+      units do escape: a file on disk has nothing to unscale it, so after a scaling rule fires the written model is in
+      rewritten units and the status line says so.</p>
 
     <p>The rules feed each other (a singleton becomes a bound, the tighter bound makes another row redundant), so they
       run to a fixpoint rather than once each. Reopening the picker shows the previous run's per-pass breakdown, which is
