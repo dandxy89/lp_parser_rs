@@ -253,9 +253,38 @@ them compete for the machine and mask the speed-up.
 | Empty rows & columns       | Drops termless rows; fixes variables appearing in no row at their preferred bound  |
 | Row scaling                | Divides each row by a power of two so its largest coefficient sits near 1           |
 | Column scaling             | Rescales each continuous variable's units by a power of two, largest coefficient near 1 |
+| Split dense rows (what-if) | An `n`-term row becomes `sqrt(n)` partial sums plus one aggregate row. **Off by default** |
+| Relax integrality (what-if) | Integer and binary columns become continuous: the LP relaxation. **Off by default** |
 
 The rules feed each other, so they run to a fixpoint (at most 10 passes) rather than once each. Reopening the picker
 shows the previous run's per-pass breakdown.
+
+The last two are **what-ifs**: every other rule preserves the set of optimal solutions, and these two break that on
+purpose, which is why both start unticked. The comparison is their whole output. How much a structural change is worth
+is a question about your model and your solver, and the only honest way to answer it is to run both sides.
+
+**Split dense rows** is the one rule that grows the model. A
+row of `n` terms becomes `k = ceil(sqrt(n))` defining equalities `part_i - sum(chunk_i) = 0` plus an aggregate
+`sum(part_i) <op> rhs`, so the worst row density falls from `n` to about `sqrt(n)` for about `sqrt(n)` extra rows,
+columns and non-zeros — at `n = 1728` that is 1728 down to ~42 for a ~2% rise in non-zeros. A running-total chain
+reaches the same density for `n` extra rows and columns and roughly three times the non-zeros, so it is only worth it
+when the cumulative quantity is itself wanted. Only rows of at least 64 non-zeros are touched; below that the aggregate
+row is no sparser than the chunks it aggregates.
+
+None of which means it is faster. The simplex factorises the basis and updates it, so a dense row costs it almost
+nothing and the extra rows and columns are pure overhead: against `HiGHS`'s default expect neutral to slightly worse.
+The density collapse pays off for interior-point methods, where row density lands in the normal equations and squares.
+Enable the rule, press Enter, and read the comparison — that is what it is for. The partial sums are new columns, so
+they show as added rows in the comparison; every original variable still lines up.
+
+**Relax integrality** deletes the integrality constraints, so the relaxed objective is a bound on the original rather
+than equal to it. On a pure LP it does nothing. The point is the pair of numbers the comparison then shows: the
+objective difference is the integrality gap (what optimality costs over the bound), and the time difference is how much
+of the run was branch-and-bound rather than simplex. A model that relaxes in milliseconds and takes minutes as a MIP has
+a branching problem, not a linear-algebra one, and no amount of scaling or row thinning will touch it. Bounds are
+materialised while relaxing, because a binary column's `[0, 1]` is implied by its kind rather than written down;
+relaxing without it would turn `b in {0, 1}` into `b >= 0`. Semi-continuous and SOS columns keep their kind: those are
+not integrality.
 
 The last three rules target what the diagnostics pane ranks rather than the row count. **Fixed columns -> rhs** is the
 one that thins the densest rows: the other rules fix columns but leave their now-constant terms in the matrix, and each

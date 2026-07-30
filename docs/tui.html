@@ -302,7 +302,41 @@ time_limit = 300</code></pre>
       <tr><td>Empty rows &amp; columns</td><td>Drops termless rows; fixes variables that appear in no row at whichever bound the objective prefers.</td></tr>
       <tr><td>Row scaling</td><td>Divides each row by a power of two so its largest coefficient sits near 1, pulling the rows onto a common magnitude. Powers of two leave every mantissa intact, so the rewrite adds no rounding error of its own.</td></tr>
       <tr><td>Column scaling</td><td>Rescales a continuous variable's units by a power of two, again so its largest coefficient sits near 1. Restricted to continuous columns: integrality, binariness, the semi-continuous rule and SOS weights are all statements about a variable's own units.</td></tr>
+      <tr><td>Split dense rows (what-if)</td><td>Breaks an <code>n</code>-term row into <code>ceil(sqrt(n))</code> partial sums plus one aggregate row, capping the worst row density at about <code>sqrt(n)</code>. The one rule that grows the model, and off by default (see below).</td></tr>
+      <tr><td>Relax integrality (what-if)</td><td>Turns every integer and binary column continuous, so the rewritten side is the LP relaxation. Off by default, and a no-op on a model that was already an LP.</td></tr>
     </table></div>
+
+    <p>The last two are <strong>what-ifs</strong>. Every other rule preserves the set of optimal solutions; these two
+      break that on purpose, which is why both start unticked. The comparison is their whole output. How much a
+      structural change is worth is a question about your model and your solver, and the only honest way to answer it is
+      to run both sides.</p>
+
+    <p><strong>Splitting dense rows</strong> is there to be measured, not to be left on. A row of <code>n</code> terms
+      becomes <code>k = ceil(sqrt(n))</code> defining equalities <code>part_i - sum(chunk_i) = 0</code> plus an aggregate
+      <code>sum(part_i) &lt;op&gt; rhs</code>: the worst row density falls from <code>n</code> to about
+      <code>sqrt(n)</code> for about <code>sqrt(n)</code> extra rows, columns and non-zeros. At <code>n = 1728</code>
+      that is 1728 down to ~42 for a ~2% rise in non-zeros. A running-total chain reaches the same density for
+      <code>n</code> extra rows and columns and roughly three times the non-zeros, so it only earns its keep when the
+      cumulative quantity is itself wanted. Only rows of at least 64 non-zeros qualify; below that the aggregate row is
+      no sparser than the chunks it aggregates.</p>
+
+    <p>None of which makes it faster. The simplex factorises the basis and updates it, so a dense row costs it almost
+      nothing and the extra rows and columns are pure overhead — against HiGHS's default expect neutral to slightly
+      worse. The density collapse pays off for interior-point methods, where row density lands in the normal equations
+      and squares. Enable the rule, press Enter, and read the comparison. The partial sums are genuinely new columns, so
+      they appear as added rows in the comparison view; every original variable still lines up.</p>
+
+    <p><strong>Relaxing integrality</strong> deletes the integrality constraints, so the relaxed objective is a bound on
+      the original rather than equal to it. On a pure LP it does nothing. The point is the pair of numbers the
+      comparison then shows: the objective difference is the integrality gap, or what optimality costs over the bound,
+      and the time difference is how much of the run was branch-and-bound rather than simplex. A model that relaxes in
+      milliseconds and takes minutes as a MIP has a branching problem, not a linear-algebra one, and no amount of
+      scaling or row thinning will touch it.</p>
+
+    <p>Bounds are materialised while relaxing, because a kind carries some of them implicitly: a binary column's
+      <code>[0, 1]</code> is implied rather than written down, and turning it continuous without recording the box would
+      relax <code>b in {0, 1}</code> to <code>b &gt;= 0</code>. Semi-continuous and SOS columns keep their kind, since
+      neither is integrality.</p>
 
     <p>Those last three target what the diagnostics pane ranks rather than the row count, and the two scaling rules only
       work as a pair. One factor per row cannot improve the worst-conditioned <em>rows</em>, because a row's own

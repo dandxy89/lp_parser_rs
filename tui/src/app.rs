@@ -579,7 +579,7 @@ impl App {
             what_if: None,
             diagnostics: None,
             presolve_cursor: None,
-            presolve_rules: crate::presolve::ALL_RULES,
+            presolve_rules: crate::presolve::DEFAULT_RULES,
             last_presolve: None,
             detail_scroll: 0,
             section_selector_state,

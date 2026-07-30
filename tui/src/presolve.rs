@@ -1,16 +1,25 @@
-//! Solution-preserving problem rewrites ("presolve").
+//! Problem rewrites ("presolve"), and a couple of what-ifs.
 //!
-//! Each rule removes work from the model without changing the set of optimal
-//! solutions: rows that cannot bind are dropped, and bounds are tightened to
-//! the smallest box that still contains every feasible point. The rules feed
-//! each other — a singleton row becomes a bound, the tighter bound makes
-//! another row redundant — so they are run to a fixpoint (see [`MAX_PASSES`]).
+//! Every rule in [`Rule::ALL`] except those in [`WHAT_IF_RULES`] removes work
+//! from the model without changing the set of optimal solutions: rows that
+//! cannot bind are dropped, and bounds are tightened to the smallest box that
+//! still contains every feasible point. The rules feed each other — a singleton
+//! row becomes a bound, the tighter bound makes another row redundant — so they
+//! are run to a fixpoint (see [`MAX_PASSES`]).
 //!
 //! Rows are removed; **columns are only ever fixed, never removed**. Keeping
 //! the variable set identical on both sides is what lets the original and the
 //! rewritten model be compared with the ordinary solve-diff view: every
 //! variable still appears in both results, so a difference in the comparison is
 //! a real difference and not an artefact of the rewrite.
+//!
+//! The what-ifs break that contract on purpose, which is why they are off by
+//! default in [`DEFAULT_RULES`] and labelled as such in the picker.
+//! [`Rule::SplitDenseRows`] adds rows and columns to cap the worst row density;
+//! [`Rule::RelaxIntegrality`] deletes the integrality constraints outright. In
+//! both cases the comparison itself is the output — how much a structural
+//! change is worth is a question about your model and your solver, and the only
+//! honest way to answer it is to run both sides.
 //!
 //! Bounds are interpreted exactly as [`crate::solver::variable_bounds`]
 //! interprets them, so presolve reasons about the same box `HiGHS` will see.
@@ -36,7 +45,7 @@ use std::collections::hash_map::Entry;
 use std::time::{Duration, Instant};
 
 use lp_parser_rs::interner::NameId;
-use lp_parser_rs::model::{Coefficient, ComparisonOp, Constraint, Sense, VariableKind};
+use lp_parser_rs::model::{Coefficient, ComparisonOp, Constraint, Sense, Variable, VariableBounds, VariableKind};
 use lp_parser_rs::problem::LpProblem;
 
 use crate::solver::{SolveResult, primary_objective_coefficients, variable_bounds};
@@ -79,11 +88,18 @@ pub enum Rule {
     /// Rescale each continuous variable's units by a power of two so its
     /// largest coefficient is near 1. Undone in the reported solution.
     ColumnScaling,
+    /// Break a dense row into `sqrt(n)` partial sums plus one aggregate row.
+    /// A what-if, not an improvement — see [`split_dense_rows`].
+    SplitDenseRows,
+    /// Drop every integrality restriction: solve the LP relaxation instead of
+    /// the MIP. A what-if, and the only rule that changes the optimum on
+    /// purpose — see [`relax_integrality`].
+    RelaxIntegrality,
 }
 
 impl Rule {
     /// Every rule, in application order.
-    pub const ALL: [Self; 8] = [
+    pub const ALL: [Self; 10] = [
         Self::FixedToRhs,
         Self::SingletonToBound,
         Self::BoundPropagation,
@@ -92,6 +108,8 @@ impl Rule {
         Self::EmptyRowsCols,
         Self::RowScaling,
         Self::ColumnScaling,
+        Self::SplitDenseRows,
+        Self::RelaxIntegrality,
     ];
 
     /// Number of rules — the width of a [`RuleSet`].
@@ -108,6 +126,8 @@ impl Rule {
             Self::EmptyRowsCols => "Empty rows & columns",
             Self::RowScaling => "Row scaling (powers of two)",
             Self::ColumnScaling => "Column scaling (powers of two)",
+            Self::SplitDenseRows => "Split dense rows (what-if)",
+            Self::RelaxIntegrality => "Relax integrality \u{2014} LP relaxation (what-if)",
         }
     }
 
@@ -122,6 +142,8 @@ impl Rule {
             Self::EmptyRowsCols => "drop termless rows; fix variables appearing in no row",
             Self::RowScaling => "divide each row by 2^k so its largest coefficient is near 1",
             Self::ColumnScaling => "rescale continuous variables by 2^k; the solution is unscaled back",
+            Self::SplitDenseRows => "n-term row becomes sqrt(n) partial sums; helps interior-point, not simplex",
+            Self::RelaxIntegrality => "integer and binary columns become continuous; the gap is the cost of branching",
         }
     }
 }
@@ -129,8 +151,21 @@ impl Rule {
 /// Which rules are enabled, indexed by `rule as usize`.
 pub type RuleSet = [bool; Rule::COUNT];
 
-/// All rules enabled — the default for the picker.
-pub const ALL_RULES: RuleSet = [true; Rule::COUNT];
+/// The what-ifs: rules that deliberately do not preserve the set of optimal
+/// solutions. One grows the model, the other drops constraints.
+pub const WHAT_IF_RULES: [Rule; 2] = [Rule::SplitDenseRows, Rule::RelaxIntegrality];
+
+/// The picker's default: every solution-preserving rule on, every what-if off.
+/// A what-if is there to be measured, not to be left on.
+pub const DEFAULT_RULES: RuleSet = {
+    let mut rules = [true; Rule::COUNT];
+    let mut index = 0;
+    while index < WHAT_IF_RULES.len() {
+        rules[WHAT_IF_RULES[index] as usize] = false;
+        index += 1;
+    }
+    rules
+};
 
 /// Whether `rule` is enabled in `rules`.
 pub const fn enabled(rules: RuleSet, rule: Rule) -> bool {
@@ -149,6 +184,12 @@ pub struct PassStats {
     pub rows_scaled: usize,
     /// Columns rescaled by a power of two by the scaling rule.
     pub cols_scaled: usize,
+    /// Partial sums introduced by splitting dense rows. Unlike every other
+    /// counter this one records structure *added*: each part is one new row and
+    /// one new column.
+    pub parts_added: usize,
+    /// Integer and binary columns turned continuous.
+    pub cols_relaxed: usize,
 }
 
 impl PassStats {
@@ -160,6 +201,8 @@ impl PassStats {
             && self.terms_removed == 0
             && self.rows_scaled == 0
             && self.cols_scaled == 0
+            && self.parts_added == 0
+            && self.cols_relaxed == 0
     }
 }
 
@@ -219,7 +262,8 @@ pub struct PresolveStats {
     pub rows_before: usize,
     /// Row count after the fixpoint.
     pub rows_after: usize,
-    /// Column count (unchanged: presolve fixes columns, it never removes them).
+    /// Column count after the fixpoint. Presolve fixes columns and never
+    /// removes them, so this only moves when [`Rule::SplitDenseRows`] adds one.
     pub cols: usize,
     /// Wall-clock time for the whole run.
     pub duration: Duration,
@@ -232,10 +276,23 @@ pub struct PresolveStats {
 }
 
 impl PresolveStats {
-    /// Total rows removed across all passes.
+    /// Total rows removed across all passes. Zero when a split added more rows
+    /// than the removal rules took away — see [`Self::parts_added`].
     #[must_use]
     pub const fn rows_removed(&self) -> usize {
-        self.rows_before - self.rows_after
+        self.rows_before.saturating_sub(self.rows_after)
+    }
+
+    /// Total partial-sum rows/columns added across all passes.
+    #[must_use]
+    pub fn parts_added(&self) -> usize {
+        self.per_pass.iter().map(|p| p.parts_added).sum()
+    }
+
+    /// Total integer/binary columns relaxed to continuous across all passes.
+    #[must_use]
+    pub fn cols_relaxed(&self) -> usize {
+        self.per_pass.iter().map(|p| p.cols_relaxed).sum()
     }
 
     /// Total columns fixed across all passes.
@@ -291,8 +348,10 @@ impl PresolveStats {
         } else {
             String::new()
         };
+        let split = if self.parts_added() > 0 { format!(", +{} split parts", self.parts_added()) } else { String::new() };
+        let relaxed = if self.cols_relaxed() > 0 { format!(", {} cols relaxed", self.cols_relaxed()) } else { String::new() };
         format!(
-            "presolve: -{} rows, {} cols fixed, {} bounds{nnz}{scaled}, {} pass(es), {:.1}ms",
+            "presolve: -{} rows, {} cols fixed, {} bounds{nnz}{scaled}{split}{relaxed}, {} pass(es), {:.1}ms",
             self.rows_removed(),
             self.cols_fixed(),
             self.bounds_tightened(),
@@ -347,6 +406,16 @@ pub fn presolve(problem: &LpProblem, rules: RuleSet) -> (LpProblem, PresolveStat
         if infeasible.is_none() && enabled(rules, Rule::ColumnScaling) {
             column_scaling(&mut out, &mut pass, &mut col_factors);
         }
+        // Last: splits whatever rows survived the removal rules, at the scale
+        // the scaling rules left them in.
+        if infeasible.is_none() && enabled(rules, Rule::SplitDenseRows) {
+            split_dense_rows(&mut out, &mut pass);
+        }
+        // After `integer_rounding`, so the relaxation inherits its inward-rounded
+        // bounds: still a valid bound on the MIP, and a tighter one.
+        if infeasible.is_none() && enabled(rules, Rule::RelaxIntegrality) {
+            relax_integrality(&mut out, &mut pass);
+        }
 
         let converged = pass.is_empty();
         if !converged {
@@ -373,8 +442,14 @@ pub fn presolve(problem: &LpProblem, rules: RuleSet) -> (LpProblem, PresolveStat
         infeasible,
         scaling,
     };
-    debug_assert_eq!(stats.cols, problem.variables.len(), "presolve fixes columns but must never remove them");
-    debug_assert!(stats.rows_after <= stats.rows_before, "presolve must not add rows");
+    // Splitting is the one rule that grows the model; every other rule leaves
+    // the column set alone and can only shrink the row count.
+    if enabled(rules, Rule::SplitDenseRows) {
+        debug_assert!(stats.cols >= problem.variables.len(), "presolve must never remove columns");
+    } else {
+        debug_assert_eq!(stats.cols, problem.variables.len(), "presolve fixes columns but must never remove them");
+        debug_assert!(stats.rows_after <= stats.rows_before, "presolve must not add rows");
+    }
     (out, stats)
 }
 
@@ -1026,6 +1101,123 @@ fn column_scaling(problem: &mut LpProblem, pass: &mut PassStats, factors: &mut H
     }
 }
 
+/// A row needs at least this many non-zeros before [`split_dense_rows`] touches
+/// it. Below the threshold the aggregate row is no sparser than the chunks it
+/// aggregates, so the split buys nothing and costs two extra rows.
+const DENSE_ROW_MIN_NNZ: usize = 64;
+
+/// Break each dense row into `sqrt(n)` partial sums plus one aggregate row.
+///
+/// `sum_j a_j x_j <op> rhs` over `n` terms becomes `k = ceil(sqrt(n))` defining
+/// equalities `part_i - sum_(j in chunk_i) a_j x_j = 0` plus the aggregate
+/// `sum_i part_i <op> rhs`. The maximum row density falls from `n` to about
+/// `sqrt(n)` for about `sqrt(n)` extra rows, `sqrt(n)` extra columns and
+/// `sqrt(n)` extra non-zeros — for `n = 1728`, 1728 becomes ~42 at a ~2% cost
+/// in non-zeros. A running-total chain reaches the same density for `n` extra
+/// rows and columns and roughly three times the non-zeros, so it is only worth
+/// it when the cumulative quantity is itself wanted.
+///
+/// **This is a what-if, not an improvement.** The simplex factorises the basis
+/// and updates it, so a dense row costs it almost nothing and the extra rows
+/// and columns are pure overhead: expect neutral to slightly worse against
+/// `HiGHS`'s default. It pays off for interior-point methods, where the row
+/// density lands in the normal equations and squares. Enable it, solve, and
+/// read the comparison — that is what the rule is for.
+///
+/// The partial sums are genuinely new columns, so they appear as added rows in
+/// the comparison view rather than lining up against an original. Every
+/// original variable still lines up, so the values that matter still compare.
+fn split_dense_rows(problem: &mut LpProblem, pass: &mut PassStats) {
+    let dense: Vec<NameId> = problem
+        .constraints
+        .iter()
+        .filter_map(|(id, constraint)| match constraint {
+            Constraint::Standard { coefficients, .. } if coefficients.len() >= DENSE_ROW_MIN_NNZ => Some(*id),
+            _ => None,
+        })
+        .collect();
+
+    for row in dense {
+        let Some(Constraint::Standard { coefficients, operator, rhs, byte_offset, .. }) = problem.constraints.get(&row) else {
+            debug_assert!(false, "dense row vanished between collection and rewrite");
+            continue;
+        };
+        let (terms, operator, rhs, byte_offset) = (coefficients.clone(), *operator, *rhs, *byte_offset);
+        debug_assert!(terms.len() >= DENSE_ROW_MIN_NNZ, "only dense rows reach here");
+
+        // ceil(sqrt(n)) balances the two levels: chunks of this size give about
+        // this many chunks, so neither level is the dense one.
+        #[allow(clippy::cast_precision_loss, clippy::cast_sign_loss, clippy::cast_possible_truncation)]
+        let chunk = (terms.len() as f64).sqrt().ceil() as usize;
+        debug_assert!(chunk >= 2, "a row of {} terms must chunk into at least pairs", terms.len());
+        let parts = terms.len().div_ceil(chunk);
+        debug_assert!(parts >= 2, "a split that produces one part is just a rename");
+
+        let row_name = problem.resolve(row).to_owned();
+        let names: Vec<(String, String)> =
+            (0..parts).map(|i| (format!("{row_name}__part{}", i + 1), format!("{row_name}__def{}", i + 1))).collect();
+        // ponytail: a name clash means the model already uses the suffix; leave
+        // that row alone rather than inventing an escaping scheme.
+        if names.iter().any(|(part, def)| problem.name_id(part).is_some() || problem.name_id(def).is_some()) {
+            continue;
+        }
+
+        let mut aggregate = Vec::with_capacity(parts);
+        for ((part_name, def_name), group) in names.iter().zip(terms.chunks(chunk)) {
+            let part = problem.intern(part_name);
+            // Explicitly two-sided infinite, not `VariableBounds::free()`: an
+            // absent lower bound reads as the LP default of zero, which would
+            // cut off any chunk whose partial sum can go negative.
+            let bounds = VariableBounds::range(f64::NEG_INFINITY, f64::INFINITY);
+            problem.add_variable(Variable::new(part).with_bounds(bounds));
+
+            let mut coefficients = group.to_vec();
+            coefficients.push(Coefficient { name: part, value: -1.0 });
+            let def = problem.intern(def_name);
+            problem.add_constraint(Constraint::Standard { name: def, coefficients, operator: ComparisonOp::EQ, rhs: 0.0, byte_offset: None });
+
+            aggregate.push(Coefficient { name: part, value: 1.0 });
+            pass.parts_added += 1;
+        }
+
+        // Replaces the original row in place, keeping its name, operator and
+        // rhs so the comparison view still lines it up against the original.
+        problem.add_constraint(Constraint::Standard { name: row, coefficients: aggregate, operator, rhs, byte_offset });
+    }
+}
+
+/// Drop every integrality restriction: solve the LP relaxation of a MIP.
+///
+/// **This is a what-if, and the only rule that moves the optimum on purpose.**
+/// Every other rule preserves the set of optimal solutions; this one deletes
+/// constraints, so the relaxed objective is a bound on the original, not equal
+/// to it. On a pure LP the rule is a no-op.
+///
+/// The point is the pair of numbers the comparison then shows. The objective
+/// difference is the integrality gap — how much optimality costs over the
+/// bound — and the solve-time difference is how much of the run was
+/// branch-and-bound rather than simplex. A model that relaxes in milliseconds
+/// and takes minutes as a MIP has a branching problem, not a linear-algebra
+/// one, and no amount of scaling or row thinning will touch it.
+///
+/// Bounds are materialised while relaxing, because a kind carries some of them
+/// implicitly: a binary column's `[0, 1]` lives in
+/// [`crate::solver::variable_bounds`], not in its `bounds` field, and turning
+/// it continuous without writing them down would relax `x in {0, 1}` to
+/// `x >= 0` instead of `0 <= x <= 1`. Semi-continuous and SOS columns keep
+/// their kind: they are not integrality, and the solver treats them separately.
+fn relax_integrality(problem: &mut LpProblem, pass: &mut PassStats) {
+    for variable in problem.variables.values_mut() {
+        if !variable.kind.is_integer() {
+            continue;
+        }
+        let (_, lower, upper) = variable_bounds(Some(variable));
+        variable.kind = VariableKind::Continuous;
+        variable.bounds = VariableBounds::range(lower, upper);
+        pass.cols_relaxed += 1;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1142,7 +1334,7 @@ mod tests {
     #[test]
     fn an_unsatisfiable_row_reports_infeasibility() {
         let problem = parse("Minimize\n obj: x + y\nSubject To\n c1: x + y <= -5\nEnd");
-        let (_, stats) = presolve(&problem, ALL_RULES);
+        let (_, stats) = presolve(&problem, DEFAULT_RULES);
 
         assert!(stats.infeasible.is_some(), "x, y >= 0 cannot sum to -5");
     }
@@ -1225,14 +1417,14 @@ mod tests {
         let (alone, _) = presolve(&problem, only(&[Rule::RedundantRows]));
         assert_eq!(alone.constraint_count(), 2, "without the singleton rewrite x is unbounded and neither row can be dropped");
 
-        let (out, _) = presolve(&problem, ALL_RULES);
+        let (out, _) = presolve(&problem, DEFAULT_RULES);
         assert_eq!(out.constraint_count(), 0, "the bound from c1 is what makes c2 redundant");
     }
 
     #[test]
     fn presolve_terminates_and_never_grows_the_model() {
         let problem = parse("Minimize\n obj: x + y + z\nSubject To\n c1: x + y <= 10\n c2: y + z >= 2\n c3: x - z = 4\nEnd");
-        let (out, stats) = presolve(&problem, ALL_RULES);
+        let (out, stats) = presolve(&problem, DEFAULT_RULES);
 
         assert!(stats.per_pass.len() <= MAX_PASSES, "the fixpoint loop is bounded");
         assert!(out.constraint_count() <= problem.constraint_count(), "rules only ever remove rows");
@@ -1250,7 +1442,7 @@ mod tests {
                 .unwrap_or_else(|error| panic!("failed to read {fixture}: {error}"));
             let problem = LpProblem::parse(&source).unwrap_or_else(|error| panic!("failed to parse {fixture}: {error}"));
 
-            let (rewritten, stats) = presolve(&problem, ALL_RULES);
+            let (rewritten, stats) = presolve(&problem, DEFAULT_RULES);
             assert!(stats.infeasible.is_none(), "{fixture}: presolve wrongly declared a solvable model infeasible");
             // Guards against the check going vacuous: a rewrite that did
             // nothing would trivially preserve the objective.
@@ -1357,7 +1549,7 @@ mod tests {
         let source = std::fs::read_to_string(root.join("../rust/resources/afiro.lp")).expect("fixture must read");
         let problem = LpProblem::parse(&source).expect("fixture must parse");
 
-        let (rewritten, stats) = presolve(&problem, ALL_RULES);
+        let (rewritten, stats) = presolve(&problem, DEFAULT_RULES);
         assert!(!stats.is_noop(), "a no-op rewrite would make the round trip prove nothing");
 
         let written = lp_parser_rs::writer::write_lp_string(&rewritten);
@@ -1375,6 +1567,121 @@ mod tests {
             }
             (original, round_tripped) => panic!("one side has an objective and the other does not: {original:?} vs {round_tripped:?}"),
         }
+    }
+
+    /// `n` variables in one `<=` row, plus per-variable upper bounds so the
+    /// problem is bounded and the split has negative coefficients to carry.
+    fn dense_problem(n: usize) -> LpProblem {
+        let terms: Vec<String> = (0..n).map(|i| format!("{} x{i}", if i % 3 == 0 { -2.0 } else { 1.0 })).collect();
+        let objective: Vec<String> = (0..n).map(|i| format!("+ x{i}")).collect();
+        let bounds: Vec<String> = (0..n).map(|i| format!(" x{i} <= 7")).collect();
+        parse(&format!(
+            "Maximize\n obj: {}\nSubject To\n dense: {} <= 40\nBounds\n{}\nEnd",
+            objective.join(" "),
+            terms.join(" + ").replace("+ -", "- "),
+            bounds.join("\n")
+        ))
+    }
+
+    #[test]
+    fn splitting_a_dense_row_caps_its_density() {
+        let problem = dense_problem(100);
+        let (out, stats) = presolve(&problem, only(&[Rule::SplitDenseRows]));
+
+        // ceil(sqrt(100)) = 10 chunks of 10, each defining row carrying its
+        // chunk plus the part variable itself.
+        assert_eq!(stats.parts_added(), 10, "sqrt(n) parts");
+        assert_eq!(out.variable_count(), problem.variable_count() + 10, "one column per part");
+        assert_eq!(out.constraint_count(), problem.constraint_count() + 10, "one row per part");
+
+        let widest = out
+            .constraints
+            .values()
+            .map(|c| match c {
+                Constraint::Standard { coefficients, .. } => coefficients.len(),
+                Constraint::SOS { weights, .. } => weights.len(),
+            })
+            .max()
+            .expect("rows exist");
+        assert_eq!(widest, 11, "1728-style density collapses to sqrt(n) + 1");
+
+        let (aggregate, rhs) = row_of(&out, "dense");
+        assert_eq!(aggregate, vec![1.0; 10], "the original row aggregates the parts");
+        assert!((rhs - 40.0).abs() < EPS, "the aggregate keeps the original rhs");
+        assert_eq!(bounds_of(&out, "dense__part1"), (f64::NEG_INFINITY, f64::INFINITY), "a partial sum must be free on both sides");
+    }
+
+    #[test]
+    fn splitting_leaves_sparse_rows_and_the_optimum_alone() {
+        let problem = dense_problem(100);
+        let (out, _) = presolve(&problem, only(&[Rule::SplitDenseRows]));
+
+        let original = crate::solver::solve_problem(&problem).expect("original solve");
+        let split = crate::solver::solve_problem(&out).expect("split solve");
+        let (Some(a), Some(b)) = (original.objective_value, split.objective_value) else {
+            panic!("both sides must have an objective");
+        };
+        assert!((a - b).abs() <= 1e-6 * (1.0 + a.abs()), "the split must not move the optimum: {a} vs {b}");
+
+        // `w` writes the rewrite to disk, so the partial sums must survive a
+        // round trip: an infinite bound the writer dropped would silently
+        // re-impose the LP default of `part >= 0`.
+        let written = lp_parser_rs::writer::write_lp_string(&out);
+        let reparsed = LpProblem::parse(&written).expect("the written split must parse back");
+        assert_eq!(bounds_of(&reparsed, "dense__part1"), (f64::NEG_INFINITY, f64::INFINITY), "the free partial sum survives the round trip");
+        let round_tripped = crate::solver::solve_problem(&reparsed).expect("round-tripped solve");
+        let Some(c) = round_tripped.objective_value else { panic!("round trip lost the objective") };
+        assert!((a - c).abs() <= 1e-6 * (1.0 + a.abs()), "the round trip moved the optimum: {a} vs {c}");
+
+        // A model with nothing dense in it is untouched.
+        let sparse = parse("Minimize\n obj: x + y\nSubject To\n c1: x + y >= 3\nEnd");
+        let (untouched, stats) = presolve(&sparse, only(&[Rule::SplitDenseRows]));
+        assert!(stats.is_noop(), "no row reaches the density threshold");
+        assert_eq!(untouched.constraint_count(), 1);
+    }
+
+    #[test]
+    fn splitting_reaches_a_fixpoint_in_one_pass() {
+        let problem = dense_problem(100);
+        let (once, stats) = presolve(&problem, only(&[Rule::SplitDenseRows]));
+        assert_eq!(stats.per_pass.len(), 1, "the split fires once and converges");
+
+        let (twice, again) = presolve(&once, only(&[Rule::SplitDenseRows]));
+        assert!(again.is_noop(), "already-split rows are below the threshold");
+        assert_eq!(twice.constraint_count(), once.constraint_count());
+    }
+
+    #[test]
+    fn relaxing_integrality_keeps_the_implicit_binary_box() {
+        // Without materialising the bounds, `b` would relax to `b >= 0` and the
+        // objective would run away to 100 instead of stopping at 1.
+        let problem = parse("Maximize\n obj: 100 b + g\nSubject To\n c1: b + g <= 6\nBounds\n g <= 4\nGenerals\n g\nBinaries\n b\nEnd");
+        let (out, stats) = presolve(&problem, only(&[Rule::RelaxIntegrality]));
+
+        assert_eq!(stats.cols_relaxed(), 2, "one binary and one general");
+        assert_eq!(bounds_of(&out, "b"), (0.0, 1.0), "a relaxed binary keeps its implicit [0, 1]");
+        assert!(out.variables.values().all(|v| !v.kind.is_integer()), "no integrality survives");
+
+        let relaxed = crate::solver::solve_problem(&out).expect("relaxed solve").objective_value.expect("objective");
+        assert!((relaxed - 104.0).abs() < 1e-6, "relaxed optimum is 100*1 + 4, not an unbounded binary: got {relaxed}");
+    }
+
+    #[test]
+    fn relaxing_integrality_bounds_the_mip_and_is_a_no_op_on_an_lp() {
+        // 3 y <= 7 caps y at 2 as an integer and 2.333 as a continuous, so the
+        // relaxation is a strict upper bound rather than the true optimum.
+        let problem = parse("Maximize\n obj: y\nSubject To\n c1: 3 y <= 7\nGenerals\n y\nEnd");
+        let (out, stats) = presolve(&problem, only(&[Rule::RelaxIntegrality]));
+        assert_eq!(stats.cols_relaxed(), 1);
+
+        let mip = crate::solver::solve_problem(&problem).expect("mip solve").objective_value.expect("objective");
+        let lp = crate::solver::solve_problem(&out).expect("lp solve").objective_value.expect("objective");
+        assert!((mip - 2.0).abs() < 1e-6, "integer optimum is 2: got {mip}");
+        assert!(lp > mip + 0.3, "the relaxation must be a strictly weaker bound: {lp} vs {mip}");
+
+        let lp_only = parse("Maximize\n obj: x\nSubject To\n c1: x <= 3\nEnd");
+        let (_, untouched) = presolve(&lp_only, only(&[Rule::RelaxIntegrality]));
+        assert!(untouched.is_noop(), "a model with no integrality has nothing to relax");
     }
 
     #[test]
