@@ -12,26 +12,25 @@ use std::sync::OnceLock;
 use ratatui::style::Color;
 
 /// Semantic colour palette for the TUI.
+///
+/// Severity reuses the diff colours: errors are drawn in `removed`, warnings in
+/// `modified`, and informational highlights in `accent`. Every palette below
+/// gave those pairs the same value, so they were one concept with two names.
+/// Split them back out if a palette ever needs them to differ.
 #[derive(Debug, Clone, Copy)]
 pub struct Theme {
     /// Colour for added / new entries.
     pub added: Color,
-    /// Colour for removed / deleted entries.
+    /// Colour for removed / deleted entries, and for error indicators.
     pub removed: Color,
-    /// Colour for modified / changed entries.
+    /// Colour for modified / changed entries, and for warning indicators.
     pub modified: Color,
     /// Subdued text for labels, hints, unchanged values.
     pub muted: Color,
-    /// Primary accent (headings, prompts, active borders).
+    /// Primary accent (headings, prompts, active borders, informational counts).
     pub accent: Color,
     /// Default body text.
     pub text: Color,
-    /// Informational highlights (counts, stats).
-    pub info: Color,
-    /// Error / failure indicators.
-    pub error: Color,
-    /// Warning indicators.
-    pub warning: Color,
     /// Background for highlighted / selected rows.
     pub highlight_bg: Color,
     /// Border colour for the focused panel.
@@ -63,9 +62,6 @@ static DARK_THEME: Theme = Theme {
     muted: Color::DarkGray,
     accent: Color::Cyan,
     text: Color::White,
-    info: Color::Cyan,
-    error: Color::Red,
-    warning: Color::Yellow,
     highlight_bg: Color::Blue,
     border_focus: Color::Cyan,
     secondary_accent: Color::Magenta,
@@ -83,9 +79,6 @@ static LIGHT_THEME: Theme = Theme {
     muted: Color::Indexed(245),    // mid grey
     accent: Color::Indexed(30),    // teal
     text: Color::Black,
-    info: Color::Indexed(30),
-    error: Color::Indexed(124),
-    warning: Color::Indexed(130),
     highlight_bg: Color::Indexed(153), // pale blue
     border_focus: Color::Indexed(30),
     secondary_accent: Color::Indexed(90), // purple
@@ -103,9 +96,6 @@ static MONO_THEME: Theme = Theme {
     muted: Color::Reset,
     accent: Color::Reset,
     text: Color::Reset,
-    info: Color::Reset,
-    error: Color::Reset,
-    warning: Color::Reset,
     highlight_bg: Color::Reset,
     border_focus: Color::Reset,
     secondary_accent: Color::Reset,

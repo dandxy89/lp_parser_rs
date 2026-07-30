@@ -31,11 +31,26 @@ pub fn bold_text() -> Style {
 
 /// Style for the sidebar delta column shown under the delta sorts.
 pub fn delta_column() -> Style {
-    Style::new().fg(theme().info)
+    Style::new().fg(theme().accent)
 }
 
 /// Arrow separator used between old → new values.
 pub const ARROW: &str = "  \u{2192}  ";
+
+/// Flatten rendered lines to plain text: concatenate each line's span contents
+/// and join with newlines. This is how the clipboard yank gets its text — the
+/// widgets are the single source of truth for layout, and stripping the styles
+/// is the whole of the "plain" rendering.
+pub fn plain(lines: &[ratatui::text::Line<'_>]) -> String {
+    let mut out = String::new();
+    for line in lines {
+        for span in &line.spans {
+            out.push_str(&span.content);
+        }
+        out.push('\n');
+    }
+    out
+}
 
 /// Return the border [`Style`] for a panel, highlighted when `current == target`.
 pub fn focus_border_style(current: Focus, target: Focus) -> Style {
@@ -132,7 +147,7 @@ pub fn kind_colour(kind: DiffKind) -> Color {
         DiffKind::Added => t.added,
         DiffKind::Removed => t.removed,
         DiffKind::Modified => t.modified,
-        DiffKind::Renamed => t.info,
+        DiffKind::Renamed => t.accent,
     }
 }
 
@@ -155,9 +170,9 @@ pub const fn kind_prefix(kind: DiffKind) -> &'static str {
 pub fn severity_colour(severity: IssueSeverity) -> Color {
     let t = theme();
     match severity {
-        IssueSeverity::Error => t.error,
-        IssueSeverity::Warning => t.warning,
-        IssueSeverity::Info => t.info,
+        IssueSeverity::Error => t.removed,
+        IssueSeverity::Warning => t.modified,
+        IssueSeverity::Info => t.accent,
     }
 }
 

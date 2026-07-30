@@ -399,38 +399,6 @@ impl VariableType {
             Self::SOS => (VariableKind::Sos, VariableBounds::free()),
         }
     }
-
-    /// Reconstruct a legacy `VariableType` from kind + bounds (lossy for mixed cases).
-    #[must_use]
-    pub const fn from_kind_and_bounds(kind: VariableKind, bounds: VariableBounds) -> Self {
-        // Prefer kind for discrete types when bounds are free; otherwise prefer bounds shape.
-        match kind {
-            VariableKind::Binary if bounds.is_free() => Self::Binary,
-            VariableKind::Integer if bounds.is_free() => Self::Integer,
-            VariableKind::General if bounds.is_free() => Self::General,
-            VariableKind::SemiContinuous if bounds.is_free() => Self::SemiContinuous,
-            VariableKind::Sos if bounds.is_free() => Self::SOS,
-            _ => match (bounds.lower, bounds.upper) {
-                (None, None) => match kind {
-                    VariableKind::Binary => Self::Binary,
-                    VariableKind::Integer => Self::Integer,
-                    VariableKind::General => Self::General,
-                    VariableKind::SemiContinuous => Self::SemiContinuous,
-                    VariableKind::Sos => Self::SOS,
-                    VariableKind::Continuous => Self::Free,
-                },
-                (Some(lb), None) => Self::LowerBound(lb),
-                (None, Some(ub)) => Self::UpperBound(ub),
-                (Some(lb), Some(ub)) => Self::DoubleBound(lb, ub),
-            },
-        }
-    }
-}
-
-impl AsRef<[u8]> for VariableType {
-    fn as_ref(&self) -> &[u8] {
-        self.as_str().as_bytes()
-    }
 }
 
 impl Display for VariableType {
@@ -457,12 +425,6 @@ impl Variable {
     /// Initialise a new continuous free `Variable`.
     pub const fn new(name: NameId) -> Self {
         Self { name, kind: VariableKind::Continuous, bounds: VariableBounds::free() }
-    }
-
-    /// Legacy view as a single [`VariableType`] (lossy when kind and bounds both set).
-    #[must_use]
-    pub const fn var_type(&self) -> VariableType {
-        VariableType::from_kind_and_bounds(self.kind, self.bounds)
     }
 
     #[inline]
@@ -617,19 +579,18 @@ mod tests {
         assert_eq!(VariableType::default(), VariableType::Free);
 
         let test_cases = [
-            (VariableType::Free, b"Free".as_slice(), "Free"),
-            (VariableType::General, b"General".as_slice(), "General"),
-            (VariableType::Binary, b"Binary".as_slice(), "Binary"),
-            (VariableType::Integer, b"Integer".as_slice(), "Integer"),
-            (VariableType::SemiContinuous, b"Semi-Continuous".as_slice(), "Semi-Continuous"),
-            (VariableType::SOS, b"SOS".as_slice(), "SOS"),
-            (VariableType::LowerBound(5.0), b"LowerBound".as_slice(), "LowerBound"),
-            (VariableType::UpperBound(10.0), b"UpperBound".as_slice(), "UpperBound"),
-            (VariableType::DoubleBound(0.0, 100.0), b"DoubleBound".as_slice(), "DoubleBound"),
+            (VariableType::Free, "Free"),
+            (VariableType::General, "General"),
+            (VariableType::Binary, "Binary"),
+            (VariableType::Integer, "Integer"),
+            (VariableType::SemiContinuous, "Semi-Continuous"),
+            (VariableType::SOS, "SOS"),
+            (VariableType::LowerBound(5.0), "LowerBound"),
+            (VariableType::UpperBound(10.0), "UpperBound"),
+            (VariableType::DoubleBound(0.0, 100.0), "DoubleBound"),
         ];
 
-        for (vt, expected_bytes, expected_str) in test_cases {
-            assert_eq!(vt.as_ref(), expected_bytes);
+        for (vt, expected_str) in test_cases {
             assert_eq!(format!("{vt}"), expected_str);
             assert_eq!(vt.clone(), vt);
         }
@@ -650,11 +611,11 @@ mod tests {
         assert_eq!(interner.resolve(var.name), "x1");
         assert_eq!(var.kind, VariableKind::Continuous);
         assert!(var.bounds.is_free());
-        assert_eq!(var.var_type(), VariableType::Free);
+        assert!(var.bounds.is_free());
 
         let var_binary = Variable::new(x).with_var_type(VariableType::Binary);
         assert_eq!(var_binary.kind, VariableKind::Binary);
-        assert_eq!(var_binary.var_type(), VariableType::Binary);
+        assert_eq!(var_binary.kind, VariableKind::Binary);
 
         let mut var_mut = Variable::new(y);
         var_mut.set_var_type(VariableType::Integer);

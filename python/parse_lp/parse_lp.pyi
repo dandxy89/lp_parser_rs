@@ -6,9 +6,6 @@ from typing_extensions import TypeAlias
 class LpParseError(RuntimeError):
     """Raised when an LP file or problem cannot be parsed."""
 
-class LpNotParsedError(RuntimeError):
-    """Raised when a method requires parse() to have been called first."""
-
 class LpObjectNotFoundError(RuntimeError):
     """Raised when a named variable, constraint or objective cannot be found."""
 
@@ -70,7 +67,11 @@ class LpParser:
     """Parser, modifier and writer for LP format files, powered by Rust."""
 
     def __init__(self, lp_file: str) -> None:
-        """Create a parser for the given LP file path; raises FileNotFoundError if it is not a file."""
+        """Create a parser for the given LP file path, parsing it immediately.
+
+        Raises FileNotFoundError if the path is not a file. The format is inferred
+        from the extension; use `from_file` to override it.
+        """
 
     @staticmethod
     def from_string(text: str, format: Format = "lp") -> LpParser:
@@ -105,10 +106,10 @@ class LpParser:
         """Mapping of variable name to variable information."""
 
     def parse(self) -> None:
-        """Read and parse the LP file; must be called before accessing problem data."""
+        """Re-read and re-parse the LP file, picking up changes made since construction."""
 
     def to_csv(self, base_directory: str) -> None:
-        """Export the problem to CSV files in the given directory (parses lazily if needed)."""
+        """Export the problem to CSV files in the given directory."""
 
     def to_lp_string(
         self,

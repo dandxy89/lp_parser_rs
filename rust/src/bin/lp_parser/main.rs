@@ -17,17 +17,17 @@ use cli::{SolveArgs, Solver};
 use lp_parser_rs::analysis::{AnalysisConfig, IssueSeverity};
 #[cfg(feature = "diff")]
 use lp_parser_rs::diff::{DiffOptions, DiffTol, LpDiff};
-use lp_parser_rs::model::{Constraint, VariableType};
+use lp_parser_rs::model::{Constraint, VariableKind};
 use lp_parser_rs::parser::parse_file;
 use lp_parser_rs::problem::LpProblem;
 
 type BoxError = Box<dyn std::error::Error>;
 
-fn cmd_parse(args: ParseArgs, verbose: bool, quiet: bool) -> Result<(), BoxError> {
+fn cmd_parse(args: ParseArgs, verbose: bool) -> Result<(), BoxError> {
     let content = parse_file(&args.file)?;
     let problem = LpProblem::parse(&content)?;
 
-    if !quiet && verbose {
+    if verbose {
         eprintln!("Parsed file: {}", args.file.display());
         eprintln!(
             "Problem: {} objectives, {} constraints, {} variables",
@@ -61,11 +61,11 @@ fn cmd_parse(args: ParseArgs, verbose: bool, quiet: bool) -> Result<(), BoxError
     Ok(())
 }
 
-fn cmd_info(args: &InfoArgs, verbose: bool, quiet: bool) -> Result<(), BoxError> {
+fn cmd_info(args: &InfoArgs, verbose: bool) -> Result<(), BoxError> {
     let content = parse_file(&args.file)?;
     let problem = LpProblem::parse(&content)?;
 
-    if !quiet && verbose {
+    if verbose {
         eprintln!("Analyzing file: {}", args.file.display());
     }
 
@@ -96,11 +96,11 @@ fn cmd_info(args: &InfoArgs, verbose: bool, quiet: bool) -> Result<(), BoxError>
 }
 
 /// Returns `ExitCode` 1 when any error-severity issue is found (CI gating), 0 otherwise.
-fn cmd_analyze(args: AnalyzeArgs, verbose: bool, quiet: bool) -> Result<ExitCode, BoxError> {
+fn cmd_analyze(args: AnalyzeArgs, verbose: bool) -> Result<ExitCode, BoxError> {
     let content = parse_file(&args.file)?;
     let problem = LpProblem::parse(&content)?;
 
-    if !quiet && verbose {
+    if verbose {
         eprintln!("Analyzing file: {}", args.file.display());
     }
 
@@ -166,10 +166,12 @@ fn count_variable_types(problem: &LpProblem) -> (usize, usize, usize) {
     let mut binary = 0;
 
     for var in problem.variables.values() {
-        match var.var_type() {
-            VariableType::Binary => binary += 1,
-            VariableType::Integer => integer += 1,
-            _ => continuous += 1,
+        match var.kind {
+            VariableKind::Binary => binary += 1,
+            // General is LP format's other integral declaration; both are
+            // integer variables as far as the counts are concerned.
+            VariableKind::Integer | VariableKind::General => integer += 1,
+            VariableKind::Continuous | VariableKind::SemiContinuous | VariableKind::Sos => continuous += 1,
         }
     }
 
@@ -225,7 +227,7 @@ fn write_info_text<W: Write>(writer: &mut W, problem: &LpProblem, args: &InfoArg
         writeln!(writer, "Variables:")?;
         for (name_id, var) in &problem.variables {
             let name = problem.resolve(*name_id);
-            writeln!(writer, "  {name}: {:?}", var.var_type())?;
+            writeln!(writer, "  {name}: {} {}", var.kind, var.bounds)?;
         }
     }
 
@@ -274,7 +276,17 @@ fn build_info_value(problem: &LpProblem, args: &InfoArgs) -> serde_json::Value {
         info["variables"] = problem
             .variables
             .iter()
-            .map(|(name_id, var)| serde_json::json!({ "name": problem.resolve(*name_id), "var_type": format!("{:?}", var.var_type()) }))
+            // Kind and bounds are emitted separately, matching the Python
+            // binding's `variables` shape: the two are independent and no
+            // single enum can carry both.
+            .map(|(name_id, var)| {
+                serde_json::json!({
+                    "name": problem.resolve(*name_id),
+                    "kind": var.kind.to_string(),
+                    "lower": var.bounds.lower,
+                    "upper": var.bounds.upper,
+                })
+            })
             .collect();
     }
 
@@ -392,7 +404,7 @@ fn build_diff_json(args: &DiffArgs, p1: &LpProblem, p2: &LpProblem, diff: &LpDif
 /// Returns `ExitCode` 0 when the problems match, 1 when differences were found
 /// (the GNU `diff` convention, so CI can gate on unexpected model changes).
 #[cfg(feature = "diff")]
-fn cmd_diff(args: &DiffArgs, verbose: bool, quiet: bool) -> Result<ExitCode, BoxError> {
+fn cmd_diff(args: &DiffArgs, verbose: bool) -> Result<ExitCode, BoxError> {
     // Rename rules arrive as a flat list of PATTERN REPLACEMENT pairs.
     if !args.rename.len().is_multiple_of(2) {
         return Err("--rename requires pairs of PATTERN REPLACEMENT".into());
@@ -407,7 +419,7 @@ fn cmd_diff(args: &DiffArgs, verbose: bool, quiet: bool) -> Result<ExitCode, Box
 
     let tol = DiffTol { abs: args.abs_tol, rel: args.rel_tol };
 
-    if !quiet && verbose {
+    if verbose {
         eprintln!("Diffing {} vs {}", args.file1.display(), args.file2.display());
         eprintln!("abs_tol={} rel_tol={} rename_rules={}", tol.abs, tol.rel, rules.len());
     }
@@ -462,7 +474,7 @@ fn cmd_convert(args: ConvertArgs, verbose: bool, quiet: bool) -> Result<(), BoxE
     let content = parse_file(&args.file)?;
     let problem = parse_convert_input(&args.file, &content)?;
 
-    if !quiet && verbose {
+    if verbose {
         eprintln!("Converting file: {}", args.file.display());
     }
 
@@ -541,7 +553,7 @@ fn cmd_solve(args: SolveArgs, verbose: bool, quiet: bool) -> Result<(), BoxError
     let content = parse_file(&args.file)?;
     let problem = LpProblem::parse(&content)?;
 
-    if !quiet && verbose {
+    if verbose {
         eprintln!("Loading problem: {}", args.file.display());
     }
 
@@ -554,7 +566,7 @@ fn cmd_solve(args: SolveArgs, verbose: bool, quiet: bool) -> Result<(), BoxError
         }
     }
 
-    if !quiet && verbose {
+    if verbose {
         eprintln!("Solving with {:?}...", args.solver);
     }
 
@@ -648,11 +660,11 @@ fn main() -> ExitCode {
     let cli = Cli::parse();
 
     let result = match cli.command {
-        Commands::Parse(args) => cmd_parse(args, cli.verbose, cli.quiet).map(|()| ExitCode::SUCCESS),
-        Commands::Info(args) => cmd_info(&args, cli.verbose, cli.quiet).map(|()| ExitCode::SUCCESS),
-        Commands::Analyze(args) => cmd_analyze(args, cli.verbose, cli.quiet),
+        Commands::Parse(args) => cmd_parse(args, cli.verbose).map(|()| ExitCode::SUCCESS),
+        Commands::Info(args) => cmd_info(&args, cli.verbose).map(|()| ExitCode::SUCCESS),
+        Commands::Analyze(args) => cmd_analyze(args, cli.verbose),
         #[cfg(feature = "diff")]
-        Commands::Diff(args) => cmd_diff(&args, cli.verbose, cli.quiet),
+        Commands::Diff(args) => cmd_diff(&args, cli.verbose),
         Commands::Convert(args) => cmd_convert(args, cli.verbose, cli.quiet).map(|()| ExitCode::SUCCESS),
         #[cfg(feature = "lp-solvers")]
         Commands::Solve(args) => cmd_solve(args, cli.verbose, cli.quiet).map(|()| ExitCode::SUCCESS),

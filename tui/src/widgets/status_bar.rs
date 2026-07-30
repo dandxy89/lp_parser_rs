@@ -90,18 +90,18 @@ pub fn draw_status_bar(frame: &mut Frame, area: Rect, params: &StatusBarParams<'
             Span::raw(" "),
             Span::styled(format!("~{}", params.section_counts.modified), Style::default().fg(t.modified)),
             Span::raw(" "),
-            Span::styled(format!(">{}", params.section_counts.renamed), Style::default().fg(t.info)),
+            Span::styled(format!(">{}", params.section_counts.renamed), Style::default().fg(t.accent)),
             separator(),
             Span::styled("filter:", Style::default().fg(t.muted)),
             Span::styled(format!("{} ({})", params.filter_label, params.filter_count), Style::default().fg(t.modified)),
         ]
     };
     if params.ignore_order {
-        spans.push(Span::styled(" [ignoring order]", Style::default().fg(t.warning)));
+        spans.push(Span::styled(" [ignoring order]", Style::default().fg(t.modified)));
     }
     if let Some(sort_label) = params.sort_label {
         spans.push(separator());
-        spans.push(Span::styled(sort_label.to_owned(), Style::default().fg(t.info)));
+        spans.push(Span::styled(sort_label.to_owned(), Style::default().fg(t.accent)));
     }
     if let Some(tolerance_label) = params.tolerance_label {
         spans.push(separator());
@@ -110,7 +110,7 @@ pub fn draw_status_bar(frame: &mut Frame, area: Rect, params: &StatusBarParams<'
     if let Some(reloading) = params.watch_reloading {
         spans.push(separator());
         if reloading {
-            spans.push(Span::styled("\u{25cf} reloading\u{2026}", Style::default().fg(t.warning).add_modifier(Modifier::BOLD)));
+            spans.push(Span::styled("\u{25cf} reloading\u{2026}", Style::default().fg(t.modified).add_modifier(Modifier::BOLD)));
         } else {
             spans.push(Span::styled("\u{25cf} watch", Style::default().fg(t.secondary_accent)));
         }

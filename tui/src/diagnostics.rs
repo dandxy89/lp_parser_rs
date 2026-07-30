@@ -32,6 +32,9 @@ use lp_parser_rs::model::Constraint;
 use lp_parser_rs::problem::LpProblem;
 
 use crate::solver::{SolveResult, variable_bounds};
+// Coefficient ratio above which a model counts as ill-conditioned. Shared with
+// the Numerics pane so the two lenses agree.
+use crate::widgets::numerics::RATIO_WARN_THRESHOLD as WIDE_RATIO;
 
 /// How many entries to list in each ranked table.
 const TOP_N: usize = 8;
@@ -51,10 +54,6 @@ const ITERATIONS_PER_ROW_ELEVATED: f64 = 5.0;
 /// Share of binding rows carrying a zero dual above which degeneracy is the
 /// prime suspect.
 const DEGENERACY_SHARE_WARN: f64 = 0.30;
-
-/// Coefficient ratio above which a model counts as ill-conditioned. Matches the
-/// library's `AnalysisConfig` default so the two lenses agree.
-const WIDE_RATIO: f64 = 1e6;
 
 /// Magnitude range of a set of values, as `[min, max]` over non-zeros.
 #[derive(Debug, Clone, Copy, Default)]

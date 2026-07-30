@@ -250,7 +250,7 @@ fn draw_too_small(frame: &mut Frame, area: Rect) {
     }
     let t = theme();
     let lines = vec![
-        Line::from(Span::styled("Terminal too small", Style::default().fg(t.error).add_modifier(Modifier::BOLD))),
+        Line::from(Span::styled("Terminal too small", Style::default().fg(t.removed).add_modifier(Modifier::BOLD))),
         Line::from(Span::styled(format!("Need at least {MIN_WIDTH}×{MIN_HEIGHT}"), Style::default().fg(t.muted))),
     ];
     #[allow(clippy::cast_possible_truncation)] // tiny fixed message

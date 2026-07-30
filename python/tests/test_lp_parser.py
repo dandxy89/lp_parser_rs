@@ -162,21 +162,21 @@ class TestLpParserProperties:
         parser.parse()
         assert parser.sense == expected_sense
 
-    def test_counts_unparsed(
+    def test_problem_data_available_without_explicit_parse(
         self,
         temp_lp_file: Callable[[str], AbstractContextManager[str]],
     ) -> None:
+        """Construction parses, so the accessors work without calling parse()."""
         content = """Maximize
 OBJ: x1
+Subject To
+c1: x1 <= 4
 End"""
         with temp_lp_file(content) as filepath:
             parser = LpParser(filepath)
-            with pytest.raises(RuntimeError, match="Must call parse\\(\\) first"):
-                _ = parser.variables
-            with pytest.raises(RuntimeError, match="Must call parse\\(\\) first"):
-                _ = parser.constraints
-            with pytest.raises(RuntimeError, match="Must call parse\\(\\) first"):
-                _ = parser.objectives
+            assert set(parser.variables) == {"x1"}
+            assert [constraint["name"] for constraint in parser.constraints] == ["c1"]
+            assert [objective["name"] for objective in parser.objectives] == ["OBJ"]
 
 
 class TestAllResourceFiles:
@@ -197,6 +197,6 @@ class TestAllResourceFiles:
         [pytest.param(f, id=f.stem) for f in collect_lp_resource_files() if f.name in EXPECTED_PARSE_FAILURES],
     )
     def test_parse_fails(self, lp_file: Path) -> None:
-        parser = LpParser(str(lp_file))
+        # Construction parses, so the failure surfaces there.
         with pytest.raises(RuntimeError):
-            parser.parse()
+            LpParser(str(lp_file))

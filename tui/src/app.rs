@@ -27,7 +27,7 @@ pub struct CommandPaletteState {
     pub visible: bool,
     /// Current fuzzy-filter query (readline-style editable input).
     pub query: tui_input::Input,
-    /// Indices into [`PaletteCommand::ALL`](crate::state::PaletteCommand::ALL)
+    /// Palette command indices (see [`PaletteCommand::at`](crate::state::PaletteCommand::at))
     /// matching the query, in rank order.
     pub filtered: Vec<usize>,
     /// Currently highlighted row within `filtered`.
@@ -334,9 +334,6 @@ pub struct App {
     /// the report data never changes, avoiding repeated recomputation.
     pub(crate) cached_summary: DiffSummary,
 
-    /// Pre-computed section selector labels, avoiding per-frame `format!` allocations.
-    pub(crate) section_labels: [TabLabel; 5],
-
     /// When `true`, entries whose only change is coefficient ordering are hidden.
     pub ignore_order: bool,
 
@@ -431,8 +428,12 @@ fn tab_count_spans(counts: &crate::diff_model::DiffCounts, filter: DiffFilter) -
     use ratatui::style::Style;
     use ratatui::text::Span;
     let t = crate::theme::theme();
-    let kind_counts =
-        [(counts.added, "+", t.added), (counts.removed, "-", t.removed), (counts.modified, "~", t.modified), (counts.renamed, ">", t.info)];
+    let kind_counts = [
+        (counts.added, "+", t.added),
+        (counts.removed, "-", t.removed),
+        (counts.modified, "~", t.modified),
+        (counts.renamed, ">", t.accent),
+    ];
     match filter {
         DiffFilter::All => {
             let mut spans = Vec::new();
@@ -563,9 +564,6 @@ impl App {
         let summary_lines = build_mode_summary_lines(mode, &report, &report_summary, &problem1);
         let numerics_lines = build_mode_numerics_lines(mode, &report, &problem1);
 
-        // Pre-compute tab bar labels.
-        let section_labels = build_section_labels(&report_summary, mode, DiffFilter::All);
-
         Self {
             mode,
             report,
@@ -622,7 +620,6 @@ impl App {
             summary_lines,
             numerics_lines,
             cached_summary: report_summary,
-            section_labels,
             ignore_order: false,
             sort_mode: SortMode::default(),
             diff_options,
@@ -632,11 +629,9 @@ impl App {
         }
     }
 
-    /// Set the kind filter and rebuild the tab labels that display it.
-    /// The single mutation point for `filter`, so the labels can never drift.
-    pub(crate) fn apply_filter(&mut self, filter: DiffFilter) {
+    /// Set the kind filter. The tab bar reads it directly at draw time.
+    pub(crate) const fn apply_filter(&mut self, filter: DiffFilter) {
         self.filter = filter;
-        self.section_labels = build_section_labels(&self.cached_summary, self.mode, self.filter);
     }
 
     /// Flash a transient status-bar message (reuses the yank flash channel).
@@ -678,7 +673,6 @@ impl App {
             }
         }
         self.summary_lines = build_mode_summary_lines(self.mode, &self.report, &summary, &self.problem1);
-        self.section_labels = build_section_labels(&summary, self.mode, self.filter);
         self.cached_summary = summary;
     }
 
@@ -1286,7 +1280,7 @@ impl App {
 
         self.solver = SolverSession::new();
 
-        self.yank.message = format!("reloaded {}", chrono::Local::now().format("%H:%M:%S"));
+        "reloaded".clone_into(&mut self.yank.message);
         self.yank.flash = Some(Instant::now());
     }
 

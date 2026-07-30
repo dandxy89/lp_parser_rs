@@ -147,3 +147,24 @@ fn snapshot_diagnostics_pane_120x40() {
     app.diagnostics = Some(crate::state::DiagnosticsPane { lines, scroll: 0 });
     insta::assert_snapshot!(render(&mut app, 120, 40).backend());
 }
+
+/// The clipboard yank is now derived from the same lines the widgets draw, by
+/// stripping their styles. Snapshot the plain text so a change to either the
+/// panel layout or the flattening shows up here.
+#[test]
+fn snapshot_yank_constraint_detail_plain() {
+    let mut app = diff_app();
+    app.set_section(Section::Constraints);
+    let text = crate::detail_text::render_detail_plain(&app).expect("a constraint is selected");
+    insta::assert_snapshot!(text);
+}
+
+/// Summary yanks the pre-built summary panel lines rather than a parallel
+/// text renderer; this pins that they still carry the counts table.
+#[test]
+fn snapshot_yank_summary_plain() {
+    let mut app = diff_app();
+    app.set_section(Section::Summary);
+    let text = crate::detail_text::render_detail_plain(&app).expect("summary always yields text");
+    insta::assert_snapshot!(text);
+}

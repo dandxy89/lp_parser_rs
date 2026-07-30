@@ -26,7 +26,11 @@ pub fn draw_tab_bar(frame: &mut Frame, area: Rect, app: &mut App) {
     spans.push(Span::raw(" "));
     let mut x = area.x.saturating_add(1);
 
-    for (i, label) in app.section_labels.iter().enumerate() {
+    // Five short labels: cheap enough to build per draw, and a draw only
+    // happens on input, resize, or an animation tick.
+    let labels = crate::app::build_section_labels(&app.cached_summary, app.mode, app.filter);
+
+    for (i, label) in labels.iter().enumerate() {
         if i > 0 {
             spans.push(Span::styled(" \u{2502} ", Style::default().fg(t.border)));
             x = x.saturating_add(3);

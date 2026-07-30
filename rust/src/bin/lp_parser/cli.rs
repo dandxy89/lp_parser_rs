@@ -16,7 +16,7 @@ pub struct Cli {
     pub verbose: bool,
 
     /// Suppress non-essential output
-    #[arg(short, long, global = true)]
+    #[arg(short, long, global = true, conflicts_with = "verbose")]
     pub quiet: bool,
 }
 

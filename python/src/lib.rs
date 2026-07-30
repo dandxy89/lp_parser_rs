@@ -16,7 +16,6 @@ use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
 
 create_exception!(parse_lp, LpParseError, PyRuntimeError, "Raised when an LP file or problem cannot be parsed.");
-create_exception!(parse_lp, LpNotParsedError, PyRuntimeError, "Raised when a method requires parse() to have been called first.");
 create_exception!(
     parse_lp,
     LpObjectNotFoundError,
@@ -28,19 +27,19 @@ create_exception!(parse_lp, LpInvalidValueError, PyRuntimeError, "Raised when an
 #[pyclass]
 pub struct LpParser {
     lp_file: String,
-    problem: Option<LpProblem>,
+    problem: LpProblem,
 }
 
 #[pymethods]
 impl LpParser {
+    /// Construct a parser from a file, parsing it immediately.
+    ///
+    /// The format is inferred from the extension (`.mps` -> MPS, everything else
+    /// -> LP); pass `format` to [`from_file`] to override it.
     #[new]
     #[pyo3(signature = (lp_file))]
-    fn new(lp_file: String) -> PyResult<Self> {
-        if !Path::new(&lp_file).is_file() {
-            return Err(PyFileNotFoundError::new_err(format!("LP file '{lp_file}' does not exist or is not a file")));
-        }
-
-        Ok(Self { lp_file, problem: None })
+    fn new(py: Python, lp_file: String) -> PyResult<Self> {
+        Self::from_file(py, lp_file, None)
     }
 
     /// Construct a parser from an in-memory string, parsing it immediately.
@@ -50,7 +49,7 @@ impl LpParser {
     #[pyo3(signature = (text, format="lp"))]
     fn from_string(py: Python, text: String, format: &str) -> PyResult<Self> {
         let problem = py.detach(|| parse_source(&text, format))?;
-        Ok(Self { lp_file: "<string>".to_string(), problem: Some(problem) })
+        Ok(Self { lp_file: "<string>".to_string(), problem })
     }
 
     /// Construct a parser from a file, parsing it immediately.
@@ -72,7 +71,7 @@ impl LpParser {
             let input = parse_file(&file_path).map_err(|err| LpParseError::new_err(format!("Unable to read file: {err}")))?;
             parse_source(&input, inferred)
         })?;
-        Ok(Self { lp_file: path, problem: Some(problem) })
+        Ok(Self { lp_file: path, problem })
     }
 
     #[getter]
@@ -80,31 +79,25 @@ impl LpParser {
         self.lp_file.clone()
     }
 
+    /// Re-read and re-parse the source file. Construction already parses, so this
+    /// is only needed to pick up changes made to the file since.
     fn parse(&mut self, py: Python) -> PyResult<()> {
         let path = PathBuf::from(&self.lp_file);
         // Release the GIL while reading and parsing so other Python threads
         // are not blocked by the heavy pure-Rust work.
-        let problem = py.detach(move || {
+        self.problem = py.detach(move || {
             let input = parse_file(&path).map_err(|err| LpParseError::new_err(format!("Unable to read LP file: {err}")))?;
             LpProblem::parse(&input).map_err(|err| LpParseError::new_err(format!("Unable to parse LpProblem: {err}")))
         })?;
-        self.problem = Some(problem);
         Ok(())
     }
 
-    #[allow(clippy::wrong_self_convention)]
-    fn to_csv(&mut self, py: Python, base_directory: &str) -> PyResult<()> {
+    fn to_csv(&self, base_directory: &str) -> PyResult<()> {
         if !Path::new(&base_directory).is_dir() {
             return Err(PyNotADirectoryError::new_err(format!("Path {base_directory} is not a directory.")));
         }
 
-        // Parse if not already parsed
-        if self.problem.is_none() {
-            self.parse(py)?;
-        }
-
-        let problem = self.get_problem()?;
-        problem
+        self.problem
             .to_csv(Path::new(base_directory))
             .map_err(|err| PyRuntimeError::new_err(format!("Unable to write to .csv files: {err}")))?;
 
@@ -115,13 +108,13 @@ impl LpParser {
     fn name(&self) -> PyResult<Option<String>> {
         // extract_problem_name already stores the bare name, without the
         // "Problem name: " comment prefix.
-        let problem = self.get_problem()?;
+        let problem = &self.problem;
         Ok(problem.name.clone())
     }
 
     #[getter]
     fn sense(&self) -> PyResult<String> {
-        let problem = self.get_problem()?;
+        let problem = &self.problem;
         Ok(match problem.sense {
             Sense::Maximize => "maximize".to_string(),
             Sense::Minimize => "minimize".to_string(),
@@ -130,7 +123,7 @@ impl LpParser {
 
     #[getter]
     fn objectives(&self, py: Python) -> PyResult<Py<PyAny>> {
-        let problem = self.get_problem()?;
+        let problem = &self.problem;
         let list = PyList::empty(py);
 
         for (name_id, obj) in &problem.objectives {
@@ -145,7 +138,7 @@ impl LpParser {
 
     #[getter]
     fn constraints(&self, py: Python) -> PyResult<Py<PyAny>> {
-        let problem = self.get_problem()?;
+        let problem = &self.problem;
         let list = PyList::empty(py);
 
         for (name_id, constraint) in &problem.constraints {
@@ -173,7 +166,7 @@ impl LpParser {
 
     #[getter]
     fn variables(&self, py: Python) -> PyResult<Py<PyAny>> {
-        let problem = self.get_problem()?;
+        let problem = &self.problem;
         let dict = PyDict::new(py);
 
         for (name_id, var) in &problem.variables {
@@ -200,14 +193,14 @@ impl LpParser {
         decimal_precision: usize,
         include_section_spacing: bool,
     ) -> PyResult<String> {
-        let problem = self.get_problem()?;
+        let problem = &self.problem;
         let options = LpWriterOptions { include_problem_name, max_line_length, decimal_precision, include_section_spacing };
         Ok(write_lp_string_with_options(problem, &options))
     }
 
     /// Save the current problem to an LP file
     fn save_to_file(&self, filepath: String) -> PyResult<()> {
-        let problem = self.get_problem()?;
+        let problem = &self.problem;
         let lp_content = write_lp_string_with_options(problem, &LpWriterOptions::default());
         std::fs::write(&filepath, lp_content).map_err(|err| PyRuntimeError::new_err(format!("Failed to write file: {err}")))
     }
@@ -215,7 +208,7 @@ impl LpParser {
     /// Write the current problem to an MPS format string.
     #[pyo3(signature = (*, decimal_precision=6, allow_multiple_objectives=false))]
     fn to_mps_string(&self, decimal_precision: usize, allow_multiple_objectives: bool) -> PyResult<String> {
-        let problem = self.get_problem()?;
+        let problem = &self.problem;
         let options = MpsWriterOptions { decimal_precision, allow_multiple_objectives };
         write_mps_string_with_options(problem, &options).map_err(|err| PyRuntimeError::new_err(format!("Unable to write MPS: {err}")))
     }
@@ -233,8 +226,8 @@ impl LpParser {
     /// `cons_added`, `cons_removed`, `cons_modified`, `objs_added`,
     /// `objs_removed`, `objs_modified`, and `is_empty`.
     fn diff(&self, py: Python, other: &Self) -> PyResult<Py<PyAny>> {
-        let problem = self.get_problem()?;
-        let other_problem = other.get_problem()?;
+        let problem = &self.problem;
+        let other_problem = &other.problem;
         let result = problem.diff(other_problem, &DiffOptions::default());
         let is_empty = result.is_empty();
 
@@ -254,7 +247,7 @@ impl LpParser {
 
     /// Update coefficient in an objective
     fn update_objective_coefficient(&mut self, objective_name: String, variable_name: String, coefficient: f64) -> PyResult<()> {
-        let problem = self.get_problem_mut()?;
+        let problem = &mut self.problem;
         problem
             .update_objective_coefficient(&objective_name, &variable_name, coefficient)
             .map_err(|err| LpObjectNotFoundError::new_err(format!("Failed to update objective coefficient: {err}")))?;
@@ -263,7 +256,7 @@ impl LpParser {
 
     /// Rename an objective
     fn rename_objective(&mut self, old_name: String, new_name: String) -> PyResult<()> {
-        let problem = self.get_problem_mut()?;
+        let problem = &mut self.problem;
         problem
             .rename_objective(&old_name, &new_name)
             .map_err(|err| LpObjectNotFoundError::new_err(format!("Failed to rename objective: {err}")))?;
@@ -273,7 +266,7 @@ impl LpParser {
 
     /// Remove an objective
     fn remove_objective(&mut self, objective_name: String) -> PyResult<()> {
-        let problem = self.get_problem_mut()?;
+        let problem = &mut self.problem;
         problem
             .remove_objective(&objective_name)
             .map_err(|err| LpObjectNotFoundError::new_err(format!("Failed to remove objective: {err}")))?;
@@ -283,7 +276,7 @@ impl LpParser {
 
     /// Update coefficient in a constraint
     fn update_constraint_coefficient(&mut self, constraint_name: String, variable_name: String, coefficient: f64) -> PyResult<()> {
-        let problem = self.get_problem_mut()?;
+        let problem = &mut self.problem;
         problem
             .update_constraint_coefficient(&constraint_name, &variable_name, coefficient)
             .map_err(|err| LpObjectNotFoundError::new_err(format!("Failed to update constraint coefficient: {err}")))?;
@@ -293,7 +286,7 @@ impl LpParser {
 
     /// Update the right-hand side value of a constraint
     fn update_constraint_rhs(&mut self, constraint_name: String, new_rhs: f64) -> PyResult<()> {
-        let problem = self.get_problem_mut()?;
+        let problem = &mut self.problem;
         problem
             .update_constraint_rhs(&constraint_name, new_rhs)
             .map_err(|err| LpObjectNotFoundError::new_err(format!("Failed to update constraint RHS: {err}")))?;
@@ -303,7 +296,7 @@ impl LpParser {
 
     /// Rename a constraint
     fn rename_constraint(&mut self, old_name: String, new_name: String) -> PyResult<()> {
-        let problem = self.get_problem_mut()?;
+        let problem = &mut self.problem;
         problem
             .rename_constraint(&old_name, &new_name)
             .map_err(|err| LpObjectNotFoundError::new_err(format!("Failed to rename constraint: {err}")))?;
@@ -313,7 +306,7 @@ impl LpParser {
 
     /// Remove a constraint
     fn remove_constraint(&mut self, constraint_name: String) -> PyResult<()> {
-        let problem = self.get_problem_mut()?;
+        let problem = &mut self.problem;
         problem
             .remove_constraint(&constraint_name)
             .map_err(|err| LpObjectNotFoundError::new_err(format!("Failed to remove constraint: {err}")))?;
@@ -323,7 +316,7 @@ impl LpParser {
 
     /// Rename a variable across all objectives and constraints
     fn rename_variable(&mut self, old_name: String, new_name: String) -> PyResult<()> {
-        let problem = self.get_problem_mut()?;
+        let problem = &mut self.problem;
         problem
             .rename_variable(&old_name, &new_name)
             .map_err(|err| LpObjectNotFoundError::new_err(format!("Failed to rename variable: {err}")))?;
@@ -333,7 +326,7 @@ impl LpParser {
 
     /// Update variable type (e.g., Binary, Integer, etc.)
     fn update_variable_type(&mut self, variable_name: String, var_type: String) -> PyResult<()> {
-        let problem = self.get_problem_mut()?;
+        let problem = &mut self.problem;
 
         // Parse the variable type string
         let variable_type = match var_type.to_lowercase().as_str() {
@@ -358,7 +351,7 @@ impl LpParser {
 
     /// Remove a variable from all objectives and constraints
     fn remove_variable(&mut self, variable_name: String) -> PyResult<()> {
-        let problem = self.get_problem_mut()?;
+        let problem = &mut self.problem;
         problem
             .remove_variable(&variable_name)
             .map_err(|err| LpObjectNotFoundError::new_err(format!("Failed to remove variable: {err}")))?;
@@ -368,7 +361,7 @@ impl LpParser {
 
     /// Set problem name
     fn set_problem_name(&mut self, name: String) -> PyResult<()> {
-        let problem = self.get_problem_mut()?;
+        let problem = &mut self.problem;
         problem.name = Some(name);
 
         Ok(())
@@ -376,7 +369,7 @@ impl LpParser {
 
     /// Set problem sense (maximize or minimize)
     fn set_sense(&mut self, sense: String) -> PyResult<()> {
-        let problem = self.get_problem_mut()?;
+        let problem = &mut self.problem;
 
         problem.sense = match sense.to_lowercase().as_str() {
             "maximize" => Sense::Maximize,
@@ -403,7 +396,7 @@ impl LpParser {
     ///     `ratio_threshold`: Coefficient ratio threshold for scaling warnings (default: 1e6)
     #[pyo3(signature = (*, large_coeff_threshold=1e9, small_coeff_threshold=1e-9, ratio_threshold=1e6))]
     fn analyze(&self, py: Python, large_coeff_threshold: f64, small_coeff_threshold: f64, ratio_threshold: f64) -> PyResult<Py<PyAny>> {
-        let problem = self.get_problem()?;
+        let problem = &self.problem;
         let config = AnalysisConfig {
             large_coefficient_threshold: large_coeff_threshold,
             small_coefficient_threshold: small_coeff_threshold,
@@ -419,18 +412,7 @@ impl LpParser {
     }
 
     fn __str__(&self) -> String {
-        let state = if self.problem.is_some() { "parsed" } else { "not parsed" };
-        format!("LpParser for '{}' ({state})", self.lp_file)
-    }
-}
-
-impl LpParser {
-    fn get_problem(&self) -> PyResult<&LpProblem> {
-        self.problem.as_ref().ok_or_else(|| LpNotParsedError::new_err("Must call parse() first"))
-    }
-
-    fn get_problem_mut(&mut self) -> PyResult<&mut LpProblem> {
-        self.problem.as_mut().ok_or_else(|| LpNotParsedError::new_err("Must call parse() first"))
+        format!("LpParser for '{}'", self.lp_file)
     }
 }
 
@@ -491,7 +473,6 @@ fn issues_to_list<'py>(py: Python<'py>, issues: &[lp_parser_rs::analysis::Analys
 fn parse_lp(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<LpParser>()?;
     m.add("LpParseError", m.py().get_type::<LpParseError>())?;
-    m.add("LpNotParsedError", m.py().get_type::<LpNotParsedError>())?;
     m.add("LpObjectNotFoundError", m.py().get_type::<LpObjectNotFoundError>())?;
     m.add("LpInvalidValueError", m.py().get_type::<LpInvalidValueError>())?;
 

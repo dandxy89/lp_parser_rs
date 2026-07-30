@@ -9,7 +9,7 @@ use std::fmt;
 use lp_parser_rs::analysis::ProblemAnalysis;
 use lp_parser_rs::diff::DiffTol;
 use lp_parser_rs::interner::{NameId, NameInterner};
-use lp_parser_rs::model::{ComparisonOp, Constraint, SOSType, Sense, VariableType};
+use lp_parser_rs::model::{ComparisonOp, Constraint, SOSType, Sense, VariableBounds, VariableKind};
 use lp_parser_rs::problem::LpProblem;
 
 // Epsilon used for floating-point coefficient value comparison. The TUI floors
@@ -319,15 +319,41 @@ impl fmt::Display for DiffKind {
     }
 }
 
+/// A variable's discrete kind and bounds in one file.
+///
+/// Held as the two independent components rather than the library's legacy
+/// `VariableType`, whose single-enum view cannot represent "integer *and*
+/// bounded": collapsing to it made an `Integer [0, 10]` → `Continuous [0, 10]`
+/// change compare equal, so the diff reported it as unchanged.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct VarSpec {
+    pub kind: VariableKind,
+    pub bounds: VariableBounds,
+}
+
+impl VarSpec {
+    const fn of(variable: &lp_parser_rs::model::Variable) -> Self {
+        Self { kind: variable.kind, bounds: variable.bounds }
+    }
+}
+
+impl fmt::Display for VarSpec {
+    /// `Integer 0 .. 10`, `Continuous free` — kind then bounds, both always shown
+    /// so a change to either is visible.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} {}", self.kind, self.bounds)
+    }
+}
+
 /// Diff entry for a single variable.
 #[derive(Debug, Clone)]
 pub struct VariableDiffEntry {
     pub name: String,
     pub kind: DiffKind,
-    /// Type in the first file; None when the variable was added.
-    pub old_type: Option<VariableType>,
-    /// Type in the second file; None when the variable was removed.
-    pub new_type: Option<VariableType>,
+    /// Kind and bounds in the first file; None when the variable was added.
+    pub old_type: Option<VarSpec>,
+    /// Kind and bounds in the second file; None when the variable was removed.
+    pub new_type: Option<VarSpec>,
 }
 
 /// Diff entry for a single constraint.
@@ -482,16 +508,12 @@ fn write_coefficients_content(buf: &mut String, coefficients: &[ResolvedCoeffici
 }
 
 impl VariableDiffEntry {
-    /// Append this entry's searchable content (its old/new variable types,
-    /// including bound values) to `buf`, NUL-separated. Used by the `c:`
-    /// content search mode.
+    /// Append this entry's searchable content (its old/new kind and bounds) to
+    /// `buf`, NUL-separated. Used by the `c:` content search mode.
     pub fn write_content(&self, buf: &mut String) {
         use std::fmt::Write as _;
-        if let Some(old_type) = &self.old_type {
-            write!(buf, "\0{old_type:?}").expect("fmt::Write to String is infallible");
-        }
-        if let Some(new_type) = &self.new_type {
-            write!(buf, "\0{new_type:?}").expect("fmt::Write to String is infallible");
+        for spec in [self.old_type, self.new_type].into_iter().flatten() {
+            write!(buf, "\0{} {}", spec.kind, spec.bounds).expect("fmt::Write to String is infallible");
         }
     }
 }
@@ -537,18 +559,6 @@ impl ObjectiveDiffEntry {
     pub fn write_content(&self, buf: &mut String, interner: &NameInterner) {
         write_coefficients_content(buf, &self.old_coefficients, interner);
         write_coefficients_content(buf, &self.new_coefficients, interner);
-    }
-}
-
-/// Extract (lower, upper) bounds from a `VariableType`, returning `None` for
-/// bounds that don't apply to that type.
-#[must_use]
-pub const fn variable_bounds(variable_type: &VariableType) -> (Option<f64>, Option<f64>) {
-    match *variable_type {
-        VariableType::LowerBound(lower) => (Some(lower), None),
-        VariableType::UpperBound(upper) => (None, Some(upper)),
-        VariableType::DoubleBound(lower, upper) => (Some(lower), Some(upper)),
-        _ => (None, None),
     }
 }
 
@@ -608,8 +618,8 @@ pub fn variable_sort_delta(entry: &VariableDiffEntry, relative: bool) -> Option<
     if entry.kind != DiffKind::Modified {
         return None;
     }
-    let (old_lower, old_upper) = entry.old_type.as_ref().map_or((None, None), variable_bounds);
-    let (new_lower, new_upper) = entry.new_type.as_ref().map_or((None, None), variable_bounds);
+    let (old_lower, old_upper) = entry.old_type.map_or((None, None), |spec| (spec.bounds.lower, spec.bounds.upper));
+    let (new_lower, new_upper) = entry.new_type.map_or((None, None), |spec| (spec.bounds.lower, spec.bounds.upper));
     let max = change_delta(old_lower, new_lower, relative).max(change_delta(old_upper, new_upper, relative));
     debug_assert!(max.is_finite() && max >= 0.0, "variable sort delta must be finite and non-negative");
     Some(max)
@@ -766,12 +776,8 @@ fn diff_variables(p1: &LpProblem, p2: &LpProblem, opts: &DiffOptions) -> Section
             std::cmp::Ordering::Less => {
                 let (name, v1) = &vars1[i];
                 counts.removed += 1;
-                let entry = VariableDiffEntry {
-                    name: name.clone(),
-                    kind: DiffKind::Removed,
-                    old_type: Some(v1.var_type().clone()),
-                    new_type: None,
-                };
+                let entry =
+                    VariableDiffEntry { name: name.clone(), kind: DiffKind::Removed, old_type: Some(VarSpec::of(v1)), new_type: None };
                 debug_assert!(entry.old_type.is_some(), "Removed variable must have old_type");
                 debug_assert!(entry.new_type.is_none(), "Removed variable must not have new_type");
                 entries.push(entry);
@@ -781,7 +787,7 @@ fn diff_variables(p1: &LpProblem, p2: &LpProblem, opts: &DiffOptions) -> Section
                 let (name, v2) = &vars2[j];
                 counts.added += 1;
                 let entry =
-                    VariableDiffEntry { name: name.clone(), kind: DiffKind::Added, old_type: None, new_type: Some(v2.var_type().clone()) };
+                    VariableDiffEntry { name: name.clone(), kind: DiffKind::Added, old_type: None, new_type: Some(VarSpec::of(v2)) };
                 debug_assert!(entry.new_type.is_some(), "Added variable must have new_type");
                 debug_assert!(entry.old_type.is_none(), "Added variable must not have old_type");
                 entries.push(entry);
@@ -790,15 +796,15 @@ fn diff_variables(p1: &LpProblem, p2: &LpProblem, opts: &DiffOptions) -> Section
             std::cmp::Ordering::Equal => {
                 let (name, v1) = &vars1[i];
                 let v2 = vars2[j].1;
-                if v1.var_type() == v2.var_type() {
+                if VarSpec::of(v1) == VarSpec::of(v2) {
                     counts.unchanged += 1;
                 } else {
                     counts.modified += 1;
                     let entry = VariableDiffEntry {
                         name: name.clone(),
                         kind: DiffKind::Modified,
-                        old_type: Some(v1.var_type().clone()),
-                        new_type: Some(v2.var_type().clone()),
+                        old_type: Some(VarSpec::of(v1)),
+                        new_type: Some(VarSpec::of(v2)),
                     };
                     debug_assert!(entry.old_type.is_some(), "Modified variable must have old_type");
                     debug_assert!(entry.new_type.is_some(), "Modified variable must have new_type");
@@ -1383,7 +1389,7 @@ mod tests {
     use std::fmt::Write;
 
     use lp_parser_rs::analysis::ProblemAnalysis;
-    use lp_parser_rs::model::{ComparisonOp, Sense, VariableType};
+    use lp_parser_rs::model::{ComparisonOp, Sense, VariableBounds, VariableKind, VariableType};
     use lp_parser_rs::problem::LpProblem;
 
     use super::*;
@@ -1484,8 +1490,8 @@ mod tests {
         let entry = report.variables.entries.iter().find(|e| e.name == "x").expect("x entry must exist");
         let mut content = String::new();
         entry.write_content(&mut content);
-        assert!(content.contains("DoubleBound"), "content must include the variable type, got {content:?}");
-        assert!(content.contains("1.5"), "content must include bound values, got {content:?}");
+        assert!(content.contains("Continuous"), "content must include the variable kind, got {content:?}");
+        assert!(content.contains("1.5") && content.contains('4'), "content must include both bound values, got {content:?}");
     }
 
     #[test]
@@ -1513,7 +1519,7 @@ mod tests {
         let entry = entry.unwrap();
         assert_eq!(entry.kind, DiffKind::Added);
         assert!(entry.old_type.is_none());
-        assert_eq!(entry.new_type, Some(VariableType::Binary));
+        assert_eq!(entry.new_type, Some(VarSpec { kind: VariableKind::Binary, bounds: VariableBounds::free() }));
     }
 
     #[test]
@@ -1526,7 +1532,7 @@ mod tests {
         let entry = entry.unwrap();
         assert_eq!(entry.kind, DiffKind::Removed);
         // The General section in LP format sets VariableType::General
-        assert_eq!(entry.old_type, Some(VariableType::General));
+        assert_eq!(entry.old_type, Some(VarSpec { kind: VariableKind::General, bounds: VariableBounds::free() }));
         assert!(entry.new_type.is_none());
     }
 
@@ -1539,8 +1545,8 @@ mod tests {
         assert!(entry.is_some(), "should have an entry for variable 'z'");
         let entry = entry.unwrap();
         assert_eq!(entry.kind, DiffKind::Modified);
-        assert_eq!(entry.old_type, Some(VariableType::Free));
-        assert_eq!(entry.new_type, Some(VariableType::Binary));
+        assert_eq!(entry.old_type, Some(VarSpec { kind: VariableKind::Continuous, bounds: VariableBounds::free() }));
+        assert_eq!(entry.new_type, Some(VarSpec { kind: VariableKind::Binary, bounds: VariableBounds::free() }));
     }
 
     #[test]
@@ -1655,12 +1661,20 @@ mod tests {
     fn test_diff_entry_trait() {
         let mut interner = lp_parser_rs::interner::NameInterner::new();
 
-        let added_var =
-            VariableDiffEntry { name: "x".to_string(), kind: DiffKind::Added, old_type: None, new_type: Some(VariableType::Binary) };
+        let added_var = VariableDiffEntry {
+            name: "x".to_string(),
+            kind: DiffKind::Added,
+            old_type: None,
+            new_type: Some(VarSpec { kind: VariableKind::Binary, bounds: VariableBounds::free() }),
+        };
         assert_diff_entry(&added_var, "x", DiffKind::Added);
 
-        let removed_var =
-            VariableDiffEntry { name: "y".to_string(), kind: DiffKind::Removed, old_type: Some(VariableType::Integer), new_type: None };
+        let removed_var = VariableDiffEntry {
+            name: "y".to_string(),
+            kind: DiffKind::Removed,
+            old_type: Some(VarSpec { kind: VariableKind::Integer, bounds: VariableBounds::free() }),
+            new_type: None,
+        };
         assert_diff_entry(&removed_var, "y", DiffKind::Removed);
 
         let x_id = interner.intern("x");

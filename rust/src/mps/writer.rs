@@ -99,7 +99,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::error::{LpParseError, LpResult};
 use crate::interner::NameId;
-use crate::model::{Coefficient, ComparisonOp, Constraint, Objective, Sense, VariableKind, VariableType};
+use crate::model::{Coefficient, ComparisonOp, Constraint, Objective, Sense, VariableBounds, VariableKind};
 use crate::problem::LpProblem;
 use crate::writer::write_number;
 
@@ -519,33 +519,53 @@ fn invalid_bound_error(var_name: &str, message: &str) -> LpParseError {
 /// Returns an error if a bound value is `NaN`, or is an infinite value MPS
 /// has no flag for (e.g. `UpperBound(-inf)`, `LowerBound(+inf)`) -- see
 /// [`write_upper_bound`], [`write_lower_bound`] and [`write_double_bound`].
-fn write_variable_bound(output: &mut String, var_name: &str, var_type: &VariableType, precision: usize) -> LpResult<()> {
-    match *var_type {
-        VariableType::Free => {
-            write_bound_flag(output, "FR", var_name).expect("fmt::Write to String is infallible");
-            Ok(())
-        }
-        VariableType::LowerBound(lb) => write_lower_bound(output, var_name, lb, precision),
-        VariableType::UpperBound(ub) => write_upper_bound(output, var_name, ub, precision),
-        VariableType::DoubleBound(lb, ub) => write_double_bound(output, var_name, lb, ub, precision),
-        VariableType::Binary => {
+fn write_variable_bound(output: &mut String, var_name: &str, kind: VariableKind, bounds: VariableBounds, precision: usize) -> LpResult<()> {
+    // Kinds with a dedicated MPS bound record win over the bound shape: the
+    // record already carries the bounds implied by the kind.
+    match kind {
+        VariableKind::Binary => {
+            // Binary is canonically [0, 1]; emit BV regardless of any redundant
+            // or contradictory explicit bounds carried alongside the kind.
             write_bound_flag(output, "BV", var_name).expect("fmt::Write to String is infallible");
+            return Ok(());
+        }
+        VariableKind::SemiContinuous => {
+            // The SC record carries the upper bound only, so any lower bound
+            // needs its own LO record first; without it the round trip would
+            // silently widen the variable's range down to zero.
+            if let Some(lb) = bounds.lower {
+                write_lower_bound(output, var_name, lb, precision)?;
+            }
+            let upper = bounds.upper.unwrap_or(SEMI_CONTINUOUS_SENTINEL_UPPER);
+            write_bound_value(output, "SC", var_name, upper, precision).expect("fmt::Write to String is infallible");
+            return Ok(());
+        }
+        // SOS membership is not itself a bound, but such a variable may still
+        // carry ordinary bounds — fall through and write them.
+        VariableKind::Sos | VariableKind::Continuous | VariableKind::Integer | VariableKind::General => {}
+    }
+
+    match (bounds.lower, bounds.upper) {
+        (Some(lb), Some(ub)) => write_double_bound(output, var_name, lb, ub, precision),
+        (Some(lb), None) => write_lower_bound(output, var_name, lb, precision),
+        (None, Some(ub)) => write_upper_bound(output, var_name, ub, precision),
+        // Unbounded. Integer and General have no MPS analogue of their own:
+        // both collapse to an integer column with an explicit LO 0 (see module
+        // docs). An unbounded SOS member keeps the MPS default ([0, +inf)),
+        // matching the LP writer's treatment.
+        (None, None) => {
+            match kind {
+                VariableKind::Integer | VariableKind::General => {
+                    write_bound_value(output, "LO", var_name, 0.0, precision).expect("fmt::Write to String is infallible");
+                }
+                VariableKind::Continuous => {
+                    write_bound_flag(output, "FR", var_name).expect("fmt::Write to String is infallible");
+                }
+                VariableKind::Sos => {}
+                VariableKind::Binary | VariableKind::SemiContinuous => unreachable!("handled above"),
+            }
             Ok(())
         }
-        // General has no MPS analogue: both collapse to an integer column
-        // with an explicit LO 0 (see module docs).
-        VariableType::Integer | VariableType::General => {
-            write_bound_value(output, "LO", var_name, 0.0, precision).expect("fmt::Write to String is infallible");
-            Ok(())
-        }
-        VariableType::SemiContinuous => {
-            write_bound_value(output, "SC", var_name, SEMI_CONTINUOUS_SENTINEL_UPPER, precision)
-                .expect("fmt::Write to String is infallible");
-            Ok(())
-        }
-        // SOS-membership is not an explicit bound; leave the MPS default
-        // ([0, +inf)) in place, matching the LP writer's treatment.
-        VariableType::SOS => Ok(()),
     }
 }
 
@@ -672,15 +692,7 @@ fn write_bounds_section(output: &mut String, problem: &LpProblem, options: &MpsW
     writeln!(output, "BOUNDS").expect("fmt::Write to String is infallible");
     for (name_id, variable) in &problem.variables {
         let var_name = problem.resolve(*name_id);
-        if matches!(variable.kind, VariableKind::Binary) {
-            // Binary is canonically [0, 1]; emit BV regardless of any redundant
-            // or contradictory explicit bounds carried alongside the kind (the
-            // lossy `var_type()` view would otherwise render those bounds and
-            // drop the binary designation).
-            write_bound_flag(output, "BV", var_name).expect("fmt::Write to String is infallible");
-        } else {
-            write_variable_bound(output, var_name, &variable.var_type(), options.decimal_precision)?;
-        }
+        write_variable_bound(output, var_name, variable.kind, variable.bounds, options.decimal_precision)?;
     }
 
     Ok(())
@@ -714,7 +726,7 @@ fn write_sos_section(output: &mut String, problem: &LpProblem, options: &MpsWrit
 #[allow(clippy::float_cmp)]
 mod tests {
     use super::*;
-    use crate::model::{Coefficient, ComparisonOp, SOSType};
+    use crate::model::{Coefficient, ComparisonOp, SOSType, VariableBounds, VariableKind, VariableType};
     use crate::mps::parse_mps;
 
     fn build_problem_with_bounds_and_sos() -> LpProblem {
@@ -838,13 +850,13 @@ mod tests {
         assert_eq!(reparsed.constraint_count(), 2); // 1 standard + 1 SOS
 
         let x1 = &reparsed.variables[&reparsed.name_id("x1").unwrap()];
-        assert_eq!(x1.var_type(), VariableType::Integer);
+        assert_eq!(x1.kind, VariableKind::Integer);
 
         let x2 = &reparsed.variables[&reparsed.name_id("x2").unwrap()];
-        assert_eq!(x2.var_type(), VariableType::DoubleBound(0.0, 50.0));
+        assert_eq!(x2.bounds, VariableBounds::range(0.0, 50.0));
 
         let x3 = &reparsed.variables[&reparsed.name_id("x3").unwrap()];
-        assert_eq!(x3.var_type(), VariableType::Binary);
+        assert_eq!(x3.kind, VariableKind::Binary);
 
         let sos = reparsed.constraints.get(&reparsed.name_id("sos1").unwrap()).unwrap();
         if let Constraint::SOS { sos_type, weights, .. } = sos {
@@ -873,7 +885,7 @@ mod tests {
 
         let reparsed = LpProblem::parse_mps(&output).unwrap();
         let x1 = &reparsed.variables[&reparsed.name_id("x1").unwrap()];
-        assert_eq!(x1.var_type(), VariableType::DoubleBound(5.5, f64::INFINITY));
+        assert_eq!(x1.bounds, VariableBounds::range(5.5, f64::INFINITY));
     }
 
     #[test]
@@ -895,7 +907,7 @@ mod tests {
         let x1 = &reparsed.variables[&reparsed.name_id("x1").unwrap()];
         // Documented variant collapse: same feasible region (lower 0), but
         // DoubleBound rather than UpperBound (see module docs).
-        assert_eq!(x1.var_type(), VariableType::DoubleBound(0.0, -5.0));
+        assert_eq!(x1.bounds, VariableBounds::range(0.0, -5.0));
     }
 
     #[test]
@@ -978,7 +990,7 @@ mod tests {
         let output = write_mps_string(&problem).unwrap();
         let reparsed = LpProblem::parse_mps(&output).unwrap();
         let x1 = &reparsed.variables[&reparsed.name_id("x1").unwrap()];
-        assert_eq!(x1.var_type(), VariableType::Integer);
+        assert_eq!(x1.kind, VariableKind::Integer);
     }
 
     #[test]
@@ -1060,7 +1072,7 @@ End
 
         let reparsed = LpProblem::parse_mps(&output).unwrap();
         let x1 = &reparsed.variables[&reparsed.name_id("x1").unwrap()];
-        assert_eq!(x1.var_type(), VariableType::SemiContinuous);
+        assert_eq!(x1.kind, VariableKind::SemiContinuous);
     }
 
     #[test]
@@ -1085,7 +1097,7 @@ ENDATA
 ";
         let problem = LpProblem::parse_mps(input).unwrap();
         let x1 = &problem.variables[&problem.name_id("x1").unwrap()];
-        assert_eq!(x1.var_type(), VariableType::UpperBound(f64::INFINITY));
+        assert_eq!(x1.bounds, VariableBounds::upper(f64::INFINITY));
 
         let output = write_mps_string(&problem).unwrap();
         assert!(output.contains(" PL BOUND"));
@@ -1093,7 +1105,7 @@ ENDATA
 
         let reparsed = LpProblem::parse_mps(&output).unwrap();
         let x1 = &reparsed.variables[&reparsed.name_id("x1").unwrap()];
-        assert_eq!(x1.var_type(), VariableType::UpperBound(f64::INFINITY));
+        assert_eq!(x1.bounds, VariableBounds::upper(f64::INFINITY));
     }
 
     #[test]
@@ -1117,7 +1129,7 @@ ENDATA
 ";
         let problem = LpProblem::parse_mps(input).unwrap();
         let x1 = &problem.variables[&problem.name_id("x1").unwrap()];
-        assert_eq!(x1.var_type(), VariableType::LowerBound(f64::NEG_INFINITY));
+        assert_eq!(x1.bounds, VariableBounds::lower(f64::NEG_INFINITY));
 
         let output = write_mps_string(&problem).unwrap();
         assert!(output.contains(" MI BOUND"));
@@ -1125,7 +1137,7 @@ ENDATA
 
         let reparsed = LpProblem::parse_mps(&output).unwrap();
         let x1 = &reparsed.variables[&reparsed.name_id("x1").unwrap()];
-        assert_eq!(x1.var_type(), VariableType::LowerBound(f64::NEG_INFINITY));
+        assert_eq!(x1.bounds, VariableBounds::lower(f64::NEG_INFINITY));
     }
 
     #[test]
@@ -1269,7 +1281,7 @@ ENDATA
         assert_eq!(original.constraints.len(), reparsed.constraint_count());
 
         let x1 = &reparsed.variables[&reparsed.name_id("x1").unwrap()];
-        assert_eq!(x1.var_type(), VariableType::DoubleBound(0.0, 20.0));
+        assert_eq!(x1.bounds, VariableBounds::range(0.0, 20.0));
     }
 
     #[test]

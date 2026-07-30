@@ -64,7 +64,7 @@ pub fn draw_search_popup(frame: &mut Frame, area: Rect, app: &App) {
     if let Some(error) = &app.search_popup.regex_error {
         let t = theme();
         let error_line =
-            Line::from(Span::styled(format!(" invalid regex: {error}"), Style::default().fg(t.error).add_modifier(Modifier::BOLD)));
+            Line::from(Span::styled(format!(" invalid regex: {error}"), Style::default().fg(t.removed).add_modifier(Modifier::BOLD)));
         frame.render_widget(Paragraph::new(error_line), v_chunks[1]);
     }
 

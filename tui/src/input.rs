@@ -124,12 +124,12 @@ impl App {
         self.palette.selected = 0;
         self.palette.filtered.clear();
         let inspect = self.mode == AppMode::Inspect;
-        let available = |index: usize| !inspect || PaletteCommand::ALL[index].available_in_inspect();
+        let available = |index: usize| !inspect || PaletteCommand::at(index).available_in_inspect();
         if self.palette.query.value().is_empty() {
-            self.palette.filtered.extend((0..PaletteCommand::ALL.len()).filter(|&i| available(i)));
+            self.palette.filtered.extend((0..PaletteCommand::COUNT).filter(|&i| available(i)));
             return;
         }
-        let labels: Vec<String> = PaletteCommand::ALL.iter().map(|c| c.label().to_owned()).collect();
+        let labels: Vec<String> = (0..PaletteCommand::COUNT).map(|i| PaletteCommand::at(i).label().to_owned()).collect();
         let config = frizbee::Config::default();
         for matched in frizbee::Matcher::new(self.palette.query.value(), &config).match_list_indices(&labels) {
             let index = matched.index as usize;
@@ -169,7 +169,7 @@ impl App {
 
     /// Execute the highlighted palette command and close the palette.
     fn confirm_palette(&mut self) {
-        let command = self.palette.filtered.get(self.palette.selected).map(|&i| PaletteCommand::ALL[i]);
+        let command = self.palette.filtered.get(self.palette.selected).map(|&i| PaletteCommand::at(i));
         self.palette.visible = false;
         if let Some(command) = command {
             self.run_palette_command(command);

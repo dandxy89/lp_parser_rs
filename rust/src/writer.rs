@@ -465,7 +465,7 @@ fn format_number(value: f64, precision: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{Coefficient, ComparisonOp, Constraint, Objective, Sense, Variable, VariableType};
+    use crate::model::{Coefficient, ComparisonOp, Constraint, Objective, Sense, Variable, VariableBounds, VariableKind, VariableType};
     use crate::problem::LpProblem;
 
     #[test]
@@ -526,9 +526,9 @@ mod tests {
         let x1 = reparsed.name_id("x1").unwrap();
         let x2 = reparsed.name_id("x2").unwrap();
         let x3 = reparsed.name_id("x3").unwrap();
-        assert_eq!(reparsed.variables[&x1].var_type(), VariableType::UpperBound(f64::INFINITY));
-        assert_eq!(reparsed.variables[&x2].var_type(), VariableType::LowerBound(f64::NEG_INFINITY));
-        assert_eq!(reparsed.variables[&x3].var_type(), VariableType::DoubleBound(f64::NEG_INFINITY, 5.0));
+        assert_eq!(reparsed.variables[&x1].bounds, VariableBounds::upper(f64::INFINITY));
+        assert_eq!(reparsed.variables[&x2].bounds, VariableBounds::lower(f64::NEG_INFINITY));
+        assert_eq!(reparsed.variables[&x3].bounds, VariableBounds::range(f64::NEG_INFINITY, 5.0));
     }
 
     #[test]
@@ -769,8 +769,8 @@ End";
         // Verify the parsed variables are General
         let x1_id = problem.name_id("x1").unwrap();
         let x2_id = problem.name_id("x2").unwrap();
-        assert_eq!(problem.variables.get(&x1_id).unwrap().var_type(), VariableType::General);
-        assert_eq!(problem.variables.get(&x2_id).unwrap().var_type(), VariableType::General);
+        assert_eq!(problem.variables.get(&x1_id).unwrap().kind, VariableKind::General);
+        assert_eq!(problem.variables.get(&x2_id).unwrap().kind, VariableKind::General);
 
         // Write back to LP format
         let output = write_lp_string(&problem);
@@ -784,8 +784,8 @@ End";
         let reparsed = crate::problem::LpProblem::parse(&output).unwrap();
         let x1_id = reparsed.name_id("x1").unwrap();
         let x2_id = reparsed.name_id("x2").unwrap();
-        assert_eq!(reparsed.variables.get(&x1_id).unwrap().var_type(), VariableType::General);
-        assert_eq!(reparsed.variables.get(&x2_id).unwrap().var_type(), VariableType::General);
+        assert_eq!(reparsed.variables.get(&x1_id).unwrap().kind, VariableKind::General);
+        assert_eq!(reparsed.variables.get(&x2_id).unwrap().kind, VariableKind::General);
     }
 
     /// Assert that two problems are structurally identical: same sense, and the
@@ -832,7 +832,7 @@ End";
         for (id, var) in &a.variables {
             let name = a.resolve(*id);
             let b_id = b.name_id(name).unwrap_or_else(|| panic!("variable '{name}' missing after round-trip"));
-            assert_eq!(var.var_type(), b.variables[&b_id].var_type(), "variable '{name}' type");
+            assert_eq!((var.kind, var.bounds), (b.variables[&b_id].kind, b.variables[&b_id].bounds), "variable '{name}' type");
         }
     }
 
@@ -867,16 +867,16 @@ End
 ";
         let original = LpProblem::parse(input).unwrap();
 
-        // Sanity-check the parse picked up the interesting variable types.
-        let vt = |name: &str| original.variables[&original.name_id(name).unwrap()].var_type().clone();
-        assert_eq!(vt("x1"), VariableType::LowerBound(2.0));
-        assert_eq!(vt("x2"), VariableType::UpperBound(8.0));
-        assert_eq!(vt("f"), VariableType::Free);
-        assert_eq!(vt("g"), VariableType::DoubleBound(-1.5, 7.5));
-        assert_eq!(vt("b1"), VariableType::Binary);
-        assert_eq!(vt("gen1"), VariableType::General);
-        assert_eq!(vt("sc1"), VariableType::SemiContinuous);
-        assert_eq!(vt("sw1"), VariableType::SOS);
+        // Sanity-check the parse picked up the interesting variable kinds and bounds.
+        let var = |name: &str| original.variables[&original.name_id(name).unwrap()].clone();
+        assert_eq!(var("x1").bounds, VariableBounds::lower(2.0));
+        assert_eq!(var("x2").bounds, VariableBounds::upper(8.0));
+        assert!(var("f").bounds.is_free());
+        assert_eq!(var("g").bounds, VariableBounds::range(-1.5, 7.5));
+        assert_eq!(var("b1").kind, VariableKind::Binary);
+        assert_eq!(var("gen1").kind, VariableKind::General);
+        assert_eq!(var("sc1").kind, VariableKind::SemiContinuous);
+        assert_eq!(var("sw1").kind, VariableKind::Sos);
 
         let written = write_lp_string(&original);
         let reparsed = LpProblem::parse(&written).unwrap_or_else(|e| panic!("written LP must re-parse: {e}\n---\n{written}"));
@@ -952,7 +952,7 @@ End
         let reparsed = LpProblem::parse(&written).unwrap_or_else(|e| panic!("wrapped LP must re-parse: {e}\n---\n{written}"));
         for name in &names {
             let id = reparsed.name_id(name).unwrap_or_else(|| panic!("binary '{name}' missing after round-trip"));
-            assert_eq!(reparsed.variables[&id].var_type(), VariableType::Binary, "variable '{name}'");
+            assert_eq!(reparsed.variables[&id].kind, VariableKind::Binary, "variable '{name}'");
         }
     }
 

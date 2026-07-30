@@ -65,7 +65,7 @@ use lp_solvers::lp_format::{AsVariable, LpObjective, WriteToLpFileFormat};
 
 use crate::NUMERIC_EPSILON;
 use crate::interner::{NameId, NameInterner};
-use crate::model::{Coefficient, ComparisonOp, Constraint, Objective, Sense, Variable, VariableType};
+use crate::model::{Coefficient, ComparisonOp, Constraint, Objective, Sense, Variable, VariableKind};
 use crate::problem::LpProblem;
 
 /// Errors that can occur when converting an `LpProblem` to lp-solvers format.
@@ -293,7 +293,7 @@ impl<'a> LpSolversCompat<'a> {
 
         // Check for semi-continuous variables
         for variable in problem.variables.values() {
-            if matches!(variable.var_type(), VariableType::SemiContinuous) {
+            if variable.kind == VariableKind::SemiContinuous {
                 warnings
                     .push(LpSolversCompatWarning::SemiContinuousApproximated { name: problem.interner.resolve(variable.name).to_string() });
             }
@@ -342,7 +342,7 @@ impl<'a> lp_solvers::lp_format::LpProblem<'a> for LpSolversCompat<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{SOSType, Variable};
+    use crate::model::{SOSType, Variable, VariableType};
 
     fn simple_problem() -> LpProblem {
         let mut p = LpProblem::new().with_sense(Sense::Minimize);

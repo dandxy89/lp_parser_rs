@@ -28,12 +28,7 @@ impl LineIndex {
     /// Build a line index from the full source text.
     #[must_use]
     pub fn new(source: &str) -> Self {
-        let mut line_starts = vec![0];
-        for (i, byte) in source.bytes().enumerate() {
-            if byte == b'\n' {
-                line_starts.push(i + 1);
-            }
-        }
+        let line_starts = std::iter::once(0).chain(source.match_indices('\n').map(|(i, _)| i + 1)).collect();
         Self { line_starts, source_len: source.len() }
     }
 

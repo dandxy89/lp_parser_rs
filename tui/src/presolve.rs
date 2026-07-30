@@ -167,8 +167,9 @@ pub const DEFAULT_RULES: RuleSet = {
     rules
 };
 
-/// Whether `rule` is enabled in `rules`.
-pub const fn enabled(rules: RuleSet, rule: Rule) -> bool {
+/// Whether `rule` is enabled in `rules`. Private: outside this module a
+/// `RuleSet` is indexed directly.
+const fn enabled(rules: RuleSet, rule: Rule) -> bool {
     rules[rule as usize]
 }
 
@@ -1174,7 +1175,13 @@ fn split_dense_rows(problem: &mut LpProblem, pass: &mut PassStats) {
             let mut coefficients = group.to_vec();
             coefficients.push(Coefficient { name: part, value: -1.0 });
             let def = problem.intern(def_name);
-            problem.add_constraint(Constraint::Standard { name: def, coefficients, operator: ComparisonOp::EQ, rhs: 0.0, byte_offset: None });
+            problem.add_constraint(Constraint::Standard {
+                name: def,
+                coefficients,
+                operator: ComparisonOp::EQ,
+                rhs: 0.0,
+                byte_offset: None,
+            });
 
             aggregate.push(Coefficient { name: part, value: 1.0 });
             pass.parts_added += 1;
@@ -1628,7 +1635,11 @@ mod tests {
         // re-impose the LP default of `part >= 0`.
         let written = lp_parser_rs::writer::write_lp_string(&out);
         let reparsed = LpProblem::parse(&written).expect("the written split must parse back");
-        assert_eq!(bounds_of(&reparsed, "dense__part1"), (f64::NEG_INFINITY, f64::INFINITY), "the free partial sum survives the round trip");
+        assert_eq!(
+            bounds_of(&reparsed, "dense__part1"),
+            (f64::NEG_INFINITY, f64::INFINITY),
+            "the free partial sum survives the round trip"
+        );
         let round_tripped = crate::solver::solve_problem(&reparsed).expect("round-tripped solve");
         let Some(c) = round_tripped.objective_value else { panic!("round trip lost the objective") };
         assert!((a - c).abs() <= 1e-6 * (1.0 + a.abs()), "the round trip moved the optimum: {a} vs {c}");

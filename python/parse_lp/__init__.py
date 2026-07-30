@@ -9,7 +9,6 @@ from importlib.metadata import version as _version
 
 from .parse_lp import (
     LpInvalidValueError,
-    LpNotParsedError,
     LpObjectNotFoundError,
     LpParseError,
     LpParser,
@@ -21,7 +20,6 @@ from .parse_lp import (
 __version__ = _version("parse_lp")
 __all__ = [
     "LpInvalidValueError",
-    "LpNotParsedError",
     "LpObjectNotFoundError",
     "LpParseError",
     "LpParser",

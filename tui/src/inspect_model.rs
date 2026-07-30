@@ -51,11 +51,11 @@ pub fn build_inspect_report(file: &str, problem: &LpProblem, line_map: &HashMap<
 
 #[cfg(test)]
 mod tests {
-    use lp_parser_rs::model::VariableType;
+    use lp_parser_rs::model::{VariableBounds, VariableKind};
     use lp_parser_rs::problem::LpProblem;
 
     use super::*;
-    use crate::diff_model::{ConstraintDiffDetail, DiffKind, ResolvedConstraint};
+    use crate::diff_model::{ConstraintDiffDetail, DiffKind, ResolvedConstraint, VarSpec};
 
     fn analyse(problem: &LpProblem) -> ProblemAnalysis {
         problem.analyze()
@@ -75,7 +75,7 @@ mod tests {
         assert!(report.variables.entries.iter().any(|e| e.name == "y"));
 
         let x = report.variables.entries.iter().find(|e| e.name == "x").expect("x present");
-        assert_eq!(x.new_type, Some(VariableType::Binary));
+        assert_eq!(x.new_type, Some(VarSpec { kind: VariableKind::Binary, bounds: VariableBounds::free() }));
         assert!(x.old_type.is_none(), "inspect entries never carry an old side");
     }
 

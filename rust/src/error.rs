@@ -178,13 +178,6 @@ impl LpParseError {
         Self::ParseError { position, message: message.into(), context: None }
     }
 
-    /// Create a parse error enriched with line/column context from `source`.
-    pub fn parse_error_with_source(position: usize, message: impl Into<String>, source: &str) -> Self {
-        let message = message.into();
-        let context = build_parse_context(source, position);
-        Self::ParseError { position, message, context }
-    }
-
     /// Attach source context to a parse error if it does not already have one.
     #[must_use]
     pub fn with_source(mut self, source: &str) -> Self {
@@ -271,10 +264,10 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_error_with_source() {
+    fn test_with_source_adds_context() {
         let source = "Minimize\n obj: x\nSubject To\n c1: @ bad\nEnd\n";
         let pos = source.find('@').expect("@ present");
-        let err = LpParseError::parse_error_with_source(pos, "Unexpected token", source);
+        let err = LpParseError::parse_error(pos, "Unexpected token").with_source(source);
         let diag = err.diagnostic();
         assert!(diag.contains("line 4"), "{diag}");
         assert!(diag.contains('^'), "{diag}");

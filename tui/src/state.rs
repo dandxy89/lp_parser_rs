@@ -98,24 +98,12 @@ impl SolveTab {
 
     /// Cycle to the next tab, wrapping around.
     pub const fn next(self) -> Self {
-        match self {
-            Self::Summary => Self::Variables,
-            Self::Variables => Self::Constraints,
-            Self::Constraints => Self::Log,
-            Self::Log => Self::Duals,
-            Self::Duals => Self::Summary,
-        }
+        Self::ALL[(self.index() + 1) % Self::ALL.len()]
     }
 
     /// Cycle to the previous tab, wrapping around.
     pub const fn prev(self) -> Self {
-        match self {
-            Self::Summary => Self::Duals,
-            Self::Variables => Self::Summary,
-            Self::Constraints => Self::Variables,
-            Self::Log => Self::Constraints,
-            Self::Duals => Self::Log,
-        }
+        Self::ALL[(self.index() + Self::ALL.len() - 1) % Self::ALL.len()]
     }
 }
 
@@ -610,16 +598,13 @@ impl PaletteCommand {
         (Self::Quit, "Quit", "q"),
     ];
 
-    /// Every command, in display order.
-    pub const ALL: [Self; 31] = {
-        let mut all = [Self::Quit; 31];
-        let mut i = 0;
-        while i < Self::CMDS.len() {
-            all[i] = Self::CMDS[i].0;
-            i += 1;
-        }
-        all
-    };
+    /// Number of commands offered by the palette.
+    pub const COUNT: usize = Self::CMDS.len();
+
+    /// The command at `index` in display order.
+    pub const fn at(index: usize) -> Self {
+        Self::CMDS[index].0
+    }
 
     /// Look up this command's row in [`Self::CMDS`], which mirrors the enum
     /// declaration order so the discriminant doubles as the table index.

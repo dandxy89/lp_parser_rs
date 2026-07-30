@@ -1,20 +1,29 @@
-//! Plain-text rendering of detail panel content for clipboard yanking.
+//! Plain-text rendering of panel content for clipboard yanking.
+//!
+//! Everything the detail, summary, numerics, and solve panels show is derived
+//! from the same `Vec<Line>` the widgets draw: [`crate::widgets::plain`] strips
+//! the styles and keeps the text. One renderer, two outputs.
+//!
+//! The exception is [`render_side_plain`], which yanks a single side of an
+//! entry as LP source syntax (`c1: 2 x + 3 y <= 10`) for pasting back into a
+//! model. That is a different artefact from what the panel draws, so it is
+//! written out here.
 
 use std::fmt::Write;
 
-use lp_parser_rs::analysis::ProblemAnalysis;
 use lp_parser_rs::interner::NameInterner;
 
 use crate::app::App;
-use crate::detail_model::{CoefficientRow, build_coeff_rows};
 use crate::diff_model::{
-    CoefficientChange, ConstraintDiffDetail, ConstraintDiffEntry, DiffCounts, DiffKind, ObjectiveDiffEntry, ResolvedCoefficient,
-    ResolvedConstraint, VariableDiffEntry,
+    ConstraintDiffDetail, ConstraintDiffEntry, DiffKind, ObjectiveDiffEntry, ResolvedCoefficient, ResolvedConstraint, VariableDiffEntry,
 };
 use crate::solver::{SolveDiffResult, SolveResult};
 use crate::state::{AppMode, Section, Side};
-use crate::widgets::detail::{fmt_bound, variable_bounds};
-use crate::widgets::{rule_str, short_filename};
+use crate::widgets::detail::{
+    build_constraint_detail, build_inspect_constraint, build_inspect_objective, build_inspect_variable, build_objective_detail,
+    build_variable_detail,
+};
+use crate::widgets::plain;
 
 /// Writing to a `String` via `fmt::Write` is infallible. This macro replaces
 /// `let _ = writeln!(...)` with an asserting version that satisfies Tiger Style.
@@ -28,171 +37,43 @@ macro_rules! w {
 }
 
 /// Render the currently selected detail panel as plain text.
-/// Returns `None` if no entry is selected (except for Summary, which has no entry).
+/// Returns `None` if no entry is selected (except for Summary and Numerics,
+/// which have no entry and yank their pre-built panel lines).
 pub fn render_detail_plain(app: &App) -> Option<String> {
-    if app.mode == AppMode::Inspect {
-        return render_inspect_detail_plain(app);
-    }
-    match app.active_section {
-        Section::Summary => Some(render_summary_plain(app)),
-        Section::Numerics => Some(render_numerics_plain(app)),
-        _ => {
-            let entry_index = app.selected_entry_index()?;
-            let cached_rows = app.cached_coeff_rows();
-            match app.active_section {
-                Section::Variables => {
-                    let entry = app.report.variables.entries.get(entry_index)?;
-                    Some(render_variable_plain(entry))
-                }
-                Section::Constraints => {
-                    let entry = app.report.constraints.entries.get(entry_index)?;
-                    Some(render_constraint_plain(entry, cached_rows, &app.report.interner))
-                }
-                Section::Objectives => {
-                    let entry = app.report.objectives.entries.get(entry_index)?;
-                    Some(render_objective_plain(entry, cached_rows, &app.report.interner))
-                }
-                Section::Summary | Section::Numerics => unreachable!("handled above"),
-            }
-        }
-    }
-}
-
-/// Render the selected inspect (single-file) detail as neutral plain text.
-fn render_inspect_detail_plain(app: &App) -> Option<String> {
     let interner = &app.report.interner;
+    let inspect = app.mode == AppMode::Inspect;
     match app.active_section {
-        Section::Summary => Some(render_inspect_summary_plain(app)),
-        Section::Numerics => Some(render_inspect_numerics_plain(app)),
-        Section::Variables => Some(render_inspect_variable_plain(app.report.variables.entries.get(app.selected_entry_index()?)?)),
+        Section::Summary => Some(plain(&app.summary_lines)),
+        Section::Numerics => Some(plain(&app.numerics_lines)),
+        Section::Variables => {
+            let entry = app.report.variables.entries.get(app.selected_entry_index()?)?;
+            Some(plain(&if inspect { build_inspect_variable(entry) } else { build_variable_detail(entry) }))
+        }
         Section::Constraints => {
-            Some(render_inspect_constraint_plain(app.report.constraints.entries.get(app.selected_entry_index()?)?, interner))
+            let entry = app.report.constraints.entries.get(app.selected_entry_index()?)?;
+            let lines = if inspect {
+                build_inspect_constraint(entry, interner)
+            } else {
+                build_constraint_detail(entry, app.cached_coeff_rows(), interner)
+            };
+            Some(plain(&lines))
         }
         Section::Objectives => {
-            Some(render_inspect_objective_plain(app.report.objectives.entries.get(app.selected_entry_index()?)?, interner))
-        }
-    }
-}
-
-/// Neutral plain text for an inspect variable entry.
-fn render_inspect_variable_plain(entry: &VariableDiffEntry) -> String {
-    let mut out = String::new();
-    w!(out, "Variable: {}", entry.name);
-    w!(out, "{}", rule_str(38));
-    if let Some(variable_type) = entry.new_type.as_ref() {
-        write_variable_type_info(&mut out, variable_type);
-    }
-    out
-}
-
-/// Neutral plain text for an inspect constraint entry (operator/RHS/coeffs or SOS).
-fn render_inspect_constraint_plain(entry: &ConstraintDiffEntry, interner: &NameInterner) -> String {
-    let mut out = String::new();
-    w!(out, "Constraint: {}", entry.name);
-    w!(out, "{}", rule_str(38));
-    if let Some(line) = entry.line_file2.or(entry.line_file1) {
-        w!(out, "  Location: L{line}");
-    }
-    match &entry.detail {
-        ConstraintDiffDetail::AddedOrRemoved(ResolvedConstraint::Standard { coefficients, operator, rhs }) => {
-            if coefficients.is_empty() {
-                w!(out, "  Operator: {operator}");
-                w!(out, "  RHS:      {rhs}");
+            let entry = app.report.objectives.entries.get(app.selected_entry_index()?)?;
+            let lines = if inspect {
+                build_inspect_objective(entry, interner)
             } else {
-                write_lp_expression(&mut out, &entry.name, coefficients, Some((*operator, *rhs)), interner);
-            }
+                build_objective_detail(entry, app.cached_coeff_rows(), interner, None)
+            };
+            Some(plain(&lines))
         }
-        ConstraintDiffDetail::AddedOrRemoved(ResolvedConstraint::Sos { sos_type, weights }) => {
-            w!(out, "  SOS Type: {sos_type}");
-            w!(out, "  Weights:");
-            for weight in weights {
-                w!(out, "    {:<20}{}", interner.resolve(weight.name), weight.value);
-            }
-        }
-        _ => w!(out, "  (unavailable)"),
-    }
-    out
-}
-
-/// Neutral plain text for an inspect objective entry (coefficients).
-fn render_inspect_objective_plain(entry: &ObjectiveDiffEntry, interner: &NameInterner) -> String {
-    let mut out = String::new();
-    w!(out, "Objective: {}", entry.name);
-    w!(out, "{}", rule_str(38));
-    if entry.new_coefficients.is_empty() {
-        w!(out, "  (no coefficients)");
-    } else {
-        write_lp_expression(&mut out, &entry.name, &entry.new_coefficients, None, interner);
-    }
-    out
-}
-
-/// Neutral single-file plain text for the inspect Summary panel.
-fn render_inspect_summary_plain(app: &App) -> String {
-    let problem = &app.problem1;
-    let analysis = &app.report.analysis1;
-    let counts = &app.cached_summary;
-    let mut out = String::with_capacity(512);
-
-    w!(out, "  {}", app.report.file1);
-    w!(out, "  Name:   {}", problem.name().unwrap_or("(unnamed)"));
-    w!(out, "  Sense:  {}", problem.sense);
-    w!(out);
-    w!(out, "  Variables:    {}", counts.variables.total());
-    w!(out, "  Constraints:  {}", counts.constraints.total());
-    w!(out, "  Objectives:   {}", counts.objectives.total());
-    w!(out, "  Non-zeros:    {}", analysis.summary.total_nonzeros);
-    w!(out, "  Density:      {:.4}%", analysis.summary.density * 100.0);
-    w!(out);
-    write_issues_single(&mut out, &analysis.issues);
-    out
-}
-
-/// Neutral single-file plain text for the inspect Numerics panel.
-fn render_inspect_numerics_plain(app: &App) -> String {
-    use crate::widgets::numerics::{count_by_severity, format_range, format_ratio, range_ratio};
-    let analysis = &app.report.analysis1;
-    let mut out = String::with_capacity(512);
-
-    w!(out, "  {}", app.report.file1);
-    w!(out);
-    w!(out, "  Problem Size");
-    w!(out, "  Variables:    {}", analysis.summary.variable_count);
-    w!(out, "  Constraints:  {}", analysis.summary.constraint_count);
-    w!(out, "  Non-zeros:    {}", analysis.summary.total_nonzeros);
-    w!(out, "  Density:      {:.4}%", analysis.summary.density * 100.0);
-    w!(out);
-    w!(out, "  Coefficient Ranges (|value|)");
-    for (label, range) in [
-        ("Objective", &analysis.coefficients.objective_coeff_range),
-        ("Matrix", &analysis.coefficients.constraint_coeff_range),
-        ("RHS", &analysis.constraints.rhs_range),
-    ] {
-        w!(out, "  {label:<12}{:>20}  ratio {}", format_range(range), format_ratio(range_ratio(range)));
-    }
-    w!(out, "  {:<12}{:>20}", "Overall ratio", format_ratio(Some(analysis.coefficients.coefficient_ratio)));
-    w!(out);
-    let (errors, warnings, infos) = count_by_severity(&analysis.issues);
-    w!(out, "  Issues: {errors} error(s), {warnings} warning(s), {infos} info");
-    write_issues_single(&mut out, &analysis.issues);
-    out
-}
-
-/// Write a single-file issues list (used by the inspect plain renderers).
-fn write_issues_single(out: &mut String, issues: &[lp_parser_rs::analysis::AnalysisIssue]) {
-    if issues.is_empty() {
-        w!(out, "  No issues detected");
-        return;
-    }
-    for issue in issues {
-        w!(out, "  [{:<7}] {}", issue.severity, issue.message);
     }
 }
 
-/// Render a single side (old or new) of the selected entry as plain text.
+/// Render the old or new side of the selected entry as LP source syntax.
 ///
-/// Returns `None` if the active section is Summary, no entry is selected,
-/// or the requested side does not exist for the entry (e.g. `Old` on an Added entry).
+/// Returns `None` when the requested side does not exist (an added entry has no
+/// old side) or the section has no per-entry sides.
 pub fn render_side_plain(app: &App, side: Side) -> Option<String> {
     let entry_index = app.selected_entry_index()?;
     match app.active_section {
@@ -339,241 +220,10 @@ fn write_lp_expression(
         w!(out);
     }
 }
-
-/// Render the summary panel as plain text for clipboard yanking.
-///
-/// Mirrors the visual summary widget: file paths, name/sense changes,
-/// per-section change-count table, totals, and comparative analysis.
-pub fn render_summary_plain(app: &App) -> String {
-    let report = &app.report;
-    let summary = &app.cached_summary;
-    let a1 = &report.analysis1;
-    let a2 = &report.analysis2;
-
-    let mut out = String::with_capacity(1024);
-
-    // File header
-    w!(out, "  {}  \u{2192}  {}", report.file1, report.file2);
-
-    if let Some((ref old, ref new)) = report.name_changed {
-        let old_name = old.as_deref().unwrap_or("(unnamed)");
-        let new_name = new.as_deref().unwrap_or("(unnamed)");
-        w!(out, "  Name:   \"{old_name}\"  \u{2192}  \"{new_name}\"");
-    }
-    if let Some((ref old_sense, ref new_sense)) = report.sense_changed {
-        w!(out, "  Sense:  {old_sense}  \u{2192}  {new_sense}");
-    }
-    w!(out);
-
-    // Change counts table
-    w!(out, "  {:<14}{:>7}{:>9}{:>12}{:>9}{:>9}", "Section", "Added", "Removed", "Modified", "Renamed", "Total");
-    for (label, counts) in [("Variables", &summary.variables), ("Constraints", &summary.constraints), ("Objectives", &summary.objectives)] {
-        write_count_row(&mut out, label, counts);
-    }
-    w!(out, "  {}", rule_str(62));
-    let totals = summary.aggregate_counts();
-    write_count_row(&mut out, "TOTAL", &totals);
-
-    // Problem Dimensions
-    w!(out);
-    write_analysis_sections(&mut out, a1, a2);
-
-    // Issues
-    w!(out);
-    write_issues_plain(&mut out, report, a1, a2);
-
-    out
-}
-
-/// Render the Numerics section as plain text (mirrors `widgets::numerics`).
-pub fn render_numerics_plain(app: &App) -> String {
-    use crate::widgets::numerics::{MAX_NEW_ISSUES, count_by_severity, format_range, format_ratio, new_issue_indices, range_ratio};
-    const W: usize = 18;
-
-    let report = &app.report;
-    let a = &report.analysis1;
-    let b = &report.analysis2;
-    let mut out = String::with_capacity(1024);
-
-    w!(out, "  {}  \u{2192}  {}", report.file1, report.file2);
-    w!(out);
-
-    w!(out, "  Problem Size");
-    w!(out, "  {:<W$}{:>20}{:>20}", "", "File A", "File B");
-    w!(out, "  {:<W$}{:>20}{:>20}", "Variables", a.summary.variable_count, b.summary.variable_count);
-    w!(out, "  {:<W$}{:>20}{:>20}", "Constraints", a.summary.constraint_count, b.summary.constraint_count);
-    w!(out, "  {:<W$}{:>20}{:>20}", "Non-zeros", a.summary.total_nonzeros, b.summary.total_nonzeros);
-    w!(out, "  {:<W$}{:>19.4}%{:>19.4}%", "Density", a.summary.density * 100.0, b.summary.density * 100.0);
-    w!(out);
-
-    w!(out, "  Coefficient Ranges (|value|)");
-    w!(out, "  {:<W$}{:>20}{:>20}", "", "File A", "File B");
-    for (label, range_a, range_b) in [
-        ("Objective", &a.coefficients.objective_coeff_range, &b.coefficients.objective_coeff_range),
-        ("Matrix", &a.coefficients.constraint_coeff_range, &b.coefficients.constraint_coeff_range),
-        ("RHS", &a.constraints.rhs_range, &b.constraints.rhs_range),
-    ] {
-        w!(out, "  {:<W$}{:>20}{:>20}", label, format_range(range_a), format_range(range_b));
-        w!(out, "  {:<W$}{:>20}{:>20}", format!("{label} ratio"), format_ratio(range_ratio(range_a)), format_ratio(range_ratio(range_b)));
-    }
-    w!(
-        out,
-        "  {:<W$}{:>20}{:>20}",
-        "Overall ratio",
-        format_ratio(Some(a.coefficients.coefficient_ratio)),
-        format_ratio(Some(b.coefficients.coefficient_ratio))
-    );
-    w!(out);
-
-    w!(out, "  Issues");
-    let (err_a, warn_a, info_a) = count_by_severity(&a.issues);
-    let (err_b, warn_b, info_b) = count_by_severity(&b.issues);
-    w!(out, "  File A: {err_a} errors, {warn_a} warnings, {info_a} infos");
-    w!(out, "  File B: {err_b} errors, {warn_b} warnings, {info_b} infos");
-    w!(out);
-
-    w!(out, "  New issues in {}", report.file2);
-    let new_indices = new_issue_indices(&a.issues, &b.issues);
-    if new_indices.is_empty() {
-        w!(out, "  none");
-    } else {
-        for &index in new_indices.iter().take(MAX_NEW_ISSUES) {
-            let issue = &b.issues[index];
-            w!(out, "  [{:<7}] {}", issue.severity.to_string(), issue.message);
-        }
-        if new_indices.len() > MAX_NEW_ISSUES {
-            w!(out, "  \u{2026} ({} more)", new_indices.len() - MAX_NEW_ISSUES);
-        }
-    }
-
-    out
-}
-
-/// Write a single row of the change-count table.
-fn write_count_row(out: &mut String, label: &str, counts: &DiffCounts) {
-    w!(out, "  {:<14}{:>7}{:>9}{:>12}{:>9}{:>9}", label, counts.added, counts.removed, counts.modified, counts.renamed, counts.total());
-}
-
-/// Write comparative analysis sections (dimensions, variable types,
-/// constraint types, coefficient scaling) as plain text.
-#[allow(clippy::cast_possible_wrap)] // LP problem dimensions never approach i64::MAX
-fn write_analysis_sections(out: &mut String, a: &ProblemAnalysis, b: &ProblemAnalysis) {
-    const W: usize = 18;
-
-    // Problem Dimensions
-    w!(out, "  Problem Dimensions");
-    w!(out, "  {:<W$}{:>12}{:>12}{:>12}", "", "File A", "File B", "Delta");
-    write_comparison_row_usize(out, "Variables", W, a.summary.variable_count, b.summary.variable_count);
-    write_comparison_row_usize(out, "Constraints", W, a.summary.constraint_count, b.summary.constraint_count);
-    write_comparison_row_usize(out, "Non-zeros", W, a.summary.total_nonzeros, b.summary.total_nonzeros);
-    write_comparison_row_pct(out, "Density", W, a.summary.density, b.summary.density);
-    let sparsity_a = format!("{}\u{2013}{}", a.sparsity.min_vars_per_constraint, a.sparsity.max_vars_per_constraint);
-    let sparsity_b = format!("{}\u{2013}{}", b.sparsity.min_vars_per_constraint, b.sparsity.max_vars_per_constraint);
-    w!(out, "  {:<W$}{:>12}{:>12}", "Vars/constraint", sparsity_a, sparsity_b);
-
-    // Variable Types
-    w!(out);
-    w!(out, "  Variable Types");
-    w!(out, "  {:<W$}{:>12}{:>12}{:>12}", "", "File A", "File B", "Delta");
-    let va = &a.variables.type_distribution;
-    let vb = &b.variables.type_distribution;
-    write_comparison_row_usize(out, "Binary", W, va.binary, vb.binary);
-    write_comparison_row_usize(out, "Integer", W, va.integer, vb.integer);
-    write_comparison_row_usize(out, "General", W, va.general, vb.general);
-    write_comparison_row_usize(out, "Free", W, va.free, vb.free);
-    write_comparison_row_usize(out, "Lower-bounded", W, va.lower_bounded, vb.lower_bounded);
-    write_comparison_row_usize(out, "Upper-bounded", W, va.upper_bounded, vb.upper_bounded);
-    write_comparison_row_usize(out, "Double-bounded", W, va.double_bounded, vb.double_bounded);
-    write_comparison_row_usize(out, "Semi-continuous", W, va.semi_continuous, vb.semi_continuous);
-
-    // Constraint Types
-    w!(out);
-    w!(out, "  Constraint Types");
-    w!(out, "  {:<W$}{:>12}{:>12}{:>12}", "", "File A", "File B", "Delta");
-    let ca = &a.constraints.type_distribution;
-    let cb = &b.constraints.type_distribution;
-    write_comparison_row_usize(out, "Equality (=)", W, ca.equality, cb.equality);
-    write_comparison_row_usize(out, "<= constraints", W, ca.less_than_equal, cb.less_than_equal);
-    write_comparison_row_usize(out, ">= constraints", W, ca.greater_than_equal, cb.greater_than_equal);
-    write_comparison_row_usize(out, "< constraints", W, ca.less_than, cb.less_than);
-    write_comparison_row_usize(out, "> constraints", W, ca.greater_than, cb.greater_than);
-    write_comparison_row_usize(out, "SOS1", W, ca.sos1, cb.sos1);
-    write_comparison_row_usize(out, "SOS2", W, ca.sos2, cb.sos2);
-
-    // Coefficient Scaling
-    w!(out);
-    w!(out, "  Coefficient Scaling");
-    w!(out, "  {:<W$}{:>16}{:>16}", "", "File A", "File B");
-    let coeff_a = crate::widgets::numerics::format_range_prec(&a.coefficients.constraint_coeff_range, 1);
-    let coeff_b = crate::widgets::numerics::format_range_prec(&b.coefficients.constraint_coeff_range, 1);
-    w!(out, "  {:<W$}{:>16}{:>16}", "Coeff range", coeff_a, coeff_b);
-    let ratio_a = crate::widgets::numerics::format_scientific(a.coefficients.coefficient_ratio);
-    let ratio_b = crate::widgets::numerics::format_scientific(b.coefficients.coefficient_ratio);
-    w!(out, "  {:<W$}{:>16}{:>16}", "Coeff ratio", ratio_a, ratio_b);
-    let rhs_a = crate::widgets::numerics::format_range_prec(&a.constraints.rhs_range, 1);
-    let rhs_b = crate::widgets::numerics::format_range_prec(&b.constraints.rhs_range, 1);
-    w!(out, "  {:<W$}{:>16}{:>16}", "RHS range", rhs_a, rhs_b);
-}
-
-/// Write a comparison row with usize values and a signed delta.
-#[allow(clippy::cast_possible_wrap)]
-fn write_comparison_row_usize(out: &mut String, label: &str, label_width: usize, a: usize, b: usize) {
-    let delta = b as i64 - a as i64;
-    let delta_str = match delta.cmp(&0) {
-        std::cmp::Ordering::Equal => "\u{2014}".to_string(),
-        std::cmp::Ordering::Greater => format!("+{delta}"),
-        std::cmp::Ordering::Less => format!("{delta}"),
-    };
-    w!(out, "  {:<label_width$}{:>12}{:>12}{:>12}", label, a, b, delta_str);
-}
-
-/// Write a comparison row with percentage values and a delta.
-fn write_comparison_row_pct(out: &mut String, label: &str, label_width: usize, a: f64, b: f64) {
-    let delta = b - a;
-    let delta_str = if delta.abs() < 1e-10 { "\u{2014}".to_string() } else { format!("{:+.2}%", delta * 100.0) };
-    w!(out, "  {:<label_width$}{:>11.2}%{:>11.2}%{:>12}", label, a * 100.0, b * 100.0, delta_str);
-}
-
-/// Write the issues section as plain text.
-fn write_issues_plain(out: &mut String, report: &crate::diff_model::LpDiffReport, a1: &ProblemAnalysis, a2: &ProblemAnalysis) {
-    use crate::widgets::numerics::count_by_severity;
-    w!(out, "  Issues");
-
-    let (err1, warn1, info1) = count_by_severity(&a1.issues);
-    let (err2, warn2, info2) = count_by_severity(&a2.issues);
-
-    w!(
-        out,
-        "  File A: {} error(s), {} warning(s), {} info  |  File B: {} error(s), {} warning(s), {} info",
-        err1,
-        warn1,
-        info1,
-        err2,
-        warn2,
-        info2
-    );
-
-    if a1.issues.is_empty() && a2.issues.is_empty() {
-        w!(out, "  No issues detected");
-        return;
-    }
-    w!(out);
-
-    let label_a = short_filename(&report.file1);
-    for issue in &a1.issues {
-        w!(out, "  [{:<7}] {}: {}", issue.severity, label_a, issue.message);
-    }
-    let label_b = short_filename(&report.file2);
-    for issue in &a2.issues {
-        w!(out, "  [{:<7}] {}: {}", issue.severity, label_b, issue.message);
-    }
-}
-
 /// Write type/bounds lines for a single-side variable (added or removed).
-fn write_variable_type_info(out: &mut String, variable_type: &lp_parser_rs::model::VariableType) {
-    let label = std::str::from_utf8(variable_type.as_ref()).unwrap_or("?");
-    w!(out, "  Type:   {label}");
-    let (lower_bound, upper_bound) = variable_bounds(variable_type);
+fn write_variable_type_info(out: &mut String, spec: &crate::diff_model::VarSpec) {
+    w!(out, "  Type:   {}", spec.kind);
+    let (lower_bound, upper_bound) = (spec.bounds.lower, spec.bounds.upper);
     if let Some(lower) = lower_bound {
         w!(out, "  Lower:  {lower}");
     }
@@ -585,414 +235,44 @@ fn write_variable_type_info(out: &mut String, variable_type: &lp_parser_rs::mode
     }
 }
 
-#[allow(clippy::similar_names)] // lower_bound/upper_bound share prefixes
-fn render_variable_plain(entry: &VariableDiffEntry) -> String {
-    let mut out = String::new();
-    w!(out, "Variable: {} [{}]", entry.name, entry.kind);
-    w!(out, "{}", rule_str(38));
+/// Panel width assumed when flattening solve results to text. The solve tabs
+/// size their name columns from the terminal width; the clipboard has no width,
+/// so a conventional 80 columns stands in.
+const PLAIN_WIDTH: u16 = 80;
 
-    match entry.kind {
-        DiffKind::Added => {
-            let variable_type = entry.new_type.as_ref().expect("invariant: Added entry must have new_type");
-            write_variable_type_info(&mut out, variable_type);
-        }
-        DiffKind::Removed => {
-            let variable_type = entry.old_type.as_ref().expect("invariant: Removed entry must have old_type");
-            write_variable_type_info(&mut out, variable_type);
-        }
-        DiffKind::Modified => {
-            let old = entry.old_type.as_ref().expect("invariant: Modified entry must have old_type");
-            let new = entry.new_type.as_ref().expect("invariant: Modified entry must have new_type");
-            let old_label = std::str::from_utf8(old.as_ref()).unwrap_or("?");
-            let new_label = std::str::from_utf8(new.as_ref()).unwrap_or("?");
-
-            if old_label == new_label {
-                w!(out, "  Type:   {old_label} (unchanged)");
-            } else {
-                w!(out, "  Type:   {old_label}  \u{2192}  {new_label}");
-            }
-
-            let (old_lower, old_upper) = variable_bounds(old);
-            let (new_lower, new_upper) = variable_bounds(new);
-
-            if old_lower.is_some() || new_lower.is_some() {
-                w!(out, "  Lower:  {}  \u{2192}  {}", fmt_bound(old_lower), fmt_bound(new_lower));
-            }
-            if old_upper.is_some() || new_upper.is_some() {
-                w!(out, "  Upper:  {}  \u{2192}  {}", fmt_bound(old_upper), fmt_bound(new_upper));
-            }
-            let old_range = old_lower.zip(old_upper).map(|(lower, upper)| upper - lower);
-            let new_range = new_lower.zip(new_upper).map(|(lower, upper)| upper - lower);
-            if old_range.is_some() || new_range.is_some() {
-                w!(out, "  Range:  {}  \u{2192}  {}", fmt_bound(old_range), fmt_bound(new_range));
-            }
-        }
-        DiffKind::Renamed => {
-            // Rename detection applies to constraints only; variables never carry Renamed.
-            debug_assert!(false, "variable entry cannot be Renamed");
-        }
-    }
-    out
-}
-
-fn render_constraint_plain(entry: &ConstraintDiffEntry, cached_rows: Option<&[CoefficientRow]>, interner: &NameInterner) -> String {
-    let mut out = String::new();
-    w!(out, "Constraint: {} [{}]", entry.name, entry.kind);
-    w!(out, "{}", rule_str(38));
-
-    if let Some(old_name) = &entry.renamed_from {
-        w!(out, "  Renamed from: {old_name}");
-    }
-
-    if entry.line_file1.is_some() || entry.line_file2.is_some() {
-        match (entry.line_file1, entry.line_file2) {
-            (Some(l1), Some(l2)) => {
-                w!(out, "  Location: L{l1} / L{l2}");
-            }
-            (Some(l1), None) => {
-                w!(out, "  Location: L{l1} (removed)");
-            }
-            (None, Some(l2)) => {
-                w!(out, "  Location: L{l2} (added)");
-            }
-            (None, None) => unreachable!("guarded by outer if"),
-        }
-    }
-
-    match &entry.detail {
-        ConstraintDiffDetail::Standard {
-            old_coefficients,
-            new_coefficients,
-            coeff_changes,
-            operator_change,
-            rhs_change,
-            old_rhs,
-            new_rhs,
-            ..
-        } => {
-            if let Some((old_op, new_op)) = operator_change {
-                w!(out, "  Operator: {old_op}  \u{2192}  {new_op}");
-            }
-            if rhs_change.is_some() {
-                w!(out, "  RHS:      {old_rhs}  \u{2192}  {new_rhs}");
-            } else {
-                w!(out, "  RHS:      {old_rhs} (unchanged)");
-            }
-            w!(out);
-            w!(out, "  Coefficients:");
-            write_coeff_changes(&mut out, coeff_changes, old_coefficients, new_coefficients, cached_rows, interner);
-        }
-        ConstraintDiffDetail::Sos { old_weights, new_weights, weight_changes, type_change, .. } => {
-            if let Some((old_type, new_type)) = type_change {
-                w!(out, "  SOS Type: {old_type}  \u{2192}  {new_type}");
-            }
-            w!(out);
-            w!(out, "  Weights:");
-            write_coeff_changes(&mut out, weight_changes, old_weights, new_weights, None, interner);
-        }
-        ConstraintDiffDetail::TypeChanged { old_summary, new_summary } => {
-            w!(out, "  Was:  {old_summary}");
-            w!(out, "  Now:  {new_summary}");
-        }
-        ConstraintDiffDetail::AddedOrRemoved(constraint) => match constraint {
-            ResolvedConstraint::Standard { coefficients, operator, rhs } => {
-                w!(out, "  Operator: {operator}");
-                w!(out, "  RHS:      {rhs}");
-                w!(out);
-                w!(out, "  Coefficients:");
-                for c in coefficients {
-                    w!(out, "    {:<20}{}", interner.resolve(c.name), c.value);
-                }
-            }
-            ResolvedConstraint::Sos { sos_type, weights } => {
-                w!(out, "  SOS Type: {sos_type}");
-                w!(out);
-                w!(out, "  Weights:");
-                for w_entry in weights {
-                    w!(out, "    {:<20}{}", interner.resolve(w_entry.name), w_entry.value);
-                }
-            }
-        },
-    }
-    out
-}
-
-fn render_objective_plain(entry: &ObjectiveDiffEntry, cached_rows: Option<&[CoefficientRow]>, interner: &NameInterner) -> String {
-    let mut out = String::new();
-    w!(out, "Objective: {} [{}]", entry.name, entry.kind);
-    w!(out, "{}", rule_str(38));
-    w!(out, "  Coefficients:");
-
-    if entry.kind == DiffKind::Modified {
-        write_coeff_changes(&mut out, &entry.coeff_changes, &entry.old_coefficients, &entry.new_coefficients, cached_rows, interner);
-    } else {
-        let coeffs = if entry.kind == DiffKind::Added { &entry.new_coefficients } else { &entry.old_coefficients };
-        for c in coeffs {
-            w!(out, "    {:<20}{}", interner.resolve(c.name), c.value);
-        }
-    }
-    out
-}
-
-/// Column width for value formatting.
-const VAL_WIDTH: usize = 12;
-
-/// Format an `Option<f64>` into a reusable buffer, returning the formatted slice.
-///
-/// Avoids per-row `map_or_else` / `format!` heap allocations by writing into a
-/// caller-owned `String` buffer that is cleared before each use.
-fn fmt_opt_f64(buf: &mut String, value: Option<f64>, precision: usize) -> &str {
-    buf.clear();
-    match value {
-        Some(v) => {
-            write!(buf, "{v:.precision$}").expect("writing to String is infallible");
-            buf.as_str()
-        }
-        None => "\u{2014}",
-    }
-}
-
-fn write_coeff_changes(
-    out: &mut String,
-    changes: &[CoefficientChange],
-    old_coefficients: &[ResolvedCoefficient],
-    new_coefficients: &[ResolvedCoefficient],
-    cached_rows: Option<&[CoefficientRow]>,
-    interner: &NameInterner,
-) {
-    let built;
-    let rows = if let Some(cached) = cached_rows {
-        cached
-    } else {
-        built = build_coeff_rows(changes, old_coefficients, new_coefficients, interner);
-        &built
-    };
-
-    // Reuse buffers across rows to avoid per-row String allocations.
-    let mut old_buf = String::with_capacity(16);
-    let mut new_buf = String::with_capacity(16);
-    for row in rows {
-        old_buf.clear();
-        if let Some(v) = row.old_value {
-            write!(old_buf, "{v}").expect("writing to String is infallible");
-        }
-        new_buf.clear();
-        if let Some(v) = row.new_value {
-            write!(new_buf, "{v}").expect("writing to String is infallible");
-        }
-
-        match row.change_kind {
-            Some(DiffKind::Added) => {
-                w!(out, "    {:<20}{:>VAL_WIDTH$}  \u{2192}  {:<VAL_WIDTH$} [added]", row.variable, "", new_buf);
-            }
-            Some(DiffKind::Removed) => {
-                w!(out, "    {:<20}{:>VAL_WIDTH$}  \u{2192}  {:VAL_WIDTH$} [removed]", row.variable, old_buf, "");
-            }
-            // Renamed never occurs on coefficient rows (asserted in build_coeff_rows);
-            // folded with Modified to keep the match exhaustive.
-            Some(DiffKind::Modified | DiffKind::Renamed) => {
-                w!(out, "    {:<20}{:>VAL_WIDTH$}  \u{2192}  {:<VAL_WIDTH$} [modified]", row.variable, old_buf, new_buf);
-            }
-            None => {
-                w!(out, "    {:<20}{:>VAL_WIDTH$} (unchanged)", row.variable, old_buf);
-            }
-        }
-    }
-}
-
-/// Format a solve result as plain text for clipboard yanking.
+/// Format a single solve result as plain text: every tab, in the order the
+/// overlay presents them.
 pub fn format_solve_result(result: &SolveResult) -> String {
-    let mut text = String::new();
-    w!(text, "Status: {}", result.status);
-    if let Some(obj) = result.objective_value {
-        w!(text, "Objective: {obj}");
-    }
-    let total = result.build_time + result.solve_time + result.extract_time;
-    w!(text, "Build time:   {:.3}s", result.build_time.as_secs_f64());
-    w!(text, "Solve time:   {:.3}s", result.solve_time.as_secs_f64());
-    w!(text, "Extract time: {:.3}s", result.extract_time.as_secs_f64());
-    w!(text, "Total time:   {:.3}s", total.as_secs_f64());
-    if result.skipped_sos > 0 {
-        w!(text, "Warning: {} SOS constraint(s) skipped (not supported by solver)", result.skipped_sos);
-    }
-    if !result.variables.is_empty() {
-        w!(text);
-        w!(text, "Variables:");
-        let has_reduced_costs = !result.reduced_costs.is_empty();
-        if has_reduced_costs {
-            w!(text, "  {:<30} {:>12}  {:>14}", "Name", "Value", "Reduced Cost");
-        }
-        for (i, (name, val)) in result.variables.iter().enumerate() {
-            if has_reduced_costs {
-                let reduced_cost = result.reduced_costs.get(i).map_or(0.0, |(_, v)| *v);
-                w!(text, "  {name:<30} {val:>12.6}  {reduced_cost:>14.6}");
-            } else {
-                w!(text, "  {name:<30} {val}");
-            }
-        }
-    }
-    if !result.shadow_prices.is_empty() {
-        w!(text);
-        w!(text, "Constraints:");
-        w!(text, "  {:<30} {:>12}  {:>14}", "Name", "Activity", "Shadow Price");
-        for (i, (name, shadow_price)) in result.shadow_prices.iter().enumerate() {
-            let row_value = result.row_values.get(i).map_or(0.0, |(_, v)| *v);
-            w!(text, "  {name:<30} {row_value:>12.6}  {shadow_price:>14.6}");
-        }
-    }
-    if !result.solver_log.is_empty() {
-        w!(text);
-        w!(text, "Solver Log:");
-        for line in result.solver_log.lines() {
-            w!(text, "  {line}");
-        }
-    }
-    text
+    let tabs = crate::widgets::solve::build_single_solve_cache(result, PLAIN_WIDTH);
+    tabs.iter().map(|lines| plain(lines)).collect()
 }
 
-/// Format a solve diff comparison as plain text for clipboard yanking.
+/// Format a solve diff comparison as plain text: every tab, in the order the
+/// overlay presents them.
 pub fn format_solve_diff_result(diff: &SolveDiffResult) -> String {
     let mut text = String::new();
-
     w!(text, "Solve Comparison");
     w!(text, "File 1: {}", diff.file1_label);
     w!(text, "File 2: {}", diff.file2_label);
     w!(text);
 
-    write_diff_summary(&mut text, diff);
-    write_diff_variables(&mut text, diff);
-    write_diff_constraints(&mut text, diff);
-    write_diff_solver_logs(&mut text, diff);
+    let crate::app::SolveRenderCache::Diff { summary, log, duals, variable_rows, constraint_rows, .. } =
+        crate::widgets::solve::build_diff_solve_cache(diff, PLAIN_WIDTH)
+    else {
+        debug_assert!(false, "build_diff_solve_cache always returns the Diff variant");
+        return text;
+    };
 
+    text.push_str(&plain(&summary));
+    for (heading, rows) in [("Variables:", &variable_rows), ("Constraints:", &constraint_rows)] {
+        w!(text);
+        w!(text, "{heading}");
+        for row in rows {
+            text.push_str(&plain(std::slice::from_ref(&row.line)));
+        }
+    }
+    w!(text);
+    text.push_str(&plain(&duals));
+    text.push_str(&plain(&log));
     text
-}
-
-/// Write the summary comparison table (status, objective, time, counts).
-fn write_diff_summary(text: &mut String, diff: &SolveDiffResult) {
-    let r1 = &diff.result1;
-    let r2 = &diff.result2;
-
-    w!(text, "{:<18} {:<20} {:<20}", "", "File 1", "File 2");
-    w!(text, "{}", rule_str(62));
-    w!(text, "{:<18} {:<20} {:<20}", "Status:", r1.status, r2.status);
-
-    let obj1 = r1.objective_value.map_or_else(|| "N/A".to_owned(), |v| format!("{v:.6}"));
-    let obj2 = r2.objective_value.map_or_else(|| "N/A".to_owned(), |v| format!("{v:.6}"));
-    w!(text, "{:<18} {:<20} {:<20}", "Objective:", obj1, obj2);
-    w!(text, "{:<18} {:<20} {:<20}", "Variables:", r1.variables.len(), r2.variables.len());
-    w!(text, "{:<18} {:<20} {:<20}", "Constraints:", r1.shadow_prices.len(), r2.shadow_prices.len());
-
-    let total1 = r1.build_time + r1.solve_time + r1.extract_time;
-    let total2 = r2.build_time + r2.solve_time + r2.extract_time;
-    w!(text);
-    w!(text, "Timings");
-    w!(text, "{}", rule_str(62));
-    w!(
-        text,
-        "{:<18} {:<20} {:<20}",
-        "Build:",
-        format!("{:.3}s", r1.build_time.as_secs_f64()),
-        format!("{:.3}s", r2.build_time.as_secs_f64())
-    );
-    w!(
-        text,
-        "{:<18} {:<20} {:<20}",
-        "Solve:",
-        format!("{:.3}s", r1.solve_time.as_secs_f64()),
-        format!("{:.3}s", r2.solve_time.as_secs_f64())
-    );
-    w!(
-        text,
-        "{:<18} {:<20} {:<20}",
-        "Extract:",
-        format!("{:.3}s", r1.extract_time.as_secs_f64()),
-        format!("{:.3}s", r2.extract_time.as_secs_f64())
-    );
-    w!(text, "{:<18} {:<20} {:<20}", "Total:", format!("{:.3}s", total1.as_secs_f64()), format!("{:.3}s", total2.as_secs_f64()));
-    w!(text, "{}", rule_str(62));
-    w!(text, "{:<18} {:.3}s", "Diff:", diff.diff_time.as_secs_f64());
-}
-
-/// Write the variable diff table.
-fn write_diff_variables(text: &mut String, diff: &SolveDiffResult) {
-    if diff.variable_diff.is_empty() {
-        return;
-    }
-    w!(text);
-    w!(text, "Variables:");
-    w!(text, "  {:<24} {:>14} {:>14} {:>14} {:>14} {:>14}", "Name", "File 1", "File 2", "\u{0394}", "RC 1", "RC 2");
-    w!(text, "  {}", rule_str(106));
-    let mut buf1 = String::with_capacity(24);
-    let mut buf2 = String::with_capacity(24);
-    let mut buf3 = String::with_capacity(24);
-    let mut buf4 = String::with_capacity(24);
-    let mut delta_buf = String::with_capacity(24);
-    for row in &diff.variable_diff {
-        let name = row.name(&diff.result1, &diff.result2);
-        let v1 = fmt_opt_f64(&mut buf1, row.val1, 6);
-        let v2 = fmt_opt_f64(&mut buf2, row.val2, 6);
-        let rc1 = fmt_opt_f64(&mut buf3, row.reduced_cost1, 6);
-        let rc2 = fmt_opt_f64(&mut buf4, row.reduced_cost2, 6);
-        delta_buf.clear();
-        let delta: &str = match (row.val1, row.val2) {
-            (None, Some(_)) => "(added)",
-            (Some(_), None) => "(removed)",
-            (Some(a), Some(b)) if row.changed => {
-                let d = b - a;
-                let sign = if d >= 0.0 { "+" } else { "" };
-                write!(delta_buf, "{sign}{d:.6}").expect("writing to String is infallible");
-                &delta_buf
-            }
-            _ => "",
-        };
-        let marker = if row.changed { " *" } else { "" };
-        w!(text, "  {:<24} {:>14} {:>14} {:>14} {:>14} {:>14}{marker}", name, v1, v2, delta, rc1, rc2);
-    }
-}
-
-/// Write the constraint diff table.
-fn write_diff_constraints(text: &mut String, diff: &SolveDiffResult) {
-    if diff.constraint_diff.is_empty() {
-        return;
-    }
-    w!(text);
-    w!(text, "Constraints:");
-    w!(text, "  {:<22} {:>13} {:>13} {:>13} {:>13}", "Name", "Activity 1", "Activity 2", "Shadow 1", "Shadow 2");
-    w!(text, "  {}", rule_str(82));
-    let mut buf1 = String::with_capacity(16);
-    let mut buf2 = String::with_capacity(16);
-    let mut buf3 = String::with_capacity(16);
-    let mut buf4 = String::with_capacity(16);
-    for row in &diff.constraint_diff {
-        let name = row.name(&diff.result1, &diff.result2);
-        let a1 = fmt_opt_f64(&mut buf1, row.activity1, 4);
-        let a2 = fmt_opt_f64(&mut buf2, row.activity2, 4);
-        let s1 = fmt_opt_f64(&mut buf3, row.shadow_price1, 4);
-        let s2 = fmt_opt_f64(&mut buf4, row.shadow_price2, 4);
-        let marker = if row.changed { " *" } else { "" };
-        w!(text, "  {:<22} {:>13} {:>13} {:>13} {:>13}{marker}", name, a1, a2, s1, s2);
-    }
-}
-
-/// Write the solver log sections for both files.
-fn write_diff_solver_logs(text: &mut String, diff: &SolveDiffResult) {
-    let r1 = &diff.result1;
-    let r2 = &diff.result2;
-    if r1.solver_log.is_empty() && r2.solver_log.is_empty() {
-        return;
-    }
-    w!(text);
-    w!(text, "Solver Logs:");
-    if !r1.solver_log.is_empty() {
-        w!(text, "\u{2500}\u{2500} File 1: {} \u{2500}{}", diff.file1_label, rule_str(34));
-        for line in r1.solver_log.lines() {
-            w!(text, "  {line}");
-        }
-    }
-    if !r2.solver_log.is_empty() {
-        w!(text, "\u{2500}\u{2500} File 2: {} \u{2500}{}", diff.file2_label, rule_str(34));
-        for line in r2.solver_log.lines() {
-            w!(text, "  {line}");
-        }
-    }
 }

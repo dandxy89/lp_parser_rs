@@ -108,11 +108,11 @@ pub(crate) fn format_ratio(ratio: Option<f64>) -> String {
 }
 
 /// Colour for a range ratio: error above 1e9, warning above 1e6, plain otherwise.
-fn ratio_colour(ratio: Option<f64>) -> Color {
+pub(crate) fn ratio_colour(ratio: Option<f64>) -> Color {
     let t = theme();
     match ratio {
-        Some(value) if value > RATIO_ERROR_THRESHOLD => t.error,
-        Some(value) if value > RATIO_WARN_THRESHOLD => t.warning,
+        Some(value) if value > RATIO_ERROR_THRESHOLD => t.removed,
+        Some(value) if value > RATIO_WARN_THRESHOLD => t.modified,
         _ => t.text,
     }
 }
@@ -363,11 +363,11 @@ fn issue_count_row(lines: &mut Vec<Line<'static>>, label: &str, (errors, warning
     let count_style = |count: usize, colour: Color| if count > 0 { Style::default().fg(colour) } else { Style::default().fg(t.muted) };
     lines.push(Line::from(vec![
         Span::styled(format!("  {label}: "), Style::default().fg(t.muted)),
-        Span::styled(format!("{errors} error{}", plural(errors)), count_style(errors, t.error)),
+        Span::styled(format!("{errors} error{}", plural(errors)), count_style(errors, t.removed)),
         Span::styled(", ", Style::default().fg(t.muted)),
-        Span::styled(format!("{warnings} warning{}", plural(warnings)), count_style(warnings, t.warning)),
+        Span::styled(format!("{warnings} warning{}", plural(warnings)), count_style(warnings, t.modified)),
         Span::styled(", ", Style::default().fg(t.muted)),
-        Span::styled(format!("{infos} info{}", plural(infos)), count_style(infos, t.info)),
+        Span::styled(format!("{infos} info{}", plural(infos)), count_style(infos, t.accent)),
     ]));
 }
 

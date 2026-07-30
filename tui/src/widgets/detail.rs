@@ -6,7 +6,6 @@
 use std::fmt::Write as _;
 
 use lp_parser_rs::interner::NameInterner;
-use lp_parser_rs::model::VariableType;
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Modifier, Style};
@@ -16,7 +15,7 @@ use ratatui::widgets::Paragraph;
 use crate::detail_model::build_coeff_rows;
 use crate::diff_model::{
     CoefficientChange, ConstraintDiffDetail, ConstraintDiffEntry, DiffKind, ObjectiveDiffEntry, ResolvedCoefficient, ResolvedConstraint,
-    VariableDiffEntry,
+    VarSpec, VariableDiffEntry,
 };
 use crate::theme::theme;
 use crate::widgets::{ARROW, bold_text, kind_colour, muted, panel_block, text, truncate_with_ellipsis};
@@ -46,21 +45,16 @@ fn detail_header(entity_label: &str, name: &str, kind: DiffKind) -> Vec<Line<'st
     ]
 }
 
-// Re-exported from the pure diff model so existing imports keep working;
-// the function moved there for use by the delta sort keys.
-pub use crate::diff_model::variable_bounds;
-
 /// Format an optional bound value as a string for display.
 pub fn fmt_bound(val: Option<f64>) -> String {
     val.map_or_else(|| "\u{2014}".to_owned(), |v| format!("{v}"))
 }
 
 /// Render type/bounds lines for an added or removed variable (single-side view).
-fn render_variable_type_info(lines: &mut Vec<Line<'static>>, variable_type: &VariableType, style: Style) {
-    let label = std::str::from_utf8(variable_type.as_ref()).unwrap_or("?");
-    lines.push(Line::from(vec![Span::styled("  Type:   ", muted()), Span::styled(label.to_owned(), style)]));
+fn render_variable_type_info(lines: &mut Vec<Line<'static>>, spec: &VarSpec, style: Style) {
+    lines.push(Line::from(vec![Span::styled("  Type:   ", muted()), Span::styled(spec.kind.to_string(), style)]));
 
-    let (lower_bound, upper_bound) = variable_bounds(variable_type);
+    let (lower_bound, upper_bound) = (spec.bounds.lower, spec.bounds.upper);
     if let Some(lower) = lower_bound {
         lines.push(Line::from(vec![Span::styled("  Lower:  ", muted()), Span::styled(format!("{lower}"), style)]));
     }
@@ -72,15 +66,10 @@ fn render_variable_type_info(lines: &mut Vec<Line<'static>>, variable_type: &Var
     }
 }
 
-/// Render a variable detail panel. Returns the total content line count.
+/// Build the content lines of a variable detail panel.
 #[allow(clippy::too_many_lines)]
 #[allow(clippy::similar_names)] // lower_bound/upper_bound share prefixes
-pub fn render_variable_detail(frame: &mut Frame, area: Rect, entry: &VariableDiffEntry, border_style: Style, scroll: u16) -> usize {
-    // A zero-sized area is an environmental condition (shrunken terminal), not a
-    // programming error: drawing into it is a no-op.
-    if area.width == 0 || area.height == 0 {
-        return 0;
-    }
+pub fn build_variable_detail(entry: &VariableDiffEntry) -> Vec<Line<'static>> {
     let mut lines = detail_header("Variable", &entry.name, entry.kind);
 
     let t = theme();
@@ -96,27 +85,28 @@ pub fn render_variable_detail(frame: &mut Frame, area: Rect, entry: &VariableDif
         DiffKind::Modified => {
             let old = entry.old_type.as_ref().expect("invariant: Modified entry must have old_type");
             let new = entry.new_type.as_ref().expect("invariant: Modified entry must have new_type");
-            let old_label = std::str::from_utf8(old.as_ref()).unwrap_or("?");
-            let new_label = std::str::from_utf8(new.as_ref()).unwrap_or("?");
+            // Kind only — the bounds get their own rows immediately below.
+            let old_label = old.kind.to_string();
+            let new_label = new.kind.to_string();
 
             if old_label == new_label {
                 lines.push(Line::from(vec![
                     Span::styled("  Type:   ", muted()),
-                    Span::styled(old_label.to_owned(), Style::default().fg(t.text)),
+                    Span::styled(old_label.clone(), Style::default().fg(t.text)),
                     Span::styled(" (unchanged)", muted()),
                 ]));
             } else {
                 lines.push(Line::from(vec![
                     Span::styled("  Type:   ", muted()),
-                    Span::styled(old_label.to_owned(), Style::default().fg(t.removed)),
+                    Span::styled(old_label.clone(), Style::default().fg(t.removed)),
                     Span::styled(ARROW, muted()),
-                    Span::styled(new_label.to_owned(), Style::default().fg(t.added)),
+                    Span::styled(new_label.clone(), Style::default().fg(t.added)),
                 ]));
             }
 
             // Bounds comparison.
-            let (old_lower, old_upper) = variable_bounds(old);
-            let (new_lower, new_upper) = variable_bounds(new);
+            let (old_lower, old_upper) = (old.bounds.lower, old.bounds.upper);
+            let (new_lower, new_upper) = (new.bounds.lower, new.bounds.upper);
 
             if old_lower.is_some() || new_lower.is_some() {
                 lines.push(Line::from(vec![
@@ -153,28 +143,36 @@ pub fn render_variable_detail(frame: &mut Frame, area: Rect, entry: &VariableDif
         }
     }
 
-    render_panel(frame, area, detail_title("Variable", &entry.name, false), lines, border_style, scroll)
+    lines
 }
 
-/// Render a constraint detail panel. Returns the total content line count.
-///
-/// When `cached_rows` is `Some`, pre-built coefficient rows are reused instead of
-/// rebuilding them each frame.
-#[allow(clippy::too_many_lines)]
-pub fn render_constraint_detail(
-    frame: &mut Frame,
-    area: Rect,
-    entry: &ConstraintDiffEntry,
-    border_style: Style,
-    scroll: u16,
-    cached_rows: Option<&[crate::detail_model::CoefficientRow]>,
-    interner: &NameInterner,
-) -> usize {
+/// Render a variable detail panel. Returns the total content line count.
+pub fn render_variable_detail(frame: &mut Frame, area: Rect, entry: &VariableDiffEntry, border_style: Style, scroll: u16) -> usize {
     // A zero-sized area is an environmental condition (shrunken terminal), not a
     // programming error: drawing into it is a no-op.
     if area.width == 0 || area.height == 0 {
         return 0;
     }
+    let lines = build_variable_detail(entry);
+    render_panel(frame, area, detail_title("Variable", &entry.name, false), lines, border_style, scroll)
+}
+
+/// How a constraint detail continues after its header block.
+enum ConstraintBody<'a> {
+    /// Coefficient (or SOS weight) rows to append. `side_by_side` requests the
+    /// two-column old/new comparison, which only the styled renderer can honour.
+    Rows { changes: &'a [CoefficientChange], old: &'a [ResolvedCoefficient], new: &'a [ResolvedCoefficient], side_by_side: bool },
+    /// The header block is the entire panel.
+    Complete,
+}
+
+/// Build the header block of a constraint detail panel and say how it continues.
+///
+/// Shared by the styled renderer (which windows the coefficient rows to the
+/// viewport, or splits them into two columns) and by the plain-text builder
+/// (which appends all of them unified).
+#[allow(clippy::too_many_lines)]
+fn constraint_detail_parts<'a>(entry: &'a ConstraintDiffEntry, interner: &NameInterner) -> (Vec<Line<'static>>, ConstraintBody<'a>) {
     let mut lines = detail_header("Constraint", &entry.name, entry.kind);
 
     let t = theme();
@@ -183,7 +181,7 @@ pub fn render_constraint_detail(
     if let Some(old_name) = &entry.renamed_from {
         lines.push(Line::from(vec![
             Span::styled("  Renamed from: ", muted()),
-            Span::styled(old_name.clone(), Style::default().fg(t.info).add_modifier(Modifier::BOLD)),
+            Span::styled(old_name.clone(), Style::default().fg(t.accent).add_modifier(Modifier::BOLD)),
         ]));
     }
 
@@ -216,7 +214,7 @@ pub fn render_constraint_detail(
     if entry.order_only {
         lines.push(Line::from(Span::styled(
             "  \u{26a0} Order Changed \u{2014} coefficients are identical but appear in a different order",
-            Style::default().fg(t.warning),
+            Style::default().fg(t.modified),
         )));
     }
 
@@ -259,30 +257,21 @@ pub fn render_constraint_detail(
 
             // Note about order change when there are also value changes.
             if *order_changed && !entry.order_only {
-                lines.push(Line::from(Span::styled("  Note: coefficient order also differs", Style::default().fg(t.warning))));
+                lines.push(Line::from(Span::styled("  Note: coefficient order also differs", Style::default().fg(t.modified))));
             }
 
             lines.push(Line::from(""));
             lines.push(Line::from(Span::styled("  Coefficients:", muted().add_modifier(Modifier::BOLD))));
 
-            if entry.kind == DiffKind::Modified {
-                return render_constraint_side_by_side(
-                    frame,
-                    area,
-                    detail_title("Constraint", &entry.name, true),
-                    lines,
-                    coeff_changes,
-                    old_coefficients,
-                    new_coefficients,
-                    border_style,
-                    scroll,
-                    cached_rows,
-                    interner,
-                );
-            }
-
-            let visible = coeff_visible_range(scroll, area, lines.len());
-            render_coeff_changes(&mut lines, coeff_changes, old_coefficients, new_coefficients, cached_rows, Some(visible), interner);
+            return (
+                lines,
+                ConstraintBody::Rows {
+                    changes: coeff_changes,
+                    old: old_coefficients,
+                    new: new_coefficients,
+                    side_by_side: entry.kind == DiffKind::Modified,
+                },
+            );
         }
 
         ConstraintDiffDetail::Sos { old_weights, new_weights, weight_changes, type_change, order_changed, .. } => {
@@ -296,14 +285,13 @@ pub fn render_constraint_detail(
             }
 
             if *order_changed && !entry.order_only {
-                lines.push(Line::from(Span::styled("  Note: weight order also differs", Style::default().fg(t.warning))));
+                lines.push(Line::from(Span::styled("  Note: weight order also differs", Style::default().fg(t.modified))));
             }
 
             lines.push(Line::from(""));
             lines.push(Line::from(Span::styled("  Weights:", muted().add_modifier(Modifier::BOLD))));
 
-            let visible = coeff_visible_range(scroll, area, lines.len());
-            render_coeff_changes(&mut lines, weight_changes, old_weights, new_weights, cached_rows, Some(visible), interner);
+            return (lines, ConstraintBody::Rows { changes: weight_changes, old: old_weights, new: new_weights, side_by_side: false });
         }
 
         ConstraintDiffDetail::TypeChanged { old_summary, new_summary } => {
@@ -357,7 +345,113 @@ pub fn render_constraint_detail(
         }
     }
 
+    (lines, ConstraintBody::Complete)
+}
+
+/// Build the content lines of a constraint detail panel, with every coefficient
+/// row present and unified into a single column.
+pub fn build_constraint_detail(
+    entry: &ConstraintDiffEntry,
+    cached_rows: Option<&[crate::detail_model::CoefficientRow]>,
+    interner: &NameInterner,
+) -> Vec<Line<'static>> {
+    let (mut lines, body) = constraint_detail_parts(entry, interner);
+    if let ConstraintBody::Rows { changes, old, new, .. } = body {
+        render_coeff_changes(&mut lines, changes, old, new, cached_rows, None, interner);
+    }
+    lines
+}
+
+/// Render a constraint detail panel. Returns the total content line count.
+///
+/// When `cached_rows` is `Some`, pre-built coefficient rows are reused instead of
+/// rebuilding them each frame.
+pub fn render_constraint_detail(
+    frame: &mut Frame,
+    area: Rect,
+    entry: &ConstraintDiffEntry,
+    border_style: Style,
+    scroll: u16,
+    cached_rows: Option<&[crate::detail_model::CoefficientRow]>,
+    interner: &NameInterner,
+) -> usize {
+    // A zero-sized area is an environmental condition (shrunken terminal), not a
+    // programming error: drawing into it is a no-op.
+    if area.width == 0 || area.height == 0 {
+        return 0;
+    }
+    let (mut lines, body) = constraint_detail_parts(entry, interner);
+    if let ConstraintBody::Rows { changes, old, new, side_by_side } = body {
+        if side_by_side {
+            return render_constraint_side_by_side(
+                frame,
+                area,
+                detail_title("Constraint", &entry.name, true),
+                lines,
+                changes,
+                old,
+                new,
+                border_style,
+                scroll,
+                cached_rows,
+                interner,
+            );
+        }
+        let visible = coeff_visible_range(scroll, area, lines.len());
+        render_coeff_changes(&mut lines, changes, old, new, cached_rows, Some(visible), interner);
+    }
     render_panel(frame, area, detail_title("Constraint", &entry.name, true), lines, border_style, scroll)
+}
+
+/// Build the content lines of an objective detail panel.
+///
+/// `viewport` is the `(scroll, area)` the panel will be drawn into; when given,
+/// `Line`s are only built for the coefficient rows actually visible. `None`
+/// builds them all, which is what the plain-text yank needs.
+pub fn build_objective_detail(
+    entry: &ObjectiveDiffEntry,
+    cached_rows: Option<&[crate::detail_model::CoefficientRow]>,
+    interner: &NameInterner,
+    viewport: Option<(u16, Rect)>,
+) -> Vec<Line<'static>> {
+    let t = theme();
+    let mut lines = detail_header("Objective", &entry.name, entry.kind);
+
+    if entry.order_only {
+        lines.push(Line::from(Span::styled(
+            "  \u{26a0} Order Changed \u{2014} coefficients are identical but appear in a different order",
+            Style::default().fg(t.modified),
+        )));
+    } else if entry.order_changed {
+        lines.push(Line::from(Span::styled("  Note: coefficient order also differs", Style::default().fg(t.modified))));
+    }
+
+    lines.push(Line::from(Span::styled("  Coefficients:", muted().add_modifier(Modifier::BOLD))));
+
+    if entry.kind == DiffKind::Modified {
+        let window = viewport.map(|(scroll, area)| coeff_visible_range(scroll, area, lines.len()));
+        render_coeff_changes(
+            &mut lines,
+            &entry.coeff_changes,
+            &entry.old_coefficients,
+            &entry.new_coefficients,
+            cached_rows,
+            window,
+            interner,
+        );
+    } else {
+        let coeffs = if entry.kind == DiffKind::Added { &entry.new_coefficients } else { &entry.old_coefficients };
+        let colour = kind_colour(entry.kind);
+        for c in coeffs {
+            let name = interner.resolve(c.name);
+            lines.push(Line::from(vec![
+                Span::styled(format!("    {:<20}", truncate_with_ellipsis(name, 20)), Style::default().fg(colour)),
+                Span::styled(format!("{}", c.value), Style::default().fg(colour)),
+            ]));
+        }
+    }
+
+    lines
 }
 
 /// Render an objective detail panel. Returns the total content line count.
@@ -378,43 +472,7 @@ pub fn render_objective_detail(
     if area.width == 0 || area.height == 0 {
         return 0;
     }
-    let t = theme();
-    let mut lines = detail_header("Objective", &entry.name, entry.kind);
-
-    if entry.order_only {
-        lines.push(Line::from(Span::styled(
-            "  \u{26a0} Order Changed \u{2014} coefficients are identical but appear in a different order",
-            Style::default().fg(t.warning),
-        )));
-    } else if entry.order_changed {
-        lines.push(Line::from(Span::styled("  Note: coefficient order also differs", Style::default().fg(t.warning))));
-    }
-
-    lines.push(Line::from(Span::styled("  Coefficients:", muted().add_modifier(Modifier::BOLD))));
-
-    if entry.kind == DiffKind::Modified {
-        let visible = coeff_visible_range(scroll, area, lines.len());
-        render_coeff_changes(
-            &mut lines,
-            &entry.coeff_changes,
-            &entry.old_coefficients,
-            &entry.new_coefficients,
-            cached_rows,
-            Some(visible),
-            interner,
-        );
-    } else {
-        let coeffs = if entry.kind == DiffKind::Added { &entry.new_coefficients } else { &entry.old_coefficients };
-        let colour = kind_colour(entry.kind);
-        for c in coeffs {
-            let name = interner.resolve(c.name);
-            lines.push(Line::from(vec![
-                Span::styled(format!("    {:<20}", truncate_with_ellipsis(name, 20)), Style::default().fg(colour)),
-                Span::styled(format!("{}", c.value), Style::default().fg(colour)),
-            ]));
-        }
-    }
-
+    let lines = build_objective_detail(entry, cached_rows, interner, Some((scroll, area)));
     render_panel(frame, area, detail_title("Objective", &entry.name, true), lines, border_style, scroll)
 }
 
@@ -424,33 +482,29 @@ fn inspect_header(entity_label: &str, name: &str) -> Vec<Line<'static>> {
     vec![Line::from(vec![Span::styled(format!("{entity_label}: "), muted()), Span::styled(name.to_owned(), bold_text())]), rule()]
 }
 
-/// Render an inspect (single-file) variable detail panel: type and bounds,
-/// all in the neutral text colour. Returns the total content line count.
-pub fn render_inspect_variable(frame: &mut Frame, area: Rect, entry: &VariableDiffEntry, border_style: Style, scroll: u16) -> usize {
-    if area.width == 0 || area.height == 0 {
-        return 0;
-    }
+/// Build the content lines of an inspect (single-file) variable detail panel:
+/// type and bounds, all in the neutral text colour.
+pub fn build_inspect_variable(entry: &VariableDiffEntry) -> Vec<Line<'static>> {
     let mut lines = inspect_header("Variable", &entry.name);
     // Inspect entries always carry the single-file value on the `new` side.
     if let Some(variable_type) = entry.new_type.as_ref() {
         render_variable_type_info(&mut lines, variable_type, text());
     }
-    render_panel(frame, area, detail_title("Variable", &entry.name, false), lines, border_style, scroll)
+    lines
 }
 
-/// Render an inspect (single-file) constraint detail panel: operator, RHS, and
-/// coefficients (or SOS type and weights), neutrally coloured.
-pub fn render_inspect_constraint(
-    frame: &mut Frame,
-    area: Rect,
-    entry: &ConstraintDiffEntry,
-    border_style: Style,
-    scroll: u16,
-    interner: &NameInterner,
-) -> usize {
+/// Render an inspect (single-file) variable detail panel. Returns the total content line count.
+pub fn render_inspect_variable(frame: &mut Frame, area: Rect, entry: &VariableDiffEntry, border_style: Style, scroll: u16) -> usize {
     if area.width == 0 || area.height == 0 {
         return 0;
     }
+    let lines = build_inspect_variable(entry);
+    render_panel(frame, area, detail_title("Variable", &entry.name, false), lines, border_style, scroll)
+}
+
+/// Build the content lines of an inspect (single-file) constraint detail panel:
+/// operator, RHS, and coefficients (or SOS type and weights), neutrally coloured.
+pub fn build_inspect_constraint(entry: &ConstraintDiffEntry, interner: &NameInterner) -> Vec<Line<'static>> {
     let t = theme();
     let mut lines = inspect_header("Constraint", &entry.name);
 
@@ -482,10 +536,35 @@ pub fn render_inspect_constraint(
         }
     }
 
+    lines
+}
+
+/// Render an inspect (single-file) constraint detail panel. Returns the total content line count.
+pub fn render_inspect_constraint(
+    frame: &mut Frame,
+    area: Rect,
+    entry: &ConstraintDiffEntry,
+    border_style: Style,
+    scroll: u16,
+    interner: &NameInterner,
+) -> usize {
+    if area.width == 0 || area.height == 0 {
+        return 0;
+    }
+    let lines = build_inspect_constraint(entry, interner);
     render_panel(frame, area, detail_title("Constraint", &entry.name, false), lines, border_style, scroll)
 }
 
-/// Render an inspect (single-file) objective detail panel: coefficients, neutral.
+/// Build the content lines of an inspect (single-file) objective detail panel:
+/// coefficients, neutral.
+pub fn build_inspect_objective(entry: &ObjectiveDiffEntry, interner: &NameInterner) -> Vec<Line<'static>> {
+    let mut lines = inspect_header("Objective", &entry.name);
+    lines.push(Line::from(Span::styled("  Coefficients:", muted().add_modifier(Modifier::BOLD))));
+    render_inspect_coefficients(&mut lines, &entry.new_coefficients, interner);
+    lines
+}
+
+/// Render an inspect (single-file) objective detail panel. Returns the total content line count.
 pub fn render_inspect_objective(
     frame: &mut Frame,
     area: Rect,
@@ -497,9 +576,7 @@ pub fn render_inspect_objective(
     if area.width == 0 || area.height == 0 {
         return 0;
     }
-    let mut lines = inspect_header("Objective", &entry.name);
-    lines.push(Line::from(Span::styled("  Coefficients:", muted().add_modifier(Modifier::BOLD))));
-    render_inspect_coefficients(&mut lines, &entry.new_coefficients, interner);
+    let lines = build_inspect_objective(entry, interner);
     render_panel(frame, area, detail_title("Objective", &entry.name, false), lines, border_style, scroll)
 }
 
@@ -524,7 +601,7 @@ fn render_constraint_side_by_side(
     frame: &mut Frame,
     area: Rect,
     title: String,
-    header_lines: Vec<Line<'_>>,
+    header_lines: Vec<Line<'static>>,
     coeff_changes: &[CoefficientChange],
     old_coefficients: &[ResolvedCoefficient],
     new_coefficients: &[ResolvedCoefficient],
@@ -652,7 +729,7 @@ const fn coeff_visible_range(scroll: u16, area: Rect, header_line_count: usize) 
 /// for the visible window, inserting cheap placeholder lines for rows above and
 /// below the viewport. This avoids `O(total_rows)` `format!` allocations per frame.
 fn render_coeff_changes(
-    lines: &mut Vec<Line<'_>>,
+    lines: &mut Vec<Line<'static>>,
     changes: &[CoefficientChange],
     old_coefficients: &[ResolvedCoefficient],
     new_coefficients: &[ResolvedCoefficient],

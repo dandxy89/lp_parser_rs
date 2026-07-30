@@ -23,7 +23,6 @@ mod event;
 mod export;
 mod input;
 mod inspect_model;
-mod line_index;
 mod parse;
 mod presolve;
 mod search;

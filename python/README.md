@@ -27,7 +27,6 @@ from parse_lp import LpParser
 
 # Parse an LP file
 parser = LpParser("path/to/problem.lp")
-parser.parse()
 
 # Access problem information
 print(f"Problem: {parser.name}")
@@ -61,7 +60,6 @@ parser.to_csv("output_directory/")
 from parse_lp import LpParser
 
 parser = LpParser("optimization_problem.lp")
-parser.parse()
 
 # Get problem overview
 print(f"Problem Name: {parser.name}")
@@ -83,8 +81,9 @@ for i, objective in enumerate(parser.objectives):
 # Access variables
 for var_name, var_info in parser.variables.items():
     print(f"Variable {var_name}:")
-    # var_type carries any bounds inline, e.g. "DoubleBound(0.0, 100.0)"
-    print(f"  Type: {var_info['var_type']}")
+    # Kind and bounds are independent: a variable can be Integer *and* bounded.
+    print(f"  Kind:   {var_info['kind']}")
+    print(f"  Bounds: {var_info['lower']} .. {var_info['upper']}")
 
 # Access constraints
 for constraint in parser.constraints:
@@ -121,7 +120,6 @@ Analyze problem structure, detect potential issues, and get comprehensive statis
 from parse_lp import LpParser
 
 parser = LpParser("problem.lp")
-parser.parse()
 
 # Get complete analysis
 analysis = parser.analyze()
@@ -192,7 +190,6 @@ from parse_lp import LpParser
 
 # Parse an existing LP file
 parser = LpParser("optimization_problem.lp")
-parser.parse()
 
 # Modify objectives
 parser.update_objective_coefficient("profit", "x1", 5.0)
@@ -217,7 +214,6 @@ parser.save_to_file("modified_problem.lp")
 
 # Verify round-trip compatibility
 new_parser = LpParser("modified_problem.lp")
-new_parser.parse()
 print(f"Successfully modified and re-parsed: {new_parser.name}")
 ```
 
@@ -241,10 +237,12 @@ print(f"Successfully modified and re-parsed: {new_parser.name}")
 {
     "variable_name": {
         "name": "variable_name",
-        # Debug-formatted VariableType. Bounds are encoded inline:
-        #   "Free", "General", "Binary", "Integer", "SemiContinuous",
-        #   "LowerBound(0.0)", "UpperBound(100.0)", "DoubleBound(0.0, 100.0)"
-        "var_type": "DoubleBound(0.0, 100.0)"
+        # Discrete kind, independent of the bounds below:
+        #   "Continuous", "General", "Integer", "Binary", "SemiContinuous", "Sos"
+        "kind": "Integer",
+        # None on a side means unbounded in that direction.
+        "lower": 0.0,
+        "upper": 100.0
     }
 }
 ```

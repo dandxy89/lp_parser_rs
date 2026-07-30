@@ -1,12 +1,11 @@
 use std::collections::HashMap;
 use std::path::Path;
 
+use lp_parser_rs::LineIndex;
 use lp_parser_rs::analysis::ProblemAnalysis;
 use lp_parser_rs::interner::NameId;
 use lp_parser_rs::parser::MappedFile;
 use lp_parser_rs::problem::LpProblem;
-
-use crate::line_index::LineIndex;
 
 /// Parsed file: the problem, structural analysis, constraint→line-number map, and raw text.
 pub type ParsedFile = (LpProblem, ProblemAnalysis, HashMap<NameId, usize>, String);
@@ -16,9 +15,7 @@ pub type ParsedFile = (LpProblem, ProblemAnalysis, HashMap<NameId, usize>, Strin
 fn build_constraint_line_map(problem: &LpProblem, line_index: &LineIndex) -> HashMap<NameId, usize> {
     let mut map = HashMap::with_capacity(problem.constraints.len());
     for (name_id, constraint) in &problem.constraints {
-        if let Some(offset) = constraint.byte_offset()
-            && let Some(line) = line_index.line_number(offset)
-        {
+        if let Some(line) = constraint.byte_offset().and_then(|offset| line_index.line_number(offset)) {
             map.insert(*name_id, line);
         }
     }

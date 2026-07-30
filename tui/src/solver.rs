@@ -825,14 +825,10 @@ pub fn diagnose_infeasibility(problem: &LpProblem) -> Result<InfeasibilityDiagno
     Ok(InfeasibilityDiagnosis { total_violation, violations, bound_conflicts, solve_time: start.elapsed() })
 }
 
-/// Write an `Option<f64>` into a reusable string buffer (cleared first), leaving it empty for `None`.
-#[inline]
-fn write_opt_f64_to_buf(buf: &mut String, value: Option<f64>) {
-    buf.clear();
-    if let Some(v) = value {
-        debug_assert!(v.is_finite(), "write_opt_f64_to_buf called with non-finite value: {v}");
-        write!(buf, "{v}").expect("writing f64 to String cannot fail");
-    }
+/// Format an `Option<f64>` as a CSV field, empty for `None`.
+fn field(value: Option<f64>) -> String {
+    debug_assert!(value.is_none_or(f64::is_finite), "CSV field called with a non-finite value: {value:?}");
+    value.map_or_else(String::new, |v| v.to_string())
 }
 
 /// Write the diff results to two timestamped CSV files in `dir`.
@@ -845,63 +841,46 @@ fn write_opt_f64_to_buf(buf: &mut String, value: Option<f64>) {
 pub fn write_diff_csv(diff: &SolveDiffResult, dir: &Path) -> Result<(String, String), Box<dyn Error>> {
     debug_assert!(dir.is_dir(), "write_diff_csv: dir must be an existing directory");
 
-    let ts = chrono::Local::now().format("%Y%m%d_%H%M%S");
+    let ts = crate::export::file_stamp();
     let var_filename = format!("variable_diff_{ts}.csv");
     let con_filename = format!("constraint_diff_{ts}.csv");
 
-    // Variable diff — one String buffer per field, reused across rows.
     {
         let mut wtr = csv::Writer::from_path(dir.join(&var_filename))?;
         wtr.write_record(["name", "value_1", "value_2", "delta", "reduced_cost_1", "reduced_cost_2"])?;
-
-        let mut buf_v1 = String::with_capacity(24);
-        let mut buf_v2 = String::with_capacity(24);
-        let mut buf_delta = String::with_capacity(24);
-        let mut buf_rc1 = String::with_capacity(24);
-        let mut buf_rc2 = String::with_capacity(24);
 
         for row in &diff.variable_diff {
             if row.val1.is_none() && row.val2.is_none() {
                 continue;
             }
-
-            let name = row.name(&diff.result1, &diff.result2);
-            write_opt_f64_to_buf(&mut buf_v1, row.val1);
-            write_opt_f64_to_buf(&mut buf_v2, row.val2);
-            buf_delta.clear();
-            if let (Some(v1), Some(v2)) = (row.val1, row.val2) {
-                write!(buf_delta, "{}", v2 - v1).expect("writing f64 to String cannot fail");
-            }
-            write_opt_f64_to_buf(&mut buf_rc1, row.reduced_cost1);
-            write_opt_f64_to_buf(&mut buf_rc2, row.reduced_cost2);
-
-            wtr.write_record([name, &buf_v1, &buf_v2, &buf_delta, &buf_rc1, &buf_rc2])?;
+            let delta = row.val1.zip(row.val2).map(|(v1, v2)| v2 - v1);
+            wtr.write_record([
+                row.name(&diff.result1, &diff.result2),
+                &field(row.val1),
+                &field(row.val2),
+                &field(delta),
+                &field(row.reduced_cost1),
+                &field(row.reduced_cost2),
+            ])?;
         }
         wtr.flush()?;
     }
 
-    // Constraint diff — one String buffer per field, reused across rows.
     {
         let mut wtr = csv::Writer::from_path(dir.join(&con_filename))?;
         wtr.write_record(["name", "activity_1", "activity_2", "shadow_price_1", "shadow_price_2"])?;
-
-        let mut buf_a1 = String::with_capacity(24);
-        let mut buf_a2 = String::with_capacity(24);
-        let mut buf_sp1 = String::with_capacity(24);
-        let mut buf_sp2 = String::with_capacity(24);
 
         for row in &diff.constraint_diff {
             if row.activity1.is_none() && row.activity2.is_none() {
                 continue;
             }
-
-            let name = row.name(&diff.result1, &diff.result2);
-            write_opt_f64_to_buf(&mut buf_a1, row.activity1);
-            write_opt_f64_to_buf(&mut buf_a2, row.activity2);
-            write_opt_f64_to_buf(&mut buf_sp1, row.shadow_price1);
-            write_opt_f64_to_buf(&mut buf_sp2, row.shadow_price2);
-
-            wtr.write_record([name, &buf_a1, &buf_a2, &buf_sp1, &buf_sp2])?;
+            wtr.write_record([
+                row.name(&diff.result1, &diff.result2),
+                &field(row.activity1),
+                &field(row.activity2),
+                &field(row.shadow_price1),
+                &field(row.shadow_price2),
+            ])?;
         }
         wtr.flush()?;
     }
@@ -921,7 +900,7 @@ pub fn write_result_csv(result: &SolveResult, dir: &Path) -> Result<(String, Str
     debug_assert_eq!(result.variables.len(), result.reduced_costs.len(), "variables and reduced_costs must have equal length");
     debug_assert_eq!(result.row_values.len(), result.shadow_prices.len(), "row_values and shadow_prices must have equal length");
 
-    let ts = chrono::Local::now().format("%Y%m%d_%H%M%S");
+    let ts = crate::export::file_stamp();
     let var_filename = format!("solve_variables_{ts}.csv");
     let con_filename = format!("solve_constraints_{ts}.csv");
 
@@ -929,13 +908,8 @@ pub fn write_result_csv(result: &SolveResult, dir: &Path) -> Result<(String, Str
         let mut wtr = csv::Writer::from_path(dir.join(&var_filename))?;
         wtr.write_record(["name", "value", "reduced_cost"])?;
 
-        let mut buf_value = String::with_capacity(24);
-        let mut buf_rc = String::with_capacity(24);
-
         for (i, (name, value)) in result.variables.iter().enumerate() {
-            write_opt_f64_to_buf(&mut buf_value, Some(*value));
-            write_opt_f64_to_buf(&mut buf_rc, result.reduced_costs.get(i).map(|(_, v)| *v));
-            wtr.write_record([name, &buf_value, &buf_rc])?;
+            wtr.write_record([name, &field(Some(*value)), &field(result.reduced_costs.get(i).map(|(_, v)| *v))])?;
         }
         wtr.flush()?;
     }
@@ -944,13 +918,8 @@ pub fn write_result_csv(result: &SolveResult, dir: &Path) -> Result<(String, Str
         let mut wtr = csv::Writer::from_path(dir.join(&con_filename))?;
         wtr.write_record(["name", "activity", "shadow_price"])?;
 
-        let mut buf_activity = String::with_capacity(24);
-        let mut buf_sp = String::with_capacity(24);
-
         for (i, (name, activity)) in result.row_values.iter().enumerate() {
-            write_opt_f64_to_buf(&mut buf_activity, Some(*activity));
-            write_opt_f64_to_buf(&mut buf_sp, result.shadow_prices.get(i).map(|(_, v)| *v));
-            wtr.write_record([name, &buf_activity, &buf_sp])?;
+            wtr.write_record([name, &field(Some(*activity)), &field(result.shadow_prices.get(i).map(|(_, v)| *v))])?;
         }
         wtr.flush()?;
     }

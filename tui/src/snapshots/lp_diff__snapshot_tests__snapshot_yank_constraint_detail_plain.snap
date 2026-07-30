@@ -1,0 +1,13 @@
+---
+source: tui/src/snapshot_tests.rs
+assertion_line: 159
+expression: text
+---
+Constraint: c1 [Modified]
+──────────────────────────────────────
+  Location: L4 / L4
+  RHS:      2  →  3
+
+  Coefficients:
+    x                              1 (unchanged)
+    y                              1 (unchanged)

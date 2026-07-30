@@ -1,0 +1,59 @@
+---
+source: tui/src/snapshot_tests.rs
+assertion_line: 169
+expression: text
+---
+  a.lp  →  b.lp
+
+  Section         Added  Removed    Modified  Renamed    Total
+  ────────────────────────────────────────────────────────────
+  Variables           0        0           0        0        2
+  Constraints         1        1           1        0        3
+  Objectives          0        0           1        0        1
+  ────────────────────────────────────────────────────────────
+  TOTAL               1        1           2        0        6
+
+  Problem Dimensions
+                          File A      File B       Delta
+  ──────────────────────────────────────────────────────
+  Variables                    2           2           —
+  Constraints                  2           2           —
+  Non-zeros                    4           4           —
+  Density                100.00%     100.00%           —
+  Vars/constraint            2–2         2–2
+
+  Variable Types
+                          File A      File B       Delta
+  ──────────────────────────────────────────────────────
+  Binary                       0           0           —
+  Integer                      0           0           —
+  General                      0           0           —
+  Free                         0           0           —
+  Lower-bounded                0           0           —
+  Upper-bounded                0           0           —
+  Double-bounded               2           2           —
+  Semi-continuous              0           0           —
+
+  Constraint Types
+                          File A      File B       Delta
+  ──────────────────────────────────────────────────────
+  Equality (=)                 0           0           —
+  <= constraints               1           1           —
+  >= constraints               1           1           —
+  < constraints                0           0           —
+  > constraints                0           0           —
+  SOS1                         0           0           —
+  SOS2                         0           0           —
+
+  Coefficient Scaling
+                              File A          File B
+  ──────────────────────────────────────────────────
+  Coeff range         [1.0e0, 1.0e0]  [1.0e0, 2.0e0]
+  Coeff ratio                 3.00e0          4.00e0
+  RHS range           [2.0e0, 8.0e0]  [3.0e0, 1.2e1]
+
+  Issues
+  File A: 0 errors, 1 warning, 0 infos  │  File B: 0 errors, 1 warning, 0 infos
+
+  [WARNING] a.lp: Problem may be over-constrained: 2 constraints for 2 variables
+  [WARNING] b.lp: Problem may be over-constrained: 2 constraints for 2 variables

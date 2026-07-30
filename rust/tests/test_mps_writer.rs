@@ -14,7 +14,7 @@ use std::error::Error;
 use std::fs;
 use std::path::PathBuf;
 
-use lp_parser_rs::model::{Constraint, VariableType};
+use lp_parser_rs::model::{Constraint, VariableKind};
 use lp_parser_rs::mps::writer::{MpsWriterOptions, write_mps_string_with_options};
 use lp_parser_rs::parser::parse_file;
 use lp_parser_rs::problem::LpProblem;
@@ -210,7 +210,7 @@ ENDATA
 ";
     let problem = LpProblem::parse_mps(input).unwrap();
     let x1 = &problem.variables[&problem.name_id("x1").unwrap()];
-    assert_eq!(x1.var_type(), VariableType::SemiContinuous, "SC bound must resolve to SemiContinuous, dropping the 50");
+    assert_eq!(x1.kind, VariableKind::SemiContinuous, "SC bound must resolve to SemiContinuous, dropping the 50");
 
     let output = write_mps_string_with_options(&problem, &lossless_options()).unwrap();
     let sc_line = output.lines().find(|line| line.trim_start().starts_with("SC ")).expect("written MPS must contain an SC bound line");
@@ -218,7 +218,7 @@ ENDATA
 
     let reparsed = LpProblem::parse_mps(&output).unwrap();
     let x1 = &reparsed.variables[&reparsed.name_id("x1").unwrap()];
-    assert_eq!(x1.var_type(), VariableType::SemiContinuous);
+    assert_eq!(x1.kind, VariableKind::SemiContinuous);
 }
 
 /// `test.lp` contains a strict inequality (`c3:: x2 > 1`), which MPS has no

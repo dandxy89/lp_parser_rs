@@ -1,5 +1,4 @@
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, mpsc};
+use std::sync::mpsc;
 use std::time::Duration;
 use std::{io, thread};
 
@@ -20,13 +19,11 @@ pub enum Event {
     Error(io::Error),
 }
 
+/// Owns the receiving end of the event channel. The polling thread is detached:
+/// it exits when the channel disconnects on drop, and in any case dies with the
+/// process — nothing observable depends on it stopping first.
 pub struct EventHandler {
     rx: mpsc::Receiver<Event>,
-    /// Keep the sender alive so the spawned thread does not detect a disconnected channel
-    /// prematurely and exit before `EventHandler` is dropped.
-    _tx: mpsc::Sender<Event>,
-    /// Shutdown flag checked by the polling thread.
-    shutdown: Arc<AtomicBool>,
 }
 
 impl EventHandler {
@@ -35,17 +32,10 @@ impl EventHandler {
     pub fn new(tick_rate: Duration) -> Self {
         debug_assert!(!tick_rate.is_zero(), "tick_rate must be non-zero");
 
-        let (tx, rx) = mpsc::channel();
-        let event_tx = tx.clone();
-        let shutdown = Arc::new(AtomicBool::new(false));
-        let thread_shutdown = Arc::clone(&shutdown);
+        let (event_tx, rx) = mpsc::channel();
 
         thread::spawn(move || {
             loop {
-                if thread_shutdown.load(Ordering::Relaxed) {
-                    return;
-                }
-
                 let poll_result = match event::poll(tick_rate) {
                     Ok(ready) => ready,
                     Err(e) => {
@@ -86,17 +76,11 @@ impl EventHandler {
             }
         });
 
-        Self { rx, _tx: tx, shutdown }
+        Self { rx }
     }
 
     /// Block until the next event is available.
     pub fn next(&self) -> Result<Event, mpsc::RecvError> {
         self.rx.recv()
-    }
-}
-
-impl Drop for EventHandler {
-    fn drop(&mut self) {
-        self.shutdown.store(true, Ordering::Relaxed);
     }
 }

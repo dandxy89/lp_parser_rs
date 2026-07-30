@@ -15,6 +15,7 @@ use ratatui::text::{Line, Span};
 
 use crate::diagnostics::{ColStat, Diagnostics, Range, RowStat, Verdict};
 use crate::theme::theme;
+use crate::widgets::numerics::{RATIO_ERROR_THRESHOLD, format_ratio, ratio_colour};
 use crate::widgets::{rule_str, truncate_with_ellipsis};
 
 /// Width of the name column in the ranked tables.
@@ -22,12 +23,6 @@ const NAME_WIDTH: usize = 26;
 
 /// Label column width in the key/value blocks.
 const LABEL_WIDTH: usize = 20;
-
-/// Ratio at which a coefficient spread is styled as a warning.
-const RATIO_WARN: f64 = 1e6;
-
-/// Ratio at which a coefficient spread is styled as an error.
-const RATIO_ERROR: f64 = 1e9;
 
 /// Box width above which a variable's bounds are effectively no constraint at
 /// all, and the ratio test has little to work with.
@@ -100,7 +95,7 @@ fn verdict_block(lines: &mut Vec<Line<'static>>, diagnostics: &Diagnostics) {
     let colour = match diagnostics.verdict {
         Verdict::Unknown => t.muted,
         Verdict::Healthy => t.added,
-        Verdict::Degenerate | Verdict::IllConditioned => t.error,
+        Verdict::Degenerate | Verdict::IllConditioned => t.removed,
         Verdict::Elevated => t.modified,
     };
     heading(lines, "Verdict", "");
@@ -128,7 +123,7 @@ fn solve_block(lines: &mut Vec<Line<'static>>, diagnostics: &Diagnostics) {
             // The ratio, not the raw count, is what says whether this is normal:
             // 200k iterations is fine for 100k rows and alarming for 500.
             let style = if per_row >= 20.0 {
-                Style::default().fg(t.error).add_modifier(Modifier::BOLD)
+                Style::default().fg(t.removed).add_modifier(Modifier::BOLD)
             } else if per_row >= 5.0 {
                 Style::default().fg(t.modified)
             } else {
@@ -148,7 +143,7 @@ fn solve_block(lines: &mut Vec<Line<'static>>, diagnostics: &Diagnostics) {
     }
     if let Some(error) = telemetry.objective_error {
         // A large primal-dual gap means the answer itself is shaky, not just slow.
-        let style = if error > 1e-6 { Style::default().fg(t.error) } else { Style::default().fg(t.text) };
+        let style = if error > 1e-6 { Style::default().fg(t.removed) } else { Style::default().fg(t.text) };
         field(lines, "P-D objective error", format!("{error:.1e}"), style);
     }
 
@@ -156,7 +151,7 @@ fn solve_block(lines: &mut Vec<Line<'static>>, diagnostics: &Diagnostics) {
         return;
     };
     let share_style = |share: f64| {
-        if share >= 0.30 { Style::default().fg(t.error).add_modifier(Modifier::BOLD) } else { Style::default().fg(t.text) }
+        if share >= 0.30 { Style::default().fg(t.removed).add_modifier(Modifier::BOLD) } else { Style::default().fg(t.text) }
     };
     field(
         lines,
@@ -209,14 +204,11 @@ fn format_range(range: Range) -> String {
     }
 }
 
-/// Colour a ratio by how far it has drifted from a well-scaled model.
+/// Colour a ratio by how far it has drifted from a well-scaled model, bolding
+/// the error tier. Thresholds come from `numerics` so the two panes agree.
 fn ratio_style(ratio: Option<f64>) -> Style {
-    let t = theme();
-    match ratio {
-        Some(value) if value >= RATIO_ERROR => Style::default().fg(t.error).add_modifier(Modifier::BOLD),
-        Some(value) if value >= RATIO_WARN => Style::default().fg(t.modified),
-        _ => Style::default().fg(t.text),
-    }
+    let style = Style::default().fg(ratio_colour(ratio));
+    if ratio.is_some_and(|value| value > RATIO_ERROR_THRESHOLD) { style.add_modifier(Modifier::BOLD) } else { style }
 }
 
 /// Ranked table of constraints: structure on the left, solve behaviour on the right.
@@ -243,7 +235,7 @@ fn row_table(lines: &mut Vec<Line<'static>>, title: &str, rows: &[RowStat], note
             (true, false, false) => "slack",
         };
         let state_style = match state {
-            "degenerate" => Style::default().fg(t.error).add_modifier(Modifier::BOLD),
+            "degenerate" => Style::default().fg(t.removed).add_modifier(Modifier::BOLD),
             "binding" => Style::default().fg(t.modified),
             _ => Style::default().fg(t.muted),
         };
@@ -283,7 +275,7 @@ fn col_table(lines: &mut Vec<Line<'static>>, title: &str, cols: &[ColStat], note
             (true, false, false) => "interior",
         };
         let state_style = match solve_state {
-            "degenerate" => Style::default().fg(t.error).add_modifier(Modifier::BOLD),
+            "degenerate" => Style::default().fg(t.removed).add_modifier(Modifier::BOLD),
             "at bound" => Style::default().fg(t.modified),
             _ => Style::default().fg(t.muted),
         };
@@ -309,11 +301,6 @@ fn col_table(lines: &mut Vec<Line<'static>>, title: &str, cols: &[ColStat], note
 /// Format a dual value, collapsing both signed zeros to a plain `0`.
 fn format_dual(value: f64) -> String {
     if value == 0.0 { "0".to_owned() } else { format!("{value:.3e}") }
-}
-
-/// A coefficient ratio, or an em dash when the row/column has nothing to compare.
-fn format_ratio(ratio: Option<f64>) -> String {
-    ratio.map_or_else(|| "\u{2014}".to_owned(), |value| format!("{value:.1e}"))
 }
 
 /// Format a solution value compactly, preferring plain decimals in the range

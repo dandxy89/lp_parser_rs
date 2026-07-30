@@ -77,15 +77,15 @@ fn draw_running(frame: &mut Frame, area: Rect, file: &str, elapsed: std::time::D
     let lines = vec![
         Line::from(""),
         Line::from(vec![
-            Span::styled(format!("  {} Solving ", spinner_frame(elapsed)), Style::default().fg(t.warning).add_modifier(Modifier::BOLD)),
+            Span::styled(format!("  {} Solving ", spinner_frame(elapsed)), Style::default().fg(t.modified).add_modifier(Modifier::BOLD)),
             Span::styled(file.to_owned(), Style::default().fg(t.text)),
-            Span::styled(format!(" ({}s)", elapsed.as_secs()), Style::default().fg(t.warning)),
+            Span::styled(format!(" ({}s)", elapsed.as_secs()), Style::default().fg(t.modified)),
         ]),
         Line::from(""),
     ];
 
-    let block = panel_block(Style::default().fg(t.warning).add_modifier(Modifier::BOLD))
-        .title(Span::styled(" Solver ", Style::default().fg(t.warning).add_modifier(Modifier::BOLD)));
+    let block = panel_block(Style::default().fg(t.modified).add_modifier(Modifier::BOLD))
+        .title(Span::styled(" Solver ", Style::default().fg(t.modified).add_modifier(Modifier::BOLD)));
 
     let paragraph = Paragraph::new(lines).block(block);
     frame.render_widget(Clear, popup);
@@ -188,10 +188,10 @@ fn build_summary_tab(lines: &mut Vec<Line<'static>>, result: &SolveResult) {
 
     if result.skipped_sos > 0 {
         lines.push(Line::from(vec![
-            Span::styled("  Warning:   ", Style::default().fg(t.warning).add_modifier(Modifier::BOLD)),
+            Span::styled("  Warning:   ", Style::default().fg(t.modified).add_modifier(Modifier::BOLD)),
             Span::styled(
                 format!("{} SOS constraint(s) skipped — solution may not satisfy them", result.skipped_sos),
-                Style::default().fg(t.warning),
+                Style::default().fg(t.modified),
             ),
         ]));
     }
@@ -325,7 +325,7 @@ fn build_log_tab(lines: &mut Vec<Line<'static>>, result: &SolveResult) {
     if total_lines > MAX_LOG_LINES {
         lines.push(Line::from(Span::styled(
             format!("  ... ({} lines truncated)", total_lines - MAX_LOG_LINES),
-            Style::default().fg(t.warning),
+            Style::default().fg(t.modified),
         )));
     }
 
@@ -393,7 +393,7 @@ fn append_magnitude_ranked_rows(lines: &mut Vec<Line<'static>>, values: &[(Strin
         );
     }
     if ranked.len() > MAX_DUAL_ROWS {
-        lines.push(Line::from(Span::styled(format!("  ... ({} more)", ranked.len() - MAX_DUAL_ROWS), Style::default().fg(t.warning))));
+        lines.push(Line::from(Span::styled(format!("  ... ({} more)", ranked.len() - MAX_DUAL_ROWS), Style::default().fg(t.modified))));
     }
 }
 
@@ -429,7 +429,7 @@ fn build_diff_duals_tab(lines: &mut Vec<Line<'static>>, diff: &SolveDiffResult, 
     if ranked_constraints.len() > MAX_DUAL_ROWS {
         lines.push(Line::from(Span::styled(
             format!("  ... ({} more)", ranked_constraints.len() - MAX_DUAL_ROWS),
-            Style::default().fg(t.warning),
+            Style::default().fg(t.modified),
         )));
     }
 
@@ -460,7 +460,7 @@ fn build_diff_duals_tab(lines: &mut Vec<Line<'static>>, diff: &SolveDiffResult, 
     if ranked_variables.len() > MAX_DUAL_ROWS {
         lines.push(Line::from(Span::styled(
             format!("  ... ({} more)", ranked_variables.len() - MAX_DUAL_ROWS),
-            Style::default().fg(t.warning),
+            Style::default().fg(t.modified),
         )));
     }
 }
@@ -517,18 +517,18 @@ fn append_diagnosis_block(lines: &mut Vec<Line<'static>>, diagnosis: &DiagnosisS
             let elapsed = started.elapsed();
             lines.push(Line::from(Span::styled(
                 format!("  {} Infeasibility diagnosis: diagnosing {file}\u{2026} ({}s)", spinner_frame(elapsed), elapsed.as_secs()),
-                Style::default().fg(t.warning),
+                Style::default().fg(t.modified),
             )));
         }
         DiagnosisState::Done { file, diagnosis } => {
             lines.push(Line::from(Span::styled(
                 format!("  Infeasibility diagnosis \u{2014} {file}"),
-                Style::default().fg(t.warning).add_modifier(Modifier::BOLD),
+                Style::default().fg(t.modified).add_modifier(Modifier::BOLD),
             )));
             lines.push(Line::from(Span::styled(format!("  {}", rule_str(62)), Style::default().fg(t.muted))));
             lines.push(Line::from(vec![
                 Span::styled("  Total violation: ", Style::default().fg(t.muted)),
-                Span::styled(format!("{:.6}", diagnosis.total_violation), Style::default().fg(t.warning).add_modifier(Modifier::BOLD)),
+                Span::styled(format!("{:.6}", diagnosis.total_violation), Style::default().fg(t.modified).add_modifier(Modifier::BOLD)),
                 Span::styled(format!("  (elastic solve: {:.3}s)", diagnosis.solve_time.as_secs_f64()), Style::default().fg(t.muted)),
             ]));
             if !diagnosis.bound_conflicts.is_empty() {
@@ -543,14 +543,14 @@ fn append_diagnosis_block(lines: &mut Vec<Line<'static>>, diagnosis: &DiagnosisS
                 for (name, gap) in diagnosis.bound_conflicts.iter().take(MAX_VIOLATION_ROWS) {
                     lines.push(Line::from(vec![
                         Span::styled(format!("  {:<30}", truncate_with_ellipsis(name, 30)), Style::default().fg(t.text)),
-                        Span::styled(format!("{gap:>14.6}"), Style::default().fg(t.warning)),
+                        Span::styled(format!("{gap:>14.6}"), Style::default().fg(t.modified)),
                         Span::styled("  (lower > upper)", Style::default().fg(t.muted)),
                     ]));
                 }
                 if diagnosis.bound_conflicts.len() > MAX_VIOLATION_ROWS {
                     lines.push(Line::from(Span::styled(
                         format!("  ... ({} more)", diagnosis.bound_conflicts.len() - MAX_VIOLATION_ROWS),
-                        Style::default().fg(t.warning),
+                        Style::default().fg(t.modified),
                     )));
                 }
             }
@@ -558,7 +558,7 @@ fn append_diagnosis_block(lines: &mut Vec<Line<'static>>, diagnosis: &DiagnosisS
                 if diagnosis.bound_conflicts.is_empty() {
                     lines.push(Line::from(Span::styled(
                         "  No violated constraints found \u{2014} infeasibility may stem from variable bounds",
-                        Style::default().fg(t.warning),
+                        Style::default().fg(t.modified),
                     )));
                 }
             } else {
@@ -573,19 +573,19 @@ fn append_diagnosis_block(lines: &mut Vec<Line<'static>>, diagnosis: &DiagnosisS
                 for (name, amount) in diagnosis.violations.iter().take(MAX_VIOLATION_ROWS) {
                     lines.push(Line::from(vec![
                         Span::styled(format!("  {:<30}", truncate_with_ellipsis(name, 30)), Style::default().fg(t.text)),
-                        Span::styled(format!("{amount:>14.6}"), Style::default().fg(t.warning)),
+                        Span::styled(format!("{amount:>14.6}"), Style::default().fg(t.modified)),
                     ]));
                 }
                 if diagnosis.violations.len() > MAX_VIOLATION_ROWS {
                     lines.push(Line::from(Span::styled(
                         format!("  ... ({} more)", diagnosis.violations.len() - MAX_VIOLATION_ROWS),
-                        Style::default().fg(t.warning),
+                        Style::default().fg(t.modified),
                     )));
                 }
             }
         }
         DiagnosisState::Failed(error) => {
-            lines.push(Line::from(Span::styled(format!("  Infeasibility diagnosis failed: {error}"), Style::default().fg(t.error))));
+            lines.push(Line::from(Span::styled(format!("  Infeasibility diagnosis failed: {error}"), Style::default().fg(t.removed))));
         }
     }
 }
@@ -611,7 +611,7 @@ fn draw_running_both(frame: &mut Frame, area: Rect, file1: &str, file2: &str, do
     let icon2 = if done2 { "\u{2713}" } else { spinner };
     let status2 = if done2 { "done" } else { running_label.as_str() };
     let style_done = Style::default().fg(t.added).add_modifier(Modifier::BOLD);
-    let style_running = Style::default().fg(t.warning).add_modifier(Modifier::BOLD);
+    let style_running = Style::default().fg(t.modified).add_modifier(Modifier::BOLD);
 
     let lines = vec![
         Line::from(""),
@@ -1173,7 +1173,7 @@ fn append_truncated_log(lines: &mut Vec<Line<'static>>, log: &str, max_lines: us
     let skip = total.saturating_sub(max_lines);
 
     if total > max_lines {
-        lines.push(Line::from(Span::styled(format!("  ... ({} lines truncated)", total - max_lines), Style::default().fg(t.warning))));
+        lines.push(Line::from(Span::styled(format!("  ... ({} lines truncated)", total - max_lines), Style::default().fg(t.modified))));
     }
 
     for log_line in log.lines().skip(skip) {
@@ -1186,15 +1186,15 @@ fn draw_failed(frame: &mut Frame, area: Rect, err: &str) {
     let popup = super::centred_rect(area, 60, 8);
     let lines = vec![
         Line::from(""),
-        Line::from(Span::styled("  Solve failed:", Style::default().fg(t.error).add_modifier(Modifier::BOLD))),
+        Line::from(Span::styled("  Solve failed:", Style::default().fg(t.removed).add_modifier(Modifier::BOLD))),
         Line::from(""),
-        Line::from(Span::styled(format!("  {err}"), Style::default().fg(t.error))),
+        Line::from(Span::styled(format!("  {err}"), Style::default().fg(t.removed))),
         Line::from(""),
         Line::from(Span::styled("  Press Esc to close", Style::default().fg(t.muted))),
     ];
 
-    let block = panel_block(Style::default().fg(t.error).add_modifier(Modifier::BOLD))
-        .title(Span::styled(" Solver Error ", Style::default().fg(t.error).add_modifier(Modifier::BOLD)));
+    let block = panel_block(Style::default().fg(t.removed).add_modifier(Modifier::BOLD))
+        .title(Span::styled(" Solver Error ", Style::default().fg(t.removed).add_modifier(Modifier::BOLD)));
 
     let paragraph = Paragraph::new(lines).block(block);
     frame.render_widget(Clear, popup);
@@ -1207,8 +1207,8 @@ fn status_style(status: &str) -> Style {
     if status.contains("Optimal") {
         Style::default().fg(t.added).add_modifier(Modifier::BOLD)
     } else if status.contains("Infeasible") || status.contains("Unbounded") {
-        Style::default().fg(t.error).add_modifier(Modifier::BOLD)
+        Style::default().fg(t.removed).add_modifier(Modifier::BOLD)
     } else {
-        Style::default().fg(t.warning).add_modifier(Modifier::BOLD)
+        Style::default().fg(t.modified).add_modifier(Modifier::BOLD)
     }
 }

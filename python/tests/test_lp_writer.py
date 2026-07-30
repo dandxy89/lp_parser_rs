@@ -190,7 +190,8 @@ class TestLpModificationErrors:
         with pytest.raises(RuntimeError, match="not found"):
             getattr(parser, method)(*args)
 
-    def test_modification_without_parse(self, simple_lp_file: Path) -> None:
+    def test_modification_without_explicit_parse(self, simple_lp_file: Path) -> None:
+        """Construction parses, so modifications work without calling parse() first."""
         parser = LpParser(str(simple_lp_file))
-        with pytest.raises(RuntimeError, match="Must call parse"):
-            parser.update_objective_coefficient("OBJ", "x1", 5.0)
+        parser.update_objective_coefficient("OBJ", "x1", 5.0)
+        assert parser.objectives[0]["coefficients"][0]["value"] == 5.0

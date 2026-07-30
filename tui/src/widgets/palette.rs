@@ -71,7 +71,7 @@ fn draw_command_list(frame: &mut Frame, area: Rect, app: &App) {
         .iter()
         .enumerate()
         .map(|(row, &command_index)| {
-            let command = PaletteCommand::ALL[command_index];
+            let command = PaletteCommand::at(command_index);
             let label = command.label();
             let hint = command.hint();
             let pad = label_width.saturating_sub(label.len() + hint.len()).max(1);

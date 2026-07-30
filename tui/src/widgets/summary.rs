@@ -137,11 +137,11 @@ pub fn build_inspect_summary_lines(
     let (errors, warnings, infos) = count_issues(&analysis.issues);
     lines.push(Line::from(vec![
         Span::raw("  "),
-        issue_count_span(errors, "error", t.error),
+        issue_count_span(errors, "error", t.removed),
         Span::styled(", ", muted()),
-        issue_count_span(warnings, "warning", t.warning),
+        issue_count_span(warnings, "warning", t.modified),
         Span::styled(", ", muted()),
-        issue_count_span(infos, "info", t.info),
+        issue_count_span(infos, "info", t.accent),
     ]));
     if analysis.issues.is_empty() {
         lines.push(Line::from(vec![Span::styled("  No issues detected", muted())]));
@@ -272,7 +272,7 @@ fn format_count_row(label: &str, counts: &DiffCounts, is_total: bool) -> Line<'s
         Span::styled(format!("{:>7}", counts.added), Style::default().fg(t.added)),
         Span::styled(format!("{:>9}", counts.removed), Style::default().fg(t.removed)),
         Span::styled(format!("{:>12}", counts.modified), Style::default().fg(t.modified)),
-        Span::styled(format!("{:>9}", counts.renamed), Style::default().fg(t.info)),
+        Span::styled(format!("{:>9}", counts.renamed), Style::default().fg(t.accent)),
         Span::styled(format!("{:>9}", counts.total()), total_style),
     ])
 }
@@ -451,18 +451,18 @@ fn build_issues_section(lines: &mut Vec<Line<'static>>, report: &LpDiffReport, a
     // Summary counts line
     lines.push(Line::from(vec![
         Span::styled("  File A: ", Style::default().fg(t.muted)),
-        issue_count_span(err1, "error", t.error),
+        issue_count_span(err1, "error", t.removed),
         Span::styled(", ", Style::default().fg(t.muted)),
-        issue_count_span(warn1, "warning", t.warning),
+        issue_count_span(warn1, "warning", t.modified),
         Span::styled(", ", Style::default().fg(t.muted)),
-        issue_count_span(info1, "info", t.info),
+        issue_count_span(info1, "info", t.accent),
         Span::styled("  \u{2502}  ", Style::default().fg(t.muted)),
         Span::styled("File B: ", Style::default().fg(t.muted)),
-        issue_count_span(err2, "error", t.error),
+        issue_count_span(err2, "error", t.removed),
         Span::styled(", ", Style::default().fg(t.muted)),
-        issue_count_span(warn2, "warning", t.warning),
+        issue_count_span(warn2, "warning", t.modified),
         Span::styled(", ", Style::default().fg(t.muted)),
-        issue_count_span(info2, "info", t.info),
+        issue_count_span(info2, "info", t.accent),
     ]));
 
     if analysis1.issues.is_empty() && analysis2.issues.is_empty() {
