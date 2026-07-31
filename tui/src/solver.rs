@@ -350,14 +350,19 @@ pub fn rank_by_magnitude(values: &[(String, f64)]) -> Vec<usize> {
 }
 
 /// Intermediate model built from an `LpProblem` before solving.
-struct BuiltModel {
-    row_problem: highs::RowProblem,
-    variable_names: Vec<String>,
+///
+/// `pub(crate)` because [`crate::highs_presolve`] builds the same model to ask
+/// `HiGHS` what its own presolve removes: the report is only about the model
+/// the solver actually sees if it is built the same way, down to the column
+/// order.
+pub(crate) struct BuiltModel {
+    pub(crate) row_problem: highs::RowProblem,
+    pub(crate) variable_names: Vec<String>,
     sorted_var_ids: Vec<NameId>,
     objective_coefficients: HashMap<NameId, f64>,
-    row_constraint_names: Vec<String>,
-    skipped_sos: usize,
-    sense: highs::Sense,
+    pub(crate) row_constraint_names: Vec<String>,
+    pub(crate) skipped_sos: usize,
+    pub(crate) sense: highs::Sense,
 }
 
 /// Metadata from the built model needed for solution extraction (after
@@ -408,7 +413,7 @@ fn sorted_variable_ids(problem: &LpProblem) -> Vec<NameId> {
 }
 
 /// Build a `HiGHS` `RowProblem` from an `LpProblem`.
-fn build_highs_model(problem: &LpProblem) -> BuiltModel {
+pub(crate) fn build_highs_model(problem: &LpProblem) -> BuiltModel {
     debug_assert!(!problem.variables.is_empty(), "cannot build a HiGHS model with no variables");
 
     // Sort variable NameIds by resolved name for deterministic ordering.

@@ -21,6 +21,7 @@ mod diagnostics;
 mod diff_model;
 mod event;
 mod export;
+mod highs_presolve;
 mod input;
 mod inspect_model;
 mod parse;

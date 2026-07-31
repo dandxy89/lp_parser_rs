@@ -1050,6 +1050,7 @@ impl App {
             KeyCode::Enter => self.confirm_presolve(),
             KeyCode::Char('w') => self.write_presolved(),
             KeyCode::Char('l') => self.open_presolve_log(),
+            KeyCode::Char('H') => self.open_highs_presolve_log(),
             _ => {}
         }
     }
@@ -1061,16 +1062,39 @@ impl App {
     /// matches the rules on screen. The run is discarded — only its record is
     /// kept — which is why an infeasible verdict is shown here rather than
     /// treated as a failure: the log is precisely what explains it.
+    ///
+    /// With no rule ticked our rewrite has nothing to say, so the question
+    /// falls through to the solver's own presolve on the unmodified model —
+    /// which is the useful reading of an empty rule set.
     fn open_presolve_log(&mut self) {
         if self.presolve_rules.iter().all(|on| !on) {
-            self.flash_status("Rewrite: enable at least one rule (space toggles)");
+            self.open_highs_presolve_log();
             return;
         }
         let (_, stats) = presolve(&self.problem1, self.presolve_rules);
         let lines = crate::widgets::presolve::log_lines(&stats);
+        let export = ("presolve_log.txt", stats.log_text());
         self.last_presolve = Some(stats);
         self.presolve_cursor = None;
-        self.presolve_log = Some(crate::state::ScrollPane { lines, scroll: 0 });
+        self.presolve_log = Some(crate::state::ScrollPane { lines, scroll: 0, export: Some(export) });
+    }
+
+    /// Open the `HiGHS` presolve report (`H` from the picker): which rows and
+    /// columns the *solver* throws away before it starts, on the file as
+    /// written, with none of our rewrites applied.
+    ///
+    /// Runs on this thread like the rewrite does. `HiGHS` presolve is a
+    /// fraction of a solve, and the picker is already a modal moment.
+    fn open_highs_presolve_log(&mut self) {
+        match crate::highs_presolve::highs_presolve(&self.problem1) {
+            Ok(report) => {
+                let lines = crate::widgets::presolve::highs_log_lines(&report);
+                let export = ("highs_presolve.txt", report.log_text());
+                self.presolve_cursor = None;
+                self.presolve_log = Some(crate::state::ScrollPane { lines, scroll: 0, export: Some(export) });
+            }
+            Err(error) => self.flash_status(format!("HiGHS presolve: {error}")),
+        }
     }
 
     /// Handle a key event while the presolve log pane is open.
@@ -1097,19 +1121,27 @@ impl App {
         }
     }
 
-    /// Write the presolve log to `<file1 stem>_presolve_log.txt` in the working
+    /// Write the open pane's report to `<file1 stem>_<suffix>` in the working
     /// directory, alongside where `w` in the picker writes the rewritten model.
+    ///
+    /// The pane carries both the suffix and the body, so this works the same
+    /// for our rewrite's log and for the `HiGHS` report.
     fn write_presolve_log(&mut self) {
-        let Some(stats) = &self.last_presolve else {
-            debug_assert!(false, "the log pane cannot be open without a run behind it");
+        let Some(pane) = &self.presolve_log else {
+            debug_assert!(false, "write_presolve_log called with the pane closed");
             return;
         };
-        let (body, actions) = (stats.log_text(), stats.log.len());
+        let Some((suffix, body)) = &pane.export else {
+            debug_assert!(false, "the presolve log pane always carries an export");
+            return;
+        };
+        let (suffix, body) = (*suffix, body.clone());
+        let lines = body.lines().count();
         let stem = self.file1_path.file_stem().unwrap_or_else(|| std::ffi::OsStr::new("model")).to_string_lossy().into_owned();
-        let filename = format!("{stem}_presolve_log.txt");
+        let filename = format!("{stem}_{suffix}");
         let written = std::env::current_dir().and_then(|dir| std::fs::write(dir.join(&filename), body));
         let message = match written {
-            Ok(()) => format!("Wrote {filename} \u{2014} {actions} action(s) recorded"),
+            Ok(()) => format!("Wrote {filename} \u{2014} {lines} line(s)"),
             Err(error) => format!("Presolve log write failed: {error}"),
         };
         self.flash_status(message);
@@ -1199,7 +1231,7 @@ impl App {
     fn open_diagnostics(&mut self) {
         let diagnostics = crate::diagnostics::analyse(&self.problem1, self.latest_solve_result());
         let lines = crate::widgets::diagnostics::build_lines(&diagnostics);
-        self.diagnostics = Some(crate::state::ScrollPane { lines, scroll: 0 });
+        self.diagnostics = Some(crate::state::ScrollPane { lines, scroll: 0, export: None });
     }
 
     /// Handle a key event while the diagnostics pane is open.
@@ -1423,5 +1455,18 @@ mod tests {
 
         app.handle_key(KeyEvent::from(KeyCode::Esc));
         assert!(app.presolve_log.is_none(), "Esc closes the log pane");
+    }
+
+    /// `a` is all-or-nothing in one key: everything off if anything is on,
+    /// everything on otherwise.
+    #[test]
+    fn a_toggles_the_whole_rule_set() {
+        let mut app = crate::snapshot_tests::inspect_app_from(crate::snapshot_tests::REDUCIBLE_LP);
+        app.handle_key(KeyEvent::from(KeyCode::Char('P')));
+        assert!(app.presolve_rules.iter().any(|on| *on), "defaults start with rules on");
+        app.handle_key(KeyEvent::from(KeyCode::Char('a')));
+        assert!(app.presolve_rules.iter().all(|on| !*on), "a with any on turns everything off: {:?}", app.presolve_rules);
+        app.handle_key(KeyEvent::from(KeyCode::Char('a')));
+        assert!(app.presolve_rules.iter().all(|on| *on), "a with none on turns everything on");
     }
 }

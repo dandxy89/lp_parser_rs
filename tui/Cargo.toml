@@ -22,6 +22,10 @@ clap = { version = "4.6.4", features = ["derive"] }
 crossterm = "0.29.0"
 frizbee = "0.12.0"
 highs = "2.4.0"
+# Raw FFI for the presolve calls the `highs` crate does not wrap (passing names
+# in, reading the presolved model's names back). Pinned to the version
+# `highs` itself depends on: the two share a model pointer.
+highs-sys = "1.15.0"
 ratatui = { version = "0.30.2", default-features = false, features = ["crossterm", "layout-cache"] }
 regex = "1.13.1"
 tui-input = "0.15.3"

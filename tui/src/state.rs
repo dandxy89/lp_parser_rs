@@ -53,6 +53,10 @@ pub struct ScrollPane {
     pub lines: Vec<Line<'static>>,
     /// Scroll offset, clamped to the content height when the pane is drawn.
     pub scroll: u16,
+    /// What `w` writes, as `(filename suffix, body)`. `None` in panes with
+    /// nothing to export — the pane carries its own write target so the key
+    /// handler does not have to work out which report is on screen.
+    pub export: Option<(&'static str, String)>,
 }
 
 /// State machine for the infeasibility diagnosis (elastic relaxation) run.

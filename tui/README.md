@@ -198,6 +198,7 @@ Search mode prefixes (type in the pop-up input):
 | `E`     | What-if: edit the selected constraint's RHS and re-solve            |
 | `P`     | Rewrite: pick presolve rules, then compare original vs rewritten    |
 | `l`     | (in the `P` picker) Log what the rewrite removes; `w` writes it to a file |
+| `H`     | (in the `P` picker) Log what HiGHS's own presolve removes from the file  |
 | `D`     | Diagnostics: why the solve is slow, and which rows/variables to blame |
 
 **Export**
@@ -239,7 +240,8 @@ bound and re-solving does.
 `P` opens a picker of solution-preserving rewrites. Each removes work from the model without changing the set of optimal
 solutions. Space toggles a rule, `a` toggles all, and `Enter` rewrites the baseline and launches an
 original-vs-rewritten comparison solve. `w` writes the rewritten model to `<file>_presolved.lp` in the working directory
-instead of solving it, and `l` opens the log of what the rewrite actually did.
+instead of solving it, `l` opens the log of what the rewrite actually did, and `H` the log of what HiGHS's own presolve
+does to the untouched file.
 
 Paired solves run **one at a time**: the timings are the point of the comparison, and solving both at once would have
 them compete for the machine and mask the speed-up.
@@ -276,8 +278,29 @@ pass 1  unused col  z                        [0, 5] -> [0, 0]
 `w` in the log pane writes it to `<file>_presolve_log.txt` in the working directory. The log is capped at 20,000 lines
 (the counters always cover the whole run); a truncated log says so on its last line.
 
-This is our own rewrite, not HiGHS's internal presolve — the solver reports only its totals, which the diagnostics pane
-(`D`) shows as "after HiGHS presolve".
+### What HiGHS's own presolve removes (`H`)
+
+`l` reports our rewrite. `H` reports the solver's, on the file exactly as written with none of our rules applied — which
+rows and columns HiGHS throws away before it runs a single simplex iteration:
+
+```
+HiGHS presolve: -0 rows, -2 cols, 24 rows x 1024 cols x 13386 nnz left, 17.6ms
+24 rows, 1026 cols in → 24 rows, 1024 cols out
+
+2 column(s) removed
+  R0100146
+  R0200146
+```
+
+Unlike our rewrite, HiGHS genuinely removes columns, so rows and columns are listed separately. `w` writes it to
+`<file>_presolve_log.txt`'s sibling, `<file>_highs_presolve.txt`. Pressing `l` with no rules ticked lands here too:
+with nothing selected our rewrite has nothing to say, and the solver's answer is the useful one.
+
+The names are real HiGHS output, not an inference: `HPresolve::shrinkProblem` carries row and column names through the
+reduction, and the C API hands the survivors back (`Highs_getPresolvedColName` / `Highs_getPresolvedRowName`). The
+`highs` crate never passes names in, so this module reaches past it to `highs-sys` for those calls; the model itself is
+built by the same code the ordinary solve uses, so the report is about the model the solver actually sees. Presolve
+proving the model infeasible is reported as such rather than as "everything was removed".
 
 The last two are **what-ifs**: every other rule preserves the set of optimal solutions, and these two break that on
 purpose, which is why both start unticked. The comparison is their whole output. How much a structural change is worth

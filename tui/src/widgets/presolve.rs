@@ -12,6 +12,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Clear, Paragraph};
 
 use crate::app::App;
+use crate::highs_presolve::HighsPresolveReport;
 use crate::presolve::{PresolveStats, Rule};
 use crate::theme::theme;
 use crate::widgets::{centred_rect, panel_block};
@@ -70,8 +71,7 @@ pub fn draw_presolve(frame: &mut Frame, area: Rect, app: &App) {
     frame.render_widget(Paragraph::new(lines).block(block), popup);
 
     // The hint sits on the bottom border so the rule list keeps the full body.
-    let hint =
-        " j/k move \u{2022} space toggle \u{2022} a all/none \u{2022} Enter solve \u{2022} l log \u{2022} w write .lp \u{2022} Esc cancel ";
+    let hint = " j/k \u{2022} space toggle \u{2022} a all/none \u{2022} Enter solve \u{2022} l log \u{2022} H HiGHS's own \u{2022} w .lp \u{2022} Esc ";
     let hint_width = u16::try_from(hint.chars().count()).unwrap_or(u16::MAX);
     if popup.width > hint_width && popup.height > 0 {
         let hint_area = Rect { x: popup.x + 2, y: popup.bottom() - 1, width: hint_width, height: 1 };
@@ -110,6 +110,51 @@ pub fn log_lines(stats: &PresolveStats) -> Vec<Line<'static>> {
             t.text
         };
         lines.push(Line::from(Span::styled(format!("  {entry}"), Style::default().fg(colour))));
+    }
+    lines
+}
+
+/// Build the lines for the `HiGHS` presolve report: what the *solver* removes
+/// from the file as written, before any of our rewrites.
+///
+/// Rows and columns are listed separately because `HiGHS` genuinely removes
+/// both, where our rewrite only ever fixes a column.
+pub fn highs_log_lines(report: &HighsPresolveReport) -> Vec<Line<'static>> {
+    let t = theme();
+    let mut lines = vec![
+        Line::from(Span::styled(format!("  {}", report.headline()), Style::default().fg(t.text))),
+        Line::from(Span::styled(
+            format!(
+                "  {} rows, {} cols in \u{2192} {} rows, {} cols out",
+                report.rows_before, report.cols_before, report.rows_after, report.cols_after
+            ),
+            Style::default().fg(t.muted),
+        )),
+    ];
+    if report.skipped_sos > 0 {
+        lines.push(Line::from(Span::styled(
+            format!("  {} SOS set(s) are not part of the model HiGHS sees", report.skipped_sos),
+            Style::default().fg(t.muted),
+        )));
+    }
+
+    let mut section = |title: String, names: &[String]| {
+        lines.push(Line::from(""));
+        lines.push(Line::from(Span::styled(format!("  {title}"), Style::default().fg(t.accent).add_modifier(Modifier::BOLD))));
+        lines.push(Line::from(""));
+        for name in names {
+            lines.push(Line::from(Span::styled(format!("  {name}"), Style::default().fg(t.removed))));
+        }
+    };
+    section(format!("{} row(s) removed", report.removed_rows.len()), &report.removed_rows);
+    section(format!("{} column(s) removed", report.removed_cols.len()), &report.removed_cols);
+
+    if report.infeasible {
+        lines.push(Line::from(""));
+        lines.push(Line::from(Span::styled(
+            "  presolve proved the model infeasible, so there is no reduced model to compare against",
+            Style::default().fg(t.removed),
+        )));
     }
     lines
 }

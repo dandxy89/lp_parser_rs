@@ -154,7 +154,7 @@ fn snapshot_diagnostics_pane_120x40() {
     // tables, which need no solver to populate.
     let diagnostics = crate::diagnostics::analyse(&app.problem1, None);
     let lines = crate::widgets::diagnostics::build_lines(&diagnostics);
-    app.diagnostics = Some(crate::state::ScrollPane { lines, scroll: 0 });
+    app.diagnostics = Some(crate::state::ScrollPane { lines, scroll: 0, export: None });
     insta::assert_snapshot!(render(&mut app, 120, 40).backend());
 }
 
@@ -165,7 +165,18 @@ fn snapshot_presolve_log_pane_120x40() {
     // The headline carries the wall-clock time; a snapshot cannot.
     stats.duration = std::time::Duration::ZERO;
     let lines = crate::widgets::presolve::log_lines(&stats);
-    app.presolve_log = Some(crate::state::ScrollPane { lines, scroll: 0 });
+    app.presolve_log = Some(crate::state::ScrollPane { lines, scroll: 0, export: Some(("presolve_log.txt", stats.log_text())) });
+    insta::assert_snapshot!(render(&mut app, 120, 40).backend());
+}
+
+#[test]
+fn snapshot_highs_presolve_pane_120x40() {
+    let mut app = inspect_app_from(REDUCIBLE_LP);
+    let mut report = crate::highs_presolve::highs_presolve(&app.problem1).expect("a plain LP presolves");
+    // The headline carries the wall-clock time; a snapshot cannot.
+    report.duration = std::time::Duration::ZERO;
+    let lines = crate::widgets::presolve::highs_log_lines(&report);
+    app.presolve_log = Some(crate::state::ScrollPane { lines, scroll: 0, export: Some(("highs_presolve.txt", report.log_text())) });
     insta::assert_snapshot!(render(&mut app, 120, 40).backend());
 }
 
