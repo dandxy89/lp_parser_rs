@@ -17,7 +17,7 @@ use crate::search::{self, CompiledSearch, SearchMode};
 use crate::solver::{InfeasibilityDiagnosis, SolveResult};
 pub use crate::state::{AppMode, DiffFilter, Focus, SearchResult, Section, SectionViewState};
 use crate::state::{
-    DetailView, DiagnosisState, DiagnosticsPane, JumpEntry, JumpList, PendingYank, Side, SolveState, SolveViewState, SortMode, WhatIfPrompt,
+    DetailView, DiagnosisState, JumpEntry, JumpList, PendingYank, ScrollPane, Side, SolveState, SolveViewState, SortMode, WhatIfPrompt,
 };
 use crate::watch::{WatchSession, WatchState};
 
@@ -240,7 +240,7 @@ pub struct App {
     pub what_if: Option<WhatIfPrompt>,
 
     /// Diagnostics pane (`D`), when open.
-    pub diagnostics: Option<DiagnosticsPane>,
+    pub diagnostics: Option<ScrollPane>,
 
     /// Presolve rule picker overlay (`P`): the highlighted rule when open.
     pub presolve_cursor: Option<usize>,
@@ -250,6 +250,10 @@ pub struct App {
 
     /// Stats from the most recent presolve run, shown when the picker reopens.
     pub last_presolve: Option<crate::presolve::PresolveStats>,
+
+    /// Presolve log pane (`l` from the picker): what the rewrite removed, row
+    /// by row and column by column.
+    pub presolve_log: Option<ScrollPane>,
 
     /// Scroll offset for the detail panel when it has focus.
     pub detail_scroll: u16,
@@ -579,6 +583,7 @@ impl App {
             presolve_cursor: None,
             presolve_rules: crate::presolve::DEFAULT_RULES,
             last_presolve: None,
+            presolve_log: None,
             detail_scroll: 0,
             section_selector_state,
             section_states: [SectionViewState::new(), SectionViewState::new(), SectionViewState::new()],

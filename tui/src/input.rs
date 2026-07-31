@@ -42,6 +42,11 @@ impl App {
             return;
         }
 
+        if self.presolve_log.is_some() {
+            self.handle_presolve_log_key(key);
+            return;
+        }
+
         if self.presolve_cursor.is_some() {
             self.handle_presolve_key(key);
             return;
@@ -1044,8 +1049,70 @@ impl App {
             }
             KeyCode::Enter => self.confirm_presolve(),
             KeyCode::Char('w') => self.write_presolved(),
+            KeyCode::Char('l') => self.open_presolve_log(),
             _ => {}
         }
+    }
+
+    /// Open the presolve log pane (`l` from the picker): every row dropped,
+    /// column fixed and bound moved by the currently ticked rules.
+    ///
+    /// Runs the rewrite rather than reading the last one, so the log always
+    /// matches the rules on screen. The run is discarded — only its record is
+    /// kept — which is why an infeasible verdict is shown here rather than
+    /// treated as a failure: the log is precisely what explains it.
+    fn open_presolve_log(&mut self) {
+        if self.presolve_rules.iter().all(|on| !on) {
+            self.flash_status("Rewrite: enable at least one rule (space toggles)");
+            return;
+        }
+        let (_, stats) = presolve(&self.problem1, self.presolve_rules);
+        let lines = crate::widgets::presolve::log_lines(&stats);
+        self.last_presolve = Some(stats);
+        self.presolve_cursor = None;
+        self.presolve_log = Some(crate::state::ScrollPane { lines, scroll: 0 });
+    }
+
+    /// Handle a key event while the presolve log pane is open.
+    fn handle_presolve_log_key(&mut self, key: KeyEvent) {
+        let page_size = self.layout.detail_height.max(1);
+        // `w` needs the stats, which the pane's mutable borrow would rule out.
+        if matches!(key.code, KeyCode::Char('w')) {
+            self.write_presolve_log();
+            return;
+        }
+        let Some(pane) = &mut self.presolve_log else {
+            debug_assert!(false, "handle_presolve_log_key called with the pane closed");
+            return;
+        };
+        match key.code {
+            KeyCode::Char('j') | KeyCode::Down => pane.scroll = pane.scroll.saturating_add(1),
+            KeyCode::Char('k') | KeyCode::Up => pane.scroll = pane.scroll.saturating_sub(1),
+            KeyCode::Char('g') | KeyCode::Home => pane.scroll = 0,
+            // Clamped against the real content height when the pane is drawn.
+            KeyCode::Char('G') | KeyCode::End => pane.scroll = u16::MAX,
+            KeyCode::PageDown => pane.scroll = pane.scroll.saturating_add(page_size),
+            KeyCode::PageUp => pane.scroll = pane.scroll.saturating_sub(page_size),
+            _ => self.presolve_log = None,
+        }
+    }
+
+    /// Write the presolve log to `<file1 stem>_presolve_log.txt` in the working
+    /// directory, alongside where `w` in the picker writes the rewritten model.
+    fn write_presolve_log(&mut self) {
+        let Some(stats) = &self.last_presolve else {
+            debug_assert!(false, "the log pane cannot be open without a run behind it");
+            return;
+        };
+        let (body, actions) = (stats.log_text(), stats.log.len());
+        let stem = self.file1_path.file_stem().unwrap_or_else(|| std::ffi::OsStr::new("model")).to_string_lossy().into_owned();
+        let filename = format!("{stem}_presolve_log.txt");
+        let written = std::env::current_dir().and_then(|dir| std::fs::write(dir.join(&filename), body));
+        let message = match written {
+            Ok(()) => format!("Wrote {filename} \u{2014} {actions} action(s) recorded"),
+            Err(error) => format!("Presolve log write failed: {error}"),
+        };
+        self.flash_status(message);
     }
 
     /// Apply the enabled rules to the baseline problem.
@@ -1132,7 +1199,7 @@ impl App {
     fn open_diagnostics(&mut self) {
         let diagnostics = crate::diagnostics::analyse(&self.problem1, self.latest_solve_result());
         let lines = crate::widgets::diagnostics::build_lines(&diagnostics);
-        self.diagnostics = Some(crate::state::DiagnosticsPane { lines, scroll: 0 });
+        self.diagnostics = Some(crate::state::ScrollPane { lines, scroll: 0 });
     }
 
     /// Handle a key event while the diagnostics pane is open.
@@ -1337,5 +1404,24 @@ mod tests {
         modified.update_constraint_rhs("c1", 5.0).expect("rhs update must succeed");
         assert_eq!(baseline_constraint_rhs(&modified, "c1"), Some(5.0), "modified copy must carry the new rhs");
         assert_eq!(baseline_constraint_rhs(&baseline, "c1"), Some(2.0), "baseline must be untouched by the what-if edit");
+    }
+
+    /// `P` then `l` must reach the log pane, and `Esc` must leave it — the key
+    /// routing is the half a snapshot of the pane cannot cover.
+    #[test]
+    fn l_in_the_picker_opens_the_presolve_log_and_esc_closes_it() {
+        let mut app = crate::snapshot_tests::inspect_app_from(crate::snapshot_tests::REDUCIBLE_LP);
+
+        app.handle_key(KeyEvent::from(KeyCode::Char('P')));
+        assert!(app.presolve_cursor.is_some(), "P opens the picker");
+
+        app.handle_key(KeyEvent::from(KeyCode::Char('l')));
+        let pane = app.presolve_log.as_ref().expect("l opens the log pane");
+        assert!(!pane.lines.is_empty(), "the pane is built with the run's lines");
+        assert!(app.presolve_cursor.is_none(), "the picker closes behind it");
+        assert!(app.last_presolve.as_ref().is_some_and(|stats| !stats.log.is_empty()), "the run behind the pane is recorded");
+
+        app.handle_key(KeyEvent::from(KeyCode::Esc));
+        assert!(app.presolve_log.is_none(), "Esc closes the log pane");
     }
 }

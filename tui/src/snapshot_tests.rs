@@ -21,9 +21,19 @@ const BASE_LP: &str = "min\nobj: 2 x + 3 y\nst\nc1: x + y >= 2\nc2: x - y <= 8\n
 
 const CHANGED_LP: &str = "min\nobj: 2 x + 4 y\nst\nc1: x + y >= 3\nc3: 2 x + y <= 12\nbounds\n0 <= x <= 10\n0 <= y <= 10\nend\n";
 
+/// A model the presolve rules actually bite on: `c2` is a singleton, `c3` can
+/// never bind, and `z` appears in no row.
+pub(crate) const REDUCIBLE_LP: &str =
+    "min\nobj: 2 x + 3 y + z\nst\nc1: x + y >= 2\nc2: 3 x <= 12\nc3: x + y <= 900\nbounds\n0 <= x <= 10\n0 <= y <= 10\n0 <= z <= 5\nend\n";
+
 /// Build an inspect-mode app from an in-memory LP model.
 fn inspect_app() -> App {
-    let (problem, analysis, line_map, raw_text) = parse_text(BASE_LP, false, "model.lp").expect("test LP must parse");
+    inspect_app_from(BASE_LP)
+}
+
+/// Build an inspect-mode app from the given LP source.
+pub(crate) fn inspect_app_from(source: &str) -> App {
+    let (problem, analysis, line_map, raw_text) = parse_text(source, false, "model.lp").expect("test LP must parse");
     let report = crate::inspect_model::build_inspect_report("model.lp", &problem, &line_map, analysis);
     App::new_inspect(report, PathBuf::from("model.lp"), Arc::new(problem), raw_text.into(), line_map)
 }
@@ -144,7 +154,18 @@ fn snapshot_diagnostics_pane_120x40() {
     // tables, which need no solver to populate.
     let diagnostics = crate::diagnostics::analyse(&app.problem1, None);
     let lines = crate::widgets::diagnostics::build_lines(&diagnostics);
-    app.diagnostics = Some(crate::state::DiagnosticsPane { lines, scroll: 0 });
+    app.diagnostics = Some(crate::state::ScrollPane { lines, scroll: 0 });
+    insta::assert_snapshot!(render(&mut app, 120, 40).backend());
+}
+
+#[test]
+fn snapshot_presolve_log_pane_120x40() {
+    let mut app = inspect_app_from(REDUCIBLE_LP);
+    let (_, mut stats) = crate::presolve::presolve(&app.problem1, crate::presolve::DEFAULT_RULES);
+    // The headline carries the wall-clock time; a snapshot cannot.
+    stats.duration = std::time::Duration::ZERO;
+    let lines = crate::widgets::presolve::log_lines(&stats);
+    app.presolve_log = Some(crate::state::ScrollPane { lines, scroll: 0 });
     insta::assert_snapshot!(render(&mut app, 120, 40).backend());
 }
 

@@ -42,6 +42,7 @@
 
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
+use std::fmt::Write as _;
 use std::time::{Duration, Instant};
 
 use lp_parser_rs::interner::NameId;
@@ -193,6 +194,63 @@ pub struct PassStats {
     pub cols_relaxed: usize,
 }
 
+/// Hard cap on recorded log lines. A rewrite of a large model can fire
+/// hundreds of thousands of times, and the log is a debugging aid, not a
+/// second copy of the model.
+///
+/// ponytail: fixed cap with a truncation notice; make it a setting if anyone
+/// ever needs the tail of a run this size.
+const MAX_LOG_LINES: usize = 20_000;
+
+/// Width of the name column in a log line.
+const LOG_NAME_WIDTH: usize = 24;
+
+/// One pass's counters, plus the line-by-line record of what fired.
+///
+/// The counters answer "how much did the rewrite do"; the log answers "to
+/// what", which is the question you have when a rewritten model solves to a
+/// different objective than you expected.
+struct Pass<'a> {
+    stats: PassStats,
+    log: &'a mut Vec<String>,
+    /// 1-based pass number, so a log line carries its own place in the cascade.
+    index: usize,
+}
+
+impl Pass<'_> {
+    /// Append one action, e.g. `pass 1  redundant  c17   max act 4 <= rhs 10`.
+    ///
+    /// Silently stops at [`MAX_LOG_LINES`] after leaving a notice, so a huge
+    /// model cannot turn the log into the dominant cost of a rewrite.
+    fn record(&mut self, kind: &str, name: &str, detail: &str) {
+        debug_assert!(self.index >= 1, "pass numbering is 1-based");
+        if self.log.len() >= MAX_LOG_LINES {
+            if self.log.len() == MAX_LOG_LINES {
+                self.log.push(format!("... log truncated at {MAX_LOG_LINES} lines; the counters above still cover the whole run"));
+            }
+            return;
+        }
+        self.log.push(format!("pass {:<2} {kind:<11} {name:<LOG_NAME_WIDTH$} {detail}", self.index));
+    }
+}
+
+/// Compact number for a log line: infinities read as themselves, and finite
+/// values lose the trailing zeros `{:.6}` would leave behind.
+fn num(value: f64) -> String {
+    if value.is_nan() {
+        return "nan".to_owned();
+    }
+    if value.is_infinite() {
+        return if value > 0.0 { "inf".to_owned() } else { "-inf".to_owned() };
+    }
+    let magnitude = value.abs();
+    if magnitude != 0.0 && !(1e-4..1e7).contains(&magnitude) {
+        return format!("{value:.3e}");
+    }
+    let text = format!("{value:.6}");
+    text.trim_end_matches('0').trim_end_matches('.').to_owned()
+}
+
 impl PassStats {
     /// Whether the pass changed nothing — the fixpoint has been reached.
     const fn is_empty(self) -> bool {
@@ -274,6 +332,10 @@ pub struct PresolveStats {
     /// Scale factors applied, for putting the rewritten model's solution back
     /// into the original's units. Empty unless a scaling rule fired.
     pub scaling: Scaling,
+    /// Every action the run took, one line each, in the order they happened:
+    /// which rows went, which columns were fixed and to what, which bounds
+    /// moved. Capped at [`MAX_LOG_LINES`].
+    pub log: Vec<String>,
 }
 
 impl PresolveStats {
@@ -360,6 +422,37 @@ impl PresolveStats {
             self.duration.as_secs_f64() * 1000.0,
         )
     }
+
+    /// The run as plain text: headline, per-pass counters, then every recorded
+    /// action. Used both for the log pane and for the file it writes.
+    #[must_use]
+    pub fn log_text(&self) -> String {
+        let mut out = self.headline();
+        out.push('\n');
+        for (index, pass) in self.per_pass.iter().enumerate() {
+            writeln!(
+                out,
+                "pass {}: -{} rows, {} cols fixed, {} bounds, -{} nnz, {}r/{}c scaled",
+                index + 1,
+                pass.rows_removed,
+                pass.cols_fixed,
+                pass.bounds_tightened,
+                pass.terms_removed,
+                pass.rows_scaled,
+                pass.cols_scaled
+            )
+            .expect("writing into a String cannot fail");
+        }
+        out.push('\n');
+        if self.log.is_empty() {
+            out.push_str("(no rule fired)\n");
+        }
+        for line in &self.log {
+            out.push_str(line);
+            out.push('\n');
+        }
+        out
+    }
 }
 
 /// Apply the enabled rules to a copy of `problem` until nothing changes.
@@ -379,9 +472,10 @@ pub fn presolve(problem: &LpProblem, rules: RuleSet) -> (LpProblem, PresolveStat
     // pass as the other dimension's scaling shifts what its largest entry is.
     let mut row_factors: HashMap<NameId, f64> = HashMap::new();
     let mut col_factors: HashMap<NameId, f64> = HashMap::new();
+    let mut log: Vec<String> = Vec::new();
 
-    for _ in 0..MAX_PASSES {
-        let mut pass = PassStats::default();
+    for index in 1..=MAX_PASSES {
+        let mut pass = Pass { stats: PassStats::default(), log: &mut log, index };
 
         if enabled(rules, Rule::FixedToRhs) {
             fixed_to_rhs(&mut out, &mut pass);
@@ -418,13 +512,20 @@ pub fn presolve(problem: &LpProblem, rules: RuleSet) -> (LpProblem, PresolveStat
             relax_integrality(&mut out, &mut pass);
         }
 
-        let converged = pass.is_empty();
+        let stats = pass.stats;
+        let converged = stats.is_empty();
         if !converged {
-            per_pass.push(pass);
+            per_pass.push(stats);
         }
         if converged || infeasible.is_some() {
             break;
         }
+    }
+
+    // The verdict belongs in the log too: the last recorded action is usually
+    // the one that led to it.
+    if let Some(reason) = &infeasible {
+        log.push(format!("INFEASIBLE: {reason}"));
     }
 
     // Resolved to names here: a solve result identifies rows and columns by
@@ -442,6 +543,7 @@ pub fn presolve(problem: &LpProblem, rules: RuleSet) -> (LpProblem, PresolveStat
         duration: started.elapsed(),
         infeasible,
         scaling,
+        log,
     };
     // Splitting is the one rule that grows the model; every other rule leaves
     // the column set alone and can only shrink the row count.
@@ -579,7 +681,10 @@ fn is_tighter(old: f64, new: f64) -> bool {
 
 /// Intersect `lower`/`upper` into `var`'s box. Bounds only ever narrow, which
 /// is what guarantees the fixpoint loop terminates.
-fn tighten(problem: &mut LpProblem, var: NameId, lower: Option<f64>, upper: Option<f64>) -> Tighten {
+///
+/// `kind` labels the resulting log line: the same narrowing is a bound
+/// tightening from propagation and a column fixing from a forcing row.
+fn tighten(problem: &mut LpProblem, var: NameId, lower: Option<f64>, upper: Option<f64>, pass: &mut Pass<'_>, kind: &str) -> Tighten {
     let (old_lower, old_upper) = effective_box(problem, var);
     let new_lower = lower.map_or(old_lower, |value| old_lower.max(value));
     let new_upper = upper.map_or(old_upper, |value| old_upper.min(value));
@@ -599,6 +704,11 @@ fn tighten(problem: &mut LpProblem, var: NameId, lower: Option<f64>, upper: Opti
     if new_upper.is_finite() {
         variable.bounds.upper = Some(new_upper);
     }
+    pass.record(
+        kind,
+        problem.resolve(var),
+        &format!("[{}, {}] -> [{}, {}]", num(old_lower), num(old_upper), num(new_lower), num(new_upper)),
+    );
     Tighten::Tightened
 }
 
@@ -607,13 +717,14 @@ fn tighten(problem: &mut LpProblem, var: NameId, lower: Option<f64>, upper: Opti
 fn apply_bounds(
     problem: &mut LpProblem,
     updates: &[(NameId, Option<f64>, Option<f64>)],
-    pass: &mut PassStats,
+    pass: &mut Pass<'_>,
     infeasible: &mut Option<String>,
+    kind: &str,
 ) {
     for &(var, lower, upper) in updates {
-        match tighten(problem, var, lower, upper) {
+        match tighten(problem, var, lower, upper, pass, kind) {
             Tighten::Unchanged => {}
-            Tighten::Tightened => pass.bounds_tightened += 1,
+            Tighten::Tightened => pass.stats.bounds_tightened += 1,
             Tighten::Infeasible => {
                 *infeasible = Some(format!("variable {} has an empty domain after tightening", problem.resolve(var)));
                 return;
@@ -661,7 +772,7 @@ fn implied_bound(operator: ComparisonOp, coefficient: f64, rhs: f64) -> (Option<
 }
 
 /// Rewrite one-term rows as variable bounds and drop them.
-fn singleton_to_bound(problem: &mut LpProblem, pass: &mut PassStats, infeasible: &mut Option<String>) {
+fn singleton_to_bound(problem: &mut LpProblem, pass: &mut Pass<'_>, infeasible: &mut Option<String>) {
     let mut doomed = Vec::new();
     let mut updates = Vec::new();
 
@@ -675,15 +786,22 @@ fn singleton_to_bound(problem: &mut LpProblem, pass: &mut PassStats, infeasible:
         }
         let (var, coefficient) = terms[0];
         let (lower, upper) = implied_bound(*operator, coefficient, *rhs);
+        let implied = match (lower, upper) {
+            (Some(low), Some(high)) if (high - low).abs() <= EPS => format!("{} = {}", problem.resolve(var), num(low)),
+            (Some(low), _) => format!("{} >= {}", problem.resolve(var), num(low)),
+            (_, Some(high)) => format!("{} <= {}", problem.resolve(var), num(high)),
+            (None, None) => unreachable!("a singleton row always implies a bound"),
+        };
+        pass.record("singleton", problem.resolve(*row_id), &format!("row removed -> {implied}"));
         updates.push((var, lower, upper));
         doomed.push(*row_id);
     }
 
-    apply_bounds(problem, &updates, pass, infeasible);
+    apply_bounds(problem, &updates, pass, infeasible, "bound");
     if infeasible.is_some() {
         return;
     }
-    pass.rows_removed += doomed.len();
+    pass.stats.rows_removed += doomed.len();
     remove_rows(problem, &doomed);
 }
 
@@ -692,7 +810,7 @@ fn singleton_to_bound(problem: &mut LpProblem, pass: &mut PassStats, infeasible:
 /// For `sum a_j x_j <= rhs`, the tightest any single term can be is
 /// `a_j x_j <= rhs - min(rest)`, which turns into a bound on `x_j`. The mirror
 /// argument on maximum activity handles `>=`; an equality gives both.
-fn bound_propagation(problem: &mut LpProblem, pass: &mut PassStats, infeasible: &mut Option<String>) {
+fn bound_propagation(problem: &mut LpProblem, pass: &mut Pass<'_>, infeasible: &mut Option<String>) {
     let mut updates = Vec::new();
 
     for constraint in problem.constraints.values() {
@@ -732,11 +850,11 @@ fn bound_propagation(problem: &mut LpProblem, pass: &mut PassStats, infeasible: 
         }
     }
 
-    apply_bounds(problem, &updates, pass, infeasible);
+    apply_bounds(problem, &updates, pass, infeasible, "propagate");
 }
 
 /// Round fractional bounds on integer variables inwards.
-fn integer_rounding(problem: &mut LpProblem, pass: &mut PassStats, infeasible: &mut Option<String>) {
+fn integer_rounding(problem: &mut LpProblem, pass: &mut Pass<'_>, infeasible: &mut Option<String>) {
     let mut updates = Vec::new();
 
     for (var_id, variable) in &problem.variables {
@@ -770,13 +888,18 @@ fn integer_rounding(problem: &mut LpProblem, pass: &mut PassStats, infeasible: &
         if let Some(value) = upper {
             variable.bounds.upper = Some(value);
         }
-        pass.bounds_tightened += 1;
+        pass.record(
+            "round",
+            problem.resolve(var),
+            &format!("[{}, {}] -> [{}, {}]", num(old_lower), num(old_upper), num(new_lower), num(new_upper)),
+        );
+        pass.stats.bounds_tightened += 1;
     }
 }
 
 /// Drop rows that hold everywhere in the box, and fix the variables of rows
 /// that can only be satisfied at a single point.
-fn redundant_rows(problem: &mut LpProblem, pass: &mut PassStats, infeasible: &mut Option<String>) {
+fn redundant_rows(problem: &mut LpProblem, pass: &mut Pass<'_>, infeasible: &mut Option<String>) {
     let mut doomed = Vec::new();
     let mut fixes: Vec<(NameId, Option<f64>, Option<f64>)> = Vec::new();
 
@@ -807,6 +930,18 @@ fn redundant_rows(problem: &mut LpProblem, pass: &mut PassStats, infeasible: &mu
         let forcing_at_min = above && min.total().is_some_and(|value| value >= rhs - EPS);
         let forcing_at_max = below && max.total().is_some_and(|value| value <= rhs + EPS);
         if forcing_at_min || forcing_at_max {
+            let activity = if forcing_at_min { min.total() } else { max.total() };
+            let extreme = if forcing_at_min { "min" } else { "max" };
+            pass.record(
+                "forcing",
+                problem.resolve(*name),
+                &format!(
+                    "row removed, {} terms pinned: {extreme} act {} vs rhs {}",
+                    terms.len(),
+                    activity.map_or_else(|| "inf".to_owned(), num),
+                    num(*rhs)
+                ),
+            );
             for &(var, coefficient) in &terms {
                 let (lower, upper) = effective_box(problem, var);
                 // At minimum activity a positive coefficient sits at its lower
@@ -823,25 +958,31 @@ fn redundant_rows(problem: &mut LpProblem, pass: &mut PassStats, infeasible: &mu
         let holds_above = !above || max.total().is_some_and(|value| value <= rhs + EPS);
         let holds_below = !below || min.total().is_some_and(|value| value >= rhs - EPS);
         if holds_above && holds_below {
+            let span = format!(
+                "activity in [{}, {}]",
+                min.total().map_or_else(|| "-inf".to_owned(), num),
+                max.total().map_or_else(|| "inf".to_owned(), num)
+            );
+            pass.record("redundant", problem.resolve(*name), &format!("row removed, {span} vs rhs {}", num(*rhs)));
             doomed.push(*row_id);
         }
     }
 
-    let fixed_before = pass.bounds_tightened;
-    apply_bounds(problem, &fixes, pass, infeasible);
+    let fixed_before = pass.stats.bounds_tightened;
+    apply_bounds(problem, &fixes, pass, infeasible, "fix col");
     // A forcing row's fixes are reported as fixed columns, not as bound tightenings.
-    let newly_fixed = pass.bounds_tightened - fixed_before;
-    pass.bounds_tightened = fixed_before;
-    pass.cols_fixed += newly_fixed;
+    let newly_fixed = pass.stats.bounds_tightened - fixed_before;
+    pass.stats.bounds_tightened = fixed_before;
+    pass.stats.cols_fixed += newly_fixed;
     if infeasible.is_some() {
         return;
     }
-    pass.rows_removed += doomed.len();
+    pass.stats.rows_removed += doomed.len();
     remove_rows(problem, &doomed);
 }
 
 /// Drop rows with no terms, and fix variables that appear in no row.
-fn empty_rows_cols(problem: &mut LpProblem, pass: &mut PassStats, infeasible: &mut Option<String>) {
+fn empty_rows_cols(problem: &mut LpProblem, pass: &mut Pass<'_>, infeasible: &mut Option<String>) {
     let mut doomed = Vec::new();
 
     for (row_id, constraint) in &problem.constraints {
@@ -860,9 +1001,10 @@ fn empty_rows_cols(problem: &mut LpProblem, pass: &mut PassStats, infeasible: &m
             *infeasible = Some(format!("row {} has no terms and a rhs it cannot meet", problem.resolve(*name)));
             return;
         }
+        pass.record("empty row", problem.resolve(*name), &format!("row removed, no terms left, rhs {}", num(*rhs)));
         doomed.push(*row_id);
     }
-    pass.rows_removed += doomed.len();
+    pass.stats.rows_removed += doomed.len();
     remove_rows(problem, &doomed);
 
     // A variable in no row is decided entirely by its objective coefficient, so
@@ -900,11 +1042,11 @@ fn empty_rows_cols(problem: &mut LpProblem, pass: &mut PassStats, infeasible: &m
         fixes.push((*var_id, Some(value), Some(value)));
     }
 
-    let tightened_before = pass.bounds_tightened;
-    apply_bounds(problem, &fixes, pass, infeasible);
-    let newly_fixed = pass.bounds_tightened - tightened_before;
-    pass.bounds_tightened = tightened_before;
-    pass.cols_fixed += newly_fixed;
+    let tightened_before = pass.stats.bounds_tightened;
+    apply_bounds(problem, &fixes, pass, infeasible, "unused col");
+    let newly_fixed = pass.stats.bounds_tightened - tightened_before;
+    pass.stats.bounds_tightened = tightened_before;
+    pass.stats.cols_fixed += newly_fixed;
 }
 
 /// Fold fixed variables into the right-hand side and drop their terms.
@@ -918,7 +1060,7 @@ fn empty_rows_cols(problem: &mut LpProblem, pass: &mut PassStats, infeasible: &m
 /// (forcing rows, singleton rows, unused columns) but leave their now-constant
 /// terms sitting in the matrix, and the fixpoint loop feeds each new fix back
 /// through here.
-fn fixed_to_rhs(problem: &mut LpProblem, pass: &mut PassStats) {
+fn fixed_to_rhs(problem: &mut LpProblem, pass: &mut Pass<'_>) {
     let fixed: HashMap<NameId, f64> = problem
         .variables
         .iter()
@@ -931,9 +1073,13 @@ fn fixed_to_rhs(problem: &mut LpProblem, pass: &mut PassStats) {
         return;
     }
 
+    // Recorded after the loop: the log needs `problem.resolve`, which cannot be
+    // borrowed while the constraints are held mutably.
+    let mut folded: Vec<(NameId, usize, f64, f64)> = Vec::new();
+
     for constraint in problem.constraints.values_mut() {
         // SOS sets carry weights, not an activity, so there is no rhs to fold into.
-        let Constraint::Standard { coefficients, rhs, .. } = constraint else {
+        let Constraint::Standard { name, coefficients, rhs, .. } = constraint else {
             continue;
         };
         let before = coefficients.len();
@@ -947,9 +1093,15 @@ fn fixed_to_rhs(problem: &mut LpProblem, pass: &mut PassStats) {
         });
         let removed = before - coefficients.len();
         if removed > 0 {
+            let old_rhs = *rhs;
             *rhs -= shift;
-            pass.terms_removed += removed;
+            folded.push((*name, removed, old_rhs, *rhs));
+            pass.stats.terms_removed += removed;
         }
+    }
+
+    for (name, removed, old_rhs, new_rhs) in folded {
+        pass.record("fold nnz", problem.resolve(name), &format!("-{removed} fixed term(s), rhs {} -> {}", num(old_rhs), num(new_rhs)));
     }
 }
 
@@ -974,7 +1126,8 @@ const MIN_SCALED_COEFF: f64 = 1e-7;
 ///
 /// The factor is a power of two so every coefficient's mantissa survives
 /// untouched: the rewrite introduces no rounding error of its own.
-fn row_scaling(problem: &mut LpProblem, pass: &mut PassStats, factors: &mut HashMap<NameId, f64>) {
+fn row_scaling(problem: &mut LpProblem, pass: &mut Pass<'_>, factors: &mut HashMap<NameId, f64>) {
+    let mut scaled: Vec<(NameId, f64, f64)> = Vec::new();
     for (row_id, constraint) in &mut problem.constraints {
         let Constraint::Standard { coefficients, rhs, .. } = constraint else {
             continue;
@@ -1002,7 +1155,12 @@ fn row_scaling(problem: &mut LpProblem, pass: &mut PassStats, factors: &mut Hash
         // positive factor also leaves the comparison operator alone.
         *rhs *= scale;
         *factors.entry(*row_id).or_insert(1.0) *= scale;
-        pass.rows_scaled += 1;
+        scaled.push((*row_id, scale, max));
+        pass.stats.rows_scaled += 1;
+    }
+
+    for (row, scale, max) in scaled {
+        pass.record("scale row", problem.resolve(row), &format!("x {} (largest coefficient was {})", num(scale), num(max)));
     }
 }
 
@@ -1023,7 +1181,7 @@ fn row_scaling(problem: &mut LpProblem, pass: &mut PassStats, factors: &mut Hash
 ///
 /// Missing bounds need no attention: the solver's implicit `0` and `+inf` are
 /// both fixed points of division by a positive factor.
-fn column_scaling(problem: &mut LpProblem, pass: &mut PassStats, factors: &mut HashMap<NameId, f64>) {
+fn column_scaling(problem: &mut LpProblem, pass: &mut Pass<'_>, factors: &mut HashMap<NameId, f64>) {
     let mut spread: HashMap<NameId, (f64, f64)> = HashMap::new();
     // A variable first seen in an ordinary row keeps its Continuous kind even
     // when a later SOS set names it, so membership has to be checked here too.
@@ -1098,7 +1256,15 @@ fn column_scaling(problem: &mut LpProblem, pass: &mut PassStats, factors: &mut H
             variable.bounds.upper = Some(upper / scale);
         }
         *factors.entry(*var).or_insert(1.0) *= scale;
-        pass.cols_scaled += 1;
+        pass.stats.cols_scaled += 1;
+    }
+
+    // Sorted: `scales` is a `HashMap`, and an unordered log would differ
+    // between runs of the same rewrite.
+    let mut named: Vec<(&str, f64)> = scales.iter().map(|(var, scale)| (problem.resolve(*var), *scale)).collect();
+    named.sort_unstable_by(|left, right| left.0.cmp(right.0));
+    for (name, scale) in named {
+        pass.record("scale col", name, &format!("units x {} (bounds divided, unscaled in the result)", num(scale)));
     }
 }
 
@@ -1128,7 +1294,7 @@ const DENSE_ROW_MIN_NNZ: usize = 64;
 /// The partial sums are genuinely new columns, so they appear as added rows in
 /// the comparison view rather than lining up against an original. Every
 /// original variable still lines up, so the values that matter still compare.
-fn split_dense_rows(problem: &mut LpProblem, pass: &mut PassStats) {
+fn split_dense_rows(problem: &mut LpProblem, pass: &mut Pass<'_>) {
     let dense: Vec<NameId> = problem
         .constraints
         .iter()
@@ -1184,12 +1350,13 @@ fn split_dense_rows(problem: &mut LpProblem, pass: &mut PassStats) {
             });
 
             aggregate.push(Coefficient { name: part, value: 1.0 });
-            pass.parts_added += 1;
+            pass.stats.parts_added += 1;
         }
 
         // Replaces the original row in place, keeping its name, operator and
         // rhs so the comparison view still lines it up against the original.
         problem.add_constraint(Constraint::Standard { name: row, coefficients: aggregate, operator, rhs, byte_offset });
+        pass.record("split", &row_name, &format!("{} terms -> {parts} partial sums of <= {chunk}", terms.len()));
     }
 }
 
@@ -1213,15 +1380,21 @@ fn split_dense_rows(problem: &mut LpProblem, pass: &mut PassStats) {
 /// it continuous without writing them down would relax `x in {0, 1}` to
 /// `x >= 0` instead of `0 <= x <= 1`. Semi-continuous and SOS columns keep
 /// their kind: they are not integrality, and the solver treats them separately.
-fn relax_integrality(problem: &mut LpProblem, pass: &mut PassStats) {
-    for variable in problem.variables.values_mut() {
+fn relax_integrality(problem: &mut LpProblem, pass: &mut Pass<'_>) {
+    let mut relaxed: Vec<(NameId, VariableKind, f64, f64)> = Vec::new();
+    for (var, variable) in &mut problem.variables {
         if !variable.kind.is_integer() {
             continue;
         }
         let (_, lower, upper) = variable_bounds(Some(variable));
+        relaxed.push((*var, variable.kind, lower, upper));
         variable.kind = VariableKind::Continuous;
         variable.bounds = VariableBounds::range(lower, upper);
-        pass.cols_relaxed += 1;
+        pass.stats.cols_relaxed += 1;
+    }
+
+    for (var, kind, lower, upper) in relaxed {
+        pass.record("relax", problem.resolve(var), &format!("{kind:?} -> Continuous over [{}, {}]", num(lower), num(upper)));
     }
 }
 
@@ -1354,6 +1527,44 @@ mod tests {
         assert_eq!(bounds_of(&out, "z"), (0.0, 0.0), "minimising a positive cost drives z to its lower bound");
         assert_eq!(stats.cols_fixed(), 1);
         assert_eq!(out.variable_count(), problem.variable_count(), "columns are fixed, never removed");
+    }
+
+    #[test]
+    fn the_log_names_every_row_that_goes_and_every_column_that_is_fixed() {
+        // c2 is a singleton, c1 is then forcing on x and y, and z is in no row.
+        let problem = parse("Minimize\n obj: x + y + 2 z\nSubject To\n c1: x + y <= 0\n c2: 3 w <= 12\nBounds\n 0 <= z <= 8\nEnd");
+        let (_, stats) = presolve(&problem, DEFAULT_RULES);
+        let log = stats.log.join("\n");
+
+        assert!(stats.infeasible.is_none(), "the fixture is feasible: {log}");
+        assert!(log.contains("singleton"), "the singleton rule names itself: {log}");
+        assert!(log.lines().any(|line| line.contains("c2") && line.contains("row removed")), "the removed row is named: {log}");
+        assert!(log.lines().any(|line| line.contains("c1") && line.contains("row removed")), "the forcing row is named: {log}");
+        assert!(log.lines().any(|line| line.contains(" z ") && line.contains("[0, 8] -> [0, 0]")), "a fixed column shows its value: {log}");
+        assert!(stats.log_text().contains(&stats.headline()), "the written log leads with the headline");
+    }
+
+    #[test]
+    fn the_log_is_capped_but_the_counters_are_not() {
+        // 30k singleton rows: well past the cap, and every one of them fires.
+        let mut rows = String::new();
+        for index in 0..30_000 {
+            writeln!(rows, " c{index}: x{index} <= 1").expect("writing into a String cannot fail");
+        }
+        let problem = parse(&format!("Minimize\n obj: x0\nSubject To\n{rows}End"));
+        let (_, stats) = presolve(&problem, only(&[Rule::SingletonToBound]));
+
+        assert_eq!(stats.rows_removed(), 30_000, "the counters cover the whole run");
+        assert_eq!(stats.log.len(), MAX_LOG_LINES + 1, "the log stops at the cap plus its notice");
+        assert!(stats.log.last().is_some_and(|line| line.contains("truncated")), "the truncation is stated, not silent");
+    }
+
+    #[test]
+    fn an_infeasible_run_records_its_verdict_last() {
+        let problem = parse("Minimize\n obj: x + y\nSubject To\n c1: x + y <= -5\nEnd");
+        let (_, stats) = presolve(&problem, DEFAULT_RULES);
+
+        assert!(stats.log.last().is_some_and(|line| line.starts_with("INFEASIBLE")), "the log ends with the verdict: {:?}", stats.log);
     }
 
     #[test]

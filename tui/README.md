@@ -197,6 +197,7 @@ Search mode prefixes (type in the pop-up input):
 | ------- | ------------------------------------------------------------------- |
 | `E`     | What-if: edit the selected constraint's RHS and re-solve            |
 | `P`     | Rewrite: pick presolve rules, then compare original vs rewritten    |
+| `l`     | (in the `P` picker) Log what the rewrite removes; `w` writes it to a file |
 | `D`     | Diagnostics: why the solve is slow, and which rows/variables to blame |
 
 **Export**
@@ -238,7 +239,7 @@ bound and re-solving does.
 `P` opens a picker of solution-preserving rewrites. Each removes work from the model without changing the set of optimal
 solutions. Space toggles a rule, `a` toggles all, and `Enter` rewrites the baseline and launches an
 original-vs-rewritten comparison solve. `w` writes the rewritten model to `<file>_presolved.lp` in the working directory
-instead of solving it.
+instead of solving it, and `l` opens the log of what the rewrite actually did.
 
 Paired solves run **one at a time**: the timings are the point of the comparison, and solving both at once would have
 them compete for the machine and mask the speed-up.
@@ -258,6 +259,25 @@ them compete for the machine and mask the speed-up.
 
 The rules feed each other, so they run to a fixpoint (at most 10 passes) rather than once each. Reopening the picker
 shows the previous run's per-pass breakdown.
+
+### Presolve log (`l`)
+
+The per-pass counters say how much the rewrite did; `l` says *to what*. It runs the ticked rules and opens a scrollable
+record of every action in the order it happened — each row dropped and why, each column fixed and to what value, each
+bound moved, each row or column rescaled, and the verdict if a rule proved the model infeasible:
+
+```
+pass 1  singleton   c2                       row removed -> x <= 4
+pass 1  bound       x                        [0, 10] -> [0, 4]
+pass 1  redundant   c3                       row removed, activity in [0, 14] vs rhs 900
+pass 1  unused col  z                        [0, 5] -> [0, 0]
+```
+
+`w` in the log pane writes it to `<file>_presolve_log.txt` in the working directory. The log is capped at 20,000 lines
+(the counters always cover the whole run); a truncated log says so on its last line.
+
+This is our own rewrite, not HiGHS's internal presolve — the solver reports only its totals, which the diagnostics pane
+(`D`) shows as "after HiGHS presolve".
 
 The last two are **what-ifs**: every other rule preserves the set of optimal solutions, and these two break that on
 purpose, which is why both start unticked. The comparison is their whole output. How much a structural change is worth

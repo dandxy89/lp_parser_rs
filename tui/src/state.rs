@@ -41,13 +41,14 @@ pub struct WhatIfPrompt {
     pub error: Option<String>,
 }
 
-/// Diagnostics pane state (`D`), held only while the pane is open.
+/// A scrollable read-only text overlay, held only while it is open: the
+/// diagnostics pane (`D`) and the presolve log (`l` from the `P` picker).
 ///
-/// The lines are built once when the pane opens: the analysis is a full pass
-/// over the matrix, and its result only changes when the model or the last
-/// solve does.
+/// The lines are built once when the pane opens rather than per frame, because
+/// building them is a full pass over the matrix (diagnostics) or over the whole
+/// rewrite record (presolve log), and neither changes while the pane is up.
 #[derive(Debug, Clone)]
-pub struct DiagnosticsPane {
+pub struct ScrollPane {
     /// Pre-built display lines.
     pub lines: Vec<Line<'static>>,
     /// Scroll offset, clamped to the content height when the pane is drawn.

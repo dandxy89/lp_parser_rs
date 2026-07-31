@@ -71,12 +71,76 @@ pub fn draw_presolve(frame: &mut Frame, area: Rect, app: &App) {
 
     // The hint sits on the bottom border so the rule list keeps the full body.
     let hint =
-        " j/k move \u{2022} space toggle \u{2022} a all/none \u{2022} Enter rewrite & solve \u{2022} w write .lp \u{2022} Esc cancel ";
+        " j/k move \u{2022} space toggle \u{2022} a all/none \u{2022} Enter solve \u{2022} l log \u{2022} w write .lp \u{2022} Esc cancel ";
     let hint_width = u16::try_from(hint.chars().count()).unwrap_or(u16::MAX);
     if popup.width > hint_width && popup.height > 0 {
         let hint_area = Rect { x: popup.x + 2, y: popup.bottom() - 1, width: hint_width, height: 1 };
         frame.render_widget(Paragraph::new(Line::from(Span::styled(hint, Style::default().fg(t.muted)))), hint_area);
     }
+}
+
+/// Build the presolve log pane's lines: the same summary the picker shows,
+/// followed by every action the run recorded.
+///
+/// The counters say how much the rewrite did; these lines say to what, which is
+/// the question you have when a rewritten model does not solve to the objective
+/// you expected.
+pub fn log_lines(stats: &PresolveStats) -> Vec<Line<'static>> {
+    let t = theme();
+    let mut lines = last_run_lines(stats, t.muted, t.text);
+
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(
+        format!("  {} action(s), oldest first", stats.log.len()),
+        Style::default().fg(t.accent).add_modifier(Modifier::BOLD),
+    )));
+    lines.push(Line::from(""));
+
+    if stats.log.is_empty() {
+        lines.push(Line::from(Span::styled("  no rule fired \u{2014} the model is already reduced", Style::default().fg(t.muted))));
+    }
+    for entry in &stats.log {
+        // Colour by verb: what left the model reads differently from what was
+        // only narrowed or rescaled.
+        let colour = if entry.starts_with("INFEASIBLE") || entry.contains("row removed") {
+            t.removed
+        } else if entry.contains(" fix col ") || entry.contains(" unused col ") {
+            t.accent
+        } else {
+            t.text
+        };
+        lines.push(Line::from(Span::styled(format!("  {entry}"), Style::default().fg(colour))));
+    }
+    lines
+}
+
+/// Draw the presolve log pane over the current frame.
+///
+/// Takes `&mut App` so the scroll offset can be clamped to the real content
+/// height once the visible window is known, matching the diagnostics pane.
+pub fn draw_presolve_log(frame: &mut Frame, area: Rect, app: &mut App) {
+    let Some(pane) = &mut app.presolve_log else {
+        return;
+    };
+    if area.width == 0 || area.height == 0 {
+        return;
+    }
+    let t = theme();
+
+    // Near-full-screen: the log lines are wide, and a rewrite worth inspecting
+    // has more of them than a popup could hold.
+    let popup = centred_rect(area, area.width.saturating_sub(4).max(1), area.height.saturating_sub(2).max(1));
+
+    let inner_height = popup.height.saturating_sub(2) as usize;
+    let max_scroll = u16::try_from(pane.lines.len().saturating_sub(inner_height)).unwrap_or(u16::MAX);
+    pane.scroll = pane.scroll.min(max_scroll);
+
+    let border_style = Style::default().fg(t.accent).add_modifier(Modifier::BOLD);
+    let title = " Presolve log  (j/k scroll \u{2022} w write .txt \u{2022} Esc close) ";
+    let block = panel_block(border_style).title(Span::styled(title, border_style));
+
+    frame.render_widget(Clear, popup);
+    frame.render_widget(Paragraph::new(pane.lines.clone()).block(block).scroll((pane.scroll, 0)), popup);
 }
 
 /// Summary of the previous run: the headline plus a per-pass breakdown, so the

@@ -42,6 +42,7 @@ const HELP_TEXT: &[&str] = &[
     "  S       Solve problem",
     "  E       What-if: edit constraint RHS & re-solve",
     "  P       Rewrite: presolve & compare solves",
+    "          (l in the picker logs what it removes)",
     "  D       Diagnostics: why is the solve slow?",
     "  Tab     Next panel",
     "  ⇧Tab    Prev panel",

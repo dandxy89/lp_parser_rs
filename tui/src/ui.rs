@@ -124,6 +124,11 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
         presolve::draw_presolve(frame, frame.area(), app);
     }
 
+    // Presolve log pane (what the rewrite actually removed).
+    if app.presolve_log.is_some() {
+        presolve::draw_presolve_log(frame, frame.area(), app);
+    }
+
     // Diagnostics pane (why is the solve slow, and which rows/vars are to blame).
     if app.diagnostics.is_some() {
         diagnostics::draw_diagnostics(frame, frame.area(), app);
