@@ -11,11 +11,11 @@
 <meta property="og:url" content="https://dandxy89.github.io/lp_parser_rs/">
 <meta property="og:title" content="lp_parser_rs — Rust LP file parser, writer &amp; diff toolkit">
 <meta property="og:description" content="A Rust library, CLI, interactive TUI, and Python package for parsing, analysing, modifying, diffing, and solving Linear Programming (LP) files.">
-<meta property="og:image" content="https://dandxy89.github.io/lp_parser_rs/assets/demo.gif">
+<meta property="og:image" content="https://dandxy89.github.io/lp_parser_rs/assets/demo-poster.jpg">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="lp_parser_rs — Rust LP file parser, writer &amp; diff toolkit">
 <meta name="twitter:description" content="A Rust library, CLI, interactive TUI, and Python package for parsing, analysing, modifying, diffing, and solving Linear Programming (LP) files.">
-<meta name="twitter:image" content="https://dandxy89.github.io/lp_parser_rs/assets/demo.gif">
+<meta name="twitter:image" content="https://dandxy89.github.io/lp_parser_rs/assets/demo-poster.jpg">
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
@@ -55,35 +55,47 @@
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Inter+Tight:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#14171a" media="(prefers-color-scheme: dark)">
 <link rel="stylesheet" href="assets/site.css">
+<script>
+  // set the stored theme before first paint, so the page never flashes the wrong one
+  try {
+    var t = localStorage.getItem("theme");
+    if (t) document.documentElement.dataset.theme = t;
+  } catch (e) {}
+</script>
 </head>
 <body>
 
 <nav aria-label="Sections">
   <div class="row">
     <span class="brand">lp_parser_rs</span>
-    <a href="#library">Library</a>
-    <a href="#cli">CLI</a>
-    <a href="tui.html">TUI</a>
-    <a href="#python">Python</a>
-    <a href="#install">Install</a>
-    <a href="https://github.com/dandxy89/lp_parser_rs">GitHub ↗</a>
+    <div class="links">
+      <a href="#library">Library</a>
+      <a href="#cli">CLI</a>
+      <a href="tui.html">TUI</a>
+      <a href="#python">Python</a>
+      <a href="#install">Install</a>
+      <a href="https://github.com/dandxy89/lp_parser_rs">GitHub ↗</a>
+    </div>
+    <button class="theme-toggle" type="button" aria-label="Switch between light and dark">theme</button>
   </div>
 </nav>
 
 <header class="hero">
-  <div class="wrap hero-grid">
+  <div class="wrap">
     <div>
-      <p class="eyebrow">\* a Rust library, CLI, TUI and Python package *\</p>
-      <h1>Minimize time wrangling.<span class="mono">Maximize the model.</span></h1>
+      <p class="eyebrow">\* Rust · CLI · TUI · Python *\</p>
+      <h1>A parser for LP files,<span class="line2">and the four tools built on it.</span></h1>
       <p class="sub">Parse, analyse, modify, write, diff, and solve Linear Programming files.
         Built on a <a href="https://github.com/dandxy89/lp_parser_rs/blob/main/rust/src/lp.lalrpop">LALRPOP grammar</a>
         covering the CPLEX&nbsp;22.1.1, Gurobi, FICO&nbsp;Xpress, and Mosek LP specifications.</p>
       <div class="badges">
         <span><b>crates.io</b> lp_parser_rs</span>
         <span><b>PyPI</b> parse-lp</span>
-        <span><b>licence</b> MIT / Apache-2.0</span>
       </div>
       <div class="cta">
         <a class="primary" href="#install">Install</a>
@@ -108,8 +120,8 @@
 
 <section id="tools">
   <div class="wrap">
-    <p class="sec-label"><span class="k">Subject To</span> \* four ways in *\</p>
-    <h2>One parser, four surfaces</h2>
+    <p class="sec-label">What's here</p>
+    <h2>Four ways to use it</h2>
     <div class="cards">
       <div class="card">
         <h4><a href="#library">lp_parser_rs — Rust crate</a></h4>
@@ -117,7 +129,7 @@
       </div>
       <div class="card">
         <h4><a href="#cli">lp_parser — CLI</a></h4>
-        <p>Six subcommands: <code>parse</code>, <code>info</code>, <code>analyze</code>, <code>diff</code>, <code>convert</code>, <code>solve</code> — text, JSON, or YAML out.</p>
+        <p>Six subcommands: <code>parse</code>, <code>info</code>, <code>analyze</code>, <code>diff</code>, <code>convert</code>, <code>solve</code>. Text, JSON, or YAML out.</p>
       </div>
       <div class="card">
         <h4><a href="#tui">lp_diff — interactive TUI</a></h4>
@@ -133,17 +145,17 @@
 
 <section id="library">
   <div class="wrap">
-    <p class="sec-label"><span class="k">Subject To</span> \* the Rust library *\</p>
+    <p class="sec-label">The Rust library</p>
     <h2>Library capabilities</h2>
     <ul class="constraints">
-      <li><span class="cname">parsing</span><span class="cbody">Full LP format coverage — multiple objectives, all constraint senses, comments, and section keywords across the CPLEX, Gurobi, Xpress, and Mosek dialects.</span></li>
-      <li><span class="cname">variable_types</span><span class="cbody">Integer, general, bounded, free, and semi-continuous variables.</span></li>
-      <li><span class="cname">writing</span><span class="cbody">Round-trip safe LP output with configurable problem-name comment, line length, decimal precision, and section spacing.</span></li>
-      <li><span class="cname">modification</span><span class="cbody">Rename, update, or remove objectives, constraints, variables, coefficients, and RHS values in place.</span></li>
-      <li><span class="cname">analysis</span><span class="cbody">Statistics, matrix density and sparsity, coefficient ranges, and issue detection with configurable numeric thresholds.</span></li>
-      <li><span class="cname">diff</span><span class="cbody">Structural comparison of two problems (<code>diff</code> feature) with numeric tolerances and regex name rewriting.</span></li>
-      <li><span class="cname">serialisation</span><span class="cbody">JSON and YAML in and out (<code>serde</code> feature).</span></li>
-      <li><span class="cname">solving</span><span class="cbody">Hand problems to CBC, GLPK, Gurobi, or CPLEX via the <code>lp-solvers</code> feature.</span></li>
+      <li><span class="cname">Parsing</span><span class="cbody">Full LP format coverage: multiple objectives, all constraint senses, comments, and section keywords across the CPLEX, Gurobi, Xpress, and Mosek dialects.</span></li>
+      <li><span class="cname">Variable types</span><span class="cbody">Integer, general, bounded, free, and semi-continuous variables.</span></li>
+      <li><span class="cname">Writing</span><span class="cbody">Round-trip safe LP output with configurable problem-name comment, line length, decimal precision, and section spacing.</span></li>
+      <li><span class="cname">Modification</span><span class="cbody">Rename, update, or remove objectives, constraints, variables, coefficients, and RHS values in place.</span></li>
+      <li><span class="cname">Analysis</span><span class="cbody">Statistics, matrix density and sparsity, coefficient ranges, and issue detection with configurable numeric thresholds.</span></li>
+      <li><span class="cname">Diff</span><span class="cbody">Structural comparison of two problems (<code>diff</code> feature) with numeric tolerances and regex name rewriting.</span></li>
+      <li><span class="cname">Serialisation</span><span class="cbody">JSON and YAML in and out (<code>serde</code> feature).</span></li>
+      <li><span class="cname">Solving</span><span class="cbody">Hand problems to CBC, GLPK, Gurobi, or CPLEX via the <code>lp-solvers</code> feature.</span></li>
     </ul>
 
     <h3>Parse and inspect</h3>
@@ -180,7 +192,7 @@ std::fs::write(<span class="g">"modified.lp"</span>, write_lp_string(&amp;proble
 
 <section id="cli">
   <div class="wrap">
-    <p class="sec-label"><span class="k">Subject To</span> \* the command line *\</p>
+    <p class="sec-label">The command line</p>
     <h2>CLI: <code>lp_parser</code></h2>
     <p class="lead">Every subcommand writes to stdout or a file (<code>-o</code>) as text, JSON, or YAML (<code>-f</code>, plus <code>--pretty</code>). Global flags: <code>-v/--verbose</code> (repeatable), <code>-q/--quiet</code>.</p>
 
@@ -233,17 +245,22 @@ lp_parser convert problem.lp --format csv --output ./out</code></pre>
 
 <section id="tui">
   <div class="wrap">
-    <p class="sec-label"><span class="k">Subject To</span> \* the terminal UI *\</p>
+    <p class="sec-label">The terminal UI</p>
     <h2>TUI: <code>lp_diff</code></h2>
     <p class="lead">An interactive <a href="https://ratatui.rs">ratatui</a> explorer and diff viewer for LP <em>and</em> MPS files. One file opens a single-model explorer; two files diff them, in any mix of formats (<code>lp_diff model.lp model.mps</code>). It has grown well past a diff viewer: there is a background solver, in-memory what-if edits, solution-preserving rewrites, and a diagnostics pane that names the constraints slowing a solve down.</p>
-    <img class="demo" src="assets/demo.gif" alt="Animated demo of lp_diff: diffing an MPS file against an LP file with a coefficient-level constraint diff, raw text view, fuzzy search and a parallel HiGHS solve, then inspecting a single model to apply presolve rewrites and open the diagnostics pane" loading="lazy">
+    <video class="demo" width="1280" height="800" autoplay loop muted playsinline controls
+           preload="none" poster="assets/demo-poster.jpg" aria-label="Diffing an MPS file against an LP file: a coefficient-level constraint diff, raw text view, fuzzy search and a parallel HiGHS solve, then a single model with presolve rewrites and the diagnostics pane.">
+      <source src="assets/demo.webm" type="video/webm">
+      <source src="assets/demo.mp4" type="video/mp4">
+      <img src="assets/demo.gif" width="1280" height="800" alt="Diffing an MPS file against an LP file: a coefficient-level constraint diff, raw text view, fuzzy search and a parallel HiGHS solve, then a single model with presolve rewrites and the diagnostics pane.">
+    </video>
     <ul class="constraints">
-      <li><span class="cname">explore_and_diff</span><span class="cbody">Five sections (Summary, Variables, Constraints, Objectives, Numerics), coefficient-level side-by-side diffs, raw LP text view, kind filters, delta sorts, and tolerances you can cycle live.</span></li>
-      <li><span class="cname">search</span><span class="cbody">Telescope-style pop-up across every section: fuzzy by default, with <code>r:</code> regex, <code>s:</code> substring, and <code>c:</code> content modes. Plus a command palette and a 100-entry jumplist.</span></li>
-      <li><span class="cname">solve</span><span class="cbody"><kbd>S</kbd> solves either file, or both in parallel, with <a href="https://highs.dev">HiGHS</a> on a background thread. Results tab into Summary, Variables, Constraints, Log and Duals, with solution diffing, ranked duals, CSV export, and <kbd>e</kbd> for infeasibility diagnosis.</span></li>
-      <li><span class="cname">what_if</span><span class="cbody"><kbd>E</kbd> edits a constraint's RHS in memory and re-solves it against the baseline, so you can test how far a shadow price actually holds.</span></li>
-      <li><span class="cname">rewrite</span><span class="cbody"><kbd>P</kbd> applies solution-preserving presolve rules (singleton rows to bounds, bound propagation, integer rounding, redundant and forcing rows, empty rows and columns) to a fixpoint, then compares the original and rewritten solves.</span></li>
-      <li><span class="cname">diagnostics</span><span class="cbody"><kbd>D</kbd> joins solver telemetry to the model, giving every row and column its coefficient spread alongside its shadow price, and ranking the worst-conditioned, most degenerate and densest by name.</span></li>
+      <li><span class="cname">Explore and diff</span><span class="cbody">Five sections (Summary, Variables, Constraints, Objectives, Numerics), coefficient-level side-by-side diffs, raw LP text view, kind filters, delta sorts, and tolerances you can cycle live.</span></li>
+      <li><span class="cname">Search</span><span class="cbody">Telescope-style pop-up across every section: fuzzy by default, with <code>r:</code> regex, <code>s:</code> substring, and <code>c:</code> content modes. Plus a command palette and a 100-entry jumplist.</span></li>
+      <li><span class="cname">Solve</span><span class="cbody"><kbd>S</kbd> solves either file, or both in parallel, with <a href="https://highs.dev">HiGHS</a> on a background thread. Results tab into Summary, Variables, Constraints, Log and Duals, with solution diffing, ranked duals, CSV export, and <kbd>e</kbd> for infeasibility diagnosis.</span></li>
+      <li><span class="cname">What-if</span><span class="cbody"><kbd>E</kbd> edits a constraint's RHS in memory and re-solves it against the baseline, so you can test how far a shadow price actually holds.</span></li>
+      <li><span class="cname">Rewrite</span><span class="cbody"><kbd>P</kbd> applies solution-preserving presolve rules (singleton rows to bounds, bound propagation, integer rounding, redundant and forcing rows, empty rows and columns) to a fixpoint, then compares the original and rewritten solves.</span></li>
+      <li><span class="cname">Diagnostics</span><span class="cbody"><kbd>D</kbd> joins solver telemetry to the model, giving every row and column its coefficient spread alongside its shadow price, and ranking the worst-conditioned, most degenerate and densest by name.</span></li>
     </ul>
     <div class="cta" style="justify-content:flex-start;margin-top:2.5rem;">
       <a class="primary" href="tui.html">Deep dive on the TUI</a>
@@ -254,7 +271,7 @@ lp_parser convert problem.lp --format csv --output ./out</code></pre>
 
 <section id="python">
   <div class="wrap">
-    <p class="sec-label"><span class="k">Subject To</span> \* Python bindings *\</p>
+    <p class="sec-label">Python bindings</p>
     <h2>Python: <code>parse_lp</code></h2>
     <p class="lead">The same Rust engine behind a typed Python API: parsing, data access, modification, LP writing, analysis with configurable thresholds, CSV export, and problem-to-problem comparison.</p>
 <pre><code><span class="k">from</span> parse_lp <span class="k">import</span> LpParser
@@ -277,16 +294,16 @@ print(analysis[<span class="g">"summary"</span>][<span class="g">"density"</span
 
 <section id="install">
   <div class="wrap">
-    <p class="sec-label"><span class="k">Bounds</span> \* getting it *\</p>
+    <p class="sec-label">Getting it</p>
     <h2>Install</h2>
     <div class="tablewrap"><table>
-      <tr><th>Surface</th><th>Command</th></tr>
-      <tr><td>Rust crate</td><td><code>lp_parser_rs = { version = "3.5.0", features = ["serde", "diff"] }</code></td></tr>
+      <tr><th>Where</th><th>Command</th></tr>
+      <tr><td>Rust crate</td><td><code>lp_parser_rs = { version = "4.1.0", features = ["serde", "diff"] }</code></td></tr>
       <tr><td>CLI</td><td><code>cargo install lp_parser_rs --all-features</code></td></tr>
       <tr><td>TUI</td><td><code>cargo install --path tui</code> (from a clone)</td></tr>
       <tr><td>Python</td><td><code>pip install parse_lp</code></td></tr>
     </table></div>
-    <p style="margin-top:1.25rem;">Develop with <code>cargo insta test --all-features</code> and review snapshot changes with <code>cargo insta review</code>. Contributions welcome — <a href="https://github.com/dandxy89/lp_parser_rs">open a pull request</a>.</p>
+    <p style="margin-top:1.25rem;">Develop with <code>cargo insta test --all-features</code> and review snapshot changes with <code>cargo insta review</code>. Contributions welcome: <a href="https://github.com/dandxy89/lp_parser_rs">open a pull request</a>.</p>
   </div>
 </section>
 
@@ -300,6 +317,26 @@ print(analysis[<span class="g">"summary"</span>][<span class="g">"density"</span
       <a href="https://github.com/dandxy89/lp_parser_rs">GitHub</a></p>
   </div>
 </footer>
+
+<script>
+  (function () {
+    var root = document.documentElement;
+    var btn = document.querySelector(".theme-toggle");
+    var media = window.matchMedia("(prefers-color-scheme: dark)");
+    var dark = function () {
+      return root.dataset.theme ? root.dataset.theme === "dark" : media.matches;
+    };
+    var label = function () { btn.textContent = dark() ? "light" : "dark"; };
+    btn.addEventListener("click", function () {
+      var next = dark() ? "light" : "dark";
+      root.dataset.theme = next;
+      try { localStorage.setItem("theme", next); } catch (e) {}
+      label();
+    });
+    media.addEventListener("change", label);
+    label();
+  })();
+</script>
 
 </body>
 </html>

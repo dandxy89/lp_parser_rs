@@ -1470,7 +1470,11 @@ End";
         assert_eq!(p.objective_count(), 0);
         let p = LpProblem::parse("minimize\nobj:\nsubject to\nc1: x + y >= 1\nend").unwrap();
         assert_eq!(p.objective_count(), 1);
-        assert!(p.objectives.values().next().unwrap().coefficients.is_empty(), "expected empty, got {:?}", p.objectives.values().next().unwrap().coefficients);
+        assert!(
+            p.objectives.values().next().unwrap().coefficients.is_empty(),
+            "expected empty, got {:?}",
+            p.objectives.values().next().unwrap().coefficients
+        );
     }
 
     // Parsed values round-trip bit-exactly from source text.

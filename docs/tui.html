@@ -11,11 +11,11 @@
 <meta property="og:url" content="https://dandxy89.github.io/lp_parser_rs/tui.html">
 <meta property="og:title" content="lp_diff — the terminal LP/MPS model explorer">
 <meta property="og:description" content="An interactive terminal explorer and diff viewer for LP and MPS models, with a HiGHS solver, what-if analysis, solution-preserving rewrites, and conditioning diagnostics.">
-<meta property="og:image" content="https://dandxy89.github.io/lp_parser_rs/assets/demo.gif">
+<meta property="og:image" content="https://dandxy89.github.io/lp_parser_rs/assets/demo-poster.jpg">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="lp_diff — the terminal LP/MPS model explorer">
 <meta name="twitter:description" content="An interactive terminal explorer and diff viewer for LP and MPS models, with a HiGHS solver, what-if analysis, solution-preserving rewrites, and conditioning diagnostics.">
-<meta name="twitter:image" content="https://dandxy89.github.io/lp_parser_rs/assets/demo.gif">
+<meta name="twitter:image" content="https://dandxy89.github.io/lp_parser_rs/assets/demo-poster.jpg">
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
@@ -28,7 +28,7 @@
       "operatingSystem": "Linux, macOS, Windows",
       "url": "https://dandxy89.github.io/lp_parser_rs/tui.html",
       "description": "An interactive terminal explorer and diff viewer for LP and MPS models, with coefficient-level diffs, fuzzy search, a background HiGHS solver, what-if edits, solution-preserving rewrites and conditioning diagnostics.",
-      "screenshot": "https://dandxy89.github.io/lp_parser_rs/assets/demo.gif",
+      "screenshot": "https://dandxy89.github.io/lp_parser_rs/assets/demo-poster.jpg",
       "isPartOf": {"@id": "https://dandxy89.github.io/lp_parser_rs/#website"},
       "author": {"@type": "Person", "name": "Dan Dixey", "url": "https://github.com/dandxy89"},
       "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}
@@ -45,29 +45,42 @@
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Inter+Tight:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#14171a" media="(prefers-color-scheme: dark)">
 <link rel="stylesheet" href="assets/site.css">
+<script>
+  // set the stored theme before first paint, so the page never flashes the wrong one
+  try {
+    var t = localStorage.getItem("theme");
+    if (t) document.documentElement.dataset.theme = t;
+  } catch (e) {}
+</script>
 </head>
 <body>
 
 <nav aria-label="Sections">
   <div class="row">
     <span class="brand"><a href="index.html" style="color:inherit">lp_parser_rs</a></span>
-    <a href="index.html#library">Library</a>
-    <a href="index.html#cli">CLI</a>
-    <a href="tui.html">TUI</a>
-    <a href="index.html#python">Python</a>
-    <a href="index.html#install">Install</a>
-    <a href="https://github.com/dandxy89/lp_parser_rs">GitHub ↗</a>
+    <div class="links">
+      <a href="index.html#library">Library</a>
+      <a href="index.html#cli">CLI</a>
+      <a href="tui.html">TUI</a>
+      <a href="index.html#python">Python</a>
+      <a href="index.html#install">Install</a>
+      <a href="https://github.com/dandxy89/lp_parser_rs">GitHub ↗</a>
+    </div>
+    <button class="theme-toggle" type="button" aria-label="Switch between light and dark">theme</button>
   </div>
 </nav>
 
 <header class="hero">
-  <div class="wrap hero-grid">
+  <div class="wrap">
     <div>
       <a class="backlink" href="index.html">← back to overview</a>
       <p class="eyebrow">\* the terminal model explorer *\</p>
-      <h1>Read the model.<span class="mono">Not the diff output.</span></h1>
+      <h1>It started as a diff viewer.<span class="line2">Now it solves, rewrites and diagnoses.</span></h1>
       <p class="sub"><code>lp_diff</code> opens an LP or MPS file (or two, in any combination) and gives you a
         navigable model: coefficient-level diffs, fuzzy search, a background <a href="https://highs.dev">HiGHS</a> solver,
         what-if edits, solution-preserving rewrites, and a diagnostics pane that names the constraints slowing your solve down.</p>
@@ -81,16 +94,21 @@
         <a href="https://github.com/dandxy89/lp_parser_rs/blob/main/tui/README.md">tui README</a>
       </div>
     </div>
-    <img class="demo" src="assets/demo.gif" alt="Animated demo of lp_diff: diffing an MPS file against an LP file with a coefficient-level constraint diff, raw text view, fuzzy search and a parallel HiGHS solve, then inspecting a single model to apply presolve rewrites and open the diagnostics pane" loading="lazy" style="max-width:52rem;margin-left:auto;margin-right:auto;">
+    <video class="demo" width="1280" height="800" autoplay loop muted playsinline controls
+           poster="assets/demo-poster.jpg" aria-label="Diffing an MPS file against an LP file: a coefficient-level constraint diff, raw text view, fuzzy search and a parallel HiGHS solve, then a single model with presolve rewrites and the diagnostics pane.">
+      <source src="assets/demo.webm" type="video/webm">
+      <source src="assets/demo.mp4" type="video/mp4">
+      <img src="assets/demo.gif" width="1280" height="800" alt="Diffing an MPS file against an LP file: a coefficient-level constraint diff, raw text view, fuzzy search and a parallel HiGHS solve, then a single model with presolve rewrites and the diagnostics pane.">
+    </video>
   </div>
 </header>
 
 <section id="modes">
   <div class="wrap">
-    <p class="sec-label"><span class="k">Minimize</span> \* getting oriented *\</p>
+    <p class="sec-label">Getting oriented</p>
     <h2>One file explores. Two files diff.</h2>
     <p class="lead">The file count decides the mode. Format is detected by extension, and the two files do not have to
-      match: comparing an LP against an MPS is a first-class case, not a workaround.</p>
+      match: comparing an LP against an MPS is a supported case.</p>
 
     <div class="subnav">
       <a href="#modes">Modes</a>
@@ -121,7 +139,7 @@ lp_diff base.lp modified.lp --summary</code></pre>
     <p>Everything that still makes sense for a single model keeps working: search, the command palette, sorting, the
       solver, CSV export, rewrites, diagnostics and <code>--watch</code>. The diff-only actions (kind filters,
       ignore-order, tolerance cycling, delta sorts and the raw side-by-side view) are hidden from the help and the
-      palette, and no-op with a brief status-bar hint if their key is pressed. There are no dead keys advertised.</p>
+      palette, and no-op with a brief status-bar hint if their key is pressed.</p>
 
     <h3>Flags</h3>
     <div class="tablewrap"><table>
@@ -143,7 +161,7 @@ lp_diff base.lp modified.lp --summary</code></pre>
 
 <section id="layout">
   <div class="wrap">
-    <p class="sec-label"><span class="k">Subject To</span> \* the three panels *\</p>
+    <p class="sec-label">The three panels</p>
     <h2>Layout</h2>
     <p class="lead">A section selector, a filterable name list, and a detail panel. The status bar carries total changes,
       per-section statistics, the active filter, and scroll position.</p>
@@ -163,7 +181,7 @@ lp_diff base.lp modified.lp --summary</code></pre>
 
 <section id="diffing">
   <div class="wrap">
-    <p class="sec-label"><span class="k">Subject To</span> \* comparing models *\</p>
+    <p class="sec-label">Comparing models</p>
     <h2>Diffing down to the coefficient</h2>
     <p class="lead">A modified constraint is not just "modified". The two-column view puts old and new coefficients
       beside each other, so you can see which term moved and by how much.</p>
@@ -181,7 +199,7 @@ lp_diff base.lp modified.lp --summary</code></pre>
       <tr><td><kbd>s</kbd></td><td>Cycle sort: name → |Δ| → relative Δ. The delta sorts surface the biggest movers first.</td></tr>
     </table></div>
 
-    <h3>Tolerance, live</h3>
+    <h3>Live tolerance</h3>
     <p><kbd>t</kbd> and <kbd>T</kbd> cycle the relative and absolute tolerances and rebuild the diff in place, so you can
       dial numeric noise out interactively rather than restarting with different flags. The active values appear on the
       Summary panel, so a screenshot of the diff records the settings that produced it.</p>
@@ -190,7 +208,7 @@ lp_diff base.lp modified.lp --summary</code></pre>
 
 <section id="search">
   <div class="wrap">
-    <p class="sec-label"><span class="k">Subject To</span> \* finding things *\</p>
+    <p class="sec-label">Finding things</p>
     <h2>Search and navigation</h2>
     <p class="lead">A Telescope-style pop-up searches every section at once, with four modes chosen by prefix.</p>
 
@@ -215,8 +233,8 @@ lp_diff base.lp modified.lp --summary</code></pre>
 
 <section id="solve">
   <div class="wrap">
-    <p class="sec-label"><span class="k">Subject To</span> \* running the model *\</p>
-    <h2>Solving, in the background</h2>
+    <p class="sec-label">Running the model</p>
+    <h2>Solving in the background</h2>
     <p class="lead"><kbd>S</kbd> solves with <a href="https://highs.dev">HiGHS</a> on a background thread. The interface
       stays responsive, and the elapsed time ticks while a long solve runs.</p>
 
@@ -224,37 +242,25 @@ lp_diff base.lp modified.lp --summary</code></pre>
       a comparison view. Results are organised into five tabs (Summary, Variables, Constraints, Log, and Duals),
       switchable with <kbd>1</kbd>–<kbd>5</kbd> or <kbd>Tab</kbd>.</p>
 
-    <div class="cards">
-      <div class="card">
-        <h4>Solution diffing</h4>
-        <p>Variables and constraints are matched by name and compared. A configurable delta threshold (<kbd>t</kbd>/<kbd>T</kbd>,
-          presets from <code>0.0</code> to <code>1.0</code>) decides what counts as changed, and <kbd>d</kbd> hides
-          everything that did not.</p>
-      </div>
-      <div class="card">
-        <h4>Duals, ranked</h4>
-        <p>The Duals tab ranks constraints by |shadow price| and variables by |reduced cost|, or, in comparison mode, by
-          the <em>change</em> in each. The binding constraints come to you.</p>
-      </div>
-      <div class="card">
-        <h4>Infeasibility diagnosis</h4>
-        <p><kbd>e</kbd> runs an elastic relaxation to find which constraints have to give, so an infeasible model
-          produces a named culprit instead of a status string.</p>
-      </div>
-      <div class="card">
-        <h4>Cached across closes</h4>
-        <p>Closing the overlay files the result away; reopening the same target restores it instead of re-solving.
-          Editing an input invalidates the cache by reloading the files.</p>
-      </div>
-    </div>
+    <ul class="constraints">
+      <li><span class="cname">Solution diffing</span><span class="cbody">Variables and constraints are matched by name
+        and compared. A configurable delta threshold (<kbd>t</kbd>/<kbd>T</kbd>, presets from <code>0.0</code> to
+        <code>1.0</code>) decides what counts as changed, and <kbd>d</kbd> hides everything that did not.</span></li>
+      <li><span class="cname">Ranked duals</span><span class="cbody">The Duals tab ranks constraints by |shadow price|
+        and variables by |reduced cost|, or, in comparison mode, by the <em>change</em> in each.</span></li>
+      <li><span class="cname">Infeasibility</span><span class="cbody"><kbd>e</kbd> runs an elastic relaxation to find
+        which constraints have to give, so an infeasible model gives you a named culprit.</span></li>
+      <li><span class="cname">Caching</span><span class="cbody">Closing the overlay files the result away; reopening the
+        same target restores it instead of re-solving. Editing an input invalidates the cache by reloading the
+        files.</span></li>
+    </ul>
 
     <p style="margin-top:1.5rem;"><kbd>y</kbd> yanks the results to the clipboard and <kbd>w</kbd> writes them to CSV:
       the full comparison in "both" mode, the single solution otherwise.</p>
 
     <h3>Solver options</h3>
     <p>A <code>highs.opt</code> in the directory you launch from is applied to every solve. It is the same
-      <code>key = value</code> format as the HiGHS CLI's <code>--options_file</code>, so one file serves both. No file is
-      the normal case, not an error.</p>
+      <code>key = value</code> format as the HiGHS CLI's <code>--options_file</code>, so one file serves both. No file is fine.</p>
 <pre><code><span class="c"># highs.opt</span>
 solver = ipm
 run_crossover = off
@@ -264,20 +270,19 @@ time_limit = 300</code></pre>
       objective, cap a run that would otherwise outlast your patience. Values are typed by parse, so integers, floats,
       booleans and strings all pass through without a per-option table.</p>
     <div class="note"><b>Applied options are never silent.</b> The first line of the Log tab records what was read
-      (<code>[lp_diff] highs.opt: solver = ipm, run_crossover = off</code>), so a run with a stray file cannot be
-      mistaken for a default one. Anything HiGHS rejects is written to the same log. <code>log_file</code> and
+      (<code>[lp_diff] highs.opt: solver = ipm, run_crossover = off</code>), so a stray file in the directory cannot go unnoticed. Anything HiGHS rejects is written to the same log. <code>log_file</code> and
       <code>output_flag</code> are ignored from the file; the Log tab needs both.</div>
   </div>
 </section>
 
 <section id="whatif">
   <div class="wrap">
-    <p class="sec-label"><span class="k">Subject To</span> \* asking questions *\</p>
-    <h2>What-if: move a bound, re-solve</h2>
+    <p class="sec-label">Asking questions</p>
+    <h2>Moving a bound to see what happens</h2>
     <p class="lead">Select a constraint, press <kbd>E</kbd>, type a new right-hand side. The baseline problem is cloned
       in memory, the RHS is changed, and both versions are solved in parallel into the standard comparison view.</p>
     <p>Nothing is written to disk and the file on disk is untouched. The edit lives only in the clone. The comparison
-      label records the change (<code>capacity rhs 200 → 260</code>), so a screenshot carries its own provenance.</p>
+      label records the change (<code>capacity rhs 200 → 260</code>).</p>
     <div class="note"><b>The point is the duals.</b> A shadow price tells you the marginal value of a constraint at the
       current solution; it does not tell you how far that stays true. Actually moving the bound and re-solving does.</div>
   </div>
@@ -285,12 +290,12 @@ time_limit = 300</code></pre>
 
 <section id="rewrite">
   <div class="wrap">
-    <p class="sec-label"><span class="k">Subject To</span> \* making it smaller *\</p>
-    <h2>Rewrites: presolve, then compare</h2>
+    <p class="sec-label">Making it smaller</p>
+    <h2>Presolve rules you can measure</h2>
     <p class="lead"><kbd>P</kbd> opens a rule picker. Each rule is a <em>solution-preserving</em> rewrite: it removes
       work from the model without changing the set of optimal solutions. Pick a set, press <kbd>Enter</kbd>, and the
-      original and the rewritten model are solved one after the other. Unlike "Both (diff)", the two runs are never in
-      flight at once, so they cannot compete for the machine and the timings mean something.</p>
+      original and the rewritten model are solved one after the other. The two runs are never in flight at once, so they cannot compete for the
+      machine and the timings mean something.</p>
 
     <div class="tablewrap"><table>
       <tr><th>Rule</th><th>What it does</th></tr>
@@ -369,8 +374,8 @@ time_limit = 300</code></pre>
 
 <section id="diagnostics">
   <div class="wrap">
-    <p class="sec-label"><span class="k">Subject To</span> \* why is it slow *\</p>
-    <h2>Diagnostics: name the offender</h2>
+    <p class="sec-label">Why is it slow</p>
+    <h2>Which row is actually the problem</h2>
     <p class="lead">A solver log saying "200,000 iterations" and a numerics panel saying "coefficients span 1e-4 to 1e6"
       are both true and neither tells you which constraint to go and fix. <kbd>D</kbd> joins them.</p>
 
@@ -391,11 +396,11 @@ time_limit = 300</code></pre>
   CONTBOS4             10    1.0e0         0           0  <span class="bad">degenerate</span>
   CONTLGA2              7    1.0e0         0           0  <span class="bad">degenerate</span></code></pre>
 
-    <p>The pane leads with a verdict rather than a table, then the solver's own telemetry (iterations, its internal
+    <p>The pane opens with a verdict, then the solver's own telemetry (iterations, its internal
       presolve reductions, run time, primal-dual objective error), then the model's magnitude ranges, then ranked tables
       for worst-conditioned, degenerate and densest, rows and columns each.</p>
 
-    <h3>Three signals, three different cures</h3>
+    <h3>The three signals</h3>
     <div class="cards three">
       <div class="card">
         <h4>Conditioning</h4>
@@ -421,31 +426,31 @@ time_limit = 300</code></pre>
     <div class="note"><b>The degeneracy figures are proxies.</b> They are computed from the final solution, not from a
       basis inspection, because HiGHS does not expose the basis through this binding. A binding row with a zero dual is strong
       evidence of a degenerate vertex, not proof, and the pane says so on screen. The solver telemetry is parsed from the
-      log, which is not an API: every field is optional, so a format change leaves a gap rather than breaking the pane.</div>
+      log, which is not an API: every field is optional, so a format change leaves a gap in the pane.</div>
   </div>
 </section>
 
 <section id="manners">
   <div class="wrap">
-    <p class="sec-label"><span class="k">Bounds</span> \* living in a terminal *\</p>
+    <p class="sec-label">Living in a terminal</p>
     <h2>Terminal manners</h2>
     <ul class="constraints">
-      <li><span class="cname">theme</span><span class="cbody">Detects light or dark from <code>COLORFGBG</code>, or force it with <code>--theme</code>. <a href="https://no-color.org"><code>NO_COLOR</code></a> forces monochrome, unless you passed <code>--theme</code> explicitly, which is treated as the deliberate override it is.</span></li>
-      <li><span class="cname">watch</span><span class="cbody"><code>--watch</code> reloads when a file changes on disk and rebuilds the diff in place, keeping your position. Stale solve results are discarded rather than shown against a model that has moved.</span></li>
-      <li><span class="cname">suspend</span><span class="cbody"><kbd>Ctrl+Z</kbd> suspends and resumes cleanly, restoring the alternate screen and raw mode on the way back.</span></li>
-      <li><span class="cname">small_terminals</span><span class="cbody">Guards against terminals too small to draw into, and every overlay scrolls rather than silently truncating.</span></li>
-      <li><span class="cname">mouse</span><span class="cbody">Scroll wheel navigates lists, clicking selects, without giving up any keyboard control.</span></li>
-      <li><span class="cname">clipboard</span><span class="cbody"><kbd>yy</kbd> yanks an entry name, <kbd>yo</kbd>/<kbd>yn</kbd> either file's version, <kbd>Y</kbd> the whole detail panel.</span></li>
+      <li><span class="cname">Theme</span><span class="cbody">Detects light or dark from <code>COLORFGBG</code>, or force it with <code>--theme</code>. <a href="https://no-color.org"><code>NO_COLOR</code></a> forces monochrome, unless you passed <code>--theme</code> explicitly, which wins.</span></li>
+      <li><span class="cname">Watch</span><span class="cbody"><code>--watch</code> reloads when a file changes on disk and rebuilds the diff in place, keeping your position. Stale solve results are discarded; the model has moved under them.</span></li>
+      <li><span class="cname">Suspend</span><span class="cbody"><kbd>Ctrl+Z</kbd> suspends and resumes cleanly, restoring the alternate screen and raw mode on the way back.</span></li>
+      <li><span class="cname">Small terminals</span><span class="cbody">Guards against terminals too small to draw into, and every overlay scrolls.</span></li>
+      <li><span class="cname">Mouse</span><span class="cbody">Scroll wheel navigates lists, clicking selects, and the keyboard still does everything.</span></li>
+      <li><span class="cname">Clipboard</span><span class="cbody"><kbd>yy</kbd> yanks an entry name, <kbd>yo</kbd>/<kbd>yn</kbd> either file's version, <kbd>Y</kbd> the whole detail panel.</span></li>
     </ul>
   </div>
 </section>
 
 <section id="keys">
   <div class="wrap">
-    <p class="sec-label"><span class="k">Bounds</span> \* the whole keyboard *\</p>
+    <p class="sec-label">The whole keyboard</p>
     <h2>Key reference</h2>
-    <p class="lead">The in-app help (<kbd>?</kbd>) is the authoritative copy and adapts to the mode you are in. This is
-      the summary.</p>
+    <p class="lead">The in-app help (<kbd>?</kbd>) adapts to the mode you are in and is always current. This is the
+      summary.</p>
 
     <h3>Navigation</h3>
     <div class="tablewrap"><table class="keys">
@@ -487,7 +492,7 @@ time_limit = 300</code></pre>
 
 <section id="install">
   <div class="wrap">
-    <p class="sec-label"><span class="k">End</span> \* getting it *\</p>
+    <p class="sec-label">Getting it</p>
     <h2>Install</h2>
 <pre><code><span class="c"># from a clone of the repository</span>
 cargo install --path tui
@@ -511,6 +516,26 @@ cargo run -p lp_parser_tui -- base.lp modified.mps</code></pre>
       <a href="https://github.com/dandxy89/lp_parser_rs">GitHub</a></p>
   </div>
 </footer>
+
+<script>
+  (function () {
+    var root = document.documentElement;
+    var btn = document.querySelector(".theme-toggle");
+    var media = window.matchMedia("(prefers-color-scheme: dark)");
+    var dark = function () {
+      return root.dataset.theme ? root.dataset.theme === "dark" : media.matches;
+    };
+    var label = function () { btn.textContent = dark() ? "light" : "dark"; };
+    btn.addEventListener("click", function () {
+      var next = dark() ? "light" : "dark";
+      root.dataset.theme = next;
+      try { localStorage.setItem("theme", next); } catch (e) {}
+      label();
+    });
+    media.addEventListener("change", label);
+    label();
+  })();
+</script>
 
 </body>
 </html>

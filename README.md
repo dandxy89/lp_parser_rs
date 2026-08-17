@@ -6,7 +6,7 @@
 [![PyPI version](https://badge.fury.io/py/parse-lp.svg)](https://badge.fury.io/py/parse-lp)
 [![PyPI Downloads](https://static.pepy.tech/personalized-badge/parse-lp?period=total&units=NONE&left_color=BLACK&right_color=GREEN&left_text=downloads)](https://pepy.tech/projects/parse-lp)
 
-A robust Rust library and CLI for parsing, analysing, modifying, and writing Linear Programming (LP) files. Built on [LALRPOP](https://github.com/lalrpop/lalrpop); grammar lives in [`lp.lalrpop`](https://github.com/dandxy89/lp_parser_rs/blob/main/rust/src/lp.lalrpop).
+A Rust library and CLI for parsing, analysing, modifying, and writing Linear Programming (LP) files. Built on [LALRPOP](https://github.com/lalrpop/lalrpop); grammar lives in [`lp.lalrpop`](https://github.com/dandxy89/lp_parser_rs/blob/main/rust/src/lp.lalrpop).
 
 Supported specifications: [IBM CPLEX v22.1.1](https://www.ibm.com/docs/en/icos/22.1.1?topic=cplex-lp-file-format-algebraic-representation), [FICO Xpress](https://www.fico.com/fico-xpress-optimization/docs/dms2020-03/solver/optimizer/HTML/chapter10_sec_section102.html), [Gurobi](https://www.gurobi.com/documentation/current/refman/lp_format.html), Mosek.
 
