@@ -554,7 +554,7 @@ mod tests {
         let e = interner.intern("e");
         let empty = Constraint::Standard { name: e, coefficients: vec![], operator: ComparisonOp::EQ, rhs: 0.0, byte_offset: None };
         if let Constraint::Standard { coefficients, .. } = empty {
-            assert!(coefficients.is_empty());
+            assert!(coefficients.is_empty(), "expected empty, got {coefficients:?}");
         }
     }
 
@@ -571,7 +571,7 @@ mod tests {
         let dynamic = interner.intern("dynamic");
         let obj_empty = Objective { name: dynamic, coefficients: vec![], constant: 0.0, byte_offset: None };
         assert_eq!(interner.resolve(obj_empty.name), "dynamic");
-        assert!(obj_empty.coefficients.is_empty());
+        assert!(obj_empty.coefficients.is_empty(), "expected empty, got {:?}", obj_empty.coefficients);
     }
 
     #[test]

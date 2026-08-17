@@ -385,6 +385,6 @@ mod tests {
         let text = rendered(&build_lines(&analyse(&problem, None)));
 
         assert!(text.contains("bound range"), "an empty range still gets its row");
-        assert!(!text.is_empty());
+        assert!(!text.is_empty(), "expected a non-empty result");
     }
 }

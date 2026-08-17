@@ -385,7 +385,7 @@ mod tests {
 
     #[test]
     fn test_new_issues_empty_lists() {
-        assert!(new_issue_indices(&[], &[]).is_empty());
+        assert!(new_issue_indices(&[], &[]).is_empty(), "expected empty, got {:?}", new_issue_indices(&[], &[]));
     }
 
     #[test]
@@ -399,7 +399,7 @@ mod tests {
     fn test_new_issues_identical_lists_yield_none() {
         let old = [issue(IssueSeverity::Warning, IssueCategory::EmptyConstraint, "Constraint 'c1' has no variables")];
         let new = [issue(IssueSeverity::Warning, IssueCategory::EmptyConstraint, "Constraint 'c1' has no variables")];
-        assert!(new_issue_indices(&old, &new).is_empty());
+        assert!(new_issue_indices(&old, &new).is_empty(), "expected empty, got {:?}", new_issue_indices(&old, &new));
     }
 
     #[test]
@@ -414,7 +414,7 @@ mod tests {
         // Severity is derived from category + message; identity ignores it.
         let old = [issue(IssueSeverity::Warning, IssueCategory::Other, "same")];
         let new = [issue(IssueSeverity::Error, IssueCategory::Other, "same")];
-        assert!(new_issue_indices(&old, &new).is_empty());
+        assert!(new_issue_indices(&old, &new).is_empty(), "expected empty, got {:?}", new_issue_indices(&old, &new));
     }
 
     #[test]

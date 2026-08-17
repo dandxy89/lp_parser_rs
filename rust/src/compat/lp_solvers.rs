@@ -410,7 +410,7 @@ mod tests {
         let sos1_id = p.intern("sos1");
         p.constraints.insert(sos1_id, Constraint::SOS { name: sos1_id, sos_type: SOSType::S1, weights: vec![], byte_offset: None });
         let c = LpSolversCompat::try_new(&p).unwrap();
-        assert!(!c.warnings().is_empty());
+        assert!(!c.warnings().is_empty(), "expected a non-empty result");
         assert!(matches!(&c.warnings()[0], LpSolversCompatWarning::SosConstraintIgnored { .. }));
 
         // Semi-continuous

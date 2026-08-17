@@ -1153,7 +1153,7 @@ ENDATA
     let result = parse_mps(input).unwrap();
     assert_eq!(result.objectives.len(), 1);
     assert_eq!(result.objectives[0].name.as_ref(), "__obj__");
-    assert!(result.objectives[0].coefficients.is_empty());
+    assert!(result.objectives[0].coefficients.is_empty(), "expected empty, got {:?}", result.objectives[0].coefficients);
     assert_eq!(result.constraints.len(), 1);
 }
 

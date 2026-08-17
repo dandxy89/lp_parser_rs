@@ -434,11 +434,11 @@ mod tests {
 
         let diff = single.diff(&double, &opts(DiffTol::default()));
         assert_eq!(diff.objs_added, vec!["obj2".to_string()]);
-        assert!(diff.objs_removed.is_empty());
+        assert!(diff.objs_removed.is_empty(), "expected empty, got {:?}", diff.objs_removed);
 
         let diff = double.diff(&single, &opts(DiffTol::default()));
         assert_eq!(diff.objs_removed, vec!["obj2".to_string()]);
-        assert!(diff.objs_added.is_empty());
+        assert!(diff.objs_added.is_empty(), "expected empty, got {:?}", diff.objs_added);
     }
 
     #[test]
@@ -447,7 +447,7 @@ mod tests {
         let p2 = parse("Minimize\n obj: x\nSubject To\n c1: x >= 100.4\nEnd");
         // abs tolerance 0.5 suppresses the 0.4 rhs change.
         let diff = p1.diff(&p2, &opts(DiffTol { abs: 0.5, rel: 0.0 }));
-        assert!(diff.cons_modified.is_empty());
+        assert!(diff.cons_modified.is_empty(), "expected empty, got {:?}", diff.cons_modified);
         // Without tolerance the change is reported.
         let diff = p1.diff(&p2, &opts(DiffTol::default()));
         assert_eq!(diff.cons_modified.len(), 1);
@@ -467,12 +467,12 @@ mod tests {
         // Strip the trailing `_<digits>` on both sides: names now match.
         let options = DiffOptions { tol: DiffTol::default(), normalise: Some(&strip_index_suffix) };
         let diff = p1.diff(&p2, &options);
-        assert!(diff.vars_added.is_empty());
-        assert!(diff.vars_removed.is_empty());
-        assert!(diff.cons_added.is_empty());
-        assert!(diff.cons_removed.is_empty());
+        assert!(diff.vars_added.is_empty(), "expected empty, got {:?}", diff.vars_added);
+        assert!(diff.vars_removed.is_empty(), "expected empty, got {:?}", diff.vars_removed);
+        assert!(diff.cons_added.is_empty(), "expected empty, got {:?}", diff.cons_added);
+        assert!(diff.cons_removed.is_empty(), "expected empty, got {:?}", diff.cons_removed);
         // Constraint c is unchanged after normalisation.
-        assert!(diff.cons_modified.is_empty());
+        assert!(diff.cons_modified.is_empty(), "expected empty, got {:?}", diff.cons_modified);
     }
 
     #[test]
