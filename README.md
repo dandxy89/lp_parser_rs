@@ -26,7 +26,7 @@ Add to `Cargo.toml`:
 
 ```toml
 [dependencies]
-lp_parser_rs = { version = "4.1.0", features = ["serde", "diff"] } # x-release-please-version
+lp_parser_rs = { version = "5.0.0", features = ["serde", "diff"] } # x-release-please-version
 ```
 
 Parse and inspect:

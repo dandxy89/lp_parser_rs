@@ -1,5 +1,58 @@
 # Changelog
 
+## [4.0.0](https://github.com/dandxy89/lp_parser_rs/compare/lp_diff-v3.6.0...lp_diff-v4.0.0) (2026-08-17)
+
+
+### ⚠ BREAKING CHANGES
+
+* Variable.var_type is now a var_type() method; Variable exposes public kind and bounds fields. Analysis type_distribution counts variables by kind rather than by bound shape.
+
+### Miscellaneous Chores
+
+* set MSRV to 1.88.0 across workspace crates ([071c612](https://github.com/dandxy89/lp_parser_rs/commit/071c612c5f76b37db24119dea8debe8c9332e163))
+* **tui:** re-record the demo, and ship it with the site ([f7d1eb0](https://github.com/dandxy89/lp_parser_rs/commit/f7d1eb0cbda0cdbd01254fa2c091ca6d33e2910e))
+
+
+### Documentation
+
+* rework the site's voice, palette and front-end ([06d37e9](https://github.com/dandxy89/lp_parser_rs/commit/06d37e9cea7d39669652760da7fa7cb77f78a9a9))
+
+
+### Features
+
+* **tui:** add a diagnostics pane for slow solves ([3400b10](https://github.com/dandxy89/lp_parser_rs/commit/3400b10b935786ff402d78658466be58e45f4cfe))
+* **tui:** add conditioning and density rewrite rules, and write the rewrite to disk ([e82e21d](https://github.com/dandxy89/lp_parser_rs/commit/e82e21d763f9b14ee8a603e1ea135ae86cb45107))
+* **tui:** add dense-row splitting and integrality relaxation what-ifs ([02f878f](https://github.com/dandxy89/lp_parser_rs/commit/02f878f36137450cdda58cc35e31f93888ab7ef9))
+* **tui:** add solution-preserving presolve rewrites ([5ac9eff](https://github.com/dandxy89/lp_parser_rs/commit/5ac9effb6e1a4913fe8ba0d18cd678a5b5eb5b30))
+* **tui:** cache solve results across overlay closes ([278c39e](https://github.com/dandxy89/lp_parser_rs/commit/278c39e6ebcd7783dcaaf99c428b8556939e84cc))
+* **tui:** read HiGHS options from highs.opt in the working directory ([8a7046f](https://github.com/dandxy89/lp_parser_rs/commit/8a7046fe74c2bf57f780c19146199a2b3852b3bd))
+* **tui:** record what the presolve rewrite removes, and show it in a log pane ([ede988e](https://github.com/dandxy89/lp_parser_rs/commit/ede988e6cff67351c71350a39360ca2e8a166881))
+* **tui:** render solve results full screen ([b8b808c](https://github.com/dandxy89/lp_parser_rs/commit/b8b808c1a84ac9a356ce35b9dca7c0fbdaf2f60e))
+* **tui:** report what HiGHS's own presolve removes, by name ([329c6de](https://github.com/dandxy89/lp_parser_rs/commit/329c6dea24ecf70000192dc85c3afdac10b0d2b6))
+* **tui:** write single-solve results to CSV with `w` ([b23e314](https://github.com/dandxy89/lp_parser_rs/commit/b23e314d8dedf16ae8be64f55cc2c8f33904538f))
+
+
+### Bug Fixes
+
+* **tui:** keep long solver labels inside the progress popup ([e2816be](https://github.com/dandxy89/lp_parser_rs/commit/e2816be86ed46342c1fc99494ffef63b886e9632))
+
+
+### Performance Improvements
+
+* **tui:** enable ratatui layout-cache feature ([59527f2](https://github.com/dandxy89/lp_parser_rs/commit/59527f28c20cbf395567c5bf2e9b155ca90da28f))
+
+
+### Code Refactoring
+
+* derive the clipboard yank from the widgets' lines, and drop the legacy VariableType view ([3cc93c9](https://github.com/dandxy89/lp_parser_rs/commit/3cc93c99913113a4a7316875ce5efa07b8db4198))
+* separate variable kind from bounds, add typed errors and line diagnostics ([91ba367](https://github.com/dandxy89/lp_parser_rs/commit/91ba3673fba00447e174d1430d34ef67198b74bf))
+* **tui:** share the solver's bounds and objective helpers ([61ff53f](https://github.com/dandxy89/lp_parser_rs/commit/61ff53f8212e67b86dab97a0332bfc83699761fd))
+
+
+### Tests
+
+* add failure messages to bare assert! calls ([e7ff1b9](https://github.com/dandxy89/lp_parser_rs/commit/e7ff1b9d100188ce6e58dd921d342dfb5e6b59a5))
+
 ## [3.6.0](https://github.com/dandxy89/lp_parser_rs/compare/lp_diff-v3.5.0...lp_diff-v3.6.0) (2026-07-09)
 
 
