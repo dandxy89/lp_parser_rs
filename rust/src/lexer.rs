@@ -260,14 +260,17 @@ pub enum Token<'input> {
     Identifier(&'input str),
 }
 
-#[allow(clippy::unnecessary_wraps)] // logos callback signature requires Option return
+/// Parse a slice matched by the number regex.
 fn parse_number<'input>(lex: &logos::Lexer<'input, Token<'input>>) -> Option<f64> {
     let slice = lex.slice();
-    let value = slice.parse::<f64>().unwrap_or_else(|_| {
+    let Ok(value) = slice.parse::<f64>() else {
         debug_assert!(false, "Logos regex matched '{slice}' but f64 parse failed - regex and parser are out of sync");
-        f64::NAN
-    });
-    debug_assert!(!value.is_nan(), "parse_number produced NaN from '{slice}' - this indicates a regex/parser mismatch");
+        return None;
+    };
+    if value.is_nan() {
+        debug_assert!(false, "parse_number produced NaN from '{slice}' - this indicates a regex/parser mismatch");
+        return None;
+    }
     Some(value)
 }
 

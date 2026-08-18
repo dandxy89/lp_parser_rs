@@ -376,14 +376,28 @@ impl LpProblem {
 
     // LP Problem Modification Methods
 
+    /// Reject a non-finite numeric input at the API boundary.
+    fn check_finite(value: f64, what: &str) -> LpResult<()> {
+        if value.is_finite() {
+            return Ok(());
+        }
+        Err(LpParseError::validation_error(format!("{what} must be a finite number, got: {value}")))
+    }
+
+    /// Reject an empty name at the API boundary. See [`Self::check_finite`].
+    fn check_name(name: &str, what: &str) -> LpResult<()> {
+        if name.is_empty() { Err(LpParseError::validation_error(format!("{what} must not be empty"))) } else { Ok(()) }
+    }
+
     /// Update a variable coefficient in an objective.
     ///
     /// # Errors
     ///
-    /// Returns an error if the specified objective does not exist.
+    /// Returns an error if the specified objective does not exist, `variable_name`
+    /// is empty, or `new_coefficient` is not finite.
     pub fn update_objective_coefficient(&mut self, objective_name: &str, variable_name: &str, new_coefficient: f64) -> LpResult<()> {
-        debug_assert!(!variable_name.is_empty(), "variable_name must not be empty");
-        debug_assert!(new_coefficient.is_finite(), "new_coefficient must be finite, got: {new_coefficient}");
+        Self::check_name(variable_name, "variable_name")?;
+        Self::check_finite(new_coefficient, "coefficient")?;
 
         let obj_id = self.interner.get(objective_name).ok_or_else(|| LpParseError::not_found(EntityKind::Objective, objective_name))?;
 
@@ -404,10 +418,11 @@ impl LpProblem {
     ///
     /// # Errors
     ///
-    /// Returns an error if the constraint does not exist or is an SOS constraint.
+    /// Returns an error if the constraint does not exist, is an SOS constraint,
+    /// `variable_name` is empty, or `new_coefficient` is not finite.
     pub fn update_constraint_coefficient(&mut self, constraint_name: &str, variable_name: &str, new_coefficient: f64) -> LpResult<()> {
-        debug_assert!(!variable_name.is_empty(), "variable_name must not be empty");
-        debug_assert!(new_coefficient.is_finite(), "new_coefficient must be finite, got: {new_coefficient}");
+        Self::check_name(variable_name, "variable_name")?;
+        Self::check_finite(new_coefficient, "coefficient")?;
 
         let con_id = self.interner.get(constraint_name).ok_or_else(|| LpParseError::not_found(EntityKind::Constraint, constraint_name))?;
 
@@ -451,10 +466,11 @@ impl LpProblem {
     ///
     /// # Errors
     ///
-    /// Returns an error if the constraint does not exist or is an SOS constraint.
+    /// Returns an error if the constraint does not exist, is an SOS constraint,
+    /// `constraint_name` is empty, or `new_rhs` is not finite.
     pub fn update_constraint_rhs(&mut self, constraint_name: &str, new_rhs: f64) -> LpResult<()> {
-        debug_assert!(!constraint_name.is_empty(), "constraint_name must not be empty");
-        debug_assert!(new_rhs.is_finite(), "new_rhs must be finite, got: {new_rhs}");
+        Self::check_name(constraint_name, "constraint_name")?;
+        Self::check_finite(new_rhs, "right-hand side")?;
         let con_id = self.interner.get(constraint_name).ok_or_else(|| LpParseError::not_found(EntityKind::Constraint, constraint_name))?;
 
         let constraint =
@@ -473,14 +489,15 @@ impl LpProblem {
     ///
     /// # Errors
     ///
-    /// Returns an error if the variable does not exist or the new name is already in use.
+    /// Returns an error if the variable does not exist, the new name is already in
+    /// use, or either name is empty.
     ///
     /// # Panics
     ///
     /// Panics if the internal state is inconsistent (variable passed filter but missing from map).
     pub fn rename_variable(&mut self, old_name: &str, new_name: &str) -> LpResult<()> {
-        debug_assert!(!old_name.is_empty(), "old_name must not be empty");
-        debug_assert!(!new_name.is_empty(), "new_name must not be empty");
+        Self::check_name(old_name, "old_name")?;
+        Self::check_name(new_name, "new_name")?;
         let old_id = self
             .interner
             .get(old_name)
@@ -536,14 +553,15 @@ impl LpProblem {
     ///
     /// # Errors
     ///
-    /// Returns an error if the constraint does not exist or the new name is already in use.
+    /// Returns an error if the constraint does not exist, the new name is already in
+    /// use, or either name is empty.
     ///
     /// # Panics
     ///
     /// Panics if the internal state is inconsistent (constraint passed filter but missing from map).
     pub fn rename_constraint(&mut self, old_name: &str, new_name: &str) -> LpResult<()> {
-        debug_assert!(!old_name.is_empty(), "old_name must not be empty");
-        debug_assert!(!new_name.is_empty(), "new_name must not be empty");
+        Self::check_name(old_name, "old_name")?;
+        Self::check_name(new_name, "new_name")?;
         let old_id = self
             .interner
             .get(old_name)
@@ -575,14 +593,15 @@ impl LpProblem {
     ///
     /// # Errors
     ///
-    /// Returns an error if the objective does not exist or the new name is already in use.
+    /// Returns an error if the objective does not exist, the new name is already in
+    /// use, or either name is empty.
     ///
     /// # Panics
     ///
     /// Panics if the internal state is inconsistent (objective passed filter but missing from map).
     pub fn rename_objective(&mut self, old_name: &str, new_name: &str) -> LpResult<()> {
-        debug_assert!(!old_name.is_empty(), "old_name must not be empty");
-        debug_assert!(!new_name.is_empty(), "new_name must not be empty");
+        Self::check_name(old_name, "old_name")?;
+        Self::check_name(new_name, "new_name")?;
         let old_id = self
             .interner
             .get(old_name)
@@ -1895,5 +1914,30 @@ mod modification_tests {
 
         p.rename_constraint("sos1", "new_sos").unwrap();
         p.remove_constraint("new_sos").unwrap();
+    }
+
+    /// Non-finite numbers and empty names must be rejected by the mutation API
+    /// in every build profile, not only where `debug_assert!` is compiled in:
+    /// the Python bindings are release builds, and a NaN that got through was
+    /// written out as `c1: x >= NaN`, which does not parse back.
+    #[test]
+    fn test_mutation_api_rejects_invalid_input_without_debug_assertions() {
+        let source = "Minimize\n obj: x\nSubject To\n c1: x >= 1\nEnd";
+        let mut p = LpProblem::parse(source).expect("fixture must parse");
+
+        for bad in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            assert!(p.update_constraint_rhs("c1", bad).is_err(), "rhs {bad} must be rejected");
+            assert!(p.update_constraint_coefficient("c1", "x", bad).is_err(), "constraint coefficient {bad} must be rejected");
+            assert!(p.update_objective_coefficient("obj", "x", bad).is_err(), "objective coefficient {bad} must be rejected");
+        }
+
+        assert!(p.rename_variable("x", "").is_err(), "empty new variable name must be rejected");
+        assert!(p.rename_constraint("c1", "").is_err(), "empty new constraint name must be rejected");
+        assert!(p.rename_objective("obj", "").is_err(), "empty new objective name must be rejected");
+
+        // The model is untouched, so it still round-trips.
+        let written = crate::writer::write_lp_string(&p);
+        assert!(!written.contains("NaN"), "a rejected NaN must never reach the output: {written}");
+        LpProblem::parse(&written).expect("the model must still round-trip after the rejected mutations");
     }
 }
