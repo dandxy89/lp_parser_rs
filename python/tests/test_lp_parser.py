@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from parse_lp import LpParser
+from parse_lp import LpInvalidValueError, LpObjectNotFoundError, LpParser
 
 from .conftest import EXPECTED_PARSE_FAILURES, collect_lp_resource_files
 
@@ -200,3 +200,39 @@ class TestAllResourceFiles:
         # Construction parses, so the failure surfaces there.
         with pytest.raises(RuntimeError):
             LpParser(str(lp_file))
+
+
+class TestMutationErrors:
+    """The exception raised must reflect the *kind* of failure, not the method
+    that failed. Both types subclass RuntimeError, so `except RuntimeError`
+    keeps working."""
+
+    SOS_LP = "Minimize\n obj: V1 + V2\nSubject To\n c1: V1 + V2 >= 1\nSOS\ncsos1: S1:: V1:1 V2:2\nEnd\n"
+
+    @pytest.fixture
+    def parser(self) -> LpParser:
+        return LpParser.from_string(self.SOS_LP, "lp")
+
+    def test_missing_name_raises_not_found(self, parser: LpParser) -> None:
+        with pytest.raises(LpObjectNotFoundError):
+            parser.update_constraint_rhs("does_not_exist", 1.0)
+
+    def test_unsupported_operation_raises_invalid_value(self, parser: LpParser) -> None:
+        # An SOS constraint has no RHS: that is an invalid operation, not a
+        # missing object.
+        with pytest.raises(LpInvalidValueError):
+            parser.update_constraint_rhs("csos1", 1.0)
+
+    def test_non_finite_value_raises_invalid_value(self, parser: LpParser) -> None:
+        for bad in (float("nan"), float("inf"), float("-inf")):
+            with pytest.raises(LpInvalidValueError):
+                parser.update_constraint_rhs("c1", bad)
+
+    def test_empty_name_raises_invalid_value(self, parser: LpParser) -> None:
+        with pytest.raises(LpInvalidValueError):
+            parser.rename_variable("V1", "")
+
+    def test_rejected_mutation_leaves_the_model_writable(self, parser: LpParser) -> None:
+        with pytest.raises(LpInvalidValueError):
+            parser.update_constraint_rhs("c1", float("nan"))
+        assert "NaN" not in parser.to_lp_string()

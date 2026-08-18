@@ -3,6 +3,7 @@
 
 use std::path::{Path, PathBuf};
 
+use lp_parser_rs::LpParseError as CoreError;
 use lp_parser_rs::analysis::AnalysisConfig;
 use lp_parser_rs::diff::DiffOptions;
 use lp_parser_rs::model::{Constraint, Sense, VariableType};
@@ -250,16 +251,14 @@ impl LpParser {
         let problem = &mut self.problem;
         problem
             .update_objective_coefficient(&objective_name, &variable_name, coefficient)
-            .map_err(|err| LpObjectNotFoundError::new_err(format!("Failed to update objective coefficient: {err}")))?;
+            .map_err(|err| to_py_err("Failed to update objective coefficient", err))?;
         Ok(())
     }
 
     /// Rename an objective
     fn rename_objective(&mut self, old_name: String, new_name: String) -> PyResult<()> {
         let problem = &mut self.problem;
-        problem
-            .rename_objective(&old_name, &new_name)
-            .map_err(|err| LpObjectNotFoundError::new_err(format!("Failed to rename objective: {err}")))?;
+        problem.rename_objective(&old_name, &new_name).map_err(|err| to_py_err("Failed to rename objective", err))?;
 
         Ok(())
     }
@@ -267,9 +266,7 @@ impl LpParser {
     /// Remove an objective
     fn remove_objective(&mut self, objective_name: String) -> PyResult<()> {
         let problem = &mut self.problem;
-        problem
-            .remove_objective(&objective_name)
-            .map_err(|err| LpObjectNotFoundError::new_err(format!("Failed to remove objective: {err}")))?;
+        problem.remove_objective(&objective_name).map_err(|err| to_py_err("Failed to remove objective", err))?;
 
         Ok(())
     }
@@ -279,7 +276,7 @@ impl LpParser {
         let problem = &mut self.problem;
         problem
             .update_constraint_coefficient(&constraint_name, &variable_name, coefficient)
-            .map_err(|err| LpObjectNotFoundError::new_err(format!("Failed to update constraint coefficient: {err}")))?;
+            .map_err(|err| to_py_err("Failed to update constraint coefficient", err))?;
 
         Ok(())
     }
@@ -287,9 +284,7 @@ impl LpParser {
     /// Update the right-hand side value of a constraint
     fn update_constraint_rhs(&mut self, constraint_name: String, new_rhs: f64) -> PyResult<()> {
         let problem = &mut self.problem;
-        problem
-            .update_constraint_rhs(&constraint_name, new_rhs)
-            .map_err(|err| LpObjectNotFoundError::new_err(format!("Failed to update constraint RHS: {err}")))?;
+        problem.update_constraint_rhs(&constraint_name, new_rhs).map_err(|err| to_py_err("Failed to update constraint RHS", err))?;
 
         Ok(())
     }
@@ -297,9 +292,7 @@ impl LpParser {
     /// Rename a constraint
     fn rename_constraint(&mut self, old_name: String, new_name: String) -> PyResult<()> {
         let problem = &mut self.problem;
-        problem
-            .rename_constraint(&old_name, &new_name)
-            .map_err(|err| LpObjectNotFoundError::new_err(format!("Failed to rename constraint: {err}")))?;
+        problem.rename_constraint(&old_name, &new_name).map_err(|err| to_py_err("Failed to rename constraint", err))?;
 
         Ok(())
     }
@@ -307,9 +300,7 @@ impl LpParser {
     /// Remove a constraint
     fn remove_constraint(&mut self, constraint_name: String) -> PyResult<()> {
         let problem = &mut self.problem;
-        problem
-            .remove_constraint(&constraint_name)
-            .map_err(|err| LpObjectNotFoundError::new_err(format!("Failed to remove constraint: {err}")))?;
+        problem.remove_constraint(&constraint_name).map_err(|err| to_py_err("Failed to remove constraint", err))?;
 
         Ok(())
     }
@@ -317,9 +308,7 @@ impl LpParser {
     /// Rename a variable across all objectives and constraints
     fn rename_variable(&mut self, old_name: String, new_name: String) -> PyResult<()> {
         let problem = &mut self.problem;
-        problem
-            .rename_variable(&old_name, &new_name)
-            .map_err(|err| LpObjectNotFoundError::new_err(format!("Failed to rename variable: {err}")))?;
+        problem.rename_variable(&old_name, &new_name).map_err(|err| to_py_err("Failed to rename variable", err))?;
 
         Ok(())
     }
@@ -342,9 +331,7 @@ impl LpParser {
             }
         };
 
-        problem
-            .update_variable_type(&variable_name, variable_type)
-            .map_err(|err| LpObjectNotFoundError::new_err(format!("Failed to update variable type: {err}")))?;
+        problem.update_variable_type(&variable_name, variable_type).map_err(|err| to_py_err("Failed to update variable type", err))?;
 
         Ok(())
     }
@@ -352,9 +339,7 @@ impl LpParser {
     /// Remove a variable from all objectives and constraints
     fn remove_variable(&mut self, variable_name: String) -> PyResult<()> {
         let problem = &mut self.problem;
-        problem
-            .remove_variable(&variable_name)
-            .map_err(|err| LpObjectNotFoundError::new_err(format!("Failed to remove variable: {err}")))?;
+        problem.remove_variable(&variable_name).map_err(|err| to_py_err("Failed to remove variable", err))?;
 
         Ok(())
     }
@@ -413,6 +398,22 @@ impl LpParser {
 
     fn __str__(&self) -> String {
         format!("LpParser for '{}'", self.lp_file)
+    }
+}
+
+/// Map a core [`CoreError`] onto the Python exception that matches its *kind*,
+/// not the call site that produced it.
+fn to_py_err(context: &str, err: CoreError) -> PyErr {
+    let message = format!("{context}: {err}");
+    match err {
+        CoreError::NotFound { .. } => LpObjectNotFoundError::new_err(message),
+        CoreError::AlreadyExists { .. }
+        | CoreError::InvalidOperation { .. }
+        | CoreError::InvalidBounds { .. }
+        | CoreError::InvalidNumber { .. }
+        | CoreError::ValidationError { .. } => LpInvalidValueError::new_err(message),
+        CoreError::MissingSection { .. } | CoreError::ParseError { .. } => LpParseError::new_err(message),
+        CoreError::IoError { .. } => PyRuntimeError::new_err(message),
     }
 }
 
