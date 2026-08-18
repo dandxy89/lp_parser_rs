@@ -418,17 +418,23 @@ fn launch_tui(mut app: App, watch: bool) -> Result<(), Box<dyn std::error::Error
     }
     let events = EventHandler::new(Duration::from_millis(50));
 
-    // Run the loop, then restore the terminal BEFORE propagating any error —
-    // a `?` here would leave the shell in raw mode + alt screen with the error
-    // message swallowed.
     let result = run_event_loop(&mut terminal, &mut app, &events);
 
-    if keyboard_enhanced {
-        execute!(terminal.backend_mut(), PopKeyboardEnhancementFlags)?;
-    }
-    disable_raw_mode()?;
-    execute!(terminal.backend_mut(), LeaveAlternateScreen, DisableMouseCapture, DisableBracketedPaste)?;
-    terminal.show_cursor()?;
+    let popped = if keyboard_enhanced { execute!(terminal.backend_mut(), PopKeyboardEnhancementFlags) } else { Ok(()) };
+    let raw = disable_raw_mode();
+    let left_alt_screen = execute!(terminal.backend_mut(), LeaveAlternateScreen);
+    let mouse = execute!(terminal.backend_mut(), DisableMouseCapture);
+    let paste = execute!(terminal.backend_mut(), DisableBracketedPaste);
+    let cursor = terminal.show_cursor();
 
-    result
+    // The event loop's error is the informative one, so it is reported first;
+    // a restoration failure only surfaces when the loop itself succeeded.
+    result?;
+    popped?;
+    raw?;
+    left_alt_screen?;
+    mouse?;
+    paste?;
+    cursor?;
+    Ok(())
 }
