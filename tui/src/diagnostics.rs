@@ -480,6 +480,11 @@ pub(crate) fn parse_telemetry(log: &str) -> Telemetry {
         let line = line.trim();
         if let Some(value) = line.strip_prefix("Simplex   iterations:").or_else(|| line.strip_prefix("Simplex iterations:")) {
             telemetry.iterations = value.trim().parse().ok();
+        } else if let Some(value) = line.strip_prefix("LP iterations") {
+            // A MIP prints a different report: `LP iterations     0`, aligned
+            // with spaces rather than delimited by a colon. Without this every
+            // model with an integer variable shows a blank iteration count.
+            telemetry.iterations = value.trim().parse().ok();
         } else if let Some(value) = line.strip_prefix("P-D objective error :") {
             telemetry.objective_error = value.trim().parse().ok();
         } else if let Some(value) = line.strip_prefix("HiGHS run time      :") {
@@ -596,6 +601,22 @@ HiGHS run time      :          0.04
         assert_eq!(telemetry.presolved, Some((122, 162, 813)));
         assert_eq!(telemetry.run_time, Some(0.04));
         assert!(telemetry.objective_error.is_some_and(|error| error < 1e-15));
+    }
+
+    #[test]
+    fn telemetry_is_read_out_of_a_real_mip_log() {
+        // A MIP's solving report is laid out differently from an LP's; the
+        // iteration count is `LP iterations` with no colon.
+        let log = "\
+Solving report
+  Status            Optimal
+  Nodes             1
+  Repair LPs        0
+  LP iterations     47
+";
+        let telemetry = parse_telemetry(log);
+
+        assert_eq!(telemetry.iterations, Some(47), "a MIP's iteration count must be read too");
     }
 
     #[test]

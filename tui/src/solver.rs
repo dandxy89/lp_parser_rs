@@ -716,15 +716,6 @@ pub fn status_is_infeasible(status: &str) -> bool {
     status == "Infeasible" || status == "UnboundedOrInfeasible"
 }
 
-/// Return `true` if a solve status string indicates unboundedness.
-///
-/// `UnboundedOrInfeasible` appears here *and* in [`status_is_infeasible`]: it is
-/// exactly the case where presolve declined to say which, so both diagnoses are
-/// worth offering.
-pub fn status_is_unbounded(status: &str) -> bool {
-    status == "Unbounded" || status == "UnboundedOrInfeasible"
-}
-
 /// Slack values above this threshold count as constraint violations in the
 /// elastic relaxation diagnosis.
 pub const VIOLATION_TOLERANCE: f64 = 1e-7;

@@ -221,7 +221,7 @@ pub fn run_profile(problem: &LpProblem) -> Result<Profile, String> {
         .iter()
         .enumerate()
         .filter(|(_, run)| run.outcome.as_ref().is_ok_and(|m| m.status == "Optimal" && !m.differs))
-        .min_by_key(|(_, run)| run.outcome.as_ref().map(|m| m.total_time).unwrap_or(Duration::MAX))
+        .min_by_key(|(_, run)| run.outcome.as_ref().map_or(Duration::MAX, |m| m.total_time))
         .map(|(index, _)| index);
 
     Ok(Profile { runs, baseline, fastest, rewrite, budget, duration: started.elapsed() })
@@ -291,6 +291,24 @@ mod tests {
         assert!(profile.rewrite.is_some(), "the rewrite preset must record its stats");
         let row = profile.runs.last().expect("six presets");
         assert_eq!(row.label, "local presolve");
+    }
+
+    /// The sweep must survive a real model end to end, not just the inline
+    /// fixtures: every preset applies, every row solves, all agree.
+    #[test]
+    fn a_real_model_profiles_end_to_end() {
+        let source = std::fs::read_to_string("../rust/resources/afiro_ext.lp").expect("fixture must exist");
+        let problem = LpProblem::parse(&source).expect("afiro must parse");
+        let profile = run_profile(&problem).expect("afiro must profile");
+
+        for run in &profile.runs {
+            let measurement = run.outcome.as_ref().unwrap_or_else(|e| panic!("preset {} failed: {e}", run.label));
+            assert!(!measurement.differs, "preset {} disagreed on the optimum", run.label);
+        }
+        // afiro_ext is a MIP, so this also pins that a MIP's iteration count
+        // is read out of its differently-shaped solving report.
+        let baseline = profile.runs[0].outcome.as_ref().expect("the baseline solved");
+        assert!(baseline.iterations.is_some(), "a MIP's iteration count must be reported");
     }
 
     #[test]

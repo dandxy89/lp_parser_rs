@@ -1,5 +1,6 @@
 use std::time::Instant;
 
+use crossterm::event::KeyCode;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::ListState;
 
@@ -57,6 +58,64 @@ pub struct ScrollPane {
     /// nothing to export — the pane carries its own write target so the key
     /// handler does not have to work out which report is on screen.
     pub export: Option<(&'static str, String)>,
+}
+
+impl ScrollPane {
+    /// Apply a scroll key to this pane.
+    ///
+    /// Returns `false` when `code` is not a scroll key — every pane treats that
+    /// as "close", so the caller does not have to enumerate the alternatives.
+    /// Shared by the diagnostics, presolve-log and analysis panes so a key that
+    /// works in one works in all of them.
+    pub fn scroll_key(&mut self, code: KeyCode, page_size: u16) -> bool {
+        debug_assert!(page_size > 0, "page size must be positive");
+        match code {
+            KeyCode::Char('j') | KeyCode::Down => self.scroll = self.scroll.saturating_add(1),
+            KeyCode::Char('k') | KeyCode::Up => self.scroll = self.scroll.saturating_sub(1),
+            KeyCode::Char('g') | KeyCode::Home => self.scroll = 0,
+            // Clamped against the real content height when the pane is drawn.
+            KeyCode::Char('G') | KeyCode::End => self.scroll = u16::MAX,
+            KeyCode::PageDown => self.scroll = self.scroll.saturating_add(page_size),
+            KeyCode::PageUp => self.scroll = self.scroll.saturating_sub(page_size),
+            _ => return false,
+        }
+        true
+    }
+}
+
+/// State machine for a slow, read-only analysis that runs off the UI thread and
+/// renders into a [`ScrollPane`].
+///
+/// One state serves every such analysis — the solve profile, the unbounded ray,
+/// ranging — because they differ only in what they compute. The producer runs on
+/// a worker thread and hands back finished lines, so the UI thread never formats
+/// a large report.
+#[derive(Debug)]
+pub enum AnalysisState {
+    /// No analysis requested.
+    Idle,
+    /// Running on a background thread. `started` is recorded at launch so the
+    /// overlay can show elapsed time.
+    Running { label: &'static str, started: Instant },
+    /// Finished; the pane is on screen.
+    Done { label: &'static str, pane: ScrollPane },
+    /// Failed with a message.
+    Failed { label: &'static str, error: String },
+}
+
+impl AnalysisState {
+    /// The pane to draw, when one is ready.
+    pub const fn pane(&self) -> Option<&ScrollPane> {
+        match self {
+            Self::Done { pane, .. } => Some(pane),
+            _ => None,
+        }
+    }
+
+    /// Whether the overlay should be on screen at all.
+    pub const fn is_open(&self) -> bool {
+        !matches!(self, Self::Idle)
+    }
 }
 
 /// State machine for the infeasibility diagnosis (elastic relaxation) run.
@@ -558,6 +617,7 @@ pub enum PaletteCommand {
     WhatIf,
     Presolve,
     Diagnostics,
+    SolveProfile,
     ExportCsv,
     YankName,
     YankOld,
@@ -569,7 +629,7 @@ pub enum PaletteCommand {
 
 impl PaletteCommand {
     /// Every command with its palette label and direct-key hint, in display order.
-    const CMDS: [(Self, &'static str, &'static str); 31] = [
+    const CMDS: [(Self, &'static str, &'static str); 32] = [
         (Self::GoSummary, "Go to Summary", "1"),
         (Self::GoVariables, "Go to Variables", "2"),
         (Self::GoConstraints, "Go to Constraints", "3"),
@@ -594,6 +654,7 @@ impl PaletteCommand {
         (Self::WhatIf, "What-if: edit constraint RHS & re-solve", "E"),
         (Self::Presolve, "Rewrite: presolve & compare solves", "P"),
         (Self::Diagnostics, "Diagnostics: why is the solve slow?", "D"),
+        (Self::SolveProfile, "Solve profile: compare HiGHS configurations", "B"),
         (Self::ExportCsv, "Export diff to CSV", "w"),
         (Self::YankName, "Yank entry name", "yy"),
         (Self::YankOld, "Yank old side (file 1)", "yo"),

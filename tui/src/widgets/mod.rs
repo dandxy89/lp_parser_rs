@@ -126,12 +126,14 @@ pub fn gauge_bar(fraction: f64, cells: usize) -> String {
     bar
 }
 
+pub mod analysis;
 pub mod detail;
 pub mod diagnostics;
 pub mod help;
 pub mod numerics;
 pub mod palette;
 pub mod presolve;
+pub mod profile;
 pub mod raw_diff;
 pub mod search_popup;
 pub mod sidebar;

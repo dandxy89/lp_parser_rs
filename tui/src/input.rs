@@ -9,7 +9,8 @@ use crate::app::{App, SolveRenderCache};
 use crate::detail_text::{format_solve_diff_result, format_solve_result};
 use crate::presolve::{Rule, Scaling, presolve};
 use crate::state::{
-    AppMode, DiagnosisState, DiffFilter, Focus, PaletteCommand, PendingYank, Section, Side, SolveState, SolveTab, SolveViewState,
+    AnalysisState, AppMode, DiagnosisState, DiffFilter, Focus, PaletteCommand, PendingYank, Section, Side, SolveState, SolveTab,
+    SolveViewState,
 };
 
 impl App {
@@ -54,6 +55,11 @@ impl App {
 
         if self.diagnostics.is_some() {
             self.handle_diagnostics_key(key);
+            return;
+        }
+
+        if self.analysis.is_open() {
+            self.handle_analysis_key(key);
             return;
         }
 
@@ -208,6 +214,7 @@ impl App {
             PaletteCommand::WhatIf => self.open_what_if(),
             PaletteCommand::Presolve => self.open_presolve(),
             PaletteCommand::Diagnostics => self.open_diagnostics(),
+            PaletteCommand::SolveProfile => self.open_profile(),
             PaletteCommand::ExportCsv => self.export_csv(),
             PaletteCommand::YankName => self.yank_name(),
             PaletteCommand::YankOld => self.yank_side(Side::Old),
@@ -362,6 +369,9 @@ impl App {
 
             // Diagnostics: why is the solve slow, and which rows/vars are to blame.
             KeyCode::Char('D') => self.open_diagnostics(),
+
+            // Solve profile: compare HiGHS configurations.
+            KeyCode::Char('B') => self.open_profile(),
 
             // Export CSV (works in both modes).
             KeyCode::Char('w') => self.export_csv(),
@@ -1109,15 +1119,8 @@ impl App {
             debug_assert!(false, "handle_presolve_log_key called with the pane closed");
             return;
         };
-        match key.code {
-            KeyCode::Char('j') | KeyCode::Down => pane.scroll = pane.scroll.saturating_add(1),
-            KeyCode::Char('k') | KeyCode::Up => pane.scroll = pane.scroll.saturating_sub(1),
-            KeyCode::Char('g') | KeyCode::Home => pane.scroll = 0,
-            // Clamped against the real content height when the pane is drawn.
-            KeyCode::Char('G') | KeyCode::End => pane.scroll = u16::MAX,
-            KeyCode::PageDown => pane.scroll = pane.scroll.saturating_add(page_size),
-            KeyCode::PageUp => pane.scroll = pane.scroll.saturating_sub(page_size),
-            _ => self.presolve_log = None,
+        if !pane.scroll_key(key.code, page_size) {
+            self.presolve_log = None;
         }
     }
 
@@ -1136,13 +1139,20 @@ impl App {
             return;
         };
         let (suffix, body) = (*suffix, body.clone());
+        self.write_report(suffix, &body);
+    }
+
+    /// Write `body` to `<file1 stem>_<suffix>` in the working directory and
+    /// flash the outcome. Shared by every pane that exports with `w`.
+    fn write_report(&mut self, suffix: &str, body: &str) {
+        debug_assert!(!suffix.is_empty(), "an export needs a filename suffix");
         let lines = body.lines().count();
         let stem = self.file1_path.file_stem().unwrap_or_else(|| std::ffi::OsStr::new("model")).to_string_lossy().into_owned();
         let filename = format!("{stem}_{suffix}");
         let written = std::env::current_dir().and_then(|dir| std::fs::write(dir.join(&filename), body));
         let message = match written {
             Ok(()) => format!("Wrote {filename} \u{2014} {lines} line(s)"),
-            Err(error) => format!("Presolve log write failed: {error}"),
+            Err(error) => format!("Report write failed: {error}"),
         };
         self.flash_status(message);
     }
@@ -1241,16 +1251,79 @@ impl App {
             debug_assert!(false, "handle_diagnostics_key called with the pane closed");
             return;
         };
-        match key.code {
-            KeyCode::Char('j') | KeyCode::Down => pane.scroll = pane.scroll.saturating_add(1),
-            KeyCode::Char('k') | KeyCode::Up => pane.scroll = pane.scroll.saturating_sub(1),
-            KeyCode::Char('g') | KeyCode::Home => pane.scroll = 0,
-            // Clamped against the real content height when the pane is drawn.
-            KeyCode::Char('G') | KeyCode::End => pane.scroll = u16::MAX,
-            KeyCode::PageDown => pane.scroll = pane.scroll.saturating_add(page_size),
-            KeyCode::PageUp => pane.scroll = pane.scroll.saturating_sub(page_size),
-            _ => self.diagnostics = None,
+        if !pane.scroll_key(key.code, page_size) {
+            self.diagnostics = None;
         }
+    }
+
+    /// Handle a key event while the analysis pane is open.
+    ///
+    /// `w` writes the report; any non-scroll key closes the pane, including
+    /// while it is still running — the worker's send then fails harmlessly.
+    fn handle_analysis_key(&mut self, key: KeyEvent) {
+        let page_size = self.layout.detail_height.max(1);
+        if matches!(key.code, KeyCode::Char('w')) {
+            if let Some((suffix, body)) = self.analysis.pane().and_then(|pane| pane.export.clone()) {
+                self.write_report(suffix, &body);
+            }
+            return;
+        }
+        let scrolled = match &mut self.analysis {
+            AnalysisState::Done { pane, .. } => pane.scroll_key(key.code, page_size),
+            // Nothing to scroll while it runs or after it failed: any key closes.
+            _ => false,
+        };
+        if !scrolled {
+            self.close_analysis();
+        }
+    }
+
+    /// Discard any in-flight or finished analysis.
+    fn close_analysis(&mut self) {
+        self.analysis = AnalysisState::Idle;
+        self.receive_analysis = None;
+    }
+
+    /// Run `build` against the baseline model on a worker thread, showing its
+    /// finished pane under `label`.
+    ///
+    /// `build` returns the rendered lines, not the report: formatting a large
+    /// table is itself slow enough to drop frames, so it happens off-thread too.
+    fn spawn_analysis(&mut self, label: &'static str, build: fn(&LpProblem) -> Result<crate::state::ScrollPane, String>) {
+        if matches!(self.analysis, AnalysisState::Running { .. }) {
+            self.flash_status(format!("{label}: already running"));
+            return;
+        }
+        if self.problem1.variables.is_empty() {
+            self.flash_status(format!("{label}: the model has no variables"));
+            return;
+        }
+
+        self.analysis = AnalysisState::Running { label, started: Instant::now() };
+        let (sender, receiver) = mpsc::channel();
+        self.receive_analysis = Some(receiver);
+
+        let problem = Arc::clone(&self.problem1);
+        std::thread::spawn(move || {
+            let pane = build(&problem);
+            // The receiver is dropped when the user closes the pane early;
+            // that is expected, not an error worth reporting to them.
+            if sender.send(pane).is_err() {
+                eprintln!("{label} result dropped: receiver closed");
+            }
+        });
+    }
+
+    /// `B` — solve the model under several `HiGHS` configurations and compare.
+    pub(crate) fn open_profile(&mut self) {
+        self.spawn_analysis("Solve profile", |problem| {
+            let profile = crate::profile::run_profile(problem)?;
+            Ok(crate::state::ScrollPane {
+                lines: crate::widgets::profile::build_lines(&profile),
+                scroll: 0,
+                export: Some(("solve_profile.txt", crate::widgets::profile::export_text(&profile))),
+            })
+        });
     }
 
     /// The most recent single-file solve result, if one is still to hand.
@@ -1436,6 +1509,65 @@ mod tests {
         modified.update_constraint_rhs("c1", 5.0).expect("rhs update must succeed");
         assert_eq!(baseline_constraint_rhs(&modified, "c1"), Some(5.0), "modified copy must carry the new rhs");
         assert_eq!(baseline_constraint_rhs(&baseline, "c1"), Some(2.0), "baseline must be untouched by the what-if edit");
+    }
+
+    /// A finished analysis pane must scroll and close like the other read-only
+    /// panes. Built directly rather than by pressing `B`, which would solve.
+    #[test]
+    fn the_analysis_pane_scrolls_and_closes() {
+        let mut app = crate::snapshot_tests::inspect_app_from(crate::snapshot_tests::REDUCIBLE_LP);
+        app.layout.detail_height = 10;
+        app.analysis = AnalysisState::Done {
+            label: "Solve profile",
+            pane: crate::state::ScrollPane {
+                lines: (0..100).map(|i| ratatui::text::Line::from(format!("line {i}"))).collect(),
+                scroll: 0,
+                export: None,
+            },
+        };
+
+        app.handle_key(KeyEvent::from(KeyCode::Char('j')));
+        assert_eq!(app.analysis.pane().expect("still open").scroll, 1, "j scrolls down");
+        app.handle_key(KeyEvent::from(KeyCode::Char('k')));
+        assert_eq!(app.analysis.pane().expect("still open").scroll, 0, "k scrolls back up");
+        app.handle_key(KeyEvent::from(KeyCode::PageDown));
+        assert_eq!(app.analysis.pane().expect("still open").scroll, 10, "PageDown moves by a page");
+
+        app.handle_key(KeyEvent::from(KeyCode::Esc));
+        assert!(!app.analysis.is_open(), "Esc closes the pane");
+    }
+
+    /// A key pressed while the analysis is still running cancels it, rather
+    /// than leaving an overlay the user cannot dismiss.
+    #[test]
+    fn a_running_analysis_can_be_cancelled() {
+        let mut app = crate::snapshot_tests::inspect_app_from(crate::snapshot_tests::REDUCIBLE_LP);
+        app.analysis = AnalysisState::Running { label: "Solve profile", started: Instant::now() };
+
+        app.handle_key(KeyEvent::from(KeyCode::Esc));
+        assert!(!app.analysis.is_open(), "Esc cancels a running analysis");
+        assert!(app.receive_analysis.is_none(), "cancelling must drop the channel");
+    }
+
+    /// The analysis overlay must take keys ahead of normal mode, or `j` would
+    /// move the sidebar selection behind the pane.
+    #[test]
+    fn the_analysis_pane_takes_keys_ahead_of_normal_mode() {
+        let mut app = crate::snapshot_tests::inspect_app_from(crate::snapshot_tests::REDUCIBLE_LP);
+        app.set_section(Section::Variables);
+        let before = app.active_name_list_state_mut().selected();
+
+        app.analysis = AnalysisState::Done {
+            label: "Solve profile",
+            pane: crate::state::ScrollPane {
+                lines: (0..100).map(|i| ratatui::text::Line::from(format!("line {i}"))).collect(),
+                scroll: 0,
+                export: None,
+            },
+        };
+        app.handle_key(KeyEvent::from(KeyCode::Char('j')));
+
+        assert_eq!(app.active_name_list_state_mut().selected(), before, "the list behind the pane must not move");
     }
 
     /// `P` then `l` must reach the log pane, and `Esc` must leave it — the key
