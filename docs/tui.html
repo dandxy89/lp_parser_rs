@@ -467,8 +467,12 @@ time_limit = 300</code></pre>
 
     <h3><kbd>R</kbd> &mdash; how far a coefficient can move</h3>
     <p>What-if (<kbd>E</kbd>) edits one right-hand side and re-solves. Ranging reads the optimal basis for the whole
-      interval at once, for every cost and every RHS, with no further solve &mdash; and the objective at each end of it.
-      The entry selected in the sidebar is shown in full at the top.</p>
+      interval at once, for every objective coefficient and every row, with no further solve &mdash; and the objective at
+      each end of it. The entry selected in the sidebar is shown in full at the top.</p>
+
+    <div class="note"><b>A row's interval brackets its activity, not its right-hand side.</b> That is what HiGHS
+      computes, and the two coincide only when the row is binding. Pairing the interval with the RHS instead would report
+      a range that does not contain its own value on every slack row.</div>
 
     <h3><kbd>B</kbd> &mdash; would another configuration be faster</h3>
     <p>The same model solved under several HiGHS configurations, times side by side. The last row is the interesting
@@ -540,7 +544,7 @@ time_limit = 300</code></pre>
       <tr><td><kbd>B</kbd></td><td>Solve profile: the same model under several HiGHS configurations, times side by side</td></tr>
       <tr><td><kbd>U</kbd></td><td>Unbounded: which variables run to infinity, and the bound that would stop them</td></tr>
       <tr><td><kbd>I</kbd></td><td>Infeasible: the minimal conflicting set of constraints and bounds (IIS)</td></tr>
-      <tr><td><kbd>R</kbd></td><td>Ranging: how far each coefficient can move before the optimal basis changes</td></tr>
+      <tr><td><kbd>R</kbd></td><td>Ranging: how far each objective coefficient and row activity can move before the optimal basis changes</td></tr>
       <tr><td><kbd>e</kbd></td><td>Diagnose infeasibility (in the solve overlay) — the cheapest set to relax</td></tr>
     </table></div>
 

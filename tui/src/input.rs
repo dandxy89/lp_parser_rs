@@ -1322,12 +1322,11 @@ impl App {
 
         let problem = Arc::clone(&self.problem1);
         std::thread::spawn(move || {
-            let pane = build(&problem);
-            // The receiver is dropped when the user closes the pane early;
-            // that is expected, not an error worth reporting to them.
-            if sender.send(pane).is_err() {
-                eprintln!("{label} result dropped: receiver closed");
-            }
+            // The receiver is dropped when the user closes the pane early, which
+            // is a supported action ("any key to cancel"), so a failed send is
+            // expected and deliberately silent: stderr is the alternate screen
+            // ratatui is drawing into, and printing there garbles the frame.
+            drop(sender.send(build(&problem)));
         });
     }
 

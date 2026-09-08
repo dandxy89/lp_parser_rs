@@ -331,12 +331,17 @@ pub fn iis(problem: &LpProblem) -> Result<Iis, String> {
     })
 }
 
-/// How far one coefficient can move before the optimal basis changes.
+/// How far one quantity can move before the optimal basis changes.
 #[derive(Debug, Clone)]
 pub struct RangeEntry {
     pub name: String,
-    /// The value in the model today: a cost for a column, a right-hand side
-    /// for a row.
+    /// The value the interval is centred on: for a column its objective
+    /// coefficient, for a row its **activity** at the optimum.
+    ///
+    /// The row case is not the right-hand side. `HiGHS`'s row ranging brackets
+    /// `row_value`, not the bound — the two coincide only when the row is
+    /// binding, so pairing the interval with the rhs reports a range that does
+    /// not contain its own value on every slack row.
     pub current: f64,
     /// Lowest value the basis survives, and the objective there.
     pub down: f64,
@@ -360,8 +365,9 @@ impl RangeEntry {
 pub struct Ranging {
     /// Objective-coefficient ranges, one per variable.
     pub costs: Vec<RangeEntry>,
-    /// Right-hand-side ranges, one per constraint.
-    pub rhs: Vec<RangeEntry>,
+    /// Row-activity ranges, one per constraint. See [`RangeEntry::current`]:
+    /// these bracket each row's activity, not its right-hand side.
+    pub rows: Vec<RangeEntry>,
     pub objective_value: Option<f64>,
     pub relaxed_integrality: usize,
     pub skipped_sos: usize,
@@ -369,11 +375,11 @@ pub struct Ranging {
 }
 
 /// Ranging information from the optimal basis: how far each objective
-/// coefficient and each right-hand side can move before the basis changes.
+/// coefficient and each row activity can move before the basis changes.
 ///
-/// This is what the what-if prompt (`E`) approximates by editing one RHS and
-/// re-solving: ranging gives the whole interval at once, from the basis, with
-/// no further solve.
+/// This is the neighbourhood the what-if prompt (`E`) explores one point at a
+/// time by editing a value and re-solving: ranging gives the whole interval at
+/// once, from the basis, with no further solve.
 ///
 /// # Errors
 ///
@@ -400,17 +406,19 @@ pub fn ranging(problem: &LpProblem) -> Result<Ranging, String> {
         return Err(format!("ranging needs an optimal basis; this model solved as {status}"));
     }
 
-    let objective_value = {
+    // Both are read here, before the raw pointer is taken: `get_solution`
+    // borrows `solved`, and the row activities are what the row ranging below
+    // is centred on.
+    let (objective_value, row_activities) = {
         let solution = solved.get_solution();
-        let columns = solution.columns();
-        Some(
-            variable_names
-                .iter()
-                .zip(columns)
-                .filter_map(|(name, value)| relaxed.name_id(name).and_then(|id| costs_by_id.get(&id)).map(|cost| cost * value))
-                .sum(),
-        )
+        let objective = variable_names
+            .iter()
+            .zip(solution.columns())
+            .filter_map(|(name, value)| relaxed.name_id(name).and_then(|id| costs_by_id.get(&id)).map(|cost| cost * value))
+            .sum();
+        (Some(objective), solution.rows().to_vec())
     };
+    debug_assert_eq!(row_activities.len(), row_names.len(), "one activity per row");
 
     let (num_col, num_row) = (variable_names.len(), row_names.len());
     let mut cost_up = vec![0.0_f64; num_col];
@@ -478,12 +486,12 @@ pub fn ranging(problem: &LpProblem) -> Result<Ranging, String> {
         })
         .collect();
 
-    let rhs = row_names
+    let rows = row_names
         .iter()
         .enumerate()
         .map(|(index, name)| RangeEntry {
             name: name.clone(),
-            current: constraint_rhs(&relaxed, name).unwrap_or(f64::NAN),
+            current: row_activities.get(index).copied().unwrap_or(f64::NAN),
             down: rhs_down[index],
             down_objective: rhs_down_objective[index],
             up: rhs_up[index],
@@ -491,16 +499,7 @@ pub fn ranging(problem: &LpProblem) -> Result<Ranging, String> {
         })
         .collect();
 
-    Ok(Ranging { costs, rhs, objective_value, relaxed_integrality, skipped_sos, duration: started.elapsed() })
-}
-
-/// The right-hand side of a named standard constraint.
-fn constraint_rhs(problem: &LpProblem, name: &str) -> Option<f64> {
-    let id = problem.name_id(name)?;
-    match problem.constraints.get(&id)? {
-        Constraint::Standard { rhs, .. } => Some(*rhs),
-        Constraint::SOS { .. } => None,
-    }
+    Ok(Ranging { costs, rows, objective_value, relaxed_integrality, skipped_sos, duration: started.elapsed() })
 }
 
 /// Diagnose an unbounded model: which variables run to infinity, and how fast.
@@ -568,9 +567,12 @@ pub fn unbounded_ray(problem: &LpProblem) -> Result<UnboundedRay, String> {
         }
     }
 
-    // Only worth guessing when the model really is unbounded and HiGHS gave no
-    // certificate: on a bounded model these would be pure noise.
-    let suspects = if crate::solver::status_is_unbounded(&status) && has_ray == 0 { suspects(&relaxed) } else { Vec::new() };
+    // Gated on `directions`, not on `has_ray`: HiGHS can report a ray it did not
+    // actually write (its own guard against that is a debug-only assert), which
+    // leaves an all-zero vector and an empty `directions`. Keying off the thing
+    // the pane renders means the two can never disagree about whether a
+    // certificate was produced.
+    let suspects = if crate::solver::status_is_unbounded(&status) && directions.is_empty() { suspects(&relaxed) } else { Vec::new() };
 
     Ok(UnboundedRay {
         status,
@@ -773,26 +775,47 @@ mod tests {
         let report = ranging(&parse(RANGING_LP)).expect("an optimal LP must range");
 
         assert_eq!(report.costs.len(), 2, "one cost range per variable");
-        assert_eq!(report.rhs.len(), 2, "one rhs range per constraint");
-        let named: Vec<&str> = report.rhs.iter().map(|e| e.name.as_str()).collect();
+        assert_eq!(report.rows.len(), 2, "one rhs range per constraint");
+        let named: Vec<&str> = report.rows.iter().map(|e| e.name.as_str()).collect();
         assert!(named.contains(&"c1") && named.contains(&"c2"), "rows must be named, got {named:?}");
     }
 
     #[test]
-    fn a_ranges_current_value_is_the_models_own_coefficient() {
+    fn a_cost_ranges_current_value_is_the_models_own_coefficient() {
         let report = ranging(&parse(RANGING_LP)).expect("an optimal LP must range");
 
         let x = report.costs.iter().find(|e| e.name == "x").expect("x must be ranged");
         assert!((x.current - 3.0).abs() < 1e-9, "x's cost is 3, got {}", x.current);
-        let c1 = report.rhs.iter().find(|e| e.name == "c1").expect("c1 must be ranged");
-        assert!((c1.current - 4.0).abs() < 1e-9, "c1's rhs is 4, got {}", c1.current);
+    }
+
+    /// The regression guard for what a row range is centred on.
+    ///
+    /// `HiGHS` brackets a row's *activity*, not its right-hand side. The two
+    /// coincide on a binding row, so a fixture where every row binds cannot
+    /// tell the difference — `slack` here deliberately does not bind.
+    #[test]
+    fn a_row_range_is_centred_on_the_activity_not_the_right_hand_side() {
+        // Optimum is x = 3, y = 1 (obj 3x + 2y maximised under x <= 3, x + y <= 4),
+        // so `slack` has activity 3 against a right-hand side of 900.
+        let problem = parse("Maximize\n obj: 3 x + 2 y\nSubject To\n c1: x + y <= 4\n c2: x <= 3\n slack: x <= 900\nEnd");
+        let report = ranging(&problem).expect("an optimal LP must range");
+
+        let slack = report.rows.iter().find(|e| e.name == "slack").expect("slack must be ranged");
+        assert!(slack.current < 900.0, "the entry must carry the activity, not the rhs of 900, got {}", slack.current);
+        assert!(
+            slack.contains_current(),
+            "a row range must bracket its own value: {} outside [{}, {}]",
+            slack.current,
+            slack.down,
+            slack.up
+        );
     }
 
     #[test]
-    fn a_range_brackets_the_value_it_describes() {
+    fn every_range_brackets_the_value_it_describes() {
         let report = ranging(&parse(RANGING_LP)).expect("an optimal LP must range");
 
-        for entry in report.costs.iter().chain(&report.rhs) {
+        for entry in report.costs.iter().chain(&report.rows) {
             assert!(entry.down <= entry.up, "{}: down {} above up {}", entry.name, entry.down, entry.up);
             assert!(entry.contains_current(), "{}: {} outside [{}, {}]", entry.name, entry.current, entry.down, entry.up);
         }
@@ -824,7 +847,7 @@ mod tests {
 
         assert_eq!(report.costs.len(), problem.variables.len(), "one cost range per column");
         assert!(report.relaxed_integrality > 0, "afiro_ext is a MIP, so columns must have been relaxed");
-        for entry in report.costs.iter().chain(&report.rhs) {
+        for entry in report.costs.iter().chain(&report.rows) {
             assert!(entry.down <= entry.up, "{}: down {} above up {}", entry.name, entry.down, entry.up);
         }
     }
@@ -851,8 +874,18 @@ mod tests {
             // column rather than returning a short table.
             let range = ranging(&problem).unwrap_or_else(|e| panic!("{name}: ranging failed: {e}"));
             assert_eq!(range.costs.len(), problem.variables.len(), "{name}: one cost range per column");
-            for entry in range.costs.iter().chain(&range.rhs) {
+            for entry in range.costs.iter().chain(&range.rows) {
                 assert!(entry.down <= entry.up, "{name}/{}: down {} above up {}", entry.name, entry.down, entry.up);
+                // These models carry plenty of non-binding rows, which is
+                // exactly where pairing a range with the wrong value shows up.
+                assert!(
+                    entry.contains_current(),
+                    "{name}/{}: {} outside [{}, {}]",
+                    entry.name,
+                    entry.current,
+                    entry.down,
+                    entry.up
+                );
             }
         }
     }
