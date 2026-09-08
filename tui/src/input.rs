@@ -215,6 +215,7 @@ impl App {
             PaletteCommand::Presolve => self.open_presolve(),
             PaletteCommand::Diagnostics => self.open_diagnostics(),
             PaletteCommand::SolveProfile => self.open_profile(),
+            PaletteCommand::UnboundedRay => self.open_unbounded_ray(),
             PaletteCommand::ExportCsv => self.export_csv(),
             PaletteCommand::YankName => self.yank_name(),
             PaletteCommand::YankOld => self.yank_side(Side::Old),
@@ -372,6 +373,9 @@ impl App {
 
             // Solve profile: compare HiGHS configurations.
             KeyCode::Char('B') => self.open_profile(),
+
+            // Unbounded ray: which variables run to infinity.
+            KeyCode::Char('U') => self.open_unbounded_ray(),
 
             // Export CSV (works in both modes).
             KeyCode::Char('w') => self.export_csv(),
@@ -1311,6 +1315,18 @@ impl App {
             if sender.send(pane).is_err() {
                 eprintln!("{label} result dropped: receiver closed");
             }
+        });
+    }
+
+    /// `U` — which variables make this model unbounded.
+    pub(crate) fn open_unbounded_ray(&mut self) {
+        self.spawn_analysis("Unbounded ray", |problem| {
+            let report = crate::highs_query::unbounded_ray(problem)?;
+            Ok(crate::state::ScrollPane {
+                lines: crate::widgets::highs_query::ray_lines(&report),
+                scroll: 0,
+                export: Some(("unbounded_ray.txt", crate::widgets::highs_query::ray_export(&report))),
+            })
         });
     }
 

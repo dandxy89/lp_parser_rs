@@ -618,6 +618,7 @@ pub enum PaletteCommand {
     Presolve,
     Diagnostics,
     SolveProfile,
+    UnboundedRay,
     ExportCsv,
     YankName,
     YankOld,
@@ -629,7 +630,7 @@ pub enum PaletteCommand {
 
 impl PaletteCommand {
     /// Every command with its palette label and direct-key hint, in display order.
-    const CMDS: [(Self, &'static str, &'static str); 32] = [
+    const CMDS: [(Self, &'static str, &'static str); 33] = [
         (Self::GoSummary, "Go to Summary", "1"),
         (Self::GoVariables, "Go to Variables", "2"),
         (Self::GoConstraints, "Go to Constraints", "3"),
@@ -655,6 +656,7 @@ impl PaletteCommand {
         (Self::Presolve, "Rewrite: presolve & compare solves", "P"),
         (Self::Diagnostics, "Diagnostics: why is the solve slow?", "D"),
         (Self::SolveProfile, "Solve profile: compare HiGHS configurations", "B"),
+        (Self::UnboundedRay, "Unbounded: which variables run to infinity?", "U"),
         (Self::ExportCsv, "Export diff to CSV", "w"),
         (Self::YankName, "Yank entry name", "yy"),
         (Self::YankOld, "Yank old side (file 1)", "yo"),

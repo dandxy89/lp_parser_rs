@@ -130,6 +130,7 @@ pub mod analysis;
 pub mod detail;
 pub mod diagnostics;
 pub mod help;
+pub mod highs_query;
 pub mod numerics;
 pub mod palette;
 pub mod presolve;

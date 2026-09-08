@@ -385,6 +385,12 @@ pub(crate) fn variable_bounds(variable: Option<&Variable>) -> (bool, f64, f64) {
     let Some(v) = variable else {
         return (false, 0.0, f64::INFINITY);
     };
+    // NOTE: `VariableBounds::effective_lower` would return -inf here for a
+    // variable whose bounds are both `None`, but the parser stores an explicit
+    // `x free` and an undeclared variable identically, so `is_free()` cannot
+    // tell them apart. Defaulting to 0 is right for the common (undeclared)
+    // case and wrong for an explicit `free`; the fix belongs in the parser,
+    // which needs to represent the two distinctly.
     let upper_default = if matches!(v.kind, VariableKind::Binary) { 1.0 } else { f64::INFINITY };
     (v.kind.is_integer(), v.bounds.lower.unwrap_or(0.0), v.bounds.upper.unwrap_or(upper_default))
 }
@@ -714,6 +720,15 @@ pub fn solve_problem_with(problem: &LpProblem, extra: &[(&str, &str)]) -> Result
 /// i.e. the `Debug` form of `highs::HighsModelStatus`) indicates infeasibility.
 pub fn status_is_infeasible(status: &str) -> bool {
     status == "Infeasible" || status == "UnboundedOrInfeasible"
+}
+
+/// Return `true` if a solve status string indicates unboundedness.
+///
+/// `UnboundedOrInfeasible` appears here *and* in [`status_is_infeasible`]: it is
+/// exactly the case where presolve declined to say which, so both diagnoses are
+/// worth offering.
+pub fn status_is_unbounded(status: &str) -> bool {
+    status == "Unbounded" || status == "UnboundedOrInfeasible"
 }
 
 /// Slack values above this threshold count as constraint violations in the
