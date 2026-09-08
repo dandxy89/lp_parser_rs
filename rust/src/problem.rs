@@ -982,7 +982,7 @@ fn intern_constraints(
 
     for raw_con in raw_constraints {
         let mut con = intern_constraint(interner, raw_con);
-        let final_id = assign_constraint_name(interner, &mut con, constraint_counter, "C", &mut name_buf);
+        let final_id = assign_constraint_name(interner, &constraints, &mut con, constraint_counter, "C", &mut name_buf);
         register_constraint_variables(variables, &con);
         if constraints.insert(final_id, con).is_some() {
             eprintln!("duplicate constraint name '{}': the later definition replaces the earlier one", interner.resolve(final_id));
@@ -1043,8 +1043,16 @@ fn intern_sos_constraints(
             continue;
         }
         let mut sos = intern_constraint(interner, raw_sos_con);
-        let final_id = assign_constraint_name(interner, &mut sos, constraint_counter, "SOS", &mut name_buf);
+        let mut final_id = assign_constraint_name(interner, constraints, &mut sos, constraint_counter, "SOS", &mut name_buf);
+        if constraints.contains_key(&final_id) {
+            // An SOS entry sharing a name with an existing constraint would
+            // delete that constraint outright; rename the SOS entry instead.
+            eprintln!("SOS constraint name '{}' is already in use: the SOS entry has been renamed", interner.resolve(final_id));
+            final_id = generate_constraint_name(interner, constraints, constraint_counter, "SOS", &mut name_buf);
+            set_constraint_name(&mut sos, final_id);
+        }
         register_constraint_variables(variables, &sos);
+        debug_assert!(!constraints.contains_key(&final_id), "SOS constraint name must be free before insertion");
         constraints.insert(final_id, sos);
     }
 }
@@ -1054,6 +1062,7 @@ fn intern_sos_constraints(
 #[inline]
 fn assign_constraint_name(
     interner: &mut NameInterner,
+    existing: &IndexMap<NameId, Constraint>,
     constraint: &mut Constraint,
     counter: &mut u32,
     prefix: &str,
@@ -1062,22 +1071,40 @@ fn assign_constraint_name(
     let current_name = interner.resolve(constraint.name());
     let is_unnamed = current_name == "__c__" || current_name.is_empty();
 
-    let final_id = if is_unnamed {
+    let final_id = if is_unnamed { generate_constraint_name(interner, existing, counter, prefix, name_buf) } else { constraint.name() };
+
+    set_constraint_name(constraint, final_id);
+
+    final_id
+}
+
+/// Generate `{prefix}{n}` for the first `n` that no existing constraint claims,
+/// so an auto-generated name can never displace one already in the map.
+fn generate_constraint_name(
+    interner: &mut NameInterner,
+    existing: &IndexMap<NameId, Constraint>,
+    counter: &mut u32,
+    prefix: &str,
+    name_buf: &mut String,
+) -> NameId {
+    loop {
         *counter += 1;
         name_buf.clear();
         write!(name_buf, "{prefix}{}", *counter).expect("writing to String cannot fail");
-        interner.intern(name_buf)
-    } else {
-        constraint.name()
-    };
-
-    match constraint {
-        Constraint::Standard { name, .. } | Constraint::SOS { name, .. } => {
-            *name = final_id;
+        let candidate = interner.intern(name_buf);
+        if !existing.contains_key(&candidate) {
+            return candidate;
         }
     }
+}
 
-    final_id
+/// Overwrite a constraint's name, whichever variant it is.
+fn set_constraint_name(constraint: &mut Constraint, name_id: NameId) {
+    match constraint {
+        Constraint::Standard { name, .. } | Constraint::SOS { name, .. } => {
+            *name = name_id;
+        }
+    }
 }
 
 /// Register variables referenced by a constraint into the variables map.
@@ -1331,6 +1358,54 @@ End";
         let p = LpProblem::parse("minimize\nx1\nsubject to\nc1: x1 <= 10\nbounds\nx1 >= 2\nx1 >= 3\nend").unwrap();
         let x1 = p.name_id("x1").unwrap();
         assert_eq!(p.variables[&x1].bounds, VariableBounds::lower(3.0));
+    }
+
+    #[test]
+    fn test_single_sided_bound_keeps_the_other_side() {
+        // A later one-sided bound refines that side only; the opposite side of
+        // an existing double bound must survive. Dropping it silently relaxes
+        // the model and can turn a bounded problem unbounded.
+        let p = LpProblem::parse("minimize\nobj: x\nsubject to\nc1: x <= 10\nbounds\n0 <= x <= 5\nx >= 2\nend").unwrap();
+        let x = p.name_id("x").unwrap();
+        assert_eq!(p.variables[&x].bounds, VariableBounds::range(2.0, 5.0), "later lower bound must not discard the upper bound");
+
+        // Same in the other direction.
+        let p = LpProblem::parse("minimize\nobj: x\nsubject to\nc1: x <= 10\nbounds\n0 <= x <= 5\nx <= 3\nend").unwrap();
+        let x = p.name_id("x").unwrap();
+        assert_eq!(p.variables[&x].bounds, VariableBounds::range(0.0, 3.0), "later upper bound must not discard the lower bound");
+    }
+
+    #[test]
+    fn test_ranged_constraint_generated_name_avoids_user_name() {
+        // `c1: 2 <= x <= 10` expands to `c1` plus a generated upper half. When
+        // the user already owns `c1_rng`, the generated half must move aside
+        // rather than be overwritten and lose `x <= 10`.
+        let p = LpProblem::parse("minimize\nobj: x\nsubject to\nc1: 2 <= x <= 10\nc1_rng: x >= 99\nend").unwrap();
+        assert_eq!(p.constraint_count(), 3, "range halves and the user constraint must all survive: {:?}", p.constraints);
+
+        let user = p.name_id("c1_rng").expect("user constraint c1_rng must exist");
+        let Constraint::Standard { operator, rhs, .. } = &p.constraints[&user] else { panic!("expected standard constraint") };
+        assert_eq!((*operator, *rhs), (ComparisonOp::GTE, 99.0), "user constraint c1_rng must keep its own body");
+
+        let upper = p
+            .constraints
+            .values()
+            .filter_map(|c| match c {
+                Constraint::Standard { operator: ComparisonOp::LTE, rhs, .. } => Some(*rhs),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(upper, vec![10.0], "the range's upper half x <= 10 must survive");
+    }
+
+    #[test]
+    fn test_sos_does_not_silently_replace_standard_constraint() {
+        // An SOS entry sharing a name with a standard constraint must not
+        // delete it without trace.
+        let p = LpProblem::parse("minimize\nobj: x + y\nsubject to\nc1: x + y <= 10\nsos\nc1: S1:: x:1 y:2\nend").unwrap();
+        assert_eq!(p.constraint_count(), 2, "the standard constraint must survive the SOS name clash: {:?}", p.constraints);
+        assert!(p.constraints.values().any(|c| matches!(c, Constraint::Standard { .. })), "the standard constraint x + y <= 10 was lost");
+        assert!(p.constraints.values().any(|c| matches!(c, Constraint::SOS { .. })), "the SOS constraint was lost");
     }
 
     #[test]

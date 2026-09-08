@@ -284,19 +284,19 @@ impl VariableBounds {
 
     /// Merge a new bound declaration into existing bounds.
     ///
-    /// Complementary single-sided bounds combine; when both sides are already
-    /// set (or the new declaration is free), the new declaration wins.
+    /// Each side is merged independently: a declaration that names a side
+    /// replaces that side, and leaves the other side untouched. An explicit
+    /// `free` declaration names neither side and so clears both.
     #[must_use]
     pub const fn merge(self, new: Self) -> Self {
-        match (self.lower, self.upper, new.lower, new.upper) {
-            // Existing lower-only + new upper-only (or vice versa) → range
-            (Some(lb), None, None, Some(ub)) | (None, Some(ub), Some(lb), None) => Self::range(lb, ub),
-            // Free existing: take new entirely
-            (None, None, _, _) => new,
-            // New free: take free
-            (_, _, None, None) => Self::free(),
-            // Otherwise last-declaration-wins
-            _ => new,
+        // `x free` is the only declaration that sets neither side, and it
+        // resets the variable rather than refining it.
+        if new.lower.is_none() && new.upper.is_none() {
+            return Self::free();
+        }
+        Self {
+            lower: if new.lower.is_some() { new.lower } else { self.lower },
+            upper: if new.upper.is_some() { new.upper } else { self.upper },
         }
     }
 
@@ -635,5 +635,11 @@ mod tests {
         assert_eq!(merged, VariableBounds::range(2.0, 8.0));
         let free = VariableBounds::range(0.0, 1.0).merge(VariableBounds::free());
         assert!(free.is_free());
+
+        // A one-sided declaration refines only its own side.
+        assert_eq!(VariableBounds::range(0.0, 5.0).merge(VariableBounds::lower(2.0)), VariableBounds::range(2.0, 5.0));
+        assert_eq!(VariableBounds::range(0.0, 5.0).merge(VariableBounds::upper(3.0)), VariableBounds::range(0.0, 3.0));
+        // Same-side redeclaration is last-wins.
+        assert_eq!(VariableBounds::lower(2.0).merge(VariableBounds::lower(3.0)), VariableBounds::lower(3.0));
     }
 }
