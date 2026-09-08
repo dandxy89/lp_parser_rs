@@ -473,7 +473,7 @@ fn aggregate_degeneracy(rows: &[RowStat], cols: &[ColStat]) -> Degeneracy {
 /// they are what the solver did, including the effect of its internal presolve.
 /// Every field is optional — the log format is not an API, so a missing line
 /// leaves a gap rather than breaking the pane.
-fn parse_telemetry(log: &str) -> Telemetry {
+pub(crate) fn parse_telemetry(log: &str) -> Telemetry {
     let mut telemetry = Telemetry::default();
 
     for line in log.lines() {
