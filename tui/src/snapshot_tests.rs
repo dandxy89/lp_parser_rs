@@ -180,6 +180,56 @@ fn snapshot_highs_presolve_pane_120x40() {
     insta::assert_snapshot!(render(&mut app, 120, 40).backend());
 }
 
+/// The solve-profile pane, built from a fixed table rather than a real sweep:
+/// wall-clock times cannot be snapshotted, and the point here is the layout.
+#[test]
+fn snapshot_solve_profile_pane_120x40() {
+    use std::time::Duration;
+
+    use crate::profile::{Measurement, Profile, Run};
+
+    let measurement = |status: &str, total_ms: u64, solve_ms: u64, iterations, objective, differs| Measurement {
+        status: status.to_owned(),
+        objective,
+        solve_time: Duration::from_millis(solve_ms),
+        total_time: Duration::from_millis(total_ms),
+        iterations,
+        differs,
+    };
+
+    let mut app = inspect_app_from(REDUCIBLE_LP);
+    let (_, mut rewrite) = crate::presolve::presolve(&app.problem1, crate::presolve::DEFAULT_RULES);
+    rewrite.duration = Duration::ZERO;
+
+    let profile = Profile {
+        runs: vec![
+            Run { label: "default", outcome: Ok(measurement("Optimal", 41, 38, Some(312), Some(190.0), false)) },
+            Run { label: "presolve off", outcome: Ok(measurement("Optimal", 118, 115, Some(904), Some(190.0), false)) },
+            Run { label: "simplex dual", outcome: Ok(measurement("Optimal", 38, 35, Some(298), Some(190.0), false)) },
+            // A row that stopped early, and a row that disagreed: both must be
+            // visibly excluded from the "fastest" verdict.
+            Run { label: "simplex primal", outcome: Ok(measurement("ReachedTimeLimit", 12, 10, None, None, true)) },
+            Run { label: "ipm", outcome: Err("HiGHS rejected `solver = ipm`".to_owned()) },
+            Run { label: "local presolve", outcome: Ok(measurement("Optimal", 29, 21, Some(201), Some(190.0), false)) },
+        ],
+        baseline: Some(190.0),
+        fastest: Some(5),
+        rewrite: Some(rewrite),
+        budget: Duration::from_secs(10),
+        duration: Duration::from_millis(238),
+    };
+
+    app.analysis = crate::state::AnalysisState::Done {
+        label: "Solve profile",
+        pane: crate::state::ScrollPane {
+            lines: crate::widgets::profile::build_lines(&profile),
+            scroll: 0,
+            export: Some(("solve_profile.txt", crate::widgets::profile::export_text(&profile))),
+        },
+    };
+    insta::assert_snapshot!(render(&mut app, 120, 40).backend());
+}
+
 /// The clipboard yank is now derived from the same lines the widgets draw, by
 /// stripping their styles. Snapshot the plain text so a change to either the
 /// panel layout or the flattening shows up here.

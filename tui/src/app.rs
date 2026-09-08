@@ -17,7 +17,8 @@ use crate::search::{self, CompiledSearch, SearchMode};
 use crate::solver::{InfeasibilityDiagnosis, SolveResult};
 pub use crate::state::{AppMode, DiffFilter, Focus, SearchResult, Section, SectionViewState};
 use crate::state::{
-    DetailView, DiagnosisState, JumpEntry, JumpList, PendingYank, ScrollPane, Side, SolveState, SolveViewState, SortMode, WhatIfPrompt,
+    AnalysisState, DetailView, DiagnosisState, JumpEntry, JumpList, PendingYank, ScrollPane, Side, SolveState, SolveViewState, SortMode,
+    WhatIfPrompt,
 };
 use crate::watch::{WatchSession, WatchState};
 
@@ -241,6 +242,15 @@ pub struct App {
 
     /// Diagnostics pane (`D`), when open.
     pub diagnostics: Option<ScrollPane>,
+    /// A slow read-only analysis (solve profile, unbounded ray, ranging) that
+    /// runs off-thread and renders into a pane. Not part of `SolverSession`:
+    /// these run against the model, not against a solve, and must survive the
+    /// solve overlay opening and closing.
+    pub analysis: AnalysisState,
+    /// Channel carrying the finished pane back from the analysis worker thread.
+    /// The worker builds the lines, so the UI thread never formats a large
+    /// report.
+    pub receive_analysis: Option<mpsc::Receiver<Result<ScrollPane, String>>>,
 
     /// Presolve rule picker overlay (`P`): the highlighted rule when open.
     pub presolve_cursor: Option<usize>,
@@ -580,6 +590,8 @@ impl App {
             palette: CommandPaletteState { visible: false, query: tui_input::Input::default(), filtered: Vec::new(), selected: 0 },
             what_if: None,
             diagnostics: None,
+            analysis: AnalysisState::Idle,
+            receive_analysis: None,
             presolve_cursor: None,
             presolve_rules: crate::presolve::DEFAULT_RULES,
             last_presolve: None,
@@ -1298,6 +1310,7 @@ impl App {
             || self.watch.is_reloading()
             || matches!(self.solver.state, SolveState::Running { .. } | SolveState::RunningBoth { .. })
             || matches!(self.solver.diagnosis, DiagnosisState::Running { .. })
+            || matches!(self.analysis, AnalysisState::Running { .. })
     }
 
     /// Poll the solver channel(s) for results, transitioning state when complete.
@@ -1308,6 +1321,32 @@ impl App {
             self.poll_solve_single();
         }
         self.poll_diagnosis();
+        self.poll_analysis();
+    }
+
+    /// Poll the analysis channel (`AnalysisState::Running`).
+    fn poll_analysis(&mut self) {
+        let Some(receive) = &self.receive_analysis else {
+            return;
+        };
+        let AnalysisState::Running { label, .. } = self.analysis else {
+            return;
+        };
+        match receive.try_recv() {
+            Ok(Ok(pane)) => {
+                self.analysis = AnalysisState::Done { label, pane };
+                self.receive_analysis = None;
+            }
+            Ok(Err(error)) => {
+                self.analysis = AnalysisState::Failed { label, error };
+                self.receive_analysis = None;
+            }
+            Err(mpsc::TryRecvError::Empty) => {} // still running
+            Err(mpsc::TryRecvError::Disconnected) => {
+                self.analysis = AnalysisState::Failed { label, error: format!("{label} thread disconnected") };
+                self.receive_analysis = None;
+            }
+        }
     }
 
     /// Poll the infeasibility-diagnosis channel (`DiagnosisState::Running`).
