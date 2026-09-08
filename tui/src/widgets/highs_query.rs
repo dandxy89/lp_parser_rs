@@ -3,7 +3,7 @@
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 
-use crate::highs_query::{Iis, UnboundedRay};
+use crate::highs_query::{Iis, RangeEntry, Ranging, UnboundedRay};
 use crate::theme::theme;
 use crate::widgets::{rule_str, truncate_with_ellipsis};
 
@@ -287,6 +287,141 @@ pub fn iis_export(report: &Iis) -> String {
             }
             out.push('\n');
         }
+    }
+
+    if report.relaxed_integrality > 0 {
+        let _ = writeln!(out, "{} integer column(s) relaxed", report.relaxed_integrality);
+    }
+    if report.skipped_sos > 0 {
+        let _ = writeln!(out, "{} SOS constraint(s) not modelled", report.skipped_sos);
+    }
+    let _ = writeln!(out, "took {:.3}s", report.duration.as_secs_f64());
+    out
+}
+
+/// Most rows of each ranging table to render.
+///
+/// ponytail: fixed cap with a truncation notice; the export carries everything,
+/// and a full table for a large model is thousands of lines nobody scrolls.
+const MAX_RANGE_ROWS: usize = 200;
+
+/// Build the display lines for the ranging pane.
+///
+/// `selected` is the entry highlighted in the sidebar, if any: it is shown in
+/// full at the top, because the question "how far can *this* move" is usually
+/// asked about the thing already under the cursor.
+pub fn ranging_lines(report: &Ranging, selected: Option<&str>) -> Vec<Line<'static>> {
+    let t = theme();
+    let mut lines = Vec::new();
+
+    heading(&mut lines, "Ranging", "how far each coefficient moves before the optimal basis changes");
+    if let Some(objective) = report.objective_value {
+        lines.push(Line::from(Span::styled(format!("  objective {objective:.6}"), Style::default().fg(t.text))));
+    }
+
+    if let Some(name) = selected
+        && let Some(entry) = report.costs.iter().chain(&report.rhs).find(|entry| entry.name == name)
+    {
+        let kind = if report.costs.iter().any(|e| e.name == name) { "objective coefficient" } else { "right-hand side" };
+        heading(&mut lines, "Selected", "");
+        lines.push(Line::from(Span::styled(
+            format!("  {} \u{2014} {kind}", entry.name),
+            Style::default().fg(t.accent).add_modifier(Modifier::BOLD),
+        )));
+        lines.push(Line::from(Span::styled(format!("  currently   {:.6}", entry.current), Style::default().fg(t.text))));
+        lines.push(Line::from(Span::styled(
+            format!("  holds over  [{}, {}]", bound(entry.down), bound(entry.up)),
+            Style::default().fg(t.text),
+        )));
+        lines.push(Line::from(Span::styled(
+            format!("  objective   {:.6} at the low end, {:.6} at the high end", entry.down_objective, entry.up_objective),
+            Style::default().fg(t.muted),
+        )));
+        if !entry.contains_current() {
+            lines.push(Line::from(Span::styled(
+                "  the range does not bracket the current value: the basis is degenerate here".to_owned(),
+                Style::default().fg(t.modified),
+            )));
+        }
+    }
+
+    range_table(&mut lines, "Objective coefficients", &report.costs);
+    range_table(&mut lines, "Right-hand sides", &report.rhs);
+
+    lines.push(Line::from(""));
+    if report.relaxed_integrality > 0 {
+        lines.push(Line::from(Span::styled(
+            format!("  {} integer column(s) relaxed: ranging reads an LP basis", report.relaxed_integrality),
+            Style::default().fg(t.modified),
+        )));
+    }
+    if report.skipped_sos > 0 {
+        lines.push(Line::from(Span::styled(
+            format!("  {} SOS constraint(s) not modelled", report.skipped_sos),
+            Style::default().fg(t.modified),
+        )));
+    }
+    lines.push(Line::from(Span::styled(format!("  took {:.3}s", report.duration.as_secs_f64()), Style::default().fg(t.muted))));
+    lines
+}
+
+/// One ranging table, capped with a notice.
+fn range_table(lines: &mut Vec<Line<'static>>, title: &str, entries: &[RangeEntry]) {
+    let t = theme();
+    if entries.is_empty() {
+        return;
+    }
+    heading(lines, title, "");
+    lines.push(Line::from(Span::styled(
+        format!("  {:<NAME_WIDTH$}{:>NUMBER_WIDTH$}{:>NUMBER_WIDTH$}{:>NUMBER_WIDTH$}", "name", "current", "down to", "up to"),
+        Style::default().fg(t.muted).add_modifier(Modifier::BOLD),
+    )));
+
+    for entry in entries.iter().take(MAX_RANGE_ROWS) {
+        lines.push(Line::from(vec![
+            Span::styled(format!("  {:<NAME_WIDTH$}", truncate_with_ellipsis(&entry.name, NAME_WIDTH)), Style::default().fg(t.text)),
+            Span::styled(format!("{:>NUMBER_WIDTH$.4}", entry.current), Style::default().fg(t.accent)),
+            Span::styled(format!("{:>NUMBER_WIDTH$}", bound(entry.down)), Style::default().fg(t.muted)),
+            Span::styled(format!("{:>NUMBER_WIDTH$}", bound(entry.up)), Style::default().fg(t.muted)),
+        ]));
+    }
+    if entries.len() > MAX_RANGE_ROWS {
+        lines.push(Line::from(Span::styled(
+            format!("  \u{2026} {} more (w writes the full table)", entries.len() - MAX_RANGE_ROWS),
+            Style::default().fg(t.muted),
+        )));
+    }
+}
+
+/// Plain-text form of the ranging report, for `w`. Uncapped, unlike the pane.
+pub fn ranging_export(report: &Ranging) -> String {
+    use std::fmt::Write as _;
+
+    let mut out = String::with_capacity((report.costs.len() + report.rhs.len()) * 72 + 256);
+    out.push_str("Ranging\n\n");
+    if let Some(objective) = report.objective_value {
+        let _ = writeln!(out, "objective {objective:.6}\n");
+    }
+
+    for (title, entries) in [("objective coefficients", &report.costs), ("right-hand sides", &report.rhs)] {
+        if entries.is_empty() {
+            continue;
+        }
+        let _ = writeln!(out, "{title}:");
+        let _ = writeln!(out, "{:<30}{:>16}{:>16}{:>16}{:>18}{:>18}", "name", "current", "down to", "up to", "obj at down", "obj at up");
+        for entry in entries {
+            let _ = writeln!(
+                out,
+                "{:<30}{:>16.6}{:>16}{:>16}{:>18.6}{:>18.6}",
+                entry.name,
+                entry.current,
+                bound(entry.down),
+                bound(entry.up),
+                entry.down_objective,
+                entry.up_objective
+            );
+        }
+        out.push('\n');
     }
 
     if report.relaxed_integrality > 0 {

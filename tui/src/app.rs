@@ -1142,7 +1142,7 @@ impl App {
     }
 
     /// Return the name of the currently selected entry, if any.
-    fn selected_entry_name(&self) -> Option<&str> {
+    pub(crate) fn selected_entry_name(&self) -> Option<&str> {
         let entry_index = self.selected_entry_index()?;
         self.entry_name(self.active_section, entry_index)
     }

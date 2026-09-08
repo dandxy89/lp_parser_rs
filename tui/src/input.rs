@@ -217,6 +217,7 @@ impl App {
             PaletteCommand::SolveProfile => self.open_profile(),
             PaletteCommand::UnboundedRay => self.open_unbounded_ray(),
             PaletteCommand::Iis => self.open_iis(),
+            PaletteCommand::Ranging => self.open_ranging(),
             PaletteCommand::ExportCsv => self.export_csv(),
             PaletteCommand::YankName => self.yank_name(),
             PaletteCommand::YankOld => self.yank_side(Side::Old),
@@ -380,6 +381,9 @@ impl App {
 
             // IIS: the minimal conflicting set.
             KeyCode::Char('I') => self.open_iis(),
+
+            // Ranging: how far each coefficient can move.
+            KeyCode::Char('R') => self.open_ranging(),
 
             // Export CSV (works in both modes).
             KeyCode::Char('w') => self.export_csv(),
@@ -1299,7 +1303,10 @@ impl App {
     ///
     /// `build` returns the rendered lines, not the report: formatting a large
     /// table is itself slow enough to drop frames, so it happens off-thread too.
-    fn spawn_analysis(&mut self, label: &'static str, build: fn(&LpProblem) -> Result<crate::state::ScrollPane, String>) {
+    fn spawn_analysis<F>(&mut self, label: &'static str, build: F)
+    where
+        F: FnOnce(&LpProblem) -> Result<crate::state::ScrollPane, String> + Send + 'static,
+    {
         if matches!(self.analysis, AnalysisState::Running { .. }) {
             self.flash_status(format!("{label}: already running"));
             return;
@@ -1344,6 +1351,22 @@ impl App {
                 lines: crate::widgets::highs_query::iis_lines(&report),
                 scroll: 0,
                 export: Some(("iis.txt", crate::widgets::highs_query::iis_export(&report))),
+            })
+        });
+    }
+
+    /// `R` — how far each coefficient can move before the basis changes.
+    pub(crate) fn open_ranging(&mut self) {
+        // Captured before the worker starts: the selection can move while the
+        // analysis runs, and the report should describe what was on screen when
+        // it was asked for.
+        let selected = self.selected_entry_name().map(str::to_owned);
+        self.spawn_analysis("Ranging", move |problem| {
+            let report = crate::highs_query::ranging(problem)?;
+            Ok(crate::state::ScrollPane {
+                lines: crate::widgets::highs_query::ranging_lines(&report, selected.as_deref()),
+                scroll: 0,
+                export: Some(("ranging.txt", crate::widgets::highs_query::ranging_export(&report))),
             })
         });
     }

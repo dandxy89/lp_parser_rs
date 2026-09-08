@@ -271,6 +271,26 @@ fn snapshot_iis_pane_120x40() {
     insta::assert_snapshot!(render(&mut app, 120, 40).backend());
 }
 
+#[test]
+fn snapshot_ranging_pane_120x40() {
+    let mut app = inspect_app_from(BASE_LP);
+    let mut report = crate::highs_query::ranging(&app.problem1).expect("an optimal LP must range");
+    // The footer carries the wall-clock time; a snapshot cannot.
+    report.duration = std::time::Duration::ZERO;
+    // Pin the selected-entry block too, which is the half that depends on the
+    // sidebar rather than on the solver.
+    let lines = crate::widgets::highs_query::ranging_lines(&report, Some("c1"));
+    app.analysis = crate::state::AnalysisState::Done {
+        label: "Ranging",
+        pane: crate::state::ScrollPane {
+            lines,
+            scroll: 0,
+            export: Some(("ranging.txt", crate::widgets::highs_query::ranging_export(&report))),
+        },
+    };
+    insta::assert_snapshot!(render(&mut app, 120, 40).backend());
+}
+
 /// The clipboard yank is now derived from the same lines the widgets draw, by
 /// stripping their styles. Snapshot the plain text so a change to either the
 /// panel layout or the flattening shows up here.
