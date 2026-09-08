@@ -569,6 +569,44 @@ fn parse_options(text: &str) -> Vec<(&str, &str)> {
         .collect()
 }
 
+/// Set one `HiGHS` option from its string form, discovering the option's type.
+///
+/// `HiGHS` types each option and rejects a mismatched setter, and there is no
+/// way to ask which type it wanted, so the setters are tried in turn from the
+/// most specific reading of `value` to the least. `simplex_strategy = 4` takes
+/// the integer setter, `time_limit = 300` the double, `presolve = off` the
+/// string, and each falls through to the next on rejection.
+///
+/// Every attempt goes through `try_set_option`: the crate's `set_option`
+/// *panics* on rejection, so probing with it would take the TUI down on the
+/// first mistyped key.
+///
+/// # Errors
+///
+/// Returns an error when `HiGHS` rejects every setter — an unknown option name,
+/// or a value outside the option's range.
+fn set_option_value(model: &mut highs::Model, key: &str, value: &str) -> Result<(), String> {
+    debug_assert!(!key.is_empty(), "option key must not be empty");
+
+    // Ordered most-specific first; `||` stops at the first setter HiGHS accepts.
+    let mut accepted = match value {
+        "true" => model.try_set_option(key, true).is_ok(),
+        "false" => model.try_set_option(key, false).is_ok(),
+        _ => false,
+    };
+    if !accepted && let Ok(int) = value.parse::<i32>() {
+        accepted = model.try_set_option(key, int).is_ok();
+    }
+    if !accepted && let Ok(float) = value.parse::<f64>() {
+        accepted = model.try_set_option(key, float).is_ok();
+    }
+    if !accepted {
+        accepted = model.try_set_option(key, value).is_ok();
+    }
+
+    if accepted { Ok(()) } else { Err(format!("HiGHS rejected `{key} = {value}` (unknown option or value out of range)")) }
+}
+
 /// Apply `highs.opt` from the current directory. Returns the options applied.
 ///
 /// Absent file is the normal case, not an error; anything else is surfaced.
@@ -579,35 +617,45 @@ fn apply_options_file(model: &mut highs::Model) -> Result<Vec<String>, String> {
         Err(e) => return Err(format!("failed to read {OPTIONS_FILE}: {e}")),
     };
 
+    // A bad line in a user's options file must not lose the solve: record what
+    // HiGHS refused and carry on, so the note lands in the log the pane shows.
     let options = parse_options(&text);
+    let mut applied = Vec::with_capacity(options.len());
     for (key, value) in &options {
-        match *value {
-            "true" => model.set_option(*key, true),
-            "false" => model.set_option(*key, false),
-            // `HiGHS` types each option and rejects a mismatched setter, and the crate's
-            // `set_option` returns nothing, so we cannot ask which type it wanted. An
-            // integral value goes out as both: the wrong one is rejected into the solver
-            // log, the right one sticks. Keeps `time_limit = 300` working alongside
-            // `simplex_strategy = 4`.
-            _ => {
-                if let Ok(int) = value.parse::<i32>() {
-                    model.set_option(*key, int);
-                    model.set_option(*key, f64::from(int));
-                } else if let Ok(float) = value.parse::<f64>() {
-                    model.set_option(*key, float);
-                } else {
-                    model.set_option(*key, *value);
-                }
-            }
+        match set_option_value(model, key, value) {
+            Ok(()) => applied.push(format!("{key} = {value}")),
+            Err(e) => applied.push(format!("{key} = {value} (ignored: {e})")),
         }
     }
 
-    Ok(options.iter().map(|(key, value)| format!("{key} = {value}")).collect())
+    Ok(applied)
 }
 
 /// Convert an `LpProblem` to a `HiGHS` `RowProblem` and solve it.
+///
+/// # Errors
+///
+/// Returns an error if the temp log path is not UTF-8, `highs.opt` cannot be
+/// read, or the solver log cannot be read back.
 pub fn solve_problem(problem: &LpProblem) -> Result<SolveResult, String> {
+    solve_problem_with(problem, &[])
+}
+
+/// [`solve_problem`], with `extra` `HiGHS` options applied on top.
+///
+/// `extra` is applied *after* `highs.opt`, so a caller-supplied preset wins over
+/// a stale options file in the working directory. Keys reserved by the solve
+/// itself (see [`RESERVED_OPTIONS`]) are ignored, as they are for the file.
+///
+/// # Errors
+///
+/// As [`solve_problem`].
+pub fn solve_problem_with(problem: &LpProblem, extra: &[(&str, &str)]) -> Result<SolveResult, String> {
     debug_assert!(!problem.variables.is_empty(), "cannot solve a problem with no variables");
+    debug_assert!(
+        extra.iter().all(|(key, _)| !RESERVED_OPTIONS.contains(key)),
+        "extra options must not redirect the solver log: {extra:?}"
+    );
 
     let build_start = Instant::now();
     let model = build_highs_model(problem);
@@ -629,7 +677,15 @@ pub fn solve_problem(problem: &LpProblem) -> Result<SolveResult, String> {
     highs_model.set_option("log_file", log_path.to_str().ok_or_else(|| "temp file path is not valid UTF-8".to_owned())?);
     // After `log_file`, so anything `HiGHS` rejects is written to the log the pane
     // shows rather than to the terminal the TUI owns.
-    let applied_options = apply_options_file(&mut highs_model)?;
+    let mut applied_options = apply_options_file(&mut highs_model)?;
+    // After the file, so a preset chosen in the TUI wins over a stale `highs.opt`.
+    // Unlike the options file, these are load-bearing: a caller asked for this
+    // exact configuration, and silently solving the default under its label
+    // would make a profile row a lie.
+    for (key, value) in extra.iter().filter(|(key, _)| !RESERVED_OPTIONS.contains(key)) {
+        set_option_value(&mut highs_model, key, value)?;
+        applied_options.push(format!("{key} = {value}"));
+    }
 
     let solve_start = Instant::now();
     let solved = highs_model.solve();
@@ -639,7 +695,7 @@ pub fn solve_problem(problem: &LpProblem) -> Result<SolveResult, String> {
     // Options applied silently would be indistinguishable from a default solve, so
     // record them alongside the log the pane shows.
     if !applied_options.is_empty() {
-        solver_log.insert_str(0, &format!("[lp_diff] {OPTIONS_FILE}: {}\n\n", applied_options.join(", ")));
+        solver_log.insert_str(0, &format!("[lp_diff] options: {}\n\n", applied_options.join(", ")));
     }
     // Cleanup failure is non-fatal (overwritten next solve, reaped by the OS); surface it in the log.
     if let Err(e) = std::fs::remove_file(&log_path) {
@@ -658,6 +714,15 @@ pub fn solve_problem(problem: &LpProblem) -> Result<SolveResult, String> {
 /// i.e. the `Debug` form of `highs::HighsModelStatus`) indicates infeasibility.
 pub fn status_is_infeasible(status: &str) -> bool {
     status == "Infeasible" || status == "UnboundedOrInfeasible"
+}
+
+/// Return `true` if a solve status string indicates unboundedness.
+///
+/// `UnboundedOrInfeasible` appears here *and* in [`status_is_infeasible`]: it is
+/// exactly the case where presolve declined to say which, so both diagnoses are
+/// worth offering.
+pub fn status_is_unbounded(status: &str) -> bool {
+    status == "Unbounded" || status == "UnboundedOrInfeasible"
 }
 
 /// Slack values above this threshold count as constraint violations in the
@@ -1077,6 +1142,50 @@ empty =\n";
         let diagnosis = diagnose_infeasibility(&problem).expect("elastic relaxation should solve");
         assert!(diagnosis.violations.is_empty(), "feasible problem must have no violations, got {:?}", diagnosis.violations);
         assert!(diagnosis.total_violation.abs() < 1e-9, "total violation should be ≈ 0, got {}", diagnosis.total_violation);
+    }
+
+    /// A tiny LP used by the option tests; the values do not matter, only that
+    /// it solves.
+    fn tiny_lp() -> LpProblem {
+        LpProblem::parse("Minimize\n obj: x + y\nSubject To\n c1: x + y >= 2\nEnd").expect("fixture must parse")
+    }
+
+    #[test]
+    fn test_an_integer_typed_option_applies_without_panicking() {
+        // Regression: `highs::Model::set_option` panics when HiGHS rejects the
+        // setter, and the old code deliberately set every integral value twice
+        // (once as int, once as double) expecting the wrong one to be ignored.
+        // Any `highs.opt` containing `simplex_strategy = 4` took the TUI down.
+        let result = solve_problem_with(&tiny_lp(), &[("simplex_strategy", "1")]).expect("an int-typed option must apply");
+        assert_eq!(result.status, "Optimal");
+    }
+
+    #[test]
+    fn test_options_of_each_type_are_accepted() {
+        // One option per HiGHS setter type, since `set_option_value` discovers
+        // the type by trying them in turn: string, double, int, bool.
+        for (key, value) in [("presolve", "off"), ("time_limit", "30.0"), ("threads", "1"), ("allow_unbounded_or_infeasible", "true")] {
+            let result = solve_problem_with(&tiny_lp(), &[(key, value)]);
+            assert!(result.is_ok(), "`{key} = {value}` should apply, got {:?}", result.err());
+        }
+    }
+
+    #[test]
+    fn test_an_unknown_preset_option_is_an_error_not_a_silent_default_solve() {
+        // A caller-supplied option is load-bearing: quietly solving the default
+        // under a preset's label would make a profile row a lie.
+        let error = solve_problem_with(&tiny_lp(), &[("made_up_option", "7")]).expect_err("HiGHS must reject an unknown option");
+        assert!(error.contains("made_up_option"), "the error should name the option, got: {error}");
+    }
+
+    #[test]
+    fn test_an_options_file_key_that_highs_refuses_is_noted_not_fatal() {
+        // A user's `highs.opt` is not under our control, so a bad line is
+        // reported into the log rather than losing them the solve.
+        let mut model = build_highs_model(&tiny_lp()).row_problem.optimise(highs::Sense::Minimise);
+        model.make_quiet();
+        assert!(set_option_value(&mut model, "made_up_option", "7").is_err(), "an unknown option must be refused");
+        assert!(set_option_value(&mut model, "presolve", "off").is_ok(), "a known option must still apply afterwards");
     }
 
     #[test]
