@@ -331,6 +331,178 @@ pub fn iis(problem: &LpProblem) -> Result<Iis, String> {
     })
 }
 
+/// How far one coefficient can move before the optimal basis changes.
+#[derive(Debug, Clone)]
+pub struct RangeEntry {
+    pub name: String,
+    /// The value in the model today: a cost for a column, a right-hand side
+    /// for a row.
+    pub current: f64,
+    /// Lowest value the basis survives, and the objective there.
+    pub down: f64,
+    pub down_objective: f64,
+    /// Highest value the basis survives, and the objective there.
+    pub up: f64,
+    pub up_objective: f64,
+}
+
+impl RangeEntry {
+    /// Whether the current value sits inside the reported interval. A range
+    /// that does not contain its own value means the basis is degenerate there.
+    #[must_use]
+    pub fn contains_current(&self) -> bool {
+        self.down <= self.current && self.current <= self.up
+    }
+}
+
+/// Sensitivity of the optimum to the model's coefficients.
+#[derive(Debug, Clone)]
+pub struct Ranging {
+    /// Objective-coefficient ranges, one per variable.
+    pub costs: Vec<RangeEntry>,
+    /// Right-hand-side ranges, one per constraint.
+    pub rhs: Vec<RangeEntry>,
+    pub objective_value: Option<f64>,
+    pub relaxed_integrality: usize,
+    pub skipped_sos: usize,
+    pub duration: Duration,
+}
+
+/// Ranging information from the optimal basis: how far each objective
+/// coefficient and each right-hand side can move before the basis changes.
+///
+/// This is what the what-if prompt (`E`) approximates by editing one RHS and
+/// re-solving: ranging gives the whole interval at once, from the basis, with
+/// no further solve.
+///
+/// # Errors
+///
+/// Returns an error when the model has no variables, does not solve to
+/// optimality (ranging needs a basis), or `HiGHS` refuses the query.
+pub fn ranging(problem: &LpProblem) -> Result<Ranging, String> {
+    if problem.variables.is_empty() {
+        return Err("the model has no variables".to_owned());
+    }
+
+    let started = Instant::now();
+    let (relaxed, relaxed_integrality) = relax_integrality(problem);
+    let built = build_highs_model(&relaxed);
+    let (variable_names, row_names) = (built.variable_names, built.row_constraint_names);
+    let skipped_sos = built.skipped_sos;
+    let costs_by_id = primary_objective_coefficients(&relaxed);
+
+    let mut model = built.row_problem.optimise(built.sense);
+    model.make_quiet();
+
+    let mut solved = model.solve();
+    let status = format!("{:?}", solved.status());
+    if status != "Optimal" {
+        return Err(format!("ranging needs an optimal basis; this model solved as {status}"));
+    }
+
+    let objective_value = {
+        let solution = solved.get_solution();
+        let columns = solution.columns();
+        Some(
+            variable_names
+                .iter()
+                .zip(columns)
+                .filter_map(|(name, value)| relaxed.name_id(name).and_then(|id| costs_by_id.get(&id)).map(|cost| cost * value))
+                .sum(),
+        )
+    };
+
+    let (num_col, num_row) = (variable_names.len(), row_names.len());
+    let mut cost_up = vec![0.0_f64; num_col];
+    let mut cost_up_objective = vec![0.0_f64; num_col];
+    let mut cost_down = vec![0.0_f64; num_col];
+    let mut cost_down_objective = vec![0.0_f64; num_col];
+    let mut rhs_up = vec![0.0_f64; num_row];
+    let mut rhs_up_objective = vec![0.0_f64; num_row];
+    let mut rhs_down = vec![0.0_f64; num_row];
+    let mut rhs_down_objective = vec![0.0_f64; num_row];
+
+    let highs = solved.as_mut_ptr();
+    // Sixteen of the twenty-four outputs are passed as null: the C API
+    // null-checks each one, and the "in/out variable" indices and the column
+    // *bound* ranges are not shown, so allocating them would be waste
+    // proportional to the model size.
+    //
+    // SAFETY: `highs` is the live model owned by `solved` for the rest of this
+    // function. Each non-null array is exactly `num_col` or `num_row` doubles,
+    // the lengths the C API documents for its position.
+    let call = unsafe {
+        highs_sys::Highs_getRanging(
+            highs,
+            cost_up.as_mut_ptr(),
+            cost_up_objective.as_mut_ptr(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            cost_down.as_mut_ptr(),
+            cost_down_objective.as_mut_ptr(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            // Column bound ranging: not shown.
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            rhs_up.as_mut_ptr(),
+            rhs_up_objective.as_mut_ptr(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            rhs_down.as_mut_ptr(),
+            rhs_down_objective.as_mut_ptr(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+        )
+    };
+    if call == highs_sys::kHighsStatusError {
+        return Err("HiGHS could not compute ranging information for this model".to_owned());
+    }
+
+    let costs = variable_names
+        .iter()
+        .enumerate()
+        .map(|(index, name)| RangeEntry {
+            name: name.clone(),
+            current: relaxed.name_id(name).and_then(|id| costs_by_id.get(&id)).copied().unwrap_or(0.0),
+            down: cost_down[index],
+            down_objective: cost_down_objective[index],
+            up: cost_up[index],
+            up_objective: cost_up_objective[index],
+        })
+        .collect();
+
+    let rhs = row_names
+        .iter()
+        .enumerate()
+        .map(|(index, name)| RangeEntry {
+            name: name.clone(),
+            current: constraint_rhs(&relaxed, name).unwrap_or(f64::NAN),
+            down: rhs_down[index],
+            down_objective: rhs_down_objective[index],
+            up: rhs_up[index],
+            up_objective: rhs_up_objective[index],
+        })
+        .collect();
+
+    Ok(Ranging { costs, rhs, objective_value, relaxed_integrality, skipped_sos, duration: started.elapsed() })
+}
+
+/// The right-hand side of a named standard constraint.
+fn constraint_rhs(problem: &LpProblem, name: &str) -> Option<f64> {
+    let id = problem.name_id(name)?;
+    match problem.constraints.get(&id)? {
+        Constraint::Standard { rhs, .. } => Some(*rhs),
+        Constraint::SOS { .. } => None,
+    }
+}
+
 /// Diagnose an unbounded model: which variables run to infinity, and how fast.
 ///
 /// Presolve is turned off for this solve. Presolve can conclude
@@ -591,6 +763,70 @@ mod tests {
         assert_eq!(bound_status(2), "lower");
         assert_eq!(bound_status(3), "upper");
         assert_eq!(bound_status(4), "both");
+    }
+
+    /// A two-variable LP whose optimum and ranging can be checked by hand.
+    const RANGING_LP: &str = "Maximize\n obj: 3 x + 2 y\nSubject To\n c1: x + y <= 4\n c2: x <= 3\nEnd";
+
+    #[test]
+    fn ranging_covers_every_row_and_column() {
+        let report = ranging(&parse(RANGING_LP)).expect("an optimal LP must range");
+
+        assert_eq!(report.costs.len(), 2, "one cost range per variable");
+        assert_eq!(report.rhs.len(), 2, "one rhs range per constraint");
+        let named: Vec<&str> = report.rhs.iter().map(|e| e.name.as_str()).collect();
+        assert!(named.contains(&"c1") && named.contains(&"c2"), "rows must be named, got {named:?}");
+    }
+
+    #[test]
+    fn a_ranges_current_value_is_the_models_own_coefficient() {
+        let report = ranging(&parse(RANGING_LP)).expect("an optimal LP must range");
+
+        let x = report.costs.iter().find(|e| e.name == "x").expect("x must be ranged");
+        assert!((x.current - 3.0).abs() < 1e-9, "x's cost is 3, got {}", x.current);
+        let c1 = report.rhs.iter().find(|e| e.name == "c1").expect("c1 must be ranged");
+        assert!((c1.current - 4.0).abs() < 1e-9, "c1's rhs is 4, got {}", c1.current);
+    }
+
+    #[test]
+    fn a_range_brackets_the_value_it_describes() {
+        let report = ranging(&parse(RANGING_LP)).expect("an optimal LP must range");
+
+        for entry in report.costs.iter().chain(&report.rhs) {
+            assert!(entry.down <= entry.up, "{}: down {} above up {}", entry.name, entry.down, entry.up);
+            assert!(entry.contains_current(), "{}: {} outside [{}, {}]", entry.name, entry.current, entry.down, entry.up);
+        }
+    }
+
+    #[test]
+    fn an_infeasible_model_is_refused_because_there_is_no_basis_to_range() {
+        let infeasible = parse("Minimize\n obj: x\nSubject To\n c1: x >= 5\n c2: x <= 3\nEnd");
+        let error = ranging(&infeasible).expect_err("ranging needs an optimal basis");
+
+        assert!(error.contains("optimal basis"), "the error should explain why, got: {error}");
+    }
+
+    #[test]
+    fn an_unbounded_model_is_refused_too() {
+        assert!(ranging(&parse(UNBOUNDED)).is_err(), "an unbounded model has no optimal basis");
+    }
+
+    #[test]
+    fn ranging_a_model_with_no_variables_is_refused() {
+        assert!(ranging(&LpProblem::default()).is_err(), "an empty model has nothing to range");
+    }
+
+    #[test]
+    fn a_real_model_ranges_end_to_end() {
+        let source = std::fs::read_to_string("../rust/resources/afiro_ext.lp").expect("fixture must exist");
+        let problem = LpProblem::parse(&source).expect("afiro must parse");
+        let report = ranging(&problem).expect("afiro's relaxation is optimal, so it must range");
+
+        assert_eq!(report.costs.len(), problem.variables.len(), "one cost range per column");
+        assert!(report.relaxed_integrality > 0, "afiro_ext is a MIP, so columns must have been relaxed");
+        for entry in report.costs.iter().chain(&report.rhs) {
+            assert!(entry.down <= entry.up, "{}: down {} above up {}", entry.name, entry.down, entry.up);
+        }
     }
 
     #[test]
