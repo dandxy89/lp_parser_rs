@@ -321,15 +321,15 @@ pub fn ranging_lines(report: &Ranging, selected: Option<&str>) -> Vec<Line<'stat
     let t = theme();
     let mut lines = Vec::new();
 
-    heading(&mut lines, "Ranging", "how far each coefficient moves before the optimal basis changes");
+    heading(&mut lines, "Ranging", "how far each quantity moves before the optimal basis changes");
     if let Some(objective) = report.objective_value {
         lines.push(Line::from(Span::styled(format!("  objective {objective:.6}"), Style::default().fg(t.text))));
     }
 
     if let Some(name) = selected
-        && let Some(entry) = report.costs.iter().chain(&report.rhs).find(|entry| entry.name == name)
+        && let Some(entry) = report.costs.iter().chain(&report.rows).find(|entry| entry.name == name)
     {
-        let kind = if report.costs.iter().any(|e| e.name == name) { "objective coefficient" } else { "right-hand side" };
+        let kind = if report.costs.iter().any(|e| e.name == name) { "objective coefficient" } else { "row activity" };
         heading(&mut lines, "Selected", "");
         lines.push(Line::from(Span::styled(
             format!("  {} \u{2014} {kind}", entry.name),
@@ -353,7 +353,7 @@ pub fn ranging_lines(report: &Ranging, selected: Option<&str>) -> Vec<Line<'stat
     }
 
     range_table(&mut lines, "Objective coefficients", &report.costs);
-    range_table(&mut lines, "Right-hand sides", &report.rhs);
+    range_table(&mut lines, "Row activities", &report.rows);
 
     lines.push(Line::from(""));
     if report.relaxed_integrality > 0 {
@@ -404,13 +404,13 @@ fn range_table(lines: &mut Vec<Line<'static>>, title: &str, entries: &[RangeEntr
 pub fn ranging_export(report: &Ranging) -> String {
     use std::fmt::Write as _;
 
-    let mut out = String::with_capacity((report.costs.len() + report.rhs.len()) * 72 + 256);
+    let mut out = String::with_capacity((report.costs.len() + report.rows.len()) * 72 + 256);
     out.push_str("Ranging\n\n");
     if let Some(objective) = report.objective_value {
         let _ = writeln!(out, "objective {objective:.6}\n");
     }
 
-    for (title, entries) in [("objective coefficients", &report.costs), ("right-hand sides", &report.rhs)] {
+    for (title, entries) in [("objective coefficients", &report.costs), ("row activities", &report.rows)] {
         if entries.is_empty() {
             continue;
         }
