@@ -230,6 +230,26 @@ fn snapshot_solve_profile_pane_120x40() {
     insta::assert_snapshot!(render(&mut app, 120, 40).backend());
 }
 
+/// An LP with nothing stopping `x` from growing: the pane must name it.
+const UNBOUNDED_LP: &str = "max\nobj: 3 x + 2 y\nst\nc1: y <= 4\nend\n";
+
+#[test]
+fn snapshot_unbounded_ray_pane_120x40() {
+    let mut app = inspect_app_from(UNBOUNDED_LP);
+    let mut report = crate::highs_query::unbounded_ray(&app.problem1).expect("an unbounded LP must diagnose");
+    // The footer carries the wall-clock time; a snapshot cannot.
+    report.duration = std::time::Duration::ZERO;
+    app.analysis = crate::state::AnalysisState::Done {
+        label: "Unbounded ray",
+        pane: crate::state::ScrollPane {
+            lines: crate::widgets::highs_query::ray_lines(&report),
+            scroll: 0,
+            export: Some(("unbounded_ray.txt", crate::widgets::highs_query::ray_export(&report))),
+        },
+    };
+    insta::assert_snapshot!(render(&mut app, 120, 40).backend());
+}
+
 /// The clipboard yank is now derived from the same lines the widgets draw, by
 /// stripping their styles. Snapshot the plain text so a change to either the
 /// panel layout or the flattening shows up here.
