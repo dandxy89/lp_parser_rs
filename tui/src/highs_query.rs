@@ -829,6 +829,34 @@ mod tests {
         }
     }
 
+    /// The analyses must survive the repo's largest models without panicking:
+    /// `fit2d` alone has 10,500 columns, so it exercises every array the FFI
+    /// calls write into at a size the small fixtures never reach.
+    #[test]
+    fn the_largest_models_are_handled_without_panicking() {
+        for name in ["fit2d", "fit1d", "boeing1", "sudoku", "wbm"] {
+            let Ok(source) = std::fs::read_to_string(format!("../rust/resources/{name}.lp")) else {
+                continue;
+            };
+            let Ok(problem) = LpProblem::parse(&source) else { continue };
+
+            let ray = unbounded_ray(&problem).unwrap_or_else(|e| panic!("{name}: ray failed: {e}"));
+            assert!(ray.directions.len() <= problem.variables.len(), "{name}: more ray entries than columns");
+
+            let subsystem = iis(&problem).unwrap_or_else(|e| panic!("{name}: iis failed: {e}"));
+            assert!(subsystem.rows.len() <= problem.constraint_count(), "{name}: more IIS rows than the model has");
+            assert!(subsystem.cols.len() <= problem.variables.len(), "{name}: more IIS columns than the model has");
+
+            // These fixtures all solve, so ranging must cover every row and
+            // column rather than returning a short table.
+            let range = ranging(&problem).unwrap_or_else(|e| panic!("{name}: ranging failed: {e}"));
+            assert_eq!(range.costs.len(), problem.variables.len(), "{name}: one cost range per column");
+            for entry in range.costs.iter().chain(&range.rhs) {
+                assert!(entry.down <= entry.up, "{name}/{}: down {} above up {}", entry.name, entry.down, entry.up);
+            }
+        }
+    }
+
     #[test]
     fn a_model_with_no_variables_is_refused_rather_than_passed_to_highs() {
         assert!(unbounded_ray(&LpProblem::default()).is_err(), "an empty model has no ray to find");
