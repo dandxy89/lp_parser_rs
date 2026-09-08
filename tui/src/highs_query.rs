@@ -188,6 +188,149 @@ fn suspects(problem: &LpProblem) -> Vec<Suspect> {
     found
 }
 
+/// `HiGHS`'s `iis_strategy`: the "from LP" route, which actually searches for an
+/// irreducible subsystem.
+///
+/// The default is `kIisStrategyLight` (0), which performs only trivial
+/// inconsistent-bound and empty-row checks and returns. Without raising this the
+/// feature silently degrades to a triviality check on most models. The other
+/// documented route, `kIisStrategyFromRay`, is described upstream as "not robust,
+/// so currently switched off".
+const IIS_STRATEGY_FROM_LP: i32 = 2;
+
+/// `HiGHS`'s `IisBoundStatus`, from `lp_data/HighsIis.h`.
+///
+/// Declared here rather than used from the bindings because `bindgen` only
+/// processes `interfaces/highs_c_api.h` (see `highs-sys/wrapper.h`), and this
+/// enum lives in a C++ header it never sees.
+fn bound_status(code: i32) -> &'static str {
+    match code {
+        -1 => "dropped",
+        1 => "free",
+        2 => "lower",
+        3 => "upper",
+        4 => "both",
+        // 0 is `Null`: in the subsystem, but not because of a bound of its own.
+        _ => "\u{2014}",
+    }
+}
+
+/// The rows and column bounds that cannot hold together.
+#[derive(Debug, Clone)]
+pub struct Iis {
+    /// The status the relaxed model solved to.
+    pub status: String,
+    /// `(constraint name, which of its bounds is implicated)`.
+    pub rows: Vec<(String, &'static str)>,
+    /// `(variable name, which of its bounds is implicated)`.
+    pub cols: Vec<(String, &'static str)>,
+    pub relaxed_integrality: usize,
+    pub skipped_sos: usize,
+    pub duration: Duration,
+}
+
+impl Iis {
+    /// Whether `HiGHS` isolated a subsystem at all.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.rows.is_empty() && self.cols.is_empty()
+    }
+}
+
+/// Find an irreducible infeasible subsystem: the smallest set of constraints
+/// and variable bounds that are mutually unsatisfiable.
+///
+/// This complements [`crate::solver::diagnose_infeasibility`] rather than
+/// replacing it. That reports the *cheapest* set of constraints to relax, by
+/// total violation; this reports a *minimal conflicting* set, no proper subset
+/// of which is infeasible. They are different questions, and when hunting a
+/// modelling mistake the second is usually the more actionable one.
+///
+/// # Errors
+///
+/// Returns an error when the model has no variables or `HiGHS` refuses the
+/// query.
+pub fn iis(problem: &LpProblem) -> Result<Iis, String> {
+    if problem.variables.is_empty() {
+        return Err("the model has no variables".to_owned());
+    }
+
+    let started = Instant::now();
+    let (relaxed, relaxed_integrality) = relax_integrality(problem);
+    let built = build_highs_model(&relaxed);
+    let (variable_names, row_names) = (built.variable_names, built.row_constraint_names);
+    let skipped_sos = built.skipped_sos;
+
+    let mut model = built.row_problem.optimise(built.sense);
+    model.make_quiet();
+    model
+        .try_set_option("iis_strategy", IIS_STRATEGY_FROM_LP)
+        .map_err(|_| "HiGHS refused the iis_strategy option".to_owned())?;
+
+    let mut solved = model.solve();
+    let status = format!("{:?}", solved.status());
+
+    let (num_col, num_row) = (variable_names.len(), row_names.len());
+    let mut col_index = vec![0_i32; num_col];
+    let mut row_index = vec![0_i32; num_row];
+    let mut col_bound = vec![0_i32; num_col];
+    let mut row_bound = vec![0_i32; num_row];
+    let (mut iis_num_col, mut iis_num_row) = (0_i32, 0_i32);
+
+    let highs = solved.as_mut_ptr();
+    // Called once with the arrays at full size rather than twice to size them:
+    // the counts are bounded by the model's own dimensions, and a second call
+    // would recompute the entire IIS.
+    //
+    // SAFETY: `highs` is the live model owned by `solved` for the rest of this
+    // function. Each array is at least as long as the count HiGHS can write to
+    // it, and the two `col_status`/`row_status` outputs are passed as null,
+    // which the C API explicitly checks for.
+    let call = unsafe {
+        highs_sys::Highs_getIis(
+            highs,
+            &raw mut iis_num_col,
+            &raw mut iis_num_row,
+            col_index.as_mut_ptr(),
+            row_index.as_mut_ptr(),
+            col_bound.as_mut_ptr(),
+            row_bound.as_mut_ptr(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+        )
+    };
+    if call == highs_sys::kHighsStatusError {
+        return Err("HiGHS could not compute an irreducible infeasible subsystem for this model".to_owned());
+    }
+
+    let take = |count: i32, limit: usize| -> usize {
+        let count = usize::try_from(count).unwrap_or(0);
+        debug_assert!(count <= limit, "HiGHS reported {count} IIS entries for a model with {limit}");
+        count.min(limit)
+    };
+    let (iis_cols, iis_rows) = (take(iis_num_col, num_col), take(iis_num_row, num_row));
+
+    let gather = |count: usize, indices: &[i32], bounds: &[i32], names: &[String]| -> Vec<(String, &'static str)> {
+        indices[..count]
+            .iter()
+            .zip(&bounds[..count])
+            .filter_map(|(index, bound)| {
+                let index = usize::try_from(*index).ok()?;
+                Some((names.get(index)?.clone(), bound_status(*bound)))
+            })
+            .collect()
+    };
+
+    Ok(Iis {
+        status,
+        rows: gather(iis_rows, &row_index, &row_bound, &row_names),
+        cols: gather(iis_cols, &col_index, &col_bound, &variable_names),
+        relaxed_integrality,
+        skipped_sos,
+        duration: started.elapsed(),
+    })
+}
+
 /// Diagnose an unbounded model: which variables run to infinity, and how fast.
 ///
 /// Presolve is turned off for this solve. Presolve can conclude
@@ -384,6 +527,70 @@ mod tests {
         assert!(!report.is_unbounded(), "afiro is bounded, got {}", report.status);
         assert!(report.directions.is_empty(), "a bounded model has no ray");
         assert!(report.relaxed_integrality > 0, "afiro_ext is a MIP, so columns must have been relaxed");
+    }
+
+    #[test]
+    fn the_conflicting_rows_are_named() {
+        // c1 and c2 cannot both hold; c3 is satisfiable and must stay out.
+        let problem = parse("Minimize\n obj: x + y\nSubject To\n c1: x >= 5\n c2: x <= 3\n c3: y >= 1\nEnd");
+        let report = iis(&problem).expect("an infeasible LP must yield an IIS");
+
+        let named: Vec<&str> = report.rows.iter().map(|(name, _)| name.as_str()).collect();
+        assert!(named.contains(&"c1"), "c1 forces x up, got {named:?}");
+        assert!(named.contains(&"c2"), "c2 forces x down, got {named:?}");
+        assert!(!named.contains(&"c3"), "c3 is satisfiable and is not part of the conflict, got {named:?}");
+    }
+
+    /// The regression guard for `iis_strategy`. Under the default `Light`
+    /// strategy `HiGHS` performs only trivial bound and empty-row checks, so a
+    /// conflict that lives in the rows comes back empty.
+    #[test]
+    fn a_conflict_between_rows_is_found_not_just_trivial_bound_clashes() {
+        // No single row and no variable bound is inconsistent on its own: the
+        // infeasibility only appears when the two rows are taken together.
+        let problem = parse("Minimize\n obj: x + y\nSubject To\n c1: x + y >= 10\n c2: x + y <= 2\nEnd");
+        let report = iis(&problem).expect("an infeasible LP must yield an IIS");
+
+        assert!(!report.is_empty(), "the row conflict must be found; iis_strategy is probably back at its Light default");
+        let named: Vec<&str> = report.rows.iter().map(|(name, _)| name.as_str()).collect();
+        assert!(named.contains(&"c1") && named.contains(&"c2"), "both rows belong to the conflict, got {named:?}");
+    }
+
+    #[test]
+    fn a_feasible_model_yields_an_empty_subsystem_rather_than_a_wrong_one() {
+        let report = iis(&parse("Minimize\n obj: x\nSubject To\n c1: x >= 1\n c2: x <= 5\nEnd")).expect("a feasible LP must report");
+
+        assert!(report.is_empty(), "a feasible model has no irreducible infeasible subsystem");
+    }
+
+    #[test]
+    fn conflicting_variable_bounds_are_reported_against_the_variable() {
+        let problem = parse("Minimize\n obj: x\nSubject To\n c1: x + y >= 0\nBounds\n 5 <= x <= 3\nEnd");
+        let report = iis(&problem).expect("conflicting bounds must diagnose");
+
+        assert!(!report.is_empty(), "a bound conflict is an infeasible subsystem");
+    }
+
+    #[test]
+    fn an_iis_never_exceeds_the_model_it_came_from() {
+        let problem = parse("Minimize\n obj: x + y\nSubject To\n c1: x >= 5\n c2: x <= 3\n c3: y >= 1\nEnd");
+        let report = iis(&problem).expect("an infeasible LP must yield an IIS");
+
+        assert!(report.rows.len() <= problem.constraint_count(), "more IIS rows than the model has");
+        assert!(report.cols.len() <= problem.variables.len(), "more IIS columns than the model has");
+    }
+
+    #[test]
+    fn an_iis_on_a_model_with_no_variables_is_refused() {
+        assert!(iis(&LpProblem::default()).is_err(), "an empty model has no subsystem to isolate");
+    }
+
+    #[test]
+    fn bound_status_codes_map_to_their_highs_names() {
+        assert_eq!(bound_status(-1), "dropped");
+        assert_eq!(bound_status(2), "lower");
+        assert_eq!(bound_status(3), "upper");
+        assert_eq!(bound_status(4), "both");
     }
 
     #[test]

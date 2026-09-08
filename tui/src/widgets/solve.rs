@@ -531,6 +531,13 @@ fn append_diagnosis_block(lines: &mut Vec<Line<'static>>, diagnosis: &DiagnosisS
                 Span::styled(format!("{:.6}", diagnosis.total_violation), Style::default().fg(t.modified).add_modifier(Modifier::BOLD)),
                 Span::styled(format!("  (elastic solve: {:.3}s)", diagnosis.solve_time.as_secs_f64()), Style::default().fg(t.muted)),
             ]));
+            // This block answers "what is cheapest to relax". The IIS answers
+            // "what is minimally in conflict" — a different question, and often
+            // the more useful one when hunting a modelling mistake.
+            lines.push(Line::from(Span::styled(
+                "  This is the cheapest set to relax; press I for the minimal conflicting set.".to_owned(),
+                Style::default().fg(t.muted),
+            )));
             if !diagnosis.bound_conflicts.is_empty() {
                 lines.push(Line::from(Span::styled(
                     format!(
