@@ -10,6 +10,7 @@
 //! (`2 <= x + y <= 10`, expanded into two constraints like MPS RANGES).
 
 use std::borrow::Cow;
+use std::collections::HashSet;
 
 use crate::lexer::{LexerError, RawCoefficient, RawConstraint, RawObjective};
 use crate::model::ComparisonOp;
@@ -168,6 +169,21 @@ pub fn assemble_objectives<'input>(elems: &[SpannedElem<'input>]) -> Result<Vec<
     Ok(objectives)
 }
 
+/// Name the generated upper half of a ranged constraint, avoiding any name the
+/// user has written explicitly (`c1_rng`, else `c1_rng2`, `c1_rng3`, ...).
+///
+/// Without this a user constraint genuinely called `c1_rng` and the generated
+/// half of `c1: 2 <= x <= 10` collide, and one of the two is lost.
+fn range_upper_name<'input>(base: &'input str, taken: &HashSet<&'input str>) -> Cow<'input, str> {
+    let mut candidate = format!("{base}_rng");
+    let mut suffix: u32 = 1;
+    while taken.contains(candidate.as_str()) {
+        suffix += 1;
+        candidate = format!("{base}_rng{suffix}");
+    }
+    Cow::Owned(candidate)
+}
+
 /// Flip a comparison operator for moving it to the other side of a relation.
 const fn flip(op: ComparisonOp) -> ComparisonOp {
     match op {
@@ -192,6 +208,9 @@ const fn flip(op: ComparisonOp) -> ComparisonOp {
 /// Returns an error for malformed term sequences, a missing comparison
 /// operator, or a non-numeric right-hand side / range bound.
 pub fn assemble_constraints<'input>(elems: &[SpannedElem<'input>]) -> Result<Vec<RawConstraint<'input>>, LexerError> {
+    let explicit_names: HashSet<&'input str> =
+        elems.iter().filter_map(|(_, elem)| if let Elem::Name(n) = *elem { Some(n) } else { None }).collect();
+
     let mut constraints = Vec::new();
     let mut i = 0;
 
@@ -234,7 +253,7 @@ pub fn assemble_constraints<'input>(elems: &[SpannedElem<'input>]) -> Result<Vec
                 i = next;
 
                 let lower_name: Cow<'input, str> = name.map_or(Cow::Borrowed("__c__"), Cow::Borrowed);
-                let upper_name: Cow<'input, str> = name.map_or(Cow::Borrowed("__c__"), |n| Cow::Owned(format!("{n}_rng")));
+                let upper_name: Cow<'input, str> = name.map_or(Cow::Borrowed("__c__"), |n| range_upper_name(n, &explicit_names));
                 constraints.push(RawConstraint::Standard {
                     name: lower_name,
                     coefficients: mid.coefficients.clone(),
