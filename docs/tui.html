@@ -119,6 +119,7 @@
       <a href="#whatif">What-if</a>
       <a href="#rewrite">Rewrites</a>
       <a href="#diagnostics">Diagnostics</a>
+      <a href="#answers">Infeasible &amp; unbounded</a>
       <a href="#manners">Terminal manners</a>
       <a href="#keys">Key reference</a>
     </div>
@@ -430,6 +431,70 @@ time_limit = 300</code></pre>
   </div>
 </section>
 
+<section id="answers">
+  <div class="wrap">
+    <p class="sec-label">When it does not solve</p>
+    <h2>Four questions the status line cannot answer</h2>
+    <p class="lead">A solve that comes back <em>Infeasible</em> or <em>Unbounded</em> tells you the model is wrong and
+      nothing about where. These four reach past the solver's answer to its working.</p>
+
+    <h3><kbd>U</kbd> &mdash; which variable runs away</h3>
+    <p>An unbounded model has a direction you can travel forever while the objective keeps improving. HiGHS can produce
+      that direction as a certificate; this names the variables in it, with the bound each one is missing.</p>
+
+<pre class="tty"><code><span class="hdr">  Variables that run to infinity</span>
+  <span class="dim">give any one of these a finite bound in its ray direction to close the model</span>
+  <span class="dim">variable                       ray          cost         lower         upper</span>
+  production_x                <span class="bad">1.0000</span>        3.0000        0.0000            <span class="bad">+&#8734;</span></code></pre>
+
+    <p>When HiGHS declines to produce a ray, the pane falls back to naming candidates by inspection: variables the
+      objective pushes towards a bound they do not have, <em>and</em> which no row holds in that direction. Consulting
+      the matrix is what makes that list usable &mdash; most variables in a real model carry no explicit bound and are
+      capped by their rows, so without it the list would name nearly every column. It is labelled as a guess on screen.</p>
+
+    <h3><kbd>I</kbd> &mdash; the minimal conflicting set</h3>
+    <p>The infeasibility diagnosis on a solve (<kbd>e</kbd>) answers <em>what is cheapest to relax</em>, by total
+      violation. This answers the different question of <em>what is minimally in conflict</em>: a set of constraints and
+      bounds no proper subset of which is infeasible. When you are hunting a modelling mistake rather than negotiating a
+      capacity, the second is usually the one you want.</p>
+
+<pre class="tty"><code><span class="hdr">  Irreducible infeasible subsystem</span>
+  <span class="bad">2 row(s) and 1 bound(s) that cannot hold together</span>
+  <span class="dim">no proper subset of these is infeasible: relaxing any one of them removes this conflict</span>
+  <span class="dim">name                         bound</span>
+  cap                          <span class="bad">upper</span>
+  supply                       <span class="bad">lower</span></code></pre>
+
+    <h3><kbd>R</kbd> &mdash; how far a coefficient can move</h3>
+    <p>What-if (<kbd>E</kbd>) edits one right-hand side and re-solves. Ranging reads the optimal basis for the whole
+      interval at once, for every cost and every RHS, with no further solve &mdash; and the objective at each end of it.
+      The entry selected in the sidebar is shown in full at the top.</p>
+
+    <h3><kbd>B</kbd> &mdash; would another configuration be faster</h3>
+    <p>The same model solved under several HiGHS configurations, times side by side. The last row is the interesting
+      one: it applies <a href="#rewrite">the rewrite rules</a> first and charges their cost to the result, which is the
+      only honest way to answer whether the rewrite is helping.</p>
+
+<pre class="tty"><code>  <span class="dim">preset            status         total        solve   iterations</span>
+  default           Optimal       0.041s       0.038s          312
+  presolve off      Optimal       0.118s       0.115s          904
+  simplex dual      Optimal       0.038s       0.035s          298
+  <span class="ok">&#9656; local presolve  Optimal       0.029s       0.021s          201</span>
+
+  <span class="ok">fastest: local presolve &#8212; 1.41x over default</span></code></pre>
+
+    <div class="note"><b>Presets run one after another, not in parallel.</b> Six solves competing for the same cores
+      inflate each other's wall-clock by an amount that depends on how many finish early &mdash; which is precisely the
+      quantity being measured. Later presets are capped by a budget derived from the baseline, so one pathological
+      configuration cannot hold the sweep open. Each row also carries its objective: a configuration that returns a
+      <em>different</em> optimum is a bug to be flagged, not a speed-up to be taken.</div>
+
+    <div class="note"><b>A ray, an IIS and ranging are all LP concepts</b>, resting on a basis a MIP does not have. Each
+      pane relaxes integrality first and reports how many columns it relaxed, so a MIP still gets an answer and you know
+      which model the answer is about.</div>
+  </div>
+</section>
+
 <section id="manners">
   <div class="wrap">
     <p class="sec-label">Living in a terminal</p>
@@ -472,7 +537,11 @@ time_limit = 300</code></pre>
       <tr><td><kbd>E</kbd></td><td>What-if: edit the selected constraint's RHS and re-solve</td></tr>
       <tr><td><kbd>P</kbd></td><td>Rewrite: pick presolve rules, then compare original vs rewritten</td></tr>
       <tr><td><kbd>D</kbd></td><td>Diagnostics: why is the solve slow, and which rows and variables are to blame</td></tr>
-      <tr><td><kbd>e</kbd></td><td>Diagnose infeasibility (in the solve overlay)</td></tr>
+      <tr><td><kbd>B</kbd></td><td>Solve profile: the same model under several HiGHS configurations, times side by side</td></tr>
+      <tr><td><kbd>U</kbd></td><td>Unbounded: which variables run to infinity, and the bound that would stop them</td></tr>
+      <tr><td><kbd>I</kbd></td><td>Infeasible: the minimal conflicting set of constraints and bounds (IIS)</td></tr>
+      <tr><td><kbd>R</kbd></td><td>Ranging: how far each coefficient can move before the optimal basis changes</td></tr>
+      <tr><td><kbd>e</kbd></td><td>Diagnose infeasibility (in the solve overlay) — the cheapest set to relax</td></tr>
     </table></div>
 
     <h3>Diff, search and export</h3>
