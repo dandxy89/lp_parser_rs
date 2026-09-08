@@ -28,10 +28,17 @@ fn heading(lines: &mut Vec<Line<'static>>, title: &str, note: &str) {
 
 /// Render a bound, using the infinity sign where there is none.
 fn bound(value: f64) -> String {
+    number(value, 4)
+}
+
+/// Render a value at `precision` decimal places, using the infinity sign rather
+/// than Rust's `inf` so an unbounded quantity reads the same everywhere it
+/// appears in these panes.
+fn number(value: f64, precision: usize) -> String {
     if value.is_infinite() {
         if value.is_sign_negative() { "-\u{221e}".to_owned() } else { "+\u{221e}".to_owned() }
     } else {
-        format!("{value:.4}")
+        format!("{value:.precision$}")
     }
 }
 
@@ -334,7 +341,7 @@ pub fn ranging_lines(report: &Ranging, selected: Option<&str>) -> Vec<Line<'stat
             Style::default().fg(t.text),
         )));
         lines.push(Line::from(Span::styled(
-            format!("  objective   {:.6} at the low end, {:.6} at the high end", entry.down_objective, entry.up_objective),
+            format!("  objective   {} at the low end, {} at the high end", number(entry.down_objective, 6), number(entry.up_objective, 6)),
             Style::default().fg(t.muted),
         )));
         if !entry.contains_current() {
@@ -412,13 +419,13 @@ pub fn ranging_export(report: &Ranging) -> String {
         for entry in entries {
             let _ = writeln!(
                 out,
-                "{:<30}{:>16.6}{:>16}{:>16}{:>18.6}{:>18.6}",
+                "{:<30}{:>16}{:>16}{:>16}{:>18}{:>18}",
                 entry.name,
-                entry.current,
+                number(entry.current, 6),
                 bound(entry.down),
                 bound(entry.up),
-                entry.down_objective,
-                entry.up_objective
+                number(entry.down_objective, 6),
+                number(entry.up_objective, 6)
             );
         }
         out.push('\n');
@@ -432,4 +439,19 @@ pub fn ranging_export(report: &Ranging) -> String {
     }
     let _ = writeln!(out, "took {:.3}s", report.duration.as_secs_f64());
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_infinite_value_reads_as_the_infinity_sign_not_rusts_inf() {
+        // Ranges and the objectives at their endpoints must agree on how an
+        // unbounded quantity looks, wherever it appears in these panes.
+        assert_eq!(bound(f64::INFINITY), "+\u{221e}");
+        assert_eq!(bound(f64::NEG_INFINITY), "-\u{221e}");
+        assert_eq!(number(f64::INFINITY, 6), "+\u{221e}");
+        assert_eq!(number(2.5, 2), "2.50");
+    }
 }
