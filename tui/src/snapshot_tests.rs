@@ -250,6 +250,27 @@ fn snapshot_unbounded_ray_pane_120x40() {
     insta::assert_snapshot!(render(&mut app, 120, 40).backend());
 }
 
+/// Two rows that cannot both hold, with a third that can: the IIS must name
+/// the first two and leave the third out.
+const INFEASIBLE_LP: &str = "min\nobj: x + y\nst\nc1: x >= 5\nc2: x <= 3\nc3: y >= 1\nend\n";
+
+#[test]
+fn snapshot_iis_pane_120x40() {
+    let mut app = inspect_app_from(INFEASIBLE_LP);
+    let mut report = crate::highs_query::iis(&app.problem1).expect("an infeasible LP must yield an IIS");
+    // The footer carries the wall-clock time; a snapshot cannot.
+    report.duration = std::time::Duration::ZERO;
+    app.analysis = crate::state::AnalysisState::Done {
+        label: "Irreducible infeasible subsystem",
+        pane: crate::state::ScrollPane {
+            lines: crate::widgets::highs_query::iis_lines(&report),
+            scroll: 0,
+            export: Some(("iis.txt", crate::widgets::highs_query::iis_export(&report))),
+        },
+    };
+    insta::assert_snapshot!(render(&mut app, 120, 40).backend());
+}
+
 /// The clipboard yank is now derived from the same lines the widgets draw, by
 /// stripping their styles. Snapshot the plain text so a change to either the
 /// panel layout or the flattening shows up here.

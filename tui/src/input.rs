@@ -216,6 +216,7 @@ impl App {
             PaletteCommand::Diagnostics => self.open_diagnostics(),
             PaletteCommand::SolveProfile => self.open_profile(),
             PaletteCommand::UnboundedRay => self.open_unbounded_ray(),
+            PaletteCommand::Iis => self.open_iis(),
             PaletteCommand::ExportCsv => self.export_csv(),
             PaletteCommand::YankName => self.yank_name(),
             PaletteCommand::YankOld => self.yank_side(Side::Old),
@@ -376,6 +377,9 @@ impl App {
 
             // Unbounded ray: which variables run to infinity.
             KeyCode::Char('U') => self.open_unbounded_ray(),
+
+            // IIS: the minimal conflicting set.
+            KeyCode::Char('I') => self.open_iis(),
 
             // Export CSV (works in both modes).
             KeyCode::Char('w') => self.export_csv(),
@@ -721,6 +725,7 @@ impl App {
                 }
             }
             KeyCode::Char('e') => self.start_diagnosis_single(),
+            KeyCode::Char('I') => self.open_iis(),
             KeyCode::Char('w') => {
                 let written = match &self.solver.state {
                     SolveState::Done(result) => Some(
@@ -889,6 +894,7 @@ impl App {
                 }
             }
             KeyCode::Char('e') => self.start_diagnosis_both(),
+            KeyCode::Char('I') => self.open_iis(),
             KeyCode::Char('w') => {
                 let written = match &self.solver.state {
                     SolveState::DoneBoth(diff) => Some(
@@ -1326,6 +1332,18 @@ impl App {
                 lines: crate::widgets::highs_query::ray_lines(&report),
                 scroll: 0,
                 export: Some(("unbounded_ray.txt", crate::widgets::highs_query::ray_export(&report))),
+            })
+        });
+    }
+
+    /// `I` — the minimal set of constraints and bounds that cannot hold together.
+    pub(crate) fn open_iis(&mut self) {
+        self.spawn_analysis("Irreducible infeasible subsystem", |problem| {
+            let report = crate::highs_query::iis(problem)?;
+            Ok(crate::state::ScrollPane {
+                lines: crate::widgets::highs_query::iis_lines(&report),
+                scroll: 0,
+                export: Some(("iis.txt", crate::widgets::highs_query::iis_export(&report))),
             })
         });
     }

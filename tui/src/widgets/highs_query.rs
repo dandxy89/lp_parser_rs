@@ -3,7 +3,7 @@
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 
-use crate::highs_query::UnboundedRay;
+use crate::highs_query::{Iis, UnboundedRay};
 use crate::theme::theme;
 use crate::widgets::{rule_str, truncate_with_ellipsis};
 
@@ -182,6 +182,115 @@ pub fn ray_export(report: &UnboundedRay) -> String {
 
     if report.relaxed_integrality > 0 {
         let _ = writeln!(out, "\n{} integer column(s) relaxed", report.relaxed_integrality);
+    }
+    if report.skipped_sos > 0 {
+        let _ = writeln!(out, "{} SOS constraint(s) not modelled", report.skipped_sos);
+    }
+    let _ = writeln!(out, "took {:.3}s", report.duration.as_secs_f64());
+    out
+}
+
+/// Build the display lines for the irreducible-infeasible-subsystem pane.
+pub fn iis_lines(report: &Iis) -> Vec<Line<'static>> {
+    let t = theme();
+    let mut lines = Vec::new();
+
+    heading(&mut lines, "Irreducible infeasible subsystem", "");
+
+    if report.is_empty() {
+        let message = if crate::solver::status_is_infeasible(&report.status) {
+            "  HiGHS could not isolate a subsystem for this model"
+        } else {
+            "  this model is not infeasible \u{2014} there is no conflict to isolate"
+        };
+        lines.push(Line::from(Span::styled(message.to_owned(), Style::default().fg(t.muted))));
+        lines.push(Line::from(Span::styled(format!("  it solved as {}", report.status), Style::default().fg(t.muted))));
+        iis_footer(&mut lines, report);
+        return lines;
+    }
+
+    lines.push(Line::from(Span::styled(
+        format!("  {} row(s) and {} bound(s) that cannot hold together", report.rows.len(), report.cols.len()),
+        Style::default().fg(t.removed).add_modifier(Modifier::BOLD),
+    )));
+    lines.push(Line::from(Span::styled(
+        "  no proper subset of these is infeasible: relaxing any one of them removes this conflict".to_owned(),
+        Style::default().fg(t.muted),
+    )));
+    lines.push(Line::from(Span::styled(
+        "  (the elastic diagnosis on a solve, `e`, answers the different question of which is cheapest to relax)".to_owned(),
+        Style::default().fg(t.muted),
+    )));
+
+    entry_table(&mut lines, "Constraints", &report.rows);
+    entry_table(&mut lines, "Variable bounds", &report.cols);
+    iis_footer(&mut lines, report);
+    lines
+}
+
+/// One named section of the subsystem.
+fn entry_table(lines: &mut Vec<Line<'static>>, title: &str, entries: &[(String, &'static str)]) {
+    let t = theme();
+    if entries.is_empty() {
+        return;
+    }
+    heading(lines, title, "");
+    lines.push(Line::from(Span::styled(
+        format!("  {:<NAME_WIDTH$}   {}", "name", "bound"),
+        Style::default().fg(t.muted).add_modifier(Modifier::BOLD),
+    )));
+    for (name, bound_status) in entries {
+        lines.push(Line::from(vec![
+            Span::styled(format!("  {:<NAME_WIDTH$}", truncate_with_ellipsis(name, NAME_WIDTH)), Style::default().fg(t.text)),
+            Span::styled(format!("   {bound_status}"), Style::default().fg(t.removed)),
+        ]));
+    }
+}
+
+/// Caveats that apply to the whole subsystem report.
+fn iis_footer(lines: &mut Vec<Line<'static>>, report: &Iis) {
+    let t = theme();
+    lines.push(Line::from(""));
+    if report.relaxed_integrality > 0 {
+        lines.push(Line::from(Span::styled(
+            format!("  {} integer column(s) relaxed: an IIS is an LP concept", report.relaxed_integrality),
+            Style::default().fg(t.modified),
+        )));
+    }
+    if report.skipped_sos > 0 {
+        lines.push(Line::from(Span::styled(
+            format!("  {} SOS constraint(s) not modelled", report.skipped_sos),
+            Style::default().fg(t.modified),
+        )));
+    }
+    lines.push(Line::from(Span::styled(format!("  took {:.3}s", report.duration.as_secs_f64()), Style::default().fg(t.muted))));
+}
+
+/// Plain-text form of the subsystem report, for `w`.
+pub fn iis_export(report: &Iis) -> String {
+    use std::fmt::Write as _;
+
+    let mut out = String::with_capacity((report.rows.len() + report.cols.len()) * 48 + 256);
+    let _ = writeln!(out, "Irreducible infeasible subsystem\n\nstatus: {}", report.status);
+
+    if report.is_empty() {
+        out.push_str("no subsystem isolated\n");
+    } else {
+        let _ = writeln!(out, "{} row(s) and {} bound(s) that cannot hold together\n", report.rows.len(), report.cols.len());
+        for (title, entries) in [("constraints", &report.rows), ("variable bounds", &report.cols)] {
+            if entries.is_empty() {
+                continue;
+            }
+            let _ = writeln!(out, "{title}:");
+            for (name, bound_status) in entries {
+                let _ = writeln!(out, "  {name:<30} {bound_status}");
+            }
+            out.push('\n');
+        }
+    }
+
+    if report.relaxed_integrality > 0 {
+        let _ = writeln!(out, "{} integer column(s) relaxed", report.relaxed_integrality);
     }
     if report.skipped_sos > 0 {
         let _ = writeln!(out, "{} SOS constraint(s) not modelled", report.skipped_sos);
