@@ -105,6 +105,7 @@ pub fn build_inspect_summary_lines(
     inspect_value_row(&mut lines, "Integer", &vt.integer.to_string());
     inspect_value_row(&mut lines, "General", &vt.general.to_string());
     inspect_value_row(&mut lines, "Free", &vt.free.to_string());
+    inspect_value_row(&mut lines, "No bounds declared", &vt.unspecified.to_string());
     inspect_value_row(&mut lines, "Lower-bounded", &vt.lower_bounded.to_string());
     inspect_value_row(&mut lines, "Upper-bounded", &vt.upper_bounded.to_string());
     inspect_value_row(&mut lines, "Double-bounded", &vt.double_bounded.to_string());
@@ -381,6 +382,7 @@ fn build_variable_type_table(lines: &mut Vec<Line<'static>>, a: &ProblemAnalysis
     comparison_row_usize(lines, "Integer", W, va.integer, vb.integer);
     comparison_row_usize(lines, "General", W, va.general, vb.general);
     comparison_row_usize(lines, "Free", W, va.free, vb.free);
+    comparison_row_usize(lines, "No bounds declared", W, va.unspecified, vb.unspecified);
     comparison_row_usize(lines, "Lower-bounded", W, va.lower_bounded, vb.lower_bounded);
     comparison_row_usize(lines, "Upper-bounded", W, va.upper_bounded, vb.upper_bounded);
     comparison_row_usize(lines, "Double-bounded", W, va.double_bounded, vb.double_bounded);

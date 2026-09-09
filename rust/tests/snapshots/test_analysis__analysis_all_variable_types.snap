@@ -15,7 +15,8 @@ sparsity:
   max_vars_per_constraint: 3
 variables:
   type_distribution:
-    free: 1
+    free: 0
+    unspecified: 1
     general: 1
     lower_bounded: 0
     upper_bounded: 0
@@ -24,8 +25,7 @@ variables:
     integer: 0
     semi_continuous: 0
     sos: 0
-  free_variables:
-    - z
+  free_variables: []
   fixed_variables: []
   invalid_bounds: []
   unused_variables: []

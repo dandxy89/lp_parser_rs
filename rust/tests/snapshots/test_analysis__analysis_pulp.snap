@@ -15,7 +15,8 @@ sparsity:
   max_vars_per_constraint: 49
 variables:
   type_distribution:
-    free: 49
+    free: 1
+    unspecified: 48
     general: 13
     lower_bounded: 0
     upper_bounded: 0
@@ -26,54 +27,6 @@ variables:
     sos: 0
   free_variables:
     - PenaltyTree_48
-    - over_0
-    - over_10
-    - over_12
-    - over_14
-    - over_16
-    - over_18
-    - over_2
-    - over_20
-    - over_22
-    - over_24
-    - over_26
-    - over_28
-    - over_30
-    - over_32
-    - over_34
-    - over_36
-    - over_38
-    - over_4
-    - over_40
-    - over_42
-    - over_44
-    - over_46
-    - over_6
-    - over_8
-    - under_1
-    - under_11
-    - under_13
-    - under_15
-    - under_17
-    - under_19
-    - under_21
-    - under_23
-    - under_25
-    - under_27
-    - under_29
-    - under_3
-    - under_31
-    - under_33
-    - under_35
-    - under_37
-    - under_39
-    - under_41
-    - under_43
-    - under_45
-    - under_47
-    - under_5
-    - under_7
-    - under_9
   fixed_variables: []
   invalid_bounds: []
   unused_variables: []

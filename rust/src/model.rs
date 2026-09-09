@@ -239,22 +239,40 @@ impl Display for VariableKind {
     }
 }
 
-/// Finite bounds on a variable. `None` on a side means unbounded on that side.
+/// Declared bounds on a variable. `None` on a side means *undeclared*, not
+/// unbounded: the format's default applies, which for LP is `0` below and
+/// `+inf` above (see [`Self::effective_lower`] / [`Self::effective_upper`]).
 ///
-/// Free variables have both sides `None`. A fixed variable has `lower == upper`.
+/// A variable declared `free` is stored as an explicit `[-inf, +inf]`, so it is
+/// distinguishable from one that was simply never given bounds. Conflating the
+/// two is not a cosmetic matter: `x free` solved with a lower bound of `0`, and
+/// an undeclared `x` written back out as `x free`, are the same mistake in
+/// opposite directions. A fixed variable has `lower == upper`.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct VariableBounds {
-    /// Lower bound, if finite.
+    /// Lower bound as declared; `None` if never declared.
     pub lower: Option<f64>,
-    /// Upper bound, if finite.
+    /// Upper bound as declared; `None` if never declared.
     pub upper: Option<f64>,
 }
 
 impl VariableBounds {
-    /// Fully free (unbounded) bounds.
+    /// Explicitly free: `-inf <= x <= +inf`, as declared by `x free` in LP or
+    /// an `FR` bound in MPS.
+    ///
+    /// Both sides are set, deliberately. [`Self::unspecified`] is the variable
+    /// nobody bounded, which is a different thing and takes the format default.
     #[must_use]
     pub const fn free() -> Self {
+        Self { lower: Some(f64::NEG_INFINITY), upper: Some(f64::INFINITY) }
+    }
+
+    /// No bounds declared at all, so the format's defaults apply (`[0, +inf)`
+    /// in LP). This is the state of a variable that only ever appears in the
+    /// objective or a constraint.
+    #[must_use]
+    pub const fn unspecified() -> Self {
         Self { lower: None, upper: None }
     }
 
@@ -276,45 +294,53 @@ impl VariableBounds {
         Self { lower: Some(lb), upper: Some(ub) }
     }
 
-    /// Whether both sides are unbounded.
+    /// Whether the variable was declared unbounded in both directions.
+    ///
+    /// False for [`Self::unspecified`]: never declaring a bound is not the same
+    /// as declaring it infinite.
     #[must_use]
-    pub const fn is_free(self) -> bool {
+    pub fn is_free(self) -> bool {
+        let below = matches!(self.lower, Some(lower) if lower == f64::NEG_INFINITY);
+        let above = matches!(self.upper, Some(upper) if upper == f64::INFINITY);
+        below && above
+    }
+
+    /// Whether neither side was declared, so the format's defaults apply.
+    #[must_use]
+    pub const fn is_unspecified(self) -> bool {
         self.lower.is_none() && self.upper.is_none()
     }
 
     /// Merge a new bound declaration into existing bounds.
     ///
-    /// Each side is merged independently: a declaration that names a side
-    /// replaces that side, and leaves the other side untouched. An explicit
-    /// `free` declaration names neither side and so clears both.
+    /// Purely per-side: a declaration that names a side replaces that side and
+    /// leaves the other alone. `x free` names both sides (as `-inf`/`+inf`), so
+    /// it resets the variable without needing a special case; a kind-only
+    /// declaration such as MPS's `BV` names neither, and so leaves any bounds
+    /// already declared intact.
     #[must_use]
     pub const fn merge(self, new: Self) -> Self {
-        // `x free` is the only declaration that sets neither side, and it
-        // resets the variable rather than refining it.
-        if new.lower.is_none() && new.upper.is_none() {
-            return Self::free();
-        }
         Self {
             lower: if new.lower.is_some() { new.lower } else { self.lower },
             upper: if new.upper.is_some() { new.upper } else { self.upper },
         }
     }
 
-    /// Default lower bound assumed by solvers when none is set for integer-like kinds.
+    /// Lower bound a solver should use: the declared one, or the format default
+    /// of `0` when none was declared.
     ///
     /// A binary variable is canonically `[0, 1]`, so any explicit (redundant or
     /// contradictory) bound stored alongside the `Binary` kind is ignored here.
+    /// A variable declared `free` carries `-inf` as its lower bound and so
+    /// needs no special case here.
     #[must_use]
     pub const fn effective_lower(self, kind: VariableKind) -> f64 {
         if matches!(kind, VariableKind::Binary) {
             return 0.0;
         }
-        if let Some(lb) = self.lower {
-            return lb;
-        }
-        match kind {
-            VariableKind::Continuous | VariableKind::Sos if self.is_free() => f64::NEG_INFINITY,
-            _ => 0.0,
+        match self.lower {
+            Some(lower) => lower,
+            None => 0.0,
         }
     }
 
@@ -332,8 +358,11 @@ impl VariableBounds {
 
 impl Display for VariableBounds {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        if self.is_free() {
+            return f.write_str("free");
+        }
         match (self.lower, self.upper) {
-            (None, None) => f.write_str("free"),
+            (None, None) => f.write_str("unbounded"),
             (Some(lb), None) => write!(f, ">= {lb}"),
             (None, Some(ub)) => write!(f, "<= {ub}"),
             (Some(lb), Some(ub)) => write!(f, "{lb} .. {ub}"),
@@ -389,14 +418,18 @@ impl VariableType {
     pub const fn into_kind_and_bounds(self) -> (VariableKind, VariableBounds) {
         match self {
             Self::Free => (VariableKind::Continuous, VariableBounds::free()),
-            Self::General => (VariableKind::General, VariableBounds::free()),
+            // The discrete kinds carry no bound of their own: they say what the
+            // variable *is*, not what it is limited to, so anything already
+            // declared survives the merge and the format default applies
+            // otherwise.
+            Self::General => (VariableKind::General, VariableBounds::unspecified()),
             Self::LowerBound(lb) => (VariableKind::Continuous, VariableBounds::lower(lb)),
             Self::UpperBound(ub) => (VariableKind::Continuous, VariableBounds::upper(ub)),
             Self::DoubleBound(lb, ub) => (VariableKind::Continuous, VariableBounds::range(lb, ub)),
-            Self::Binary => (VariableKind::Binary, VariableBounds::free()),
-            Self::Integer => (VariableKind::Integer, VariableBounds::free()),
-            Self::SemiContinuous => (VariableKind::SemiContinuous, VariableBounds::free()),
-            Self::SOS => (VariableKind::Sos, VariableBounds::free()),
+            Self::Binary => (VariableKind::Binary, VariableBounds::unspecified()),
+            Self::Integer => (VariableKind::Integer, VariableBounds::unspecified()),
+            Self::SemiContinuous => (VariableKind::SemiContinuous, VariableBounds::unspecified()),
+            Self::SOS => (VariableKind::Sos, VariableBounds::unspecified()),
         }
     }
 }
@@ -422,9 +455,14 @@ pub struct Variable {
 impl Variable {
     #[must_use]
     #[inline]
-    /// Initialise a new continuous free `Variable`.
+    /// Initialise a continuous `Variable` with no bounds declared.
+    ///
+    /// This is what a variable first seen in the objective or a constraint
+    /// gets, so it must be [`VariableBounds::unspecified`] and not
+    /// [`VariableBounds::free`] — LP's default for such a variable is
+    /// `[0, +inf)`.
     pub const fn new(name: NameId) -> Self {
-        Self { name, kind: VariableKind::Continuous, bounds: VariableBounds::free() }
+        Self { name, kind: VariableKind::Continuous, bounds: VariableBounds::unspecified() }
     }
 
     #[inline]
@@ -610,8 +648,10 @@ mod tests {
         let var = Variable::new(x1);
         assert_eq!(interner.resolve(var.name), "x1");
         assert_eq!(var.kind, VariableKind::Continuous);
-        assert!(var.bounds.is_free());
-        assert!(var.bounds.is_free());
+        // Never declared, so the format default applies — not free.
+        assert!(var.bounds.is_unspecified());
+        assert!(!var.bounds.is_free());
+        assert_eq!(var.bounds.effective_lower(var.kind), 0.0);
 
         let var_binary = Variable::new(x).with_var_type(VariableType::Binary);
         assert_eq!(var_binary.kind, VariableKind::Binary);
@@ -627,6 +667,45 @@ mod tests {
 
         assert_eq!(Variable::new(x).with_var_type(VariableType::Binary), Variable::new(x).with_var_type(VariableType::Binary));
         assert_ne!(Variable::new(x).with_var_type(VariableType::Binary), Variable::new(y).with_var_type(VariableType::Binary));
+    }
+
+    /// The distinction the whole representation exists for: `x free` and a
+    /// variable nobody bounded are different models, and must not compare equal.
+    #[test]
+    fn free_and_undeclared_are_distinct() {
+        let free = VariableBounds::free();
+        let undeclared = VariableBounds::unspecified();
+
+        assert_ne!(free, undeclared, "conflating these solves the wrong model");
+        assert!(free.is_free() && !free.is_unspecified());
+        assert!(undeclared.is_unspecified() && !undeclared.is_free());
+        assert_eq!(undeclared, VariableBounds::default(), "the default is undeclared, not free");
+    }
+
+    #[test]
+    fn effective_bounds_follow_the_declaration() {
+        // Undeclared takes LP's default of [0, +inf).
+        let undeclared = VariableBounds::unspecified();
+        assert_eq!(undeclared.effective_lower(VariableKind::Continuous), 0.0);
+        assert_eq!(undeclared.effective_upper(VariableKind::Continuous), f64::INFINITY);
+
+        // Declared free is unbounded both ways.
+        let free = VariableBounds::free();
+        assert_eq!(free.effective_lower(VariableKind::Continuous), f64::NEG_INFINITY);
+        assert_eq!(free.effective_upper(VariableKind::Continuous), f64::INFINITY);
+
+        // A binary is canonically [0, 1] whatever it was declared with.
+        assert_eq!(free.effective_lower(VariableKind::Binary), 0.0);
+        assert_eq!(free.effective_upper(VariableKind::Binary), 1.0);
+    }
+
+    #[test]
+    fn a_kind_only_declaration_leaves_declared_bounds_alone() {
+        // MPS's `BV`/`LI` and LP's `general`/`binary` sections say what a
+        // variable is, not what it is limited to. Merging one used to reset the
+        // bounds to free, because that is what "names neither side" meant.
+        let (_, kind_only) = VariableType::Binary.into_kind_and_bounds();
+        assert_eq!(VariableBounds::range(2.0, 5.0).merge(kind_only), VariableBounds::range(2.0, 5.0));
     }
 
     #[test]

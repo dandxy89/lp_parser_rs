@@ -7,7 +7,7 @@ use std::path::Path;
 use std::time::{Duration, Instant};
 
 use lp_parser_rs::interner::NameId;
-use lp_parser_rs::model::{ComparisonOp, Constraint, Variable, VariableKind};
+use lp_parser_rs::model::{ComparisonOp, Constraint, Variable};
 use lp_parser_rs::problem::LpProblem;
 
 /// Result returned after a successful solve.
@@ -385,14 +385,10 @@ pub(crate) fn variable_bounds(variable: Option<&Variable>) -> (bool, f64, f64) {
     let Some(v) = variable else {
         return (false, 0.0, f64::INFINITY);
     };
-    // NOTE: `VariableBounds::effective_lower` would return -inf here for a
-    // variable whose bounds are both `None`, but the parser stores an explicit
-    // `x free` and an undeclared variable identically, so `is_free()` cannot
-    // tell them apart. Defaulting to 0 is right for the common (undeclared)
-    // case and wrong for an explicit `free`; the fix belongs in the parser,
-    // which needs to represent the two distinctly.
-    let upper_default = if matches!(v.kind, VariableKind::Binary) { 1.0 } else { f64::INFINITY };
-    (v.kind.is_integer(), v.bounds.lower.unwrap_or(0.0), v.bounds.upper.unwrap_or(upper_default))
+    // Delegated rather than reimplemented: `effective_lower` is the one place
+    // that knows a declared-`free` variable has no lower bound while an
+    // undeclared one defaults to zero, and that a binary is canonically [0, 1].
+    (v.kind.is_integer(), v.bounds.effective_lower(v.kind), v.bounds.effective_upper(v.kind))
 }
 
 /// Objective coefficients of the problem's primary objective, keyed by variable.
@@ -1192,6 +1188,32 @@ empty =\n";
         model.make_quiet();
         assert!(set_option_value(&mut model, "made_up_option", "7").is_err(), "an unknown option must be refused");
         assert!(set_option_value(&mut model, "presolve", "off").is_ok(), "a known option must still apply afterwards");
+    }
+
+    /// The regression guard for the solve half of the free/undeclared
+    /// conflation: `x free` was handed to `HiGHS` with a lower bound of 0, so a
+    /// model whose optimum is negative silently returned the wrong answer.
+    #[test]
+    fn test_a_declared_free_variable_may_go_negative() {
+        // Minimising x subject to x >= -5, with x declared free. The optimum is
+        // -5; clamping x at 0 would report 0 instead.
+        let problem = LpProblem::parse("Minimize\n obj: x\nSubject To\n c1: x >= -5\nBounds\n x free\nEnd").expect("must parse");
+        let result = solve_problem(&problem).expect("a bounded LP must solve");
+
+        assert_eq!(result.status, "Optimal");
+        let objective = result.objective_value.expect("an optimal solve has an objective");
+        assert!((objective - -5.0).abs() < 1e-9, "a free x must reach -5, got {objective}");
+    }
+
+    #[test]
+    fn test_an_undeclared_variable_keeps_the_lp_default_of_zero() {
+        // The same model without the `free` declaration: LP says x >= 0, so the
+        // optimum is 0, not -5.
+        let problem = LpProblem::parse("Minimize\n obj: x\nSubject To\n c1: x >= -5\nEnd").expect("must parse");
+        let result = solve_problem(&problem).expect("a bounded LP must solve");
+
+        let objective = result.objective_value.expect("an optimal solve has an objective");
+        assert!((objective - 0.0).abs() < 1e-9, "an undeclared x is non-negative, got {objective}");
     }
 
     #[test]

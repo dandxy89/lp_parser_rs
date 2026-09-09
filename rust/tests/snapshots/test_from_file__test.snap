@@ -72,8 +72,8 @@ variables:
   - name: x1
     kind: Continuous
     bounds:
-      lower: ~
-      upper: ~
+      lower: -inf
+      upper: inf
   - name: x2
     kind: Continuous
     bounds:

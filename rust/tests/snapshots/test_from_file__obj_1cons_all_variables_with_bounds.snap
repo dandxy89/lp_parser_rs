@@ -29,8 +29,8 @@ variables:
   - name: x
     kind: Continuous
     bounds:
-      lower: ~
-      upper: ~
+      lower: -inf
+      upper: inf
   - name: y
     kind: General
     bounds:

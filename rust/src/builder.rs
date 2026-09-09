@@ -136,11 +136,13 @@ mod tests {
 
     #[test]
     fn test_builder_auto_creates_referenced_variable() {
-        // "z" is referenced but never declared: it becomes continuous + free.
+        // "z" is referenced but never declared, so it is continuous with no
+        // bounds of its own and takes LP's default of [0, +inf) — not free.
         let problem = ProblemBuilder::new().objective("obj", &[("z", 1.0)]).build();
         let z = problem.name_id("z").expect("z interned via objective term");
         assert_eq!(problem.variables[&z].kind, VariableKind::Continuous);
-        assert!(problem.variables[&z].bounds.is_free());
+        assert!(problem.variables[&z].bounds.is_unspecified());
+        assert!(!problem.variables[&z].bounds.is_free());
     }
 
     #[test]

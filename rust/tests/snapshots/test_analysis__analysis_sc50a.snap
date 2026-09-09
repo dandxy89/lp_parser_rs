@@ -15,7 +15,8 @@ sparsity:
   max_vars_per_constraint: 4
 variables:
   type_distribution:
-    free: 48
+    free: 0
+    unspecified: 48
     general: 0
     lower_bounded: 0
     upper_bounded: 0
@@ -24,55 +25,7 @@ variables:
     integer: 0
     semi_continuous: 0
     sos: 0
-  free_variables:
-    - COL00001
-    - COL00002
-    - COL00003
-    - COL00004
-    - COL00005
-    - COL00006
-    - COL00007
-    - COL00008
-    - COL00009
-    - COL00010
-    - COL00011
-    - COL00012
-    - COL00013
-    - COL00014
-    - COL00015
-    - COL00016
-    - COL00017
-    - COL00018
-    - COL00019
-    - COL00020
-    - COL00021
-    - COL00022
-    - COL00023
-    - COL00024
-    - COL00025
-    - COL00026
-    - COL00027
-    - COL00028
-    - COL00029
-    - COL00030
-    - COL00031
-    - COL00032
-    - COL00033
-    - COL00034
-    - COL00035
-    - COL00036
-    - COL00037
-    - COL00038
-    - COL00039
-    - COL00040
-    - COL00041
-    - COL00042
-    - COL00043
-    - COL00044
-    - COL00045
-    - COL00046
-    - COL00047
-    - COL00048
+  free_variables: []
   fixed_variables: []
   invalid_bounds: []
   unused_variables: []
