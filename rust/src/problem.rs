@@ -1099,7 +1099,7 @@ fn generate_constraint_name(
 }
 
 /// Overwrite a constraint's name, whichever variant it is.
-fn set_constraint_name(constraint: &mut Constraint, name_id: NameId) {
+const fn set_constraint_name(constraint: &mut Constraint, name_id: NameId) {
     match constraint {
         Constraint::Standard { name, .. } | Constraint::SOS { name, .. } => {
             *name = name_id;

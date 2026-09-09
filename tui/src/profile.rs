@@ -135,7 +135,12 @@ fn objective_differs(baseline: Option<f64>, candidate: Option<f64>) -> bool {
 /// The `SolveResult` is dropped before returning: on a large model each one
 /// carries a value and a dual for every row and column, and the sweep needs
 /// four numbers from it.
-fn measure(problem: &LpProblem, preset: &Preset, budget: Option<Duration>, baseline: Option<f64>) -> Result<(Measurement, Option<PresolveStats>), String> {
+fn measure(
+    problem: &LpProblem,
+    preset: &Preset,
+    budget: Option<Duration>,
+    baseline: Option<f64>,
+) -> Result<(Measurement, Option<PresolveStats>), String> {
     let started = Instant::now();
 
     let mut options: Vec<(String, String)> = preset.options.iter().map(|(key, value)| ((*key).to_owned(), (*value).to_owned())).collect();
@@ -194,10 +199,7 @@ pub fn run_profile(problem: &LpProblem) -> Result<Profile, String> {
     if let Ok((measurement, _)) = &mut baseline_run {
         measurement.differs = false;
     }
-    let budget = baseline_run
-        .as_ref()
-        .ok()
-        .map_or(MIN_BUDGET, |(m, _)| (m.total_time * BUDGET_FACTOR).max(MIN_BUDGET));
+    let budget = baseline_run.as_ref().ok().map_or(MIN_BUDGET, |(m, _)| (m.total_time * BUDGET_FACTOR).max(MIN_BUDGET));
     runs.push(Run { label: PRESETS[0].label, outcome: baseline_run.map(|(m, _)| m) });
 
     for preset in &PRESETS[1..] {
@@ -263,12 +265,7 @@ mod tests {
         let baseline = profile.baseline.expect("the baseline must solve");
         for run in &profile.runs {
             let measurement = run.outcome.as_ref().unwrap_or_else(|e| panic!("preset {} failed: {e}", run.label));
-            assert!(
-                !measurement.differs,
-                "preset {} returned objective {:?}, baseline was {baseline}",
-                run.label,
-                measurement.objective
-            );
+            assert!(!measurement.differs, "preset {} returned objective {:?}, baseline was {baseline}", run.label, measurement.objective);
         }
     }
 

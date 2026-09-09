@@ -88,11 +88,7 @@ fn run_line(run: &Run, fastest: bool) -> Line<'static> {
 
     match &run.outcome {
         Ok(measurement) => {
-            let label_style = if fastest {
-                Style::default().fg(t.added).add_modifier(Modifier::BOLD)
-            } else {
-                Style::default().fg(t.text)
-            };
+            let label_style = if fastest { Style::default().fg(t.added).add_modifier(Modifier::BOLD) } else { Style::default().fg(t.text) };
             let status_style = if measurement.status == "Optimal" { Style::default().fg(t.added) } else { Style::default().fg(t.modified) };
             Line::from(vec![
                 Span::styled(format!("{marker}{:<LABEL_WIDTH$}  ", run.label), label_style),
@@ -121,20 +117,14 @@ fn footer(lines: &mut Vec<Line<'static>>, profile: &Profile) {
             format!("  fastest: {label} \u{2014} {factor:.2}x over default"),
             Style::default().fg(t.added).add_modifier(Modifier::BOLD),
         ))),
-        None => lines.push(Line::from(Span::styled(
-            "  no configuration beat the default".to_owned(),
-            Style::default().fg(t.muted),
-        ))),
+        None => lines.push(Line::from(Span::styled("  no configuration beat the default".to_owned(), Style::default().fg(t.muted)))),
     }
 
     if let Some(rewrite) = &profile.rewrite {
         lines.push(Line::from(Span::styled(format!("  local presolve: {}", rewrite.headline()), Style::default().fg(t.muted))));
     }
     // Name the value every `differs` flag above was measured against.
-    lines.push(Line::from(Span::styled(
-        format!("  baseline objective {}", objective(profile.baseline)),
-        Style::default().fg(t.muted),
-    )));
+    lines.push(Line::from(Span::styled(format!("  baseline objective {}", objective(profile.baseline)), Style::default().fg(t.muted))));
     lines.push(Line::from(Span::styled(
         format!("  budget {} per preset after the baseline \u{2022} sweep took {}", seconds(profile.budget), seconds(profile.duration)),
         Style::default().fg(t.muted),
