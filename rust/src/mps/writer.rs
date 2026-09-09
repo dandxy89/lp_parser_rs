@@ -79,18 +79,13 @@
 //!   keeps it correct at the cost of re-parsing as `DoubleBound(0, ub)`
 //!   rather than `UpperBound(ub)` (the same feasible region, a different
 //!   variant).
-//! - **Free-default conversion caveat**: [`LpProblem`](crate::problem::LpProblem) defaults an
-//!   undeclared variable that only appears in constraints (never in a
-//!   `Bounds`/`Free`/etc. section, and never given an explicit bound) to
-//!   [`VariableType::Free`](crate::model::VariableType::Free), which this writer faithfully emits as an `FR`
-//!   bound. LP format's own default for such a variable is `[0, +inf)`, not
-//!   free -- so converting an LP file straight through this writer without
-//!   ever having declared the variable's bounds widens its feasible region
-//!   to include negative values. This is not a writer bug (the LP-side
-//!   default is deliberately preserved rather than silently narrowed back
-//!   down), but it is a real semantic difference to be aware of when the
-//!   MPS output feeds another solver: declare bounds explicitly in the LP
-//!   source (even a redundant `x >= 0`) if the distinction matters.
+//! - **Undeclared variables take the MPS default**: a variable that only ever
+//!   appears in the objective or a constraint gets no `BOUNDS` entry, which
+//!   MPS reads as `[0, +inf)` — the same default LP gives it. A variable
+//!   actually declared `x free` carries an explicit `[-inf, +inf]` and is
+//!   written as `FR`. The two used to share a representation, and this writer
+//!   emitted `FR` for both, widening every undeclared variable's feasible
+//!   region to include negatives on the way through.
 
 use std::fmt::Write;
 
@@ -558,10 +553,13 @@ fn write_variable_bound(output: &mut String, var_name: &str, kind: VariableKind,
                 VariableKind::Integer | VariableKind::General => {
                     write_bound_value(output, "LO", var_name, 0.0, precision).expect("fmt::Write to String is infallible");
                 }
-                VariableKind::Continuous => {
-                    write_bound_flag(output, "FR", var_name).expect("fmt::Write to String is infallible");
-                }
-                VariableKind::Sos => {}
+                // No bound was declared, so say nothing: MPS's own default for
+                // a column with no BOUNDS entry is [0, +inf), which is exactly
+                // what the source meant. Writing `FR` here would state a bound
+                // the input never had. An explicit `x free` does not reach this
+                // arm — it carries [-inf, +inf] and is written as `FR` by
+                // `write_double_bound`.
+                VariableKind::Continuous | VariableKind::Sos => {}
                 VariableKind::Binary | VariableKind::SemiContinuous => unreachable!("handled above"),
             }
             Ok(())
@@ -1282,6 +1280,22 @@ ENDATA
 
         let x1 = &reparsed.variables[&reparsed.name_id("x1").unwrap()];
         assert_eq!(x1.bounds, VariableBounds::range(0.0, 20.0));
+    }
+
+    /// The regression guard for the MPS writer half of the free/undeclared
+    /// conflation, which this module's docs used to carry as an accepted
+    /// caveat: an undeclared variable was emitted as `FR`, widening its
+    /// feasible region to include negatives on the way to another solver.
+    #[test]
+    fn an_undeclared_variable_gets_no_bounds_entry() {
+        let source = "minimize\nobj: x + y\nsubject to\nc1: x + y >= 2\nbounds\ny free\nend\n";
+        let problem = LpProblem::parse(source).expect("fixture must parse");
+        let written = write_mps_string(&problem).expect("must write");
+
+        assert!(written.contains(" FR "), "the declared-free y must be written as FR:\n{written}");
+        let free_lines: Vec<&str> = written.lines().filter(|line| line.contains(" FR ")).collect();
+        assert_eq!(free_lines.len(), 1, "only y is free, got:\n{written}");
+        assert!(free_lines[0].ends_with('y'), "the FR bound must be y's, got {:?}", free_lines[0]);
     }
 
     #[test]

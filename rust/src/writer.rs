@@ -239,15 +239,22 @@ fn write_bounds_section(output: &mut String, problem: &LpProblem, options: &LpWr
 
 /// Whether a variable should appear in the Bounds section.
 ///
+/// A variable with no declared bounds is omitted entirely: LP's default for it
+/// is `[0, +inf)`, and writing anything at all would state a bound the input
+/// never had. Emitting `x free` here — as this did while "free" and "no bounds
+/// declared" shared a representation — silently widened every undeclared
+/// variable's feasible region to include negatives on the way out.
+///
 /// Continuous free variables are emitted as `x free` so round-trips preserve
-/// the explicit free declaration. Discrete kinds with free bounds rely on
-/// type sections instead and skip the Bounds section.
+/// the explicit declaration. Discrete kinds rely on their type sections.
 fn needs_bounds_declaration(variable: &Variable) -> bool {
     use crate::model::VariableKind;
+    if variable.bounds.is_unspecified() {
+        return false;
+    }
     if !variable.bounds.is_free() {
         return true;
     }
-    // Explicit free continuous variables are written as `x free`.
     variable.kind == VariableKind::Continuous
 }
 
@@ -259,10 +266,14 @@ fn write_variable_bounds(output: &mut String, variable: &Variable, interner: &Na
     }
 
     let var_name = interner.resolve(variable.name);
+    if variable.bounds.is_free() && variable.kind == VariableKind::Continuous {
+        writeln!(output, "{var_name} free")?;
+        return Ok(());
+    }
     match (variable.bounds.lower, variable.bounds.upper) {
-        (None, None) if variable.kind == VariableKind::Continuous => {
-            writeln!(output, "{var_name} free")?;
-        }
+        // Unreachable in practice: `needs_bounds_declaration` returns false for
+        // an undeclared variable, so there is nothing to write.
+        (None, None) => {}
         (Some(bound), None) => {
             write!(output, "{var_name} >= ")?;
             write_number(output, bound, options.decimal_precision)?;
@@ -279,7 +290,6 @@ fn write_variable_bounds(output: &mut String, variable: &Variable, interner: &Na
             write_number(output, upper, options.decimal_precision)?;
             writeln!(output)?;
         }
-        (None, None) => {}
     }
 
     Ok(())
@@ -834,6 +844,28 @@ End";
             let b_id = b.name_id(name).unwrap_or_else(|| panic!("variable '{name}' missing after round-trip"));
             assert_eq!((var.kind, var.bounds), (b.variables[&b_id].kind, b.variables[&b_id].bounds), "variable '{name}' type");
         }
+    }
+
+    /// The regression guard for the LP writer half of the free/undeclared
+    /// conflation: an undeclared variable used to come back out as `x free`,
+    /// which widened its feasible region to include negatives on every
+    /// round-trip.
+    #[test]
+    fn an_undeclared_variable_is_not_written_as_free() {
+        let source = "minimize\nobj: x + y\nsubject to\nc1: x + y >= 2\nbounds\ny free\nend\n";
+        let problem = LpProblem::parse(source).expect("fixture must parse");
+        let written = write_lp_string(&problem);
+
+        assert!(!written.contains("x free"), "x was never declared free:\n{written}");
+        assert!(written.contains("y free"), "y was declared free and must stay so:\n{written}");
+
+        // And it survives a second pass: x keeps LP's default, y keeps its
+        // explicit freedom.
+        let reparsed = LpProblem::parse(&written).expect("output must re-parse");
+        let x = reparsed.name_id("x").expect("x present");
+        let y = reparsed.name_id("y").expect("y present");
+        assert!(reparsed.variables[&x].bounds.is_unspecified(), "x must stay undeclared");
+        assert!(reparsed.variables[&y].bounds.is_free(), "y must stay free");
     }
 
     #[test]

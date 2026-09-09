@@ -109,7 +109,9 @@ pub struct SparsityMetrics {
 pub struct VariableAnalysis {
     /// Distribution of variable types
     pub type_distribution: VariableTypeDistribution,
-    /// Variables with no explicit bounds (truly free)
+    /// Variables declared free (`x free`), and so unbounded in both directions.
+    /// A variable that simply never had bounds declared is not listed here —
+    /// it takes the format default of `[0, +inf)`.
     pub free_variables: Vec<String>,
     /// Variables where lower bound equals upper bound
     pub fixed_variables: Vec<FixedVariable>,
@@ -125,8 +127,12 @@ pub struct VariableAnalysis {
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Debug, Clone, Default)]
 pub struct VariableTypeDistribution {
-    /// Free (unbounded) variables
+    /// Variables declared unbounded in both directions (`x free`).
     pub free: usize,
+    /// Continuous variables with no bounds declared at all, which take the
+    /// format's default of `[0, +inf)`. Counted apart from `free`: never
+    /// declaring a bound is not the same as declaring it infinite.
+    pub unspecified: usize,
     /// General (non-negative) variables
     pub general: usize,
     /// Lower-bounded only
@@ -419,7 +425,7 @@ impl Display for ProblemAnalysis {
         writeln!(
             f,
             "  Continuous: {} | Binary: {} | Integer: {}",
-            vt.general + vt.free + vt.lower_bounded + vt.upper_bounded + vt.double_bounded,
+            vt.general + vt.free + vt.unspecified + vt.lower_bounded + vt.upper_bounded + vt.double_bounded,
             vt.binary,
             vt.integer
         )?;
@@ -641,11 +647,15 @@ impl LpProblem {
                 VariableKind::General => type_distribution.general += 1,
                 VariableKind::SemiContinuous => type_distribution.semi_continuous += 1,
                 VariableKind::Sos => type_distribution.sos += 1,
+                // Declared-free is checked before the per-side shapes: it is
+                // stored as an explicit [-inf, +inf], which would otherwise read
+                // as an ordinary double bound.
+                VariableKind::Continuous if variable.bounds.is_free() => {
+                    type_distribution.free += 1;
+                    free_variables.push(name_str.to_string());
+                }
                 VariableKind::Continuous => match (variable.bounds.lower, variable.bounds.upper) {
-                    (None, None) => {
-                        type_distribution.free += 1;
-                        free_variables.push(name_str.to_string());
-                    }
+                    (None, None) => type_distribution.unspecified += 1,
                     (Some(_), None) => type_distribution.lower_bounded += 1,
                     (None, Some(_)) => type_distribution.upper_bounded += 1,
                     (Some(lower), Some(upper)) => {
@@ -675,6 +685,7 @@ impl LpProblem {
 
         debug_assert_eq!(
             type_distribution.free
+                + type_distribution.unspecified
                 + type_distribution.general
                 + type_distribution.lower_bounded
                 + type_distribution.upper_bounded

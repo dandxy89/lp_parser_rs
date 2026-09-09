@@ -1738,7 +1738,8 @@ End";
         let p = LpProblem::parse("minimize\nx1\nsubject to\nc1: x1 <= 1\ngenerals\nbinaries\nend").unwrap();
         assert_eq!(p.constraint_count(), 1);
         let x1 = p.name_id("x1").unwrap();
-        assert!(p.variables[&x1].bounds.is_free());
+        // Empty type sections declare nothing, so x1 keeps LP's default bounds.
+        assert!(p.variables[&x1].bounds.is_unspecified());
     }
 
     // Parsed RHS values round-trip bit-exactly from source text.

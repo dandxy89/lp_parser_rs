@@ -1,6 +1,5 @@
 ---
 source: tui/src/snapshot_tests.rs
-assertion_line: 169
 expression: text
 ---
   a.lp  →  b.lp
@@ -29,6 +28,7 @@ expression: text
   Integer                      0           0           —
   General                      0           0           —
   Free                         0           0           —
+  No bounds declared           0           0           —
   Lower-bounded                0           0           —
   Upper-bounded                0           0           —
   Double-bounded               2           2           —

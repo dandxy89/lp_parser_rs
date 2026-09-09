@@ -16,6 +16,7 @@ sparsity:
 variables:
   type_distribution:
     free: 1
+    unspecified: 0
     general: 1
     lower_bounded: 0
     upper_bounded: 0

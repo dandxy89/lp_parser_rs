@@ -1519,7 +1519,7 @@ mod tests {
         let entry = entry.unwrap();
         assert_eq!(entry.kind, DiffKind::Added);
         assert!(entry.old_type.is_none());
-        assert_eq!(entry.new_type, Some(VarSpec { kind: VariableKind::Binary, bounds: VariableBounds::free() }));
+        assert_eq!(entry.new_type, Some(VarSpec { kind: VariableKind::Binary, bounds: VariableBounds::unspecified() }));
     }
 
     #[test]
@@ -1532,7 +1532,7 @@ mod tests {
         let entry = entry.unwrap();
         assert_eq!(entry.kind, DiffKind::Removed);
         // The General section in LP format sets VariableType::General
-        assert_eq!(entry.old_type, Some(VarSpec { kind: VariableKind::General, bounds: VariableBounds::free() }));
+        assert_eq!(entry.old_type, Some(VarSpec { kind: VariableKind::General, bounds: VariableBounds::unspecified() }));
         assert!(entry.new_type.is_none());
     }
 
@@ -1546,7 +1546,7 @@ mod tests {
         let entry = entry.unwrap();
         assert_eq!(entry.kind, DiffKind::Modified);
         assert_eq!(entry.old_type, Some(VarSpec { kind: VariableKind::Continuous, bounds: VariableBounds::free() }));
-        assert_eq!(entry.new_type, Some(VarSpec { kind: VariableKind::Binary, bounds: VariableBounds::free() }));
+        assert_eq!(entry.new_type, Some(VarSpec { kind: VariableKind::Binary, bounds: VariableBounds::unspecified() }));
     }
 
     #[test]
@@ -1665,14 +1665,14 @@ mod tests {
             name: "x".to_string(),
             kind: DiffKind::Added,
             old_type: None,
-            new_type: Some(VarSpec { kind: VariableKind::Binary, bounds: VariableBounds::free() }),
+            new_type: Some(VarSpec { kind: VariableKind::Binary, bounds: VariableBounds::unspecified() }),
         };
         assert_diff_entry(&added_var, "x", DiffKind::Added);
 
         let removed_var = VariableDiffEntry {
             name: "y".to_string(),
             kind: DiffKind::Removed,
-            old_type: Some(VarSpec { kind: VariableKind::Integer, bounds: VariableBounds::free() }),
+            old_type: Some(VarSpec { kind: VariableKind::Integer, bounds: VariableBounds::unspecified() }),
             new_type: None,
         };
         assert_diff_entry(&removed_var, "y", DiffKind::Removed);

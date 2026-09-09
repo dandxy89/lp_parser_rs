@@ -475,8 +475,8 @@ variables:
   - name: X07
     kind: Continuous
     bounds:
-      lower: ~
-      upper: ~
+      lower: -inf
+      upper: inf
   - name: X08
     kind: Continuous
     bounds:

@@ -433,9 +433,11 @@ mod tests {
             (VariableType::DoubleBound(-10.0, 10.0), -10.0, 10.0, false),
             // Semi-continuous is approximated as a continuous non-negative variable.
             (VariableType::SemiContinuous, 0.0, f64::INFINITY, false),
-            // SOS membership carries no bounds of its own; a free SOS variable is
-            // unbounded below like any continuous free variable.
-            (VariableType::SOS, f64::NEG_INFINITY, f64::INFINITY, false),
+            // SOS membership carries no bounds of its own, so the format default
+            // of [0, +inf) applies — the same treatment the MPS writer gives an
+            // SOS column with no BOUNDS entry. Only an explicit `free` makes a
+            // variable unbounded below.
+            (VariableType::SOS, 0.0, f64::INFINITY, false),
         ];
         for (vt, lb, ub, is_int) in cases {
             let a = adapter(vt.clone());

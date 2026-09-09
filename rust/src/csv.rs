@@ -172,12 +172,16 @@ End
         // Variables: the `type` column reports the variable kind; bound shape
         // lives in the separate lower_bound/upper_bound columns. These are all
         // continuous variables that differ only in their bounds.
+        //
+        // `w` is declared `free` and so carries explicit infinities. A variable
+        // with no bounds declared at all would show two empty columns instead —
+        // the export distinguishes the two, because the model does.
         let var_lines = read_lines(&dir.join("variables.csv"));
         assert_eq!(var_lines[0], "variable_name,type,lower_bound,upper_bound");
         assert!(var_lines.contains(&"x,Continuous,1,".to_string()), "got: {var_lines:?}");
         assert!(var_lines.contains(&"y,Continuous,,5".to_string()), "got: {var_lines:?}");
         assert!(var_lines.contains(&"z,Continuous,2,8".to_string()), "got: {var_lines:?}");
-        assert!(var_lines.contains(&"w,Continuous,,".to_string()), "got: {var_lines:?}");
+        assert!(var_lines.contains(&"w,Continuous,-inf,inf".to_string()), "got: {var_lines:?}");
         assert_eq!(var_lines.len(), 5);
 
         fs::remove_dir_all(&dir).expect("cleanup failed");

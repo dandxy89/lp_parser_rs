@@ -1332,10 +1332,9 @@ fn split_dense_rows(problem: &mut LpProblem, pass: &mut Pass<'_>) {
         let mut aggregate = Vec::with_capacity(parts);
         for ((part_name, def_name), group) in names.iter().zip(terms.chunks(chunk)) {
             let part = problem.intern(part_name);
-            // Explicitly two-sided infinite, not `VariableBounds::free()`: an
-            // absent lower bound reads as the LP default of zero, which would
-            // cut off any chunk whose partial sum can go negative.
-            let bounds = VariableBounds::range(f64::NEG_INFINITY, f64::INFINITY);
+            // A chunk's partial sum can go negative, so the part variable must
+            // be free rather than take the LP default of zero below.
+            let bounds = VariableBounds::free();
             problem.add_variable(Variable::new(part).with_bounds(bounds));
 
             let mut coefficients = group.to_vec();

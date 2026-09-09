@@ -75,7 +75,8 @@ mod tests {
         assert!(report.variables.entries.iter().any(|e| e.name == "y"));
 
         let x = report.variables.entries.iter().find(|e| e.name == "x").expect("x present");
-        assert_eq!(x.new_type, Some(VarSpec { kind: VariableKind::Binary, bounds: VariableBounds::free() }));
+        // `binary x` declares a kind, not a bound, so x has no bounds of its own.
+        assert_eq!(x.new_type, Some(VarSpec { kind: VariableKind::Binary, bounds: VariableBounds::unspecified() }));
         assert!(x.old_type.is_none(), "inspect entries never carry an old side");
     }
 
