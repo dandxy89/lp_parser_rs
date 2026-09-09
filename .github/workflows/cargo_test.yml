@@ -51,6 +51,21 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Run Clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
+      # --all-features hides feature-gating mistakes: an item used under one
+      # cfg but declared under another compiles fine once everything is on.
+      # The `cli` binary declares `required-features = ["cli"]`, so that set
+      # alone must build; `diff` and `csv` are the optional pair it forgets.
+      - name: Clippy across feature combinations
+        run: |
+          for features in cli cli,diff cli,csv cli,diff,csv; do
+            echo "::group::--features $features"
+            cargo clippy --package lp_parser_rs --no-default-features \
+              --features "$features" --all-targets -- -D warnings
+            echo "::endgroup::"
+          done
+          echo "::group::library with no features"
+          cargo clippy --package lp_parser_rs --no-default-features --lib -- -D warnings
+          echo "::endgroup::"
 
   test:
     runs-on: ubuntu-24.04-arm

@@ -2,7 +2,6 @@
 
 mod cli;
 
-#[cfg(feature = "diff")]
 use std::fs;
 use std::io::{self, Stdout, Write};
 use std::path::PathBuf;
@@ -467,6 +466,10 @@ fn parse_convert_input(path: &std::path::Path, content: &str) -> Result<LpProble
     if is_mps { Ok(LpProblem::parse_mps(content)?) } else { Ok(LpProblem::parse(content)?) }
 }
 
+// `quiet` suppresses the CSV branch's "files written to" note, and that is the
+// only message this command emits on success, so without the `csv` feature the
+// parameter has nothing left to gate.
+#[cfg_attr(not(feature = "csv"), allow(unused_variables, reason = "`quiet` only gates the CSV progress message"))]
 fn cmd_convert(args: ConvertArgs, verbose: bool, quiet: bool) -> Result<(), BoxError> {
     use lp_parser_rs::mps::writer::{MpsWriterOptions, write_mps_string_with_options};
     use lp_parser_rs::writer::{LpWriterOptions, write_lp_string_with_options};

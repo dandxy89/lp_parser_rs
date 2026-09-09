@@ -82,11 +82,7 @@ pub fn ray_lines(report: &UnboundedRay) -> Vec<Line<'static>> {
         Style::default().fg(t.text),
     )));
 
-    heading(
-        &mut lines,
-        "Variables that run to infinity",
-        "give any one of these a finite bound in its ray direction to close the model",
-    );
+    heading(&mut lines, "Variables that run to infinity", "give any one of these a finite bound in its ray direction to close the model");
     lines.push(Line::from(Span::styled(
         format!(
             "  {:<NAME_WIDTH$}{:>NUMBER_WIDTH$}{:>NUMBER_WIDTH$}{:>NUMBER_WIDTH$}{:>NUMBER_WIDTH$}",

@@ -15,11 +15,11 @@ use crate::diff_model::{DiffEntry, DiffInput, DiffKind, DiffOptions, DiffSummary
 use crate::parse::ParsedFile;
 use crate::search::{self, CompiledSearch, SearchMode};
 use crate::solver::{InfeasibilityDiagnosis, SolveResult};
-pub use crate::state::{AppMode, DiffFilter, Focus, SearchResult, Section, SectionViewState};
 use crate::state::{
     AnalysisState, DetailView, DiagnosisState, JumpEntry, JumpList, PendingYank, ScrollPane, Side, SolveState, SolveViewState, SortMode,
     WhatIfPrompt,
 };
+pub use crate::state::{AppMode, DiffFilter, Focus, SearchResult, Section, SectionViewState};
 use crate::watch::{WatchSession, WatchState};
 
 /// State for the `Ctrl+P` command palette overlay.

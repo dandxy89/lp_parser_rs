@@ -18,9 +18,9 @@
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
+use lp_parser_rs::interner::NameId;
 use lp_parser_rs::model::{ComparisonOp, Constraint, Sense, VariableBounds, VariableKind};
 use lp_parser_rs::problem::LpProblem;
-use lp_parser_rs::interner::NameId;
 
 use crate::solver::{build_highs_model, primary_objective_coefficients, variable_bounds};
 
@@ -130,8 +130,7 @@ fn held_by_rows(problem: &LpProblem) -> HashMap<NameId, Held> {
             let entry = held.entry(coefficient.name).or_default();
             // A positive coefficient moves the row activity the same way as the
             // variable; a negative one moves it the opposite way.
-            let (blocks_up, blocks_down) =
-                if coefficient.value > 0.0 { (caps_above, caps_below) } else { (caps_below, caps_above) };
+            let (blocks_up, blocks_down) = if coefficient.value > 0.0 { (caps_above, caps_below) } else { (caps_below, caps_above) };
             entry.up |= blocks_up;
             entry.down |= blocks_down;
         }
@@ -176,11 +175,7 @@ fn suspects(problem: &LpProblem) -> Vec<Suspect> {
         let escapes = if improves_upward { upper.is_infinite() && !rows.up } else { lower.is_infinite() && !rows.down };
 
         if escapes {
-            found.push(Suspect {
-                name: problem.resolve(*id).to_owned(),
-                cost,
-                direction: if improves_upward { "up" } else { "down" },
-            });
+            found.push(Suspect { name: problem.resolve(*id).to_owned(), cost, direction: if improves_upward { "up" } else { "down" } });
         }
     }
 
@@ -203,7 +198,7 @@ const IIS_STRATEGY_FROM_LP: i32 = 2;
 /// Declared here rather than used from the bindings because `bindgen` only
 /// processes `interfaces/highs_c_api.h` (see `highs-sys/wrapper.h`), and this
 /// enum lives in a C++ header it never sees.
-fn bound_status(code: i32) -> &'static str {
+const fn bound_status(code: i32) -> &'static str {
     match code {
         -1 => "dropped",
         1 => "free",
@@ -232,7 +227,7 @@ pub struct Iis {
 impl Iis {
     /// Whether `HiGHS` isolated a subsystem at all.
     #[must_use]
-    pub fn is_empty(&self) -> bool {
+    pub const fn is_empty(&self) -> bool {
         self.rows.is_empty() && self.cols.is_empty()
     }
 }
@@ -263,9 +258,7 @@ pub fn iis(problem: &LpProblem) -> Result<Iis, String> {
 
     let mut model = built.row_problem.optimise(built.sense);
     model.make_quiet();
-    model
-        .try_set_option("iis_strategy", IIS_STRATEGY_FROM_LP)
-        .map_err(|_| "HiGHS refused the iis_strategy option".to_owned())?;
+    model.try_set_option("iis_strategy", IIS_STRATEGY_FROM_LP).map_err(|_| "HiGHS refused the iis_strategy option".to_owned())?;
 
     let mut solved = model.solve();
     let status = format!("{:?}", solved.status());
@@ -574,15 +567,7 @@ pub fn unbounded_ray(problem: &LpProblem) -> Result<UnboundedRay, String> {
     // certificate was produced.
     let suspects = if crate::solver::status_is_unbounded(&status) && directions.is_empty() { suspects(&relaxed) } else { Vec::new() };
 
-    Ok(UnboundedRay {
-        status,
-        directions,
-        objective_rate,
-        suspects,
-        relaxed_integrality,
-        skipped_sos,
-        duration: started.elapsed(),
-    })
+    Ok(UnboundedRay { status, directions, objective_rate, suspects, relaxed_integrality, skipped_sos, duration: started.elapsed() })
 }
 
 #[cfg(test)]
@@ -878,14 +863,7 @@ mod tests {
                 assert!(entry.down <= entry.up, "{name}/{}: down {} above up {}", entry.name, entry.down, entry.up);
                 // These models carry plenty of non-binding rows, which is
                 // exactly where pairing a range with the wrong value shows up.
-                assert!(
-                    entry.contains_current(),
-                    "{name}/{}: {} outside [{}, {}]",
-                    entry.name,
-                    entry.current,
-                    entry.down,
-                    entry.up
-                );
+                assert!(entry.contains_current(), "{name}/{}: {} outside [{}, {}]", entry.name, entry.current, entry.down, entry.up);
             }
         }
     }
