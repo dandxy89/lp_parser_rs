@@ -6,7 +6,7 @@ use ratatui::widgets::{List, ListItem, Paragraph, ScrollbarState};
 
 use crate::app::{App, Focus, Section};
 use crate::theme::theme;
-use crate::widgets::{focus_border_style, panel_block, panel_scrollbar, zebra_style};
+use crate::widgets::{SELECTION_CURSOR, focus_border_style, panel_block, selection_style, zebra_style};
 
 /// Draw the section tab bar across the top of the frame.
 ///
@@ -38,7 +38,7 @@ pub fn draw_tab_bar(frame: &mut Frame, area: Rect, app: &mut App) {
         let active = Section::from_index(i) == app.active_section;
         let style = if active {
             let base = Style::default().fg(t.accent).add_modifier(Modifier::BOLD | Modifier::UNDERLINED);
-            if focused { base.bg(t.highlight_bg) } else { base }
+            if focused { base.bg(t.selection_bg) } else { base }
         } else if focused {
             Style::default().fg(t.text)
         } else {
@@ -115,6 +115,7 @@ pub fn draw_name_list(frame: &mut Frame, area: Rect, app: &mut App) {
 /// Must not be called for static sections (Summary, Numerics), which have no entry list.
 fn draw_section_entry_list(frame: &mut Frame, area: Rect, app: &mut App, section: Section, border_style: Style) {
     debug_assert!(section.list_index().is_some(), "draw_section_entry_list called for static section {section:?}");
+    let focused = app.focus == Focus::NameList;
     let (section_label, total_count) = match section {
         Section::Variables => ("variables", app.report.variables.counts.total()),
         Section::Constraints => ("constraints", app.report.constraints.counts.total()),
@@ -127,7 +128,7 @@ fn draw_section_entry_list(frame: &mut Frame, area: Rect, app: &mut App, section
     draw_entry_name_list(
         frame,
         area,
-        &NameListParams { filtered_indices: filtered, cached_lines, section_label, total_count, border_style, sort_label },
+        &NameListParams { filtered_indices: filtered, cached_lines, section_label, total_count, border_style, sort_label, focused },
         state,
     );
 }
@@ -142,6 +143,9 @@ pub struct NameListParams<'a> {
     pub border_style: Style,
     /// Active sort indicator (e.g. "sort:|Δ|"). `None` for the default name sort.
     pub sort_label: Option<&'a str>,
+    /// Whether the sidebar holds focus — the selected row is tinted when it
+    /// does and neutral when it does not, so only the live list looks live.
+    pub focused: bool,
 }
 
 /// Draw a compact name list for a section's entries in the sidebar.
@@ -164,7 +168,17 @@ fn draw_entry_name_list(frame: &mut Frame, area: Rect, params: &NameListParams<'
 
     let selected_position = state.selected().map_or(0, |s| s + 1);
     let sort = params.sort_label.map(|label| format!("\u{b7} {label} ")).unwrap_or_default();
-    let title = format!(" {selected_position}/{total_items} {} ({} total) {sort}", params.section_label, params.total_count);
+    // The sidebar is a fifth of the width, so the full title rarely fits. Drop
+    // whole segments rather than let the block clip mid-word.
+    let inner_width = area.width.saturating_sub(2) as usize;
+    let title = [
+        format!(" {selected_position}/{total_items} {} ({} total) {sort}", params.section_label, params.total_count),
+        format!(" {selected_position}/{total_items} {} ", params.section_label),
+        format!(" {selected_position}/{total_items} "),
+    ]
+    .into_iter()
+    .find(|candidate| candidate.chars().count() <= inner_width)
+    .unwrap_or_default();
     let block = panel_block(params.border_style).title(title);
 
     if total_items == 0 || inner_height == 0 {
@@ -203,15 +217,12 @@ fn draw_entry_name_list(frame: &mut Frame, area: Rect, params: &NameListParams<'
     // Temporary state mapped to the slice coordinate space.
     let mut slice_state = ratatui::widgets::ListState::default().with_offset(0).with_selected(state.selected().map(|s| s - offset));
 
-    let list = List::new(items)
-        .block(block)
-        .highlight_style(Style::default().bg(t.highlight_bg).add_modifier(Modifier::BOLD))
-        .highlight_symbol("\u{25b6} ");
+    let list = List::new(items).block(block).highlight_style(selection_style(params.focused)).highlight_symbol(SELECTION_CURSOR);
 
     frame.render_stateful_widget(list, area, &mut slice_state);
 
     // Mark rows whose name is wider than the pane with a trailing ellipsis —
-    // ratatui clips them silently otherwise. The highlight symbol ("▶ ")
+    // ratatui clips them silently otherwise. The selection cursor ("▍ ")
     // shifts every row's content right by 2 columns.
     let inner_width = area.width.saturating_sub(2) as usize; // borders
     let usable = inner_width.saturating_sub(2); // highlight symbol gutter
@@ -233,7 +244,7 @@ fn draw_entry_name_list(frame: &mut Frame, area: Rect, params: &NameListParams<'
     // Scrollbar — uses real position within the full list.
     if total_items > inner_height {
         let mut scrollbar_state = ScrollbarState::new(total_items).position(selected);
-        frame.render_stateful_widget(panel_scrollbar(), area, &mut scrollbar_state);
+        crate::widgets::render_panel_scrollbar(frame, area, &mut scrollbar_state);
     }
 }
 

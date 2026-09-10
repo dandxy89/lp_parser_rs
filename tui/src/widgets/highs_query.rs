@@ -5,7 +5,7 @@ use ratatui::text::{Line, Span};
 
 use crate::highs_query::{Iis, RangeEntry, Ranging, UnboundedRay};
 use crate::theme::theme;
-use crate::widgets::{rule_str, truncate_with_ellipsis};
+use crate::widgets::truncate_with_ellipsis;
 
 /// Width of the name column in the ray table.
 const NAME_WIDTH: usize = 26;
@@ -13,17 +13,9 @@ const NAME_WIDTH: usize = 26;
 /// Width of the numeric columns.
 const NUMBER_WIDTH: usize = 14;
 
-/// Section heading with an underline, matching the diagnostics pane.
+/// Section heading, in the shared style used by every pane.
 fn heading(lines: &mut Vec<Line<'static>>, title: &str, note: &str) {
-    let t = theme();
-    if !lines.is_empty() {
-        lines.push(Line::from(""));
-    }
-    lines.push(Line::from(Span::styled(format!("  {title}"), Style::default().fg(t.accent).add_modifier(Modifier::BOLD))));
-    lines.push(Line::from(Span::styled(format!("  {}", rule_str(title.chars().count())), Style::default().fg(t.muted))));
-    if !note.is_empty() {
-        lines.push(Line::from(Span::styled(format!("  {note}"), Style::default().fg(t.muted))));
-    }
+    crate::widgets::push_heading(lines, title, note);
 }
 
 /// Render a bound, using the infinity sign where there is none.
@@ -46,8 +38,6 @@ fn number(value: f64, precision: usize) -> String {
 pub fn ray_lines(report: &UnboundedRay) -> Vec<Line<'static>> {
     let t = theme();
     let mut lines = Vec::new();
-
-    heading(&mut lines, "Unbounded ray", "");
 
     if !report.is_unbounded() {
         lines.push(Line::from(Span::styled(
@@ -198,8 +188,6 @@ pub fn iis_lines(report: &Iis) -> Vec<Line<'static>> {
     let t = theme();
     let mut lines = Vec::new();
 
-    heading(&mut lines, "Irreducible infeasible subsystem", "");
-
     if report.is_empty() {
         let message = if crate::solver::status_is_infeasible(&report.status) {
             "  HiGHS could not isolate a subsystem for this model"
@@ -317,7 +305,7 @@ pub fn ranging_lines(report: &Ranging, selected: Option<&str>) -> Vec<Line<'stat
     let t = theme();
     let mut lines = Vec::new();
 
-    heading(&mut lines, "Ranging", "how far each quantity moves before the optimal basis changes");
+    lines.push(crate::widgets::note_line("how far each quantity moves before the optimal basis changes"));
     if let Some(objective) = report.objective_value {
         lines.push(Line::from(Span::styled(format!("  objective {objective:.6}"), Style::default().fg(t.text))));
     }

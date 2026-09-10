@@ -36,6 +36,19 @@ macro_rules! w {
     };
 }
 
+/// The header line a yanked detail opens with.
+///
+/// On screen the panel's border title carries the entity, name and kind badge,
+/// so the builders emit no header of their own. Yanked text has no border, so
+/// it gets the line back here.
+fn yank_header(entity_label: &str, name: &str, kind: DiffKind, inspect: bool) -> Vec<ratatui::text::Line<'static>> {
+    if inspect {
+        crate::widgets::detail::inspect_header(entity_label, name)
+    } else {
+        crate::widgets::detail::detail_header(entity_label, name, kind)
+    }
+}
+
 /// Render the currently selected detail panel as plain text.
 /// Returns `None` if no entry is selected (except for Summary and Numerics,
 /// which have no entry and yank their pre-built panel lines).
@@ -47,24 +60,28 @@ pub fn render_detail_plain(app: &App) -> Option<String> {
         Section::Numerics => Some(plain(&app.numerics_lines)),
         Section::Variables => {
             let entry = app.report.variables.entries.get(app.selected_entry_index()?)?;
-            Some(plain(&if inspect { build_inspect_variable(entry) } else { build_variable_detail(entry) }))
+            let mut lines = yank_header("Variable", &entry.name, entry.kind, inspect);
+            lines.extend(if inspect { build_inspect_variable(entry) } else { build_variable_detail(entry) });
+            Some(plain(&lines))
         }
         Section::Constraints => {
             let entry = app.report.constraints.entries.get(app.selected_entry_index()?)?;
-            let lines = if inspect {
+            let mut lines = yank_header("Constraint", &entry.name, entry.kind, inspect);
+            lines.extend(if inspect {
                 build_inspect_constraint(entry, interner)
             } else {
                 build_constraint_detail(entry, app.cached_coeff_rows(), interner)
-            };
+            });
             Some(plain(&lines))
         }
         Section::Objectives => {
             let entry = app.report.objectives.entries.get(app.selected_entry_index()?)?;
-            let lines = if inspect {
+            let mut lines = yank_header("Objective", &entry.name, entry.kind, inspect);
+            lines.extend(if inspect {
                 build_inspect_objective(entry, interner)
             } else {
                 build_objective_detail(entry, app.cached_coeff_rows(), interner, None)
-            };
+            });
             Some(plain(&lines))
         }
     }

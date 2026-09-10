@@ -134,6 +134,20 @@ fn snapshot_help_overlay_80x24() {
     insta::assert_snapshot!(render(&mut app, 80, 24).backend());
 }
 
+/// The scrim behind a modal: content outside the overlay keeps its symbols but
+/// loses its colours, so the overlay is unmistakably the layer in front.
+#[test]
+fn help_overlay_dims_the_screen_behind_it() {
+    let mut app = inspect_app();
+    app.show_help = true;
+    // Wide enough that the help pane floats rather than filling the frame.
+    let terminal = render(&mut app, 140, 44);
+    // The sidebar's left border, well outside the centred overlay.
+    let cell = terminal.backend().buffer().cell((0, 3)).expect("cell inside the buffer");
+    assert_eq!(cell.symbol(), "\u{2502}", "the border symbol survives the scrim");
+    assert_eq!(cell.fg, crate::theme::theme().border, "the scrim flattens colour behind the overlay");
+}
+
 #[test]
 fn snapshot_too_small_terminal_40x10() {
     let mut app = inspect_app();

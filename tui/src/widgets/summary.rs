@@ -278,10 +278,9 @@ fn format_count_row(label: &str, counts: &DiffCounts, is_total: bool) -> Line<'s
     ])
 }
 
-/// Render a section heading with underline.
+/// Render a section heading in the shared style used by every pane.
 fn section_heading(lines: &mut Vec<Line<'static>>, title: &str) {
-    let t = theme();
-    lines.push(Line::from(vec![Span::styled(format!("  {title}"), Style::default().fg(t.accent).add_modifier(Modifier::BOLD))]));
+    lines.push(crate::widgets::heading_line(title));
 }
 
 /// Render a three-column comparison header row with a separator rule.

@@ -16,7 +16,7 @@ use crate::app::App;
 use crate::search;
 use crate::state::{SearchResult, Section};
 use crate::theme::theme;
-use crate::widgets::{detail, kind_prefix, kind_style, panel_block, panel_scrollbar, sidebar, summary, zebra_style};
+use crate::widgets::{SELECTION_CURSOR, detail, kind_prefix, kind_style, panel_block, selection_style, sidebar, summary, zebra_style};
 
 /// Section tag prefix for display in results list.
 const fn section_tag(section: Section) -> &'static str {
@@ -148,17 +148,14 @@ fn draw_results_list(frame: &mut Frame, area: Rect, cached_lines: &[Line<'static
         state.select(Some(selected));
     }
 
-    let list = List::new(items)
-        .block(block)
-        .highlight_style(Style::default().bg(t.highlight_bg).add_modifier(Modifier::BOLD))
-        .highlight_symbol("\u{25b6} ");
+    let list = List::new(items).block(block).highlight_style(selection_style(true)).highlight_symbol(SELECTION_CURSOR);
 
     frame.render_stateful_widget(list, area, &mut state);
 
     // Scrollbar for long result lists.
     if result_count > area.height.saturating_sub(2) as usize {
         let mut scrollbar_state = ScrollbarState::new(result_count).position(selected);
-        frame.render_stateful_widget(panel_scrollbar(), area, &mut scrollbar_state);
+        crate::widgets::render_panel_scrollbar(frame, area, &mut scrollbar_state);
     }
 }
 

@@ -16,7 +16,7 @@ use ratatui::text::{Line, Span};
 use crate::diagnostics::{ColStat, Diagnostics, Range, RowStat, Verdict};
 use crate::theme::theme;
 use crate::widgets::numerics::{RATIO_ERROR_THRESHOLD, format_ratio, ratio_colour};
-use crate::widgets::{rule_str, truncate_with_ellipsis};
+use crate::widgets::truncate_with_ellipsis;
 
 /// Width of the name column in the ranked tables.
 const NAME_WIDTH: usize = 26;
@@ -65,17 +65,9 @@ pub fn build_lines(diagnostics: &Diagnostics) -> Vec<Line<'static>> {
     lines
 }
 
-/// Section heading with an underline, matching the numerics panel's style.
+/// Section heading, in the shared style used by every pane.
 fn heading(lines: &mut Vec<Line<'static>>, title: &str, note: &str) {
-    let t = theme();
-    if !lines.is_empty() {
-        lines.push(Line::from(""));
-    }
-    lines.push(Line::from(Span::styled(format!("  {title}"), Style::default().fg(t.accent).add_modifier(Modifier::BOLD))));
-    lines.push(Line::from(Span::styled(format!("  {}", rule_str(title.chars().count())), Style::default().fg(t.muted))));
-    if !note.is_empty() {
-        lines.push(Line::from(Span::styled(format!("  {note}"), Style::default().fg(t.muted))));
-    }
+    crate::widgets::push_heading(lines, title, note);
 }
 
 /// A `label   value` line in one of the key/value blocks.
@@ -330,14 +322,14 @@ pub fn draw_diagnostics(frame: &mut ratatui::Frame, area: ratatui::layout::Rect,
 
     // Near-full-screen: the tables are wide, and the value is in reading
     // several of them against each other.
-    let popup = crate::widgets::centred_rect(area, area.width.saturating_sub(4).max(1), area.height.saturating_sub(2).max(1));
+    let popup = crate::widgets::report_rect(area);
 
     let inner_height = popup.height.saturating_sub(2) as usize;
     let max_scroll = u16::try_from(pane.lines.len().saturating_sub(inner_height)).unwrap_or(u16::MAX);
     pane.scroll = pane.scroll.min(max_scroll);
 
     let border_style = Style::default().fg(t.accent).add_modifier(Modifier::BOLD);
-    let title = if max_scroll > 0 { " Diagnostics  (j/k scroll \u{2022} Esc close) " } else { " Diagnostics  (Esc close) " };
+    let title = if max_scroll > 0 { " Diagnostics  (j/k scroll \u{b7} Esc close) " } else { " Diagnostics  (Esc close) " };
     let block = crate::widgets::panel_block(border_style).title(Span::styled(title, border_style));
 
     frame.render_widget(Clear, popup);

@@ -42,7 +42,7 @@ pub fn draw_presolve(frame: &mut Frame, area: Rect, app: &App) {
     for (index, rule) in Rule::ALL.iter().enumerate() {
         let selected = index == cursor;
         let on = app.presolve_rules[index];
-        let marker = if selected { "\u{25b8} " } else { "  " };
+        let marker = if selected { crate::widgets::SELECTION_CURSOR } else { "  " };
         let checkbox = if on { "[x] " } else { "[ ] " };
         let label_style = match (on, selected) {
             (true, true) => Style::default().fg(t.accent).add_modifier(Modifier::BOLD),
@@ -71,12 +71,8 @@ pub fn draw_presolve(frame: &mut Frame, area: Rect, app: &App) {
     frame.render_widget(Paragraph::new(lines).block(block), popup);
 
     // The hint sits on the bottom border so the rule list keeps the full body.
-    let hint = " j/k \u{2022} space toggle \u{2022} a all/none \u{2022} Enter solve \u{2022} l log \u{2022} H HiGHS's own \u{2022} w .lp \u{2022} Esc ";
-    let hint_width = u16::try_from(hint.chars().count()).unwrap_or(u16::MAX);
-    if popup.width > hint_width && popup.height > 0 {
-        let hint_area = Rect { x: popup.x + 2, y: popup.bottom() - 1, width: hint_width, height: 1 };
-        frame.render_widget(Paragraph::new(Line::from(Span::styled(hint, Style::default().fg(t.muted)))), hint_area);
-    }
+    let hint = " j/k \u{b7} space toggle \u{b7} a all/none \u{b7} Enter solve \u{b7} l log \u{b7} H HiGHS's own \u{b7} w .lp \u{b7} Esc ";
+    crate::widgets::draw_footer_hint(frame, popup, hint);
 }
 
 /// Build the presolve log pane's lines: the same summary the picker shows,
@@ -174,14 +170,14 @@ pub fn draw_presolve_log(frame: &mut Frame, area: Rect, app: &mut App) {
 
     // Near-full-screen: the log lines are wide, and a rewrite worth inspecting
     // has more of them than a popup could hold.
-    let popup = centred_rect(area, area.width.saturating_sub(4).max(1), area.height.saturating_sub(2).max(1));
+    let popup = crate::widgets::report_rect(area);
 
     let inner_height = popup.height.saturating_sub(2) as usize;
     let max_scroll = u16::try_from(pane.lines.len().saturating_sub(inner_height)).unwrap_or(u16::MAX);
     pane.scroll = pane.scroll.min(max_scroll);
 
     let border_style = Style::default().fg(t.accent).add_modifier(Modifier::BOLD);
-    let title = " Presolve log  (j/k scroll \u{2022} w write .txt \u{2022} Esc close) ";
+    let title = " Presolve log  (j/k scroll \u{b7} w write .txt \u{b7} Esc close) ";
     let block = panel_block(border_style).title(Span::styled(title, border_style));
 
     frame.render_widget(Clear, popup);

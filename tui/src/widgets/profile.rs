@@ -13,7 +13,6 @@ use ratatui::text::{Line, Span};
 
 use crate::profile::{Profile, Run};
 use crate::theme::theme;
-use crate::widgets::rule_str;
 
 /// Width of the preset-label column, sized to the longest label in `PRESETS`.
 const LABEL_WIDTH: usize = 16;
@@ -40,13 +39,7 @@ pub fn build_lines(profile: &Profile) -> Vec<Line<'static>> {
     let t = theme();
     let mut lines = Vec::with_capacity(profile.runs.len() + 16);
 
-    let title = "Solve profile";
-    lines.push(Line::from(Span::styled(format!("  {title}"), Style::default().fg(t.accent).add_modifier(Modifier::BOLD))));
-    lines.push(Line::from(Span::styled(format!("  {}", rule_str(title.chars().count())), Style::default().fg(t.muted))));
-    lines.push(Line::from(Span::styled(
-        "  presets run one after another: concurrent solves would inflate each other's times".to_owned(),
-        Style::default().fg(t.muted),
-    )));
+    lines.push(crate::widgets::note_line("presets run one after another: concurrent solves would inflate each other's times"));
     lines.push(Line::from(""));
 
     lines.push(Line::from(Span::styled(
@@ -126,7 +119,7 @@ fn footer(lines: &mut Vec<Line<'static>>, profile: &Profile) {
     // Name the value every `differs` flag above was measured against.
     lines.push(Line::from(Span::styled(format!("  baseline objective {}", objective(profile.baseline)), Style::default().fg(t.muted))));
     lines.push(Line::from(Span::styled(
-        format!("  budget {} per preset after the baseline \u{2022} sweep took {}", seconds(profile.budget), seconds(profile.duration)),
+        format!("  budget {} per preset after the baseline \u{b7} sweep took {}", seconds(profile.budget), seconds(profile.duration)),
         Style::default().fg(t.muted),
     )));
 }

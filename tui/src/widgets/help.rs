@@ -16,25 +16,25 @@ use crate::widgets::panel_block;
 
 const HELP_TEXT: &[&str] = &[
     "",
-    "  Navigation          Filters             Other",
-    "  ─────────           ───────             ─────",
-    "  j / ↓   Down        a   All             /   Search",
-    "  k / ↑   Up          +   Added           Ctrl-p  Command palette",
-    "  g / Home Top         -   Removed         ?   This help",
-    "  G / End  Bottom      m   Modified        q   Quit",
-    "  [ / ]   Prev/next    =   Renamed         Ctrl-C  Force quit",
-    "          section      o   Ignore order",
-    "  n / N   Next / prev",
-    "          search match",
-    "  Ctrl-d  Half page ↓                     Clipboard",
-    "  Ctrl-u  Half page ↑                     ─────────",
-    "  Ctrl-f  Full page ↓                     yy  Yank name",
-    "  Ctrl-b  Full page ↑                     yo  Yank old (file 1)",
-    "                                          yn  Yank new (file 2)",
-    "                                          Y   Yank detail",
-    "                                          w   Export CSV",
-    "  Ctrl-o  Jump back",
-    "  Ctrl-i  Jump forward",
+    "  Navigation              Filters             Other",
+    "  ─────────               ───────             ─────",
+    "  j / ↓     Down          a   All             /       Search",
+    "  k / ↑     Up            +   Added           Ctrl-p  Command palette",
+    "  g / Home  Top           -   Removed         ?       This help",
+    "  G / End   Bottom        m   Modified        q       Quit",
+    "  [ / ]     Prev/next     =   Renamed         Ctrl-C  Force quit",
+    "            section       o   Ignore order",
+    "  n / N     Next / prev",
+    "            search match",
+    "  Ctrl-d    Half page ↓                       Clipboard",
+    "  Ctrl-u    Half page ↑                       ─────────",
+    "  Ctrl-f    Full page ↓                       yy      Yank name",
+    "  Ctrl-b    Full page ↑                       yo      Yank old (file 1)",
+    "                                              yn      Yank new (file 2)",
+    "                                              Y       Yank detail",
+    "                                              w       Export CSV",
+    "  Ctrl-o    Jump back",
+    "  Ctrl-i    Jump forward",
     "  r       Toggle raw text view",
     "  s       Cycle sort: name \u{2192} |\u{394}| \u{2192} rel\u{394}",
     "  t / T   Cycle rel / abs tolerance (rebuilds diff;",
@@ -58,12 +58,12 @@ const HELP_TEXT: &[&str] = &[
     "",
     "  Search (Telescope-style pop-up)",
     "  ──────────────────────────────",
-    "  /         Open search pop-up",
-    "  ↓ / Ctrl-n  Next result",
-    "  ↑ / Ctrl-p  Prev result",
-    "  Tab       Complete with selected name",
-    "  Enter     Jump to selected entry",
-    "  Esc       Cancel search",
+    "  /             Open search pop-up",
+    "  ↓ / Ctrl-n    Next result",
+    "  ↑ / Ctrl-p    Prev result",
+    "  Tab           Complete with selected name",
+    "  Enter         Jump to selected entry",
+    "  Esc           Cancel search",
     "  ←/→ Ctrl-w/u  Edit query (readline-style)",
     "",
     "  Search Modes (type prefix in pop-up)",
@@ -94,38 +94,60 @@ const INSPECT_HELP_TEXT: &[&str] = &[
     "  Single-file inspect mode",
     "  ───────────────────────",
     "",
-    "  Navigation                              Other",
-    "  ─────────                               ─────",
-    "  j / ↓   Down                            /   Search",
-    "  k / ↑   Up                              Ctrl-p  Command palette",
-    "  g / Home Top                             ?   This help",
-    "  G / End  Bottom                          q   Quit",
-    "  [ / ]   Prev/next section                Ctrl-C  Force quit",
-    "  n / N   Next / prev match               E   What-if: edit RHS & re-solve",
-    "  Ctrl-d / Ctrl-u  Half page ↓ / ↑        Clipboard",
-    "  Ctrl-f / Ctrl-b  Full page ↓ / ↑        ─────────",
-    "  Ctrl-o / Ctrl-i  Jump back / forward    yy  Yank name",
-    "  Tab / ⇧Tab  Next / prev panel           Y   Yank detail",
-    "  Enter   Go to detail                    w   Export CSV (objectives,",
-    "  h / l   Sidebar / Detail                    constraints, variables)",
-    "  1–5     Jump to section (5: Numerics)    S   Solve this model",
-    "  Esc     Back                             P   Rewrite: presolve & compare",
-    "                                           D   Diagnostics: why is the solve slow?",
-    "                                           B   Solve profile: compare HiGHS configs",
-    "                                           U   Unbounded: which variables run away?",
-    "                                           I   Infeasible: minimal conflicting set",
-    "                                           R   Ranging: how far can a coefficient move?",
+    "  Navigation                                      Other",
+    "  ─────────                                       ─────",
+    "  j / ↓            Down                           /       Search",
+    "  k / ↑            Up                             Ctrl-p  Command palette",
+    "  g / Home         Top                            ?       This help",
+    "  G / End          Bottom                         q       Quit",
+    "  [ / ]            Prev/next section              Ctrl-C  Force quit",
+    "  n / N            Next / prev match",
+    "  Ctrl-d / Ctrl-u  Half page ↓ / ↑                Clipboard",
+    "  Ctrl-f / Ctrl-b  Full page ↓ / ↑                ─────────",
+    "  Ctrl-o / Ctrl-i  Jump back / forward            yy      Yank name",
+    "  Tab / ⇧Tab       Next / prev panel              Y       Yank detail",
+    "  Enter            Go to detail                   w       Export CSV",
+    "  h / l            Sidebar / Detail",
+    "  1–5              Jump to section (5: Numerics)",
+    "  Esc              Back",
+    "",
+    "  Analyses",
+    "  ────────",
+    "  S   Solve this model",
+    "  E   What-if: edit constraint RHS & re-solve",
+    "  P   Rewrite: presolve & compare solves",
+    "  D   Diagnostics: why is the solve slow?",
+    "  B   Solve profile: compare HiGHS configs",
+    "  U   Unbounded: which variables run away?",
+    "  I   Infeasible: minimal conflicting set",
+    "  R   Ranging: how far can a coefficient move?",
     "",
     "  Search (Telescope-style pop-up)",
     "  ──────────────────────────────",
-    "  /         Open search pop-up",
-    "  Tab       Complete with selected name",
-    "  Enter     Jump to selected entry",
-    "  Esc       Cancel search",
-    "  query / r:pattern / s:text / c:text   Fuzzy / regex / substring / content",
+    "  /             Open search pop-up",
+    "  ↓ / Ctrl-n    Next result",
+    "  ↑ / Ctrl-p    Prev result",
+    "  Tab           Complete with selected name",
+    "  Enter         Jump to selected entry",
+    "  Esc           Cancel search",
+    "  ←/→ Ctrl-w/u  Edit query (readline-style)",
     "",
-    "  Filters, tolerance, raw diff and delta sorts are diff-only",
-    "  and are unavailable when inspecting a single file.",
+    "  Search Modes (type prefix in pop-up)",
+    "  ───────────────────────────────────",
+    "  query       Fuzzy (default)",
+    "  r:pattern   Regex",
+    "  s:text      Substring",
+    "  c:text      Content (variables, coefficients, RHS)",
+    "",
+    "  Solver Results (after S → solve)",
+    "  ────────────────────────────────",
+    "  y         Yank results to clipboard",
+    "  w         Write results to CSV (diff in both mode)",
+    "  d         Toggle diff-only (both mode)",
+    "  t / T     Cycle delta threshold (both mode)",
+    "  e         Diagnose infeasibility",
+    "  1–5       Switch tab",
+    "  Esc       Close overlay (result cached until input changes)",
     "",
     "  Mouse: scroll wheel navigates, click selects",
     "",
@@ -152,19 +174,39 @@ const fn desired_height(text: &[&str]) -> u16 {
     lines.saturating_add(2)
 }
 
-/// Pre-built diff help text lines, cached to avoid per-frame allocation.
-static HELP_LINES: LazyLock<Vec<Line<'static>>> = LazyLock::new(|| {
+/// Style the help text so its structure is visible: the rules under group
+/// headings drop back to the muted colour, and the heading each rule sits under
+/// comes forward in the accent. The help screen is otherwise one flat wall of
+/// text, and it is the screen a new user reads first.
+fn style_help(text: &'static [&'static str]) -> Vec<Line<'static>> {
     let t = theme();
-    let text_style = Style::default().fg(t.text);
-    HELP_TEXT.iter().map(|&s| Line::from(Span::styled(s, text_style))).collect()
-});
+    let body = Style::default().fg(t.text);
+    let rule = Style::default().fg(t.muted);
+    let heading = Style::default().fg(t.accent).add_modifier(Modifier::BOLD);
+    let is_rule = |line: &str| {
+        let trimmed = line.trim();
+        !trimmed.is_empty() && trimmed.chars().all(|c| c == '\u{2500}' || c == ' ')
+    };
+    text.iter()
+        .enumerate()
+        .map(|(index, &line)| {
+            let style = if is_rule(line) {
+                rule
+            } else if text.get(index + 1).is_some_and(|next| is_rule(next)) {
+                heading
+            } else {
+                body
+            };
+            Line::from(Span::styled(line, style))
+        })
+        .collect()
+}
+
+/// Pre-built diff help text lines, cached to avoid per-frame allocation.
+static HELP_LINES: LazyLock<Vec<Line<'static>>> = LazyLock::new(|| style_help(HELP_TEXT));
 
 /// Pre-built inspect help text lines, cached to avoid per-frame allocation.
-static INSPECT_HELP_LINES: LazyLock<Vec<Line<'static>>> = LazyLock::new(|| {
-    let t = theme();
-    let text_style = Style::default().fg(t.text);
-    INSPECT_HELP_TEXT.iter().map(|&s| Line::from(Span::styled(s, text_style))).collect()
-});
+static INSPECT_HELP_LINES: LazyLock<Vec<Line<'static>>> = LazyLock::new(|| style_help(INSPECT_HELP_TEXT));
 
 /// Draw a centred help pop-up overlay on top of the current frame.
 ///
@@ -189,7 +231,7 @@ pub fn draw_help(frame: &mut Frame, area: Rect, app: &mut App) {
     app.help_scroll = app.help_scroll.min(max_scroll);
 
     let t = theme();
-    let border_style = Style::default().fg(t.added).add_modifier(Modifier::BOLD);
+    let border_style = Style::default().fg(t.accent).add_modifier(Modifier::BOLD);
     let title = if max_scroll > 0 { " Keybindings  (j/k scroll · Esc close) " } else { " Keybindings " };
     let block = panel_block(border_style).title(Span::styled(title, border_style));
 

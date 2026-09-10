@@ -49,7 +49,7 @@ pub fn draw_what_if(frame: &mut Frame, area: Rect, prompt: &WhatIfPrompt) {
     if let Some(error) = &prompt.error {
         lines.push(Line::from(Span::styled(format!(" {error}"), Style::default().fg(t.removed))));
     } else {
-        lines.push(Line::from(Span::styled(" Enter solve baseline vs what-if \u{2022} Esc cancel", Style::default().fg(t.muted))));
+        lines.push(Line::from(Span::styled(" Enter solve baseline vs what-if \u{b7} Esc cancel", Style::default().fg(t.muted))));
     }
 
     let block = panel_block(Style::default().fg(t.accent))

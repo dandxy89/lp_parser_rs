@@ -6,7 +6,7 @@ use std::time::Duration;
 use lp_parser_rs::analysis::IssueSeverity;
 use ratatui::layout::{Constraint, Flex, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
-use ratatui::text::Span;
+use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, Borders, Scrollbar, ScrollbarOrientation};
 
 use crate::diff_model::DiffKind;
@@ -14,7 +14,6 @@ use crate::state::Focus;
 use crate::theme::theme;
 
 /// Subdued text for labels, hints, and unchanged values.
-/// Theme-aware: uses `DarkGray` on capable terminals, `Gray` on basic 16-colour.
 pub fn muted() -> Style {
     Style::new().fg(theme().muted)
 }
@@ -66,9 +65,100 @@ pub fn panel_block(border_style: Style) -> Block<'static> {
     Block::default().borders(Borders::ALL).border_type(BorderType::Rounded).border_style(border_style)
 }
 
-/// Standard vertical scrollbar with end caps.
-pub const fn panel_scrollbar() -> Scrollbar<'static> {
-    Scrollbar::new(ScrollbarOrientation::VerticalRight).begin_symbol(Some("\u{25b2}")).end_symbol(Some("\u{25bc}"))
+/// Standard vertical scrollbar: a hairline track and a hairline thumb, no end
+/// caps. The position is the information; the arrows were chrome, the
+/// double-line track competed with the panel border beside it, and a full
+/// block thumb read as a hole punched through that border.
+pub fn panel_scrollbar() -> Scrollbar<'static> {
+    let t = theme();
+    Scrollbar::new(ScrollbarOrientation::VerticalRight)
+        .track_symbol(Some("\u{2502}"))
+        .track_style(Style::new().fg(t.border))
+        .thumb_symbol("\u{2503}")
+        .thumb_style(Style::new().fg(t.muted))
+        .begin_symbol(None)
+        .end_symbol(None)
+}
+
+/// Render [`panel_scrollbar`] down the right edge of a bordered panel.
+///
+/// `area` is the panel's outer rect, borders included; the track is inset by a
+/// row top and bottom so it runs beside the border instead of eating its
+/// corners.
+pub fn render_panel_scrollbar(frame: &mut ratatui::Frame, area: Rect, state: &mut ratatui::widgets::ScrollbarState) {
+    if area.height <= 2 {
+        return;
+    }
+    let track = Rect { y: area.y + 1, height: area.height - 2, ..area };
+    frame.render_stateful_widget(panel_scrollbar(), track, state);
+}
+
+/// Draw a hint line onto a panel's bottom border, indented past the corner.
+///
+/// The hint is chrome for the pane it belongs to; sitting on the border keeps
+/// it out of the body, which is what the reader is actually there for. Silently
+/// skipped when the panel is too narrow to hold it.
+pub fn draw_footer_hint(frame: &mut ratatui::Frame, panel: Rect, hint: &str) {
+    let width = u16::try_from(hint.chars().count()).unwrap_or(u16::MAX);
+    if panel.width <= width.saturating_add(4) || panel.height == 0 {
+        return;
+    }
+    let area = Rect { x: panel.x + 2, y: panel.bottom() - 1, width, height: 1 };
+    frame.render_widget(
+        ratatui::widgets::Paragraph::new(Line::from(Span::styled(hint.to_owned(), Style::default().fg(theme().muted)))),
+        area,
+    );
+}
+
+/// Dim everything already drawn in `area` so a modal overlay reads as the layer
+/// in focus.
+///
+/// Foregrounds drop to the border colour and backgrounds reset, which flattens
+/// the zebra stripes and selection tints underneath: the content stays as
+/// texture without competing with the overlay for attention. `DIM` carries the
+/// same intent on the monochrome palette, where every colour is the terminal
+/// default.
+pub fn draw_scrim(frame: &mut ratatui::Frame, area: Rect) {
+    let colour = theme().border;
+    let buffer = frame.buffer_mut();
+    for y in area.top()..area.bottom() {
+        for x in area.left()..area.right() {
+            if let Some(cell) = buffer.cell_mut((x, y)) {
+                cell.set_fg(colour).set_bg(Color::Reset);
+                // Bold and underline behind the modal would survive the colour
+                // flattening and keep drawing the eye, so they go too.
+                cell.modifier = Modifier::DIM;
+            }
+        }
+    }
+}
+
+/// Overwrite one cell with a box-drawing junction, so two rules that meet read
+/// as joined rather than as one crossing the other. A position outside the
+/// buffer is ignored — junction stitching is cosmetic, never load-bearing.
+pub fn draw_junction(frame: &mut ratatui::Frame, position: (u16, u16), symbol: &'static str, colour: Color) {
+    if let Some(cell) = frame.buffer_mut().cell_mut(position) {
+        cell.set_symbol(symbol).set_fg(colour);
+    }
+}
+
+/// A full-width hairline rule, drawn as a block's top border. Used to separate
+/// stacked regions inside one panel, where a second panel would be a nested box.
+pub fn separator_rule(border_style: Style) -> Block<'static> {
+    Block::default().borders(Borders::TOP).border_style(border_style)
+}
+
+/// The row cursor: a solid bar in the gutter rather than an arrowhead, so the
+/// selected row reads as a marked edge instead of a pointer aimed at the text.
+/// Two columns wide, matching the `"  "` gutter of unselected rows.
+pub const SELECTION_CURSOR: &str = "\u{258d} ";
+
+/// Style for the selected row of a list. The focused pane carries the tinted
+/// selection; an unfocused pane keeps its selection visible but neutral, so
+/// only one list at a time looks live.
+pub fn selection_style(focused: bool) -> Style {
+    let t = theme();
+    Style::new().bg(if focused { t.selection_bg } else { t.selection_bg_dim }).add_modifier(Modifier::BOLD)
 }
 
 /// Background style for alternating rows, keyed on the absolute item index so
@@ -104,6 +194,59 @@ pub fn truncate_with_ellipsis(name: &str, max_width: usize) -> Cow<'_, str> {
 /// Return a `─` rule of the given display width (clamped to 120 columns).
 pub fn rule_str(width: usize) -> String {
     "\u{2500}".repeat(width.min(120))
+}
+
+/// Column at which a section heading's trailing rule stops.
+///
+/// Sized so the rule ends inside the detail panel of an 80-column terminal,
+/// with a gutter before the border and the scrollbar, instead of running under
+/// them. Wider panes then read it as a measure rather than a full-bleed
+/// divider; narrower ones clip it, which is the graceful direction to fail.
+const HEADING_WIDTH: usize = 54;
+
+/// A section heading: the title in the accent colour, run out to a common
+/// column with a hairline rule, so every heading in every pane shares one
+/// spine. This replaces the older two-line treatment (title, then an underline
+/// matched to the title's width) — same structure, half the vertical cost, and
+/// headings no longer step in and out with the length of their own text.
+pub fn heading_line(title: &str) -> Line<'static> {
+    let t = theme();
+    let used = title.chars().count() + 3;
+    Line::from(vec![
+        Span::styled(format!("  {title} "), Style::default().fg(t.accent).add_modifier(Modifier::BOLD)),
+        Span::styled(rule_str(HEADING_WIDTH.saturating_sub(used)), Style::default().fg(t.border)),
+    ])
+}
+
+/// A muted note line, indented to the pane's text column.
+///
+/// Used where a pane opens with a one-line explanation: the border title
+/// already names the pane, so a heading there would only say it twice.
+pub fn note_line(note: &str) -> Line<'static> {
+    Line::from(Span::styled(format!("  {note}"), Style::default().fg(theme().muted)))
+}
+
+/// Push a section heading into `lines`, preceded by a blank spacer unless it
+/// opens the pane, and followed by `note` when one is given.
+pub fn push_heading(lines: &mut Vec<Line<'static>>, title: &str, note: &str) {
+    if !lines.is_empty() {
+        lines.push(Line::from(""));
+    }
+    lines.push(heading_line(title));
+    if !note.is_empty() {
+        lines.push(Line::from(Span::styled(format!("  {note}"), Style::default().fg(theme().muted))));
+    }
+}
+
+/// The rectangle for a full-screen report overlay: the whole width, inset by
+/// one row top and bottom so the tab bar and status bar stay readable behind
+/// it. Insetting the sides as well left a two-column sliver of the panel
+/// underneath showing through, which read as a second, broken border.
+pub const fn report_rect(area: Rect) -> Rect {
+    if area.height <= 2 {
+        return area;
+    }
+    Rect { x: area.x, y: area.y + 1, width: area.width, height: area.height - 2 }
 }
 
 /// Build an inline gauge bar like `▐███░░░░░▌` for a fraction in `[0, 1]`.
@@ -218,8 +361,11 @@ pub fn draw_prompt_input(frame: &mut ratatui::Frame, area: Rect, input: &tui_inp
 
 /// Compute a centred rectangle of the given dimensions, clamped to the terminal area.
 pub fn centred_rect(area: Rect, width: u16, height: u16) -> Rect {
-    let width = width.min(area.width);
-    let height = height.min(area.height);
+    // Snap to the full extent when the margin would be a column or a row on
+    // each side: a sliver of the panel underneath showing past the overlay's
+    // border reads as a second, broken border rather than as breathing room.
+    let width = if width + 4 > area.width { area.width } else { width };
+    let height = if height + 4 > area.height { area.height } else { height };
 
     let vertical = Layout::vertical([Constraint::Length(height)]).flex(Flex::Center).split(area);
     let horizontal = Layout::horizontal([Constraint::Length(width)]).flex(Flex::Center).split(vertical[0]);

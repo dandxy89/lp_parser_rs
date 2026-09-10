@@ -213,9 +213,7 @@ fn build_summary_tab(lines: &mut Vec<Line<'static>>, result: &SolveResult) {
 
     // Timing breakdown.
     let total = result.build_time + result.solve_time + result.extract_time;
-    lines.push(Line::from(""));
-    lines.push(Line::from(Span::styled("  Timings", Style::default().fg(t.muted).add_modifier(Modifier::BOLD))));
-    lines.push(Line::from(Span::styled(format!("  {}", rule_str(38)), Style::default().fg(t.muted))));
+    crate::widgets::push_heading(lines, "Timings", "");
     lines.push(Line::from(vec![
         Span::styled("  Build:         ", Style::default().fg(t.muted)),
         Span::styled(format!("{:.3}s", result.build_time.as_secs_f64()), Style::default().fg(t.accent)),
@@ -315,8 +313,7 @@ fn build_log_tab(lines: &mut Vec<Line<'static>>, result: &SolveResult) {
         return;
     }
 
-    lines.push(Line::from(Span::styled("  Solver Log:", Style::default().fg(t.muted).add_modifier(Modifier::BOLD))));
-    lines.push(Line::from(Span::styled(format!("  {}", rule_str(38)), Style::default().fg(t.muted))));
+    lines.push(crate::widgets::heading_line("Solver log"));
 
     // Count total lines first, then skip/take to avoid collecting into a Vec.
     let total_lines = result.solver_log.lines().count();
@@ -521,11 +518,7 @@ fn append_diagnosis_block(lines: &mut Vec<Line<'static>>, diagnosis: &DiagnosisS
             )));
         }
         DiagnosisState::Done { file, diagnosis } => {
-            lines.push(Line::from(Span::styled(
-                format!("  Infeasibility diagnosis \u{2014} {file}"),
-                Style::default().fg(t.modified).add_modifier(Modifier::BOLD),
-            )));
-            lines.push(Line::from(Span::styled(format!("  {}", rule_str(62)), Style::default().fg(t.muted))));
+            lines.push(crate::widgets::heading_line(&format!("Infeasibility diagnosis \u{2014} {file}")));
             lines.push(Line::from(vec![
                 Span::styled("  Total violation: ", Style::default().fg(t.muted)),
                 Span::styled(format!("{:.6}", diagnosis.total_violation), Style::default().fg(t.modified).add_modifier(Modifier::BOLD)),
