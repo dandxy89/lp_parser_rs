@@ -31,8 +31,11 @@ pub struct Theme {
     pub accent: Color,
     /// Default body text.
     pub text: Color,
-    /// Background for highlighted / selected rows.
-    pub highlight_bg: Color,
+    /// Background for the selected row in the focused pane.
+    pub selection_bg: Color,
+    /// Background for the selected row in an unfocused pane — neutral, so the
+    /// live pane is the one carrying the tinted selection.
+    pub selection_bg_dim: Color,
     /// Border colour for the focused panel.
     pub border_focus: Color,
     /// Secondary accent (e.g. magenta highlights in diff views).
@@ -55,17 +58,24 @@ pub enum ThemeMode {
 }
 
 /// Dark palette — the default, tuned for dark terminal backgrounds.
+///
+/// Diff and severity hues stay on the ANSI base colours so they inherit the
+/// user's own terminal palette. The neutrals are pinned to the 256-colour ramp
+/// instead: pure white body text, a near-black `DarkGray` for muted labels, and
+/// a full-saturation blue selection bar all read as chrome shouting over the
+/// content.
 static DARK_THEME: Theme = Theme {
     added: Color::Green,
     removed: Color::Red,
     modified: Color::Yellow,
-    muted: Color::DarkGray,
+    muted: Color::Indexed(245), // mid grey: ~5:1 on a dark ground, unlike DarkGray
     accent: Color::Cyan,
-    text: Color::White,
-    highlight_bg: Color::Blue,
-    border_focus: Color::Cyan,
+    text: Color::Indexed(252), // off-white; pure white glares against the chrome
+    selection_bg: Color::Indexed(24),
+    selection_bg_dim: Color::Indexed(238),
+    border_focus: Color::Indexed(245),
     secondary_accent: Color::Magenta,
-    border: Color::Indexed(240),
+    border: Color::Indexed(238),
     zebra_bg: Color::Indexed(236),
 };
 
@@ -73,14 +83,15 @@ static DARK_THEME: Theme = Theme {
 /// Indexed colours are used where the ANSI base colour (e.g. yellow) would be
 /// near-invisible on white.
 static LIGHT_THEME: Theme = Theme {
-    added: Color::Indexed(28),     // dark green
-    removed: Color::Indexed(124),  // dark red
-    modified: Color::Indexed(130), // dark orange
-    muted: Color::Indexed(245),    // mid grey
-    accent: Color::Indexed(30),    // teal
-    text: Color::Black,
-    highlight_bg: Color::Indexed(153), // pale blue
-    border_focus: Color::Indexed(30),
+    added: Color::Indexed(28),         // dark green
+    removed: Color::Indexed(124),      // dark red
+    modified: Color::Indexed(130),     // dark orange
+    muted: Color::Indexed(241),        // mid grey: 245 fell under 4.5:1 on white
+    accent: Color::Indexed(30),        // teal
+    text: Color::Indexed(235),         // near-black; pure black is harsh on paper
+    selection_bg: Color::Indexed(153), // pale blue
+    selection_bg_dim: Color::Indexed(252),
+    border_focus: Color::Indexed(245),
     secondary_accent: Color::Indexed(90), // purple
     border: Color::Indexed(250),
     zebra_bg: Color::Indexed(253),
@@ -88,7 +99,7 @@ static LIGHT_THEME: Theme = Theme {
 
 /// Monochrome palette — every colour is the terminal default. Honours
 /// `NO_COLOR`: nothing but the default fg/bg is emitted, so selection and focus
-/// rely on bold/underline modifiers, the `▶` cursor symbol, and the kind prefixes.
+/// rely on bold/underline modifiers, the `▍` cursor bar, and the kind prefixes.
 static MONO_THEME: Theme = Theme {
     added: Color::Reset,
     removed: Color::Reset,
@@ -96,7 +107,8 @@ static MONO_THEME: Theme = Theme {
     muted: Color::Reset,
     accent: Color::Reset,
     text: Color::Reset,
-    highlight_bg: Color::Reset,
+    selection_bg: Color::Reset,
+    selection_bg_dim: Color::Reset,
     border_focus: Color::Reset,
     secondary_accent: Color::Reset,
     border: Color::Reset,

@@ -4,14 +4,17 @@
 //!
 //! ```text
 //!  Summary │ Numerics │ Variables │ Constraints │ Objectives
-//! ╭──────────────────╮╭───────────────────────────────────╮
-//! │ Name List        ││                                   │
-//! │ (filtered)       ││         Detail Panel              │
-//! │                  ││                                   │
-//! │                  ││                                   │
-//! ╰──────────────────╯╰───────────────────────────────────╯
+//! ╭──────────────────┬───────────────────────────────────╮
+//! │ Name List        │                                   │
+//! │ (filtered)       │         Detail Panel              │
+//! │                  │                                   │
+//! │                  │                                   │
+//! ╰──────────────────┴───────────────────────────────────╯
 //!   status bar
 //! ```
+//!
+//! The two panels share the divider column rather than each drawing its own
+//! border there.
 
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
@@ -23,8 +26,8 @@ use crate::app::{App, AppMode, Focus, Section};
 use crate::state::{DetailView, PendingYank};
 use crate::theme::theme;
 use crate::widgets::{
-    analysis, centred_rect, detail, diagnostics, focus_border_style, help, palette, panel_block, panel_scrollbar, presolve, raw_diff,
-    search_popup, sidebar, solve, status_bar, summary, what_if,
+    analysis, centred_rect, detail, diagnostics, focus_border_style, help, palette, panel_block, presolve, raw_diff, search_popup, sidebar,
+    solve, status_bar, summary, what_if,
 };
 
 /// Minimum width for the sidebar panel in columns.
@@ -70,7 +73,14 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     let h_chunks = Layout::horizontal([Constraint::Length(sidebar_width), Constraint::Min(0)]).split(main_area);
 
     let sidebar_area = h_chunks[0];
-    let detail_area = h_chunks[1];
+    // The two panels share one column: the detail panel starts on the sidebar's
+    // right border rather than beside it. Two hairlines abutting (`││`) read as
+    // a seam; one reads as a divider, and the panel gains back a column.
+    let detail_area = if h_chunks[1].width > 0 {
+        Rect { x: h_chunks[1].x.saturating_sub(1), width: h_chunks[1].width.saturating_add(1), ..h_chunks[1] }
+    } else {
+        h_chunks[1]
+    };
 
     // Store layout rects and heights on app for mouse hit-testing and page scrolling.
     app.layout.section_selector = tab_bar_area;
@@ -82,22 +92,33 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     // Tab bar across the full width.
     sidebar::draw_tab_bar(frame, tab_bar_area, app);
 
+    // Detail panel first, then the sidebar: they share a border column, and the
+    // sidebar draws its scrollbar there, so it must be the one that lands last.
+    draw_detail_panel(frame, detail_area, app);
+
     // Name List (full sidebar height).
     sidebar::draw_name_list(frame, sidebar_area, app);
 
-    // Detail Panel
-    draw_detail_panel(frame, detail_area, app);
+    // Stitch the shared column's corners into T-junctions — each panel drew its
+    // own corner there, and whichever landed last read as a broken box.
+    draw_divider_junctions(frame, main_area, detail_area.x);
 
     // Detail scrollbar — the sidebar has one; the detail panel deserves the
     // same position feedback without needing focus.
     let detail_inner_height = detail_area.height.saturating_sub(2) as usize;
     if app.layout.detail_content_lines > detail_inner_height {
         let mut scrollbar_state = ScrollbarState::new(app.layout.detail_content_lines).position(app.detail_scroll as usize);
-        frame.render_stateful_widget(panel_scrollbar(), detail_area, &mut scrollbar_state);
+        crate::widgets::render_panel_scrollbar(frame, detail_area, &mut scrollbar_state);
     }
 
     // Status bar (drawn after detail so detail_content_lines is populated).
     draw_status(frame, outer[2], app, &report_summary, total_changes, filter_count);
+
+    // Modal overlays sit over a dimmed screen, so the layer that takes the keys
+    // is unmistakably the one in front.
+    if app.has_overlay() {
+        crate::widgets::draw_scrim(frame, frame.area());
+    }
 
     // Search pop-up overlay — rendered on top of main content.
     if app.search_popup.visible {
@@ -223,14 +244,19 @@ fn draw_status(
     // borrow it across the draw call below.
     let inspect_file = (app.mode == AppMode::Inspect).then(|| crate::widgets::short_filename(&app.report.file1));
     let inspect = inspect_file.as_deref().map(|file| {
-        let (label, count) = match app.active_section {
-            Section::Variables => ("variables", app.report.variables.entries.len()),
-            Section::Constraints => ("constraints", app.report.constraints.entries.len()),
-            Section::Objectives => ("objectives", app.report.objectives.entries.len()),
-            Section::Summary | Section::Numerics => {
-                ("total", app.report.variables.entries.len() + app.report.constraints.entries.len() + app.report.objectives.entries.len())
-            }
+        // The label is the plural-correct noun for the count, so the status bar
+        // prints it as-is: "2 variables", not "2 variables entries".
+        let (singular, plural, count) = match app.active_section {
+            Section::Variables => ("variable", "variables", app.report.variables.entries.len()),
+            Section::Constraints => ("constraint", "constraints", app.report.constraints.entries.len()),
+            Section::Objectives => ("objective", "objectives", app.report.objectives.entries.len()),
+            Section::Summary | Section::Numerics => (
+                "entry",
+                "entries",
+                app.report.variables.entries.len() + app.report.constraints.entries.len() + app.report.objectives.entries.len(),
+            ),
         };
+        let label = if count == 1 { singular } else { plural };
         status_bar::InspectInfo { file, section_label: label, entry_count: count }
     });
     status_bar::draw_status_bar(
@@ -251,6 +277,19 @@ fn draw_status(
             hints: context_hints(app),
         },
     );
+}
+
+/// Replace the corners where the sidebar and detail panels meet with `┬` / `┴`,
+/// so the shared border column reads as one divider running between them.
+///
+/// `x` is the shared column; `area` spans both panels.
+fn draw_divider_junctions(frame: &mut Frame, area: Rect, x: u16) {
+    if area.height < 2 || x <= area.x || x >= area.right() {
+        return;
+    }
+    let border = theme().border;
+    crate::widgets::draw_junction(frame, (x, area.y), "\u{252c}", border);
+    crate::widgets::draw_junction(frame, (x, area.bottom().saturating_sub(1)), "\u{2534}", border);
 }
 
 /// Render a centred "terminal too small" hint for sub-minimum window sizes.

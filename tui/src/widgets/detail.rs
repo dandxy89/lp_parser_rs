@@ -20,30 +20,45 @@ use crate::diff_model::{
 use crate::theme::theme;
 use crate::widgets::{ARROW, bold_text, kind_colour, muted, panel_block, text, truncate_with_ellipsis};
 
-/// Horizontal rule used as a visual separator below the entry header.
-fn rule<'a>() -> Line<'a> {
-    Line::from(Span::styled("──────────────────────────────────────", muted()))
-}
-
-/// Build the panel title: entity, entry name (truncated), and the raw-view
-/// toggle hint where the raw side-by-side view applies (diff-mode constraints
-/// and objectives). The title persists when the in-content header scrolls away.
-fn detail_title(entity_label: &str, name: &str, raw_hint: bool) -> String {
+/// Build the panel title: entity label, entry name (truncated and bold), the
+/// diff-kind badge in its kind colour, and the raw-view toggle hint where the
+/// raw side-by-side view applies (diff-mode constraints and objectives).
+///
+/// The border title is the panel's whole header. The builders below emit a
+/// matching header *line* for the plain-text yank, which has no border to carry
+/// it; on screen that line would only say the same thing twice, so the render
+/// paths leave it out.
+fn detail_title(entity_label: &str, name: &str, kind: Option<DiffKind>, raw_hint: bool) -> Line<'static> {
     let name = truncate_with_ellipsis(name, 32);
-    if raw_hint { format!(" {entity_label}: {name} \u{b7} r:raw ") } else { format!(" {entity_label}: {name} ") }
+    let mut spans = vec![Span::styled(format!(" {entity_label}: "), muted()), Span::styled(name.into_owned(), bold_text())];
+    if let Some(kind) = kind {
+        spans.push(Span::styled(format!(" [{kind}]"), Style::default().fg(kind_colour(kind))));
+    }
+    if raw_hint {
+        spans.push(Span::styled(" \u{b7} r:raw", muted()));
+    }
+    spans.push(Span::raw(" "));
+    Line::from(spans)
 }
 
-/// Build the common header lines for a detail panel: entity label, name, kind badge, and rule.
-fn detail_header(entity_label: &str, name: &str, kind: DiffKind) -> Vec<Line<'static>> {
-    vec![
-        Line::from(vec![
-            Span::styled(format!("{entity_label}: "), muted()),
-            Span::styled(name.to_owned(), bold_text()),
-            Span::styled(format!(" [{kind}]"), Style::default().fg(kind_colour(kind))),
-        ]),
-        rule(),
-    ]
+/// Build the header line for a yanked detail panel: entity label, name, kind
+/// badge, then a hairline rule running out to the same column the section
+/// headings in every other pane use.
+///
+/// Only the plain-text yank uses this — on screen [`detail_title`] carries it.
+pub fn detail_header(entity_label: &str, name: &str, kind: DiffKind) -> Vec<Line<'static>> {
+    let badge = format!(" [{kind}] ");
+    let used = 2 + entity_label.chars().count() + 2 + name.chars().count() + badge.chars().count();
+    vec![Line::from(vec![
+        Span::styled(format!("  {entity_label}: "), muted()),
+        Span::styled(name.to_owned(), bold_text()),
+        Span::styled(badge, Style::default().fg(kind_colour(kind))),
+        Span::styled(crate::widgets::rule_str(HEADER_RULE_END.saturating_sub(used)), muted()),
+    ])]
 }
+
+/// Column at which the detail header's trailing rule stops.
+const HEADER_RULE_END: usize = 70;
 
 /// Format an optional bound value as a string for display.
 pub fn fmt_bound(val: Option<f64>) -> String {
@@ -70,7 +85,7 @@ fn render_variable_type_info(lines: &mut Vec<Line<'static>>, spec: &VarSpec, sty
 #[allow(clippy::too_many_lines)]
 #[allow(clippy::similar_names)] // lower_bound/upper_bound share prefixes
 pub fn build_variable_detail(entry: &VariableDiffEntry) -> Vec<Line<'static>> {
-    let mut lines = detail_header("Variable", &entry.name, entry.kind);
+    let mut lines: Vec<Line<'static>> = Vec::new();
 
     let t = theme();
     match entry.kind {
@@ -154,7 +169,7 @@ pub fn render_variable_detail(frame: &mut Frame, area: Rect, entry: &VariableDif
         return 0;
     }
     let lines = build_variable_detail(entry);
-    render_panel(frame, area, detail_title("Variable", &entry.name, false), lines, border_style, scroll)
+    render_panel(frame, area, detail_title("Variable", &entry.name, Some(entry.kind), false), lines, border_style, scroll)
 }
 
 /// How a constraint detail continues after its header block.
@@ -173,7 +188,7 @@ enum ConstraintBody<'a> {
 /// (which appends all of them unified).
 #[allow(clippy::too_many_lines)]
 fn constraint_detail_parts<'a>(entry: &'a ConstraintDiffEntry, interner: &NameInterner) -> (Vec<Line<'static>>, ConstraintBody<'a>) {
-    let mut lines = detail_header("Constraint", &entry.name, entry.kind);
+    let mut lines: Vec<Line<'static>> = Vec::new();
 
     let t = theme();
 
@@ -386,7 +401,7 @@ pub fn render_constraint_detail(
             return render_constraint_side_by_side(
                 frame,
                 area,
-                detail_title("Constraint", &entry.name, true),
+                detail_title("Constraint", &entry.name, Some(entry.kind), true),
                 lines,
                 changes,
                 old,
@@ -400,7 +415,7 @@ pub fn render_constraint_detail(
         let visible = coeff_visible_range(scroll, area, lines.len());
         render_coeff_changes(&mut lines, changes, old, new, cached_rows, Some(visible), interner);
     }
-    render_panel(frame, area, detail_title("Constraint", &entry.name, true), lines, border_style, scroll)
+    render_panel(frame, area, detail_title("Constraint", &entry.name, Some(entry.kind), true), lines, border_style, scroll)
 }
 
 /// Build the content lines of an objective detail panel.
@@ -415,7 +430,7 @@ pub fn build_objective_detail(
     viewport: Option<(u16, Rect)>,
 ) -> Vec<Line<'static>> {
     let t = theme();
-    let mut lines = detail_header("Objective", &entry.name, entry.kind);
+    let mut lines: Vec<Line<'static>> = Vec::new();
 
     if entry.order_only {
         lines.push(Line::from(Span::styled(
@@ -473,19 +488,26 @@ pub fn render_objective_detail(
         return 0;
     }
     let lines = build_objective_detail(entry, cached_rows, interner, Some((scroll, area)));
-    render_panel(frame, area, detail_title("Objective", &entry.name, true), lines, border_style, scroll)
+    render_panel(frame, area, detail_title("Objective", &entry.name, Some(entry.kind), true), lines, border_style, scroll)
 }
 
-/// Build the neutral header lines for an inspect detail panel: entity label,
-/// name (bold), and a rule. No diff badge — inspect shows a single model.
-fn inspect_header(entity_label: &str, name: &str) -> Vec<Line<'static>> {
-    vec![Line::from(vec![Span::styled(format!("{entity_label}: "), muted()), Span::styled(name.to_owned(), bold_text())]), rule()]
+/// Build the neutral header line for a yanked inspect detail panel: entity
+/// label, name (bold), and the trailing rule. No diff badge — inspect shows a
+/// single model. Only the plain-text yank uses this; on screen the panel title
+/// carries it.
+pub fn inspect_header(entity_label: &str, name: &str) -> Vec<Line<'static>> {
+    let used = 2 + entity_label.chars().count() + 3 + name.chars().count();
+    vec![Line::from(vec![
+        Span::styled(format!("  {entity_label}: "), muted()),
+        Span::styled(name.to_owned(), bold_text()),
+        Span::styled(format!(" {}", crate::widgets::rule_str(HEADER_RULE_END.saturating_sub(used))), muted()),
+    ])]
 }
 
 /// Build the content lines of an inspect (single-file) variable detail panel:
 /// type and bounds, all in the neutral text colour.
 pub fn build_inspect_variable(entry: &VariableDiffEntry) -> Vec<Line<'static>> {
-    let mut lines = inspect_header("Variable", &entry.name);
+    let mut lines: Vec<Line<'static>> = Vec::new();
     // Inspect entries always carry the single-file value on the `new` side.
     if let Some(variable_type) = entry.new_type.as_ref() {
         render_variable_type_info(&mut lines, variable_type, text());
@@ -499,14 +521,14 @@ pub fn render_inspect_variable(frame: &mut Frame, area: Rect, entry: &VariableDi
         return 0;
     }
     let lines = build_inspect_variable(entry);
-    render_panel(frame, area, detail_title("Variable", &entry.name, false), lines, border_style, scroll)
+    render_panel(frame, area, detail_title("Variable", &entry.name, None, false), lines, border_style, scroll)
 }
 
 /// Build the content lines of an inspect (single-file) constraint detail panel:
 /// operator, RHS, and coefficients (or SOS type and weights), neutrally coloured.
 pub fn build_inspect_constraint(entry: &ConstraintDiffEntry, interner: &NameInterner) -> Vec<Line<'static>> {
     let t = theme();
-    let mut lines = inspect_header("Constraint", &entry.name);
+    let mut lines: Vec<Line<'static>> = Vec::new();
 
     // Source location (inspect builds the model on the `new`/file-2 side).
     if let Some(line) = entry.line_file2.or(entry.line_file1) {
@@ -552,13 +574,13 @@ pub fn render_inspect_constraint(
         return 0;
     }
     let lines = build_inspect_constraint(entry, interner);
-    render_panel(frame, area, detail_title("Constraint", &entry.name, false), lines, border_style, scroll)
+    render_panel(frame, area, detail_title("Constraint", &entry.name, None, false), lines, border_style, scroll)
 }
 
 /// Build the content lines of an inspect (single-file) objective detail panel:
 /// coefficients, neutral.
 pub fn build_inspect_objective(entry: &ObjectiveDiffEntry, interner: &NameInterner) -> Vec<Line<'static>> {
-    let mut lines = inspect_header("Objective", &entry.name);
+    let mut lines: Vec<Line<'static>> = Vec::new();
     lines.push(Line::from(Span::styled("  Coefficients:", muted().add_modifier(Modifier::BOLD))));
     render_inspect_coefficients(&mut lines, &entry.new_coefficients, interner);
     lines
@@ -577,7 +599,7 @@ pub fn render_inspect_objective(
         return 0;
     }
     let lines = build_inspect_objective(entry, interner);
-    render_panel(frame, area, detail_title("Objective", &entry.name, false), lines, border_style, scroll)
+    render_panel(frame, area, detail_title("Objective", &entry.name, None, false), lines, border_style, scroll)
 }
 
 /// Append neutral `name  value` rows for a resolved coefficient/weight list.
@@ -600,7 +622,7 @@ fn render_inspect_coefficients(lines: &mut Vec<Line<'static>>, coefficients: &[R
 fn render_constraint_side_by_side(
     frame: &mut Frame,
     area: Rect,
-    title: String,
+    title: Line<'static>,
     header_lines: Vec<Line<'static>>,
     coeff_changes: &[CoefficientChange],
     old_coefficients: &[ResolvedCoefficient],
@@ -641,9 +663,8 @@ fn render_constraint_side_by_side(
     let data_take = if coefficient_scroll == 0 { visible_height.saturating_sub(column_header_lines) } else { visible_height };
 
     let mut left_lines: Vec<Line<'_>> =
-        vec![Line::from(Span::styled(" Old", Style::default().fg(t.removed).add_modifier(Modifier::BOLD | Modifier::UNDERLINED)))];
-    let mut right_lines: Vec<Line<'_>> =
-        vec![Line::from(Span::styled(" New", Style::default().fg(t.added).add_modifier(Modifier::BOLD | Modifier::UNDERLINED)))];
+        vec![Line::from(Span::styled("  Old", Style::default().fg(t.removed).add_modifier(Modifier::BOLD)))];
+    let mut right_lines: Vec<Line<'_>> = vec![Line::from(Span::styled("  New", Style::default().fg(t.added).add_modifier(Modifier::BOLD)))];
 
     // Placeholder lines for data rows scrolled above the viewport.
     for _ in 0..data_skip.min(rows.len()) {
@@ -653,7 +674,7 @@ fn render_constraint_side_by_side(
 
     // Name column sized to the half-pane width: whatever remains after the
     // value column (10), badge (4), and leading space.
-    let name_w = ((v_chunks[1].width / 2) as usize).saturating_sub(16).clamp(12, 48);
+    let name_w = ((v_chunks[1].width / 2) as usize).saturating_sub(17).clamp(12, 48);
 
     // Build styled Lines only for the visible window.
     // Reuse string buffers across rows to avoid per-row heap allocations.
@@ -680,12 +701,12 @@ fn render_constraint_side_by_side(
 
         let name = truncate_with_ellipsis(&row.variable, name_w);
         left_lines.push(Line::from(vec![
-            Span::styled(format!(" {name:<name_w$}"), left_style),
+            Span::styled(format!("  {name:<name_w$}"), left_style),
             Span::styled(format!("{old_buf:>10}"), left_style),
             Span::styled(badge, left_style),
         ]));
         right_lines.push(Line::from(vec![
-            Span::styled(format!(" {name:<name_w$}"), right_style),
+            Span::styled(format!("  {name:<name_w$}"), right_style),
             Span::styled(format!("{new_buf:>10}"), right_style),
             Span::styled(badge, right_style),
         ]));
@@ -825,7 +846,7 @@ fn render_coeff_changes(
 
 /// Wrap `lines` in a bordered block with the given `title` and render it,
 /// applying vertical scroll. Returns the total content line count.
-fn render_panel(frame: &mut Frame, area: Rect, title: String, lines: Vec<Line<'_>>, border_style: Style, scroll: u16) -> usize {
+fn render_panel(frame: &mut Frame, area: Rect, title: Line<'static>, lines: Vec<Line<'_>>, border_style: Style, scroll: u16) -> usize {
     let line_count = lines.len();
     let block = panel_block(border_style).title(title);
     let paragraph = Paragraph::new(lines).block(block).scroll((scroll, 0));

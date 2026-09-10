@@ -12,7 +12,7 @@ expression: text
   ────────────────────────────────────────────────────────────
   TOTAL               1        1           2        0        6
 
-  Problem Dimensions
+  Problem Dimensions ─────────────────────────────────
                           File A      File B       Delta
   ──────────────────────────────────────────────────────
   Variables                    2           2           —
@@ -21,7 +21,7 @@ expression: text
   Density                100.00%     100.00%           —
   Vars/constraint            2–2         2–2
 
-  Variable Types
+  Variable Types ─────────────────────────────────────
                           File A      File B       Delta
   ──────────────────────────────────────────────────────
   Binary                       0           0           —
@@ -34,7 +34,7 @@ expression: text
   Double-bounded               2           2           —
   Semi-continuous              0           0           —
 
-  Constraint Types
+  Constraint Types ───────────────────────────────────
                           File A      File B       Delta
   ──────────────────────────────────────────────────────
   Equality (=)                 0           0           —
@@ -45,14 +45,14 @@ expression: text
   SOS1                         0           0           —
   SOS2                         0           0           —
 
-  Coefficient Scaling
+  Coefficient Scaling ────────────────────────────────
                               File A          File B
   ──────────────────────────────────────────────────
   Coeff range         [1.0e0, 1.0e0]  [1.0e0, 2.0e0]
   Coeff ratio                 3.00e0          4.00e0
   RHS range           [2.0e0, 8.0e0]  [3.0e0, 1.2e1]
 
-  Issues
+  Issues ─────────────────────────────────────────────
   File A: 0 errors, 1 warning, 0 infos  │  File B: 0 errors, 1 warning, 0 infos
 
   [WARNING] a.lp: Problem may be over-constrained: 2 constraints for 2 variables

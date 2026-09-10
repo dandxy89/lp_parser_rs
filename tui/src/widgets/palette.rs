@@ -1,19 +1,24 @@
 //! `Ctrl+P` command palette overlay.
 //!
 //! A compact, fuzzy-filterable list of every action that also has a direct
-//! keybinding. Renders a centred floating pop-up with a query input on top, the
-//! filtered command list (label left, key hint right) below, and a hint bar.
+//! keybinding. Renders as one centred floating panel: the query on the top row,
+//! a hairline, then the filtered command list (label left, key hint right).
+//! Input, list and hints share the one frame — stacked as three bordered boxes
+//! they read as a pile of cards rather than a single palette.
 
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Clear, List, ListItem, ListState, Paragraph, ScrollbarState};
+use ratatui::widgets::{Clear, List, ListItem, ListState, ScrollbarState};
 
 use crate::app::App;
 use crate::state::PaletteCommand;
 use crate::theme::theme;
-use crate::widgets::{panel_block, panel_scrollbar, zebra_style};
+use crate::widgets::{SELECTION_CURSOR, draw_footer_hint, draw_junction, panel_block, selection_style, separator_rule, zebra_style};
+
+/// Keys the palette itself responds to, shown on its bottom border.
+const PALETTE_HINT: &str = " type to filter \u{b7} \u{2191}/\u{2193} move \u{b7} Enter run \u{b7} Esc cancel ";
 
 /// Draw the command palette overlay on top of the current frame.
 pub fn draw_palette(frame: &mut Frame, area: Rect, app: &App) {
@@ -25,45 +30,49 @@ pub fn draw_palette(frame: &mut Frame, area: Rect, app: &App) {
     let popup = centred_rect(area);
     frame.render_widget(Clear, popup);
 
-    let v_chunks = Layout::vertical([
-        Constraint::Length(3), // query input
-        Constraint::Min(1),    // command list
-        Constraint::Length(3), // hint bar
-    ])
-    .split(popup);
-
-    draw_input(frame, v_chunks[0], &app.palette.query, app.palette.filtered.len());
-    draw_command_list(frame, v_chunks[1], app);
-    draw_hints(frame, v_chunks[2]);
-}
-
-/// Draw the query input bar at the top of the palette: an editable query on
-/// the left (with the real terminal cursor) and the command count on the right.
-fn draw_input(frame: &mut Frame, area: Rect, query: &tui_input::Input, match_count: usize) {
     let t = theme();
+    let match_count = app.palette.filtered.len();
     let block = panel_block(Style::default().fg(t.accent))
-        .title(Span::styled(" Command Palette ", Style::default().fg(t.accent).add_modifier(Modifier::BOLD)));
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
-    if inner.width == 0 || inner.height == 0 {
+        .title(Span::styled(" Command Palette ", Style::default().fg(t.accent).add_modifier(Modifier::BOLD)))
+        .title_top(Line::from(Span::styled(format!(" {match_count} commands "), Style::default().fg(t.muted))).right_aligned());
+    let inner = block.inner(popup);
+    frame.render_widget(block, popup);
+    if inner.width == 0 || inner.height < 3 {
         return;
     }
 
-    let right_text = format!("{match_count} commands");
-    #[allow(clippy::cast_possible_truncation)] // label is a few dozen columns
-    let right_len = (right_text.len() as u16).min(inner.width);
-    let chunks = Layout::horizontal([Constraint::Min(0), Constraint::Length(right_len)]).split(inner);
+    let rows = Layout::vertical([
+        Constraint::Length(1), // query
+        Constraint::Length(1), // hairline
+        Constraint::Min(1),    // command list
+    ])
+    .split(inner);
 
-    crate::widgets::draw_prompt_input(frame, chunks[0], query);
-    frame.render_widget(Paragraph::new(Span::styled(right_text, Style::default().fg(t.muted))), chunks[1]);
+    crate::widgets::draw_prompt_input(frame, rows[0], &app.palette.query);
+    frame.render_widget(separator_rule(Style::default().fg(t.border)), rows[1]);
+    // Join the rule to the panel's sides; unstitched it reads as a line laid
+    // across the panel rather than as a division of it.
+    draw_junction(frame, (popup.x, rows[1].y), "\u{251c}", t.border);
+    draw_junction(frame, (popup.right().saturating_sub(1), rows[1].y), "\u{2524}", t.border);
+    draw_command_list(frame, rows[2], app);
+
+    // The scrollbar rides the panel border beside the list rows only, so its
+    // travel matches what actually scrolls.
+    if match_count > rows[2].height as usize {
+        let mut scrollbar_state = ScrollbarState::new(match_count).position(app.palette.selected);
+        let track = Rect { y: rows[2].y.saturating_sub(1), height: rows[2].height.saturating_add(2), ..popup };
+        crate::widgets::render_panel_scrollbar(frame, track, &mut scrollbar_state);
+    }
+
+    draw_footer_hint(frame, popup, PALETTE_HINT);
 }
 
 /// Draw the filtered command list with the key hint right-aligned per row.
 fn draw_command_list(frame: &mut Frame, area: Rect, app: &App) {
     let t = theme();
-    let inner_width = area.width.saturating_sub(2) as usize;
-    // Account for the highlight symbol gutter ("▶ ") so the hint never clips.
-    let label_width = inner_width.saturating_sub(2);
+    // Account for the selection cursor gutter ("▍ ") on the left and a column of
+    // air on the right, so the key hint never sits flush against the border.
+    let label_width = (area.width as usize).saturating_sub(3);
 
     let items: Vec<ListItem> = app
         .palette
@@ -84,39 +93,13 @@ fn draw_command_list(frame: &mut Frame, area: Rect, app: &App) {
         })
         .collect();
 
-    let block = panel_block(Style::default().fg(t.border)).title(" Commands ");
-
     let mut state = ListState::default();
     if !app.palette.filtered.is_empty() {
         state.select(Some(app.palette.selected.min(app.palette.filtered.len() - 1)));
     }
 
-    let list = List::new(items)
-        .block(block)
-        .highlight_style(Style::default().bg(t.highlight_bg).add_modifier(Modifier::BOLD))
-        .highlight_symbol("\u{25b6} ");
+    let list = List::new(items).highlight_style(selection_style(true)).highlight_symbol(SELECTION_CURSOR);
     frame.render_stateful_widget(list, area, &mut state);
-
-    if app.palette.filtered.len() > area.height.saturating_sub(2) as usize {
-        let mut scrollbar_state = ScrollbarState::new(app.palette.filtered.len()).position(app.palette.selected);
-        frame.render_stateful_widget(panel_scrollbar(), area, &mut scrollbar_state);
-    }
-}
-
-/// Draw the hint bar at the bottom of the palette.
-fn draw_hints(frame: &mut Frame, area: Rect) {
-    let t = theme();
-    let hints = Line::from(vec![
-        Span::styled("  type", Style::default().fg(t.muted)),
-        Span::styled(" to filter  ", Style::default().fg(t.muted)),
-        Span::styled("\u{2191}/\u{2193}", Style::default().fg(t.accent)),
-        Span::styled(" move  ", Style::default().fg(t.muted)),
-        Span::styled("Enter", Style::default().fg(t.accent)),
-        Span::styled(" run  ", Style::default().fg(t.muted)),
-        Span::styled("Esc", Style::default().fg(t.accent)),
-        Span::styled(" cancel", Style::default().fg(t.muted)),
-    ]);
-    frame.render_widget(Paragraph::new(hints).block(panel_block(Style::default().fg(t.muted))), area);
 }
 
 /// Compute a centred rectangle sized for the palette, clamped to the terminal.

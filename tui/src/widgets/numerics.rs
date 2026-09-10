@@ -314,10 +314,9 @@ fn inspect_range_rows(lines: &mut Vec<Line<'static>>, label: &str, range: &Range
     ]));
 }
 
-/// Append a bold accent heading line.
+/// Append a section heading in the shared style used by every pane.
 fn heading(lines: &mut Vec<Line<'static>>, title: &str) {
-    let t = theme();
-    lines.push(Line::from(vec![Span::styled(format!("  {title}"), Style::default().fg(t.accent).add_modifier(Modifier::BOLD))]));
+    lines.push(crate::widgets::heading_line(title));
 }
 
 /// Append the File A / File B column header row with a separator rule.

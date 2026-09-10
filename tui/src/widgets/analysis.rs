@@ -49,11 +49,11 @@ pub fn draw_analysis(frame: &mut ratatui::Frame, area: Rect, app: &mut crate::ap
             (centred_rect(area, 76.min(area.width), 5.min(area.height)), lines, format!(" {label} "))
         }
         AnalysisState::Done { label, pane } => {
-            let popup = centred_rect(area, area.width.saturating_sub(4).max(1), area.height.saturating_sub(2).max(1));
+            let popup = crate::widgets::report_rect(area);
             let inner_height = popup.height.saturating_sub(2) as usize;
             let max_scroll = u16::try_from(pane.lines.len().saturating_sub(inner_height)).unwrap_or(u16::MAX);
             pane.scroll = pane.scroll.min(max_scroll);
-            let hint = if max_scroll > 0 { "j/k scroll \u{2022} w write \u{2022} Esc close" } else { "w write \u{2022} Esc close" };
+            let hint = if max_scroll > 0 { "j/k scroll \u{b7} w write \u{b7} Esc close" } else { "w write \u{b7} Esc close" };
             (popup, pane.lines.clone(), format!(" {label}  ({hint}) "))
         }
     };
