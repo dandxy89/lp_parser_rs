@@ -683,6 +683,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::float_cmp)]
     fn effective_bounds_follow_the_declaration() {
         // Undeclared takes LP's default of [0, +inf).
         let undeclared = VariableBounds::unspecified();
