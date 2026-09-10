@@ -1,5 +1,95 @@
 # Changelog
 
+## [4.0.0](https://github.com/dandxy89/lp_parser_rs/compare/parse_lp-v3.0.2...parse_lp-v4.0.0) (2026-09-10)
+
+
+### ⚠ BREAKING CHANGES
+
+* **python:** parse() now raises LpParseError immediately for malformed files instead of deferring the error to the first attribute access.
+* **python:** parse-lp console script and LpParser.compare() are removed; use the Rust CLI's diff subcommand instead.
+
+### Build System
+
+* **deps:** bump pygments from 2.19.2 to 2.20.0 in /python ([#180](https://github.com/dandxy89/lp_parser_rs/issues/180)) ([4e4bd0f](https://github.com/dandxy89/lp_parser_rs/commit/4e4bd0f568ce087b832dc727f015eff46fdf555a))
+* Python updates + lint fixes ([e6693a0](https://github.com/dandxy89/lp_parser_rs/commit/e6693a03111ce494bc90196f93c176122c47cda2))
+* update pyo3 to version 0.28.0 and replace pyrefly with ty in dependencies ([38907e5](https://github.com/dandxy89/lp_parser_rs/commit/38907e513cb5865aca186c253d8c48dab48dc5ec))
+* Updating crates, ty and ruff ([76bbebc](https://github.com/dandxy89/lp_parser_rs/commit/76bbebc7ef216386f5f856dbac718cbc4e60cdbd))
+
+
+### Continuous Integration
+
+* Fix pipeline sync ([cb8d0bd](https://github.com/dandxy89/lp_parser_rs/commit/cb8d0bda41be746647a7628ab3071f6332b67a4e))
+* fix release-please config paths and changelog locations ([5808e72](https://github.com/dandxy89/lp_parser_rs/commit/5808e72bceb4aefd1c0cbe69a4902ebf42dcabc3))
+* trigger release-please after tag fix ([bb19a1c](https://github.com/dandxy89/lp_parser_rs/commit/bb19a1cdbac44a957ff8ce07ebbe5e5f729eb2c1))
+
+
+### Miscellaneous Chores
+
+* Adding more validation / debug_asserts ([cdc94bd](https://github.com/dandxy89/lp_parser_rs/commit/cdc94bd8d39c910faf27529e187bf9a07bf904b7))
+* **deps-dev:** bump basedpyright ([#183](https://github.com/dandxy89/lp_parser_rs/issues/183)) ([95cab0a](https://github.com/dandxy89/lp_parser_rs/commit/95cab0abdb164057fb51f6b2c8adec6fa8f7569c))
+* enable clippy pedantic workspace-wide and fix all violations ([b334191](https://github.com/dandxy89/lp_parser_rs/commit/b3341919d350ec4ba6d8ef5eb463c8a239a1a0d2))
+* release main ([d24c5c8](https://github.com/dandxy89/lp_parser_rs/commit/d24c5c81325f1cc28600250900b44d73a68ff26d))
+* release main ([948ff5d](https://github.com/dandxy89/lp_parser_rs/commit/948ff5d43f3cecd2aa5bae41c8ae42a44407a38d))
+* release main ([#149](https://github.com/dandxy89/lp_parser_rs/issues/149)) ([cfa1f2c](https://github.com/dandxy89/lp_parser_rs/commit/cfa1f2c39ceeb5aa61c2f332b489f78d95ef17f2))
+* release main ([#153](https://github.com/dandxy89/lp_parser_rs/issues/153)) ([96baff8](https://github.com/dandxy89/lp_parser_rs/commit/96baff8997a87f3e78c4ac390c042efebf8270e4))
+* release main ([#155](https://github.com/dandxy89/lp_parser_rs/issues/155)) ([60c66d8](https://github.com/dandxy89/lp_parser_rs/commit/60c66d8f780407f7c818978c941a0c5592d74984))
+* release main ([#159](https://github.com/dandxy89/lp_parser_rs/issues/159)) ([71b8c7b](https://github.com/dandxy89/lp_parser_rs/commit/71b8c7b5c0cdb868dca7cbe1f9e37dd218cef58e))
+* release main ([#164](https://github.com/dandxy89/lp_parser_rs/issues/164)) ([8a8e267](https://github.com/dandxy89/lp_parser_rs/commit/8a8e2671887a8983ed009f0862fbe56784e1569f))
+* release main ([#168](https://github.com/dandxy89/lp_parser_rs/issues/168)) ([a0b8eba](https://github.com/dandxy89/lp_parser_rs/commit/a0b8eba2fc5c035793a3de98cafe8b6df72d2d50))
+* release main ([#171](https://github.com/dandxy89/lp_parser_rs/issues/171)) ([5fe0bcd](https://github.com/dandxy89/lp_parser_rs/commit/5fe0bcd1d6197d3265ce4a8a09b992aa7a638adf))
+* release main ([#181](https://github.com/dandxy89/lp_parser_rs/issues/181)) ([47d9efe](https://github.com/dandxy89/lp_parser_rs/commit/47d9efed7392c46bd22b184d7f10349d30d6f9e2))
+* release main ([#187](https://github.com/dandxy89/lp_parser_rs/issues/187)) ([e867c09](https://github.com/dandxy89/lp_parser_rs/commit/e867c09e4553288bb91c770996918048f50961aa))
+* release main ([#196](https://github.com/dandxy89/lp_parser_rs/issues/196)) ([99f9f31](https://github.com/dandxy89/lp_parser_rs/commit/99f9f314c67797c55897c285856a9baeb190bfd2))
+* set MSRV to 1.88.0 across workspace crates ([071c612](https://github.com/dandxy89/lp_parser_rs/commit/071c612c5f76b37db24119dea8debe8c9332e163))
+
+
+### Documentation
+
+* fix stale examples and links, fill missing docs, enforce doc lints ([e0bb357](https://github.com/dandxy89/lp_parser_rs/commit/e0bb3577dc3a5c3c5d893b46b3931caad4a45c72))
+* refresh READMEs and tag the summary output code fence ([d718289](https://github.com/dandxy89/lp_parser_rs/commit/d7182890167a342508db6d1daaf7d18e9d89d94e))
+
+
+### Features
+
+* Adding a dedicated TUI for solving, viewing and comparing LP files ([#160](https://github.com/dandxy89/lp_parser_rs/issues/160)) ([8b6c455](https://github.com/dandxy89/lp_parser_rs/commit/8b6c455133f4bc226796fd166d577d57e8b26871))
+* Detailed statistics ([#154](https://github.com/dandxy89/lp_parser_rs/issues/154)) ([e4d74b7](https://github.com/dandxy89/lp_parser_rs/commit/e4d74b7240be508c07ec15998f511e7610c8e5f4))
+* Extending python library with runnable main ([8eef3a6](https://github.com/dandxy89/lp_parser_rs/commit/8eef3a62360adef6e35818884e5e2ad475bfb992))
+* **python:** add string/MPS parsing, diff and structured variables ([ecbef95](https://github.com/dandxy89/lp_parser_rs/commit/ecbef9570f7ee60037d47ffdfbffa5e57747a584))
+* TUI and Perf fixes ([#189](https://github.com/dandxy89/lp_parser_rs/issues/189)) ([c898123](https://github.com/dandxy89/lp_parser_rs/commit/c898123543df4000ab3ce3aca9adcaedb2059a6f))
+* tui watch numerics perf ([#193](https://github.com/dandxy89/lp_parser_rs/issues/193)) ([d849d2f](https://github.com/dandxy89/lp_parser_rs/commit/d849d2f6bfa597cdaa59f421f79aa7f9ec571eeb))
+* **tui:** Add CSV export of diff report ([fa53f7f](https://github.com/dandxy89/lp_parser_rs/commit/fa53f7fb8108b81cca26f8b0adf25324b5579ea3))
+
+
+### Bug Fixes
+
+* Apply fixes due to ty violations ([76bbebc](https://github.com/dandxy89/lp_parser_rs/commit/76bbebc7ef216386f5f856dbac718cbc4e60cdbd))
+* CI Pipeline failure ([3316c6e](https://github.com/dandxy89/lp_parser_rs/commit/3316c6e61c17afa9b32874415ad5582a763c24a6))
+* **feat:** Extending the regex and improving the versatility of the original CLI ([#185](https://github.com/dandxy89/lp_parser_rs/issues/185)) ([ebe05b8](https://github.com/dandxy89/lp_parser_rs/commit/ebe05b8cc3361ddf798f6b97c72c290761ad36d7))
+* **python:** declare dual MIT OR Apache-2.0 licence on PyPI ([de7d14e](https://github.com/dandxy89/lp_parser_rs/commit/de7d14e503f01ceb1b52259283f4049d46a9db42))
+* **python:** raise exceptions by error kind, not by the call site ([9e85fdc](https://github.com/dandxy89/lp_parser_rs/commit/9e85fdc4f35550fb88eae230411a5dfcd8d54d77))
+* Updating lints ([dc95549](https://github.com/dandxy89/lp_parser_rs/commit/dc955496f611528250061f1ad55f894d73a1912c))
+
+
+### Performance Improvements
+
+* **python:** parse once, store LpProblem instead of re-parsing text ([eb29882](https://github.com/dandxy89/lp_parser_rs/commit/eb2988218770e39a8f7c08f8eb045fde849f6988))
+
+
+### Code Refactoring
+
+* Clippy ([#150](https://github.com/dandxy89/lp_parser_rs/issues/150)) ([0ec6a51](https://github.com/dandxy89/lp_parser_rs/commit/0ec6a510fe3bd3a9f6f52194de381a110ad19589))
+* derive the clipboard yank from the widgets' lines, and drop the legacy VariableType view ([3cc93c9](https://github.com/dandxy89/lp_parser_rs/commit/3cc93c99913113a4a7316875ce5efa07b8db4198))
+* ponytail audit cleanup ([#195](https://github.com/dandxy89/lp_parser_rs/issues/195)) ([ada04ce](https://github.com/dandxy89/lp_parser_rs/commit/ada04ceebb112725ce75c7fade7bba59c73ab0d8))
+* **python:** remove diff CLI and compare(), slim bindings ([65d7873](https://github.com/dandxy89/lp_parser_rs/commit/65d787320e35a6e605ee90c56395c8e54d513b68))
+* remove over-engineering flagged by repo audit ([5d3ec69](https://github.com/dandxy89/lp_parser_rs/commit/5d3ec6951243ec27362992240bc839e10753892c))
+* strip over-engineering found by repo-wide audit ([c842456](https://github.com/dandxy89/lp_parser_rs/commit/c842456c5fdd1d67ed16fea3dd17d9de71d6393a))
+
+
+### Styles
+
+* Formatting ([4d3ab97](https://github.com/dandxy89/lp_parser_rs/commit/4d3ab97e560eb04c921ea057da2bfb409c60127f))
+* Remove inline imports and qualified imports ([42c20a2](https://github.com/dandxy89/lp_parser_rs/commit/42c20a25b412b6fded358fdca70db4983db6f19b))
+
 ## [3.0.2](https://github.com/dandxy89/lp_parser_rs/compare/parse_lp-v4.0.1...parse_lp-v3.0.2) (2026-08-17)
 
 

@@ -1,5 +1,35 @@
 # Changelog
 
+## [4.1.0](https://github.com/dandxy89/lp_parser_rs/compare/lp_diff-v4.0.0...lp_diff-v4.1.0) (2026-09-10)
+
+
+### Features
+
+* **tui:** compare solve times across HiGHS configurations ([59869eb](https://github.com/dandxy89/lp_parser_rs/commit/59869eb3f1f7b751f792c013139196cb26973554))
+* **tui:** find the minimal conflicting set of an infeasible model (I) ([14e204a](https://github.com/dandxy89/lp_parser_rs/commit/14e204a3fe890c04eaa1bd9ea34469a0a90c8af7))
+* **tui:** name the variables that make a model unbounded (U) ([6e2c5ed](https://github.com/dandxy89/lp_parser_rs/commit/6e2c5ed793fe13a90d060a8df148a2dd1e3ee0c2))
+* **tui:** show how far each coefficient can move (R) ([915168c](https://github.com/dandxy89/lp_parser_rs/commit/915168c0954242fc59f8ce78529bafd9db4fc2bc))
+* **tui:** show the solve profile in a pane (B) ([b9eb2d2](https://github.com/dandxy89/lp_parser_rs/commit/b9eb2d25e561f1f630e89620a7bb9acb1dc14a74))
+
+
+### Bug Fixes
+
+* **cli:** build the lp_parser binary without the diff feature ([51ea77c](https://github.com/dandxy89/lp_parser_rs/commit/51ea77c38df0fe7c404ec6781f24b7a745ef1711))
+* distinguish a declared-free variable from an undeclared one ([47d594f](https://github.com/dandxy89/lp_parser_rs/commit/47d594f5dbb9e57630ac45b7fbfd351f686e9a16))
+* **tui:** centre a row's range on its activity, not its right-hand side ([f4be5a8](https://github.com/dandxy89/lp_parser_rs/commit/f4be5a830909c4355a8c555274ee30e4b735b554))
+* **tui:** finish restoring the terminal when a teardown step fails ([2c88158](https://github.com/dandxy89/lp_parser_rs/commit/2c8815808f47da61f782071aa52ef4f7558d2ead))
+* **tui:** print infinity consistently across the analysis panes ([167d5c4](https://github.com/dandxy89/lp_parser_rs/commit/167d5c44994ec9c2d90f1f2c3a8064ef3eaa54e2))
+
+
+### Styles
+
+* **tui:** Styling of the TUI updates ([4126da0](https://github.com/dandxy89/lp_parser_rs/commit/4126da0bb248aba1bdbcf09030e5cab26a8de805))
+
+
+### Tests
+
+* **tui:** exercise the analyses on the repo's largest models ([dde2d28](https://github.com/dandxy89/lp_parser_rs/commit/dde2d2872a0a1c07a7b1d7c827e68460f8fe7724))
+
 ## [4.0.0](https://github.com/dandxy89/lp_parser_rs/compare/lp_diff-v3.6.0...lp_diff-v4.0.0) (2026-08-17)
 
 

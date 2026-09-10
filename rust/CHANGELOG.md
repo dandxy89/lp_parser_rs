@@ -1,5 +1,16 @@
 # Changelog
 
+## [5.0.1](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v5.0.0...lp_parser_rs-v5.0.1) (2026-09-10)
+
+
+### Bug Fixes
+
+* **cli:** build the lp_parser binary without the diff feature ([51ea77c](https://github.com/dandxy89/lp_parser_rs/commit/51ea77c38df0fe7c404ec6781f24b7a745ef1711))
+* distinguish a declared-free variable from an undeclared one ([47d594f](https://github.com/dandxy89/lp_parser_rs/commit/47d594f5dbb9e57630ac45b7fbfd351f686e9a16))
+* **parser:** stop silently dropping bounds and constraints on name clashes ([ccc58ad](https://github.com/dandxy89/lp_parser_rs/commit/ccc58ad3f5e32866ef005a4aa3361b55a0dea257))
+* **rust:** allow exact float comparison in effective-bounds test ([837f985](https://github.com/dandxy89/lp_parser_rs/commit/837f9859ac12d44b03416127f154ee949a6c486a))
+* **rust:** validate mutation inputs, and fail the lex on an unparseable number ([a262cc0](https://github.com/dandxy89/lp_parser_rs/commit/a262cc075bf5d81f40ee8a771d130c88dd673543))
+
 ## [5.0.0](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v4.1.0...lp_parser_rs-v5.0.0) (2026-08-17)
 
 
