@@ -1,5 +1,33 @@
 # Changelog
 
+## [4.1.0](https://github.com/dandxy89/lp_parser_rs/compare/parse_lp-v4.0.0...parse_lp-v4.1.0) (2026-09-10)
+
+
+### Miscellaneous Chores
+
+* release main ([d3ba294](https://github.com/dandxy89/lp_parser_rs/commit/d3ba2946cc0fce6a256da7feb8fee3a740453973))
+* release main ([d24c5c8](https://github.com/dandxy89/lp_parser_rs/commit/d24c5c81325f1cc28600250900b44d73a68ff26d))
+* release main ([948ff5d](https://github.com/dandxy89/lp_parser_rs/commit/948ff5d43f3cecd2aa5bae41c8ae42a44407a38d))
+* set MSRV to 1.88.0 across workspace crates ([071c612](https://github.com/dandxy89/lp_parser_rs/commit/071c612c5f76b37db24119dea8debe8c9332e163))
+
+
+### Features
+
+* **python:** add string/MPS parsing, diff and structured variables ([ecbef95](https://github.com/dandxy89/lp_parser_rs/commit/ecbef9570f7ee60037d47ffdfbffa5e57747a584))
+
+
+### Bug Fixes
+
+* **python:** declare dual MIT OR Apache-2.0 licence on PyPI ([de7d14e](https://github.com/dandxy89/lp_parser_rs/commit/de7d14e503f01ceb1b52259283f4049d46a9db42))
+* **python:** raise exceptions by error kind, not by the call site ([9e85fdc](https://github.com/dandxy89/lp_parser_rs/commit/9e85fdc4f35550fb88eae230411a5dfcd8d54d77))
+
+
+### Code Refactoring
+
+* derive the clipboard yank from the widgets' lines, and drop the legacy VariableType view ([3cc93c9](https://github.com/dandxy89/lp_parser_rs/commit/3cc93c99913113a4a7316875ce5efa07b8db4198))
+* remove over-engineering flagged by repo audit ([5d3ec69](https://github.com/dandxy89/lp_parser_rs/commit/5d3ec6951243ec27362992240bc839e10753892c))
+* strip over-engineering found by repo-wide audit ([c842456](https://github.com/dandxy89/lp_parser_rs/commit/c842456c5fdd1d67ed16fea3dd17d9de71d6393a))
+
 ## [4.0.0](https://github.com/dandxy89/lp_parser_rs/compare/parse_lp-v3.0.2...parse_lp-v4.0.0) (2026-09-10)
 
 
