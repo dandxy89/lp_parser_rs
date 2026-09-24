@@ -2,7 +2,7 @@ use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{List, ListItem, Paragraph, ScrollbarState};
+use ratatui::widgets::{HighlightSpacing, List, ListItem, Paragraph, ScrollbarState};
 
 use crate::app::{App, Focus, Section};
 use crate::theme::theme;
@@ -217,7 +217,13 @@ fn draw_entry_name_list(frame: &mut Frame, area: Rect, params: &NameListParams<'
     // Temporary state mapped to the slice coordinate space.
     let mut slice_state = ratatui::widgets::ListState::default().with_offset(0).with_selected(state.selected().map(|s| s - offset));
 
-    let list = List::new(items).block(block).highlight_style(selection_style(params.focused)).highlight_symbol(SELECTION_CURSOR);
+    // Always reserve the cursor gutter, so rows do not jump two columns
+    // sideways when the selection comes and goes.
+    let list = List::new(items)
+        .block(block)
+        .highlight_style(selection_style(params.focused))
+        .highlight_symbol(SELECTION_CURSOR)
+        .highlight_spacing(HighlightSpacing::Always);
 
     frame.render_stateful_widget(list, area, &mut slice_state);
 

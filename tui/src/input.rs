@@ -1464,7 +1464,7 @@ impl App {
             self.set_active_section(new_section);
             self.invalidate_cache();
             self.ensure_active_section_cache();
-            self.reset_name_list_selection();
+            self.reselect_entry(None);
             self.detail_scroll = 0;
         }
     }
@@ -1474,7 +1474,7 @@ impl App {
         self.set_active_section(section);
         self.invalidate_cache();
         self.ensure_active_section_cache();
-        self.reset_name_list_selection();
+        self.reselect_entry(None);
         self.detail_scroll = 0;
         // Land focus on the section's content so navigation keys act on it
         // immediately, rather than on the tab bar.
@@ -1484,10 +1484,11 @@ impl App {
     pub(crate) fn set_filter(&mut self, filter: DiffFilter) {
         if self.filter != filter {
             self.record_jump();
+            let selected = self.selected_entry_index();
             self.apply_filter(filter);
             self.invalidate_cache();
             self.ensure_active_section_cache();
-            self.reset_name_list_selection();
+            self.reselect_entry(selected);
         }
     }
 

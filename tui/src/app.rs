@@ -679,9 +679,12 @@ impl App {
 
     /// Toggle hiding of order-only diff entries.
     pub fn toggle_ignore_order(&mut self) {
+        let selected = self.selected_entry_index();
         self.ignore_order = !self.ignore_order;
         self.invalidate_cache();
         self.rebuild_summary();
+        self.ensure_active_section_cache();
+        self.reselect_entry(selected);
     }
 
     /// Rebuild the cached summary and summary lines, adjusting counts when
@@ -700,10 +703,11 @@ impl App {
 
     /// Cycle the sidebar sort mode: Name → `AbsDelta` → `RelDelta` → Name.
     pub fn cycle_sort_mode(&mut self) {
+        let selected = self.selected_entry_index();
         self.sort_mode = self.sort_mode.next();
         self.invalidate_cache();
         self.ensure_active_section_cache();
-        self.reset_name_list_selection();
+        self.reselect_entry(selected);
         let label = match self.sort_mode {
             SortMode::Name => "Sort: name",
             SortMode::AbsDelta => "Sort: |\u{394}| (largest first)",
@@ -996,10 +1000,24 @@ impl App {
         self.active_section.list_index().is_some() && self.name_list_len() > 0
     }
 
-    pub(crate) const fn reset_name_list_selection(&mut self) {
-        if let Some(index) = self.active_section.list_index() {
-            self.section_states[index].list_state.select(None);
+    /// Re-select `entry` (a report index) in the active section's freshly
+    /// recomputed list, or the first row when it is no longer visible.
+    ///
+    /// A filter or sort change must not drop the selection: the list would
+    /// read `0/N` and the detail panel fall back to the cheat sheet, as though
+    /// the user had never picked anything. Must be called after
+    /// `ensure_active_section_cache`.
+    pub(crate) fn reselect_entry(&mut self, entry: Option<usize>) {
+        let Some(index) = self.active_section.list_index() else {
+            return;
+        };
+        let visible = self.section_states[index].cached_indices();
+        let kept = entry.and_then(|entry| visible.iter().position(|&i| i == entry));
+        let position = kept.or_else(|| (!visible.is_empty()).then_some(0));
+        if kept.is_none() {
+            self.detail_scroll = 0;
         }
+        self.section_states[index].list_state.select(position);
     }
 
     /// Move down by `n` steps in the focused panel. No-op for `SectionSelector`.
@@ -1851,6 +1869,27 @@ mod tests {
         app.jump_back();
 
         assert_eq!(app.selected_entry_name(), Some("c2"), "the jump must land on the recorded entry");
+    }
+
+    /// Regression: a filter or sort change dropped the selection, so the list
+    /// read `0/N` and the detail panel fell back to the cheat sheet.
+    #[test]
+    fn filter_and_sort_changes_keep_the_selected_entry() {
+        let mut app = crate::snapshot_tests::diff_app_from(
+            "min\nobj: x\nst\nc1: x + y >= 2\nc2: x <= 8\nc3: y <= 4\nend\n",
+            "min\nobj: x\nst\nc1: x + y >= 3\nc2: x <= 9\nc4: y <= 5\nend\n",
+        );
+        app.set_section(Section::Constraints);
+        let c2 = app.report.constraints.entries.iter().position(|entry| entry.name == "c2").expect("c2 is in the report");
+        let position = app.section_states[1].cached_indices().iter().position(|&i| i == c2).expect("c2 is listed");
+        app.active_name_list_state_mut().select(Some(position));
+
+        app.cycle_sort_mode();
+        assert_eq!(app.selected_entry_name(), Some("c2"), "a sort change keeps the entry");
+        app.set_filter(DiffFilter::Modified);
+        assert_eq!(app.selected_entry_name(), Some("c2"), "a filter that still shows the entry keeps it");
+        app.set_filter(DiffFilter::Added);
+        assert_eq!(app.active_name_list_state_mut().selected(), Some(0), "a filter hiding the entry falls back to the first row");
     }
 
     /// Regression: search covers order-only entries that `o` hides, and the
