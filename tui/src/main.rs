@@ -15,6 +15,7 @@
 
 mod app;
 mod cli_output;
+mod clipboard;
 mod detail_model;
 mod detail_text;
 mod diagnostics;

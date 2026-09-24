@@ -175,6 +175,8 @@ Search mode prefixes (type in the pop-up input):
 | `yn` | Yank new (file 2) version of entry to clipboard |
 | `Y`  | Yank full detail panel content to clipboard     |
 
+Over SSH or inside tmux (`SSH_TTY` or `TMUX` set), yanks go through the terminal as an OSC 52 escape instead, so they land on the clipboard of the machine you are sitting at; locally, OSC 52 is the fallback when the system clipboard is unavailable. The status bar says which route was taken. Under tmux, OSC 52 needs `set -g set-clipboard on`.
+
 **Solver**
 
 | Key                 | Action                                                                         |

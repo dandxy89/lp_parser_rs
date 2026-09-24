@@ -1190,23 +1190,41 @@ impl App {
     /// Copy `text` to the system clipboard and show a flash message in the status bar.
     ///
     /// `label` is a short description shown on success (e.g. "Yanked: x1").
+    ///
+    /// Over SSH or inside tmux the system clipboard `arboard` reaches is the
+    /// wrong machine's (or none at all), so the text goes to the terminal
+    /// instead, as an OSC 52 escape the terminal copies from. Locally,
+    /// `arboard` is tried first and OSC 52 is the fallback when it fails. The
+    /// flash names the route taken, since OSC 52 cannot confirm it landed.
     pub(crate) fn set_yank_flash(&mut self, label: &str, text: &str) {
         thread_local! {
             static CLIPBOARD: std::cell::RefCell<Option<arboard::Clipboard>> = const { std::cell::RefCell::new(None) };
+        }
+
+        let remote = std::env::var_os("SSH_TTY").is_some() || std::env::var_os("TMUX").is_some();
+        if remote {
+            match crate::clipboard::write_osc52(text) {
+                Ok(()) => self.flash_ok(format!("{label} (via terminal, OSC 52)")),
+                Err(error) => self.flash_error(format!("Yank failed: could not write OSC 52: {error}")),
+            }
+            return;
         }
 
         let result: Result<(), String> = CLIPBOARD.with_borrow_mut(|cb| {
             if cb.is_none() {
                 // Surface initialisation failure (common on SSH/Wayland sessions) instead of
                 // silently appearing to succeed; the next yank will retry initialisation.
-                *cb = Some(arboard::Clipboard::new().map_err(|error| format!("Clipboard unavailable: {error}"))?);
+                *cb = Some(arboard::Clipboard::new().map_err(|error| format!("clipboard unavailable: {error}"))?);
             }
-            cb.as_mut().expect("clipboard initialised above").set_text(text).map_err(|error| format!("Yank failed: {error}"))
+            cb.as_mut().expect("clipboard initialised above").set_text(text).map_err(|error| format!("clipboard failed: {error}"))
         });
 
         match result {
-            Ok(()) => self.flash_ok(label),
-            Err(message) => self.flash_error(message),
+            Ok(()) => self.flash_ok(format!("{label} (clipboard)")),
+            Err(clipboard_error) => match crate::clipboard::write_osc52(text) {
+                Ok(()) => self.flash_warn(format!("{label} (via terminal, OSC 52 \u{2014} {clipboard_error})")),
+                Err(error) => self.flash_error(format!("Yank failed: {clipboard_error}; OSC 52: {error}")),
+            },
         }
     }
 
