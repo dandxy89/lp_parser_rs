@@ -1,18 +1,17 @@
 // Allow pedantic lints that are unavoidable due to PyO3 macro requirements
 #![allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap, clippy::needless_pass_by_value, clippy::unnecessary_wraps)]
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use lp_parser_rs::analysis::AnalysisConfig;
 use lp_parser_rs::diff::DiffOptions;
 use lp_parser_rs::model::{Constraint, Sense, VariableType};
 use lp_parser_rs::mps::writer::{MpsWriterOptions, write_mps_string_with_options};
-use lp_parser_rs::parser::parse_file;
 use lp_parser_rs::problem::LpProblem;
 use lp_parser_rs::writer::{LpWriterOptions, write_lp_string_with_options};
 use lp_parser_rs::{EntityKind, LpParseError as CoreError, VariableKind};
 use pyo3::create_exception;
-use pyo3::exceptions::{PyFileNotFoundError, PyNotADirectoryError, PyRuntimeError};
+use pyo3::exceptions::{PyFileNotFoundError, PyNotADirectoryError, PyOSError, PyRuntimeError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
 
@@ -76,7 +75,7 @@ impl LpParser {
         };
         let file_path = path;
         let problem = py.detach(|| {
-            let input = parse_file(&file_path).map_err(|err| LpParseError::new_err(format!("Unable to read file: {err}")))?;
+            let input = std::fs::read_to_string(&file_path).map_err(|err| io_err(&file_path, &err))?;
             parse_source(&input, inferred)
         })?;
         Ok(Self { lp_file: file_path.to_string_lossy().into_owned(), source_path: Some(file_path), format: inferred, problem })
@@ -100,7 +99,7 @@ impl LpParser {
         // Release the GIL while reading and parsing so other Python threads
         // are not blocked by the heavy pure-Rust work.
         self.problem = py.detach(|| {
-            let input = parse_file(path).map_err(|err| LpParseError::new_err(format!("Unable to read file: {err}")))?;
+            let input = std::fs::read_to_string(path).map_err(|err| io_err(path, &err))?;
             parse_source(&input, format)
         })?;
         Ok(())
@@ -111,7 +110,10 @@ impl LpParser {
             return Err(PyNotADirectoryError::new_err(format!("Path {} is not a directory.", base_directory.display())));
         }
 
-        self.problem.to_csv(&base_directory).map_err(|err| PyRuntimeError::new_err(format!("Unable to write to .csv files: {err}")))?;
+        self.problem.to_csv(&base_directory).map_err(|err| match err.downcast::<std::io::Error>() {
+            Ok(io) => io_err(&base_directory, &io),
+            Err(err) => PyRuntimeError::new_err(format!("Unable to write to .csv files: {err}")),
+        })?;
 
         Ok(())
     }
@@ -218,7 +220,7 @@ impl LpParser {
     fn save_to_file(&self, filepath: PathBuf) -> PyResult<()> {
         let problem = &self.problem;
         let lp_content = write_lp_string_with_options(problem, &LpWriterOptions::default());
-        std::fs::write(&filepath, lp_content).map_err(|err| PyRuntimeError::new_err(format!("Failed to write file: {err}")))
+        std::fs::write(&filepath, lp_content).map_err(|err| io_err(&filepath, &err))
     }
 
     /// Write the current problem to an MPS format string.
@@ -233,7 +235,7 @@ impl LpParser {
     #[pyo3(signature = (filepath, *, decimal_precision=6, allow_multiple_objectives=false))]
     fn save_to_mps(&self, filepath: PathBuf, decimal_precision: usize, allow_multiple_objectives: bool) -> PyResult<()> {
         let content = self.to_mps_string(decimal_precision, allow_multiple_objectives)?;
-        std::fs::write(&filepath, content).map_err(|err| PyRuntimeError::new_err(format!("Failed to write file: {err}")))
+        std::fs::write(&filepath, content).map_err(|err| io_err(&filepath, &err))
     }
 
     /// Compare this problem against another parser's problem.
@@ -463,7 +465,23 @@ fn to_py_err(context: &str, err: CoreError) -> PyErr {
         | CoreError::InvalidNumber { .. }
         | CoreError::ValidationError { .. } => LpInvalidValueError::new_err(message),
         CoreError::MissingSection { .. } | CoreError::ParseError { .. } => LpParseError::new_err(message),
-        CoreError::IoError { .. } => PyRuntimeError::new_err(message),
+        CoreError::IoError { .. } => PyOSError::new_err(message),
+    }
+}
+
+/// Raise an I/O failure as `OSError`. Given an OS error code, Python's
+/// `OSError(errno, strerror, filename)` picks the matching subclass
+/// (`FileNotFoundError`, `PermissionError`, `IsADirectoryError`, ...).
+fn io_err(path: &Path, err: &std::io::Error) -> PyErr {
+    let filename = path.display().to_string();
+    match err.raw_os_error() {
+        Some(errno) => {
+            // Rust appends " (os error N)"; Python already shows `[Errno N]`.
+            let message = err.to_string();
+            let strerror = message.split(" (os error").next().unwrap_or(&message).to_string();
+            PyOSError::new_err((errno, strerror, filename))
+        }
+        None => PyOSError::new_err(format!("{filename}: {err}")),
     }
 }
 

@@ -76,6 +76,9 @@ class LpParser:
 
         Raises FileNotFoundError if the path is not a file. The format is inferred
         from the extension; use `from_file` to override it.
+
+        I/O failures here and in the save/export methods raise OSError (or the
+        matching subclass, e.g. PermissionError); parse failures raise LpParseError.
         """
 
     @staticmethod

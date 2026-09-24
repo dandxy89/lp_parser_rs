@@ -284,6 +284,31 @@ class TestPathLikeArguments:
         assert (tmp_path / "variables.csv").is_file()
 
 
+class TestIoErrors:
+    """I/O failures raise OSError subclasses, not LpParseError."""
+
+    def test_reparse_deleted_file_raises_file_not_found(self, simple_lp_file: Path, tmp_path: Path) -> None:
+        path = tmp_path / "gone.lp"
+        path.write_text(simple_lp_file.read_text())
+        parser = LpParser(path)
+        path.unlink()
+        with pytest.raises(FileNotFoundError) as info:
+            parser.parse()
+        assert not isinstance(info.value, RuntimeError)
+        assert info.value.filename == str(path)
+
+    def test_save_into_missing_directory_raises_os_error(self, simple_lp_file: Path, tmp_path: Path) -> None:
+        parser = LpParser(simple_lp_file)
+        with pytest.raises(FileNotFoundError):
+            parser.save_to_file(tmp_path / "missing" / "out.lp")
+        with pytest.raises(FileNotFoundError):
+            parser.save_to_mps(tmp_path / "missing" / "out.mps")
+
+    def test_save_onto_directory_raises_os_error(self, simple_lp_file: Path, tmp_path: Path) -> None:
+        with pytest.raises(IsADirectoryError):
+            LpParser(simple_lp_file).save_to_file(tmp_path)
+
+
 class TestUpdateVariableType:
     LP = "Minimize\n obj: x + y\nSubject To\n c1: x + y >= 1\nBounds\n 2 <= x <= 5\nGenerals\n x\nEnd\n"
 
