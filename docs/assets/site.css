@@ -18,7 +18,7 @@
   --tty-rule: #2c333b;
   --accent: #15b757;
   --focus: #0d7a3c;
-  --accent-hot: #fb4a00;
+  --accent-hot: #c73a00;
   --link: #1b370e;
   --ink-alt: #3a668f;
   --hero-a: #f6f7f8;
@@ -229,7 +229,7 @@ h1 .line2 { display: block; color: var(--ink); font-weight: 500; }
 .cta a::after {
   content: "↗"; display: flex; align-items: center; justify-content: center;
   width: 3rem; height: 3rem; flex: none;
-  border-left: 1px solid var(--rule); color: var(--accent);
+  border-left: 1px solid var(--rule); color: var(--focus);
   font-size: 1.05rem; font-weight: 400;
   transition: border-color var(--t), color var(--t), background var(--t);
 }
@@ -249,7 +249,7 @@ section { padding: 5.5rem 0; border-bottom: 1px solid var(--rule); }
   display: flex; align-items: baseline; gap: 0.9rem;
 }
 .sec-label::before {
-  content: counter(sec, decimal-leading-zero); color: var(--accent); font-weight: 600; letter-spacing: 0.04em;
+  content: counter(sec, decimal-leading-zero); color: var(--focus); font-weight: 600; letter-spacing: 0.04em;
 }
 h2 {
   font-family: var(--display);
@@ -336,7 +336,7 @@ footer .end {
 }
 footer p { color: var(--band-ink-soft); font-size: 0.88rem; margin-top: 1.25rem; }
 footer a { color: var(--band-link); text-decoration: underline; text-decoration-color: rgba(220,235,214,.35); }
-footer a:hover { color: var(--accent); }
+footer a:hover { color: var(--focus); }
 
 /* ---- deep-dive page additions (tui.html) ---- */
 
