@@ -25,6 +25,11 @@ impl App {
             return;
         }
 
+        // An error flash stays up until the user has had a key press to see it.
+        if self.yank.level == crate::app::FlashLevel::Err {
+            self.yank.clear();
+        }
+
         // Ctrl-C is an unconditional quit regardless of any other mode.
         if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
             self.should_quit = true;
@@ -752,11 +757,10 @@ impl App {
 
     /// Flash the status bar with the outcome of a solve CSV write.
     fn flash_csv_write(&mut self, written: Result<(String, String), String>) {
-        self.yank.message = match written {
-            Ok((file1, file2)) => format!("Wrote {file1} and {file2}"),
-            Err(e) => format!("CSV write failed: {e}"),
-        };
-        self.yank.flash = Some(std::time::Instant::now());
+        match written {
+            Ok((file1, file2)) => self.flash_ok(format!("Wrote {file1} and {file2}")),
+            Err(e) => self.flash_error(format!("CSV write failed: {e}")),
+        }
     }
 
     /// Start an infeasibility diagnosis for the single-solve result, if it is
@@ -981,15 +985,15 @@ impl App {
     /// case a hint is flashed instead.
     fn open_what_if(&mut self) {
         if self.active_section != Section::Constraints {
-            self.flash_status("What-if: select a constraint first (section 3)");
+            self.flash_warn("What-if: select a constraint first (section 3)");
             return;
         }
         let Some(name) = self.selected_constraint_name() else {
-            self.flash_status("What-if: select a constraint first");
+            self.flash_warn("What-if: select a constraint first");
             return;
         };
         let Some(current_rhs) = baseline_constraint_rhs(&self.problem1, &name) else {
-            self.flash_status("What-if: constraint is not a standard constraint in file 1");
+            self.flash_warn("What-if: constraint is not a standard constraint in file 1");
             return;
         };
         self.what_if =
@@ -1124,7 +1128,7 @@ impl App {
                 self.presolve_cursor = None;
                 self.presolve_log = Some(crate::state::ScrollPane { lines, scroll: 0, export: Some(export) });
             }
-            Err(error) => self.flash_status(format!("HiGHS presolve: {error}")),
+            Err(error) => self.flash_error(format!("HiGHS presolve: {error}")),
         }
     }
 
@@ -1171,11 +1175,10 @@ impl App {
         let stem = self.file1_path.file_stem().unwrap_or_else(|| std::ffi::OsStr::new("model")).to_string_lossy().into_owned();
         let filename = format!("{stem}_{suffix}");
         let written = std::env::current_dir().and_then(|dir| std::fs::write(dir.join(&filename), body));
-        let message = match written {
-            Ok(()) => format!("Wrote {filename} \u{2014} {lines} line(s)"),
-            Err(error) => format!("Report write failed: {error}"),
-        };
-        self.flash_status(message);
+        match written {
+            Ok(()) => self.flash_ok(format!("Wrote {filename} \u{2014} {lines} line(s)")),
+            Err(error) => self.flash_error(format!("Report write failed: {error}")),
+        }
     }
 
     /// Apply the enabled rules to the baseline problem.
@@ -1184,7 +1187,7 @@ impl App {
     /// using: no rule selected, the model proved infeasible, or nothing fired.
     fn rewrite_baseline(&mut self) -> Option<(LpProblem, crate::presolve::PresolveStats)> {
         if self.presolve_rules.iter().all(|on| !on) {
-            self.flash_status("Rewrite: enable at least one rule (space toggles)");
+            self.flash_warn("Rewrite: enable at least one rule (space toggles)");
             return None;
         }
 
@@ -1192,7 +1195,7 @@ impl App {
         self.presolve_cursor = None;
 
         if let Some(reason) = &stats.infeasible {
-            self.flash_status(format!("Rewrite proved the model infeasible: {reason}"));
+            self.flash_warn(format!("Rewrite proved the model infeasible: {reason}"));
             self.last_presolve = Some(stats);
             return None;
         }
@@ -1221,12 +1224,11 @@ impl App {
         let written: Result<(), Box<dyn std::error::Error>> = lp_parser_rs::writer::write_lp_string(&rewritten)
             .map_err(Into::into)
             .and_then(|lp| std::env::current_dir().and_then(|dir| std::fs::write(dir.join(&filename), lp)).map_err(Into::into));
-        let message = match written {
-            Ok(()) => format!("Wrote {filename}{units} \u{2014} {}", stats.headline()),
-            Err(error) => format!("Rewrite write failed: {error}"),
-        };
+        match written {
+            Ok(()) => self.flash_ok(format!("Wrote {filename}{units} \u{2014} {}", stats.headline())),
+            Err(error) => self.flash_error(format!("Rewrite write failed: {error}")),
+        }
         self.last_presolve = Some(stats);
-        self.flash_status(message);
     }
 
     /// Rewrite the baseline problem with the selected rules and launch an
@@ -1325,11 +1327,11 @@ impl App {
         F: FnOnce(&LpProblem) -> Result<crate::state::ScrollPane, String> + Send + 'static,
     {
         if matches!(self.analysis, AnalysisState::Running { .. }) {
-            self.flash_status(format!("{label}: already running"));
+            self.flash_warn(format!("{label}: already running"));
             return;
         }
         if problem.variables.is_empty() {
-            self.flash_status(format!("{label}: the model has no variables"));
+            self.flash_warn(format!("{label}: the model has no variables"));
             return;
         }
 

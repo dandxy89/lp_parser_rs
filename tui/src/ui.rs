@@ -216,8 +216,11 @@ fn draw_status(
     // A pending `y` chord shows its which-key hint in the right segment; the
     // hint must win over a lingering yank flash or the chord keys stay hidden.
     let pending_chord = app.pending_yank == PendingYank::WaitingForTarget;
-    let yank_flash =
-        if app.yank.flash.is_some() && !pending_chord { Some(status_bar::YankFlash { message: &app.yank.message }) } else { None };
+    let yank_flash = if app.yank.flash.is_some() && !pending_chord {
+        Some(status_bar::YankFlash { message: &app.yank.message, level: app.yank.level })
+    } else {
+        None
+    };
     // Tolerance indicator — only shown when at least one tolerance is active.
     let tolerance_label = {
         let options = &app.diff_options;

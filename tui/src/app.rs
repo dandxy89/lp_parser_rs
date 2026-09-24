@@ -69,12 +69,42 @@ pub struct LayoutRects {
     pub tab_bounds: [(u16, u16); 5],
 }
 
-/// Yank (clipboard) flash state.
+/// How a status-bar flash is coloured, and how long it stays.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum FlashLevel {
+    /// Neutral feedback: a mode changed, a match was reached.
+    #[default]
+    Info,
+    /// An action succeeded: a yank, a file written.
+    Ok,
+    /// The action was refused or did nothing, but nothing failed.
+    Warn,
+    /// An action failed. Stays until the next key press rather than expiring,
+    /// so it is not missed.
+    Err,
+}
+
+/// Status-bar flash state (it began as the yank confirmation, hence the name).
 pub struct YankState {
-    /// Timestamp of the last successful yank, used for the flash message.
+    /// When the flash was raised; `None` when no flash is showing.
     pub flash: Option<Instant>,
-    /// Message displayed in the status bar after a successful yank.
+    /// Message displayed in the status bar while the flash shows.
     pub message: String,
+    /// Severity: picks the colour, and whether the flash expires on its own.
+    pub level: FlashLevel,
+}
+
+impl YankState {
+    /// Whether the flash clears itself on a timer (everything but errors).
+    pub(crate) const fn expires(&self) -> bool {
+        self.flash.is_some() && !matches!(self.level, FlashLevel::Err)
+    }
+
+    /// Drop the flash.
+    pub(crate) fn clear(&mut self) {
+        self.flash = None;
+        self.message.clear();
+    }
 }
 
 /// A single entry in the pre-built flat search haystack.
@@ -621,7 +651,7 @@ impl App {
                 detail_content_lines: 0,
                 tab_bounds: [(0, 0); 5],
             },
-            yank: YankState { flash: None, message: String::new() },
+            yank: YankState { flash: None, message: String::new(), level: FlashLevel::Info },
             pending_yank: PendingYank::None,
             search_popup: SearchPopupState {
                 visible: false,
@@ -664,16 +694,37 @@ impl App {
         self.filter = filter;
     }
 
-    /// Flash a transient status-bar message (reuses the yank flash channel).
-    pub(crate) fn flash_status(&mut self, message: impl Into<String>) {
+    /// Flash a status-bar message at the given severity.
+    pub(crate) fn flash(&mut self, level: FlashLevel, message: impl Into<String>) {
         self.yank.message = message.into();
+        self.yank.level = level;
         self.yank.flash = Some(Instant::now());
+    }
+
+    /// Flash neutral feedback.
+    pub(crate) fn flash_status(&mut self, message: impl Into<String>) {
+        self.flash(FlashLevel::Info, message);
+    }
+
+    /// Flash a success.
+    pub(crate) fn flash_ok(&mut self, message: impl Into<String>) {
+        self.flash(FlashLevel::Ok, message);
+    }
+
+    /// Flash a refusal or no-op.
+    pub(crate) fn flash_warn(&mut self, message: impl Into<String>) {
+        self.flash(FlashLevel::Warn, message);
+    }
+
+    /// Flash a failure; it stays until the next key press.
+    pub(crate) fn flash_error(&mut self, message: impl Into<String>) {
+        self.flash(FlashLevel::Err, message);
     }
 
     /// A diff-only action was pressed in inspect mode: brief no-op hint.
     pub(crate) fn flash_diff_only(&mut self) {
         debug_assert!(matches!(self.mode, AppMode::Inspect), "flash_diff_only is only reachable in inspect mode");
-        self.flash_status("Not available in inspect mode (single file)");
+        self.flash_warn("Not available in inspect mode (single file)");
     }
 
     /// Toggle between parsed and raw text detail views.
@@ -721,8 +772,7 @@ impl App {
             SortMode::AbsDelta => "Sort: |\u{394}| (largest first)",
             SortMode::RelDelta => "Sort: rel\u{394} (largest first)",
         };
-        label.clone_into(&mut self.yank.message);
-        self.yank.flash = Some(Instant::now());
+        self.flash_status(label);
     }
 
     /// Cycle the relative tolerance through the presets and rebuild the diff.
@@ -730,8 +780,7 @@ impl App {
         let value = next_tolerance_preset(self.diff_options.rel_tol);
         self.diff_options.rel_tol = value;
         self.rebuild_report_inner(false);
-        self.yank.message = format!("rel_tol = {}", format_tolerance(value));
-        self.yank.flash = Some(Instant::now());
+        self.flash_status(format!("rel_tol = {}", format_tolerance(value)));
     }
 
     /// Cycle the absolute tolerance through the presets and rebuild the diff.
@@ -739,8 +788,7 @@ impl App {
         let value = next_tolerance_preset(self.diff_options.abs_tol);
         self.diff_options.abs_tol = value;
         self.rebuild_report_inner(false);
-        self.yank.message = format!("abs_tol = {}", format_tolerance(value));
-        self.yank.flash = Some(Instant::now());
+        self.flash_status(format!("abs_tol = {}", format_tolerance(value)));
     }
 
     /// Rebuild the diff report from the stored problems with the current
@@ -1100,14 +1148,8 @@ impl App {
         });
 
         match result {
-            Ok(()) => {
-                label.clone_into(&mut self.yank.message);
-                self.yank.flash = Some(Instant::now());
-            }
-            Err(message) => {
-                self.yank.message = message;
-                self.yank.flash = Some(Instant::now());
-            }
+            Ok(()) => self.flash_ok(label),
+            Err(message) => self.flash_error(message),
         }
     }
 
@@ -1132,8 +1174,7 @@ impl App {
                 Side::Old => "No old version",
                 Side::New => "No new version",
             };
-            msg.clone_into(&mut self.yank.message);
-            self.yank.flash = Some(Instant::now());
+            self.flash_warn(msg);
         }
     }
 
@@ -1157,8 +1198,7 @@ impl App {
         let dir = match std::env::current_dir() {
             Ok(d) => d,
             Err(e) => {
-                self.yank.message = format!("CSV export failed: {e}");
-                self.yank.flash = Some(Instant::now());
+                self.flash_error(format!("CSV export failed: {e}"));
                 return;
             }
         };
@@ -1173,10 +1213,9 @@ impl App {
                 .map_err(|e| e.to_string()),
         };
         match result {
-            Ok(message) => self.yank.message = message,
-            Err(e) => self.yank.message = format!("CSV export failed: {e}"),
+            Ok(message) => self.flash_ok(message),
+            Err(e) => self.flash_error(format!("CSV export failed: {e}")),
         }
-        self.yank.flash = Some(Instant::now());
     }
 
     /// Return the name of an entry given section and entry index.
@@ -1288,14 +1327,12 @@ impl App {
                 Ok(Err(error)) => {
                     // Keep the old report; the watcher retries on the next change.
                     self.watch.receive = None;
-                    self.yank.message = format!("reload failed: {error}");
-                    self.yank.flash = Some(Instant::now());
+                    self.flash_error(format!("reload failed: {error}"));
                 }
                 Err(mpsc::TryRecvError::Empty) => {} // still parsing
                 Err(mpsc::TryRecvError::Disconnected) => {
                     self.watch.receive = None;
-                    self.yank.message = format!("reload failed: {}", crate::disconnected("parse"));
-                    self.yank.flash = Some(Instant::now());
+                    self.flash_error(format!("reload failed: {}", crate::disconnected("parse")));
                 }
             }
             return;
@@ -1357,8 +1394,7 @@ impl App {
         self.solver = SolverSession::new();
         self.discard_model_derived_state();
 
-        "reloaded".clone_into(&mut self.yank.message);
-        self.yank.flash = Some(Instant::now());
+        self.flash_ok("reloaded");
     }
 
     /// Drop everything computed from the old models on a reload, so no stale
@@ -1387,7 +1423,7 @@ impl App {
     /// watch reload, or a visible yank flash. Everything else only changes
     /// in response to input, so the main loop skips idle-tick repaints.
     pub const fn is_animating(&self) -> bool {
-        self.yank.flash.is_some()
+        self.yank.expires()
             || self.watch.is_reloading()
             || matches!(self.solver.state, SolveState::Running { .. } | SolveState::RunningBoth { .. })
             || matches!(self.solver.diagnosis, DiagnosisState::Running { .. })
@@ -1766,7 +1802,7 @@ impl App {
     /// search, wrapping around. Bound to `n`/`N` in normal mode.
     pub(crate) fn repeat_search(&mut self, forward: bool) {
         if self.last_search.is_empty() {
-            self.flash_status("No previous search (press / to search)");
+            self.flash_warn("No previous search (press / to search)");
             return;
         }
         let len = self.last_search.len();
@@ -1877,6 +1913,23 @@ mod tests {
         app.jump_back();
 
         assert_eq!(app.selected_entry_name(), Some("c2"), "the jump must land on the recorded entry");
+    }
+
+    /// An error flash does not expire on the timer; the next key press clears
+    /// it. Other flashes expire, and only they keep the tick redrawing.
+    #[test]
+    fn an_error_flash_stays_until_the_next_key_press() {
+        let mut app = crate::snapshot_tests::diff_app_from(crate::snapshot_tests::BASE_LP, crate::snapshot_tests::BASE_LP);
+        app.flash_ok("Yanked: x");
+        assert!(app.yank.expires() && app.is_animating(), "a success expires on the timer");
+
+        app.flash_error("CSV export failed: disk full");
+        assert_eq!(app.yank.level, FlashLevel::Err);
+        assert!(!app.yank.expires(), "an error must not expire on its own");
+        assert!(!app.is_animating(), "a standing error needs no redraw ticks");
+
+        app.handle_key(crossterm::event::KeyEvent::from(crossterm::event::KeyCode::Char('j')));
+        assert!(app.yank.flash.is_none(), "the next key press clears the error");
     }
 
     /// Regression: a filter or sort change dropped the selection, so the list

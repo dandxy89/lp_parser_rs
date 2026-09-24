@@ -260,12 +260,13 @@ fn run_event_loop<W: io::Write>(
                 // still painted.
                 let was_animating = app.is_animating();
 
-                // Clear yank flash after 1.5 seconds.
+                // Clear the flash after 1.5 seconds — unless it reports an
+                // error, which stays until the next key press.
                 if let Some(flash_time) = app.yank.flash
+                    && app.yank.expires()
                     && flash_time.elapsed() >= Duration::from_millis(1500)
                 {
-                    app.yank.flash = None;
-                    app.yank.message.clear();
+                    app.yank.clear();
                 }
 
                 app.poll_solve();

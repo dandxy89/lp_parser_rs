@@ -20,9 +20,26 @@ pub struct DetailPosition {
     pub content_lines: usize,
 }
 
-/// Optional yank flash state for the status bar.
+/// Optional flash message for the status bar.
 pub struct YankFlash<'a> {
     pub message: &'a str,
+    /// Severity, which picks the colour.
+    pub level: crate::app::FlashLevel,
+}
+
+/// Colour of a flash at `level`: errors in the removal red, warnings in the
+/// modification amber, successes in the addition green, and neutral feedback
+/// in the accent — so a failure never reads as a green success.
+fn flash_style(level: crate::app::FlashLevel) -> Style {
+    use crate::app::FlashLevel;
+    let t = theme();
+    let colour = match level {
+        FlashLevel::Info => t.accent,
+        FlashLevel::Ok => t.added,
+        FlashLevel::Warn => t.modified,
+        FlashLevel::Err => t.removed,
+    };
+    Style::default().fg(colour).add_modifier(Modifier::BOLD)
 }
 
 /// Inspect-mode left segment: the single filename and current section counts.
@@ -167,9 +184,7 @@ pub fn draw_status_bar(frame: &mut Frame, area: Rect, params: &StatusBarParams<'
     // left segments can flow (and drop) independently.
     let (mut right_spans, right_width) = params.yank_flash.map_or_else(
         || hint_spans(params.hints, (area.width * HINT_WIDTH_NUMERATOR / HINT_WIDTH_DENOMINATOR) as usize),
-        |flash| {
-            (vec![Span::styled(flash.message, Style::default().fg(t.added).add_modifier(Modifier::BOLD))], flash.message.chars().count())
-        },
+        |flash| (vec![Span::styled(flash.message, flash_style(flash.level))], flash.message.chars().count()),
     );
     // A leading space keeps a visible gap between the two halves.
     right_spans.insert(0, Span::raw(" "));
