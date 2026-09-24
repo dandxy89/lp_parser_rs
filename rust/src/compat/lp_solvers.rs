@@ -106,6 +106,12 @@ pub enum LpSolversCompatWarning {
         /// The name of the semi-continuous variable.
         name: String,
     },
+
+    /// A semi-integer variable is being treated as a plain integer variable.
+    SemiIntegerApproximated {
+        /// The name of the semi-integer variable.
+        name: String,
+    },
 }
 
 impl fmt::Display for LpSolversCompatWarning {
@@ -116,6 +122,9 @@ impl fmt::Display for LpSolversCompatWarning {
             }
             Self::SemiContinuousApproximated { name } => {
                 write!(f, "semi-continuous variable '{name}' is not directly supported; treating as continuous")
+            }
+            Self::SemiIntegerApproximated { name } => {
+                write!(f, "semi-integer variable '{name}' is not directly supported; treating as integer")
             }
         }
     }
@@ -134,7 +143,8 @@ impl AsVariable for VariableAdapter<'_> {
     }
 
     fn is_integer(&self) -> bool {
-        self.variable.kind.is_integer()
+        // A semi-integer is approximated as a plain integer (with a warning).
+        self.variable.kind.is_integer() || self.variable.kind == VariableKind::SemiInteger
     }
 
     fn lower_bound(&self) -> f64 {
@@ -293,9 +303,11 @@ impl<'a> LpSolversCompat<'a> {
 
         // Check for semi-continuous variables
         for variable in problem.variables.values() {
-            if variable.kind == VariableKind::SemiContinuous {
-                warnings
-                    .push(LpSolversCompatWarning::SemiContinuousApproximated { name: problem.interner.resolve(variable.name).to_string() });
+            let name = || problem.interner.resolve(variable.name).to_string();
+            match variable.kind {
+                VariableKind::SemiContinuous => warnings.push(LpSolversCompatWarning::SemiContinuousApproximated { name: name() }),
+                VariableKind::SemiInteger => warnings.push(LpSolversCompatWarning::SemiIntegerApproximated { name: name() }),
+                _ => {}
             }
         }
 
@@ -419,6 +431,13 @@ mod tests {
         p.variables.insert(y_id, Variable::new(y_id).with_var_type(VariableType::SemiContinuous));
         let c = LpSolversCompat::try_new(&p).unwrap();
         assert!(matches!(&c.warnings()[0], LpSolversCompatWarning::SemiContinuousApproximated { .. }));
+
+        // Semi-integer
+        let mut p = simple_problem();
+        let y_id = p.intern("y");
+        p.variables.insert(y_id, Variable::new(y_id).with_var_type(VariableType::SemiInteger));
+        let c = LpSolversCompat::try_new(&p).unwrap();
+        assert!(matches!(&c.warnings()[0], LpSolversCompatWarning::SemiIntegerApproximated { .. }));
     }
 
     #[test]
@@ -433,6 +452,8 @@ mod tests {
             (VariableType::DoubleBound(-10.0, 10.0), -10.0, 10.0, false),
             // Semi-continuous is approximated as a continuous non-negative variable.
             (VariableType::SemiContinuous, 0.0, f64::INFINITY, false),
+            // Semi-integer is approximated as a plain integer variable.
+            (VariableType::SemiInteger, 0.0, f64::INFINITY, true),
             // SOS membership carries no bounds of its own, so the format default
             // of [0, +inf) applies — the same treatment the MPS writer gives an
             // SOS column with no BOUNDS entry. Only an explicit `free` makes a

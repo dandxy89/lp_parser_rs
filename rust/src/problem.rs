@@ -45,10 +45,7 @@ fn apply_variable_kind(interner: &mut NameInterner, variables: &mut IndexMap<Nam
                 if existing == VariableKind::Continuous {
                     entry.get_mut().set_kind(kind);
                 } else if is_semi_integer(existing, kind) {
-                    eprintln!(
-                        "variable '{name}' is both integer and semi-continuous (semi-integer), which the model cannot \
-                         represent: it is kept as {existing} and its semi-continuity is dropped"
-                    );
+                    entry.get_mut().set_kind(VariableKind::SemiInteger);
                 }
             }
             Entry::Vacant(entry) => {
@@ -1836,11 +1833,19 @@ End";
         assert!(!super::is_semi_integer(VariableKind::Binary, VariableKind::SemiContinuous));
         assert!(!super::is_semi_integer(VariableKind::Continuous, VariableKind::SemiContinuous));
 
-        // Integrality is kept (with a warning on stderr) and bounds survive.
+        // The combination becomes semi-integer and the bounds survive.
         let p = LpProblem::parse("minimize\nx\nsubject to\nc: x >= 1\nbounds\nx <= 10\ngenerals\nx\nsemi-continuous\nx\nend").unwrap();
         let x = &p.variables[&p.name_id("x").unwrap()];
-        assert_eq!(x.kind, VariableKind::General);
+        assert_eq!(x.kind, VariableKind::SemiInteger);
         assert_eq!(x.bounds, VariableBounds::upper(10.0));
+
+        // Section order does not matter, nor does `integers` versus `generals`.
+        let p = LpProblem::parse("minimize\nx\nsubject to\nc: x >= 1\nsemi\nx\nintegers\nx\nend").unwrap();
+        assert_eq!(p.variables[&p.name_id("x").unwrap()].kind, VariableKind::SemiInteger);
+
+        // A binary stays binary: semi-continuity adds nothing to {0, 1}.
+        let p = LpProblem::parse("minimize\nx\nsubject to\nc: x >= 1\nbinary\nx\nsemi\nx\nend").unwrap();
+        assert_eq!(p.variables[&p.name_id("x").unwrap()].kind, VariableKind::Binary);
     }
 
     #[test]

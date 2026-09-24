@@ -416,6 +416,12 @@ fn write_variable_types_sections(output: &mut String, problem: &LpProblem, optio
             VariableKind::Integer => integers.push(var_name),
             VariableKind::General => generals.push(var_name),
             VariableKind::SemiContinuous => semi_continuous.push(var_name),
+            // CPLEX declares a semi-integer variable by listing it in both the
+            // generals and the semi-continuous sections.
+            VariableKind::SemiInteger => {
+                generals.push(var_name);
+                semi_continuous.push(var_name);
+            }
             VariableKind::Continuous | VariableKind::Sos => {}
         }
     }

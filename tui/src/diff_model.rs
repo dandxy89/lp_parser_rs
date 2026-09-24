@@ -1413,7 +1413,7 @@ mod tests {
             VariableType::LowerBound(lb) => format!("bounds\n {lb} <= {name}\n"),
             VariableType::UpperBound(ub) => format!("bounds\n {name} <= {ub}\n"),
             VariableType::DoubleBound(lb, ub) => format!("bounds\n {lb} <= {name} <= {ub}\n"),
-            VariableType::SemiContinuous | VariableType::SOS | VariableType::General => {
+            VariableType::SemiContinuous | VariableType::SemiInteger | VariableType::SOS | VariableType::General => {
                 format!("bounds\n {name} free\n")
             }
         };

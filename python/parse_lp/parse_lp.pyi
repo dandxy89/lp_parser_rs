@@ -16,7 +16,7 @@ class LpInvalidValueError(RuntimeError):
 # Type definitions for structured data
 Sense: TypeAlias = Literal["maximize", "minimize"]
 SenseInput: TypeAlias = Literal["maximize", "max", "minimize", "min"]
-VariableType: TypeAlias = Literal["continuous", "binary", "integer", "general", "free", "semicontinuous"]
+VariableType: TypeAlias = Literal["continuous", "binary", "integer", "general", "free", "semicontinuous", "semiinteger"]
 Format: TypeAlias = Literal["lp", "mps"]
 StrPath: TypeAlias = str | os.PathLike[str]
 
@@ -30,7 +30,7 @@ class Objective(TypedDict):
 
 class VariableInfo(TypedDict):
     name: str
-    kind: str  # Continuous | General | Integer | Binary | SemiContinuous | Sos
+    kind: str  # Continuous | General | Integer | Binary | SemiContinuous | SemiInteger | Sos
     # None means no bound was declared on that side, so the format default
     # applies (in LP: lower 0, upper +inf). An explicit `free` bound is
     # reported as -inf / +inf, not None.
@@ -188,7 +188,7 @@ class LpParser:
         """Change a variable's type (case-insensitive).
 
         - "continuous" changes only the kind; declared bounds are kept.
-        - "binary", "integer", "general", "semicontinuous" set the kind and clear
+        - "binary", "integer", "general", "semicontinuous", "semiinteger" set the kind and clear
           declared bounds, so the format default applies (LP: lower 0).
         - "free" is a bound, not a kind: the variable becomes continuous with
           bounds (-inf, +inf).

@@ -473,30 +473,29 @@ impl<'input> BoundsState<'input> {
                 accumulator.binary = true;
                 self.binary_vars.push(var_name);
             }
-            "SC" => {
-                // Per the MPS spec the SC value is the upper bound of the
-                // semi-continuous variable; a missing, zero or `>= 1e30` value
-                // means it is unbounded above. Semi-continuity itself is applied
-                // later from `ParseResult::semi_continuous`.
+            "SC" | "SI" => {
+                // Per the MPS spec the SC / SI value is the upper bound of the
+                // semi-continuous / semi-integer variable; a missing, zero or
+                // `>= 1e30` value means it is unbounded above. Semi-continuity
+                // itself is applied later from `ParseResult::semi_continuous`.
                 let value = match value_field {
                     Some(_) => parse_bound_value(value_field, line_num, bound_type)?,
                     None => f64::INFINITY,
                 };
                 if value != 0.0 && value < crate::INFINITE_BOUND_THRESHOLD {
                     if accumulator.has_explicit_upper() {
-                        return Err(LpParseError::invalid_bounds(var_name, format!("duplicate upper bound (SC) at line {line_num}")));
+                        return Err(LpParseError::invalid_bounds(var_name, format!("duplicate upper bound ({upper}) at line {line_num}")));
                     }
                     accumulator.set_upper(value);
                 }
                 self.semi_continuous_vars.push(var_name);
-            }
-            "SI" => {
-                // Semi-integer: the model has no semi-integer type, so the closest
-                // representation is an integer variable with the given upper bound.
-                let value = parse_bound_value(value_field, line_num, bound_type)?;
-                eprintln!("line {line_num}: semi-integer (SI) column '{var_name}' is read as integer; its semi-continuity is dropped");
-                accumulator.set_upper(value);
-                if integer_vars_set.insert(var_name) {
+                if upper == "SI" {
+                    // Integer *and* semi-continuous makes the variable
+                    // semi-integer (see `problem::apply_variable_kind`). The
+                    // column deliberately stays out of `integer_vars_set`: that
+                    // set drives the INTORG default bounds of `[0, 1]` and the
+                    // integer-in-`[0, 1]`-is-binary collapse, neither of which
+                    // applies to an SI column.
                     integer_vars.push(var_name);
                 }
             }

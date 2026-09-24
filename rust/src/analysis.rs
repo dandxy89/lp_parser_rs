@@ -119,7 +119,7 @@ pub struct VariableAnalysis {
     pub invalid_bounds: Vec<InvalidBound>,
     /// Variables not appearing in any constraint or objective
     pub unused_variables: Vec<String>,
-    /// Count of discrete (binary + integer + general) variables
+    /// Count of discrete (binary + integer + general + semi-integer) variables
     pub discrete_variable_count: usize,
 }
 
@@ -147,6 +147,8 @@ pub struct VariableTypeDistribution {
     pub integer: usize,
     /// Semi-continuous variables
     pub semi_continuous: usize,
+    /// Semi-integer variables (zero, or an integer within their bounds)
+    pub semi_integer: usize,
     /// SOS variables
     pub sos: usize,
 }
@@ -432,6 +434,9 @@ impl Display for ProblemAnalysis {
         if vt.semi_continuous > 0 {
             writeln!(f, "  Semi-continuous: {}", vt.semi_continuous)?;
         }
+        if vt.semi_integer > 0 {
+            writeln!(f, "  Semi-integer: {}", vt.semi_integer)?;
+        }
         if vt.sos > 0 {
             writeln!(f, "  SOS: {}", vt.sos)?;
         }
@@ -651,6 +656,7 @@ impl LpProblem {
                 VariableKind::Integer => type_distribution.integer += 1,
                 VariableKind::General => type_distribution.general += 1,
                 VariableKind::SemiContinuous => type_distribution.semi_continuous += 1,
+                VariableKind::SemiInteger => type_distribution.semi_integer += 1,
                 VariableKind::Sos => type_distribution.sos += 1,
                 // Declared-free is checked before the per-side shapes: it is
                 // stored as an explicit [-inf, +inf], which would otherwise read
@@ -686,7 +692,8 @@ impl LpProblem {
         }
 
         let unused_variables = self.find_unused_variables();
-        let discrete_variable_count = type_distribution.binary + type_distribution.integer + type_distribution.general;
+        let discrete_variable_count =
+            type_distribution.binary + type_distribution.integer + type_distribution.general + type_distribution.semi_integer;
 
         debug_assert_eq!(
             type_distribution.free
@@ -698,6 +705,7 @@ impl LpProblem {
                 + type_distribution.binary
                 + type_distribution.integer
                 + type_distribution.semi_continuous
+                + type_distribution.semi_integer
                 + type_distribution.sos,
             self.variables.len(),
             "postcondition: type distribution must sum to total variable count"

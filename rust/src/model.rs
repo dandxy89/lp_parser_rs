@@ -209,6 +209,12 @@ pub enum VariableKind {
     Binary,
     /// Semi-continuous variable.
     SemiContinuous,
+    /// Semi-integer variable: either zero or an integer within its bounds.
+    ///
+    /// LP files declare one by listing the variable in both a `generals` (or
+    /// `integers`) section and the `semi-continuous` section (CPLEX
+    /// semantics); MPS files use the `SI` bound type.
+    SemiInteger,
     /// Variable participating in an SOS set.
     Sos,
 }
@@ -221,14 +227,29 @@ impl VariableKind {
             Self::Integer => "Integer",
             Self::Binary => "Binary",
             Self::SemiContinuous => "SemiContinuous",
+            Self::SemiInteger => "SemiInteger",
             Self::Sos => "Sos",
         }
     }
 
-    /// Whether this kind is treated as integer-valued by solvers.
+    /// Whether this kind is an ordinary integer kind (integer, general or
+    /// binary).
+    ///
+    /// [`Self::SemiInteger`] is deliberately excluded, like
+    /// [`Self::SemiContinuous`]: it is integer-valued only away from zero, and
+    /// code that treats it as a plain integer (for example by relaxing it to a
+    /// continuous `[lb, ub]` range) would drop the zero branch. See
+    /// [`Self::is_semi`].
     #[must_use]
     pub const fn is_integer(self) -> bool {
         matches!(self, Self::Integer | Self::General | Self::Binary)
+    }
+
+    /// Whether this kind is semi-continuous or semi-integer (the variable may
+    /// also take the value zero outside its bounds).
+    #[must_use]
+    pub const fn is_semi(self) -> bool {
+        matches!(self, Self::SemiContinuous | Self::SemiInteger)
     }
 }
 
@@ -394,6 +415,8 @@ pub enum VariableType {
     Integer,
     /// Semi-continuous variable.
     SemiContinuous,
+    /// Semi-integer variable (zero, or an integer within its bounds).
+    SemiInteger,
     /// Special Order Set (SOS)
     SOS,
 }
@@ -409,6 +432,7 @@ impl VariableType {
             Self::Binary => "Binary",
             Self::Integer => "Integer",
             Self::SemiContinuous => "Semi-Continuous",
+            Self::SemiInteger => "Semi-Integer",
             Self::SOS => "SOS",
         }
     }
@@ -429,6 +453,7 @@ impl VariableType {
             Self::Binary => (VariableKind::Binary, VariableBounds::unspecified()),
             Self::Integer => (VariableKind::Integer, VariableBounds::unspecified()),
             Self::SemiContinuous => (VariableKind::SemiContinuous, VariableBounds::unspecified()),
+            Self::SemiInteger => (VariableKind::SemiInteger, VariableBounds::unspecified()),
             Self::SOS => (VariableKind::Sos, VariableBounds::unspecified()),
         }
     }
@@ -622,6 +647,7 @@ mod tests {
             (VariableType::Binary, "Binary"),
             (VariableType::Integer, "Integer"),
             (VariableType::SemiContinuous, "Semi-Continuous"),
+            (VariableType::SemiInteger, "Semi-Integer"),
             (VariableType::SOS, "SOS"),
             (VariableType::LowerBound(5.0), "LowerBound"),
             (VariableType::UpperBound(10.0), "UpperBound"),

@@ -24,6 +24,7 @@ variables:
     binary: 1
     integer: 0
     semi_continuous: 0
+    semi_integer: 0
     sos: 0
   free_variables:
     - x

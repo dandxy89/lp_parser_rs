@@ -172,7 +172,8 @@ fn count_variable_types(problem: &LpProblem) -> (usize, usize, usize) {
             VariableKind::Binary => binary += 1,
             // General is LP format's other integral declaration; both are
             // integer variables as far as the counts are concerned.
-            VariableKind::Integer | VariableKind::General => integer += 1,
+            // A semi-integer variable is integral wherever it is non-zero.
+            VariableKind::Integer | VariableKind::General | VariableKind::SemiInteger => integer += 1,
             VariableKind::Continuous | VariableKind::SemiContinuous | VariableKind::Sos => continuous += 1,
         }
     }

@@ -66,6 +66,8 @@
 //!   no upper bound (or `+inf`) gets the conventional "infinite" sentinel
 //!   (`SEMI_CONTINUOUS_SENTINEL_UPPER`, `1e30`), because the record requires a
 //!   value. A lower bound, if any, is written as its own `LO` record first.
+//!   [`SemiInteger`](crate::model::VariableKind::SemiInteger) is written the
+//!   same way with an `SI` record.
 //! - Strict inequalities (`ComparisonOp::LT` / `ComparisonOp::GT`) have no MPS
 //!   representation (only `L`/`G`/`E` rows exist); writing a problem with such
 //!   a constraint returns an error.
@@ -622,10 +624,11 @@ fn write_variable_bound(
             write_bound_flag(output, "BV", var_name, style).expect("fmt::Write to String is infallible");
             return Ok(());
         }
-        VariableKind::SemiContinuous => {
-            // The SC record carries the upper bound only, so any lower bound
-            // needs its own LO record first; without it the round trip would
-            // silently widen the variable's range down to zero.
+        VariableKind::SemiContinuous | VariableKind::SemiInteger => {
+            // The SC / SI record carries the upper bound only, so any lower
+            // bound needs its own LO record first; without it the round trip
+            // would silently widen the variable's range down to zero.
+            let record = if kind == VariableKind::SemiInteger { "SI" } else { "SC" };
             if let Some(lb) = bounds.lower {
                 write_lower_bound(output, var_name, lb, style)?;
             }
@@ -641,8 +644,8 @@ fn write_variable_bound(
                 }
                 Some(ub) => ub,
             };
-            debug_assert!(upper.is_finite(), "SC bound value must be finite, got {upper}");
-            write_bound_value(output, "SC", var_name, upper, style).expect("fmt::Write to String is infallible");
+            debug_assert!(upper.is_finite(), "{record} bound value must be finite, got {upper}");
+            write_bound_value(output, record, var_name, upper, style).expect("fmt::Write to String is infallible");
             return Ok(());
         }
         // SOS membership is not itself a bound, but such a variable may still
@@ -670,7 +673,7 @@ fn write_variable_bound(
                 // arm — it carries [-inf, +inf] and is written as `FR` by
                 // `write_double_bound`.
                 VariableKind::Continuous | VariableKind::Sos => {}
-                VariableKind::Binary | VariableKind::SemiContinuous => unreachable!("handled above"),
+                VariableKind::Binary | VariableKind::SemiContinuous | VariableKind::SemiInteger => unreachable!("handled above"),
             }
             Ok(())
         }

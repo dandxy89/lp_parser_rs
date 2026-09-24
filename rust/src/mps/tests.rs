@@ -424,11 +424,38 @@ ENDATA
     assert!(result.semi_continuous.contains(&"x1"));
     assert!(!result.integers.contains(&"x1"));
     assert!(result.bounds.contains(&("x1", VariableType::UpperBound(100.0))));
-    // SI: the model has no semi-integer type; the closest representation is
-    // an integer variable with the given upper bound.
-    assert!(!result.semi_continuous.contains(&"x2"));
+    // SI: integer *and* semi-continuous, which the model reads as semi-integer;
+    // the value is the upper bound.
+    assert!(result.semi_continuous.contains(&"x2"));
     assert!(result.integers.contains(&"x2"));
     assert!(result.bounds.contains(&("x2", VariableType::UpperBound(200.0))));
+
+    let problem = crate::problem::LpProblem::parse_mps(input).unwrap();
+    let x2 = &problem.variables[&problem.name_id("x2").unwrap()];
+    assert_eq!(x2.kind, crate::model::VariableKind::SemiInteger);
+    assert_eq!(x2.bounds, crate::model::VariableBounds::upper(200.0));
+    let x1 = &problem.variables[&problem.name_id("x1").unwrap()];
+    assert_eq!(x1.kind, crate::model::VariableKind::SemiContinuous);
+}
+
+#[test]
+fn test_semi_integer_upper_bound_of_one_is_not_collapsed_to_binary() {
+    // An SI column is not an INTORG column: the integer-in-[0, 1]-is-binary
+    // collapse must not turn it into a binary variable.
+    let input = "\
+NAME        test
+ROWS
+ N  obj
+COLUMNS
+    x         obj       1
+BOUNDS
+ SI BOUND     x         1
+ENDATA
+";
+    let problem = crate::problem::LpProblem::parse_mps(input).unwrap();
+    let x = &problem.variables[&problem.name_id("x").unwrap()];
+    assert_eq!(x.kind, crate::model::VariableKind::SemiInteger);
+    assert_eq!(x.bounds, crate::model::VariableBounds::upper(1.0));
 }
 
 #[test]

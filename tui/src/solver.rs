@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use lp_parser_rs::interner::NameId;
-use lp_parser_rs::model::{ComparisonOp, Constraint, Variable};
+use lp_parser_rs::model::{ComparisonOp, Constraint, Variable, VariableKind};
 use lp_parser_rs::problem::LpProblem;
 
 /// Result returned after a successful solve.
@@ -441,7 +441,12 @@ pub(crate) fn build_highs_model(problem: &LpProblem) -> BuiltModel {
 
         let (is_integer, lower, upper) = variable_bounds(variable);
 
-        let col = row_problem.add_column_with_integrality(objective_coefficient, lower..=upper, is_integer);
+        // A semi-integer column is passed as such (HiGHS rejects one with an
+        // infinite upper bound, which surfaces as a model error rather than a
+        // silently relaxed solve).
+        let integrality =
+            if variable.is_some_and(|v| v.kind == VariableKind::SemiInteger) { highs::Integrality::SemiInteger } else { is_integer.into() };
+        let col = row_problem.add_column_with_integrality_kind(objective_coefficient, lower..=upper, integrality);
         columns.push(col);
     }
 
@@ -1349,6 +1354,18 @@ empty =\n";
 
         let objective = result.objective_value.expect("an optimal solve has an objective");
         assert!((objective - 0.0).abs() < 1e-9, "an undeclared x is non-negative, got {objective}");
+    }
+
+    #[test]
+    fn test_a_semi_integer_variable_keeps_its_zero_branch() {
+        // x is 0 or an integer in [2, 10]. Minimising x reaches 0; solving it
+        // as a plain integer in [2, 10] would report 2 instead.
+        let source =
+            "Maximize\n obj: - x + 0.5 y\nSubject To\n c1: y - x <= 0.5\nBounds\n 2 <= x <= 10\nGenerals\n x\nSemi-Continuous\n x\nEnd";
+        let problem = LpProblem::parse(source).expect("must parse");
+        let result = solve_problem(&problem).expect("a bounded MIP must solve");
+        let objective = result.objective_value.expect("an optimal solve has an objective");
+        assert!((objective - 0.25).abs() < 1e-9, "x = 0, y = 0.5 is optimal, got {objective}");
     }
 
     #[test]

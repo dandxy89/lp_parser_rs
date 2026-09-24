@@ -335,7 +335,8 @@ impl LpParser {
     /// Update variable type (e.g., Binary, Integer, etc.)
     ///
     /// `continuous` changes only the kind and keeps any declared bounds. The
-    /// discrete kinds (`binary`, `integer`, `general`, `semicontinuous`) set
+    /// discrete kinds (`binary`, `integer`, `general`, `semicontinuous`,
+    /// `semiinteger`) set
     /// the kind and clear declared bounds, so the format default applies.
     /// `free` is a bound, not a kind: it makes the variable continuous with
     /// bounds `(-inf, +inf)`.
@@ -358,9 +359,11 @@ impl LpParser {
             "general" => VariableType::General,
             "free" => VariableType::Free,
             "semicontinuous" => VariableType::SemiContinuous,
+            "semiinteger" => VariableType::SemiInteger,
             _ => {
                 return Err(LpInvalidValueError::new_err(format!(
-                    "Unknown variable type: {var_type}. Supported types: continuous, binary, integer, general, free, semicontinuous",
+                    "Unknown variable type: {var_type}. Supported types: continuous, binary, integer, general, free, semicontinuous, \
+                     semiinteger",
                 )));
             }
         };

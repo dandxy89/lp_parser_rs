@@ -14,11 +14,19 @@ Supported specifications: [IBM CPLEX v22.1.1](https://www.ibm.com/docs/en/icos/2
 
 - **Parsing & writing** — round-trip LP files (parse → modify → write → parse) with configurable formatting; MPS files can also be written via [`mps::writer`](https://docs.rs/lp_parser_rs) (`write_mps_string`), letting LP and MPS problems convert to either format
 - **Problem modification** — rename / update / remove objectives, constraints, variables, coefficients, and RHS values
-- **Variable types** — integer, general, bounded, free, semi-continuous
+- **Variable types** — integer, general, bounded, free, semi-continuous, semi-integer
 - **Analysis** — statistics, matrix density, sparsity, coefficient ranges, issue detection with configurable thresholds
 - **Diff** (`diff` feature) — structural and numeric comparison between two LP problems, callable from the library via [`LpProblem::diff`](https://docs.rs/lp_parser_rs) or `diff::compare`
 - **Serialisation** (`serde` feature) — JSON / YAML support
 - **External solvers** (`lp-solvers` feature) — CBC, Gurobi, CPLEX, GLPK via the [lp-solvers](https://crates.io/crates/lp-solvers) crate
+
+### Extended LP syntax
+
+Beyond linear objectives, constraints, bounds and variable-type sections, the parser, both writers, the diff engine and the analysis understand:
+
+| Feature | LP syntax | Model | MPS |
+| --- | --- | --- | --- |
+| Semi-integer variables | variable listed in both `Generals` (or `Integers`) and `Semi-Continuous` (CPLEX) | `VariableKind::SemiInteger` | `SI` bound (read and written) |
 
 ## Library Usage
 

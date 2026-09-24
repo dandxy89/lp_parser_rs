@@ -47,7 +47,7 @@ variables:
       lower: ~
       upper: 10
   - name: b_5880854_x2
-    kind: General
+    kind: SemiInteger
     bounds:
       lower: 1014
       upper: 1917

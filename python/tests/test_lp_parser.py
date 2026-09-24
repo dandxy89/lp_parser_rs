@@ -332,6 +332,17 @@ class TestUpdateVariableType:
         x = parser.variables["x"]
         assert (x["kind"], x["lower"], x["upper"]) == ("Continuous", float("-inf"), float("inf"))
 
+    def test_generals_and_semi_continuous_make_a_semi_integer(self) -> None:
+        parser = LpParser.from_string(self.LP.replace("End", "Semi-Continuous\n x\nEnd"))
+        x = parser.variables["x"]
+        assert (x["kind"], x["lower"], x["upper"]) == ("SemiInteger", 2.0, 5.0)
+        assert "Semi-Continuous\n x" in parser.to_lp_string()
+
+    def test_semiinteger_sets_the_kind(self) -> None:
+        parser = LpParser.from_string(self.LP)
+        parser.update_variable_type("y", "semiinteger")
+        assert parser.variables["y"]["kind"] == "SemiInteger"
+
     def test_continuous_on_missing_variable_raises_not_found(self) -> None:
         parser = LpParser.from_string(self.LP)
         with pytest.raises(LpObjectNotFoundError):
