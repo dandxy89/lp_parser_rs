@@ -75,6 +75,9 @@ pub struct StatusBarParams<'a> {
     pub hints: &'a str,
 }
 
+/// Prefix of the renamed count, here and in the tab bar.
+pub const RENAMED: &str = "\u{21c4}";
+
 /// Muted separator between status bar segments.
 const SEPARATOR: &str = "  \u{2502}  ";
 
@@ -163,19 +166,28 @@ pub fn draw_status_bar(frame: &mut Frame, area: Rect, params: &StatusBarParams<'
         segments.push(vec![Span::styled(format!(" {}", inspect.file), Style::default().fg(t.accent).add_modifier(Modifier::BOLD))]);
         segments.push(vec![Span::styled(format!("{} {}", inspect.entry_count, inspect.section_label), Style::default().fg(t.text))]);
     } else {
-        segments.push(vec![Span::styled(
-            format!(" {} changes", params.total_changes),
-            Style::default().fg(t.added).add_modifier(Modifier::BOLD),
-        )]);
-        segments.push(vec![
-            Span::styled(format!("+{}", params.section_counts.added), Style::default().fg(t.added)),
+        // No changes is a quiet fact, not a headline.
+        let changes_style = if params.total_changes == 0 {
+            Style::default().fg(t.muted)
+        } else {
+            Style::default().fg(t.added).add_modifier(Modifier::BOLD)
+        };
+        segments.push(vec![Span::styled(format!(" {}", crate::format::plural(params.total_changes, "change", "changes")), changes_style)]);
+        let counts = params.section_counts;
+        let mut kinds = vec![
+            Span::styled(format!("+{}", counts.added), Style::default().fg(t.added)),
             Span::raw(" "),
-            Span::styled(format!("-{}", params.section_counts.removed), Style::default().fg(t.removed)),
+            Span::styled(format!("-{}", counts.removed), Style::default().fg(t.removed)),
             Span::raw(" "),
-            Span::styled(format!("~{}", params.section_counts.modified), Style::default().fg(t.modified)),
-            Span::raw(" "),
-            Span::styled(format!(">{}", params.section_counts.renamed), Style::default().fg(t.accent)),
-        ]);
+            Span::styled(format!("~{}", counts.modified), Style::default().fg(t.modified)),
+        ];
+        // Renames only happen under rename rules or detection; a permanent
+        // `>0` was noise, and `>` read as a comparison.
+        if counts.renamed > 0 {
+            kinds.push(Span::raw(" "));
+            kinds.push(Span::styled(format!("{RENAMED}{}", counts.renamed), Style::default().fg(t.accent)));
+        }
+        segments.push(kinds);
         segments.push(vec![
             Span::styled("filter:", Style::default().fg(t.muted)),
             Span::styled(format!("{} ({})", params.filter_label, params.filter_count), Style::default().fg(t.modified)),
@@ -235,6 +247,44 @@ fn last_hint_width(hints: &str) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Render a diff-mode status bar with the given counts; returns its text
+    /// and the cell under the first character of the change count.
+    fn render_counts(total_changes: usize, renamed: usize) -> (String, ratatui::buffer::Cell) {
+        let counts = DiffCounts { renamed, ..DiffCounts::default() };
+        let params = StatusBarParams {
+            total_changes,
+            section_counts: &counts,
+            filter_label: "All",
+            filter_count: 0,
+            detail_position: None,
+            yank_flash: None,
+            ignore_order: false,
+            sort_label: None,
+            tolerance_label: None,
+            watch_reloading: None,
+            inspect: None,
+            hints: "?:help",
+        };
+        let mut terminal = ratatui::Terminal::new(ratatui::backend::TestBackend::new(80, 1)).expect("test terminal");
+        terminal.draw(|frame| draw_status_bar(frame, frame.area(), &params)).expect("draws");
+        let buffer = terminal.backend().buffer().clone();
+        let text = buffer.content().iter().map(ratatui::buffer::Cell::symbol).collect();
+        (text, buffer[(1, 0)].clone())
+    }
+
+    #[test]
+    fn no_changes_is_quiet_and_renames_show_only_when_present() {
+        let (text, cell) = render_counts(0, 0);
+        assert!(text.contains("0 changes"), "{text:?}");
+        assert_eq!(cell.fg, theme().muted, "no changes is muted");
+        assert!(!text.contains(RENAMED), "no renames, no rename count: {text:?}");
+
+        let (text, cell) = render_counts(1, 2);
+        assert!(text.contains("1 change "), "singular for one: {text:?}");
+        assert_eq!(cell.fg, theme().added);
+        assert!(text.contains("\u{21c4}2"), "renames carry the swap arrow: {text:?}");
+    }
 
     #[test]
     fn hints_shrink_to_help_before_the_state_is_dropped() {

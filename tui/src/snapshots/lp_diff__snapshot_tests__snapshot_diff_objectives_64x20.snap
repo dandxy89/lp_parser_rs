@@ -21,4 +21,4 @@ expression: terminal.backend()
 "│                  │                                           │"
 "│                  │                                           │"
 "╰──────────────────┴───────────────────────────────────────────╯"
-" 4 changes  │  +0 -0 ~1 >0  │  filter:All (1)    r:raw · ?:help "
+" 4 changes  │  +0 -0 ~1  │  filter:All (1)       r:raw · ?:help "
