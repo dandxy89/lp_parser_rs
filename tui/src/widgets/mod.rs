@@ -398,10 +398,11 @@ pub fn draw_prompt_input(frame: &mut ratatui::Frame, area: Rect, input: &tui_inp
 
 /// Compute a centred rectangle of the given dimensions, clamped to the terminal area.
 pub fn centred_rect(area: Rect, width: u16, height: u16) -> Rect {
-    // Snap to the full extent when the margin would be a column or a row on
-    // each side: a sliver of the panel underneath showing past the overlay's
-    // border reads as a second, broken border rather than as breathing room.
-    let width = if width + 4 > area.width { area.width } else { width };
+    // Snap to the full extent when the margin would be a sliver on each side
+    // (two columns, or a row): the panel border underneath showing past the
+    // overlay's border reads as a second, broken border rather than as
+    // breathing room.
+    let width = if width + 6 > area.width { area.width } else { width };
     let height = if height + 4 > area.height { area.height } else { height };
 
     let vertical = Layout::vertical([Constraint::Length(height)]).flex(Flex::Center).split(area);
@@ -431,6 +432,13 @@ mod tests {
     fn test_truncate_multibyte_safe() {
         // 4 chars, max 3 → 2 chars + ellipsis, no panic on char boundaries.
         assert_eq!(truncate_with_ellipsis("\u{0394}\u{0394}\u{0394}\u{0394}", 3), "\u{0394}\u{0394}\u{2026}");
+    }
+
+    #[test]
+    fn centred_rect_never_leaves_a_sliver_beside_the_popup() {
+        let area = Rect::new(0, 0, 64, 24);
+        assert_eq!(centred_rect(area, 60, 10).width, 64, "a two-column margin snaps to the full width");
+        assert_eq!(centred_rect(Rect::new(0, 0, 80, 24), 60, 10).width, 60, "a real margin is kept");
     }
 
     #[test]
