@@ -330,3 +330,36 @@ fn snapshot_yank_summary_plain() {
     let text = crate::detail_text::render_detail_plain(&app).expect("summary always yields text");
     insta::assert_snapshot!(text);
 }
+
+/// Whether the rendered frame contains `needle`.
+fn frame_contains(terminal: &Terminal<TestBackend>, needle: &str) -> bool {
+    let text: String = terminal.backend().buffer().content().iter().map(ratatui::buffer::Cell::symbol).collect();
+    text.contains(needle)
+}
+
+/// Regression: `j` grew the solve overlay's scroll offset without bound, so
+/// over-scrolling left a blank pane that `k` had to climb back out of.
+#[test]
+fn solve_overlay_scroll_is_clamped_to_its_content() {
+    let mut app = diff_app();
+    let result1 = crate::solver::solve_problem(&app.problem1).expect("base solves");
+    let result2 = crate::solver::solve_problem(&app.problem2).expect("changed solves");
+
+    let cache = crate::widgets::solve::build_single_solve_cache(&result1, 78);
+    app.solver.render_cache = crate::app::SolveRenderCache::Single(cache);
+    app.solver.state = crate::state::SolveState::Done(Box::new(result1.clone()));
+    app.solver.view.scroll = [u16::MAX; 5];
+    let terminal = render(&mut app, 80, 24);
+    assert!(app.solver.view.scroll[0] < u16::MAX, "the offset must be written back clamped");
+    assert!(frame_contains(&terminal, "Esc: close"), "the footer must be in view at the clamp");
+
+    let diff = crate::solver::diff_results("a.lp".to_owned(), "b.lp".to_owned(), result1, result2, 0.0);
+    app.solver.render_cache = crate::widgets::solve::build_diff_solve_cache(&diff, 78);
+    app.solver.state = crate::state::SolveState::DoneBoth(Box::new(diff));
+    app.solver.view.tab = crate::state::SolveTab::Variables;
+    let variables = app.solver.view.tab.index();
+    app.solver.view.scroll[variables] = u16::MAX;
+    let terminal = render(&mut app, 80, 24);
+    assert!(app.solver.view.scroll[variables] < u16::MAX, "the comparison offset must be written back clamped");
+    assert!(frame_contains(&terminal, "1-5: tabs"), "the comparison footer must be in view at the clamp");
+}

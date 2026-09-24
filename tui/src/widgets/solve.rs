@@ -22,7 +22,11 @@ fn name_column_width(inner_width: u16, fixed: usize) -> usize {
 }
 
 /// Draw the solver overlay on top of the current frame, based on the current solve state.
-pub fn draw_solve_overlay(frame: &mut Frame, area: Rect, app: &App) {
+///
+/// Takes `app` mutably to write back the results view's scroll offset,
+/// clamped to the content, so scrolling past the end does not leave a dead
+/// zone that `k` has to climb back out of.
+pub fn draw_solve_overlay(frame: &mut Frame, area: Rect, app: &mut App) {
     // A zero-sized area is an environmental condition (shrunken terminal), not a
     // programming error: drawing into it is a no-op.
     if area.width == 0 || area.height == 0 {
@@ -35,8 +39,16 @@ pub fn draw_solve_overlay(frame: &mut Frame, area: Rect, app: &App) {
         SolveState::RunningBoth { file1, file2, result1, result2, started } => {
             draw_running_both(frame, area, file1, file2, result1.is_some(), result2.is_some(), started.elapsed());
         }
-        SolveState::Done(result) => draw_done(frame, area, result, &app.solver.view, &app.solver.render_cache, &app.solver.diagnosis),
-        SolveState::DoneBoth(diff) => draw_done_both(frame, area, diff, &app.solver.view, &app.solver.render_cache, &app.solver.diagnosis),
+        SolveState::Done(result) => {
+            let scroll = draw_done(frame, area, result, &app.solver.view, &app.solver.render_cache, &app.solver.diagnosis);
+            let tab = app.solver.view.tab.index();
+            app.solver.view.scroll[tab] = scroll;
+        }
+        SolveState::DoneBoth(diff) => {
+            let scroll = draw_done_both(frame, area, diff, &app.solver.view, &app.solver.render_cache, &app.solver.diagnosis);
+            let tab = app.solver.view.tab.index();
+            app.solver.view.scroll[tab] = scroll;
+        }
         SolveState::Failed(error) => draw_failed(frame, area, error),
     }
 }
@@ -92,6 +104,8 @@ fn draw_running(frame: &mut Frame, area: Rect, file: &str, elapsed: std::time::D
     frame.render_widget(paragraph, popup);
 }
 
+/// Draw a single solve's results, returning the scroll offset actually used:
+/// the requested one, clamped so the last line can still reach the bottom.
 fn draw_done(
     frame: &mut Frame,
     area: Rect,
@@ -99,7 +113,7 @@ fn draw_done(
     view: &SolveViewState,
     cache: &SolveRenderCache,
     diagnosis: &DiagnosisState,
-) {
+) -> u16 {
     let t = theme();
     // Full screen bar the bottom row, so the status bar stays visible.
     let popup = Rect { height: area.height.saturating_sub(1), ..area };
@@ -118,7 +132,7 @@ fn draw_done(
     // cached tab lines are the only source of content.
     let SolveRenderCache::Single(tabs) = cache else {
         debug_assert!(false, "render cache must be Single when solve state is Done");
-        return;
+        return scroll;
     };
     let cached: &[Line<'static>] = &tabs[active.index()];
 
@@ -143,6 +157,7 @@ fn draw_done(
     let inner = block.inner(popup);
     frame.render_widget(Clear, popup);
     frame.render_widget(block, popup);
+    let scroll = clamp_scroll(scroll, lines.len(), inner.height);
 
     // Windowed render honouring vertical scroll (same idiom as `draw_summary`),
     // clipping long lines to width like the previous unwrapped `Paragraph`.
@@ -152,6 +167,7 @@ fn draw_done(
         let y = inner.y + i as u16;
         buf.set_line(inner.x, y, line, inner.width);
     }
+    scroll
 }
 
 /// Build the tab bar line with the active tab highlighted.
@@ -642,6 +658,8 @@ fn draw_running_both(frame: &mut Frame, area: Rect, file1: &str, file2: &str, do
     frame.render_widget(paragraph, popup);
 }
 
+/// Draw the comparison overlay, returning the scroll offset actually used:
+/// the requested one, clamped so the last line can still reach the bottom.
 fn draw_done_both(
     frame: &mut Frame,
     area: Rect,
@@ -649,13 +667,54 @@ fn draw_done_both(
     view: &SolveViewState,
     cache: &SolveRenderCache,
     diagnosis: &DiagnosisState,
-) {
+) -> u16 {
     let t = theme();
     // Full screen bar the bottom row, so the status bar stays visible.
     let popup = Rect { height: area.height.saturating_sub(1), ..area };
 
+    let mut scroll = view.scroll[view.tab.index()];
+    let Some(mut lines) = done_both_lines(diff, view, cache, diagnosis, scroll, popup.height) else {
+        return scroll;
+    };
+    // The line count does not depend on the offset (off-screen rows are
+    // placeholders), so an over-scrolled view is rebuilt once at the clamp.
+    let clamped = clamp_scroll(scroll, lines.len(), popup.height.saturating_sub(2));
+    if clamped != scroll {
+        scroll = clamped;
+        let Some(rebuilt) = done_both_lines(diff, view, cache, diagnosis, scroll, popup.height) else {
+            return scroll;
+        };
+        lines = rebuilt;
+    }
+
+    let block = panel_block(Style::default().fg(t.secondary_accent).add_modifier(Modifier::BOLD))
+        .title(Span::styled(" Solve Comparison ", Style::default().fg(t.secondary_accent).add_modifier(Modifier::BOLD)));
+
+    let paragraph = Paragraph::new(lines).block(block).scroll((scroll, 0));
+    frame.render_widget(Clear, popup);
+    frame.render_widget(paragraph, popup);
+    scroll
+}
+
+/// Largest useful scroll offset for `line_count` lines in `visible` rows,
+/// applied to `scroll`.
+fn clamp_scroll(scroll: u16, line_count: usize, visible: u16) -> u16 {
+    let max = line_count.saturating_sub(visible as usize);
+    scroll.min(u16::try_from(max).unwrap_or(u16::MAX))
+}
+
+/// The comparison overlay's lines at `scroll`, or `None` if the render cache
+/// is not a diff cache.
+fn done_both_lines(
+    diff: &SolveDiffResult,
+    view: &SolveViewState,
+    cache: &SolveRenderCache,
+    diagnosis: &DiagnosisState,
+    scroll: u16,
+    height: u16,
+) -> Option<Vec<Line<'static>>> {
+    let t = theme();
     let active = view.tab;
-    let scroll = view.scroll[active.index()];
 
     let tab_bar = build_tab_bar(active);
     let mut lines = vec![tab_bar, Line::from("")];
@@ -666,14 +725,14 @@ fn draw_done_both(
         cache
     else {
         debug_assert!(false, "render cache must be Diff when solve state is DoneBoth");
-        return;
+        return None;
     };
 
     match active {
         SolveTab::Summary => lines.extend(summary.iter().cloned()),
-        SolveTab::Variables => build_diff_variables_tab_cached(&mut lines, variable_count_label, variable_rows, view, scroll, popup.height),
+        SolveTab::Variables => build_diff_variables_tab_cached(&mut lines, variable_count_label, variable_rows, view, scroll, height),
         SolveTab::Constraints => {
-            build_diff_constraints_tab_cached(&mut lines, constraint_count_label, constraint_rows, view, scroll, popup.height);
+            build_diff_constraints_tab_cached(&mut lines, constraint_count_label, constraint_rows, view, scroll, height);
         }
         SolveTab::Log => lines.extend(log.iter().cloned()),
         SolveTab::Duals => lines.extend(duals.iter().cloned()),
@@ -689,13 +748,7 @@ fn draw_done_both(
         "  1-5: tabs  Tab/S-Tab: cycle  j/k: scroll  d: toggle diff  t/T: threshold  w: csv  y: yank  Esc: close",
         Style::default().fg(t.muted),
     )));
-
-    let block = panel_block(Style::default().fg(t.secondary_accent).add_modifier(Modifier::BOLD))
-        .title(Span::styled(" Solve Comparison ", Style::default().fg(t.secondary_accent).add_modifier(Modifier::BOLD)));
-
-    let paragraph = Paragraph::new(lines).block(block).scroll((scroll, 0));
-    frame.render_widget(Clear, popup);
-    frame.render_widget(paragraph, popup);
+    Some(lines)
 }
 
 /// Pre-format all 5 tab contents for a single solve result.
