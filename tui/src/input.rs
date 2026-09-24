@@ -729,7 +729,7 @@ impl App {
                 }
             }
             KeyCode::Char('e') => self.start_diagnosis_single(),
-            KeyCode::Char('I') => self.open_iis(),
+            KeyCode::Char('I') => self.open_iis_for_solve(),
             KeyCode::Char('w') => {
                 let written = match &self.solver.state {
                     SolveState::Done(result) => Some(
@@ -898,7 +898,7 @@ impl App {
                 }
             }
             KeyCode::Char('e') => self.start_diagnosis_both(),
-            KeyCode::Char('I') => self.open_iis(),
+            KeyCode::Char('I') => self.open_iis_for_solve(),
             KeyCode::Char('w') => {
                 let written = match &self.solver.state {
                     SolveState::DoneBoth(diff) => Some(
@@ -1307,11 +1307,20 @@ impl App {
     where
         F: FnOnce(&LpProblem) -> Result<crate::state::ScrollPane, String> + Send + 'static,
     {
+        self.spawn_analysis_on(label, Arc::clone(&self.problem1), build);
+    }
+
+    /// [`spawn_analysis`](Self::spawn_analysis) against `problem` rather than
+    /// the baseline.
+    fn spawn_analysis_on<F>(&mut self, label: &'static str, problem: Arc<LpProblem>, build: F)
+    where
+        F: FnOnce(&LpProblem) -> Result<crate::state::ScrollPane, String> + Send + 'static,
+    {
         if matches!(self.analysis, AnalysisState::Running { .. }) {
             self.flash_status(format!("{label}: already running"));
             return;
         }
-        if self.problem1.variables.is_empty() {
+        if problem.variables.is_empty() {
             self.flash_status(format!("{label}: the model has no variables"));
             return;
         }
@@ -1320,7 +1329,6 @@ impl App {
         let (sender, receiver) = mpsc::channel();
         self.receive_analysis = Some(receiver);
 
-        let problem = Arc::clone(&self.problem1);
         std::thread::spawn(move || {
             // The receiver is dropped when the user closes the pane early, which
             // is a supported action ("any key to cancel"), so a failed send is
@@ -1344,14 +1352,37 @@ impl App {
 
     /// `I` — the minimal set of constraints and bounds that cannot hold together.
     pub(crate) fn open_iis(&mut self) {
-        self.spawn_analysis("Irreducible infeasible subsystem", |problem| {
-            let report = crate::highs_query::iis(problem)?;
-            Ok(crate::state::ScrollPane {
-                lines: crate::widgets::highs_query::iis_lines(&report),
-                scroll: 0,
-                export: Some(("iis.txt", crate::widgets::highs_query::iis_export(&report))),
-            })
-        });
+        self.spawn_analysis("Irreducible infeasible subsystem", iis_pane);
+    }
+
+    /// `I` from the solve overlay — the IIS of the model whose result is on
+    /// screen, which may be file 2 or a what-if/rewrite side rather than the
+    /// baseline.
+    fn open_iis_for_solve(&mut self) {
+        match self.solve_view_problem() {
+            Some(problem) => self.spawn_analysis_on("Irreducible infeasible subsystem", problem, iis_pane),
+            None => self.open_iis(),
+        }
+    }
+
+    /// The model behind the completed solve on screen: the solved model for a
+    /// single solve, and for a comparison the infeasible side (side 1 when both
+    /// or neither are), mirroring which side `e` diagnoses.
+    fn solve_view_problem(&self) -> Option<Arc<LpProblem>> {
+        match &self.solver.state {
+            SolveState::Done(_) => self.solver.solved_problem.clone(),
+            SolveState::DoneBoth(diff) => {
+                let side2_only =
+                    !crate::solver::status_is_infeasible(&diff.result1.status) && crate::solver::status_is_infeasible(&diff.result2.status);
+                Some(if side2_only {
+                    // Side 2 is the modified model in a what-if or rewrite run, `problem2` otherwise.
+                    self.solver.what_if_problem.clone().unwrap_or_else(|| Arc::clone(&self.problem2))
+                } else {
+                    Arc::clone(&self.problem1)
+                })
+            }
+            _ => None,
+        }
     }
 
     /// `R` — how far each coefficient can move before the basis changes.
@@ -1551,6 +1582,16 @@ fn baseline_constraint_rhs(problem: &LpProblem, name: &str) -> Option<f64> {
     }
 }
 
+/// Build the IIS pane for `problem`; runs on the analysis worker thread.
+fn iis_pane(problem: &LpProblem) -> Result<crate::state::ScrollPane, String> {
+    let report = crate::highs_query::iis(problem)?;
+    Ok(crate::state::ScrollPane {
+        lines: crate::widgets::highs_query::iis_lines(&report),
+        scroll: 0,
+        export: Some(("iis.txt", crate::widgets::highs_query::iis_export(&report))),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1565,6 +1606,37 @@ mod tests {
         modified.update_constraint_rhs("c1", 5.0).expect("rhs update must succeed");
         assert_eq!(baseline_constraint_rhs(&modified, "c1"), Some(5.0), "modified copy must carry the new rhs");
         assert_eq!(baseline_constraint_rhs(&baseline, "c1"), Some(2.0), "baseline must be untouched by the what-if edit");
+    }
+
+    /// A comparison whose second side is infeasible, as the solve overlay holds it.
+    fn app_with_side2_infeasible() -> App {
+        let mut app = crate::snapshot_tests::diff_app_from(crate::snapshot_tests::BASE_LP, crate::snapshot_tests::INFEASIBLE_LP);
+        let result1 = crate::solver::solve_problem(&app.problem1).expect("base solves");
+        let result2 = crate::solver::solve_problem(&app.problem2).expect("infeasible model still solves");
+        assert!(crate::solver::status_is_infeasible(&result2.status), "fixture must be infeasible");
+        let diff = crate::solver::diff_results("a.lp".to_owned(), "b.lp".to_owned(), result1, result2, 0.0);
+        app.solver.state = SolveState::DoneBoth(Box::new(diff));
+        app
+    }
+
+    /// Regression: `I` in the solve overlay always analysed file 1, even when
+    /// the infeasible model on screen was file 2 or a what-if side.
+    #[test]
+    fn iis_from_the_solve_overlay_analyses_the_side_on_screen() {
+        let mut app = app_with_side2_infeasible();
+        let problem = app.solve_view_problem().expect("a completed comparison names a side");
+        assert!(Arc::ptr_eq(&problem, &app.problem2), "the infeasible side 2 must be analysed");
+
+        let what_if = Arc::new((*app.problem2).clone());
+        app.solver.what_if_problem = Some(Arc::clone(&what_if));
+        let problem = app.solve_view_problem().expect("a completed comparison names a side");
+        assert!(Arc::ptr_eq(&problem, &what_if), "a what-if side 2 must be analysed, not file 2");
+
+        let result = crate::solver::solve_problem(&app.problem2).expect("solves");
+        app.solver.state = SolveState::Done(Box::new(result));
+        app.solver.solved_problem = Some(Arc::clone(&app.problem2));
+        let problem = app.solve_view_problem().expect("a completed solve names its model");
+        assert!(Arc::ptr_eq(&problem, &app.problem2), "a single solve of file 2 must analyse file 2");
     }
 
     /// A finished analysis pane must scroll and close like the other read-only

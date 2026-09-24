@@ -17,7 +17,7 @@ use crate::parse::parse_text;
 use crate::state::Section;
 use crate::ui;
 
-const BASE_LP: &str = "min\nobj: 2 x + 3 y\nst\nc1: x + y >= 2\nc2: x - y <= 8\nbounds\n0 <= x <= 10\n0 <= y <= 10\nend\n";
+pub(crate) const BASE_LP: &str = "min\nobj: 2 x + 3 y\nst\nc1: x + y >= 2\nc2: x - y <= 8\nbounds\n0 <= x <= 10\n0 <= y <= 10\nend\n";
 
 const CHANGED_LP: &str = "min\nobj: 2 x + 4 y\nst\nc1: x + y >= 3\nc3: 2 x + y <= 12\nbounds\n0 <= x <= 10\n0 <= y <= 10\nend\n";
 
@@ -40,8 +40,13 @@ pub(crate) fn inspect_app_from(source: &str) -> App {
 
 /// Build a diff-mode app comparing two in-memory LP models.
 fn diff_app() -> App {
-    let (problem1, analysis1, line_map1, raw_text1) = parse_text(BASE_LP, false, "a.lp").expect("base LP must parse");
-    let (problem2, analysis2, line_map2, raw_text2) = parse_text(CHANGED_LP, false, "b.lp").expect("changed LP must parse");
+    diff_app_from(BASE_LP, CHANGED_LP)
+}
+
+/// Build a diff-mode app comparing the two given LP sources.
+pub(crate) fn diff_app_from(base: &str, changed: &str) -> App {
+    let (problem1, analysis1, line_map1, raw_text1) = parse_text(base, false, "a.lp").expect("base LP must parse");
+    let (problem2, analysis2, line_map2, raw_text2) = parse_text(changed, false, "b.lp").expect("changed LP must parse");
     let options = DiffOptions::default();
     let report = build_diff_report(&DiffInput {
         file1: "a.lp",
@@ -266,7 +271,7 @@ fn snapshot_unbounded_ray_pane_120x40() {
 
 /// Two rows that cannot both hold, with a third that can: the IIS must name
 /// the first two and leave the third out.
-const INFEASIBLE_LP: &str = "min\nobj: x + y\nst\nc1: x >= 5\nc2: x <= 3\nc3: y >= 1\nend\n";
+pub(crate) const INFEASIBLE_LP: &str = "min\nobj: x + y\nst\nc1: x >= 5\nc2: x <= 3\nc3: y >= 1\nend\n";
 
 #[test]
 fn snapshot_iis_pane_120x40() {
