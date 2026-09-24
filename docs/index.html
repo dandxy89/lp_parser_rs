@@ -252,7 +252,7 @@ lp_parser convert problem.lp --format csv --output ./out</code></pre>
     <p class="sec-label">The terminal UI</p>
     <h2>TUI: <code>lp_diff</code></h2>
     <p class="lead">An interactive <a href="https://ratatui.rs">ratatui</a> explorer and diff viewer for LP <em>and</em> MPS files. One file opens a single-model explorer; two files diff them, in any mix of formats (<code>lp_diff model.lp model.mps</code>). It has grown well past a diff viewer: there is a background solver, in-memory what-if edits, solution-preserving rewrites, and a diagnostics pane that names the constraints slowing a solve down.</p>
-    <video class="demo" width="1280" height="800" autoplay loop muted playsinline controls
+    <video class="demo" width="1280" height="800" loop muted playsinline controls
            preload="none" poster="assets/demo-poster.jpg" aria-label="Diffing an MPS file against an LP file: a coefficient-level constraint diff, raw text view, fuzzy search and a parallel HiGHS solve, then a single model with presolve rewrites and the diagnostics pane.">
       <source src="assets/demo.webm" type="video/webm">
       <source src="assets/demo.mp4" type="video/mp4">
@@ -321,6 +321,22 @@ print(analysis[<span class="g">"summary"</span>][<span class="g">"density"</span
       <a href="https://github.com/dandxy89/lp_parser_rs">GitHub</a></p>
   </div>
 </footer>
+
+<script>
+  // play the demo only for readers who have not asked for reduced motion,
+  // and only once it scrolls into view; otherwise the poster and controls remain
+  (function () {
+    var video = document.querySelector("video.demo");
+    if (!video || !window.matchMedia("(prefers-reduced-motion: no-preference)").matches) return;
+    // a rejected play() (e.g. a browser autoplay policy) just leaves the poster up
+    var play = function () { video.play().catch(function () {}); };
+    if (!("IntersectionObserver" in window)) { play(); return; }
+    var io = new IntersectionObserver(function (entries) {
+      if (entries[0].isIntersecting) { play(); io.disconnect(); }
+    });
+    io.observe(video);
+  })();
+</script>
 
 <script>
   (function () {

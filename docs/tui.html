@@ -94,7 +94,7 @@
         <a href="https://github.com/dandxy89/lp_parser_rs/blob/main/tui/README.md">tui README</a>
       </div>
     </div>
-    <video class="demo" width="1280" height="800" autoplay loop muted playsinline controls
+    <video class="demo" width="1280" height="800" loop muted playsinline controls
            poster="assets/demo-poster.jpg" aria-label="Diffing an MPS file against an LP file: a coefficient-level constraint diff, raw text view, fuzzy search and a parallel HiGHS solve, then a single model with presolve rewrites and the diagnostics pane.">
       <source src="assets/demo.webm" type="video/webm">
       <source src="assets/demo.mp4" type="video/mp4">
@@ -589,6 +589,22 @@ cargo run -p lp_parser_tui -- base.lp modified.mps</code></pre>
       <a href="https://github.com/dandxy89/lp_parser_rs">GitHub</a></p>
   </div>
 </footer>
+
+<script>
+  // play the demo only for readers who have not asked for reduced motion,
+  // and only once it scrolls into view; otherwise the poster and controls remain
+  (function () {
+    var video = document.querySelector("video.demo");
+    if (!video || !window.matchMedia("(prefers-reduced-motion: no-preference)").matches) return;
+    // a rejected play() (e.g. a browser autoplay policy) just leaves the poster up
+    var play = function () { video.play().catch(function () {}); };
+    if (!("IntersectionObserver" in window)) { play(); return; }
+    var io = new IntersectionObserver(function (entries) {
+      if (entries[0].isIntersecting) { play(); io.disconnect(); }
+    });
+    io.observe(video);
+  })();
+</script>
 
 <script>
   (function () {
