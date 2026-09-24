@@ -1,0 +1,35 @@
+[package]
+name = "lp-lsp"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88.0"
+description = "Language server for LP (linear programming) files"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/dandxy89/lp_parser_rs"
+keywords = ["lp", "lsp", "language-server", "optimisation"]
+categories = ["development-tools", "mathematics"]
+
+[[bin]]
+name = "lp-lsp"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow = "1.0.104"
+lp_parser_rs = { version = "5.0.1", path = "../rust", features = ["diff", "serde"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+streaming-iterator = "0.1.9"
+tokio = { version = "1.53.1", features = ["rt-multi-thread", "macros", "io-std", "sync", "time"] }
+tower-lsp-server = "0.23.0"
+tree-sitter = "0.26.13"
+tree-sitter-lp = { version = "0.1.0", path = "vendor/tree-sitter-lp" }
+
+[dev-dependencies]
+criterion = "0.8.2"
+futures = { version = "0.3", default-features = false, features = ["std", "async-await"] }
+insta = "1.48.0"
+proptest = "1.11.0"
+tower = { version = "0.5.3", features = ["util"] }
