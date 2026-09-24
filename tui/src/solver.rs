@@ -441,7 +441,7 @@ pub(crate) fn check_supported(problem: &LpProblem) -> Result<(), String> {
 /// Build a `HiGHS` `RowProblem` from an `LpProblem` with a linear objective.
 ///
 /// Used by the queries (IIS, ranging, rays, presolve), which have no quadratic
-/// counterpart; only [`solve_problem`] passes a quadratic objective on.
+/// counterpart; only `solve_problem` passes a quadratic objective on.
 ///
 /// # Errors
 ///
@@ -752,7 +752,7 @@ pub fn solve_problem(problem: &LpProblem) -> Result<SolveResult, String> {
     solve_problem_with(problem, &[])
 }
 
-/// [`solve_problem`], stopping early once `cancel` is set.
+/// `solve_problem`, stopping early once `cancel` is set.
 ///
 /// `HiGHS` polls its interrupt callbacks between simplex, interior-point and
 /// branch-and-bound iterations; the callback registered here answers them
@@ -761,7 +761,7 @@ pub fn solve_problem(problem: &LpProblem) -> Result<SolveResult, String> {
 ///
 /// # Errors
 ///
-/// As [`solve_problem`], and when `HiGHS` will not register the callback.
+/// As `solve_problem`, and when `HiGHS` will not register the callback.
 pub fn solve_problem_cancellable(problem: &LpProblem, cancel: &AtomicBool) -> Result<SolveResult, String> {
     solve(problem, &[], Some(cancel))
 }
@@ -813,7 +813,7 @@ fn register_cancel(model: &mut highs::Model, cancel: &AtomicBool) -> Result<(), 
     Ok(())
 }
 
-/// [`solve_problem`], with `extra` `HiGHS` options applied on top.
+/// `solve_problem`, with `extra` `HiGHS` options applied on top.
 ///
 /// `extra` is applied *after* `highs.opt`, so a caller-supplied preset wins over
 /// a stale options file in the working directory. Keys reserved by the solve
@@ -821,7 +821,7 @@ fn register_cancel(model: &mut highs::Model, cancel: &AtomicBool) -> Result<(), 
 ///
 /// # Errors
 ///
-/// As [`solve_problem`].
+/// As `solve_problem`.
 pub fn solve_problem_with(problem: &LpProblem, extra: &[(&str, &str)]) -> Result<SolveResult, String> {
     solve(problem, extra, None)
 }
