@@ -79,7 +79,7 @@ The interface is a three-panel layout:
 
 | Panel            | Description                                                                             |
 | ---------------- | --------------------------------------------------------------------------------------- |
-| Section Selector | Left sidebar — choose between Summary, Variables, Constraints, Objectives, and Numerics |
+| Section tabs     | Tab bar across the top — Summary, Variables, Constraints, Objectives, and Numerics      |
 | Name List        | Left sidebar — filterable list of changed entries for the selected section              |
 | Detail           | Right panel — full diff detail for the selected entry                                   |
 
@@ -117,8 +117,8 @@ In diff mode, press `w` to export the full diff report as a CSV file (`lp_diff_r
 | ------------ | ------------------------- |
 | `j` / `↓`    | Move down                 |
 | `k` / `↑`    | Move up                   |
-| `n`          | Move down                 |
-| `N`          | Move up                   |
+| `n`          | Next search match         |
+| `N`          | Previous search match     |
 | `g` / `Home` | Jump to top               |
 | `G` / `End`  | Jump to bottom            |
 | `Ctrl+d`     | Half page down            |
@@ -150,8 +150,8 @@ In diff mode, press `w` to export the full diff report as a CSV file (`lp_diff_r
 | Key       | Action                                                       |
 | --------- | ------------------------------------------------------------ |
 | `/`       | Open search pop-up (searches across all sections)            |
-| `j` / `↓` | Next result (in pop-up)                                      |
-| `k` / `↑` | Previous result (in pop-up)                                  |
+| `↓` / `Ctrl+n` | Next result (in pop-up; plain `j`/`k` are typed into the query) |
+| `↑` / `Ctrl+p` | Previous result (in pop-up)                                  |
 | `Tab`     | Complete query with selected result's name                   |
 | `Enter`   | Jump to selected entry                                       |
 | `Esc`     | Cancel search                                                |

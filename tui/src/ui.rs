@@ -3,7 +3,7 @@
 //! Renders a unified single-window layout:
 //!
 //! ```text
-//!  Summary │ Numerics │ Variables │ Constraints │ Objectives
+//!  Summary │ Variables │ Constraints │ Objectives │ Numerics
 //! ╭──────────────────┬───────────────────────────────────╮
 //! │ Name List        │                                   │
 //! │ (filtered)       │         Detail Panel              │
