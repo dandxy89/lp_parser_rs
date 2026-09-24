@@ -150,6 +150,7 @@
     <ul class="constraints">
       <li><span class="cname">Parsing</span><span class="cbody">Full LP format coverage: multiple objectives, all constraint senses, comments, and section keywords across the CPLEX, Gurobi, Xpress, and Mosek dialects.</span></li>
       <li><span class="cname">Variable types</span><span class="cbody">Integer, general, bounded, free, and semi-continuous variables.</span></li>
+      <li><span class="cname">MPS</span><span class="cbody">Read and write MPS files alongside LP (<code>LpProblem::parse_mps</code>, <code>mps::writer</code>), so a model can move between the two formats.</span></li>
       <li><span class="cname">Writing</span><span class="cbody">Round-trip safe LP output with configurable problem-name comment, line length, decimal precision, and section spacing.</span></li>
       <li><span class="cname">Modification</span><span class="cbody">Rename, update, or remove objectives, constraints, variables, coefficients, and RHS values in place.</span></li>
       <li><span class="cname">Analysis</span><span class="cbody">Statistics, matrix density and sparsity, coefficient ranges, and issue detection with configurable numeric thresholds.</span></li>
@@ -183,6 +184,9 @@ std::fs::write(<span class="g">"modified.lp"</span>, write_lp_string(&amp;proble
     <h3>Cargo features</h3>
     <div class="tablewrap"><table>
       <tr><th>Feature</th><th>Adds</th></tr>
+      <tr><td>cli</td><td>Builds the <code>lp_parser</code> command-line binary.</td></tr>
+      <tr><td>csv</td><td>CSV export of constraints, objectives, and variables.</td></tr>
+      <tr><td>mmap</td><td>Memory-mapped file input, so large files are parsed without copying them onto the heap.</td></tr>
       <tr><td>diff</td><td>Structural comparison between two LP problems.</td></tr>
       <tr><td>serde</td><td>JSON / YAML serialisation of problems, analyses, and diffs.</td></tr>
       <tr><td>lp-solvers</td><td>External solver integration: CBC, GLPK, Gurobi, CPLEX.</td></tr>
