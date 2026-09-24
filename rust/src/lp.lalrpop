@@ -42,6 +42,11 @@ extern {
         ":" => Token::Colon,
         "::" => Token::DoubleColon,
         "->" => Token::Implies,
+        "[" => Token::LBracket,
+        "]" => Token::RBracket,
+        "^" => Token::Caret,
+        "*" => Token::Star,
+        "/" => Token::Slash,
     }
 }
 
@@ -121,6 +126,16 @@ ObjElem: SpannedElem<'input> = {
     <loc:@L> <i:"infinity"> => (loc, Elem::Num(i)),
     <loc:@L> "+" => (loc, Elem::Plus),
     <loc:@L> "-" => (loc, Elem::Minus),
+    <loc:@L> <q:QuadElem> => (loc, q),
+};
+
+// Quadratic-block punctuation, shared by objectives and constraints.
+QuadElem: Elem<'input> = {
+    "[" => Elem::LBracket,
+    "]" => Elem::RBracket,
+    "^" => Elem::Caret,
+    "*" => Elem::Star,
+    "/" => Elem::Slash,
 };
 
 // One element of the constraint section body. Also admits `name "::"` and
@@ -135,6 +150,7 @@ ConElem: SpannedElem<'input> = {
     <loc:@L> "-" => (loc, Elem::Minus),
     <loc:@L> <op:CompOp> => (loc, Elem::Op(op)),
     <loc:@L> "->" => (loc, Elem::Implies),
+    <loc:@L> <q:QuadElem> => (loc, q),
 };
 
 BoundsSection: Vec<(&'input str, VariableType)> = {

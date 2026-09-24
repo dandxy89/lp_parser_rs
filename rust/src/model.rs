@@ -116,6 +116,36 @@ pub struct Coefficient {
     pub value: f64,
 }
 
+/// A quadratic term `coefficient * var1 * var2` (`var1 == var2` for a square).
+///
+/// The coefficient is the term's own coefficient in the expression it belongs
+/// to. In an objective that differs from what an LP file writes: CPLEX and
+/// Gurobi write objective quadratics as `[ ... ] / 2`, so `[ x ^ 2 ] / 2` is
+/// stored as `0.5 x x`. Constraint quadratics are written without the halving.
+#[derive(Debug, Clone, PartialEq)]
+pub struct QuadraticTerm {
+    /// Interned name of the first variable.
+    pub var1: NameId,
+    /// Interned name of the second variable (equal to `var1` for a square).
+    pub var2: NameId,
+    /// Coefficient of the product `var1 * var2`.
+    pub coefficient: f64,
+}
+
+impl QuadraticTerm {
+    /// Whether this term is a square (`x ^ 2`).
+    #[must_use]
+    pub fn is_square(&self) -> bool {
+        self.var1 == self.var2
+    }
+
+    /// Whether this term multiplies the same (unordered) pair of variables as `other`.
+    #[must_use]
+    pub fn same_pair(&self, other: &Self) -> bool {
+        (self.var1 == other.var1 && self.var2 == other.var2) || (self.var1 == other.var2 && self.var2 == other.var1)
+    }
+}
+
 #[derive(Debug, Clone)]
 /// Represents a constraint in an optimisation problem, which can be either a
 /// standard linear constraint or a special ordered set (SOS) constraint.
@@ -141,6 +171,22 @@ pub enum Constraint {
         sos_type: SOSType,
         /// Weight per participating variable.
         weights: Vec<Coefficient>,
+        /// Byte offset of this constraint in the source text (for line number mapping).
+        byte_offset: Option<usize>,
+    },
+    /// A quadratic constraint (`name: x + [ x ^ 2 + 2 x * y ] <= 4`): linear
+    /// coefficients plus quadratic terms, compared against the right-hand side.
+    Quadratic {
+        /// Interned constraint name.
+        name: NameId,
+        /// Linear left-hand-side coefficients.
+        coefficients: Vec<Coefficient>,
+        /// Quadratic left-hand-side terms (never empty).
+        quadratic: Vec<QuadraticTerm>,
+        /// Comparison operator between the LHS and the RHS.
+        operator: ComparisonOp,
+        /// Right-hand-side value.
+        rhs: f64,
         /// Byte offset of this constraint in the source text (for line number mapping).
         byte_offset: Option<usize>,
     },
@@ -180,6 +226,10 @@ impl PartialEq for Constraint {
                 Self::Indicator { name: n1, variable: v1, active_value: a1, coefficients: c1, operator: o1, rhs: r1, .. },
                 Self::Indicator { name: n2, variable: v2, active_value: a2, coefficients: c2, operator: o2, rhs: r2, .. },
             ) => n1 == n2 && v1 == v2 && a1 == a2 && c1 == c2 && o1 == o2 && r1 == r2,
+            (
+                Self::Quadratic { name: n1, coefficients: c1, quadratic: q1, operator: o1, rhs: r1, .. },
+                Self::Quadratic { name: n2, coefficients: c2, quadratic: q2, operator: o2, rhs: r2, .. },
+            ) => n1 == n2 && c1 == c2 && q1 == q2 && o1 == o2 && r1 == r2,
             _ => false,
         }
     }
@@ -191,7 +241,7 @@ impl Constraint {
     /// Returns the interned name of the constraint.
     pub const fn name(&self) -> NameId {
         match self {
-            Self::Standard { name, .. } | Self::SOS { name, .. } | Self::Indicator { name, .. } => *name,
+            Self::Standard { name, .. } | Self::SOS { name, .. } | Self::Indicator { name, .. } | Self::Quadratic { name, .. } => *name,
         }
     }
 
@@ -200,7 +250,10 @@ impl Constraint {
     /// Returns the byte offset of this constraint in the source text, if available.
     pub const fn byte_offset(&self) -> Option<usize> {
         match self {
-            Self::Standard { byte_offset, .. } | Self::SOS { byte_offset, .. } | Self::Indicator { byte_offset, .. } => *byte_offset,
+            Self::Standard { byte_offset, .. }
+            | Self::SOS { byte_offset, .. }
+            | Self::Indicator { byte_offset, .. }
+            | Self::Quadratic { byte_offset, .. } => *byte_offset,
         }
     }
 
@@ -209,12 +262,13 @@ impl Constraint {
     /// Returns a mutable reference to the interned name of the constraint.
     pub const fn name_mut(&mut self) -> &mut NameId {
         match self {
-            Self::Standard { name, .. } | Self::SOS { name, .. } | Self::Indicator { name, .. } => name,
+            Self::Standard { name, .. } | Self::SOS { name, .. } | Self::Indicator { name, .. } | Self::Quadratic { name, .. } => name,
         }
     }
 
     /// The linear row of a standard or indicator constraint as
-    /// `(coefficients, operator, rhs)`; `None` for an SOS constraint. For an
+    /// `(coefficients, operator, rhs)`; `None` for an SOS or quadratic
+    /// constraint (a quadratic constraint has no purely linear row). For an
     /// indicator constraint this is the constraint that holds when the
     /// indicator is active.
     #[must_use]
@@ -223,7 +277,7 @@ impl Constraint {
             Self::Standard { coefficients, operator, rhs, .. } | Self::Indicator { coefficients, operator, rhs, .. } => {
                 Some((coefficients, *operator, *rhs))
             }
-            Self::SOS { .. } => None,
+            Self::SOS { .. } | Self::Quadratic { .. } => None,
         }
     }
 
@@ -241,6 +295,15 @@ impl Constraint {
                 f(*variable);
                 for term in coefficients {
                     f(term.name);
+                }
+            }
+            Self::Quadratic { coefficients, quadratic, .. } => {
+                for term in coefficients {
+                    f(term.name);
+                }
+                for term in quadratic {
+                    f(term.var1);
+                    f(term.var2);
                 }
             }
         }
@@ -298,6 +361,10 @@ pub struct Objective {
     pub coefficients: Vec<Coefficient>,
     /// Constant term of the objective function.
     pub constant: f64,
+    /// Quadratic terms of the objective (empty for a linear objective). Each
+    /// coefficient is the term's actual coefficient: the `/ 2` of the LP
+    /// syntax is already applied (see [`QuadraticTerm`]).
+    pub quadratic: Vec<QuadraticTerm>,
     /// Byte offset of this objective in the source text (for line number mapping).
     pub byte_offset: Option<usize>,
 }
@@ -735,12 +802,18 @@ mod tests {
         let profit = interner.intern("profit");
         let x1 = interner.intern("x1");
 
-        let obj = Objective { name: profit, coefficients: vec![Coefficient { name: x1, value: 5.0 }], constant: 0.0, byte_offset: None };
+        let obj = Objective {
+            name: profit,
+            coefficients: vec![Coefficient { name: x1, value: 5.0 }],
+            constant: 0.0,
+            quadratic: Vec::new(),
+            byte_offset: None,
+        };
         assert_eq!(interner.resolve(obj.name), "profit");
         assert_eq!(obj.coefficients.len(), 1);
 
         let dynamic = interner.intern("dynamic");
-        let obj_empty = Objective { name: dynamic, coefficients: vec![], constant: 0.0, byte_offset: None };
+        let obj_empty = Objective { name: dynamic, coefficients: vec![], constant: 0.0, quadratic: Vec::new(), byte_offset: None };
         assert_eq!(interner.resolve(obj_empty.name), "dynamic");
         assert!(obj_empty.coefficients.is_empty(), "expected empty, got {:?}", obj_empty.coefficients);
     }

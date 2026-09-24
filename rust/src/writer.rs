@@ -27,7 +27,7 @@ use crate::NUMERIC_EPSILON;
 use crate::error::{LpParseError, LpResult};
 use crate::interner::{NameId, NameInterner};
 use crate::lexer::Token;
-use crate::model::{Coefficient, Constraint, ConstraintClass, Objective, Variable};
+use crate::model::{Coefficient, Constraint, ConstraintClass, Objective, QuadraticTerm, Variable};
 use crate::problem::LpProblem;
 
 /// Options for controlling LP file output format
@@ -133,7 +133,7 @@ fn omitted_expressions(problem: &LpProblem) -> Vec<String> {
 
 /// An objective with neither terms nor a constant, which the writer omits.
 fn is_empty_objective(objective: &Objective) -> bool {
-    objective.coefficients.is_empty() && objective.constant == 0.0
+    objective.coefficients.is_empty() && objective.quadratic.is_empty() && objective.constant == 0.0
 }
 
 /// Check that `name` lexes back as exactly one LP identifier equal to itself.
@@ -176,6 +176,10 @@ fn validate_lp_names(problem: &LpProblem, options: &LpWriterOptions) -> LpResult
         check(objective.name, "objective")?;
         for coeff in &objective.coefficients {
             check(coeff.name, "variable")?;
+        }
+        for term in &objective.quadratic {
+            check(term.var1, "variable")?;
+            check(term.var2, "variable")?;
         }
     }
     for constraint in problem.constraints.values() {
@@ -254,10 +258,12 @@ fn write_objective(output: &mut String, objective: &Objective, interner: &NameIn
     }
     write!(output, " {name}: ")?;
 
-    write_coefficients_line(output, &objective.coefficients, interner, options)?;
+    // Objective quadratics are written `[ ... ] / 2` (CPLEX, Gurobi), so the
+    // stored coefficients are doubled inside the brackets.
+    write_expression(output, &objective.coefficients, &objective.quadratic, QuadraticBlock::Halved, interner, options)?;
 
     if objective.constant != 0.0 {
-        if objective.coefficients.is_empty() {
+        if objective.coefficients.is_empty() && objective.quadratic.is_empty() {
             write_number(output, objective.constant, options.decimal_precision)?;
         } else {
             write!(output, " {} ", if objective.constant < 0.0 { "-" } else { "+" })?;
@@ -345,6 +351,17 @@ fn write_constraint(output: &mut String, constraint: &Constraint, interner: &Nam
             write!(output, " {resolved_name}: ")?;
 
             write_coefficients_line(output, coefficients, interner, options)?;
+
+            write!(output, " {operator} ")?;
+            write_number(output, *rhs, options.decimal_precision)?;
+            writeln!(output)
+        }
+        Constraint::Quadratic { name, coefficients, quadratic, operator, rhs, .. } => {
+            debug_assert!(!quadratic.is_empty(), "a quadratic constraint has quadratic terms");
+            let resolved_name = interner.resolve(*name);
+            write!(output, " {resolved_name}: ")?;
+
+            write_expression(output, coefficients, quadratic, QuadraticBlock::Plain, interner, options)?;
 
             write!(output, " {operator} ")?;
             write_number(output, *rhs, options.decimal_precision)?;
@@ -529,9 +546,41 @@ fn write_coefficients_line(
     interner: &NameInterner,
     options: &LpWriterOptions,
 ) -> std::fmt::Result {
+    write_expression(output, coefficients, &[], QuadraticBlock::Plain, interner, options)
+}
+
+/// How a quadratic block is written: in an objective it is `[ ... ] / 2` with
+/// doubled coefficients, in a constraint plain `[ ... ]`.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum QuadraticBlock {
+    Halved,
+    Plain,
+}
+
+/// Write linear terms followed by a quadratic block (if any), wrapping long
+/// lines onto indented continuation lines.
+fn write_expression(
+    output: &mut String,
+    coefficients: &[Coefficient],
+    quadratic: &[QuadraticTerm],
+    block: QuadraticBlock,
+    interner: &NameInterner,
+    options: &LpWriterOptions,
+) -> std::fmt::Result {
     const CONTINUATION_INDENT: &str = "        ";
     let mut current_line_length: usize = 0;
     let mut piece = String::new();
+    let mut pieces_written = 0usize;
+    let mut emit = |output: &mut String, piece: &str| {
+        if current_line_length + piece.len() > options.max_line_length && pieces_written > 0 {
+            output.push('\n');
+            output.push_str(CONTINUATION_INDENT);
+            current_line_length = CONTINUATION_INDENT.len();
+        }
+        output.push_str(piece);
+        current_line_length += piece.len();
+        pieces_written += 1;
+    };
 
     for (i, coeff) in coefficients.iter().enumerate() {
         let var_name = interner.resolve(coeff.name);
@@ -539,17 +588,29 @@ fn write_coefficients_line(
         // Format into a scratch buffer so wrapping decisions use the real width.
         piece.clear();
         write_formatted_coefficient(&mut piece, var_name, coeff.value, i == 0, options.decimal_precision)?;
-
-        if current_line_length + piece.len() > options.max_line_length && i > 0 {
-            writeln!(output)?;
-            write!(output, "{CONTINUATION_INDENT}")?;
-            current_line_length = CONTINUATION_INDENT.len();
-        }
-
-        output.push_str(&piece);
-        current_line_length += piece.len();
+        emit(output, &piece);
     }
 
+    if quadratic.is_empty() {
+        return Ok(());
+    }
+    let scale = if block == QuadraticBlock::Halved { 2.0 } else { 1.0 };
+    emit(output, if coefficients.is_empty() { "[" } else { " + [" });
+    for (i, term) in quadratic.iter().enumerate() {
+        piece.clear();
+        let product = if term.is_square() {
+            format!("{} ^ 2", interner.resolve(term.var1))
+        } else {
+            format!("{} * {}", interner.resolve(term.var1), interner.resolve(term.var2))
+        };
+        // A leading space separates the first term from the opening bracket.
+        if i == 0 {
+            piece.push(' ');
+        }
+        write_formatted_coefficient(&mut piece, &product, term.coefficient * scale, i == 0, options.decimal_precision)?;
+        emit(output, &piece);
+    }
+    emit(output, if block == QuadraticBlock::Halved { " ] / 2" } else { " ]" });
     Ok(())
 }
 
@@ -735,6 +796,7 @@ mod tests {
             name: obj_id,
             coefficients: vec![Coefficient { name: x1, value: 1.0 }],
             constant: 0.0,
+            quadratic: Vec::new(),
             byte_offset: None,
         });
         let c1 = problem.intern("c1");
@@ -776,9 +838,16 @@ mod tests {
             name: obj_id,
             coefficients: vec![Coefficient { name: x1, value: 1.0 }],
             constant: 0.0,
+            quadratic: Vec::new(),
             byte_offset: None,
         });
-        problem.add_objective(Objective { name: empty_obj_id, coefficients: vec![], constant: 0.0, byte_offset: None });
+        problem.add_objective(Objective {
+            name: empty_obj_id,
+            coefficients: vec![],
+            constant: 0.0,
+            quadratic: Vec::new(),
+            byte_offset: None,
+        });
         problem.add_constraint(Constraint::Standard {
             name: c1,
             coefficients: vec![Coefficient { name: x1, value: 1.0 }],
@@ -883,6 +952,7 @@ mod tests {
             name: profit_id,
             coefficients: vec![Coefficient { name: x1_id, value: 3.0 }, Coefficient { name: x2_id, value: 2.0 }],
             constant: 0.0,
+            quadratic: Vec::new(),
             byte_offset: None,
         };
         problem.add_objective(objective);
@@ -997,6 +1067,7 @@ End";
                 Coefficient { name: x3_id, value: 20.0 },
             ],
             constant: 0.0,
+            quadratic: Vec::new(),
             byte_offset: None,
         };
         problem.add_objective(objective);
@@ -1215,7 +1286,7 @@ End
                 Coefficient { name: id, value: f64::from(i + 1) * 1.5 }
             })
             .collect();
-        problem.add_objective(Objective { name: obj_id, coefficients, constant: 0.0, byte_offset: None });
+        problem.add_objective(Objective { name: obj_id, coefficients, constant: 0.0, quadratic: Vec::new(), byte_offset: None });
         let c1 = problem.intern("c1");
         let x0 = problem.name_id("very_long_variable_name_00").unwrap();
         problem.add_constraint(Constraint::Standard {
@@ -1247,6 +1318,7 @@ End
             name: obj_id,
             coefficients: vec![Coefficient { name: x_id, value: 1.0 }],
             constant: 0.0,
+            quadratic: Vec::new(),
             byte_offset: None,
         });
         let c1 = problem.intern("c1");

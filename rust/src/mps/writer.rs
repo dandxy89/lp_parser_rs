@@ -23,7 +23,10 @@
 //! lazy constraints and user cuts, listed like `ROWS` and otherwise ordinary
 //! rows in `COLUMNS`, `RHS` and `RANGES`), `COLUMNS` (integer/general/binary
 //! variables wrapped in `'MARKER'` `INTORG`/`INTEND` blocks), `RHS`, `RANGES`
-//! (see below), `BOUNDS`, `SOS`, `INDICATORS` (CPLEX: an indicator
+//! (see below), `BOUNDS`, `SOS`, `QUADOBJ` (the written objective's
+//! quadratic terms, upper triangle of `Q` in `c'x + 1/2 x'Qx`), `QCMATRIX`
+//! (one per quadratic constraint: the full symmetric `Q` of `a'x + x'Qx`),
+//! `INDICATORS` (CPLEX: an indicator
 //! constraint is an ordinary row plus an `IF row variable value` line),
 //! `ENDATA`.
 //!
@@ -98,7 +101,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::error::{LpParseError, LpResult};
 use crate::interner::NameId;
-use crate::model::{Coefficient, ComparisonOp, Constraint, ConstraintClass, Objective, Sense, VariableBounds, VariableKind};
+use crate::model::{Coefficient, ComparisonOp, Constraint, ConstraintClass, Objective, QuadraticTerm, Sense, VariableBounds, VariableKind};
 use crate::problem::LpProblem;
 use crate::writer::write_number;
 
@@ -279,6 +282,7 @@ fn build_mps(output: &mut String, problem: &LpProblem, options: &MpsWriterOption
     write_ranges_section(output, problem, &labels.ranges, options, &range_pairs).expect("fmt::Write to String is infallible");
     write_bounds_section(output, problem, BoundStyle { label: &labels.bounds, precision: options.decimal_precision })?;
     write_sos_section(output, problem, options).expect("fmt::Write to String is infallible");
+    write_quadratic_sections(output, problem, objective, options).expect("fmt::Write to String is infallible");
     write_indicators_section(output, problem).expect("fmt::Write to String is infallible");
 
     writeln!(output, "ENDATA").expect("fmt::Write to String is infallible");
@@ -411,7 +415,7 @@ fn write_rows_section(output: &mut String, problem: &LpProblem, obj_row_name: &s
             if range_pairs.skip.contains(name_id) || problem.constraint_class(*name_id) != class {
                 continue;
             }
-            if let Some((_, operator, _)) = constraint.linear_row() {
+            if let Some((_, operator, _)) = row_parts(constraint) {
                 let name = constraint.name();
                 if let Some(header) = header
                     && !wrote_header
@@ -475,7 +479,7 @@ fn build_columns<'p>(
         if range_pairs.skip.contains(constraint_id) {
             continue; // The base row already carries these coefficients.
         }
-        if let Some((coefficients, _, _)) = constraint.linear_row() {
+        if let Some((coefficients, _, _)) = row_parts(constraint) {
             let row_name = problem.resolve(constraint.name());
             for coeff in coefficients {
                 debug_assert!(problem.variables.contains_key(&coeff.name), "constraint coefficient must reference a registered variable");
@@ -484,15 +488,24 @@ fn build_columns<'p>(
         }
     }
 
-    // An indicator variable must be a column for the INDICATORS section to
-    // name it, even when it appears in no row.
-    let indicators: FxHashSet<NameId> = problem
-        .constraints
-        .values()
-        .filter_map(|c| if let Constraint::Indicator { variable, .. } = c { Some(*variable) } else { None })
-        .collect();
+    // An indicator variable, or one that only appears in quadratic terms, must
+    // still be a column for the INDICATORS / QUADOBJ / QCMATRIX sections to
+    // name it.
+    let mut needs_column: FxHashSet<NameId> = FxHashSet::default();
+    for constraint in problem.constraints.values() {
+        match constraint {
+            Constraint::Indicator { variable, .. } => {
+                needs_column.insert(*variable);
+            }
+            Constraint::Quadratic { quadratic, .. } => needs_column.extend(quadratic.iter().flat_map(|t| [t.var1, t.var2])),
+            Constraint::Standard { .. } | Constraint::SOS { .. } => {}
+        }
+    }
+    if let Some(obj) = objective {
+        needs_column.extend(obj.quadratic.iter().flat_map(|t| [t.var1, t.var2]));
+    }
     for (name_id, variable) in &problem.variables {
-        if needs_marker(variable.kind) || indicators.contains(name_id) {
+        if needs_marker(variable.kind) || needs_column.contains(name_id) {
             let entries = columns.entry(*name_id).or_default();
             if entries.is_empty() {
                 entries.push((obj_row_name, 0.0));
@@ -569,7 +582,7 @@ fn write_rhs_section(
         if range_pairs.skip.contains(constraint_id) {
             continue;
         }
-        if let Some((_, _, rhs)) = constraint.linear_row() {
+        if let Some((_, _, rhs)) = row_parts(constraint) {
             if rhs == 0.0 {
                 continue;
             }
@@ -864,6 +877,70 @@ fn write_sos_section(output: &mut String, problem: &LpProblem, options: &MpsWrit
     Ok(())
 }
 
+/// The linear row an MPS `ROWS` entry carries for a constraint: standard,
+/// indicator (its linear part) and quadratic (its linear part, the quadratic
+/// terms going to `QCMATRIX`) constraints; `None` for SOS.
+fn row_parts(constraint: &Constraint) -> Option<(&[Coefficient], ComparisonOp, f64)> {
+    match constraint {
+        Constraint::Quadratic { coefficients, operator, rhs, .. } => Some((coefficients, *operator, *rhs)),
+        other => other.linear_row(),
+    }
+}
+
+/// Write one `row column value` line of a quadratic section.
+fn write_quadratic_entry(
+    output: &mut String,
+    problem: &LpProblem,
+    var1: NameId,
+    var2: NameId,
+    value: f64,
+    options: &MpsWriterOptions,
+) -> std::fmt::Result {
+    let (a, b) = (problem.resolve(var1), problem.resolve(var2));
+    write!(output, "    {a:<10} {b:<10} ")?;
+    write_number(output, value, options.decimal_precision)?;
+    writeln!(output)
+}
+
+/// Write the `QUADOBJ` section for the written objective and one `QCMATRIX`
+/// section per quadratic constraint.
+///
+/// `QUADOBJ` stores the upper triangle of `Q` in `c'x + 1/2 x'Qx`: a square
+/// term `c x^2` is `Q_xx = 2c`, a product `c x y` is `Q_xy = c`. `QCMATRIX`
+/// stores the full symmetric `Q` of `a'x + x'Qx`: `c x^2` is `Q_xx = c` and
+/// `c x y` is `Q_xy = Q_yx = c / 2`.
+fn write_quadratic_sections(
+    output: &mut String,
+    problem: &LpProblem,
+    objective: Option<&Objective>,
+    options: &MpsWriterOptions,
+) -> std::fmt::Result {
+    if let Some(obj) = objective
+        && !obj.quadratic.is_empty()
+    {
+        writeln!(output, "QUADOBJ")?;
+        for term in &obj.quadratic {
+            let value = if term.is_square() { 2.0 * term.coefficient } else { term.coefficient };
+            write_quadratic_entry(output, problem, term.var1, term.var2, value, options)?;
+        }
+    }
+    for constraint in problem.constraints.values() {
+        let Constraint::Quadratic { name, quadratic, .. } = constraint else {
+            continue;
+        };
+        writeln!(output, "QCMATRIX   {}", problem.resolve(*name))?;
+        for QuadraticTerm { var1, var2, coefficient } in quadratic {
+            if var1 == var2 {
+                write_quadratic_entry(output, problem, *var1, *var2, *coefficient, options)?;
+            } else {
+                write_quadratic_entry(output, problem, *var1, *var2, coefficient / 2.0, options)?;
+                write_quadratic_entry(output, problem, *var2, *var1, coefficient / 2.0, options)?;
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Write the `INDICATORS` section (CPLEX): one `IF row variable value` line
 /// per indicator constraint, whose linear part is an ordinary row.
 fn write_indicators_section(output: &mut String, problem: &LpProblem) -> std::fmt::Result {
@@ -909,6 +986,7 @@ mod tests {
                 Coefficient { name: x3_id, value: 1.0 },
             ],
             constant: 0.0,
+            quadratic: Vec::new(),
             byte_offset: None,
         });
 
@@ -965,6 +1043,7 @@ mod tests {
             name: profit_id,
             coefficients: vec![Coefficient { name: x1_id, value: 3.0 }, Coefficient { name: x2_id, value: 2.0 }],
             constant: 0.0,
+            quadratic: Vec::new(),
             byte_offset: None,
         });
         problem.add_constraint(Constraint::Standard {
@@ -1038,6 +1117,7 @@ mod tests {
             name: obj_id,
             coefficients: vec![Coefficient { name: x1_id, value: 1.0 }],
             constant: 0.0,
+            quadratic: Vec::new(),
             byte_offset: None,
         });
         problem.update_variable_type("x1", VariableType::DoubleBound(5.5, f64::INFINITY)).unwrap();
@@ -1059,6 +1139,7 @@ mod tests {
             name: obj_id,
             coefficients: vec![Coefficient { name: x1_id, value: 1.0 }],
             constant: 0.0,
+            quadratic: Vec::new(),
             byte_offset: None,
         });
         problem.update_variable_type("x1", VariableType::UpperBound(-5.0)).unwrap();
@@ -1082,12 +1163,14 @@ mod tests {
             name: a,
             coefficients: vec![Coefficient { name: x1_id, value: 1.0 }],
             constant: 0.0,
+            quadratic: Vec::new(),
             byte_offset: None,
         });
         problem.add_objective(Objective {
             name: b,
             coefficients: vec![Coefficient { name: x1_id, value: 2.0 }],
             constant: 0.0,
+            quadratic: Vec::new(),
             byte_offset: None,
         });
 
@@ -1105,12 +1188,14 @@ mod tests {
             name: a,
             coefficients: vec![Coefficient { name: x1_id, value: 1.0 }],
             constant: 0.0,
+            quadratic: Vec::new(),
             byte_offset: None,
         });
         problem.add_objective(Objective {
             name: b,
             coefficients: vec![Coefficient { name: x1_id, value: 2.0 }],
             constant: 0.0,
+            quadratic: Vec::new(),
             byte_offset: None,
         });
 
@@ -1145,7 +1230,7 @@ mod tests {
         // round-trip as Integer, not fall back to the MPS [0, 1] default.
         let mut problem = LpProblem::new();
         let obj_id = problem.intern("obj");
-        problem.add_objective(Objective { name: obj_id, coefficients: vec![], constant: 0.0, byte_offset: None });
+        problem.add_objective(Objective { name: obj_id, coefficients: vec![], constant: 0.0, quadratic: Vec::new(), byte_offset: None });
         let x1_id = problem.intern("x1");
         problem.add_variable(crate::model::Variable::new(x1_id).with_var_type(VariableType::General));
 
@@ -1225,7 +1310,7 @@ End
     fn test_semi_continuous_round_trips() {
         let mut problem = LpProblem::new();
         let obj_id = problem.intern("obj");
-        problem.add_objective(Objective { name: obj_id, coefficients: vec![], constant: 0.0, byte_offset: None });
+        problem.add_objective(Objective { name: obj_id, coefficients: vec![], constant: 0.0, quadratic: Vec::new(), byte_offset: None });
         let x1_id = problem.intern("x1");
         problem.add_variable(crate::model::Variable::new(x1_id).with_var_type(VariableType::SemiContinuous));
 
@@ -1249,6 +1334,7 @@ End
             name: obj_id,
             coefficients: vec![Coefficient { name: x_id, value: 1.0 }, Coefficient { name: y_id, value: 1.0 }],
             constant: 0.0,
+            quadratic: Vec::new(),
             byte_offset: None,
         });
         // `RNG` / `RNG_rng` fold into a RANGES entry; `RHS` is an ordinary row.
@@ -1400,6 +1486,7 @@ ENDATA
             name: obj_id,
             coefficients: vec![Coefficient { name: x1_id, value: 1.0 }],
             constant: 0.0,
+            quadratic: Vec::new(),
             byte_offset: None,
         });
         problem.update_variable_type("x1", VariableType::UpperBound(f64::NAN)).unwrap();
@@ -1417,6 +1504,7 @@ ENDATA
             name: obj_id,
             coefficients: vec![Coefficient { name: x1_id, value: 1.0 }],
             constant: 0.0,
+            quadratic: Vec::new(),
             byte_offset: None,
         });
         problem.update_variable_type("x1", VariableType::LowerBound(f64::NAN)).unwrap();
@@ -1434,6 +1522,7 @@ ENDATA
             name: obj_id,
             coefficients: vec![Coefficient { name: x1_id, value: 1.0 }],
             constant: 0.0,
+            quadratic: Vec::new(),
             byte_offset: None,
         });
         problem.update_variable_type("x1", VariableType::UpperBound(f64::NEG_INFINITY)).unwrap();
@@ -1451,6 +1540,7 @@ ENDATA
             name: obj_id,
             coefficients: vec![Coefficient { name: x1_id, value: 1.0 }],
             constant: 0.0,
+            quadratic: Vec::new(),
             byte_offset: None,
         });
         problem.update_variable_type("x1", VariableType::LowerBound(f64::INFINITY)).unwrap();
@@ -1468,6 +1558,7 @@ ENDATA
             name: obj_id,
             coefficients: vec![Coefficient { name: x1_id, value: 1.0 }],
             constant: 0.0,
+            quadratic: Vec::new(),
             byte_offset: None,
         });
         problem.update_variable_type("x1", VariableType::DoubleBound(f64::NAN, 5.0)).unwrap();
@@ -1485,6 +1576,7 @@ ENDATA
             name: obj_id,
             coefficients: vec![Coefficient { name: x1_id, value: 1.0 }],
             constant: 0.0,
+            quadratic: Vec::new(),
             byte_offset: None,
         });
         // Lower bound of +inf paired with a finite upper bound is an empty,

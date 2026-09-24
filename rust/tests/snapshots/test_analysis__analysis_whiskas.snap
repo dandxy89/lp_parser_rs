@@ -10,6 +10,8 @@ summary:
   variable_count: 6
   total_nonzeros: 25
   density: 0.83333
+  quadratic_objective_terms: 0
+  quadratic_constraint_terms: 0
 sparsity:
   min_vars_per_constraint: 4
   max_vars_per_constraint: 6
@@ -41,6 +43,7 @@ constraints:
     sos1: 0
     sos2: 0
     indicator: 0
+    quadratic: 0
     lazy: 0
     user_cuts: 0
   empty_constraints: []

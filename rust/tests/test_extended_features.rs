@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 
-use lp_parser_rs::model::{ComparisonOp, Constraint, ConstraintClass, VariableBounds, VariableKind};
+use lp_parser_rs::model::{ComparisonOp, Constraint, ConstraintClass, QuadraticTerm, VariableBounds, VariableKind};
 use lp_parser_rs::mps::writer::write_mps_string;
 use lp_parser_rs::problem::LpProblem;
 use lp_parser_rs::writer::write_lp_string;
@@ -296,4 +296,159 @@ fn indicator_is_refused_by_lp_solvers_compat() {
     let problem = parse_resource("indicator.lp");
     let error = LpSolversCompat::try_new(&problem).expect_err("an indicator constraint cannot be dropped");
     assert!(matches!(error, LpSolversCompatError::UnsupportedConstraint { kind: "indicator", .. }), "{error:?}");
+}
+
+// --- Quadratic objectives and constraints ------------------------------------
+
+/// Quadratic terms as `(var1, var2, coefficient)` with resolved names.
+fn quadratic_terms(problem: &LpProblem, terms: &[QuadraticTerm]) -> Vec<(String, String, f64)> {
+    terms.iter().map(|t| (problem.resolve(t.var1).to_string(), problem.resolve(t.var2).to_string(), t.coefficient)).collect()
+}
+
+fn objective_quadratic(problem: &LpProblem, name: &str) -> Vec<(String, String, f64)> {
+    let id = problem.name_id(name).unwrap_or_else(|| panic!("objective '{name}' must exist"));
+    quadratic_terms(problem, &problem.objectives[&id].quadratic)
+}
+
+/// `(linear coefficient count, quadratic terms, operator, rhs)` of a quadratic constraint.
+fn quadratic_constraint(problem: &LpProblem, name: &str) -> (usize, Vec<(String, String, f64)>, ComparisonOp, f64) {
+    let id = problem.name_id(name).unwrap_or_else(|| panic!("constraint '{name}' must exist"));
+    match &problem.constraints[&id] {
+        Constraint::Quadratic { coefficients, quadratic, operator, rhs, .. } => {
+            (coefficients.len(), quadratic_terms(problem, quadratic), *operator, *rhs)
+        }
+        other => panic!("'{name}' must be a quadratic constraint, got {other:?}"),
+    }
+}
+
+fn term(var1: &str, var2: &str, coefficient: f64) -> (String, String, f64) {
+    (var1.to_string(), var2.to_string(), coefficient)
+}
+
+#[test]
+fn quadratic_fixture_parses() {
+    let problem = parse_resource("quadratic.lp");
+    // `[ x ^ 2 + 4 x * y + 2 y ^ 2 ] / 2` halves every coefficient.
+    assert_eq!(objective_quadratic(&problem, "obj"), vec![term("x", "x", 0.5), term("x", "y", 2.0), term("y", "y", 1.0)]);
+    let obj = &problem.objectives[&problem.name_id("obj").unwrap()];
+    assert_eq!((obj.coefficients.len(), obj.constant), (2, 1.0));
+
+    assert_eq!(quadratic_constraint(&problem, "q1"), (1, vec![term("x", "x", 1.0), term("y", "y", 1.0)], ComparisonOp::LTE, 4.0));
+    assert_eq!(quadratic_constraint(&problem, "q2"), (0, vec![term("x", "y", -1.0), term("z", "z", 3.0)], ComparisonOp::GTE, -2.0));
+    // A flipped quadratic constraint is normalised like a linear one.
+    assert_eq!(quadratic_constraint(&problem, "C1"), (1, vec![term("z", "x", 1.0)], ComparisonOp::LTE, 10.0));
+    assert!(matches!(problem.constraints[&problem.name_id("c1").unwrap()], Constraint::Standard { .. }));
+}
+
+#[test]
+fn quadratic_terms_of_the_same_pair_are_merged() {
+    let problem = LpProblem::parse("minimize\nobj: [ x * y + y * x + x ^ 2 + x * x ] / 2\nsubject to\nc: x + y >= 1\nend").unwrap();
+    assert_eq!(objective_quadratic(&problem, "obj"), vec![term("x", "y", 1.0), term("x", "x", 1.0)]);
+}
+
+#[test]
+fn quadratic_lp_round_trip() {
+    let problem = parse_resource("quadratic.lp");
+    let written = write_lp_string(&problem).unwrap();
+    // Objective coefficients are doubled back inside `[ ... ] / 2`.
+    assert!(written.contains(" obj: 2 x + 3 y + [ x ^ 2 + 4 x * y + 2 y ^ 2 ] / 2 + 1"), "{written}");
+    assert!(written.contains(" q1: x + [ x ^ 2 + y ^ 2 ] <= 4"), "{written}");
+    assert!(written.contains(" q2: [ - x * y + 3 z ^ 2 ] >= -2"), "{written}");
+
+    let reparsed = lp_round_trip(&problem);
+    assert_eq!(objective_quadratic(&reparsed, "obj"), objective_quadratic(&problem, "obj"));
+    for name in ["q1", "q2", "C1"] {
+        assert_eq!(quadratic_constraint(&reparsed, name), quadratic_constraint(&problem, name), "constraint {name}");
+    }
+}
+
+#[test]
+fn quadratic_mps_round_trip() {
+    let problem = parse_resource("quadratic.lp");
+    let mps = write_mps_string(&problem).expect("quadratic terms are representable in MPS");
+    assert!(mps.contains("QUADOBJ\n") && mps.contains("QCMATRIX   q1\n"), "{mps}");
+    let reparsed = LpProblem::parse_mps(&mps).unwrap_or_else(|e| panic!("written MPS must re-parse: {e}\n{mps}"));
+    assert_eq!(objective_quadratic(&reparsed, "obj"), objective_quadratic(&problem, "obj"));
+    for name in ["q1", "q2", "C1"] {
+        assert_eq!(quadratic_constraint(&reparsed, name), quadratic_constraint(&problem, name), "constraint {name}");
+    }
+}
+
+#[test]
+fn mps_quadratic_sections_follow_their_conventions() {
+    // QUADOBJ is the upper triangle of Q in 1/2 x'Qx, QMATRIX the full Q, and
+    // QCMATRIX the full Q in x'Qx: all three describe x^2 + 3 x y here.
+    let base = "NAME t\nROWS\n N obj\n L c1\nCOLUMNS\n x obj 1 c1 1\n y obj 1 c1 1\nRHS\n RHS c1 4\n";
+    let quadobj = LpProblem::parse_mps(&format!("{base}QUADOBJ\n x x 2\n x y 3\nENDATA\n")).unwrap();
+    let qmatrix = LpProblem::parse_mps(&format!("{base}QMATRIX\n x x 2\n x y 3\n y x 3\nENDATA\n")).unwrap();
+    for problem in [&quadobj, &qmatrix] {
+        assert_eq!(objective_quadratic(problem, "obj"), vec![term("x", "x", 1.0), term("x", "y", 3.0)]);
+    }
+    let qc = LpProblem::parse_mps(&format!("{base}QCMATRIX c1\n x x 1\n x y 1.5\n y x 1.5\nENDATA\n")).unwrap();
+    assert_eq!(quadratic_constraint(&qc, "c1"), (2, vec![term("x", "x", 1.0), term("x", "y", 3.0)], ComparisonOp::LTE, 4.0));
+
+    // Errors: an objective row, an unknown row, a ranged row, a bad entry.
+    assert!(LpProblem::parse_mps(&format!("{base}QCMATRIX obj\n x x 1\nENDATA\n")).is_err());
+    assert!(LpProblem::parse_mps(&format!("{base}QCMATRIX nope\n x x 1\nENDATA\n")).is_err());
+    assert!(LpProblem::parse_mps(&format!("{base}RANGES\n RNG c1 2\nQCMATRIX c1\n x x 1\nENDATA\n")).is_err());
+    assert!(LpProblem::parse_mps(&format!("{base}QUADOBJ\n x x\nENDATA\n")).is_err());
+}
+
+#[test]
+fn quadratic_syntax_errors() {
+    let parse = |body: &str| LpProblem::parse(&format!("minimize\n{body}\nend"));
+    // An objective block must be divided by exactly 2.
+    assert!(parse("obj: x + [ x ^ 2 ]\nsubject to\nc: x >= 1").is_err());
+    assert!(parse("obj: x + [ x ^ 2 ] / 3\nsubject to\nc: x >= 1").is_err());
+    // A constraint block must not be divided.
+    assert!(parse("obj: x\nsubject to\nc: [ x ^ 2 ] / 2 <= 1").is_err());
+    // Only squares, products, and non-empty, closed blocks.
+    assert!(parse("obj: [ x ^ 3 ] / 2\nsubject to\nc: x >= 1").is_err());
+    assert!(parse("obj: [ x y ] / 2\nsubject to\nc: x >= 1").is_err());
+    assert!(parse("obj: [ ] / 2\nsubject to\nc: x >= 1").is_err());
+    assert!(parse("obj: [ x ^ 2 / 2\nsubject to\nc: x >= 1").is_err());
+    // No quadratic terms in a range or an indicator.
+    assert!(parse("obj: x\nsubject to\nc: 1 <= [ x ^ 2 ] <= 4").is_err());
+    assert!(parse("obj: x\nsubject to\nc: b = 1 -> [ x ^ 2 ] <= 4").is_err());
+}
+
+#[test]
+fn quadratic_variables_rename_and_remove() {
+    let mut problem = parse_resource("quadratic.lp");
+    problem.rename_variable("y", "why").unwrap();
+    assert_eq!(objective_quadratic(&problem, "obj")[1], term("x", "why", 2.0));
+    assert_eq!(quadratic_constraint(&problem, "q1").1[1], term("why", "why", 1.0));
+    problem.remove_variable("z").unwrap();
+    // C1 loses its only quadratic term and becomes a linear constraint.
+    assert!(matches!(problem.constraints[&problem.name_id("C1").unwrap()], Constraint::Standard { .. }));
+    assert_eq!(quadratic_constraint(&problem, "q2").1, vec![term("x", "why", -1.0)]);
+}
+
+#[cfg(feature = "diff")]
+#[test]
+fn quadratic_changes_are_detected_by_diff() {
+    let a = LpProblem::parse("minimize\nobj: x + [ x ^ 2 ] / 2\nsubject to\nq: [ x * y ] <= 1\nend").unwrap();
+    let b = LpProblem::parse("minimize\nobj: x + [ 3 x ^ 2 ] / 2\nsubject to\nq: [ y * x + y ^ 2 ] <= 1\nend").unwrap();
+    let diff = a.diff(&b, &lp_parser_rs::diff::DiffOptions::default());
+    assert_eq!(diff.objs_modified, vec![("obj".to_string(), vec!["1 quadratic term change(s)".to_string()])]);
+    // `x * y` and `y * x` are the same term; only `y ^ 2` is new.
+    assert_eq!(diff.cons_modified, vec![("q".to_string(), vec!["1 quadratic term change(s)".to_string()])]);
+}
+
+#[test]
+fn quadratic_terms_are_counted_by_analysis() {
+    let analysis = parse_resource("quadratic.lp").analyze();
+    assert_eq!(analysis.summary.quadratic_objective_terms, 3);
+    assert_eq!(analysis.summary.quadratic_constraint_terms, 5);
+    assert_eq!(analysis.constraints.type_distribution.quadratic, 3);
+}
+
+#[cfg(feature = "lp-solvers")]
+#[test]
+fn quadratic_is_refused_by_lp_solvers_compat() {
+    use lp_parser_rs::compat::lp_solvers::{LpSolversCompat, LpSolversCompatError};
+    let objective_only = LpProblem::parse("minimize\nobj: x + [ x ^ 2 ] / 2\nsubject to\nc: x >= 1\nend").unwrap();
+    assert!(matches!(LpSolversCompat::try_new(&objective_only), Err(LpSolversCompatError::QuadraticObjective { .. })));
+    let constraint = LpProblem::parse("minimize\nobj: x\nsubject to\nq: [ x ^ 2 ] <= 1\nend").unwrap();
+    assert!(matches!(LpSolversCompat::try_new(&constraint), Err(LpSolversCompatError::UnsupportedConstraint { kind: "quadratic", .. })));
 }

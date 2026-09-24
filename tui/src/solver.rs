@@ -358,6 +358,9 @@ pub fn rank_by_magnitude(values: &[(String, f64)]) -> Vec<usize> {
 /// order.
 pub(crate) struct BuiltModel {
     pub(crate) row_problem: highs::RowProblem,
+    /// Quadratic part of the primary objective as `(column, column, coefficient)`
+    /// of `coefficient * x_i * x_j`; empty for a linear objective.
+    objective_quadratic: Vec<(usize, usize, f64)>,
     pub(crate) variable_names: Vec<String>,
     sorted_var_ids: Vec<NameId>,
     objective_coefficients: HashMap<NameId, f64>,
@@ -372,6 +375,7 @@ struct SolveMetadata {
     variable_names: Vec<String>,
     sorted_var_ids: Vec<NameId>,
     objective_coefficients: HashMap<NameId, f64>,
+    objective_quadratic: Vec<(usize, usize, f64)>,
     row_constraint_names: Vec<String>,
     skipped_sos: usize,
 }
@@ -423,20 +427,41 @@ fn sorted_variable_ids(problem: &LpProblem) -> Vec<NameId> {
 /// Returns an error naming the first unsupported constraint.
 pub(crate) fn check_supported(problem: &LpProblem) -> Result<(), String> {
     for (name_id, constraint) in &problem.constraints {
-        if matches!(constraint, Constraint::Indicator { .. }) {
-            return Err(format!("indicator constraint '{}' is not supported by the HiGHS solver", problem.resolve(*name_id)));
-        }
+        let kind = match constraint {
+            Constraint::Indicator { .. } => "indicator",
+            Constraint::Quadratic { .. } => "quadratic",
+            Constraint::Standard { .. } | Constraint::SOS { .. } => continue,
+        };
+        return Err(format!("{kind} constraint '{}' is not supported by the HiGHS solver", problem.resolve(*name_id)));
     }
     Ok(())
 }
 
-/// Build a `HiGHS` `RowProblem` from an `LpProblem`.
+/// Build a `HiGHS` `RowProblem` from an `LpProblem` with a linear objective.
+///
+/// Used by the queries (IIS, ranging, rays, presolve), which have no quadratic
+/// counterpart; only [`solve_problem`] passes a quadratic objective on.
 ///
 /// # Errors
 ///
 /// Returns an error when the model has a constraint `HiGHS` cannot express
-/// (see [`check_supported`]).
+/// (see [`check_supported`]) or a quadratic objective.
 pub(crate) fn build_highs_model(problem: &LpProblem) -> Result<BuiltModel, String> {
+    let built = build_highs_qp_model(problem)?;
+    if !built.objective_quadratic.is_empty() {
+        return Err("the objective has quadratic terms, which only a full solve supports".to_owned());
+    }
+    Ok(built)
+}
+
+/// Build a `HiGHS` `RowProblem` from an `LpProblem`, keeping the primary
+/// objective's quadratic terms in [`BuiltModel::objective_quadratic`] for the
+/// caller to pass as a Hessian.
+///
+/// # Errors
+///
+/// As [`build_highs_model`], except that a quadratic objective is allowed.
+fn build_highs_qp_model(problem: &LpProblem) -> Result<BuiltModel, String> {
     debug_assert!(!problem.variables.is_empty(), "cannot build a HiGHS model with no variables");
     check_supported(problem)?;
 
@@ -503,7 +528,7 @@ pub(crate) fn build_highs_model(problem: &LpProblem) -> Result<BuiltModel, Strin
             Constraint::SOS { .. } => {
                 skipped_sos += 1;
             }
-            Constraint::Indicator { .. } => unreachable!("rejected by check_supported"),
+            Constraint::Indicator { .. } | Constraint::Quadratic { .. } => unreachable!("rejected by check_supported"),
         }
     }
 
@@ -514,7 +539,30 @@ pub(crate) fn build_highs_model(problem: &LpProblem) -> Result<BuiltModel, Strin
 
     debug_assert_eq!(columns.len(), variable_names.len(), "column count must match variable count");
 
-    Ok(BuiltModel { row_problem, variable_names, sorted_var_ids, objective_coefficients, row_constraint_names, skipped_sos, sense })
+    // The primary objective, as in `primary_objective_coefficients`.
+    let objective_quadratic: Vec<(usize, usize, f64)> = problem
+        .objectives
+        .iter()
+        .min_by_key(|(id, _)| problem.resolve(**id))
+        .map(|(_, objective)| {
+            objective
+                .quadratic
+                .iter()
+                .filter_map(|t| Some((*variable_index.get(&t.var1)?, *variable_index.get(&t.var2)?, t.coefficient)))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    Ok(BuiltModel {
+        row_problem,
+        objective_quadratic,
+        variable_names,
+        sorted_var_ids,
+        objective_coefficients,
+        row_constraint_names,
+        skipped_sos,
+        sense,
+    })
 }
 
 /// Hand a built problem to `HiGHS`, reporting a rejected model as an error.
@@ -566,7 +614,12 @@ fn extract_solution(
                         let coefficient = metadata.objective_coefficients.get(&metadata.sorted_var_ids[i]).copied().unwrap_or(0.0);
                         value * coefficient
                     })
-                    .sum::<f64>(),
+                    .sum::<f64>()
+                    + metadata
+                        .objective_quadratic
+                        .iter()
+                        .map(|&(i, j, coefficient)| coefficient * solution.columns()[i] * solution.columns()[j])
+                        .sum::<f64>(),
             );
 
             let variables: Vec<(String, f64)> =
@@ -779,8 +832,11 @@ fn solve(problem: &LpProblem, extra: &[(&str, &str)], cancel: Option<&AtomicBool
     );
 
     let build_start = Instant::now();
-    let model = build_highs_model(problem)?;
+    let model = build_highs_qp_model(problem)?;
     let build_time = build_start.elapsed();
+    if !model.objective_quadratic.is_empty() && problem.variables.values().any(|v| v.kind != VariableKind::Continuous) {
+        return Err("HiGHS cannot solve a quadratic objective with integer, semi-continuous or SOS variables (MIQP)".to_owned());
+    }
 
     // pid+sequence-named temp file + explicit cleanup instead of the
     // tempfile crate. The sequence number keeps concurrent solves in one process
@@ -788,12 +844,27 @@ fn solve(problem: &LpProblem, extra: &[(&str, &str)], cancel: Option<&AtomicBool
     let log_seq = SOLVE_LOG_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let log_path = std::env::temp_dir().join(format!("lp_diff_solver_{}_{log_seq}.log", std::process::id()));
 
-    let BuiltModel { row_problem, sense, variable_names, sorted_var_ids, objective_coefficients, row_constraint_names, skipped_sos } =
-        model;
+    let BuiltModel {
+        row_problem,
+        objective_quadratic,
+        sense,
+        variable_names,
+        sorted_var_ids,
+        objective_coefficients,
+        row_constraint_names,
+        skipped_sos,
+    } = model;
 
-    let metadata = SolveMetadata { variable_names, sorted_var_ids, objective_coefficients, row_constraint_names, skipped_sos };
+    let hessian = hessian_columns(&objective_quadratic, variable_names.len());
+    let metadata =
+        SolveMetadata { variable_names, sorted_var_ids, objective_coefficients, objective_quadratic, row_constraint_names, skipped_sos };
 
     let mut highs_model = pass_model(row_problem, sense)?;
+    if let Some(columns) = hessian {
+        highs_model
+            .try_pass_hessian(highs::HessianFormat::Triangular, columns)
+            .map_err(|e| format!("HiGHS rejected the quadratic objective: {e}"))?;
+    }
     highs_model.set_option("output_flag", true);
     highs_model.set_option("log_file", log_path.to_str().ok_or_else(|| "temp file path is not valid UTF-8".to_owned())?);
     // After `log_file`, so anything `HiGHS` rejects is written to the log the pane
@@ -836,6 +907,24 @@ fn solve(problem: &LpProblem, extra: &[(&str, &str)], cancel: Option<&AtomicBool
     result.extract_time = extract_start.elapsed();
 
     Ok(result)
+}
+
+/// Lower-triangular Hessian columns for `HiGHS`, whose objective is
+/// `c'x + 1/2 x'Qx`: a square term `c x_i^2` is `Q_ii = 2c` and a product
+/// `c x_i x_j` is `Q_ij = Q_ji = c`, stored once at row `max(i, j)` of column
+/// `min(i, j)`. `None` for a linear objective.
+fn hessian_columns(terms: &[(usize, usize, f64)], column_count: usize) -> Option<Vec<Vec<(usize, f64)>>> {
+    if terms.is_empty() {
+        return None;
+    }
+    let mut columns: Vec<std::collections::BTreeMap<usize, f64>> = vec![std::collections::BTreeMap::new(); column_count];
+    for &(i, j, coefficient) in terms {
+        debug_assert!(i < column_count && j < column_count, "quadratic term indices must name columns");
+        let (row, col) = (i.max(j), i.min(j));
+        let value = if i == j { 2.0 * coefficient } else { coefficient };
+        *columns[col].entry(row).or_insert(0.0) += value;
+    }
+    Some(columns.into_iter().map(|column| column.into_iter().collect()).collect())
 }
 
 /// Return `true` if a solve status string (as produced by `extract_solution`,
@@ -1398,6 +1487,24 @@ empty =\n";
         let error = solve_problem(&problem).expect_err("an indicator constraint must not be silently dropped");
         assert!(error.contains("indicator constraint 'ind'"), "unexpected error: {error}");
         assert!(diagnose_infeasibility(&problem).is_err(), "diagnosis must refuse too");
+    }
+
+    #[test]
+    fn test_a_quadratic_objective_is_solved_as_a_qp() {
+        // min x^2 + y^2 s.t. x + y >= 2: optimum x = y = 1, objective 2. Solving
+        // only the (empty) linear part would report 0.
+        let problem = LpProblem::parse("Minimize\n obj: [ 2 x ^ 2 + 2 y ^ 2 ] / 2\nSubject To\n c1: x + y >= 2\nEnd").expect("must parse");
+        let result = solve_problem(&problem).expect("a convex QP must solve");
+        let objective = result.objective_value.expect("an optimal solve has an objective");
+        assert!((objective - 2.0).abs() < 1e-6, "x = y = 1 is optimal, got {objective}");
+
+        // The queries have no quadratic counterpart and must say so.
+        let error = crate::highs_query::ranging(&problem).expect_err("ranging must refuse a QP");
+        assert!(error.contains("quadratic"), "unexpected error: {error}");
+
+        let with_constraint = LpProblem::parse("Minimize\n obj: x\nSubject To\n q: [ x ^ 2 ] <= 4\nEnd").expect("must parse");
+        let error = solve_problem(&with_constraint).expect_err("a quadratic constraint must not be dropped");
+        assert!(error.contains("quadratic constraint 'q'"), "unexpected error: {error}");
     }
 
     #[test]

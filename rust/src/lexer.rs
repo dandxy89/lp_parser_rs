@@ -18,7 +18,10 @@
 //! - `S1` / `S2` only in `name: S1::`;
 //! - `free` only directly after an identifier on the same line (`x free`).
 //!
-//! Remaining reserved words: `inf` / `infinity` always lex as infinity, and a
+//! Remaining reserved words: `inf` / `infinity` always lex as infinity, a lone
+//! `[` or `]` is always a quadratic-term bracket (names may still contain
+//! brackets, as in `x[1]`, but a bracket that opens or closes a quadratic block
+//! must be separated from the neighbouring name by whitespace), and a
 //! section keyword alone at the start of a line (e.g. a variable named `bin`
 //! listed on its own line in a `generals` section) is read as a section
 //! header. The multi-word `subject to` / `such that`, `lazy constraints` and
@@ -84,6 +87,21 @@ pub enum RawConstraint<'input> {
         /// Byte offset of the constraint in the source text, if tracked.
         byte_offset: Option<usize>,
     },
+    /// A quadratic constraint: linear coefficients plus quadratic terms.
+    Quadratic {
+        /// Constraint name (borrowed, or owned when auto-generated).
+        name: Cow<'input, str>,
+        /// Linear left-hand-side coefficients.
+        coefficients: Vec<RawCoefficient<'input>>,
+        /// Quadratic left-hand-side terms.
+        quadratic: Vec<RawQuadraticTerm<'input>>,
+        /// Comparison operator between the LHS and the RHS.
+        operator: ComparisonOp,
+        /// Right-hand-side value.
+        rhs: f64,
+        /// Byte offset of the constraint in the source text, if tracked.
+        byte_offset: Option<usize>,
+    },
     /// An indicator constraint: `variable = value -> linear constraint`.
     Indicator {
         /// Constraint name (borrowed, or owned when auto-generated).
@@ -108,9 +126,21 @@ impl RawConstraint<'_> {
     #[must_use]
     pub fn name(&self) -> &str {
         match self {
-            Self::Standard { name, .. } | Self::SOS { name, .. } | Self::Indicator { name, .. } => name,
+            Self::Standard { name, .. } | Self::SOS { name, .. } | Self::Indicator { name, .. } | Self::Quadratic { name, .. } => name,
         }
     }
+}
+
+/// Raw quadratic term produced by the grammar (zero-copy): `coefficient *
+/// var1 * var2`, with any `/ 2` of an objective block already applied.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RawQuadraticTerm<'input> {
+    /// First variable name.
+    pub var1: &'input str,
+    /// Second variable name (equal to `var1` for a square).
+    pub var2: &'input str,
+    /// Coefficient of the product.
+    pub coefficient: f64,
 }
 
 /// Raw objective produced by the grammar (zero-copy).
@@ -120,6 +150,8 @@ pub struct RawObjective<'input> {
     pub name: Cow<'input, str>,
     /// Coefficients of the objective function.
     pub coefficients: Vec<RawCoefficient<'input>>,
+    /// Quadratic terms of the objective function.
+    pub quadratic: Vec<RawQuadraticTerm<'input>>,
     /// Constant term of the objective function.
     pub constant: f64,
     /// Byte offset of this objective in the source text (for line number mapping).
@@ -304,6 +336,26 @@ pub enum Token<'input> {
     #[token("::")]
     DoubleColon,
 
+    /// Opening bracket of a quadratic block (`[ x ^ 2 + 2 x * y ]`).
+    #[token("[", priority = 10)]
+    LBracket,
+
+    /// Closing bracket of a quadratic block.
+    #[token("]", priority = 10)]
+    RBracket,
+
+    /// Exponent of a squared quadratic term (`x ^ 2`).
+    #[token("^")]
+    Caret,
+
+    /// Product of two variables in a quadratic term (`x * y`).
+    #[token("*")]
+    Star,
+
+    /// Division of an objective's quadratic block (`[ ... ] / 2`).
+    #[token("/")]
+    Slash,
+
     /// Implication arrow of an indicator constraint (`b = 1 -> x <= 3`).
     /// A `-` directly followed by `>` never occurs in a linear expression, so
     /// this is unambiguous.
@@ -423,6 +475,10 @@ impl<'input> Lexer<'input> {
                     | Token::Gt
                     | Token::Eq
                     | Token::Implies
+                    | Token::LBracket
+                    | Token::Caret
+                    | Token::Star
+                    | Token::Slash
             )
         )
     }
@@ -683,8 +739,6 @@ mod tests {
     #[test_case("}" => vec![Token::Identifier("}")] ; "close_brace")]
     #[test_case("~" => vec![Token::Identifier("~")] ; "tilde")]
     #[test_case("'" => vec![Token::Identifier("'")] ; "apostrophe")]
-    #[test_case("[" => vec![Token::Identifier("[")] ; "open_bracket")]
-    #[test_case("]" => vec![Token::Identifier("]")] ; "close_bracket")]
     fn test_valid_start_chars(input: &str) -> Vec<Token<'_>> {
         tokenize(input)
     }
@@ -765,6 +819,8 @@ mod tests {
     #[test_case("*" ; "asterisk")]
     #[test_case("/" ; "slash")]
     #[test_case("^" ; "caret")]
+    #[test_case("[" ; "open_bracket")]
+    #[test_case("]" ; "close_bracket")]
     #[test_case("\"" ; "double_quote")]
     fn test_invalid_start_chars(input: &str) {
         let tokens = tokenize_raw(input);
@@ -1030,10 +1086,34 @@ mod tests {
 
     #[test]
     fn test_lexer_error_reports_its_position() {
-        let input = "min\nx\nst\nc1: x >= 1\nc2: x ^ 3\nend";
-        let err = Lexer::new(input).find_map(Result::err).expect("'^' must be a lexer error");
-        assert_eq!(err.position, input.find('^').unwrap());
-        assert_eq!(err.message.as_deref(), Some("unrecognised token '^'"));
+        let input = "min\nx\nst\nc1: x >= 1\nc2: x ? 3 | 4\nend";
+        let err = Lexer::new(input).find_map(Result::err).expect("'|' must be a lexer error");
+        assert_eq!(err.position, input.find('|').unwrap());
+        assert_eq!(err.message.as_deref(), Some("unrecognised token '|'"));
+    }
+
+    #[test]
+    fn test_quadratic_tokens() {
+        use Token::{Caret, Identifier, LBracket, Number, Plus, RBracket, Slash, Star};
+        assert_eq!(
+            tokenize("[ x^2 + 4 x * y ] / 2"),
+            vec![
+                LBracket,
+                Identifier("x"),
+                Caret,
+                Number(2.0),
+                Plus,
+                Number(4.0),
+                Identifier("x"),
+                Star,
+                Identifier("y"),
+                RBracket,
+                Slash,
+                Number(2.0)
+            ]
+        );
+        // Brackets inside a name stay part of it.
+        assert_eq!(tokenize("x[1] [y]"), vec![Identifier("x[1]"), Identifier("[y]")]);
     }
 
     #[test]

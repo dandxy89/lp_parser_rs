@@ -8,11 +8,15 @@
 //! rejected: constant terms (`obj: x + 10`, `c1: x + 2 <= 10`), empty
 //! objectives, flipped constraints (`10 >= x`), and ranged constraints
 //! (`2 <= x + y <= 10`, expanded into two constraints like MPS RANGES).
+//!
+//! Quadratic terms are written in a bracketed block, `[ x ^ 2 + 4 x * y ]`.
+//! In an objective the block must be followed by `/ 2` (CPLEX, Gurobi) and its
+//! coefficients are halved on the way in; a constraint's block is not divided.
 
 use std::borrow::Cow;
 use std::collections::HashSet;
 
-use crate::lexer::{LexerError, RawCoefficient, RawConstraint, RawObjective};
+use crate::lexer::{LexerError, RawCoefficient, RawConstraint, RawObjective, RawQuadraticTerm};
 use crate::model::ComparisonOp;
 
 /// One element of an objective or constraint body, with its byte offset.
@@ -35,6 +39,25 @@ pub enum Elem<'input> {
     Op(ComparisonOp),
     /// `->`, the implication arrow of an indicator constraint.
     Implies,
+    /// `[`, opening a quadratic block.
+    LBracket,
+    /// `]`, closing a quadratic block.
+    RBracket,
+    /// `^`, the exponent of a squared term.
+    Caret,
+    /// `*`, the product of two variables.
+    Star,
+    /// `/`, the division of an objective's quadratic block.
+    Slash,
+}
+
+/// Where a quadratic block appears, which decides whether it is divided.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum QuadraticContext {
+    /// An objective: the block must be written `[ ... ] / 2`.
+    Objective,
+    /// A constraint: the block is not divided.
+    Constraint,
 }
 
 fn err(position: usize, message: impl Into<String>) -> LexerError {
@@ -47,19 +70,33 @@ fn pos_at(elems: &[SpannedElem<'_>], i: usize) -> usize {
     elems.get(i).or_else(|| elems.last()).map_or(0, |&(loc, _)| loc)
 }
 
-/// A parsed run of terms: variable coefficients plus a folded constant.
+/// A parsed run of terms: variable coefficients, quadratic terms, and a folded
+/// constant.
 #[derive(Debug, Default)]
 struct Segment<'input> {
     coefficients: Vec<RawCoefficient<'input>>,
+    quadratic: Vec<RawQuadraticTerm<'input>>,
     constant: f64,
 }
 
+impl Segment<'_> {
+    /// Whether the segment mentions no variable at all (only constants).
+    fn is_numeric_only(&self) -> bool {
+        self.coefficients.is_empty() && self.quadratic.is_empty()
+    }
+}
+
 /// Parse a term sequence starting at `i`: `[+|-] term ([+|-] term)*` where a
-/// term is `Num Var` (coefficient), `Var` (unit coefficient), or `Num`
-/// (constant). Stops without error at an `Op`, a `Name`, end of input, or an
-/// unsigned term following a complete one (the start of the next entry).
-/// Returns the segment and the index of the first unconsumed element.
-fn parse_segment<'input>(elems: &[SpannedElem<'input>], mut i: usize) -> Result<(Segment<'input>, usize), LexerError> {
+/// term is `Num Var` (coefficient), `Var` (unit coefficient), `Num`
+/// (constant), or a quadratic block `[ ... ]` (see [`parse_quadratic_block`]).
+/// Stops without error at an `Op`, a `Name`, end of input, or an unsigned
+/// term following a complete one (the start of the next entry). Returns the
+/// segment and the index of the first unconsumed element.
+fn parse_segment<'input>(
+    elems: &[SpannedElem<'input>],
+    mut i: usize,
+    context: QuadraticContext,
+) -> Result<(Segment<'input>, usize), LexerError> {
     let mut segment = Segment::default();
     let mut first = true;
 
@@ -73,7 +110,7 @@ fn parse_segment<'input>(elems: &[SpannedElem<'input>], mut i: usize) -> Result<
                 i += 1;
                 -1.0
             }
-            Some((_, Elem::Var(_) | Elem::Num(_))) if first => 1.0,
+            Some((_, Elem::Var(_) | Elem::Num(_) | Elem::LBracket)) if first => 1.0,
             // Op / Name / end of input / unsigned term after a complete one:
             // the segment is finished.
             _ => return Ok((segment, i)),
@@ -100,12 +137,118 @@ fn parse_segment<'input>(elems: &[SpannedElem<'input>], mut i: usize) -> Result<
                     i += 1;
                 }
             },
+            Some((_, Elem::LBracket)) => {
+                let next = parse_quadratic_block(elems, i, sign, context, &mut segment.quadratic)?;
+                debug_assert!(next > i, "a quadratic block consumes at least its brackets");
+                i = next;
+            }
             Some((loc, Elem::Plus | Elem::Minus)) => return Err(err(*loc, "consecutive signs; expected a number or variable")),
             _ => return Err(err(pos_at(elems, i), "dangling sign; expected a number or variable")),
         }
 
         first = false;
     }
+}
+
+/// Parse a quadratic block starting at the `[` at index `i`, pushing its terms
+/// (scaled by `sign`) onto `out` and returning the index after it.
+///
+/// A term is `[+|-] [Num] Var ^ 2` or `[+|-] [Num] Var * Var`. In an objective
+/// the block must be followed by `/ 2`, which halves every coefficient; in a
+/// constraint it must not be divided.
+///
+/// # Errors
+///
+/// Returns an error for an empty or unterminated block, a malformed term, an
+/// exponent other than 2, a non-finite coefficient, or a missing (objective)
+/// or unexpected (constraint) `/ 2`.
+fn parse_quadratic_block<'input>(
+    elems: &[SpannedElem<'input>],
+    i: usize,
+    sign: f64,
+    context: QuadraticContext,
+    out: &mut Vec<RawQuadraticTerm<'input>>,
+) -> Result<usize, LexerError> {
+    debug_assert!(matches!(elems.get(i), Some((_, Elem::LBracket))), "a quadratic block starts at '['");
+    let open_loc = elems[i].0;
+    let mut j = i + 1;
+    let mut terms: Vec<RawQuadraticTerm<'input>> = Vec::new();
+
+    loop {
+        let term_sign = match elems.get(j) {
+            Some((_, Elem::RBracket)) if !terms.is_empty() => {
+                j += 1;
+                break;
+            }
+            Some((loc, Elem::RBracket)) => return Err(err(*loc, "empty quadratic block")),
+            Some((_, Elem::Plus)) => {
+                j += 1;
+                1.0
+            }
+            Some((_, Elem::Minus)) => {
+                j += 1;
+                -1.0
+            }
+            Some((_, Elem::Num(_) | Elem::Var(_))) if terms.is_empty() => 1.0,
+            None => return Err(err(open_loc, "unterminated quadratic block; expected ']'")),
+            Some((loc, _)) => return Err(err(*loc, "expected '+', '-' or ']' in a quadratic block")),
+        };
+
+        let (coefficient, coefficient_loc) = match elems.get(j) {
+            Some(&(loc, Elem::Num(value))) => {
+                j += 1;
+                (value, loc)
+            }
+            _ => (1.0, pos_at(elems, j)),
+        };
+        if !coefficient.is_finite() {
+            return Err(err(coefficient_loc, "quadratic coefficient must be finite"));
+        }
+
+        let Some(&(_, Elem::Var(var1))) = elems.get(j) else {
+            return Err(err(pos_at(elems, j), "expected a variable in a quadratic term"));
+        };
+        j += 1;
+        let var2 = match (elems.get(j), elems.get(j + 1)) {
+            (Some((_, Elem::Caret)), Some(&(loc, Elem::Num(exponent)))) => {
+                // The exponent is a literal and only a square is quadratic.
+                #[allow(clippy::float_cmp)]
+                if exponent != 2.0 {
+                    return Err(err(loc, format!("only squares ('{var1} ^ 2') are quadratic, not '{var1} ^ {exponent}'")));
+                }
+                var1
+            }
+            (Some((_, Elem::Star)), Some(&(_, Elem::Var(var2)))) => var2,
+            _ => return Err(err(pos_at(elems, j), format!("expected '^ 2' or '* variable' after '{var1}' in a quadratic term"))),
+        };
+        j += 2;
+
+        terms.push(RawQuadraticTerm { var1, var2, coefficient: sign * term_sign * coefficient });
+    }
+
+    match (context, elems.get(j), elems.get(j + 1)) {
+        (QuadraticContext::Objective, Some((_, Elem::Slash)), Some(&(_, Elem::Num(divisor)))) => {
+            // CPLEX and Gurobi only ever write `/ 2`.
+            #[allow(clippy::float_cmp)]
+            if divisor != 2.0 {
+                return Err(err(pos_at(elems, j + 1), format!("an objective's quadratic block must be divided by 2, not {divisor}")));
+            }
+            for term in &mut terms {
+                term.coefficient /= 2.0;
+            }
+            j += 2;
+        }
+        (QuadraticContext::Objective, ..) => {
+            return Err(err(pos_at(elems, j), "an objective's quadratic block must be followed by '/ 2'"));
+        }
+        (QuadraticContext::Constraint, Some((loc, Elem::Slash)), _) => {
+            return Err(err(*loc, "a constraint's quadratic block is not divided; remove the '/'"));
+        }
+        (QuadraticContext::Constraint, ..) => {}
+    }
+
+    out.extend(terms);
+    Ok(j)
 }
 
 /// Parse a single signed numeric value (`[+|-] Num`) at `i`.
@@ -148,18 +291,29 @@ pub fn assemble_objectives<'input>(elems: &[SpannedElem<'input>]) -> Result<Vec<
             if let Some(obj) = current.take() {
                 objectives.push(obj);
             }
-            current = Some(RawObjective { name: Cow::Borrowed(name), coefficients: Vec::new(), constant: 0.0, byte_offset: Some(loc) });
+            current = Some(RawObjective {
+                name: Cow::Borrowed(name),
+                coefficients: Vec::new(),
+                quadratic: Vec::new(),
+                constant: 0.0,
+                byte_offset: Some(loc),
+            });
             i += 1;
         } else {
             let obj = current.get_or_insert_with(|| RawObjective {
                 name: Cow::Borrowed("__obj__"),
                 coefficients: Vec::new(),
+                quadratic: Vec::new(),
                 constant: 0.0,
                 byte_offset: Some(loc),
             });
-            let (segment, next) = parse_segment(elems, i)?;
-            debug_assert!(next > i, "parse_segment must consume at least one element here");
+            let (segment, next) = parse_segment(elems, i, QuadraticContext::Objective)?;
+            if next == i {
+                // Nothing parsed: an element that cannot start a term.
+                return Err(err(loc, "expected a term in the objective section"));
+            }
             obj.coefficients.extend(segment.coefficients);
+            obj.quadratic.extend(segment.quadratic);
             obj.constant += segment.constant;
             if !obj.constant.is_finite() {
                 return Err(err(loc, "objective constant must be finite"));
@@ -271,8 +425,10 @@ fn assemble_body<'input>(
             i = next;
         }
         let first_new = constraints.len();
+        // Quadratic terms of the entry, attached once its linear row is built.
+        let quadratic: Vec<RawQuadraticTerm<'input>>;
 
-        let (lhs, next) = parse_segment(elems, i)?;
+        let (lhs, next) = parse_segment(elems, i, QuadraticContext::Constraint)?;
         if next == i {
             // parse_segment consumed nothing: the entry starts with something
             // that cannot begin an expression (e.g. a stray operator).
@@ -285,10 +441,10 @@ fn assemble_body<'input>(
         };
         i += 1;
 
-        if lhs.coefficients.is_empty() {
+        if lhs.is_numeric_only() {
             // Numeric-only LHS: flipped (`10 >= x + y`) or ranged
             // (`2 <= x + y <= 10`) constraint.
-            let (mid, next) = parse_segment(elems, i)?;
+            let (mid, next) = parse_segment(elems, i, QuadraticContext::Constraint)?;
             if next == i {
                 return Err(err(pos_at(elems, i), "expected an expression after the comparison operator"));
             }
@@ -299,6 +455,10 @@ fn assemble_body<'input>(
                 i += 1;
                 let (rhs, next) = parse_signed_number(elems, i, "range bound")?;
                 i = next;
+                if !mid.quadratic.is_empty() {
+                    return Err(err(entry_loc, "a ranged constraint cannot have quadratic terms"));
+                }
+                quadratic = Vec::new();
 
                 let lower_name: Cow<'input, str> = name.map_or(Cow::Borrowed("__c__"), Cow::Borrowed);
                 let upper_name: Cow<'input, str> = name.map_or(Cow::Borrowed("__c__"), |n| range_upper_name(n, explicit_names));
@@ -318,6 +478,7 @@ fn assemble_body<'input>(
                 });
             } else {
                 // Flipped: normalise so the variables sit on the left.
+                quadratic = mid.quadratic;
                 constraints.push(RawConstraint::Standard {
                     name: name.map_or(Cow::Borrowed("__c__"), Cow::Borrowed),
                     coefficients: mid.coefficients,
@@ -330,6 +491,7 @@ fn assemble_body<'input>(
             // Standard: RHS is a single signed number; LHS constants fold in.
             let (rhs, next) = parse_signed_number(elems, i, "constraint right-hand side")?;
             i = next;
+            quadratic = lhs.quadratic;
             constraints.push(RawConstraint::Standard {
                 name: name.map_or(Cow::Borrowed("__c__"), Cow::Borrowed),
                 coefficients: lhs.coefficients,
@@ -337,6 +499,17 @@ fn assemble_body<'input>(
                 rhs: checked_rhs(rhs - lhs.constant, entry_loc)?,
                 byte_offset: Some(entry_loc),
             });
+        }
+
+        if !quadratic.is_empty() {
+            if indicator.is_some() {
+                return Err(err(entry_loc, "the constraint of an indicator must be linear"));
+            }
+            let Some(RawConstraint::Standard { name, coefficients, operator, rhs, byte_offset }) = constraints.pop() else {
+                unreachable!("a non-ranged entry pushes exactly one standard constraint");
+            };
+            debug_assert_eq!(constraints.len(), first_new, "the quadratic entry must be the only constraint pushed");
+            constraints.push(RawConstraint::Quadratic { name, coefficients, quadratic, operator, rhs, byte_offset });
         }
 
         if let Some((variable, active_value, _)) = indicator {

@@ -39,7 +39,13 @@ pub(super) fn build_objectives<'input>(
     debug_assert!(objective_rows.iter().all(|r| !r.is_empty()), "objective_rows must not contain empty row names");
 
     if objective_rows.is_empty() {
-        return vec![RawObjective { name: Cow::Borrowed("__obj__"), coefficients: Vec::new(), constant: 0.0, byte_offset: None }];
+        return vec![RawObjective {
+            name: Cow::Borrowed("__obj__"),
+            coefficients: Vec::new(),
+            quadratic: Vec::new(),
+            constant: 0.0,
+            byte_offset: None,
+        }];
     }
 
     let mut objectives = Vec::with_capacity(objective_rows.len());
@@ -48,6 +54,8 @@ pub(super) fn build_objectives<'input>(
         objectives.push(RawObjective {
             name: Cow::Borrowed(obj_row),
             coefficients: row_coefficients(columns, obj_row),
+            // QUADOBJ / QMATRIX terms are attached once the file is read.
+            quadratic: Vec::new(),
             constant,
             byte_offset: None,
         });

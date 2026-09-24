@@ -379,6 +379,27 @@ class TestIndicatorConstraint:
         assert " ind: b = 0 -> x >= 2" in LpParser.from_string(self.LP).to_lp_string()
 
 
+class TestQuadratic:
+    LP = "Minimize\n obj: x + [ x ^ 2 + 4 x * y ] / 2\nSubject To\n q: y + [ y ^ 2 ] <= 4\nEnd\n"
+
+    def test_objective_terms_are_halved(self) -> None:
+        (objective,) = LpParser.from_string(self.LP).objectives
+        assert objective["quadratic"] == [
+            {"var1": "x", "var2": "x", "coefficient": 0.5},
+            {"var1": "x", "var2": "y", "coefficient": 2.0},
+        ]
+
+    def test_quadratic_constraint(self) -> None:
+        (constraint,) = LpParser.from_string(self.LP).constraints
+        assert constraint["type"] == "quadratic"
+        assert constraint["quadratic"] == [{"var1": "y", "var2": "y", "coefficient": 1.0}]
+
+    def test_round_trip(self) -> None:
+        written = LpParser.from_string(self.LP).to_lp_string()
+        assert " obj: x + [ x ^ 2 + 4 x * y ] / 2" in written
+        assert " q: y + [ y ^ 2 ] <= 4" in written
+
+
 class TestThresholdValidation:
     LP = "Minimize\n obj: x\nSubject To\n c1: x >= 1000\nEnd\n"
 

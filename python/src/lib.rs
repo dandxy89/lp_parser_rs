@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use lp_parser_rs::analysis::AnalysisConfig;
 use lp_parser_rs::diff::DiffOptions;
-use lp_parser_rs::model::{Constraint, Sense, VariableType};
+use lp_parser_rs::model::{Constraint, QuadraticTerm, Sense, VariableType};
 use lp_parser_rs::mps::writer::{MpsWriterOptions, write_mps_string_with_options};
 use lp_parser_rs::problem::LpProblem;
 use lp_parser_rs::writer::{LpWriterOptions, write_lp_string_with_options};
@@ -144,6 +144,7 @@ impl LpParser {
             let dict = PyDict::new(py);
             dict.set_item("name", problem.resolve(*name_id))?;
             dict.set_item("coefficients", coefficients_to_list(py, problem, &obj.coefficients)?)?;
+            dict.set_item("quadratic", quadratic_to_list(py, problem, &obj.quadratic)?)?;
             list.append(dict)?;
         }
 
@@ -163,6 +164,14 @@ impl LpParser {
                 Constraint::Standard { coefficients, operator, rhs, .. } => {
                     dict.set_item("type", "standard")?;
                     dict.set_item("coefficients", coefficients_to_list(py, problem, coefficients)?)?;
+                    dict.set_item("operator", format!("{operator:?}"))?;
+                    dict.set_item("rhs", rhs)?;
+                    dict.set_item("class", constraint_class_name(problem.constraint_class(*name_id)))?;
+                }
+                Constraint::Quadratic { coefficients, quadratic, operator, rhs, .. } => {
+                    dict.set_item("type", "quadratic")?;
+                    dict.set_item("coefficients", coefficients_to_list(py, problem, coefficients)?)?;
+                    dict.set_item("quadratic", quadratic_to_list(py, problem, quadratic)?)?;
                     dict.set_item("operator", format!("{operator:?}"))?;
                     dict.set_item("rhs", rhs)?;
                     dict.set_item("class", constraint_class_name(problem.constraint_class(*name_id)))?;
@@ -533,6 +542,20 @@ fn analysis_to_dict(py: Python, analysis: &lp_parser_rs::analysis::ProblemAnalys
 }
 
 /// Build a list of `{name, value}` dicts from coefficients, resolving interned names.
+/// Quadratic terms as `[{"var1", "var2", "coefficient"}]`; each coefficient is
+/// the term's actual coefficient (an objective's LP `/ 2` already applied).
+fn quadratic_to_list<'py>(py: Python<'py>, problem: &LpProblem, terms: &[QuadraticTerm]) -> PyResult<Bound<'py, PyList>> {
+    let list = PyList::empty(py);
+    for term in terms {
+        let dict = PyDict::new(py);
+        dict.set_item("var1", problem.resolve(term.var1))?;
+        dict.set_item("var2", problem.resolve(term.var2))?;
+        dict.set_item("coefficient", term.coefficient)?;
+        list.append(dict)?;
+    }
+    Ok(list)
+}
+
 /// The Python spelling of a constraint class (`"normal"`, `"lazy"`, `"user_cut"`).
 const fn constraint_class_name(class: ConstraintClass) -> &'static str {
     match class {

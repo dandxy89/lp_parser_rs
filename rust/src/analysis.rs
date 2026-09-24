@@ -91,6 +91,10 @@ pub struct ProblemSummary {
     pub total_nonzeros: usize,
     /// Matrix density (nonzeros / (constraints * variables))
     pub density: f64,
+    /// Quadratic terms across all objectives
+    pub quadratic_objective_terms: usize,
+    /// Quadratic terms across all constraints
+    pub quadratic_constraint_terms: usize,
 }
 
 /// Sparsity and structural metrics.
@@ -211,6 +215,8 @@ pub struct ConstraintTypeDistribution {
     pub sos2: usize,
     /// Indicator constraints (`b = 1 -> ...`), not counted under an operator
     pub indicator: usize,
+    /// Quadratic constraints, not counted under an operator
+    pub quadratic: usize,
     /// Lazy constraints (also counted under their operator above)
     pub lazy: usize,
     /// User cuts (also counted under their operator above)
@@ -420,6 +426,13 @@ impl Display for ProblemAnalysis {
             self.summary.objective_count, self.summary.constraint_count, self.summary.variable_count
         )?;
         writeln!(f, "  Non-zeros: {} | Density: {:.2}%", self.summary.total_nonzeros, self.summary.density * 100.0)?;
+        if self.summary.quadratic_objective_terms > 0 || self.summary.quadratic_constraint_terms > 0 {
+            writeln!(
+                f,
+                "  Quadratic terms: {} in objectives | {} in constraints",
+                self.summary.quadratic_objective_terms, self.summary.quadratic_constraint_terms
+            )?;
+        }
         writeln!(f)?;
 
         // Sparsity
@@ -457,6 +470,9 @@ impl Display for ProblemAnalysis {
         }
         if ct.indicator > 0 {
             writeln!(f, "  Indicator: {}", ct.indicator)?;
+        }
+        if ct.quadratic > 0 {
+            writeln!(f, "  Quadratic: {}", ct.quadratic)?;
         }
         if ct.lazy > 0 || ct.user_cuts > 0 {
             writeln!(f, "  Lazy: {} | User cuts: {}", ct.lazy, ct.user_cuts)?;
@@ -619,6 +635,12 @@ impl LpProblem {
             variable_count,
             total_nonzeros,
             density,
+            quadratic_objective_terms: self.objectives.values().map(|o| o.quadratic.len()).sum(),
+            quadratic_constraint_terms: self
+                .constraints
+                .values()
+                .map(|c| if let Constraint::Quadratic { quadratic, .. } = c { quadratic.len() } else { 0 })
+                .sum(),
         }
     }
 
@@ -627,7 +649,10 @@ impl LpProblem {
         self.constraints
             .values()
             .map(|c| match c {
-                Constraint::Standard { coefficients, .. } | Constraint::Indicator { coefficients, .. } => coefficients.len(),
+                // Linear nonzeros only; quadratic terms are counted in the summary.
+                Constraint::Standard { coefficients, .. }
+                | Constraint::Indicator { coefficients, .. }
+                | Constraint::Quadratic { coefficients, .. } => coefficients.len(),
                 Constraint::SOS { weights, .. } => weights.len(),
             })
             .sum()
@@ -637,7 +662,9 @@ impl LpProblem {
     fn compute_sparsity_metrics(&self) -> SparsityMetrics {
         let (min_v, max_v) = self.constraints.values().fold((usize::MAX, 0usize), |(min_v, max_v), c| {
             let n = match c {
-                Constraint::Standard { coefficients, .. } | Constraint::Indicator { coefficients, .. } => coefficients.len(),
+                Constraint::Standard { coefficients, .. }
+                | Constraint::Indicator { coefficients, .. }
+                | Constraint::Quadratic { coefficients, .. } => coefficients.len(),
                 Constraint::SOS { weights, .. } => weights.len(),
             };
             (min_v.min(n), max_v.max(n))
@@ -796,6 +823,10 @@ impl LpProblem {
                     type_distribution.indicator += 1;
                     rhs_range.update(*rhs);
                 }
+                Constraint::Quadratic { rhs, .. } => {
+                    type_distribution.quadratic += 1;
+                    rhs_range.update(*rhs);
+                }
                 Constraint::SOS { sos_type, weights, .. } => {
                     match sos_type {
                         SOSType::S1 => {
@@ -820,7 +851,8 @@ impl LpProblem {
                 + type_distribution.greater_than
                 + type_distribution.sos1
                 + type_distribution.sos2
-                + type_distribution.indicator,
+                + type_distribution.indicator
+                + type_distribution.quadratic,
             self.constraints.len(),
             "postcondition: constraint type distribution must sum to total constraint count"
         );
@@ -1216,6 +1248,7 @@ mod tests {
             name: obj_id,
             coefficients: vec![Coefficient { name: x_id, value: 1.0 }],
             constant: 0.0,
+            quadratic: Vec::new(),
             byte_offset: None,
         });
         add_standard_constraint(&mut problem, "c1", &["x"], ComparisonOp::GTE, 1.0);

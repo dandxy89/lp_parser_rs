@@ -37,6 +37,12 @@ pub(super) enum MpsSection {
     Sos,
     /// CPLEX `INDICATORS`: `IF row column value` lines.
     Indicators,
+    /// `QUADOBJ`: upper triangle of the objective's `Q` (`c'x + 1/2 x'Qx`).
+    QuadObj,
+    /// `QMATRIX`: the full objective `Q` (`c'x + 1/2 x'Qx`).
+    QMatrix,
+    /// `QCMATRIX row`: the full `Q` of a quadratic constraint (`a'x + x'Qx`).
+    QcMatrix,
     Unsupported,
 }
 

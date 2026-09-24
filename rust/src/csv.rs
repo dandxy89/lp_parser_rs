@@ -64,6 +64,19 @@ impl LpProblem {
                         const_writer.write_record(vals)?;
                     }
                 }
+                Constraint::Quadratic { coefficients, quadratic, operator: op, rhs, .. } => {
+                    let rhs_str = rhs.to_string();
+                    let linear = coefficients.iter().map(|c| (self.interner.resolve(c.name).to_string(), c.value));
+                    let products = quadratic
+                        .iter()
+                        .map(|t| (format!("{}*{}", self.interner.resolve(t.var1), self.interner.resolve(t.var2)), t.coefficient));
+                    for (var_name, value) in linear.chain(products) {
+                        let coeff = value.to_string();
+                        let vals: [&[u8]; 7] =
+                            [name_bytes, b"Quadratic", var_name.as_bytes(), coeff.as_bytes(), op.as_ref(), rhs_str.as_bytes(), b""];
+                        const_writer.write_record(vals)?;
+                    }
+                }
                 Constraint::SOS { sos_type, weights, .. } => {
                     for c in weights {
                         let var_name = self.interner.resolve(c.name);
@@ -88,6 +101,12 @@ impl LpProblem {
                 let var_name = self.interner.resolve(coef.name);
                 let coeff = coef.value.to_string();
                 obj_writer.write_record([name.as_bytes(), var_name.as_bytes(), coeff.as_bytes()])?;
+            }
+            // A quadratic term is written as `x*y` with its actual coefficient.
+            for term in &objective.quadratic {
+                let product = format!("{}*{}", self.interner.resolve(term.var1), self.interner.resolve(term.var2));
+                let coeff = term.coefficient.to_string();
+                obj_writer.write_record([name.as_bytes(), product.as_bytes(), coeff.as_bytes()])?;
             }
         }
         obj_writer.flush()?;
@@ -210,6 +229,7 @@ End
             name: obj_id,
             coefficients: vec![Coefficient { name: var_id, value: 1.0 }],
             constant: 0.0,
+            quadratic: Vec::new(),
             byte_offset: None,
         });
 

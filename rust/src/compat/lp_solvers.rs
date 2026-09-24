@@ -91,6 +91,14 @@ pub enum LpSolversCompatError {
         operator: String,
     },
 
+    /// The objective has quadratic terms, which the lp-solvers LP format
+    /// cannot express; solving only its linear part would be a different model.
+    #[error("objective '{objective}' has quadratic terms, which lp-solvers does not support")]
+    QuadraticObjective {
+        /// The name of the quadratic objective.
+        objective: String,
+    },
+
     /// A constraint kind the lp-solvers LP format cannot express (an
     /// indicator, quadratic or general constraint). Dropping it would solve a
     /// different model, so conversion fails instead.
@@ -256,7 +264,9 @@ impl<'a> Iterator for ConstraintIterator<'a> {
                     });
                 }
                 Some(Constraint::SOS { .. }) => {} // Skip SOS constraints
-                Some(Constraint::Indicator { .. }) => unreachable!("indicator constraints are rejected during validation"),
+                Some(Constraint::Indicator { .. } | Constraint::Quadratic { .. }) => {
+                    unreachable!("indicator and quadratic constraints are rejected during validation")
+                }
                 None => return None,
             }
         }
@@ -280,7 +290,8 @@ impl<'a> LpSolversCompat<'a> {
     /// - The Problem has multiple objectives
     /// - The Problem has no objectives
     /// - Any constraint uses strict inequalities (`<` or `>`)
-    /// - Any constraint is an indicator constraint
+    /// - Any constraint is an indicator or quadratic constraint
+    /// - The objective has quadratic terms
     ///
     /// # Panics
     ///
@@ -295,6 +306,9 @@ impl<'a> LpSolversCompat<'a> {
         }
 
         let objective = problem.objectives.values().next().expect("objective must exist: length check passed");
+        if !objective.quadratic.is_empty() {
+            return Err(LpSolversCompatError::QuadraticObjective { objective: problem.interner.resolve(objective.name).to_string() });
+        }
         let mut warnings = Vec::new();
 
         // Validate constraints (no strict inequalities)
@@ -315,6 +329,12 @@ impl<'a> LpSolversCompat<'a> {
                     return Err(LpSolversCompatError::UnsupportedConstraint {
                         constraint: problem.interner.resolve(*name).to_string(),
                         kind: "indicator",
+                    });
+                }
+                Constraint::Quadratic { name, .. } => {
+                    return Err(LpSolversCompatError::UnsupportedConstraint {
+                        constraint: problem.interner.resolve(*name).to_string(),
+                        kind: "quadratic",
                     });
                 }
             }
@@ -382,7 +402,13 @@ mod tests {
         let c1_id = p.intern("c1");
         p.objectives.insert(
             obj_id,
-            Objective { name: obj_id, coefficients: vec![Coefficient { name: x_id, value: 2.0 }], constant: 0.0, byte_offset: None },
+            Objective {
+                name: obj_id,
+                coefficients: vec![Coefficient { name: x_id, value: 2.0 }],
+                constant: 0.0,
+                quadratic: Vec::new(),
+                byte_offset: None,
+            },
         );
         p.constraints.insert(
             c1_id,
@@ -421,7 +447,8 @@ mod tests {
         // Multiple objectives
         let mut p = simple_problem();
         let obj2_id = p.intern("obj2");
-        p.objectives.insert(obj2_id, Objective { name: obj2_id, coefficients: vec![], constant: 0.0, byte_offset: None });
+        p.objectives
+            .insert(obj2_id, Objective { name: obj2_id, coefficients: vec![], constant: 0.0, quadratic: Vec::new(), byte_offset: None });
         assert!(matches!(LpSolversCompat::try_new(&p), Err(LpSolversCompatError::MultipleObjectives { count: 2 })));
 
         // Strict inequalities

@@ -36,7 +36,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use crate::error::{LpParseError, LpResult};
 use crate::interner::NameId;
-use crate::model::{Coefficient, Constraint};
+use crate::model::{Coefficient, Constraint, QuadraticTerm};
 use crate::problem::LpProblem;
 
 /// A name normaliser: rewrites a name before matching.
@@ -176,6 +176,18 @@ fn coeff_map(problem: &LpProblem, coeffs: &[Coefficient], normalise: Normaliser)
     coeffs.iter().map(|c| (normalise(problem.resolve(c.name)), c.value)).collect()
 }
 
+/// Build a quadratic-term map keyed by the canonical (normalised, sorted)
+/// variable pair, so `x * y` and `y * x` match. Repeated pairs are summed.
+fn quad_map(problem: &LpProblem, terms: &[QuadraticTerm], normalise: Normaliser) -> BTreeMap<String, f64> {
+    let mut map = BTreeMap::new();
+    for term in terms {
+        let (a, b) = (normalise(problem.resolve(term.var1)), normalise(problem.resolve(term.var2)));
+        let key = if a <= b { format!("{a}*{b}") } else { format!("{b}*{a}") };
+        *map.entry(key).or_insert(0.0) += term.coefficient;
+    }
+    map
+}
+
 /// Count coefficients that changed value, were removed, or were added.
 fn count_coeff_diffs(m1: &BTreeMap<String, f64>, m2: &BTreeMap<String, f64>, tol: DiffTol) -> usize {
     let mut diffs = 0usize;
@@ -252,6 +264,25 @@ fn diff_modified_constraints(
                     changes.push(format!("{coef_diffs} coefficient change(s)"));
                 }
             }
+            (
+                Constraint::Quadratic { coefficients: cf1, quadratic: q1, operator: op1, rhs: r1, .. },
+                Constraint::Quadratic { coefficients: cf2, quadratic: q2, operator: op2, rhs: r2, .. },
+            ) => {
+                if op1 != op2 {
+                    changes.push(format!("operator {op1} -> {op2}"));
+                }
+                if tol.differ(*r1, *r2) {
+                    changes.push(format!("rhs {r1} -> {r2}"));
+                }
+                let coef_diffs = count_coeff_diffs(&coeff_map(p1, cf1, normalise), &coeff_map(p2, cf2, normalise), tol);
+                if coef_diffs > 0 {
+                    changes.push(format!("{coef_diffs} coefficient change(s)"));
+                }
+                let quad_diffs = count_coeff_diffs(&quad_map(p1, q1, normalise), &quad_map(p2, q2, normalise), tol);
+                if quad_diffs > 0 {
+                    changes.push(format!("{quad_diffs} quadratic term change(s)"));
+                }
+            }
             _ => changes.push(format!("constraint kind changed ({} <-> {})", constraint_kind(c1), constraint_kind(c2))),
         }
         if !changes.is_empty() {
@@ -267,6 +298,7 @@ const fn constraint_kind(constraint: &Constraint) -> &'static str {
         Constraint::Standard { .. } => "Standard",
         Constraint::SOS { .. } => "SOS",
         Constraint::Indicator { .. } => "Indicator",
+        Constraint::Quadratic { .. } => "Quadratic",
     }
 }
 
@@ -291,6 +323,10 @@ fn diff_modified_objectives(
         }
         if tol.differ(o1.constant, o2.constant) {
             changes.push(format!("constant: {} -> {}", o1.constant, o2.constant));
+        }
+        let quad_diffs = count_coeff_diffs(&quad_map(p1, &o1.quadratic, normalise), &quad_map(p2, &o2.quadratic, normalise), tol);
+        if quad_diffs > 0 {
+            changes.push(format!("{quad_diffs} quadratic term change(s)"));
         }
         if !changes.is_empty() {
             modified.push((name.clone(), changes));

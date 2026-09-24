@@ -24,9 +24,16 @@ class Coefficient(TypedDict):
     name: str
     value: float
 
+class QuadraticTerm(TypedDict):
+    var1: str
+    var2: str
+    # The term's actual coefficient: an objective's LP `[ ... ] / 2` is applied.
+    coefficient: float
+
 class Objective(TypedDict):
     name: str
     coefficients: list[Coefficient]
+    quadratic: list[QuadraticTerm]
 
 class VariableInfo(TypedDict):
     name: str
@@ -88,7 +95,21 @@ IndicatorConstraint = TypedDict(
     },
 )
 
-Constraint: TypeAlias = StandardConstraint | SOSConstraint | IndicatorConstraint
+# `x + [ x ^ 2 + 2 x * y ] <= 4`
+QuadraticConstraint = TypedDict(
+    "QuadraticConstraint",
+    {
+        "name": str,
+        "type": Literal["quadratic"],
+        "coefficients": list[Coefficient],
+        "quadratic": list[QuadraticTerm],
+        "operator": str,
+        "rhs": float,
+        "class": ConstraintClass,
+    },
+)
+
+Constraint: TypeAlias = StandardConstraint | SOSConstraint | IndicatorConstraint | QuadraticConstraint
 
 # Analysis result dictionary as built in src/lib.rs; see analyze() docs for the
 # keys (summary, sparsity, variables, constraints, coefficients, issues).

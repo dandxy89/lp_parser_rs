@@ -6,9 +6,9 @@ use indexmap::map::Entry;
 
 use crate::error::{EntityKind, LpParseError, LpResult};
 use crate::interner::{NameId, NameInterner};
-use crate::lexer::{Lexer, ParseResult, RawCoefficient, RawConstraint, RawObjective};
+use crate::lexer::{Lexer, ParseResult, RawCoefficient, RawConstraint, RawObjective, RawQuadraticTerm};
 use crate::lp::LpProblemParser;
-use crate::model::{Coefficient, Constraint, ConstraintClass, Objective, Sense, Variable, VariableKind, VariableType};
+use crate::model::{Coefficient, Constraint, ConstraintClass, Objective, QuadraticTerm, Sense, Variable, VariableKind, VariableType};
 use crate::mps::{extract_mps_name, parse_mps};
 use crate::{INFINITE_BOUND_THRESHOLD, NUMERIC_EPSILON};
 
@@ -151,6 +151,26 @@ fn intern_coefficients(interner: &mut NameInterner, raw: &[RawCoefficient<'_>]) 
     merged.into_iter().map(|(name, value)| Coefficient { name, value }).collect()
 }
 
+/// Intern raw quadratic terms. Repeated products of the same pair (`x * y`
+/// and `y * x` included) are summed into the first occurrence, keeping its
+/// orientation, so a written model reads back identically.
+fn intern_quadratic(interner: &mut NameInterner, raw: &[RawQuadraticTerm<'_>]) -> Vec<QuadraticTerm> {
+    let mut merged: Vec<QuadraticTerm> = Vec::with_capacity(raw.len());
+    let mut index: rustc_hash::FxHashMap<(NameId, NameId), usize> = rustc_hash::FxHashMap::default();
+    for term in raw {
+        let (var1, var2) = (interner.intern(term.var1), interner.intern(term.var2));
+        let key = if var1 <= var2 { (var1, var2) } else { (var2, var1) };
+        if let Some(&at) = index.get(&key) {
+            merged[at].coefficient += term.coefficient;
+        } else {
+            index.insert(key, merged.len());
+            merged.push(QuadraticTerm { var1, var2, coefficient: term.coefficient });
+        }
+    }
+    debug_assert!(merged.len() <= raw.len(), "merging never adds terms");
+    merged
+}
+
 /// Intern a raw constraint into a model constraint.
 #[inline]
 fn intern_constraint(interner: &mut NameInterner, raw: &RawConstraint<'_>) -> Constraint {
@@ -166,6 +186,14 @@ fn intern_constraint(interner: &mut NameInterner, raw: &RawConstraint<'_>) -> Co
             name: interner.intern(name),
             sos_type: *sos_type,
             weights: intern_coefficients(interner, weights),
+            byte_offset: *byte_offset,
+        },
+        RawConstraint::Quadratic { name, coefficients, quadratic, operator, rhs, byte_offset } => Constraint::Quadratic {
+            name: interner.intern(name),
+            coefficients: intern_coefficients(interner, coefficients),
+            quadratic: intern_quadratic(interner, quadratic),
+            operator: *operator,
+            rhs: *rhs,
             byte_offset: *byte_offset,
         },
         RawConstraint::Indicator { name, variable, active_value, coefficients, operator, rhs, byte_offset } => Constraint::Indicator {
@@ -187,6 +215,7 @@ fn intern_objective(interner: &mut NameInterner, raw: &RawObjective<'_>) -> Obje
         name: interner.intern(&raw.name),
         coefficients: intern_coefficients(interner, &raw.coefficients),
         constant: raw.constant,
+        quadratic: intern_quadratic(interner, &raw.quadratic),
         byte_offset: raw.byte_offset,
     }
 }
@@ -417,7 +446,7 @@ impl LpProblem {
                     // SOS membership sets kind without wiping bounds.
                 }
             }
-            Constraint::Standard { .. } | Constraint::Indicator { .. } => {
+            Constraint::Standard { .. } | Constraint::Indicator { .. } | Constraint::Quadratic { .. } => {
                 constraint.for_each_variable(|id| self.ensure_variable_exists(id, None));
             }
         }
@@ -434,6 +463,10 @@ impl LpProblem {
         debug_assert!(!self.interner.resolve(objective.name).is_empty(), "objective name must not be empty");
         for coeff in &objective.coefficients {
             self.ensure_variable_exists(coeff.name, None);
+        }
+        for term in &objective.quadratic {
+            self.ensure_variable_exists(term.var1, None);
+            self.ensure_variable_exists(term.var2, None);
         }
 
         let name_id = objective.name;
@@ -499,7 +532,10 @@ impl LpProblem {
 
         match constraint {
             // An indicator constraint's coefficients are those of its linear constraint.
-            Constraint::Standard { coefficients, .. } | Constraint::Indicator { coefficients, .. } => {
+            // The linear coefficients of an indicator's constraint or a quadratic constraint.
+            Constraint::Standard { coefficients, .. }
+            | Constraint::Indicator { coefficients, .. }
+            | Constraint::Quadratic { coefficients, .. } => {
                 update_coefficient_vec(coefficients, var_id, new_coefficient);
 
                 if !is_effectively_zero(new_coefficient, 1.0) {
@@ -544,7 +580,7 @@ impl LpProblem {
             self.constraints.get_mut(&con_id).ok_or_else(|| LpParseError::not_found(EntityKind::Constraint, constraint_name))?;
 
         match constraint {
-            Constraint::Standard { rhs, .. } | Constraint::Indicator { rhs, .. } => {
+            Constraint::Standard { rhs, .. } | Constraint::Indicator { rhs, .. } | Constraint::Quadratic { rhs, .. } => {
                 *rhs = new_rhs;
                 Ok(())
             }
@@ -584,12 +620,23 @@ impl LpProblem {
         // PERF: O(n*m) scan over all objectives and constraints to rename the variable.
         // Acceptable because rename is infrequent in typical LP workflows. For mutation-heavy
         // workloads, prefer batch operations or maintain a reverse index.
+        let rename_terms = |terms: &mut [QuadraticTerm]| {
+            for term in terms {
+                if term.var1 == old_id {
+                    term.var1 = new_id;
+                }
+                if term.var2 == old_id {
+                    term.var2 = new_id;
+                }
+            }
+        };
         for objective in self.objectives.values_mut() {
             for coeff in &mut objective.coefficients {
                 if coeff.name == old_id {
                     coeff.name = new_id;
                 }
             }
+            rename_terms(&mut objective.quadratic);
         }
 
         for constraint in self.constraints.values_mut() {
@@ -610,6 +657,14 @@ impl LpProblem {
                             coeff.name = new_id;
                         }
                     }
+                }
+                Constraint::Quadratic { coefficients, quadratic, .. } => {
+                    for coeff in coefficients {
+                        if coeff.name == old_id {
+                            coeff.name = new_id;
+                        }
+                    }
+                    rename_terms(quadratic);
                 }
                 Constraint::SOS { weights, .. } => {
                     for weight in weights {
@@ -730,12 +785,27 @@ impl LpProblem {
         // workloads, prefer batch operations or maintain a reverse index.
         for objective in self.objectives.values_mut() {
             objective.coefficients.retain(|c| c.name != var_id);
+            objective.quadratic.retain(|t| t.var1 != var_id && t.var2 != var_id);
         }
 
         for constraint in self.constraints.values_mut() {
             match constraint {
                 Constraint::Standard { coefficients, .. } | Constraint::Indicator { coefficients, .. } => {
                     coefficients.retain(|c| c.name != var_id);
+                }
+                Constraint::Quadratic { name, coefficients, quadratic, operator, rhs, byte_offset } => {
+                    coefficients.retain(|c| c.name != var_id);
+                    quadratic.retain(|t| t.var1 != var_id && t.var2 != var_id);
+                    if quadratic.is_empty() {
+                        // No quadratic term left: it is an ordinary linear constraint now.
+                        *constraint = Constraint::Standard {
+                            name: *name,
+                            coefficients: std::mem::take(coefficients),
+                            operator: *operator,
+                            rhs: *rhs,
+                            byte_offset: *byte_offset,
+                        };
+                    }
                 }
                 Constraint::SOS { weights, .. } => {
                     weights.retain(|w| w.name != var_id);
@@ -814,7 +884,9 @@ mod serde_support {
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
     use crate::interner::{NameId, NameInterner};
-    use crate::model::{Coefficient, ComparisonOp, Constraint, ConstraintClass, Objective, SOSType, Sense, Variable, VariableType};
+    use crate::model::{
+        Coefficient, ComparisonOp, Constraint, ConstraintClass, Objective, QuadraticTerm, SOSType, Sense, Variable, VariableType,
+    };
     use crate::problem::LpProblem;
 
     #[derive(Serialize, Deserialize)]
@@ -840,6 +912,15 @@ mod serde_support {
             sos_type: SOSType,
             weights: Vec<SerdeCoefficient>,
         },
+        Quadratic {
+            name: String,
+            coefficients: Vec<SerdeCoefficient>,
+            quadratic: Vec<SerdeQuadraticTerm>,
+            operator: ComparisonOp,
+            rhs: f64,
+            #[serde(default, skip_serializing_if = "is_normal")]
+            class: ConstraintClass,
+        },
         Indicator {
             name: String,
             variable: String,
@@ -859,6 +940,34 @@ mod serde_support {
         // Default keeps pre-constant serialised problems deserialisable.
         #[serde(default)]
         constant: f64,
+        /// Omitted for a linear objective, so older snapshots still load.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        quadratic: Vec<SerdeQuadraticTerm>,
+    }
+
+    #[derive(Serialize, Deserialize)]
+    struct SerdeQuadraticTerm {
+        var1: String,
+        var2: String,
+        coefficient: f64,
+    }
+
+    fn quadratic_to_serde(terms: &[QuadraticTerm], interner: &NameInterner) -> Vec<SerdeQuadraticTerm> {
+        terms
+            .iter()
+            .map(|t| SerdeQuadraticTerm {
+                var1: interner.resolve(t.var1).to_string(),
+                var2: interner.resolve(t.var2).to_string(),
+                coefficient: t.coefficient,
+            })
+            .collect()
+    }
+
+    fn quadratic_from_serde(terms: &[SerdeQuadraticTerm], interner: &mut NameInterner) -> Vec<QuadraticTerm> {
+        terms
+            .iter()
+            .map(|t| QuadraticTerm { var1: interner.intern(&t.var1), var2: interner.intern(&t.var2), coefficient: t.coefficient })
+            .collect()
     }
 
     #[derive(Serialize, Deserialize)]
@@ -917,6 +1026,7 @@ mod serde_support {
                         name: self.interner.resolve(obj.name).to_string(),
                         coefficients: coeffs_to_serde(&obj.coefficients, &self.interner),
                         constant: obj.constant,
+                        quadratic: quadratic_to_serde(&obj.quadratic, &self.interner),
                     })
                     .collect(),
                 constraints: self
@@ -934,6 +1044,14 @@ mod serde_support {
                             name: self.interner.resolve(*name).to_string(),
                             sos_type: *sos_type,
                             weights: coeffs_to_serde(weights, &self.interner),
+                        },
+                        Constraint::Quadratic { name, coefficients, quadratic, operator, rhs, .. } => SerdeConstraint::Quadratic {
+                            name: self.interner.resolve(*name).to_string(),
+                            coefficients: coeffs_to_serde(coefficients, &self.interner),
+                            quadratic: quadratic_to_serde(quadratic, &self.interner),
+                            operator: *operator,
+                            rhs: *rhs,
+                            class: self.constraint_class(*name),
                         },
                         Constraint::Indicator { name, variable, active_value, coefficients, operator, rhs, .. } => {
                             SerdeConstraint::Indicator {
@@ -977,6 +1095,7 @@ mod serde_support {
                         name: name_id,
                         coefficients: coeffs_from_serde(&so.coefficients, &mut interner),
                         constant: so.constant,
+                        quadratic: quadratic_from_serde(&so.quadratic, &mut interner),
                         byte_offset: None,
                     };
                     (name_id, obj)
@@ -996,6 +1115,21 @@ mod serde_support {
                         let con = Constraint::Standard {
                             name: name_id,
                             coefficients: coeffs_from_serde(coefficients, &mut interner),
+                            operator: *operator,
+                            rhs: *rhs,
+                            byte_offset: None,
+                        };
+                        (name_id, con)
+                    }
+                    SerdeConstraint::Quadratic { name, coefficients, quadratic, operator, rhs, class } => {
+                        let name_id = interner.intern(name);
+                        if !class.is_normal() {
+                            constraint_classes.insert(name_id, *class);
+                        }
+                        let con = Constraint::Quadratic {
+                            name: name_id,
+                            coefficients: coeffs_from_serde(coefficients, &mut interner),
+                            quadratic: quadratic_from_serde(quadratic, &mut interner),
                             operator: *operator,
                             rhs: *rhs,
                             byte_offset: None,
@@ -1091,11 +1225,7 @@ fn from_parse_result(parsed: ParseResult<'_>, problem_name: Option<String>) -> L
         .chain(&parsed.lazy_constraints)
         .chain(&parsed.user_cuts)
         .chain(&parsed.sos)
-        .filter_map(|c| match c {
-            RawConstraint::Standard { name, .. } | RawConstraint::SOS { name, .. } | RawConstraint::Indicator { name, .. } => {
-                (name != "__c__").then_some(name.as_ref())
-            }
-        })
+        .filter_map(|c| (c.name() != "__c__").then_some(c.name()))
         .collect();
 
     let objectives = intern_objectives(&mut interner, &parsed.objectives, &mut variables);
@@ -1168,6 +1298,10 @@ fn intern_objectives(
         }
 
         register_variables_from_coefficients(variables, &obj.coefficients, None);
+        for term in &obj.quadratic {
+            variables.entry(term.var1).or_insert_with(|| Variable::new(term.var1));
+            variables.entry(term.var2).or_insert_with(|| Variable::new(term.var2));
+        }
         let name = obj.name;
         if objectives.insert(name, obj).is_some() {
             eprintln!("duplicate objective name '{}': the later definition replaces the earlier one", interner.resolve(name));
@@ -1352,9 +1486,10 @@ fn register_constraint_variables(variables: &mut IndexMap<NameId, Variable>, con
         Constraint::SOS { weights, .. } => {
             register_variables_from_coefficients(variables, weights, Some(&VariableType::SOS));
         }
-        Constraint::Indicator { variable, coefficients, .. } => {
-            variables.entry(*variable).or_insert_with(|| Variable::new(*variable));
-            register_variables_from_coefficients(variables, coefficients, None);
+        Constraint::Indicator { .. } | Constraint::Quadratic { .. } => {
+            constraint.for_each_variable(|id| {
+                variables.entry(id).or_insert_with(|| Variable::new(id));
+            });
         }
     }
 }
@@ -1477,6 +1612,7 @@ End";
             name: obj1,
             coefficients: vec![Coefficient { name: x3, value: 1.0 }],
             constant: 0.0,
+            quadratic: Vec::new(),
             byte_offset: None,
         });
         assert_eq!(problem.objective_count(), 1);
@@ -2115,6 +2251,7 @@ mod modification_tests {
             name: obj1,
             coefficients: vec![Coefficient { name: x1, value: 2.0 }, Coefficient { name: x2, value: 3.0 }],
             constant: 0.0,
+            quadratic: Vec::new(),
             byte_offset: None,
         });
         problem.add_constraint(Constraint::Standard {
