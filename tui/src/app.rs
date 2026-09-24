@@ -1282,10 +1282,10 @@ impl App {
 
         std::thread::spawn(move || {
             let outcome = crate::watch::reload_files(&path1, &path2);
-            // Receiver may be dropped if the app quit — this is expected.
-            if sender.send(outcome).is_err() {
-                eprintln!("reload result dropped: receiver closed");
-            }
+            // The receiver is dropped if the app quit, so a failed send is
+            // expected and deliberately silent: stderr is the alternate screen
+            // ratatui is drawing into, and printing there garbles the frame.
+            drop(sender.send(outcome));
         });
     }
 

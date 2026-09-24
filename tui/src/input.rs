@@ -818,10 +818,10 @@ impl App {
 
         std::thread::spawn(move || {
             let result = crate::solver::diagnose_infeasibility(&problem);
-            // Receiver may be dropped if the user dismissed the overlay — this is expected.
-            if sender.send(result).is_err() {
-                eprintln!("diagnosis result dropped: receiver closed");
-            }
+            // The receiver is dropped if the user dismissed the overlay, so a
+            // failed send is expected and deliberately silent: stderr is the
+            // alternate screen ratatui is drawing into.
+            drop(sender.send(result));
         });
     }
 
@@ -867,10 +867,10 @@ impl App {
 
         std::thread::spawn(move || {
             let result = crate::solver::solve_problem(&problem);
-            // Receiver may be dropped if the user dismissed the overlay — this is expected.
-            if sender.send(result).is_err() {
-                eprintln!("solve result dropped: receiver closed");
-            }
+            // The receiver is dropped if the user dismissed the overlay, so a
+            // failed send is expected and deliberately silent: stderr is the
+            // alternate screen ratatui is drawing into.
+            drop(sender.send(result));
         });
     }
 
@@ -950,19 +950,20 @@ impl App {
 
         // One thread, in order: side 1's result reaches the UI while side 2 is
         // still running, and the two solves never compete for the machine.
-        // Receivers may be dropped if the user dismissed the overlay.
+        // Receivers are dropped if the user dismissed the overlay, so a failed
+        // send is expected and deliberately silent: stderr is the alternate
+        // screen ratatui is drawing into. Side 2 is skipped once nobody is
+        // waiting for it.
         std::thread::spawn(move || {
             let result = crate::solver::solve_problem(&problem1);
             if sender1.send(result).is_err() {
-                eprintln!("solve result 1 dropped: receiver closed");
+                return;
             }
             let mut result = crate::solver::solve_problem(&problem2);
             if let Ok(solved) = &mut result {
                 scaling2.unscale(solved);
             }
-            if sender2.send(result).is_err() {
-                eprintln!("solve result 2 dropped: receiver closed");
-            }
+            drop(sender2.send(result));
         });
     }
 
