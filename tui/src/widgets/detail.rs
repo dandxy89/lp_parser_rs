@@ -3,8 +3,6 @@
 //! Renders the full before/after breakdown for a single selected diff entry
 //! (variables, constraints, objectives) in the detail pane.
 
-use std::fmt::Write as _;
-
 use lp_parser_rs::interner::NameInterner;
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
@@ -818,6 +816,80 @@ impl SideBySideColumns {
     }
 }
 
+/// How the unified coefficient rows spell their change badges.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BadgeStyle {
+    /// ` [modified]`, ` (unchanged)`.
+    Words,
+    /// ` [~]`, and nothing for an unchanged row — for panes too narrow for words.
+    Glyphs,
+}
+
+impl BadgeStyle {
+    const fn label(self, kind: DiffKind) -> &'static str {
+        match (self, kind) {
+            (Self::Words, DiffKind::Added) => " [added]",
+            (Self::Words, DiffKind::Removed) => " [removed]",
+            (Self::Words, DiffKind::Modified | DiffKind::Renamed) => " [modified]",
+            (Self::Glyphs, DiffKind::Added) => " [+]",
+            (Self::Glyphs, DiffKind::Removed) => " [-]",
+            (Self::Glyphs, DiffKind::Modified | DiffKind::Renamed) => " [~]",
+        }
+    }
+
+    const fn unchanged(self) -> &'static str {
+        match self {
+            Self::Words => " (unchanged)",
+            Self::Glyphs => "",
+        }
+    }
+
+    const fn width(self) -> usize {
+        match self {
+            Self::Words => " [modified]".len(),
+            Self::Glyphs => " [~]".len(),
+        }
+    }
+}
+
+/// Value columns of the unified `name  old → new  [badge]` coefficient rows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct UnifiedColumns {
+    value: usize,
+    badges: BadgeStyle,
+}
+
+impl UnifiedColumns {
+    /// The value columns' width when there is room — wide enough for typical
+    /// LP coefficients.
+    const VALUE: usize = 12;
+    /// The narrowest a value column gets; `fit_number` rounds into it.
+    const MIN_VALUE: usize = 5;
+    /// Borders, indent, gap, and the narrowest useful name column.
+    const NAME_CHROME: usize = 2 + 4 + 1 + 8;
+
+    /// Size the value columns to `pane_width` so the badge stays in view: the
+    /// badges drop to glyphs first, then the values narrow (rounded, never
+    /// clipped). `None` (the plain-text yank) is the full layout.
+    fn fit(pane_width: Option<u16>) -> Self {
+        let full = Self { value: Self::VALUE, badges: BadgeStyle::Words };
+        let Some(width) = pane_width else {
+            return full;
+        };
+        let room = (width as usize).saturating_sub(Self::NAME_CHROME);
+        if room >= full.reserved() {
+            return full;
+        }
+        let spare = room.saturating_sub(ARROW.chars().count() + BadgeStyle::Glyphs.width());
+        Self { value: (spare / 2).clamp(Self::MIN_VALUE, Self::VALUE), badges: BadgeStyle::Glyphs }
+    }
+
+    /// Columns taken after the name: both values, the arrow and the badge.
+    fn reserved(self) -> usize {
+        2 * self.value + ARROW.chars().count() + self.badges.width()
+    }
+}
+
 /// Compute the visible range of coefficient rows for windowed rendering.
 ///
 /// Returns `(first_visible_row, max_visible_rows)`. When the scroll position
@@ -849,9 +921,6 @@ fn render_coeff_changes(
     pane_width: Option<u16>,
     interner: &NameInterner,
 ) {
-    // Column width for value formatting — wide enough for typical LP coefficients.
-    const VAL_WIDTH: usize = 12;
-
     let t = theme();
 
     let owned_rows;
@@ -863,9 +932,9 @@ fn render_coeff_changes(
     };
 
     let (skip, take) = visible_range.unwrap_or((0, rows.len()));
-    // Old value, arrow, new value and the widest ` [modified]` badge.
-    let reserved = VAL_WIDTH + ARROW.chars().count() + VAL_WIDTH + " [modified]".len();
-    let name_w = name_column_width(rows.iter().map(|row| row.variable.chars().count()).max().unwrap_or(0), pane_width, reserved);
+    let layout = UnifiedColumns::fit(pane_width);
+    let (val_w, badges) = (layout.value, layout.badges);
+    let name_w = name_column_width(rows.iter().map(|row| row.variable.chars().count()).max().unwrap_or(0), pane_width, layout.reserved());
 
     // Placeholder lines for coefficient rows scrolled above the viewport.
     let placeholder_before = skip.min(rows.len());
@@ -882,11 +951,11 @@ fn render_coeff_changes(
     for row in rows.iter().skip(skip).take(take) {
         old_buf.clear();
         if let Some(v) = row.old_value {
-            write!(old_buf, "{v}").expect("writing f64 to String is infallible");
+            old_buf.push_str(&fit_number(v, val_w));
         }
         new_buf.clear();
         if let Some(v) = row.new_value {
-            write!(new_buf, "{v}").expect("writing f64 to String is infallible");
+            new_buf.push_str(&fit_number(v, val_w));
         }
         name_buf.clear();
         name_buf.push_str(&name_cell(&row.variable, name_w));
@@ -895,19 +964,19 @@ fn render_coeff_changes(
             Some(DiffKind::Added) => {
                 lines.push(Line::from(vec![
                     Span::styled(name_buf.clone(), Style::default().fg(t.added)),
-                    Span::styled(format!("{:>VAL_WIDTH$}", ""), Style::default()),
+                    Span::styled(format!("{:>val_w$}", ""), Style::default()),
                     Span::styled(ARROW, muted()),
-                    Span::styled(format!("{new_buf:<VAL_WIDTH$}"), Style::default().fg(t.added)),
-                    Span::styled(" [added]", Style::default().fg(t.added)),
+                    Span::styled(format!("{new_buf:<val_w$}"), Style::default().fg(t.added)),
+                    Span::styled(badges.label(DiffKind::Added), Style::default().fg(t.added)),
                 ]));
             }
             Some(DiffKind::Removed) => {
                 lines.push(Line::from(vec![
                     Span::styled(name_buf.clone(), Style::default().fg(t.removed)),
-                    Span::styled(format!("{old_buf:>VAL_WIDTH$}"), Style::default().fg(t.removed)),
+                    Span::styled(format!("{old_buf:>val_w$}"), Style::default().fg(t.removed)),
                     Span::styled(ARROW, muted()),
-                    Span::styled(format!("{:VAL_WIDTH$}", ""), Style::default()),
-                    Span::styled(" [removed]", Style::default().fg(t.removed)),
+                    Span::styled(format!("{:val_w$}", ""), Style::default()),
+                    Span::styled(badges.label(DiffKind::Removed), Style::default().fg(t.removed)),
                 ]));
             }
             // Renamed never occurs on coefficient rows (asserted in build_coeff_rows);
@@ -915,17 +984,17 @@ fn render_coeff_changes(
             Some(DiffKind::Modified | DiffKind::Renamed) => {
                 lines.push(Line::from(vec![
                     Span::styled(name_buf.clone(), Style::default().fg(t.modified)),
-                    Span::styled(format!("{old_buf:>VAL_WIDTH$}"), Style::default().fg(t.removed)),
+                    Span::styled(format!("{old_buf:>val_w$}"), Style::default().fg(t.removed)),
                     Span::styled(ARROW, muted()),
-                    Span::styled(format!("{new_buf:<VAL_WIDTH$}"), Style::default().fg(t.added)),
-                    Span::styled(" [modified]", Style::default().fg(t.modified)),
+                    Span::styled(format!("{new_buf:<val_w$}"), Style::default().fg(t.added)),
+                    Span::styled(badges.label(DiffKind::Modified), Style::default().fg(t.modified)),
                 ]));
             }
             None => {
                 lines.push(Line::from(vec![
                     Span::styled(name_buf.clone(), Style::default().fg(t.muted)),
-                    Span::styled(format!("{old_buf:>VAL_WIDTH$}"), Style::default().fg(t.muted)),
-                    Span::styled(" (unchanged)", Style::default().fg(t.muted)),
+                    Span::styled(format!("{old_buf:>val_w$}"), Style::default().fg(t.muted)),
+                    Span::styled(badges.unchanged(), Style::default().fg(t.muted)),
                 ]));
             }
         }
@@ -951,6 +1020,15 @@ fn render_panel(frame: &mut Frame, area: Rect, title: Line<'static>, lines: Vec<
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn unified_columns_keep_the_badge_in_narrow_panes() {
+        assert_eq!(UnifiedColumns::fit(None), UnifiedColumns { value: 12, badges: BadgeStyle::Words });
+        assert_eq!(UnifiedColumns::fit(Some(80)), UnifiedColumns { value: 12, badges: BadgeStyle::Words });
+        let narrow = UnifiedColumns::fit(Some(45));
+        assert_eq!(narrow.badges, BadgeStyle::Glyphs, "a narrow pane drops to glyph badges");
+        assert!(UnifiedColumns::NAME_CHROME + narrow.reserved() <= 45, "the row fits: {narrow:?}");
+    }
 
     #[test]
     fn side_by_side_columns_shrink_the_name_before_the_value() {
