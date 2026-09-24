@@ -36,8 +36,11 @@ pub struct Theme {
     /// Background for the selected row in an unfocused pane — neutral, so the
     /// live pane is the one carrying the tinted selection.
     pub selection_bg_dim: Color,
-    /// Border colour for the focused panel.
+    /// Border and title colour for the focused panel.
     pub border_focus: Color,
+    /// Draw the focused panel's border with heavy lines. The monochrome
+    /// palette has no colour to mark focus with, so the line weight does it.
+    pub focus_thick: bool,
     /// Secondary accent (e.g. magenta highlights in diff views).
     pub secondary_accent: Color,
     /// Border colour for unfocused panels (dim, so focus stands out).
@@ -73,7 +76,10 @@ static DARK_THEME: Theme = Theme {
     text: Color::Indexed(252), // off-white; pure white glares against the chrome
     selection_bg: Color::Indexed(24),
     selection_bg_dim: Color::Indexed(238),
-    border_focus: Color::Indexed(245),
+    // The accent, not a grey: a focused panel should be findable at a glance,
+    // and a lighter grey border read as barely different from an unfocused one.
+    border_focus: Color::Cyan,
+    focus_thick: false,
     secondary_accent: Color::Magenta,
     border: Color::Indexed(238),
     zebra_bg: Color::Indexed(236),
@@ -91,7 +97,8 @@ static LIGHT_THEME: Theme = Theme {
     text: Color::Indexed(235),         // near-black; pure black is harsh on paper
     selection_bg: Color::Indexed(153), // pale blue
     selection_bg_dim: Color::Indexed(252),
-    border_focus: Color::Indexed(245),
+    border_focus: Color::Indexed(30), // the accent teal
+    focus_thick: false,
     secondary_accent: Color::Indexed(90), // purple
     border: Color::Indexed(250),
     zebra_bg: Color::Indexed(253),
@@ -110,6 +117,7 @@ static MONO_THEME: Theme = Theme {
     selection_bg: Color::Reset,
     selection_bg_dim: Color::Reset,
     border_focus: Color::Reset,
+    focus_thick: true,
     secondary_accent: Color::Reset,
     border: Color::Reset,
     zebra_bg: Color::Reset,

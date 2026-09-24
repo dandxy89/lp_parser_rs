@@ -61,8 +61,23 @@ pub fn focus_border_style(current: Focus, target: Focus) -> Style {
 }
 
 /// Standard rounded panel block used by every bordered widget.
+///
+/// A bold border style marks the panel holding focus (see
+/// [`focus_border_style`]); on a palette with no colour to spare
+/// ([`Theme::focus_thick`](crate::theme::Theme::focus_thick)) that border is
+/// drawn with heavy lines instead.
 pub fn panel_block(border_style: Style) -> Block<'static> {
-    Block::default().borders(Borders::ALL).border_type(BorderType::Rounded).border_style(border_style)
+    let focused = border_style.add_modifier.contains(Modifier::BOLD);
+    let block = Block::default().borders(Borders::ALL).border_type(border_type(focused, theme().focus_thick)).border_style(border_style);
+    // A focused panel's title takes its border's colour too; spans that carry
+    // their own colour (a diff badge) keep it.
+    if focused { block.title_style(border_style) } else { block }
+}
+
+/// Line style of a panel border: heavy for the focused panel when the palette
+/// marks focus by weight rather than colour, rounded otherwise.
+const fn border_type(focused: bool, focus_thick: bool) -> BorderType {
+    if focused && focus_thick { BorderType::Thick } else { BorderType::Rounded }
 }
 
 /// Standard vertical scrollbar: a hairline track and a hairline thumb, no end
@@ -525,6 +540,15 @@ mod tests {
     fn test_truncate_multibyte_safe() {
         // 4 chars, max 3 → 2 chars + ellipsis, no panic on char boundaries.
         assert_eq!(truncate_with_ellipsis("\u{0394}\u{0394}\u{0394}\u{0394}", 3), "\u{0394}\u{0394}\u{2026}");
+    }
+
+    #[test]
+    fn focus_is_marked_by_colour_or_by_line_weight() {
+        assert_eq!(border_type(true, true), BorderType::Thick, "monochrome marks focus with heavy lines");
+        assert_eq!(border_type(false, true), BorderType::Rounded);
+        assert_eq!(border_type(true, false), BorderType::Rounded, "colour palettes keep the rounded border");
+        let focused = focus_border_style(Focus::Detail, Focus::Detail);
+        assert_eq!(focused.fg, Some(theme().accent), "a focused border takes the accent");
     }
 
     #[test]
