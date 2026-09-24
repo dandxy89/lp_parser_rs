@@ -3,7 +3,7 @@ source: tui/src/snapshot_tests.rs
 expression: "render(&mut app, 120, 40).backend()"
 ---
 " Summary │ Variables (3) │ Constraints (3) │ Objectives (1) │ Numerics                                                  "
-"╭ Presolve log  (j/k scroll · w write .txt · Esc close) ───────────────────────────────────────────────────────────────╮"
+"╭ Presolve log  (j/k:scroll · w:write .txt · Esc:close) ───────────────────────────────────────────────────────────────╮"
 "│  HiGHS presolve: solved the model outright — nothing left, 0.0ms                                                     │"
 "│  3 rows, 3 cols in → 0 rows, 0 cols out                                                                              │"
 "│                                                                                                                      │"

@@ -307,8 +307,12 @@ pub fn draw_help(frame: &mut Frame, area: Rect, app: &mut App) {
 
     let t = theme();
     let border_style = Style::default().fg(t.accent).add_modifier(Modifier::BOLD);
-    let title = if max_scroll > 0 { " Keybindings  (j/k scroll \u{b7} Esc close) " } else { " Keybindings " };
-    let block = panel_block(border_style).title(Span::styled(title, border_style));
+    let title = if max_scroll > 0 {
+        super::title_with_hints("Keybindings", "j/k:scroll  Esc:close", border_style)
+    } else {
+        Line::styled(" Keybindings ", border_style)
+    };
+    let block = panel_block(border_style).title(title);
 
     let paragraph = Paragraph::new(help_lines.to_vec()).block(block).scroll((app.help_scroll, 0));
 

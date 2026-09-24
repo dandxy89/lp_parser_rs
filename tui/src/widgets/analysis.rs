@@ -36,30 +36,37 @@ pub fn draw_analysis(frame: &mut ratatui::Frame, area: Rect, app: &mut crate::ap
                     format!("  {} {label} running\u{2026} {:.1}s", spinner_frame(elapsed), elapsed.as_secs_f64()),
                     Style::default().fg(t.accent),
                 )),
-                Line::from(Span::styled("  any key to cancel".to_owned(), Style::default().fg(t.muted))),
+                indented_hints("any key:cancel"),
             ];
-            (centred_rect(area, 56.min(area.width), 5.min(area.height)), lines, format!(" {label} "))
+            (centred_rect(area, 56.min(area.width), 5.min(area.height)), lines, Line::styled(format!(" {label} "), border_style))
         }
         AnalysisState::Failed { label, error } => {
             let lines = vec![
                 Line::from(""),
                 Line::from(Span::styled(format!("  {error}"), Style::default().fg(t.removed))),
-                Line::from(Span::styled("  any key to close".to_owned(), Style::default().fg(t.muted))),
+                indented_hints("any key:close"),
             ];
-            (centred_rect(area, 76.min(area.width), 5.min(area.height)), lines, format!(" {label} "))
+            (centred_rect(area, 76.min(area.width), 5.min(area.height)), lines, Line::styled(format!(" {label} "), border_style))
         }
         AnalysisState::Done { label, pane } => {
             let popup = crate::widgets::report_rect(area);
             let inner_height = popup.height.saturating_sub(2) as usize;
             let max_scroll = u16::try_from(pane.lines.len().saturating_sub(inner_height)).unwrap_or(u16::MAX);
             pane.scroll = pane.scroll.min(max_scroll);
-            let hint = if max_scroll > 0 { "j/k scroll \u{b7} w write \u{b7} Esc close" } else { "w write \u{b7} Esc close" };
-            (popup, pane.lines.clone(), format!(" {label}  ({hint}) "))
+            let hints = if max_scroll > 0 { "j/k:scroll  w:write  Esc:close" } else { "w:write  Esc:close" };
+            (popup, pane.lines.clone(), crate::widgets::title_with_hints(label, hints, border_style))
         }
     };
 
     let scroll = app.analysis.pane().map_or(0, |pane| pane.scroll);
-    let block = panel_block(border_style).title(Span::styled(title, border_style));
+    let block = panel_block(border_style).title(title);
     frame.render_widget(Clear, popup);
     frame.render_widget(Paragraph::new(lines).block(block).scroll((scroll, 0)), popup);
+}
+
+/// Packed key hints as a body line, indented to the pane's text column.
+fn indented_hints(packed: &'static str) -> Line<'static> {
+    let mut spans = vec![Span::raw("  ")];
+    spans.extend(crate::widgets::key_hint_spans(&crate::widgets::hint_pairs(packed)));
+    Line::from(spans)
 }

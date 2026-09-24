@@ -3,7 +3,7 @@ source: tui/src/snapshot_tests.rs
 expression: "render(&mut app, 120, 40).backend()"
 ---
 " Summary │ Variables (2) │ Constraints (2) │ Objectives (1) │ Numerics                                                  "
-"╭ Ranging  (w write · Esc close) ──────────────────────────────────────────────────────────────────────────────────────╮"
+"╭ Ranging  (w:write · Esc:close) ──────────────────────────────────────────────────────────────────────────────────────╮"
 "│  how far each quantity moves before the optimal basis changes                                                        │"
 "│  objective 4.000000                                                                                                  │"
 "│                                                                                                                      │"

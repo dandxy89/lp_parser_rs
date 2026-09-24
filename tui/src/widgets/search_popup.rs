@@ -269,21 +269,19 @@ fn draw_detail_preview(frame: &mut Frame, area: Rect, app: &App) {
 /// Draw the hint bar at the bottom of the pop-up.
 fn draw_hints(frame: &mut Frame, area: Rect) {
     let t = theme();
-    let hints = Line::from(vec![
-        Span::styled("  r:", Style::default().fg(t.accent).add_modifier(Modifier::BOLD)),
-        Span::styled("regex  ", Style::default().fg(t.muted)),
-        Span::styled("s:", Style::default().fg(t.accent).add_modifier(Modifier::BOLD)),
-        Span::styled("substring  ", Style::default().fg(t.muted)),
-        Span::styled("c:", Style::default().fg(t.accent).add_modifier(Modifier::BOLD)),
-        Span::styled("content  ", Style::default().fg(t.muted)),
-        Span::styled("(default: fuzzy)  ", Style::default().fg(t.muted)),
-        Span::styled("\u{2191}/\u{2193}", Style::default().fg(t.accent)),
-        Span::styled(" navigate  ", Style::default().fg(t.muted)),
-        Span::styled("Enter", Style::default().fg(t.accent)),
-        Span::styled(" select  ", Style::default().fg(t.muted)),
-        Span::styled("Esc", Style::default().fg(t.accent)),
-        Span::styled(" cancel", Style::default().fg(t.muted)),
-    ]);
+    // The mode prefixes are typed, not pressed, but render the same way — and
+    // `r:regex` spells the very prefix to type.
+    let mut spans = vec![Span::raw(" ")];
+    spans.extend(crate::widgets::key_hint_spans(&[
+        "r:regex",
+        "s:substring",
+        "c:content",
+        "(none):fuzzy",
+        "\u{2191}/\u{2193}:navigate",
+        "Enter:select",
+        "Esc:cancel",
+    ]));
+    let hints = Line::from(spans);
 
     let block = panel_block(Style::default().fg(t.muted));
 

@@ -78,8 +78,7 @@ pub struct StatusBarParams<'a> {
 /// Muted separator between status bar segments.
 const SEPARATOR: &str = "  \u{2502}  ";
 
-/// Separator between key hints in the right-hand segment.
-const HINT_SEPARATOR: &str = " \u{b7} ";
+use crate::widgets::HINT_SEPARATOR;
 
 /// Split the packed hint string (`"S:solve  w:csv"`) into styled spans, and
 /// return their total display width.
@@ -118,25 +117,7 @@ fn hint_spans(hints: &str, max_width: usize) -> (Vec<Span<'_>>, usize) {
     width += last.chars().count();
     kept.push(last);
 
-    let t = theme();
-    let key_style = Style::default().fg(t.muted).add_modifier(Modifier::BOLD);
-    let label_style = Style::default().fg(t.muted);
-    let mut spans = Vec::with_capacity(kept.len() * 3);
-    for (i, pair) in kept.iter().enumerate() {
-        if i > 0 {
-            spans.push(Span::styled(HINT_SEPARATOR, Style::default().fg(t.border)));
-        }
-        match pair.split_once(':') {
-            Some((key, action)) => {
-                spans.push(Span::styled(key, key_style));
-                spans.push(Span::styled(":", label_style));
-                spans.push(Span::styled(action, label_style));
-            }
-            // No colon: a plain fragment such as the `y →` chord prefix.
-            None => spans.push(Span::styled(*pair, label_style)),
-        }
-    }
-    (spans, width)
+    (crate::widgets::key_hint_spans(&kept), width)
 }
 
 /// Assemble segments into one line, separated by [`SEPARATOR`], keeping only

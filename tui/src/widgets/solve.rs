@@ -112,7 +112,9 @@ fn running_footer(confirm_quit: bool) -> Line<'static> {
             Span::styled("n", Style::default().fg(t.accent).add_modifier(Modifier::BOLD)),
         ])
     } else {
-        Line::from(vec![Span::styled("  Esc", Style::default().fg(t.accent)), Span::styled(": cancel", Style::default().fg(t.muted))])
+        let mut spans = vec![Span::raw("  ")];
+        spans.extend(super::key_hint_spans(&["Esc:cancel", "q:quit"]));
+        Line::from(spans)
     }
 }
 

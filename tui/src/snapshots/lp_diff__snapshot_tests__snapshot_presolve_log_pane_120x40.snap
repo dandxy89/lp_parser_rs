@@ -3,7 +3,7 @@ source: tui/src/snapshot_tests.rs
 expression: "render(&mut app, 120, 40).backend()"
 ---
 " Summary │ Variables (3) │ Constraints (3) │ Objectives (1) │ Numerics                                                  "
-"╭ Presolve log  (j/k scroll · w write .txt · Esc close) ───────────────────────────────────────────────────────────────╮"
+"╭ Presolve log  (j/k:scroll · w:write .txt · Esc:close) ───────────────────────────────────────────────────────────────╮"
 "│  last run  presolve: -2 rows, 1 cols fixed, 1 bounds, 1 pass(es), 0.0ms                                              │"
 "│    pass 1: -2 rows, 1 cols fixed, 1 bounds, -0 nnz, 0r/0c scaled                                                     │"
 "│                                                                                                                      │"

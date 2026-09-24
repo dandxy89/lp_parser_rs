@@ -2,7 +2,7 @@
 source: tui/src/snapshot_tests.rs
 expression: "render(&mut app, 80, 24).backend()"
 ---
-"╭ Keybindings  (j/k scroll · Esc close) ───────────────────────────────────────╮"
+"╭ Keybindings  (j/k:scroll · Esc:close) ───────────────────────────────────────╮"
 "│                                                                              │"
 "│  Single-file inspect mode                                                    │"
 "│  ───────────────────────                                                     │"

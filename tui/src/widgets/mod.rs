@@ -93,21 +93,73 @@ pub fn render_panel_scrollbar(frame: &mut ratatui::Frame, area: Rect, state: &mu
     frame.render_stateful_widget(panel_scrollbar(), track, state);
 }
 
-/// Draw a hint line onto a panel's bottom border, indented past the corner.
+/// Separator between `key:action` hint pairs.
+pub const HINT_SEPARATOR: &str = " \u{b7} ";
+
+/// Render `key:action` hint pairs in the one style every hint in the app
+/// uses: the key — what the eye is hunting for — in the accent, the action
+/// receding in the muted colour, and a quiet middot between pairs. A pair
+/// without a colon (the `y →` chord prefix) is drawn muted as it stands.
+pub fn key_hint_spans<'a>(pairs: &[&'a str]) -> Vec<Span<'a>> {
+    let t = theme();
+    let key_style = Style::default().fg(t.accent);
+    let label_style = Style::default().fg(t.muted);
+    let mut spans = Vec::with_capacity(pairs.len() * 3);
+    for (i, pair) in pairs.iter().enumerate() {
+        if i > 0 {
+            spans.push(Span::styled(HINT_SEPARATOR, Style::default().fg(t.border)));
+        }
+        match pair.split_once(':') {
+            Some((key, action)) => {
+                spans.push(Span::styled(key, key_style));
+                spans.push(Span::styled(":", label_style));
+                spans.push(Span::styled(action, label_style));
+            }
+            None => spans.push(Span::styled(*pair, label_style)),
+        }
+    }
+    spans
+}
+
+/// Split packed hints (`"j/k:scroll  Esc:close"`, pairs two spaces apart)
+/// into pairs for [`key_hint_spans`].
+pub fn hint_pairs(packed: &str) -> Vec<&str> {
+    packed.split("  ").filter(|pair| !pair.is_empty()).collect()
+}
+
+/// Display width of packed hints once rendered.
+pub fn key_hint_width(packed: &str) -> usize {
+    let pairs = hint_pairs(packed);
+    let separators = pairs.len().saturating_sub(1) * HINT_SEPARATOR.chars().count();
+    pairs.iter().map(|pair| pair.chars().count()).sum::<usize>() + separators
+}
+
+/// A panel title — the name, then its key hints in parentheses — in the
+/// shared hint style.
+pub fn title_with_hints(name: &str, packed: &'static str, style: Style) -> Line<'static> {
+    let mut spans = vec![Span::styled(format!(" {name}  ("), style)];
+    spans.extend(key_hint_spans(&hint_pairs(packed)));
+    spans.push(Span::styled(") ", style));
+    Line::from(spans)
+}
+
+/// Draw packed key hints onto a panel's bottom border, indented past the
+/// corner.
 ///
 /// The hint is chrome for the pane it belongs to; sitting on the border keeps
 /// it out of the body, which is what the reader is actually there for. Silently
 /// skipped when the panel is too narrow to hold it.
-pub fn draw_footer_hint(frame: &mut ratatui::Frame, panel: Rect, hint: &str) {
-    let width = u16::try_from(hint.chars().count()).unwrap_or(u16::MAX);
+pub fn draw_footer_hint(frame: &mut ratatui::Frame, panel: Rect, packed: &str) {
+    // A space either side keeps the hint clear of the border rule.
+    let width = u16::try_from(key_hint_width(packed) + 2).unwrap_or(u16::MAX);
     if panel.width <= width.saturating_add(4) || panel.height == 0 {
         return;
     }
     let area = Rect { x: panel.x + 2, y: panel.bottom() - 1, width, height: 1 };
-    frame.render_widget(
-        ratatui::widgets::Paragraph::new(Line::from(Span::styled(hint.to_owned(), Style::default().fg(theme().muted)))),
-        area,
-    );
+    let mut spans = vec![Span::raw(" ")];
+    spans.extend(key_hint_spans(&hint_pairs(packed)));
+    spans.push(Span::raw(" "));
+    frame.render_widget(ratatui::widgets::Paragraph::new(Line::from(spans)), area);
 }
 
 /// Dim everything already drawn in `area` so a modal overlay reads as the layer
@@ -473,6 +525,16 @@ mod tests {
     fn test_truncate_multibyte_safe() {
         // 4 chars, max 3 → 2 chars + ellipsis, no panic on char boundaries.
         assert_eq!(truncate_with_ellipsis("\u{0394}\u{0394}\u{0394}\u{0394}", 3), "\u{0394}\u{0394}\u{2026}");
+    }
+
+    #[test]
+    fn key_hints_put_keys_in_the_accent() {
+        let spans = key_hint_spans(&hint_pairs("j/k:scroll  Esc:close"));
+        let text: String = spans.iter().map(|span| span.content.as_ref()).collect();
+        assert_eq!(text, "j/k:scroll \u{b7} Esc:close");
+        assert_eq!(key_hint_width("j/k:scroll  Esc:close"), text.chars().count());
+        let keys: Vec<&str> = spans.iter().filter(|span| span.style.fg == Some(theme().accent)).map(|span| span.content.as_ref()).collect();
+        assert_eq!(keys, ["j/k", "Esc"], "only the keys take the accent");
     }
 
     #[test]

@@ -71,7 +71,7 @@ pub fn draw_presolve(frame: &mut Frame, area: Rect, app: &App) {
     frame.render_widget(Paragraph::new(lines).block(block), popup);
 
     // The hint sits on the bottom border so the rule list keeps the full body.
-    let hint = " j/k \u{b7} space toggle \u{b7} a all/none \u{b7} Enter solve \u{b7} l log \u{b7} H HiGHS's own \u{b7} w .lp \u{b7} Esc ";
+    let hint = "space:toggle  a:all/none  Enter:solve  l:log  H:HiGHS's own  w:.lp  Esc:close";
     crate::widgets::draw_footer_hint(frame, popup, hint);
 }
 
@@ -177,8 +177,11 @@ pub fn draw_presolve_log(frame: &mut Frame, area: Rect, app: &mut App) {
     pane.scroll = pane.scroll.min(max_scroll);
 
     let border_style = Style::default().fg(t.accent).add_modifier(Modifier::BOLD);
-    let title = " Presolve log  (j/k scroll \u{b7} w write .txt \u{b7} Esc close) ";
-    let block = panel_block(border_style).title(Span::styled(title, border_style));
+    let block = panel_block(border_style).title(crate::widgets::title_with_hints(
+        "Presolve log",
+        "j/k:scroll  w:write .txt  Esc:close",
+        border_style,
+    ));
 
     frame.render_widget(Clear, popup);
     frame.render_widget(Paragraph::new(pane.lines.clone()).block(block).scroll((pane.scroll, 0)), popup);

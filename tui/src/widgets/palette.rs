@@ -18,7 +18,7 @@ use crate::theme::theme;
 use crate::widgets::{SELECTION_CURSOR, draw_footer_hint, draw_junction, panel_block, selection_style, separator_rule, zebra_style};
 
 /// Keys the palette itself responds to, shown on its bottom border.
-const PALETTE_HINT: &str = " type to filter \u{b7} \u{2191}/\u{2193} move \u{b7} Enter run \u{b7} Esc cancel ";
+const PALETTE_HINT: &str = "type:filter  \u{2191}/\u{2193}:move  Enter:run  Esc:cancel";
 
 /// Draw the command palette overlay on top of the current frame.
 pub fn draw_palette(frame: &mut Frame, area: Rect, app: &App) {

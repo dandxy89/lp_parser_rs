@@ -3,7 +3,7 @@ source: tui/src/snapshot_tests.rs
 expression: "render(&mut app, 120, 40).backend()"
 ---
 " Summary │ Variables (2) │ Constraints (2) │ Objectives (1) │ Numerics                                                  "
-"╭ Diagnostics  (Esc close) ────────────────────────────────────────────────────────────────────────────────────────────╮"
+"╭ Diagnostics  (Esc:close) ────────────────────────────────────────────────────────────────────────────────────────────╮"
 "│  Verdict ────────────────────────────────────────────                                                                │"
 "│  No solve yet — press S to solve, then reopen for a reading                                                          │"
 "│                                                                                                                      │"

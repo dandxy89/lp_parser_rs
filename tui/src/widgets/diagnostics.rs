@@ -329,8 +329,8 @@ pub fn draw_diagnostics(frame: &mut ratatui::Frame, area: ratatui::layout::Rect,
     pane.scroll = pane.scroll.min(max_scroll);
 
     let border_style = Style::default().fg(t.accent).add_modifier(Modifier::BOLD);
-    let title = if max_scroll > 0 { " Diagnostics  (j/k scroll \u{b7} Esc close) " } else { " Diagnostics  (Esc close) " };
-    let block = crate::widgets::panel_block(border_style).title(Span::styled(title, border_style));
+    let hints = if max_scroll > 0 { "j/k:scroll  Esc:close" } else { "Esc:close" };
+    let block = crate::widgets::panel_block(border_style).title(crate::widgets::title_with_hints("Diagnostics", hints, border_style));
 
     frame.render_widget(Clear, popup);
     frame.render_widget(Paragraph::new(pane.lines.clone()).block(block).scroll((pane.scroll, 0)), popup);
