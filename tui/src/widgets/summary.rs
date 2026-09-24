@@ -309,11 +309,13 @@ fn comparison_row_usize(lines: &mut Vec<Line<'static>>, label: &str, label_width
     ]));
 }
 
-/// Render a comparison row with f64 percentage values and a delta.
+/// Render a comparison row with fractional values shown as percentages, and
+/// their difference in percentage points: 2.17% → 5.36% is `+3.19 pp`, not
+/// the raw difference of the fractions.
 fn comparison_row_pct(lines: &mut Vec<Line<'static>>, label: &str, label_width: usize, a: f64, b: f64) {
     let t = theme();
-    let delta = b - a;
-    let delta_str = if delta.abs() < 1e-10 { "\u{2014}".to_string() } else { format!("{delta:+.2}%") };
+    let delta = percentage_point_delta(a, b);
+    let delta_str = if delta.abs() < 1e-8 { "\u{2014}".to_string() } else { format!("{delta:+.2} pp") };
     let delta_colour = if delta.abs() < 1e-10 {
         t.muted
     } else if delta > 0.0 {
@@ -338,6 +340,11 @@ fn comparison_row_str(lines: &mut Vec<Line<'static>>, label: &str, label_width: 
         Span::styled(format!("{a:>12}"), Style::default().fg(t.text)),
         Span::styled(format!("{b:>12}"), Style::default().fg(t.text)),
     ]));
+}
+
+/// Difference between two fractions in percentage points.
+fn percentage_point_delta(a: f64, b: f64) -> f64 {
+    (b - a) * 100.0
 }
 
 fn format_delta_i64(delta: i64) -> String {
@@ -516,4 +523,21 @@ fn format_issue_line(file_label: &str, issue: &lp_parser_rs::analysis::AnalysisI
         Span::styled(format!("{file_label}: "), Style::default().fg(t.muted)),
         Span::styled(issue.message.clone(), Style::default().fg(t.text)),
     ])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn density_delta_is_in_percentage_points() {
+        let delta = percentage_point_delta(0.0217, 0.0536);
+        assert!((delta - 3.19).abs() < 1e-9, "2.17% to 5.36% is +3.19 pp, got {delta}");
+        let line = {
+            let mut lines = Vec::new();
+            comparison_row_pct(&mut lines, "Density", 18, 0.0217, 0.0536);
+            crate::widgets::plain(&lines)
+        };
+        assert!(line.contains("+3.19 pp"), "the row must show the percentage-point delta: {line:?}");
+    }
 }
