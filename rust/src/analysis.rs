@@ -241,9 +241,9 @@ pub struct SOSSummary {
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Debug, Clone)]
 pub struct CoefficientAnalysis {
-    /// Constraint coefficient range statistics
+    /// Range of the absolute values of the non-zero constraint coefficients
     pub constraint_coeff_range: RangeStats,
-    /// Objective coefficient range statistics
+    /// Range of the absolute values of the non-zero objective coefficients
     pub objective_coeff_range: RangeStats,
     /// Locations of very large coefficients
     pub large_coefficients: Vec<CoefficientLocation>,
@@ -499,6 +499,11 @@ fn collect_coefficient_stats(
 
     for coeff in coefficients {
         let abs_value = coeff.value.abs();
+        if abs_value == 0.0 {
+            // An explicit zero carries no scale; letting it into the range
+            // would make the minimum 0 and drop this whole range from the ratio.
+            continue;
+        }
         range.update(abs_value);
 
         if abs_value > config.large_coefficient_threshold {
@@ -508,7 +513,7 @@ fn collect_coefficient_stats(
                 variable: interner.resolve(coeff.name).to_string(),
                 value: coeff.value,
             });
-        } else if abs_value > 0.0 && abs_value < config.small_coefficient_threshold {
+        } else if abs_value < config.small_coefficient_threshold {
             small.push(CoefficientLocation {
                 location: location_name.to_string(),
                 is_objective,
@@ -536,8 +541,8 @@ fn compute_coefficient_ratio(constraint_range: &RangeStats, objective_range: &Ra
     for range in [constraint_range, objective_range] {
         if range.count > 0 && range.max > 0.0 {
             has_positive = true;
-            // range.min could be 0.0 (abs of a zero coeff); skip zeros for ratio.
-            if range.min > 0.0 && range.min < global_min {
+            debug_assert!(range.min > 0.0, "ranges hold non-zero magnitudes only");
+            if range.min < global_min {
                 global_min = range.min;
             }
             if range.max > global_max {
@@ -1127,6 +1132,16 @@ mod tests {
             "no over-constrained warning expected below the boundary: {:?}",
             analysis.issues
         );
+    }
+
+    #[test]
+    #[allow(clippy::float_cmp)]
+    fn test_zero_coefficient_does_not_hide_the_coefficient_ratio() {
+        let problem = LpProblem::parse("min\n obj: x\nst\n c1: 0 x + 0.001 y + 1000 z >= 1\nend").unwrap();
+        let analysis = problem.analyze();
+        assert_eq!(analysis.summary.total_nonzeros, 3, "the explicit zero must be kept for this test to mean anything");
+        assert_eq!(analysis.coefficients.constraint_coeff_range.min, 0.001);
+        assert!((analysis.coefficients.coefficient_ratio - 1e6).abs() < 1.0, "ratio: {}", analysis.coefficients.coefficient_ratio);
     }
 
     #[test]
