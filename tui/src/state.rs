@@ -552,7 +552,9 @@ impl SectionViewState {
                 Line::from(spans)
             } else {
                 // Inspect mode: plain name, no diff badge, default text colour.
-                Line::from(vec![Span::raw("  "), Span::styled(entry.name().to_owned(), text())])
+                // No indent either: with no badge column to line up with, it
+                // was only dead space after the selection gutter.
+                Line::from(vec![Span::styled(entry.name().to_owned(), text())])
             };
             self.cached_lines.push(line);
         }

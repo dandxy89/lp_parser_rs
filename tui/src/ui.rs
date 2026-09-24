@@ -59,8 +59,6 @@ pub(crate) fn sidebar_width(app: &App, main_width: u16) -> u16 {
         if app.sort_mode != crate::state::SortMode::Name {
             chrome += 9; // the delta column
         }
-    } else {
-        chrome += 2; // the inspect rows' indent
     }
     let wanted = u16::try_from(app.longest_name + chrome).unwrap_or(u16::MAX);
     let cap = (main_width * SIDEBAR_MAX_PERCENT / 100).max(SIDEBAR_MIN_WIDTH);
@@ -553,7 +551,7 @@ mod tests {
 
         let mut long = crate::snapshot_tests::inspect_app_from("min\nobj: x\nst\nSteel_Flow_Conservation_in_Node_Chicago: x >= 1\nend\n");
         assert_eq!(sidebar_width(&long, 80), 28, "long names grow it to 35% of the width");
-        assert_eq!(sidebar_width(&long, 200), 46, "with room, it fits the name: 39 + borders, gutter, indent, scrollbar");
+        assert_eq!(sidebar_width(&long, 200), 44, "with room, it fits the name: 39 + borders, gutter, scrollbar");
 
         long.resize_sidebar(false);
         assert_eq!(sidebar_width(&long, 80), 24, "< narrows it by a step");
