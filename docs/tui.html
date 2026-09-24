@@ -152,7 +152,7 @@ lp_diff base.lp modified.lp --summary</code></pre>
       <tr><td>--abs-tol</td><td>Absolute tolerance: equal when <code>|a - b| &lt;= abs_tol</code>. An epsilon floor always applies, so ordinary float noise never registers as a change.</td></tr>
       <tr><td>--rel-tol</td><td>Relative tolerance, scaled by magnitude: equal when <code>|a - b| &lt;= rel_tol * max(|a|, |b|)</code>.</td></tr>
       <tr><td>--rename</td><td>Regex rewrite applied to names in <em>both</em> files before matching. Repeatable; rules apply in order.</td></tr>
-      <tr><td>--theme</td><td><code>auto</code> (detects from <code>COLORFGBG</code>), <code>dark</code>, or <code>light</code>.</td></tr>
+      <tr><td>--theme</td><td><code>auto</code> (detects from <code>COLORFGBG</code>, then by asking the terminal for its background colour), <code>dark</code>, or <code>light</code>.</td></tr>
     </table></div>
 
     <div class="note"><b>Why <code>--rename</code> exists.</b> Renumbering a model, whether inserting a time period or reindexing a
@@ -508,7 +508,7 @@ time_limit = 300</code></pre>
     <p class="sec-label">Living in a terminal</p>
     <h2>Terminal manners</h2>
     <ul class="constraints">
-      <li><span class="cname">Theme</span><span class="cbody">Detects light or dark from <code>COLORFGBG</code>, or force it with <code>--theme</code>. <a href="https://no-color.org"><code>NO_COLOR</code></a> forces monochrome, unless you passed <code>--theme</code> explicitly, which wins.</span></li>
+      <li><span class="cname">Theme</span><span class="cbody">Detects light or dark from <code>COLORFGBG</code>, or else by asking the terminal for its background colour (OSC 11, with a 100&nbsp;ms limit); force it with <code>--theme</code>. <a href="https://no-color.org"><code>NO_COLOR</code></a> forces monochrome, unless you passed <code>--theme</code> explicitly, which wins.</span></li>
       <li><span class="cname">Watch</span><span class="cbody"><code>--watch</code> reloads when a file changes on disk and rebuilds the diff in place, keeping your position. Stale solve results are discarded; the model has moved under them.</span></li>
       <li><span class="cname">Suspend</span><span class="cbody"><kbd>Ctrl+Z</kbd> suspends and resumes cleanly, restoring the alternate screen and raw mode on the way back.</span></li>
       <li><span class="cname">Small terminals</span><span class="cbody">Guards against terminals too small to draw into, and every overlay scrolls.</span></li>

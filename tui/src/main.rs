@@ -105,7 +105,7 @@ struct Cli {
 /// `--theme` argument values.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
 enum ThemeArg {
-    /// Detect from `COLORFGBG`, falling back to dark
+    /// Detect from `COLORFGBG`, then by asking the terminal, falling back to dark
     Auto,
     Dark,
     Light,
@@ -116,8 +116,10 @@ impl ThemeArg {
     ///
     /// `NO_COLOR` (<https://no-color.org>) forces monochrome, but only when the
     /// user left `--theme` at its default: an explicit `--theme dark|light` is
-    /// an intentional override and wins.
-    fn resolve(self) -> theme::ThemeMode {
+    /// an intentional override and wins. Without `COLORFGBG`, the terminal is
+    /// asked for its background colour (OSC 11) when `query_terminal` allows —
+    /// not for `--summary`, which draws nothing and may be piped.
+    fn resolve(self, query_terminal: bool) -> theme::ThemeMode {
         match self {
             Self::Dark => theme::ThemeMode::Dark,
             Self::Light => theme::ThemeMode::Light,
@@ -128,11 +130,17 @@ impl ThemeArg {
                 std::env::var("COLORFGBG")
                     .ok()
                     .and_then(|value| theme::detect_mode_from_colorfgbg(&value))
+                    .or_else(|| query_terminal.then(|| theme::query_background_mode(BACKGROUND_QUERY_TIMEOUT)).flatten())
                     .unwrap_or(theme::ThemeMode::Dark)
             }
         }
     }
 }
+
+/// How long to wait for the terminal to report its background colour. A
+/// terminal that answers at all answers within a few milliseconds; one that
+/// does not must not hold up the start.
+const BACKGROUND_QUERY_TIMEOUT: Duration = Duration::from_millis(100);
 
 /// Compile the `--rename` pairs into a list of `(Regex, replacement)` tuples.
 ///
@@ -285,7 +293,7 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let args = Cli::parse();
 
     // Fix the palette before any cached lines are built against it.
-    theme::init_theme(args.theme.resolve());
+    theme::init_theme(args.theme.resolve(!args.summary));
 
     // Validate file existence at the CLI boundary before doing any work.
     if !args.file1.exists() {
