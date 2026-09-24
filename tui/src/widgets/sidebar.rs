@@ -10,7 +10,7 @@ use crate::widgets::{SELECTION_CURSOR, focus_border_style, panel_block, selectio
 
 /// Draw the section tab bar across the top of the frame.
 ///
-/// Renders ` Summary │ Numerics │ Variables (n) │ … ` and records each tab's
+/// Renders ` 1 Summary │ 2 Variables (n) │ … │ 5 Numerics ` and records each tab's
 /// column range in `app.layout.tab_bounds` for mouse hit-testing.
 pub fn draw_tab_bar(frame: &mut Frame, area: Rect, app: &mut App) {
     // A zero-sized area is an environmental condition (shrunken terminal), not a
@@ -24,7 +24,7 @@ pub fn draw_tab_bar(frame: &mut Frame, area: Rect, app: &mut App) {
 
     // Five short labels: cheap enough to build per draw, and a draw only
     // happens on input, resize, or an animation tick.
-    let labels = crate::app::build_section_labels(&app.cached_summary, app.mode, app.filter);
+    let labels = crate::app::build_section_labels(&app.cached_summary, app.mode, app.filter, app.numerics_badge);
 
     // Each tab's spans at the chosen density. The coloured per-kind change
     // counts keep their own colours regardless of tab state — they are
@@ -41,7 +41,9 @@ pub fn draw_tab_bar(frame: &mut Frame, area: Rect, app: &mut App) {
             Style::default().fg(t.muted)
         };
         let name = if density == TabDensity::Full { label.name.as_ref() } else { label.short.as_ref() };
-        let mut spans = vec![Span::styled(name, style)];
+        // The digit that jumps to the tab, so `1`–`5` need no memorising.
+        let digit = Span::styled(TAB_DIGITS[index], if active { style } else { Style::default().fg(t.muted) });
+        let mut spans = vec![digit, Span::styled(name, style)];
         let show_counts = density != TabDensity::ActiveCounts || active;
         if show_counts && !label.counts.is_empty() {
             spans.push(Span::raw(" "));
@@ -98,6 +100,9 @@ pub fn draw_tab_bar(frame: &mut Frame, area: Rect, app: &mut App) {
     app.layout.tab_bounds = bounds;
     frame.render_widget(Paragraph::new(Line::from(spans)), area);
 }
+
+/// Each tab's shortcut digit, drawn before its name.
+const TAB_DIGITS: [&str; 5] = ["1 ", "2 ", "3 ", "4 ", "5 "];
 
 /// How much of each tab label the tab bar draws, from most to least.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

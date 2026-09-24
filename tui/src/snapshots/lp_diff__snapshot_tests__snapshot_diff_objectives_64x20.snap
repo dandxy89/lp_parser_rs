@@ -2,7 +2,7 @@
 source: tui/src/snapshot_tests.rs
 expression: terminal.backend()
 ---
-" Sum │ Vars │ Cons +1 -1 ~1 │ Objs ~1 │ Num                     "
+" 1 Sum │ 2 Vars │ 3 Cons +1 -1 ~1 │ 4 Objs ~1 │ 5 Num           "
 "╭ 1/1 objectives ──┬ Objective: obj [Modified] · r:raw ────────╮"
 "│▍ [~] obj         │  Coefficients:                            │"
 "│                  │    x          2                           │"

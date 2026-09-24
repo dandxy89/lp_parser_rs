@@ -2,7 +2,7 @@
 source: tui/src/snapshot_tests.rs
 expression: "render(&mut app, 120, 40).backend()"
 ---
-" Summary │ Variables (3) │ Constraints (3) │ Objectives (1) │ Numerics                                                  "
+" 1 Summary │ 2 Variables (3) │ 3 Constraints (3) │ 4 Objectives (1) │ 5 Numerics !1                                     "
 "╭ Solve profile  (w:write · Esc:close) ────────────────────────────────────────────────────────────────────────────────╮"
 "│  presets run one after another: concurrent solves would inflate each other's times                                   │"
 "│                                                                                                                      │"

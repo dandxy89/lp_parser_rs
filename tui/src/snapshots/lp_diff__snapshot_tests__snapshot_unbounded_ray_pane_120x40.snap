@@ -2,7 +2,7 @@
 source: tui/src/snapshot_tests.rs
 expression: "render(&mut app, 120, 40).backend()"
 ---
-" Summary │ Variables (2) │ Constraints (1) │ Objectives (1) │ Numerics                                                  "
+" 1 Summary │ 2 Variables (2) │ 3 Constraints (1) │ 4 Objectives (1) │ 5 Numerics                                        "
 "╭ Unbounded ray  (w:write · Esc:close) ────────────────────────────────────────────────────────────────────────────────╮"
 "│  the objective is unbounded (Unbounded)                                                                              │"
 "│  objective improves by 3.000000 per unit along the ray                                                               │"

@@ -415,6 +415,10 @@ pub struct App {
     /// Rebuilt in `rebuild_report()` since the analyses change on watch reloads.
     pub(crate) numerics_lines: Vec<Line<'static>>,
 
+    /// The Numerics tab's issue badge (see `numerics_badge`), rebuilt with
+    /// `numerics_lines`.
+    pub(crate) numerics_badge: Option<(usize, lp_parser_rs::analysis::IssueSeverity)>,
+
     /// Pre-computed diff summary. Built once in `App::new()` since
     /// the report data never changes, avoiding repeated recomputation.
     pub(crate) cached_summary: DiffSummary,
@@ -567,9 +571,22 @@ fn tab_count_spans(counts: &crate::diff_model::DiffCounts, filter: DiffFilter) -
     }
 }
 
-/// Build pre-computed tab bar labels: list sections carry their entry/change counts.
-pub(crate) fn build_section_labels(summary: &DiffSummary, mode: AppMode, filter: DiffFilter) -> [TabLabel; 5] {
+/// Build pre-computed tab bar labels: list sections carry their entry/change
+/// counts, and Numerics its issue badge (`!N`, coloured by the worst severity).
+pub(crate) fn build_section_labels(
+    summary: &DiffSummary,
+    mode: AppMode,
+    filter: DiffFilter,
+    numerics_badge: Option<(usize, lp_parser_rs::analysis::IssueSeverity)>,
+) -> [TabLabel; 5] {
     Section::ALL.map(|section| {
+        if section == Section::Numerics {
+            let counts = numerics_badge.map_or_else(Vec::new, |(count, severity)| {
+                let style = ratatui::style::Style::default().fg(crate::widgets::severity_colour(severity));
+                vec![ratatui::text::Span::styled(format!("!{count}"), style)]
+            });
+            return TabLabel { name: Cow::Borrowed(section.label()), short: Cow::Borrowed(section.short_label()), counts };
+        }
         let counts = match section {
             Section::Summary | Section::Numerics => None,
             Section::Variables => Some(&summary.variables),
@@ -674,6 +691,7 @@ impl App {
         let report_summary = report.summary();
         let summary_lines = build_mode_summary_lines(mode, &report, &report_summary, &problem1);
         let numerics_lines = build_mode_numerics_lines(mode, &report, &problem1);
+        let numerics_badge = crate::widgets::numerics::numerics_badge(mode, &report);
 
         Self {
             mode,
@@ -733,6 +751,7 @@ impl App {
             coeff_row_cache: None,
             summary_lines,
             numerics_lines,
+            numerics_badge,
             cached_summary: report_summary,
             ignore_order: false,
             sort_mode: SortMode::default(),
@@ -906,6 +925,7 @@ impl App {
         // reloads but not on tolerance changes -- skip the rebuild otherwise.
         if analyses_changed {
             self.numerics_lines = build_mode_numerics_lines(self.mode, &self.report, &self.problem1);
+            self.numerics_badge = crate::widgets::numerics::numerics_badge(self.mode, &self.report);
         }
 
         // Filtered indices, cached sidebar lines, and coefficient row cache.

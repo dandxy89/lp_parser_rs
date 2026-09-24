@@ -2,7 +2,7 @@
 source: tui/src/snapshot_tests.rs
 expression: "render(&mut app, 80, 24).backend()"
 ---
-" Summary │ Variables ~0/2 │ Constraints ~1/3 │ Objectives ~1/1 │ Numerics       "
+" 1 Sum │ 2 Vars ~0/2 │ 3 Cons ~1/3 │ 4 Objs ~1/1 │ 5 Num                        "
 "╭ 1/1 constraints ─┬ Constraint: c1 [Modified] · r:raw ────────────────────────╮"
 "│▍ [~] c1          │  Location: L4 / L4                                        │"
 "│                  │  RHS:      2  →  3                                        │"

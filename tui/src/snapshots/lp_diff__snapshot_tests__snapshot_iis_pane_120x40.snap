@@ -2,7 +2,7 @@
 source: tui/src/snapshot_tests.rs
 expression: "render(&mut app, 120, 40).backend()"
 ---
-" Summary │ Variables (2) │ Constraints (3) │ Objectives (1) │ Numerics                                                  "
+" 1 Summary │ 2 Variables (2) │ 3 Constraints (3) │ 4 Objectives (1) │ 5 Numerics !1                                     "
 "╭ Irreducible infeasible subsystem  (w:write · Esc:close) ─────────────────────────────────────────────────────────────╮"
 "│  2 row(s) and 1 bound(s) that cannot hold together                                                                   │"
 "│  no proper subset of these is infeasible: relaxing any one of them removes this conflict                             │"
