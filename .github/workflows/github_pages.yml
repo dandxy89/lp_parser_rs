@@ -34,6 +34,8 @@ jobs:
       - id: deployment
         uses: actions/deploy-pages@v5
       - name: Ping IndexNow
+        # best effort: a 4xx or 429 from IndexNow must not fail a deploy that has already succeeded
+        continue-on-error: true
         run: |
           curl -sS -f -X POST https://api.indexnow.org/IndexNow \
             -H 'Content-Type: application/json; charset=utf-8' \
