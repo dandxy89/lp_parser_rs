@@ -20,7 +20,12 @@ pub const fn prepare(doc: &Document, position: Position) -> Result<Option<Prepar
 ///
 /// # Errors
 /// A user-facing message when the new name is invalid or collides.
-pub const fn rename(doc: &Document, workspace: &[Arc<Document>], position: Position, new_name: &str) -> Result<Option<WorkspaceEdit>, String> {
+pub const fn rename(
+    doc: &Document,
+    workspace: &[Arc<Document>],
+    position: Position,
+    new_name: &str,
+) -> Result<Option<WorkspaceEdit>, String> {
     let _ = (doc, workspace, position, new_name);
     Ok(None)
 }

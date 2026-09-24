@@ -66,7 +66,8 @@ impl Harness {
     async fn diagnostics(&mut self) -> Vec<Value> {
         let deadline = Duration::from_secs(10);
         loop {
-            let (method, params) = tokio::time::timeout(deadline, self.notifications.recv()).await.expect("diagnostics in time").expect("channel open");
+            let (method, params) =
+                tokio::time::timeout(deadline, self.notifications.recv()).await.expect("diagnostics in time").expect("channel open");
             if method == "textDocument/publishDiagnostics" && params["uri"] == URI {
                 return params["diagnostics"].as_array().cloned().unwrap_or_default();
             }
@@ -132,7 +133,9 @@ async fn full_session() {
         .expect("a response");
     assert!(rejected.into_parts().1.is_err(), "leading digit rejected");
 
-    let formatting = h.request("textDocument/formatting", json!({ "textDocument": { "uri": URI }, "options": { "tabSize": 2, "insertSpaces": true } })).await;
+    let formatting = h
+        .request("textDocument/formatting", json!({ "textDocument": { "uri": URI }, "options": { "tabSize": 2, "insertSpaces": true } }))
+        .await;
     let edits = formatting.as_array().expect("formatting edits");
     assert!(!edits.is_empty(), "messy spacing gets formatted");
 
