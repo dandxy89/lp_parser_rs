@@ -18,7 +18,7 @@ expression: text
   Variables                    2           2           —
   Constraints                  2           2           —
   Non-zeros                    4           4           —
-  Density                100.00%     100.00%           —
+  Density                   100%        100%           —
   Vars/constraint            2–2         2–2
 
   Variable Types ─────────────────────────────────────

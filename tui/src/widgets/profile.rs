@@ -23,15 +23,15 @@ const STATUS_WIDTH: usize = 22;
 /// Width of the numeric columns.
 const NUMBER_WIDTH: usize = 11;
 
-/// Format a duration the way the solve overlay does, so times read the same
-/// wherever they appear.
+/// Format a duration in the shared format, so times read the same wherever
+/// they appear.
 fn seconds(duration: Duration) -> String {
-    format!("{:.3}s", duration.as_secs_f64())
+    crate::format::fmt_duration(duration)
 }
 
 /// Format an objective value, or a dash when the preset produced none.
 fn objective(value: Option<f64>) -> String {
-    value.map_or_else(|| "\u{2014}".to_owned(), |v| format!("{v:.6}"))
+    value.map_or_else(|| "\u{2014}".to_owned(), crate::format::fmt_num)
 }
 
 /// Build the full set of display lines for the pane.

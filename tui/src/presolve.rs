@@ -49,6 +49,7 @@ use lp_parser_rs::interner::NameId;
 use lp_parser_rs::model::{Coefficient, ComparisonOp, Constraint, Sense, Variable, VariableBounds, VariableKind};
 use lp_parser_rs::problem::LpProblem;
 
+use crate::format::plural;
 use crate::solver::{SolveResult, primary_objective_coefficients, variable_bounds};
 
 /// Absolute tolerance for treating a coefficient as zero and for comparing a
@@ -234,21 +235,9 @@ impl Pass<'_> {
     }
 }
 
-/// Compact number for a log line: infinities read as themselves, and finite
-/// values lose the trailing zeros `{:.6}` would leave behind.
+/// Compact number for a log line, in the shared display format.
 fn num(value: f64) -> String {
-    if value.is_nan() {
-        return "nan".to_owned();
-    }
-    if value.is_infinite() {
-        return if value > 0.0 { "inf".to_owned() } else { "-inf".to_owned() };
-    }
-    let magnitude = value.abs();
-    if magnitude != 0.0 && !(1e-4..1e7).contains(&magnitude) {
-        return format!("{value:.3e}");
-    }
-    let text = format!("{value:.6}");
-    text.trim_end_matches('0').trim_end_matches('.').to_owned()
+    crate::format::fmt_num(value)
 }
 
 impl PassStats {
@@ -412,14 +401,15 @@ impl PresolveStats {
             String::new()
         };
         let split = if self.parts_added() > 0 { format!(", +{} split parts", self.parts_added()) } else { String::new() };
-        let relaxed = if self.cols_relaxed() > 0 { format!(", {} cols relaxed", self.cols_relaxed()) } else { String::new() };
+        let relaxed =
+            if self.cols_relaxed() > 0 { format!(", {} relaxed", plural(self.cols_relaxed(), "col", "cols")) } else { String::new() };
         format!(
-            "presolve: -{} rows, {} cols fixed, {} bounds{nnz}{scaled}{split}{relaxed}, {} pass(es), {:.1}ms",
-            self.rows_removed(),
-            self.cols_fixed(),
-            self.bounds_tightened(),
-            self.per_pass.len(),
-            self.duration.as_secs_f64() * 1000.0,
+            "presolve: -{}, {} fixed, {}{nnz}{scaled}{split}{relaxed}, {}, {}",
+            plural(self.rows_removed(), "row", "rows"),
+            plural(self.cols_fixed(), "col", "cols"),
+            plural(self.bounds_tightened(), "bound", "bounds"),
+            plural(self.per_pass.len(), "pass", "passes"),
+            crate::format::fmt_duration(self.duration),
         )
     }
 
@@ -432,11 +422,11 @@ impl PresolveStats {
         for (index, pass) in self.per_pass.iter().enumerate() {
             writeln!(
                 out,
-                "pass {}: -{} rows, {} cols fixed, {} bounds, -{} nnz, {}r/{}c scaled",
+                "pass {}: -{}, {} fixed, {}, -{} nnz, {}r/{}c scaled",
                 index + 1,
-                pass.rows_removed,
-                pass.cols_fixed,
-                pass.bounds_tightened,
+                plural(pass.rows_removed, "row", "rows"),
+                plural(pass.cols_fixed, "col", "cols"),
+                plural(pass.bounds_tightened, "bound", "bounds"),
                 pass.terms_removed,
                 pass.rows_scaled,
                 pass.cols_scaled
@@ -707,7 +697,7 @@ fn tighten(problem: &mut LpProblem, var: NameId, lower: Option<f64>, upper: Opti
     pass.record(
         kind,
         problem.resolve(var),
-        &format!("[{}, {}] -> [{}, {}]", num(old_lower), num(old_upper), num(new_lower), num(new_upper)),
+        &format!("[{}, {}] \u{2192} [{}, {}]", num(old_lower), num(old_upper), num(new_lower), num(new_upper)),
     );
     Tighten::Tightened
 }
@@ -792,7 +782,7 @@ fn singleton_to_bound(problem: &mut LpProblem, pass: &mut Pass<'_>, infeasible: 
             (_, Some(high)) => format!("{} <= {}", problem.resolve(var), num(high)),
             (None, None) => unreachable!("a singleton row always implies a bound"),
         };
-        pass.record("singleton", problem.resolve(*row_id), &format!("row removed -> {implied}"));
+        pass.record("singleton", problem.resolve(*row_id), &format!("row removed \u{2192} {implied}"));
         updates.push((var, lower, upper));
         doomed.push(*row_id);
     }
@@ -891,7 +881,7 @@ fn integer_rounding(problem: &mut LpProblem, pass: &mut Pass<'_>, infeasible: &m
         pass.record(
             "round",
             problem.resolve(var),
-            &format!("[{}, {}] -> [{}, {}]", num(old_lower), num(old_upper), num(new_lower), num(new_upper)),
+            &format!("[{}, {}] \u{2192} [{}, {}]", num(old_lower), num(old_upper), num(new_lower), num(new_upper)),
         );
         pass.stats.bounds_tightened += 1;
     }
@@ -1101,7 +1091,11 @@ fn fixed_to_rhs(problem: &mut LpProblem, pass: &mut Pass<'_>) {
     }
 
     for (name, removed, old_rhs, new_rhs) in folded {
-        pass.record("fold nnz", problem.resolve(name), &format!("-{removed} fixed term(s), rhs {} -> {}", num(old_rhs), num(new_rhs)));
+        pass.record(
+            "fold nnz",
+            problem.resolve(name),
+            &format!("-{}, rhs {} \u{2192} {}", plural(removed, "fixed term", "fixed terms"), num(old_rhs), num(new_rhs)),
+        );
     }
 }
 
@@ -1355,7 +1349,7 @@ fn split_dense_rows(problem: &mut LpProblem, pass: &mut Pass<'_>) {
         // Replaces the original row in place, keeping its name, operator and
         // rhs so the comparison view still lines it up against the original.
         problem.add_constraint(Constraint::Standard { name: row, coefficients: aggregate, operator, rhs, byte_offset });
-        pass.record("split", &row_name, &format!("{} terms -> {parts} partial sums of <= {chunk}", terms.len()));
+        pass.record("split", &row_name, &format!("{} terms \u{2192} {parts} partial sums of <= {chunk}", terms.len()));
     }
 }
 
@@ -1393,7 +1387,7 @@ fn relax_integrality(problem: &mut LpProblem, pass: &mut Pass<'_>) {
     }
 
     for (var, kind, lower, upper) in relaxed {
-        pass.record("relax", problem.resolve(var), &format!("{kind:?} -> Continuous over [{}, {}]", num(lower), num(upper)));
+        pass.record("relax", problem.resolve(var), &format!("{kind:?} \u{2192} Continuous over [{}, {}]", num(lower), num(upper)));
     }
 }
 
@@ -1539,7 +1533,10 @@ mod tests {
         assert!(log.contains("singleton"), "the singleton rule names itself: {log}");
         assert!(log.lines().any(|line| line.contains("c2") && line.contains("row removed")), "the removed row is named: {log}");
         assert!(log.lines().any(|line| line.contains("c1") && line.contains("row removed")), "the forcing row is named: {log}");
-        assert!(log.lines().any(|line| line.contains(" z ") && line.contains("[0, 8] -> [0, 0]")), "a fixed column shows its value: {log}");
+        assert!(
+            log.lines().any(|line| line.contains(" z ") && line.contains("[0, 8] \u{2192} [0, 0]")),
+            "a fixed column shows its value: {log}"
+        );
         assert!(stats.log_text().contains(&stats.headline()), "the written log leads with the headline");
     }
 

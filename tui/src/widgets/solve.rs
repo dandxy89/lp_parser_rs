@@ -238,7 +238,10 @@ fn build_summary_tab(lines: &mut Vec<Line<'static>>, result: &SolveResult) {
         lines.push(Line::from(vec![
             Span::styled("  Warning:   ", Style::default().fg(t.modified).add_modifier(Modifier::BOLD)),
             Span::styled(
-                format!("{} SOS constraint(s) skipped — solution may not satisfy them", result.skipped_sos),
+                format!(
+                    "{} skipped \u{2014} solution may not satisfy them",
+                    crate::format::plural(result.skipped_sos, "SOS constraint", "SOS constraints")
+                ),
                 Style::default().fg(t.modified),
             ),
         ]));
@@ -264,19 +267,19 @@ fn build_summary_tab(lines: &mut Vec<Line<'static>>, result: &SolveResult) {
     crate::widgets::push_heading(lines, "Timings", "");
     lines.push(Line::from(vec![
         Span::styled("  Build:         ", Style::default().fg(t.muted)),
-        Span::styled(format!("{:.3}s", result.build_time.as_secs_f64()), Style::default().fg(t.accent)),
+        Span::styled(crate::format::fmt_duration(result.build_time), Style::default().fg(t.accent)),
     ]));
     lines.push(Line::from(vec![
         Span::styled("  Solve:         ", Style::default().fg(t.muted)),
-        Span::styled(format!("{:.3}s", result.solve_time.as_secs_f64()), Style::default().fg(t.accent)),
+        Span::styled(crate::format::fmt_duration(result.solve_time), Style::default().fg(t.accent)),
     ]));
     lines.push(Line::from(vec![
         Span::styled("  Extract:       ", Style::default().fg(t.muted)),
-        Span::styled(format!("{:.3}s", result.extract_time.as_secs_f64()), Style::default().fg(t.accent)),
+        Span::styled(crate::format::fmt_duration(result.extract_time), Style::default().fg(t.accent)),
     ]));
     lines.push(Line::from(vec![
         Span::styled("  Total:         ", Style::default().fg(t.muted)),
-        Span::styled(format!("{:.3}s", total.as_secs_f64()), Style::default().fg(t.text).add_modifier(Modifier::BOLD)),
+        Span::styled(crate::format::fmt_duration(total), Style::default().fg(t.text).add_modifier(Modifier::BOLD)),
     ]));
 }
 
@@ -570,7 +573,10 @@ fn append_diagnosis_block(lines: &mut Vec<Line<'static>>, diagnosis: &DiagnosisS
             lines.push(Line::from(vec![
                 Span::styled("  Total violation: ", Style::default().fg(t.muted)),
                 Span::styled(format!("{:.6}", diagnosis.total_violation), Style::default().fg(t.modified).add_modifier(Modifier::BOLD)),
-                Span::styled(format!("  (elastic solve: {:.3}s)", diagnosis.solve_time.as_secs_f64()), Style::default().fg(t.muted)),
+                Span::styled(
+                    format!("  (elastic solve: {})", crate::format::fmt_duration(diagnosis.solve_time)),
+                    Style::default().fg(t.muted),
+                ),
             ]));
             // This block answers "what is cheapest to relax". The IIS answers
             // "what is minimally in conflict" — a different question, and often
@@ -1179,8 +1185,8 @@ fn build_diff_summary_metrics(lines: &mut Vec<Line<'static>>, diff: &SolveDiffRe
     {
         lines.push(Line::from(vec![
             Span::styled(format!("  {label:<label_w$}"), Style::default().fg(t.muted)),
-            Span::styled(format!("{:<col_w$}", format!("{:.3}s", d1.as_secs_f64())), Style::default().fg(t.accent)),
-            Span::styled(format!("{:<col_w$}", format!("{:.3}s", d2.as_secs_f64())), Style::default().fg(t.accent)),
+            Span::styled(format!("{:<col_w$}", crate::format::fmt_duration(d1)), Style::default().fg(t.accent)),
+            Span::styled(format!("{:<col_w$}", crate::format::fmt_duration(d2)), Style::default().fg(t.accent)),
         ]));
     }
 

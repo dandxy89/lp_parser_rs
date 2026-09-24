@@ -22,6 +22,7 @@ mod diagnostics;
 mod diff_model;
 mod event;
 mod export;
+mod format;
 mod highs_presolve;
 mod highs_query;
 mod input;

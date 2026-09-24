@@ -290,19 +290,14 @@ fn col_table(lines: &mut Vec<Line<'static>>, title: &str, cols: &[ColStat], note
     }
 }
 
-/// Format a dual value, collapsing both signed zeros to a plain `0`.
+/// Format a dual value in the shared display format.
 fn format_dual(value: f64) -> String {
-    if value == 0.0 { "0".to_owned() } else { format!("{value:.3e}") }
+    crate::format::fmt_num(value)
 }
 
-/// Format a solution value compactly, preferring plain decimals in the range
-/// where they are shorter and easier to compare by eye.
+/// Format a solution value in the shared display format.
 fn format_value(value: f64) -> String {
-    if value == 0.0 {
-        return "0".to_owned();
-    }
-    let magnitude = value.abs();
-    if (1e-3..1e7).contains(&magnitude) { format!("{value:.4}") } else { format!("{value:.3e}") }
+    crate::format::fmt_num(value)
 }
 
 /// Draw the diagnostics pane over the current frame.

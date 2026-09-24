@@ -76,24 +76,23 @@ impl HighsPresolveReport {
             return "HiGHS presolve: proved the model infeasible".to_owned();
         }
         if self.reduced_to_empty() {
-            return format!("HiGHS presolve: solved the model outright \u{2014} nothing left, {:.1}ms", self.millis());
+            return format!(
+                "HiGHS presolve: solved the model outright \u{2014} nothing left, {}",
+                crate::format::fmt_duration(self.duration)
+            );
         }
         if self.is_noop() {
-            return format!("HiGHS presolve: no reduction, {:.1}ms", self.millis());
+            return format!("HiGHS presolve: no reduction, {}", crate::format::fmt_duration(self.duration));
         }
         format!(
-            "HiGHS presolve: -{} rows, -{} cols, {} rows x {} cols x {} nnz left, {:.1}ms",
+            "HiGHS presolve: -{} rows, -{} cols, {} rows \u{d7} {} cols \u{d7} {} nnz left, {}",
             self.removed_rows.len(),
             self.removed_cols.len(),
             self.rows_after,
             self.cols_after,
             self.nnz_after,
-            self.millis(),
+            crate::format::fmt_duration(self.duration),
         )
-    }
-
-    fn millis(&self) -> f64 {
-        self.duration.as_secs_f64() * 1000.0
     }
 
     /// The report as plain text, for the log pane and the file it writes.
@@ -102,7 +101,7 @@ impl HighsPresolveReport {
         let mut out = self.headline();
         out.push('\n');
         if self.skipped_sos > 0 {
-            writeln!(out, "{} SOS set(s) are not part of the model HiGHS sees", self.skipped_sos)
+            writeln!(out, "{} are not part of the model HiGHS sees", crate::format::plural(self.skipped_sos, "SOS set", "SOS sets"))
                 .expect("writing into a String cannot fail");
         }
         out.push('\n');

@@ -94,7 +94,7 @@ pub fn build_inspect_summary_lines(
     inspect_value_row(&mut lines, "Variables", &analysis.summary.variable_count.to_string());
     inspect_value_row(&mut lines, "Constraints", &analysis.summary.constraint_count.to_string());
     inspect_value_row(&mut lines, "Non-zeros", &analysis.summary.total_nonzeros.to_string());
-    inspect_value_row(&mut lines, "Density", &format!("{:.4}%", analysis.summary.density * 100.0));
+    inspect_value_row(&mut lines, "Density", &density(analysis.summary.density));
     inspect_value_row(
         &mut lines,
         "Vars/constraint",
@@ -358,8 +358,8 @@ fn comparison_row_pct(lines: &mut Vec<Line<'static>>, label: &str, label_width: 
 
     lines.push(Line::from(vec![
         Span::styled(format!("  {label:<label_width$}"), Style::default().fg(t.text)),
-        Span::styled(format!("{:>11.2}%", a * 100.0), Style::default().fg(t.text)),
-        Span::styled(format!("{:>11.2}%", b * 100.0), Style::default().fg(t.text)),
+        Span::styled(format!("{:>12}", density(a)), Style::default().fg(t.text)),
+        Span::styled(format!("{:>12}", density(b)), Style::default().fg(t.text)),
         Span::styled(format!("{delta_str:>12}"), Style::default().fg(delta_colour)),
     ]));
 }
@@ -372,6 +372,13 @@ fn comparison_row_str(lines: &mut Vec<Line<'static>>, label: &str, label_width: 
         Span::styled(format!("{a:>12}"), Style::default().fg(t.text)),
         Span::styled(format!("{b:>12}"), Style::default().fg(t.text)),
     ]));
+}
+
+/// A density (a fraction) as a percentage, in the shared number format —
+/// the same in the inspect and diff summaries, and never rounded to `0.00%`
+/// for a sparse model.
+fn density(fraction: f64) -> String {
+    format!("{}%", crate::format::fmt_num(fraction * 100.0))
 }
 
 /// Difference between two fractions in percentage points.

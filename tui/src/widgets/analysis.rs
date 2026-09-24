@@ -33,7 +33,7 @@ pub fn draw_analysis(frame: &mut ratatui::Frame, area: Rect, app: &mut crate::ap
             let lines = vec![
                 Line::from(""),
                 Line::from(Span::styled(
-                    format!("  {} {label} running\u{2026} {:.1}s", spinner_frame(elapsed), elapsed.as_secs_f64()),
+                    format!("  {} {label} running\u{2026} {}", spinner_frame(elapsed), crate::format::fmt_duration(elapsed)),
                     Style::default().fg(t.accent),
                 )),
                 indented_hints("any key:cancel"),

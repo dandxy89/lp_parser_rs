@@ -87,7 +87,7 @@ pub fn log_lines(stats: &PresolveStats) -> Vec<Line<'static>> {
 
     lines.push(Line::from(""));
     lines.push(Line::from(Span::styled(
-        format!("  {} action(s), oldest first", stats.log.len()),
+        format!("  {}, oldest first", crate::format::plural(stats.log.len(), "action", "actions")),
         Style::default().fg(t.accent).add_modifier(Modifier::BOLD),
     )));
     lines.push(Line::from(""));
@@ -129,7 +129,7 @@ pub fn highs_log_lines(report: &HighsPresolveReport) -> Vec<Line<'static>> {
     ];
     if report.skipped_sos > 0 {
         lines.push(Line::from(Span::styled(
-            format!("  {} SOS set(s) are not part of the model HiGHS sees", report.skipped_sos),
+            format!("  {} are not part of the model HiGHS sees", crate::format::plural(report.skipped_sos, "SOS set", "SOS sets")),
             Style::default().fg(t.muted),
         )));
     }
@@ -142,8 +142,8 @@ pub fn highs_log_lines(report: &HighsPresolveReport) -> Vec<Line<'static>> {
             lines.push(Line::from(Span::styled(format!("  {name}"), Style::default().fg(t.removed))));
         }
     };
-    section(format!("{} row(s) removed", report.removed_rows.len()), &report.removed_rows);
-    section(format!("{} column(s) removed", report.removed_cols.len()), &report.removed_cols);
+    section(format!("{} removed", crate::format::plural(report.removed_rows.len(), "row", "rows")), &report.removed_rows);
+    section(format!("{} removed", crate::format::plural(report.removed_cols.len(), "column", "columns")), &report.removed_cols);
 
     if report.infeasible {
         lines.push(Line::from(""));
