@@ -93,13 +93,12 @@ fn build_lp(output: &mut String, problem: &LpProblem, options: &LpWriterOptions)
     // Write sense and objectives
     write_objectives_section(output, problem, options)?;
 
-    // Write constraints
-    if !problem.constraints.is_empty() {
-        if options.include_section_spacing {
-            writeln!(output)?;
-        }
-        write_constraints_section(output, problem, options)?;
+    // Write constraints. The grammar requires a `Subject To` header even when
+    // there are no constraints, so it is always written.
+    if options.include_section_spacing {
+        writeln!(output)?;
     }
+    write_constraints_section(output, problem, options)?;
 
     // Write bounds
     write_bounds_section(output, problem, options)?;
@@ -645,6 +644,16 @@ mod tests {
 
         assert!(result.contains("Minimize"));
         assert!(result.contains("End"));
+    }
+
+    #[test]
+    fn test_problem_without_constraints_round_trips() {
+        let problem = LpProblem::parse("min\n obj: x\nst\nbounds\n x <= 4\nend").expect("fixture must parse");
+        assert_eq!(problem.constraint_count(), 0);
+        let written = write_lp_string(&problem);
+        assert!(written.contains("Subject To"), "grammar requires the header:\n{written}");
+        let reparsed = LpProblem::parse(&written).unwrap_or_else(|e| panic!("written LP must re-parse: {e}\n---\n{written}"));
+        assert_eq!(reparsed.variable_count(), 1);
     }
 
     #[test]
