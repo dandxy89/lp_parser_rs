@@ -348,13 +348,7 @@ fn comparison_row_pct(lines: &mut Vec<Line<'static>>, label: &str, label_width: 
     let t = theme();
     let delta = percentage_point_delta(a, b);
     let delta_str = if delta.abs() < 1e-8 { "\u{2014}".to_string() } else { format!("{delta:+.2} pp") };
-    let delta_colour = if delta.abs() < 1e-10 {
-        t.muted
-    } else if delta > 0.0 {
-        t.added
-    } else {
-        t.removed
-    };
+    let delta_colour = delta_colour(if delta.abs() < 1e-8 { std::cmp::Ordering::Equal } else { delta.total_cmp(&0.0) });
 
     lines.push(Line::from(vec![
         Span::styled(format!("  {label:<label_width$}"), Style::default().fg(t.text)),
@@ -395,11 +389,19 @@ fn format_delta_i64(delta: i64) -> String {
 }
 
 fn delta_colour_i64(delta: i64) -> Color {
+    delta_colour(delta.cmp(&0))
+}
+
+/// Colour of a dimension delta by its sign alone. More variables or a denser
+/// matrix is neither good nor bad, so the add/remove green and red — which
+/// read as a verdict — are kept for diff kinds; a rise takes the accent, a
+/// fall the secondary accent, and no change recedes.
+fn delta_colour(sign: std::cmp::Ordering) -> Color {
     let t = theme();
-    match delta.cmp(&0) {
+    match sign {
         std::cmp::Ordering::Equal => t.muted,
-        std::cmp::Ordering::Greater => t.added,
-        std::cmp::Ordering::Less => t.removed,
+        std::cmp::Ordering::Greater => t.accent,
+        std::cmp::Ordering::Less => t.secondary_accent,
     }
 }
 
@@ -567,6 +569,15 @@ fn format_issue_line(file_label: &str, issue: &lp_parser_rs::analysis::AnalysisI
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn dimension_deltas_are_coloured_neutrally() {
+        let t = theme();
+        assert_eq!(delta_colour_i64(3), t.accent);
+        assert_eq!(delta_colour_i64(-3), t.secondary_accent);
+        assert_eq!(delta_colour_i64(0), t.muted);
+        assert_ne!(delta_colour_i64(3), t.added, "a rise is not a verdict");
+    }
 
     #[test]
     fn density_delta_is_in_percentage_points() {
