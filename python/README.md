@@ -159,7 +159,8 @@ for issue in analysis['issues']:
 analysis = parser.analyze(
     large_coeff_threshold=1e8,      # Flag coefficients above this
     small_coeff_threshold=1e-10,    # Flag coefficients below this
-    ratio_threshold=1e5             # Flag if max/min ratio exceeds this
+    ratio_threshold=1e5,            # Flag if max/min ratio exceeds this
+    large_rhs_threshold=1e8,        # Flag right-hand sides above this
 )
 ```
 
@@ -307,7 +308,7 @@ print(f"Successfully modified and re-parsed: {new_parser.name}")
 
 ### Analysis Methods
 
-- `analyze(large_coeff_threshold, small_coeff_threshold, ratio_threshold)` - Get complete problem analysis including statistics and issues, with optional custom thresholds
+- `analyze(large_coeff_threshold, small_coeff_threshold, ratio_threshold, large_rhs_threshold)` - Get complete problem analysis including statistics and issues, with optional custom thresholds
 
 ### Variable Types
 

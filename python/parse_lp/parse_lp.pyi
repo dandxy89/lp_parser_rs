@@ -125,7 +125,10 @@ class LpParser:
         decimal_precision: int = 6,
         include_section_spacing: bool = True,
     ) -> str:
-        """Write the current problem to an LP format string, with optional custom formatting."""
+        """Write the current problem to an LP format string, with optional custom formatting.
+
+        Raises LpInvalidValueError if max_line_length is 0.
+        """
 
     def save_to_file(self, filepath: str) -> None:
         """Save the current problem to an LP file."""
@@ -200,5 +203,9 @@ class LpParser:
         large_coeff_threshold: float = 1e9,
         small_coeff_threshold: float = 1e-9,
         ratio_threshold: float = 1e6,
+        large_rhs_threshold: float = 1e9,
     ) -> ProblemAnalysis:
-        """Perform comprehensive analysis of the problem (statistics, structure and issues)."""
+        """Perform comprehensive analysis of the problem (statistics, structure and issues).
+
+        Every threshold must be finite and positive, else LpInvalidValueError is raised.
+        """

@@ -208,6 +208,9 @@ impl LpParser {
         decimal_precision: usize,
         include_section_spacing: bool,
     ) -> PyResult<String> {
+        if max_line_length == 0 {
+            return Err(LpInvalidValueError::new_err("max_line_length must be positive, got 0"));
+        }
         let problem = &self.problem;
         let options = LpWriterOptions { include_problem_name, max_line_length, decimal_precision, include_section_spacing };
         Ok(write_lp_string_with_options(problem, &options))
@@ -408,13 +411,33 @@ impl LpParser {
     ///     `large_coeff_threshold`: Threshold for large coefficient warnings (default: 1e9)
     ///     `small_coeff_threshold`: Threshold for small coefficient warnings (default: 1e-9)
     ///     `ratio_threshold`: Coefficient ratio threshold for scaling warnings (default: 1e6)
-    #[pyo3(signature = (*, large_coeff_threshold=1e9, small_coeff_threshold=1e-9, ratio_threshold=1e6))]
-    fn analyze(&self, py: Python, large_coeff_threshold: f64, small_coeff_threshold: f64, ratio_threshold: f64) -> PyResult<Py<PyAny>> {
+    ///     `large_rhs_threshold`: Threshold for large right-hand side warnings (default: 1e9)
+    ///
+    /// Every threshold must be finite and positive.
+    #[pyo3(signature = (*, large_coeff_threshold=1e9, small_coeff_threshold=1e-9, ratio_threshold=1e6, large_rhs_threshold=1e9))]
+    fn analyze(
+        &self,
+        py: Python,
+        large_coeff_threshold: f64,
+        small_coeff_threshold: f64,
+        ratio_threshold: f64,
+        large_rhs_threshold: f64,
+    ) -> PyResult<Py<PyAny>> {
+        for (name, value) in [
+            ("large_coeff_threshold", large_coeff_threshold),
+            ("small_coeff_threshold", small_coeff_threshold),
+            ("ratio_threshold", ratio_threshold),
+            ("large_rhs_threshold", large_rhs_threshold),
+        ] {
+            if !(value.is_finite() && value > 0.0) {
+                return Err(LpInvalidValueError::new_err(format!("{name} must be finite and positive, got {value}")));
+            }
+        }
         let problem = &self.problem;
         let config = AnalysisConfig {
             large_coefficient_threshold: large_coeff_threshold,
             small_coefficient_threshold: small_coeff_threshold,
-            large_rhs_threshold: large_coeff_threshold,
+            large_rhs_threshold,
             coefficient_ratio_threshold: ratio_threshold,
         };
         let analysis = problem.analyze_with_config(&config);

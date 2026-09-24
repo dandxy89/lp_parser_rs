@@ -287,3 +287,29 @@ class TestUpdateVariableType:
         parser = LpParser.from_string(self.LP)
         with pytest.raises(LpObjectNotFoundError):
             parser.update_variable_type("missing", "continuous")
+
+
+class TestThresholdValidation:
+    LP = "Minimize\n obj: x\nSubject To\n c1: x >= 1000\nEnd\n"
+
+    @staticmethod
+    def _messages(parser: LpParser, **thresholds: float) -> list[str]:
+        return [issue["message"] for issue in parser.analyze(**thresholds)["issues"]]
+
+    def test_large_rhs_threshold_is_independent_of_coefficient_threshold(self) -> None:
+        parser = LpParser.from_string(self.LP)
+        assert not any("Large RHS" in m for m in self._messages(parser, large_coeff_threshold=10.0))
+        assert any("Large RHS" in m for m in self._messages(parser, large_rhs_threshold=10.0))
+
+    @pytest.mark.parametrize(
+        "name", ["large_coeff_threshold", "small_coeff_threshold", "ratio_threshold", "large_rhs_threshold"]
+    )
+    @pytest.mark.parametrize("bad", [0.0, -1.0, float("nan"), float("inf")])
+    def test_invalid_threshold_raises(self, name: str, bad: float) -> None:
+        parser = LpParser.from_string(self.LP)
+        with pytest.raises(LpInvalidValueError, match=name):
+            parser.analyze(**{name: bad})
+
+    def test_zero_max_line_length_raises(self) -> None:
+        with pytest.raises(LpInvalidValueError, match="max_line_length"):
+            LpParser.from_string(self.LP).to_lp_string(max_line_length=0)
