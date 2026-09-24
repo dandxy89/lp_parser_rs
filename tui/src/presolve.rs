@@ -1006,7 +1006,9 @@ fn empty_rows_cols(problem: &mut LpProblem, pass: &mut Pass<'_>, infeasible: &mu
         match constraint {
             Constraint::Standard { coefficients, .. } => used.extend(coefficients.iter().map(|c| c.name)),
             Constraint::SOS { weights, .. } => used.extend(weights.iter().map(|c| c.name)),
-            Constraint::Indicator { .. } | Constraint::Quadratic { .. } => constraint.for_each_variable(|id| used.push(id)),
+            Constraint::Indicator { .. } | Constraint::Quadratic { .. } | Constraint::General { .. } => {
+                constraint.for_each_variable(|id| used.push(id));
+            }
         }
     }
     // A variable in a quadratic objective term is not decided by its linear
@@ -1202,7 +1204,9 @@ fn column_scaling(problem: &mut LpProblem, pass: &mut Pass<'_>, factors: &mut Ha
             }
             Constraint::SOS { weights, .. } => in_sos.extend(weights.iter().map(|weight| weight.name)),
             // Rows this pass does not rescale: keep their variables unscaled too.
-            Constraint::Indicator { .. } | Constraint::Quadratic { .. } => constraint.for_each_variable(|id| in_sos.push(id)),
+            Constraint::Indicator { .. } | Constraint::Quadratic { .. } | Constraint::General { .. } => {
+                constraint.for_each_variable(|id| in_sos.push(id));
+            }
         }
     }
     // Quadratic objective terms are not rescaled either.
@@ -1828,6 +1832,7 @@ mod tests {
                 | Constraint::Indicator { coefficients, .. }
                 | Constraint::Quadratic { coefficients, .. } => coefficients.len(),
                 Constraint::SOS { weights, .. } => weights.len(),
+                Constraint::General { .. } => 0,
             })
             .max()
             .expect("rows exist");

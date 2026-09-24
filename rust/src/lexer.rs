@@ -24,8 +24,9 @@
 //! must be separated from the neighbouring name by whitespace), and a
 //! section keyword alone at the start of a line (e.g. a variable named `bin`
 //! listed on its own line in a `generals` section) is read as a section
-//! header. The multi-word `subject to` / `such that`, `lazy constraints` and
-//! `user cuts` are always keywords.
+//! header. The multi-word `subject to` / `such that`, `lazy constraints`,
+//! `user cuts` and `general constraints` (and its variants) are always
+//! keywords; the single-word `genconstrs` follows the section-keyword rule.
 
 use std::borrow::Cow;
 use std::fmt::{Display, Formatter, Result as FmtResult};
@@ -33,7 +34,7 @@ use std::ops::Range;
 
 use logos::Logos;
 
-use crate::model::{ComparisonOp, SOSType, Sense, VariableType};
+use crate::model::{ComparisonOp, GeneralFunction, SOSType, Sense, VariableType};
 
 /// Lexer error type, also used for semantic errors raised while assembling
 /// objective/constraint bodies (see [`crate::assemble`]).
@@ -87,6 +88,17 @@ pub enum RawConstraint<'input> {
         /// Byte offset of the constraint in the source text, if tracked.
         byte_offset: Option<usize>,
     },
+    /// A Gurobi general constraint: `resultant = FUNCTION ( arguments )`.
+    General {
+        /// Constraint name (borrowed, or owned when auto-generated).
+        name: Cow<'input, str>,
+        /// The variable the function's value is assigned to.
+        resultant: &'input str,
+        /// The function and its arguments.
+        function: GeneralFunction<&'input str>,
+        /// Byte offset of the constraint in the source text, if tracked.
+        byte_offset: Option<usize>,
+    },
     /// A quadratic constraint: linear coefficients plus quadratic terms.
     Quadratic {
         /// Constraint name (borrowed, or owned when auto-generated).
@@ -126,7 +138,11 @@ impl RawConstraint<'_> {
     #[must_use]
     pub fn name(&self) -> &str {
         match self {
-            Self::Standard { name, .. } | Self::SOS { name, .. } | Self::Indicator { name, .. } | Self::Quadratic { name, .. } => name,
+            Self::Standard { name, .. }
+            | Self::SOS { name, .. }
+            | Self::Indicator { name, .. }
+            | Self::Quadratic { name, .. }
+            | Self::General { name, .. } => name,
         }
     }
 }
@@ -186,6 +202,8 @@ pub enum OptionalSection<'input> {
     Lazy(Vec<crate::assemble::SpannedElem<'input>>),
     /// `User Cuts` section (CPLEX): an unassembled constraint body.
     UserCuts(Vec<crate::assemble::SpannedElem<'input>>),
+    /// `General Constraints` section (Gurobi): an unassembled body.
+    GeneralConstraints(Vec<crate::assemble::SpannedElem<'input>>),
 }
 
 /// Structured result from the LALRPOP parser, replacing the previous 9-tuple.
@@ -246,6 +264,10 @@ pub enum Token<'input> {
     /// User cuts section header (CPLEX)
     #[regex(r"(?i)user[ \t]+cuts", priority = 10)]
     UserCuts,
+
+    /// General constraints section header (Gurobi)
+    #[regex(r"(?i)general[ \t]+constraints?|general[ \t]+constrs?|gen[ \t]+cons|genconstrs?", priority = 10)]
+    GeneralConstraints,
 
     /// Bounds section header
     #[regex(r"(?i)bounds?", priority = 10)]
@@ -493,7 +515,15 @@ impl<'input> Lexer<'input> {
                 let multi_word = self.input[span.clone()].contains([' ', '\t']);
                 multi_word || (!self.seen_subject_to && at_line_start && !self.prev_continues_expression())
             }
-            Token::Bounds | Token::Generals | Token::Integers | Token::Binaries | Token::SemiContinuous | Token::Sos | Token::End => {
+            Token::GeneralConstraints if self.input[span.clone()].contains([' ', '\t']) => true,
+            Token::Bounds
+            | Token::Generals
+            | Token::Integers
+            | Token::Binaries
+            | Token::SemiContinuous
+            | Token::Sos
+            | Token::End
+            | Token::GeneralConstraints => {
                 at_line_start
                     && !self.prev_continues_expression()
                     && !self.peek_same_line(|t| matches!(t, Token::Colon | Token::DoubleColon))
@@ -608,6 +638,11 @@ mod tests {
         assert_eq!(tokenize_keywords("lazy constraints"), vec![Token::LazyConstraints]);
         assert_eq!(tokenize_keywords("Lazy  Constraints"), vec![Token::LazyConstraints]);
         assert_eq!(tokenize_keywords("USER CUTS"), vec![Token::UserCuts]);
+        for header in ["General Constraints", "general constraint", "General Constrs", "Gen Cons", "GenConstrs"] {
+            assert_eq!(tokenize_keywords(header), vec![Token::GeneralConstraints], "{header}");
+        }
+        // The single-word form is a name where a section cannot start.
+        assert_eq!(tokenize("x + genconstrs")[2], Token::Identifier("genconstrs"));
         // Each word alone is an ordinary name.
         assert_eq!(tokenize("lazy + cuts"), vec![Token::Identifier("lazy"), Token::Plus, Token::Identifier("cuts")]);
 

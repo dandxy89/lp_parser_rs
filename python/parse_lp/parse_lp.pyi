@@ -109,7 +109,18 @@ QuadraticConstraint = TypedDict(
     },
 )
 
-Constraint: TypeAlias = StandardConstraint | SOSConstraint | IndicatorConstraint | QuadraticConstraint
+# Gurobi `General Constraints`: `resultant = FUNCTION ( arguments )`.
+class GeneralConstraint(TypedDict):
+    name: str
+    type: Literal["general"]
+    resultant: str
+    function: Literal["MAX", "MIN", "ABS", "AND", "OR"]
+    arguments: list[str]
+    constant: float | None  # MAX / MIN only
+
+Constraint: TypeAlias = (
+    StandardConstraint | SOSConstraint | IndicatorConstraint | QuadraticConstraint | GeneralConstraint
+)
 
 # Analysis result dictionary as built in src/lib.rs; see analyze() docs for the
 # keys (summary, sparsity, variables, constraints, coefficients, issues).

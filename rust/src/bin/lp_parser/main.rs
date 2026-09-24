@@ -224,6 +224,10 @@ fn write_info_text<W: Write>(writer: &mut W, problem: &LpProblem, args: &InfoArg
                 Constraint::Quadratic { coefficients, quadratic, operator, rhs, .. } => {
                     writeln!(writer, "  {name}: {} terms + {} quadratic terms {operator} {rhs}", coefficients.len(), quadratic.len())?;
                 }
+                Constraint::General { resultant, function, .. } => {
+                    let resultant = problem.resolve(*resultant);
+                    writeln!(writer, "  {name}: {resultant} = {} of {} variables", function.keyword(), function.variables().len())?;
+                }
                 Constraint::Indicator { variable, active_value, coefficients, operator, rhs, .. } => {
                     let indicator = problem.resolve(*variable);
                     let value = u8::from(*active_value);
@@ -277,6 +281,10 @@ fn build_info_value(problem: &LpProblem, args: &InfoArgs) -> serde_json::Value {
                         ("standard", format!("{} terms {operator} {rhs}", coefficients.len()))
                     }
                     Constraint::SOS { sos_type, weights, .. } => ("sos", format!("{sos_type} with {} variables", weights.len())),
+                    Constraint::General { resultant, function, .. } => (
+                        "general",
+                        format!("{} = {} of {} variables", problem.resolve(*resultant), function.keyword(), function.variables().len()),
+                    ),
                     Constraint::Quadratic { coefficients, quadratic, operator, rhs, .. } => {
                         ("quadratic", format!("{} terms + {} quadratic terms {operator} {rhs}", coefficients.len(), quadratic.len()))
                     }

@@ -31,10 +31,11 @@ Beyond linear objectives, constraints, bounds and variable-type sections, the pa
 | Indicator constraints | `name: b = 1 -> x + y <= 3` (or `b = 0`) in `Subject To` / lazy sections (CPLEX, Gurobi); `<->` and `<-` are not supported | `Constraint::Indicator` | `INDICATORS` section (`IF row column value`, read and written) |
 | Quadratic objectives | `obj: 2 x + [ x ^ 2 + 4 x * y ] / 2` (the `/ 2` is mandatory, as in CPLEX and Gurobi) | `Objective::quadratic` (`QuadraticTerm`, stored with the `/ 2` applied) | `QUADOBJ` / `QMATRIX` read, `QUADOBJ` written |
 | Quadratic constraints | `c: x + [ x ^ 2 + y ^ 2 ] <= 4` (no `/ 2`) | `Constraint::Quadratic` | `QCMATRIX` (read and written) |
+| General constraints | `General Constraints` section (Gurobi; also `General Constrs`, `Gen Cons`, `GenConstrs`): `g: r = MAX ( x1 , x2 , 3 )`, `MIN`, `ABS ( x )`, `AND ( b1 , b2 )`, `OR`; `PWL` is not supported | `Constraint::General` (`GeneralFunction`) | not supported: the writer returns an error, the reader skips `GENCONS` with a warning |
 
-A lone `[` or `]` is always a quadratic bracket, so it must be separated from neighbouring names by whitespace (names such as `x[1]` are unaffected).
+A lone `[` or `]` is always a quadratic bracket, so it must be separated from neighbouring names by whitespace (names such as `x[1]` are unaffected). Likewise the parentheses and commas of a general constraint must be separated by whitespace, as Gurobi writes them, since `(`, `)` and `,` are name characters.
 
-The `lp-solvers` adapter refuses models containing indicator or quadratic constraints, or a quadratic objective, rather than silently dropping them. The `lp_diff` HiGHS solver refuses indicator and quadratic constraints, and passes a quadratic objective to HiGHS as a Hessian (continuous QPs only: HiGHS cannot solve MIQPs, and the IIS/ranging/presolve queries refuse QPs).
+The `lp-solvers` adapter refuses models containing indicator, quadratic or general constraints, or a quadratic objective, rather than silently dropping them. The `lp_diff` HiGHS solver refuses indicator, quadratic and general constraints, and passes a quadratic objective to HiGHS as a Hessian (continuous QPs only: HiGHS cannot solve MIQPs, and the IIS/ranging/presolve queries refuse QPs).
 
 ## Library Usage
 

@@ -239,9 +239,9 @@ pub struct MpsWriterOptions {
 /// # Errors
 ///
 /// Returns an error if the problem has more than one objective (see
-/// [`MpsWriterOptions::allow_multiple_objectives`]) or contains a constraint
-/// with a strict inequality operator (`<` or `>`), neither of which MPS can
-/// represent.
+/// [`MpsWriterOptions::allow_multiple_objectives`]), contains a constraint
+/// with a strict inequality operator (`<` or `>`), or contains a Gurobi
+/// general constraint, none of which this writer can represent.
 pub fn write_mps_string(problem: &LpProblem) -> LpResult<String> {
     write_mps_string_with_options(problem, &MpsWriterOptions::default())
 }
@@ -260,6 +260,12 @@ pub fn write_mps_string_with_options(problem: &LpProblem, options: &MpsWriterOpt
 /// Build the full MPS document into `output`.
 fn build_mps(output: &mut String, problem: &LpProblem, options: &MpsWriterOptions) -> LpResult<()> {
     let objective = select_objective(problem, options)?;
+    if let Some(general) = problem.constraints.values().find(|c| matches!(c, Constraint::General { .. })) {
+        return Err(LpParseError::validation_error(format!(
+            "general constraint '{}' cannot be written to MPS: this writer has no GENCONS support",
+            problem.resolve(general.name())
+        )));
+    }
     let obj_row_name: &str = objective.map_or(EMPTY_OBJECTIVE_ROW_NAME, |o| problem.resolve(o.name));
     validate_mps_names(problem, obj_row_name)?;
     let range_pairs = detect_range_pairs(problem);
@@ -499,6 +505,7 @@ fn build_columns<'p>(
             }
             Constraint::Quadratic { quadratic, .. } => needs_column.extend(quadratic.iter().flat_map(|t| [t.var1, t.var2])),
             Constraint::Standard { .. } | Constraint::SOS { .. } => {}
+            Constraint::General { .. } => unreachable!("general constraints are rejected before columns are built"),
         }
     }
     if let Some(obj) = objective {

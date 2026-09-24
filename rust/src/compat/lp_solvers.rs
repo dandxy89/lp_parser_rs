@@ -264,8 +264,8 @@ impl<'a> Iterator for ConstraintIterator<'a> {
                     });
                 }
                 Some(Constraint::SOS { .. }) => {} // Skip SOS constraints
-                Some(Constraint::Indicator { .. } | Constraint::Quadratic { .. }) => {
-                    unreachable!("indicator and quadratic constraints are rejected during validation")
+                Some(Constraint::Indicator { .. } | Constraint::Quadratic { .. } | Constraint::General { .. }) => {
+                    unreachable!("indicator, quadratic and general constraints are rejected during validation")
                 }
                 None => return None,
             }
@@ -290,7 +290,7 @@ impl<'a> LpSolversCompat<'a> {
     /// - The Problem has multiple objectives
     /// - The Problem has no objectives
     /// - Any constraint uses strict inequalities (`<` or `>`)
-    /// - Any constraint is an indicator or quadratic constraint
+    /// - Any constraint is an indicator, quadratic or general constraint
     /// - The objective has quadratic terms
     ///
     /// # Panics
@@ -335,6 +335,12 @@ impl<'a> LpSolversCompat<'a> {
                     return Err(LpSolversCompatError::UnsupportedConstraint {
                         constraint: problem.interner.resolve(*name).to_string(),
                         kind: "quadratic",
+                    });
+                }
+                Constraint::General { name, .. } => {
+                    return Err(LpSolversCompatError::UnsupportedConstraint {
+                        constraint: problem.interner.resolve(*name).to_string(),
+                        kind: "general",
                     });
                 }
             }

@@ -452,3 +452,111 @@ fn quadratic_is_refused_by_lp_solvers_compat() {
     let constraint = LpProblem::parse("minimize\nobj: x\nsubject to\nq: [ x ^ 2 ] <= 1\nend").unwrap();
     assert!(matches!(LpSolversCompat::try_new(&constraint), Err(LpSolversCompatError::UnsupportedConstraint { kind: "quadratic", .. })));
 }
+
+// --- General constraints ------------------------------------------------------
+
+/// `(resultant, function keyword, arguments, constant)` of a general constraint.
+fn general(problem: &LpProblem, name: &str) -> (String, &'static str, Vec<String>, Option<f64>) {
+    let id = problem.name_id(name).unwrap_or_else(|| panic!("constraint '{name}' must exist"));
+    match &problem.constraints[&id] {
+        Constraint::General { resultant, function, .. } => (
+            problem.resolve(*resultant).to_string(),
+            function.keyword(),
+            function.variables().iter().map(|v| problem.resolve(*v).to_string()).collect(),
+            function.constant(),
+        ),
+        other => panic!("'{name}' must be a general constraint, got {other:?}"),
+    }
+}
+
+fn names(names: &[&str]) -> Vec<String> {
+    names.iter().map(ToString::to_string).collect()
+}
+
+#[test]
+fn general_constraint_fixture_parses() {
+    let problem = parse_resource("general_constraints.lp");
+    assert_eq!(general(&problem, "gc_max"), ("r1".to_string(), "MAX", names(&["x1", "x2"]), Some(3.0)));
+    assert_eq!(general(&problem, "gc_min"), ("r2".to_string(), "MIN", names(&["x1", "x2"]), Some(-1.5)));
+    assert_eq!(general(&problem, "gc_abs"), ("r3".to_string(), "ABS", names(&["x1"]), None));
+    assert_eq!(general(&problem, "gc_and"), ("b3".to_string(), "AND", names(&["b1", "b2"]), None));
+    assert_eq!(general(&problem, "C1"), ("b4".to_string(), "OR", names(&["b1", "b2"]), None), "unnamed entries get a generated name");
+    assert_eq!(problem.constraint_count(), 7);
+}
+
+#[test]
+fn general_constraint_lp_round_trip() {
+    let problem = parse_resource("general_constraints.lp");
+    let written = write_lp_string(&problem).unwrap();
+    assert!(written.contains("General Constraints\n gc_max: r1 = MAX ( x1 , x2 , 3 )"), "{written}");
+    assert!(written.contains(" gc_min: r2 = MIN ( x1 , x2 , -1.5 )"), "{written}");
+    let reparsed = lp_round_trip(&problem);
+    for name in ["gc_max", "gc_min", "gc_abs", "gc_and", "C1"] {
+        assert_eq!(general(&reparsed, name), general(&problem, name), "constraint {name}");
+    }
+}
+
+#[test]
+fn general_constraint_section_headers() {
+    for header in ["General Constraints", "General Constrs", "Gen Cons", "GenConstrs"] {
+        let source = format!("maximize\nobj: r\nsubject to\nc: x <= 4\n{header}\ng: r = ABS ( x )\nend");
+        let problem = LpProblem::parse(&source).unwrap_or_else(|e| panic!("{header}: {e}"));
+        assert_eq!(general(&problem, "g").1, "ABS", "{header}");
+    }
+    // `genconstrs` where a section cannot start is an ordinary name.
+    let problem = LpProblem::parse("minimize\nobj: x + genconstrs\nsubject to\nc: x >= 1\nend").unwrap();
+    assert!(problem.name_id("genconstrs").is_some_and(|id| problem.variables.contains_key(&id)));
+}
+
+#[test]
+fn general_constraint_errors() {
+    let parse = |entry: &str| LpProblem::parse(&format!("minimize\nobj: x\nsubject to\nc: x >= 1\ngeneral constraints\n{entry}\nend"));
+    assert!(parse("g: r = ABS ( x , y )").is_err(), "ABS takes one variable");
+    assert!(parse("g: r = AND ( b1 , 1 )").is_err(), "AND takes variables only");
+    assert!(parse("g: r = MAX ( 3 )").is_err(), "MAX needs a variable");
+    assert!(parse("g: r = PWL ( x )").is_err(), "unsupported function");
+    assert!(parse("g: r = MAX ( x , y").is_err(), "unclosed argument list");
+    assert!(parse("g: r MAX ( x )").is_err(), "missing '='");
+    assert!(parse("g: r = MAX ( x y )").is_err(), "missing ','");
+
+    // MPS cannot carry them, so the writer refuses rather than dropping them.
+    let problem = parse_resource("general_constraints.lp");
+    let error = write_mps_string(&problem).expect_err("general constraints are not representable in MPS");
+    assert!(error.to_string().contains("gc_max"), "{error}");
+}
+
+#[test]
+fn general_constraint_variables_rename_and_remove() {
+    let mut problem = parse_resource("general_constraints.lp");
+    problem.rename_variable("x1", "first").unwrap();
+    assert_eq!(general(&problem, "gc_max").2, names(&["first", "x2"]));
+    problem.rename_variable("r3", "absolute").unwrap();
+    assert_eq!(general(&problem, "gc_abs").0, "absolute");
+    assert!(problem.remove_variable("x2").is_err(), "an argument of a general constraint cannot be removed on its own");
+    assert!(problem.set_constraint_class("gc_max", ConstraintClass::Lazy).is_err());
+}
+
+#[cfg(feature = "diff")]
+#[test]
+fn general_constraint_changes_are_detected_by_diff() {
+    let a = LpProblem::parse("minimize\nobj: r\nsubject to\nc: x + y >= 1\ngenconstrs\ng: r = MAX ( x , y , 1 )\nend").unwrap();
+    let b = LpProblem::parse("minimize\nobj: r\nsubject to\nc: x + y >= 1\ngenconstrs\ng: r = MAX ( x , y , 2 )\nend").unwrap();
+    assert!(a.diff(&a, &lp_parser_rs::diff::DiffOptions::default()).is_empty());
+    let diff = a.diff(&b, &lp_parser_rs::diff::DiffOptions::default());
+    assert_eq!(diff.cons_modified, vec![("g".to_string(), vec!["general constraint r = MAX (x, y, 1) -> r = MAX (x, y, 2)".to_string()])]);
+}
+
+#[test]
+fn general_constraints_are_counted_by_analysis() {
+    let analysis = parse_resource("general_constraints.lp").analyze();
+    assert_eq!(analysis.constraints.type_distribution.general, 5);
+}
+
+#[cfg(feature = "lp-solvers")]
+#[test]
+fn general_constraint_is_refused_by_lp_solvers_compat() {
+    use lp_parser_rs::compat::lp_solvers::{LpSolversCompat, LpSolversCompatError};
+    let problem = parse_resource("general_constraints.lp");
+    let error = LpSolversCompat::try_new(&problem).expect_err("a general constraint cannot be dropped");
+    assert!(matches!(error, LpSolversCompatError::UnsupportedConstraint { kind: "general", .. }), "{error:?}");
+}

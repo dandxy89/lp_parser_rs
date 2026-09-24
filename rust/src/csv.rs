@@ -77,6 +77,19 @@ impl LpProblem {
                         const_writer.write_record(vals)?;
                     }
                 }
+                Constraint::General { resultant, function, .. } => {
+                    // One row per variable: the resultant, then the arguments;
+                    // the function (and any constant) travels in the type.
+                    let kind = match function.constant() {
+                        Some(constant) => format!("General({}, {constant})", function.keyword()),
+                        None => format!("General({})", function.keyword()),
+                    };
+                    for variable in std::iter::once(resultant).chain(function.variables()) {
+                        let var_name = self.interner.resolve(*variable);
+                        let vals: [&[u8]; 7] = [name_bytes, kind.as_bytes(), var_name.as_bytes(), b"", b"", b"", b""];
+                        const_writer.write_record(vals)?;
+                    }
+                }
                 Constraint::SOS { sos_type, weights, .. } => {
                     for c in weights {
                         let var_name = self.interner.resolve(c.name);

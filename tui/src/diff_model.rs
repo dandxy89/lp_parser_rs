@@ -196,6 +196,19 @@ fn resolve_constraint(problem: &LpProblem, constraint: &Constraint, interner: &m
         Constraint::SOS { sos_type, weights, .. } => {
             ResolvedConstraint::Sos { sos_type: *sos_type, weights: resolve_coefficients(problem, weights, interner, opts) }
         }
+        // A general constraint is shown by the variables it relates (resultant
+        // first); its function appears in type-change summaries.
+        Constraint::General { resultant, function, .. } => {
+            let coefficients: Vec<lp_parser_rs::model::Coefficient> = std::iter::once(resultant)
+                .chain(function.variables())
+                .map(|v| lp_parser_rs::model::Coefficient { name: *v, value: 1.0 })
+                .collect();
+            ResolvedConstraint::Standard {
+                coefficients: resolve_coefficients(problem, &coefficients, interner, opts),
+                operator: ComparisonOp::EQ,
+                rhs: function.constant().unwrap_or(0.0),
+            }
+        }
     }
 }
 
@@ -729,6 +742,11 @@ fn constraint_summary(problem: &LpProblem, constraint: &Constraint) -> String {
             let _ = problem; // used for consistency; SOS summary doesn't need name resolution
             format!("SOS({sos_type}, {} weights)", weights.len())
         }
+        Constraint::General { resultant, function, .. } => {
+            let mut arguments: Vec<String> = function.variables().iter().map(|v| problem.resolve(*v).to_string()).collect();
+            arguments.extend(function.constant().map(|c| c.to_string()));
+            format!("General({} = {}({}))", problem.resolve(*resultant), function.keyword(), arguments.join(", "))
+        }
         Constraint::Quadratic { coefficients, quadratic, operator, rhs, .. } => {
             let mut terms: Vec<String> =
                 quadratic.iter().map(|t| format!("{} {}*{}", t.coefficient, problem.resolve(t.var1), problem.resolve(t.var2))).collect();
@@ -969,8 +987,21 @@ fn diff_constraint_pair(
             diff_sos_constraints(*old_type, &old_resolved, *new_type, &new_resolved, interner, reordered, opts)
         }
 
-        // Different kinds, indicators with different conditions, or quadratic
-        // constraints with different quadratic terms: structurally incompatible.
+        // General constraints: unchanged, or changed as a whole.
+        (Constraint::General { resultant: old_r, function: old_f, .. }, Constraint::General { resultant: new_r, function: new_f, .. })
+            if old_f.keyword() == new_f.keyword()
+                && old_f.constant().map(f64::to_bits) == new_f.constant().map(f64::to_bits)
+                && std::iter::once(old_r)
+                    .chain(old_f.variables())
+                    .map(|v| opts.rewrite(p1.resolve(*v)))
+                    .eq(std::iter::once(new_r).chain(new_f.variables()).map(|v| opts.rewrite(p2.resolve(*v)))) =>
+        {
+            None
+        }
+
+        // Different kinds, indicators with different conditions, quadratic
+        // constraints with different quadratic terms, or changed general
+        // constraints: structurally incompatible.
         _ => Some(ConstraintDiffDetail::TypeChanged { old_summary: constraint_summary(p1, c1), new_summary: constraint_summary(p2, c2) }),
     }
 }

@@ -17,7 +17,7 @@ use std::borrow::Cow;
 use std::collections::HashSet;
 
 use crate::lexer::{LexerError, RawCoefficient, RawConstraint, RawObjective, RawQuadraticTerm};
-use crate::model::ComparisonOp;
+use crate::model::{ComparisonOp, GeneralFunction};
 
 /// One element of an objective or constraint body, with its byte offset.
 pub type SpannedElem<'input> = (usize, Elem<'input>);
@@ -524,6 +524,106 @@ fn assemble_body<'input>(
     }
 
     Ok(constraints)
+}
+
+/// Assemble a Gurobi `General Constraints` section body. Each entry is
+/// `[name:] resultant = FUNCTION ( arg , arg , ... )` with `FUNCTION` one of
+/// `MAX`, `MIN` (variables and at most one constant), `ABS` (one variable),
+/// `AND`, `OR` (variables). Parentheses and commas must be separated from
+/// names by whitespace, as Gurobi writes them: `x1,` would read as one name.
+///
+/// # Errors
+///
+/// Returns an error for an entry that does not have this shape.
+pub fn assemble_general_constraints<'input>(elems: &[SpannedElem<'input>]) -> Result<Vec<RawConstraint<'input>>, LexerError> {
+    let mut constraints = Vec::new();
+    let mut i = 0;
+    while i < elems.len() {
+        let entry_loc = elems[i].0;
+        let name = if let Elem::Name(n) = elems[i].1 {
+            i += 1;
+            Cow::Borrowed(n)
+        } else {
+            Cow::Borrowed("__c__")
+        };
+        let (
+            Some(&(_, Elem::Var(resultant))),
+            Some((_, Elem::Op(ComparisonOp::EQ))),
+            Some(&(func_loc, Elem::Var(keyword))),
+            Some((_, Elem::Var("("))),
+        ) = (elems.get(i), elems.get(i + 1), elems.get(i + 2), elems.get(i + 3))
+        else {
+            return Err(err(pos_at(elems, i), "expected 'resultant = FUNCTION ( ... )' in the general constraints section"));
+        };
+        i += 4;
+
+        // Arguments: variables and signed numbers separated by ',' up to ')'.
+        let mut variables: Vec<&'input str> = Vec::new();
+        let mut constants: Vec<f64> = Vec::new();
+        loop {
+            match elems.get(i) {
+                Some(&(_, Elem::Var(variable))) if variable != ")" && variable != "," && variable != "(" => {
+                    variables.push(variable);
+                    i += 1;
+                }
+                Some((_, Elem::Plus | Elem::Minus | Elem::Num(_))) => {
+                    let (value, next) = parse_signed_number(elems, i, "a general constraint argument")?;
+                    if !value.is_finite() {
+                        return Err(err(pos_at(elems, i), "a general constraint constant must be finite"));
+                    }
+                    constants.push(value);
+                    i = next;
+                }
+                _ => return Err(err(pos_at(elems, i), "expected a variable or number as a general constraint argument")),
+            }
+            match elems.get(i) {
+                Some((_, Elem::Var(","))) => i += 1,
+                Some((_, Elem::Var(")"))) => {
+                    i += 1;
+                    break;
+                }
+                _ => return Err(err(pos_at(elems, i), "expected ',' or ')' after a general constraint argument")),
+            }
+        }
+
+        let function = general_function(keyword, variables, &constants).map_err(|message| err(func_loc, message))?;
+        constraints.push(RawConstraint::General { name, resultant, function, byte_offset: Some(entry_loc) });
+    }
+    Ok(constraints)
+}
+
+/// Build a [`GeneralFunction`] from its keyword and parsed arguments.
+fn general_function<'input>(keyword: &str, variables: Vec<&'input str>, constants: &[f64]) -> Result<GeneralFunction<&'input str>, String> {
+    let upper = keyword.to_ascii_uppercase();
+    let no_constants = |name: &str| {
+        if constants.is_empty() { Ok(()) } else { Err(format!("{name} takes variables only, not constants")) }
+    };
+    match upper.as_str() {
+        "MAX" | "MIN" => {
+            if variables.is_empty() {
+                return Err(format!("{upper} needs at least one variable argument"));
+            }
+            // Several constants are equivalent to their largest (MAX) or smallest (MIN).
+            let fold = if upper == "MAX" { f64::max } else { f64::min };
+            let constant = constants.iter().copied().reduce(fold);
+            Ok(if upper == "MAX" { GeneralFunction::Max { variables, constant } } else { GeneralFunction::Min { variables, constant } })
+        }
+        "ABS" => {
+            no_constants("ABS")?;
+            let [variable] = variables.as_slice() else {
+                return Err(format!("ABS takes exactly one variable, got {}", variables.len()));
+            };
+            Ok(GeneralFunction::Abs { variable })
+        }
+        "AND" | "OR" => {
+            no_constants(&upper)?;
+            if variables.is_empty() {
+                return Err(format!("{upper} needs at least one variable argument"));
+            }
+            Ok(if upper == "AND" { GeneralFunction::And { variables } } else { GeneralFunction::Or { variables } })
+        }
+        _ => Err(format!("unsupported general constraint function '{keyword}' (expected MAX, MIN, ABS, AND or OR)")),
+    }
 }
 
 /// Recognise the head of an indicator constraint, `var = 0 ->` or

@@ -45,6 +45,7 @@ constraints:
     sos2: 1
     indicator: 0
     quadratic: 0
+    general: 0
     lazy: 0
     user_cuts: 0
   empty_constraints: []

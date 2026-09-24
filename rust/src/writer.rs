@@ -230,6 +230,9 @@ fn build_lp(output: &mut String, problem: &LpProblem, options: &LpWriterOptions)
     // Write SOS constraints (their own section; not valid `Subject To` syntax)
     write_sos_section(output, problem, options)?;
 
+    // Gurobi general constraints have their own section too.
+    write_general_constraints_section(output, problem, options)?;
+
     // Write end marker
     if options.include_section_spacing {
         writeln!(output)?;
@@ -279,7 +282,8 @@ fn write_constraints_section(output: &mut String, problem: &LpProblem, options: 
     writeln!(output, "Subject To")?;
 
     for (id, constraint) in &problem.constraints {
-        if !matches!(constraint, Constraint::SOS { .. }) && problem.constraint_class(*id).is_normal() {
+        let in_subject_to = matches!(constraint, Constraint::Standard { .. } | Constraint::Indicator { .. } | Constraint::Quadratic { .. });
+        if in_subject_to && problem.constraint_class(*id).is_normal() {
             write_constraint(output, constraint, &problem.interner, options)?;
         }
     }
@@ -338,6 +342,24 @@ fn write_sos_section(output: &mut String, problem: &LpProblem, options: &LpWrite
     Ok(())
 }
 
+/// Write the Gurobi `General Constraints` section.
+fn write_general_constraints_section(output: &mut String, problem: &LpProblem, options: &LpWriterOptions) -> std::fmt::Result {
+    let mut wrote_header = false;
+    for constraint in problem.constraints.values() {
+        if matches!(constraint, Constraint::General { .. }) {
+            if !wrote_header {
+                if options.include_section_spacing {
+                    writeln!(output)?;
+                }
+                writeln!(output, "General Constraints")?;
+                wrote_header = true;
+            }
+            write_constraint(output, constraint, &problem.interner, options)?;
+        }
+    }
+    Ok(())
+}
+
 /// Write a single constraint
 fn write_constraint(output: &mut String, constraint: &Constraint, interner: &NameInterner, options: &LpWriterOptions) -> std::fmt::Result {
     match constraint {
@@ -355,6 +377,20 @@ fn write_constraint(output: &mut String, constraint: &Constraint, interner: &Nam
             write!(output, " {operator} ")?;
             write_number(output, *rhs, options.decimal_precision)?;
             writeln!(output)
+        }
+        Constraint::General { name, resultant, function, .. } => {
+            debug_assert!(!function.variables().is_empty(), "a general constraint has at least one variable argument");
+            // Gurobi separates the parentheses and commas with spaces; without
+            // them they would lex as part of the neighbouring names.
+            write!(output, " {}: {} = {} (", interner.resolve(*name), interner.resolve(*resultant), function.keyword())?;
+            for (i, variable) in function.variables().iter().enumerate() {
+                write!(output, "{} {}", if i == 0 { "" } else { " ," }, interner.resolve(*variable))?;
+            }
+            if let Some(constant) = function.constant() {
+                write!(output, " , ")?;
+                write_number(output, constant, options.decimal_precision)?;
+            }
+            writeln!(output, " )")
         }
         Constraint::Quadratic { name, coefficients, quadratic, operator, rhs, .. } => {
             debug_assert!(!quadratic.is_empty(), "a quadratic constraint has quadratic terms");

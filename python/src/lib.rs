@@ -168,6 +168,14 @@ impl LpParser {
                     dict.set_item("rhs", rhs)?;
                     dict.set_item("class", constraint_class_name(problem.constraint_class(*name_id)))?;
                 }
+                Constraint::General { resultant, function, .. } => {
+                    dict.set_item("type", "general")?;
+                    dict.set_item("resultant", problem.resolve(*resultant))?;
+                    dict.set_item("function", function.keyword())?;
+                    let arguments: Vec<&str> = function.variables().iter().map(|v| problem.resolve(*v)).collect();
+                    dict.set_item("arguments", arguments)?;
+                    dict.set_item("constant", function.constant())?;
+                }
                 Constraint::Quadratic { coefficients, quadratic, operator, rhs, .. } => {
                     dict.set_item("type", "quadratic")?;
                     dict.set_item("coefficients", coefficients_to_list(py, problem, coefficients)?)?;

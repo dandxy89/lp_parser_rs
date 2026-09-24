@@ -188,6 +188,12 @@ fn intern_constraint(interner: &mut NameInterner, raw: &RawConstraint<'_>) -> Co
             weights: intern_coefficients(interner, weights),
             byte_offset: *byte_offset,
         },
+        RawConstraint::General { name, resultant, function, byte_offset } => Constraint::General {
+            name: interner.intern(name),
+            resultant: interner.intern(resultant),
+            function: function.map_variables(|v| interner.intern(v)),
+            byte_offset: *byte_offset,
+        },
         RawConstraint::Quadratic { name, coefficients, quadratic, operator, rhs, byte_offset } => Constraint::Quadratic {
             name: interner.intern(name),
             coefficients: intern_coefficients(interner, coefficients),
@@ -409,8 +415,8 @@ impl LpProblem {
     /// # Errors
     ///
     /// Returns an error if the constraint does not exist, or if it is an SOS
-    /// constraint and `class` is not [`ConstraintClass::Normal`] (SOS sets
-    /// have their own section and cannot be lazy or a cut).
+    /// or general constraint and `class` is not [`ConstraintClass::Normal`]
+    /// (those have their own sections and cannot be lazy or a cut).
     pub fn set_constraint_class(&mut self, constraint_name: &str, class: ConstraintClass) -> LpResult<()> {
         Self::check_name(constraint_name, "constraint_name")?;
         let con_id = self
@@ -422,8 +428,8 @@ impl LpProblem {
             self.constraint_classes.shift_remove(&con_id);
             return Ok(());
         }
-        if matches!(self.constraints[&con_id], Constraint::SOS { .. }) {
-            return Err(LpParseError::invalid_operation("SOS constraints cannot be lazy constraints or user cuts"));
+        if matches!(self.constraints[&con_id], Constraint::SOS { .. } | Constraint::General { .. }) {
+            return Err(LpParseError::invalid_operation("SOS and general constraints cannot be lazy constraints or user cuts"));
         }
         self.constraint_classes.insert(con_id, class);
         Ok(())
@@ -446,7 +452,7 @@ impl LpProblem {
                     // SOS membership sets kind without wiping bounds.
                 }
             }
-            Constraint::Standard { .. } | Constraint::Indicator { .. } | Constraint::Quadratic { .. } => {
+            Constraint::Standard { .. } | Constraint::Indicator { .. } | Constraint::Quadratic { .. } | Constraint::General { .. } => {
                 constraint.for_each_variable(|id| self.ensure_variable_exists(id, None));
             }
         }
@@ -531,7 +537,6 @@ impl LpProblem {
             self.constraints.get_mut(&con_id).ok_or_else(|| LpParseError::not_found(EntityKind::Constraint, constraint_name))?;
 
         match constraint {
-            // An indicator constraint's coefficients are those of its linear constraint.
             // The linear coefficients of an indicator's constraint or a quadratic constraint.
             Constraint::Standard { coefficients, .. }
             | Constraint::Indicator { coefficients, .. }
@@ -544,6 +549,9 @@ impl LpProblem {
             }
             Constraint::SOS { .. } => {
                 return Err(LpParseError::invalid_operation("Cannot update coefficients in SOS constraints using this method"));
+            }
+            Constraint::General { .. } => {
+                return Err(LpParseError::invalid_operation("general constraints have no coefficients to update"));
             }
         }
 
@@ -585,6 +593,7 @@ impl LpProblem {
                 Ok(())
             }
             Constraint::SOS { .. } => Err(LpParseError::invalid_operation("SOS constraints do not have right-hand side values")),
+            Constraint::General { .. } => Err(LpParseError::invalid_operation("general constraints do not have right-hand side values")),
         }
     }
 
@@ -665,6 +674,13 @@ impl LpProblem {
                         }
                     }
                     rename_terms(quadratic);
+                }
+                Constraint::General { resultant, function, .. } => {
+                    for variable in std::iter::once(resultant).chain(function.variables_mut()) {
+                        if *variable == old_id {
+                            *variable = new_id;
+                        }
+                    }
                 }
                 Constraint::SOS { weights, .. } => {
                     for weight in weights {
@@ -759,8 +775,9 @@ impl LpProblem {
     /// # Errors
     ///
     /// Returns an error if the variable does not exist, or if it is the
-    /// indicator variable of an indicator constraint (remove the constraint
-    /// first: dropping only its condition would change what it means).
+    /// indicator variable of an indicator constraint or appears in a general
+    /// constraint (remove the constraint first: dropping only part of it would
+    /// change what it means).
     pub fn remove_variable(&mut self, variable_name: &str) -> LpResult<()> {
         debug_assert!(!variable_name.is_empty(), "variable_name must not be empty");
         let var_id = self
@@ -774,6 +791,14 @@ impl LpProblem {
         {
             return Err(LpParseError::invalid_operation(format!(
                 "variable '{variable_name}' is the indicator of constraint '{}'; remove that constraint first",
+                self.interner.resolve(constraint.name())
+            )));
+        }
+        if let Some(constraint) = self.constraints.values().find(|c| {
+            matches!(c, Constraint::General { resultant, function, .. } if *resultant == var_id || function.variables().contains(&var_id))
+        }) {
+            return Err(LpParseError::invalid_operation(format!(
+                "variable '{variable_name}' appears in general constraint '{}'; remove that constraint first",
                 self.interner.resolve(constraint.name())
             )));
         }
@@ -810,6 +835,8 @@ impl LpProblem {
                 Constraint::SOS { weights, .. } => {
                     weights.retain(|w| w.name != var_id);
                 }
+                // Refused above when it references the variable.
+                Constraint::General { .. } => {}
             }
         }
 
@@ -885,7 +912,8 @@ mod serde_support {
 
     use crate::interner::{NameId, NameInterner};
     use crate::model::{
-        Coefficient, ComparisonOp, Constraint, ConstraintClass, Objective, QuadraticTerm, SOSType, Sense, Variable, VariableType,
+        Coefficient, ComparisonOp, Constraint, ConstraintClass, GeneralFunction, Objective, QuadraticTerm, SOSType, Sense, Variable,
+        VariableType,
     };
     use crate::problem::LpProblem;
 
@@ -911,6 +939,11 @@ mod serde_support {
             name: String,
             sos_type: SOSType,
             weights: Vec<SerdeCoefficient>,
+        },
+        General {
+            name: String,
+            resultant: String,
+            function: GeneralFunction<String>,
         },
         Quadratic {
             name: String,
@@ -1045,6 +1078,11 @@ mod serde_support {
                             sos_type: *sos_type,
                             weights: coeffs_to_serde(weights, &self.interner),
                         },
+                        Constraint::General { name, resultant, function, .. } => SerdeConstraint::General {
+                            name: self.interner.resolve(*name).to_string(),
+                            resultant: self.interner.resolve(*resultant).to_string(),
+                            function: function.map_variables(|v| self.interner.resolve(*v).to_string()),
+                        },
                         Constraint::Quadratic { name, coefficients, quadratic, operator, rhs, .. } => SerdeConstraint::Quadratic {
                             name: self.interner.resolve(*name).to_string(),
                             coefficients: coeffs_to_serde(coefficients, &self.interner),
@@ -1081,6 +1119,80 @@ mod serde_support {
         }
     }
 
+    /// Rebuild one constraint (recording a non-default class in `constraint_classes`).
+    fn constraint_from_serde(
+        sc: &SerdeConstraint,
+        interner: &mut NameInterner,
+        constraint_classes: &mut IndexMap<NameId, ConstraintClass>,
+    ) -> (NameId, Constraint) {
+        match sc {
+            SerdeConstraint::Standard { name, coefficients, operator, rhs, class } => {
+                let name_id = interner.intern(name);
+                if !class.is_normal() {
+                    constraint_classes.insert(name_id, *class);
+                }
+                let con = Constraint::Standard {
+                    name: name_id,
+                    coefficients: coeffs_from_serde(coefficients, interner),
+                    operator: *operator,
+                    rhs: *rhs,
+                    byte_offset: None,
+                };
+                (name_id, con)
+            }
+            SerdeConstraint::General { name, resultant, function } => {
+                let name_id = interner.intern(name);
+                let con = Constraint::General {
+                    name: name_id,
+                    resultant: interner.intern(resultant),
+                    function: function.map_variables(|v| interner.intern(v)),
+                    byte_offset: None,
+                };
+                (name_id, con)
+            }
+            SerdeConstraint::Quadratic { name, coefficients, quadratic, operator, rhs, class } => {
+                let name_id = interner.intern(name);
+                if !class.is_normal() {
+                    constraint_classes.insert(name_id, *class);
+                }
+                let con = Constraint::Quadratic {
+                    name: name_id,
+                    coefficients: coeffs_from_serde(coefficients, interner),
+                    quadratic: quadratic_from_serde(quadratic, interner),
+                    operator: *operator,
+                    rhs: *rhs,
+                    byte_offset: None,
+                };
+                (name_id, con)
+            }
+            SerdeConstraint::Indicator { name, variable, active_value, coefficients, operator, rhs, class } => {
+                let name_id = interner.intern(name);
+                if !class.is_normal() {
+                    constraint_classes.insert(name_id, *class);
+                }
+                let con = Constraint::Indicator {
+                    name: name_id,
+                    variable: interner.intern(variable),
+                    active_value: *active_value,
+                    coefficients: coeffs_from_serde(coefficients, interner),
+                    operator: *operator,
+                    rhs: *rhs,
+                    byte_offset: None,
+                };
+                (name_id, con)
+            }
+            SerdeConstraint::Sos { name, sos_type, weights } => {
+                let name_id = interner.intern(name);
+                let con = Constraint::SOS {
+                    name: name_id,
+                    sos_type: *sos_type,
+                    weights: coeffs_from_serde(weights, interner),
+                    byte_offset: None,
+                };
+                (name_id, con)
+            }
+        }
+    }
     impl<'de> Deserialize<'de> for LpProblem {
         fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
             let proxy = SerdeLpProblem::deserialize(deserializer)?;
@@ -1103,67 +1215,8 @@ mod serde_support {
                 .collect();
 
             let mut constraint_classes: IndexMap<NameId, ConstraintClass> = IndexMap::new();
-            let constraints: IndexMap<NameId, Constraint> = proxy
-                .constraints
-                .iter()
-                .map(|sc| match sc {
-                    SerdeConstraint::Standard { name, coefficients, operator, rhs, class } => {
-                        let name_id = interner.intern(name);
-                        if !class.is_normal() {
-                            constraint_classes.insert(name_id, *class);
-                        }
-                        let con = Constraint::Standard {
-                            name: name_id,
-                            coefficients: coeffs_from_serde(coefficients, &mut interner),
-                            operator: *operator,
-                            rhs: *rhs,
-                            byte_offset: None,
-                        };
-                        (name_id, con)
-                    }
-                    SerdeConstraint::Quadratic { name, coefficients, quadratic, operator, rhs, class } => {
-                        let name_id = interner.intern(name);
-                        if !class.is_normal() {
-                            constraint_classes.insert(name_id, *class);
-                        }
-                        let con = Constraint::Quadratic {
-                            name: name_id,
-                            coefficients: coeffs_from_serde(coefficients, &mut interner),
-                            quadratic: quadratic_from_serde(quadratic, &mut interner),
-                            operator: *operator,
-                            rhs: *rhs,
-                            byte_offset: None,
-                        };
-                        (name_id, con)
-                    }
-                    SerdeConstraint::Indicator { name, variable, active_value, coefficients, operator, rhs, class } => {
-                        let name_id = interner.intern(name);
-                        if !class.is_normal() {
-                            constraint_classes.insert(name_id, *class);
-                        }
-                        let con = Constraint::Indicator {
-                            name: name_id,
-                            variable: interner.intern(variable),
-                            active_value: *active_value,
-                            coefficients: coeffs_from_serde(coefficients, &mut interner),
-                            operator: *operator,
-                            rhs: *rhs,
-                            byte_offset: None,
-                        };
-                        (name_id, con)
-                    }
-                    SerdeConstraint::Sos { name, sos_type, weights } => {
-                        let name_id = interner.intern(name);
-                        let con = Constraint::SOS {
-                            name: name_id,
-                            sos_type: *sos_type,
-                            weights: coeffs_from_serde(weights, &mut interner),
-                            byte_offset: None,
-                        };
-                        (name_id, con)
-                    }
-                })
-                .collect();
+            let constraints: IndexMap<NameId, Constraint> =
+                proxy.constraints.iter().map(|sc| constraint_from_serde(sc, &mut interner, &mut constraint_classes)).collect();
 
             let variables: IndexMap<NameId, Variable> = proxy
                 .variables
@@ -1486,7 +1539,7 @@ fn register_constraint_variables(variables: &mut IndexMap<NameId, Variable>, con
         Constraint::SOS { weights, .. } => {
             register_variables_from_coefficients(variables, weights, Some(&VariableType::SOS));
         }
-        Constraint::Indicator { .. } | Constraint::Quadratic { .. } => {
+        Constraint::Indicator { .. } | Constraint::Quadratic { .. } | Constraint::General { .. } => {
             constraint.for_each_variable(|id| {
                 variables.entry(id).or_insert_with(|| Variable::new(id));
             });

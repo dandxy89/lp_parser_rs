@@ -1,6 +1,6 @@
 use lalrpop_util::ParseError;
 
-use crate::assemble::{Elem, SpannedElem, assemble_constraint_sections, assemble_objectives};
+use crate::assemble::{Elem, SpannedElem, assemble_constraint_sections, assemble_general_constraints, assemble_objectives};
 use crate::lexer::{Token, LexerError, RawCoefficient, RawConstraint, OptionalSection, ParseResult, SosEntryKind};
 use crate::model::{ComparisonOp, SOSType, Sense, VariableType};
 
@@ -16,6 +16,7 @@ extern {
         "subject to" => Token::SubjectTo,
         "lazy constraints" => Token::LazyConstraints,
         "user cuts" => Token::UserCuts,
+        "general constraints" => Token::GeneralConstraints,
         "bounds" => Token::Bounds,
         "generals" => Token::Generals,
         "integers" => Token::Integers,
@@ -72,6 +73,7 @@ pub LpProblem: ParseResult<'input> = {
         let mut sos: Vec<RawConstraint<'input>> = Vec::new();
         let mut lazy_bodies: Vec<Vec<SpannedElem<'input>>> = Vec::new();
         let mut user_cut_bodies: Vec<Vec<SpannedElem<'input>>> = Vec::new();
+        let mut general_bodies: Vec<Vec<SpannedElem<'input>>> = Vec::new();
 
         for section in sections {
             match section {
@@ -83,6 +85,7 @@ pub LpProblem: ParseResult<'input> = {
                 OptionalSection::SOS(s) => sos.extend(s),
                 OptionalSection::Lazy(elems) => lazy_bodies.push(elems),
                 OptionalSection::UserCuts(elems) => user_cut_bodies.push(elems),
+                OptionalSection::GeneralConstraints(elems) => general_bodies.push(elems),
             }
         }
 
@@ -94,7 +97,11 @@ pub LpProblem: ParseResult<'input> = {
         bodies.extend(lazy_bodies.iter().map(Vec::as_slice));
         bodies.extend(user_cut_bodies.iter().map(Vec::as_slice));
         let mut assembled = assemble_constraint_sections(&bodies).map_err(|error| ParseError::User { error })?.into_iter();
-        let constraints = assembled.next().unwrap_or_default();
+        let mut constraints = assembled.next().unwrap_or_default();
+        // General constraints are ordinary (not lazy) constraints of their own kind.
+        for body in &general_bodies {
+            constraints.extend(assemble_general_constraints(body).map_err(|error| ParseError::User { error })?);
+        }
         let lazy_constraints: Vec<RawConstraint<'input>> = assembled.by_ref().take(lazy_bodies.len()).flatten().collect();
         let user_cuts: Vec<RawConstraint<'input>> = assembled.flatten().collect();
 
@@ -115,6 +122,7 @@ AnySection: OptionalSection<'input> = {
     // Constraint bodies are assembled in the top-level action (see above).
     "lazy constraints" <elems:ConElem*> => OptionalSection::Lazy(elems),
     "user cuts" <elems:ConElem*> => OptionalSection::UserCuts(elems),
+    "general constraints" <elems:ConElem*> => OptionalSection::GeneralConstraints(elems),
 };
 
 // One element of the objective section body. `name ":"` is folded into a

@@ -36,7 +36,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use crate::error::{LpParseError, LpResult};
 use crate::interner::NameId;
-use crate::model::{Coefficient, Constraint, QuadraticTerm};
+use crate::model::{Coefficient, Constraint, GeneralFunction, QuadraticTerm};
 use crate::problem::LpProblem;
 
 /// A name normaliser: rewrites a name before matching.
@@ -283,6 +283,9 @@ fn diff_modified_constraints(
                     changes.push(format!("{quad_diffs} quadratic term change(s)"));
                 }
             }
+            (Constraint::General { resultant: r1, function: f1, .. }, Constraint::General { resultant: r2, function: f2, .. }) => {
+                changes.extend(general_constraint_change((p1, *r1, f1), (p2, *r2, f2), normalise, tol));
+            }
             _ => changes.push(format!("constraint kind changed ({} <-> {})", constraint_kind(c1), constraint_kind(c2))),
         }
         if !changes.is_empty() {
@@ -292,6 +295,27 @@ fn diff_modified_constraints(
     modified
 }
 
+/// A Gurobi general constraint as `(problem, resultant, function)`.
+type GeneralSide<'a> = (&'a LpProblem, NameId, &'a GeneralFunction);
+
+/// Describe a change between two general constraints, if there is one.
+fn general_constraint_change(old: GeneralSide<'_>, new: GeneralSide<'_>, normalise: Normaliser, tol: DiffTol) -> Option<String> {
+    let describe = |(p, resultant, function): GeneralSide<'_>| {
+        let args: Vec<String> = function.variables().iter().map(|v| normalise(p.resolve(*v))).collect();
+        let constant = function.constant().map_or_else(String::new, |c| format!(", {c}"));
+        format!("{} = {} ({}{constant})", normalise(p.resolve(resultant)), function.keyword(), args.join(", "))
+    };
+    let constants_differ = match (old.2.constant(), new.2.constant()) {
+        (Some(a), Some(b)) => tol.differ(a, b),
+        (a, b) => a.is_some() != b.is_some(),
+    };
+    let names = |(p, resultant, function): GeneralSide<'_>| -> Vec<String> {
+        std::iter::once(&resultant).chain(function.variables()).map(|v| normalise(p.resolve(*v))).collect()
+    };
+    let structure_differs = old.2.keyword() != new.2.keyword() || names(old) != names(new);
+    (structure_differs || constants_differ).then(|| format!("general constraint {} -> {}", describe(old), describe(new)))
+}
+
 /// Short name of a constraint's kind, for "kind changed" descriptions.
 const fn constraint_kind(constraint: &Constraint) -> &'static str {
     match constraint {
@@ -299,6 +323,7 @@ const fn constraint_kind(constraint: &Constraint) -> &'static str {
         Constraint::SOS { .. } => "SOS",
         Constraint::Indicator { .. } => "Indicator",
         Constraint::Quadratic { .. } => "Quadratic",
+        Constraint::General { .. } => "General",
     }
 }
 

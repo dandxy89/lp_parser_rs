@@ -146,6 +146,98 @@ impl QuadraticTerm {
     }
 }
 
+/// The function of a Gurobi general constraint (`resultant = FUNCTION ( ... )`),
+/// generic over how variables are named ([`NameId`] in the model, `&str` while
+/// parsing).
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, PartialEq)]
+pub enum GeneralFunction<V = NameId> {
+    /// `MAX ( x1 , x2 , c )`: the largest of the variables and the constant.
+    Max {
+        /// Argument variables.
+        variables: Vec<V>,
+        /// Constant argument, if any.
+        constant: Option<f64>,
+    },
+    /// `MIN ( x1 , x2 , c )`: the smallest of the variables and the constant.
+    Min {
+        /// Argument variables.
+        variables: Vec<V>,
+        /// Constant argument, if any.
+        constant: Option<f64>,
+    },
+    /// `ABS ( x )`: the absolute value of a variable.
+    Abs {
+        /// The argument variable.
+        variable: V,
+    },
+    /// `AND ( b1 , b2 )`: the conjunction of binary variables.
+    And {
+        /// Argument (binary) variables.
+        variables: Vec<V>,
+    },
+    /// `OR ( b1 , b2 )`: the disjunction of binary variables.
+    Or {
+        /// Argument (binary) variables.
+        variables: Vec<V>,
+    },
+}
+
+impl<V> GeneralFunction<V> {
+    /// The function's LP keyword (`MAX`, `MIN`, `ABS`, `AND`, `OR`).
+    #[must_use]
+    pub const fn keyword(&self) -> &'static str {
+        match self {
+            Self::Max { .. } => "MAX",
+            Self::Min { .. } => "MIN",
+            Self::Abs { .. } => "ABS",
+            Self::And { .. } => "AND",
+            Self::Or { .. } => "OR",
+        }
+    }
+
+    /// The argument variables, in order.
+    #[must_use]
+    pub fn variables(&self) -> &[V] {
+        match self {
+            Self::Max { variables, .. } | Self::Min { variables, .. } | Self::And { variables } | Self::Or { variables } => variables,
+            Self::Abs { variable } => std::slice::from_ref(variable),
+        }
+    }
+
+    /// The constant argument of `MAX` / `MIN`, if any.
+    #[must_use]
+    pub const fn constant(&self) -> Option<f64> {
+        match self {
+            Self::Max { constant, .. } | Self::Min { constant, .. } => *constant,
+            Self::Abs { .. } | Self::And { .. } | Self::Or { .. } => None,
+        }
+    }
+
+    /// Mutable access to the argument variables.
+    pub fn variables_mut(&mut self) -> &mut [V] {
+        match self {
+            Self::Max { variables, .. } | Self::Min { variables, .. } | Self::And { variables } | Self::Or { variables } => variables,
+            Self::Abs { variable } => std::slice::from_mut(variable),
+        }
+    }
+
+    /// Rename every argument variable with `f`, keeping the function.
+    pub fn map_variables<W>(&self, mut f: impl FnMut(&V) -> W) -> GeneralFunction<W> {
+        match self {
+            Self::Max { variables, constant } => {
+                GeneralFunction::Max { variables: variables.iter().map(&mut f).collect(), constant: *constant }
+            }
+            Self::Min { variables, constant } => {
+                GeneralFunction::Min { variables: variables.iter().map(&mut f).collect(), constant: *constant }
+            }
+            Self::Abs { variable } => GeneralFunction::Abs { variable: f(variable) },
+            Self::And { variables } => GeneralFunction::And { variables: variables.iter().map(&mut f).collect() },
+            Self::Or { variables } => GeneralFunction::Or { variables: variables.iter().map(&mut f).collect() },
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 /// Represents a constraint in an optimisation problem, which can be either a
 /// standard linear constraint or a special ordered set (SOS) constraint.
@@ -190,6 +282,18 @@ pub enum Constraint {
         /// Byte offset of this constraint in the source text (for line number mapping).
         byte_offset: Option<usize>,
     },
+    /// A Gurobi general constraint (`General Constraints` section):
+    /// `resultant = FUNCTION ( arguments )`.
+    General {
+        /// Interned constraint name.
+        name: NameId,
+        /// The variable the function's value is assigned to.
+        resultant: NameId,
+        /// The function and its arguments.
+        function: GeneralFunction,
+        /// Byte offset of this constraint in the source text (for line number mapping).
+        byte_offset: Option<usize>,
+    },
     /// An indicator constraint (`name: b = 1 -> x + y <= 3`): the linear
     /// constraint must hold whenever the binary `variable` equals
     /// `active_value`, and is unconstrained otherwise.
@@ -230,6 +334,9 @@ impl PartialEq for Constraint {
                 Self::Quadratic { name: n1, coefficients: c1, quadratic: q1, operator: o1, rhs: r1, .. },
                 Self::Quadratic { name: n2, coefficients: c2, quadratic: q2, operator: o2, rhs: r2, .. },
             ) => n1 == n2 && c1 == c2 && q1 == q2 && o1 == o2 && r1 == r2,
+            (Self::General { name: n1, resultant: r1, function: f1, .. }, Self::General { name: n2, resultant: r2, function: f2, .. }) => {
+                n1 == n2 && r1 == r2 && f1 == f2
+            }
             _ => false,
         }
     }
@@ -241,7 +348,11 @@ impl Constraint {
     /// Returns the interned name of the constraint.
     pub const fn name(&self) -> NameId {
         match self {
-            Self::Standard { name, .. } | Self::SOS { name, .. } | Self::Indicator { name, .. } | Self::Quadratic { name, .. } => *name,
+            Self::Standard { name, .. }
+            | Self::SOS { name, .. }
+            | Self::Indicator { name, .. }
+            | Self::Quadratic { name, .. }
+            | Self::General { name, .. } => *name,
         }
     }
 
@@ -253,7 +364,8 @@ impl Constraint {
             Self::Standard { byte_offset, .. }
             | Self::SOS { byte_offset, .. }
             | Self::Indicator { byte_offset, .. }
-            | Self::Quadratic { byte_offset, .. } => *byte_offset,
+            | Self::Quadratic { byte_offset, .. }
+            | Self::General { byte_offset, .. } => *byte_offset,
         }
     }
 
@@ -262,7 +374,11 @@ impl Constraint {
     /// Returns a mutable reference to the interned name of the constraint.
     pub const fn name_mut(&mut self) -> &mut NameId {
         match self {
-            Self::Standard { name, .. } | Self::SOS { name, .. } | Self::Indicator { name, .. } | Self::Quadratic { name, .. } => name,
+            Self::Standard { name, .. }
+            | Self::SOS { name, .. }
+            | Self::Indicator { name, .. }
+            | Self::Quadratic { name, .. }
+            | Self::General { name, .. } => name,
         }
     }
 
@@ -277,7 +393,7 @@ impl Constraint {
             Self::Standard { coefficients, operator, rhs, .. } | Self::Indicator { coefficients, operator, rhs, .. } => {
                 Some((coefficients, *operator, *rhs))
             }
-            Self::SOS { .. } | Self::Quadratic { .. } => None,
+            Self::SOS { .. } | Self::Quadratic { .. } | Self::General { .. } => None,
         }
     }
 
@@ -304,6 +420,12 @@ impl Constraint {
                 for term in quadratic {
                     f(term.var1);
                     f(term.var2);
+                }
+            }
+            Self::General { resultant, function, .. } => {
+                f(*resultant);
+                for variable in function.variables() {
+                    f(*variable);
                 }
             }
         }

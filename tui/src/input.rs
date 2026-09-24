@@ -1685,7 +1685,7 @@ pub(crate) fn baseline_constraint_rhs(problem: &LpProblem, name: &str) -> Option
         lp_parser_rs::model::Constraint::Standard { rhs, .. }
         | lp_parser_rs::model::Constraint::Indicator { rhs, .. }
         | lp_parser_rs::model::Constraint::Quadratic { rhs, .. } => Some(*rhs),
-        lp_parser_rs::model::Constraint::SOS { .. } => None,
+        lp_parser_rs::model::Constraint::SOS { .. } | lp_parser_rs::model::Constraint::General { .. } => None,
     }
 }
 

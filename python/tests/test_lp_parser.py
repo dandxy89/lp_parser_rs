@@ -400,6 +400,22 @@ class TestQuadratic:
         assert " q: y + [ y ^ 2 ] <= 4" in written
 
 
+class TestGeneralConstraint:
+    LP = "Maximize\n obj: r\nSubject To\n c1: x + y <= 4\nGeneral Constraints\n g: r = MIN ( x , y , 2 )\nEnd\n"
+
+    def test_general_constraint_is_exposed(self) -> None:
+        general = next(c for c in LpParser.from_string(self.LP).constraints if c["type"] == "general")
+        assert (general["resultant"], general["function"], general["arguments"], general["constant"]) == (
+            "r",
+            "MIN",
+            ["x", "y"],
+            2.0,
+        )
+
+    def test_round_trip(self) -> None:
+        assert "General Constraints\n g: r = MIN ( x , y , 2 )" in LpParser.from_string(self.LP).to_lp_string()
+
+
 class TestThresholdValidation:
     LP = "Minimize\n obj: x\nSubject To\n c1: x >= 1000\nEnd\n"
 

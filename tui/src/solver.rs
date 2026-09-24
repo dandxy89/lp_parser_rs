@@ -430,6 +430,7 @@ pub(crate) fn check_supported(problem: &LpProblem) -> Result<(), String> {
         let kind = match constraint {
             Constraint::Indicator { .. } => "indicator",
             Constraint::Quadratic { .. } => "quadratic",
+            Constraint::General { .. } => "general",
             Constraint::Standard { .. } | Constraint::SOS { .. } => continue,
         };
         return Err(format!("{kind} constraint '{}' is not supported by the HiGHS solver", problem.resolve(*name_id)));
@@ -528,7 +529,9 @@ fn build_highs_qp_model(problem: &LpProblem) -> Result<BuiltModel, String> {
             Constraint::SOS { .. } => {
                 skipped_sos += 1;
             }
-            Constraint::Indicator { .. } | Constraint::Quadratic { .. } => unreachable!("rejected by check_supported"),
+            Constraint::Indicator { .. } | Constraint::Quadratic { .. } | Constraint::General { .. } => {
+                unreachable!("rejected by check_supported")
+            }
         }
     }
 
@@ -1487,6 +1490,11 @@ empty =\n";
         let error = solve_problem(&problem).expect_err("an indicator constraint must not be silently dropped");
         assert!(error.contains("indicator constraint 'ind'"), "unexpected error: {error}");
         assert!(diagnose_infeasibility(&problem).is_err(), "diagnosis must refuse too");
+
+        let general = LpProblem::parse("Minimize\n obj: r\nSubject To\n c1: x >= 1\nGeneral Constraints\n g: r = ABS ( x )\nEnd")
+            .expect("must parse");
+        let error = solve_problem(&general).expect_err("a general constraint must not be silently dropped");
+        assert!(error.contains("general constraint 'g'"), "unexpected error: {error}");
     }
 
     #[test]

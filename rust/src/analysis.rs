@@ -217,6 +217,8 @@ pub struct ConstraintTypeDistribution {
     pub indicator: usize,
     /// Quadratic constraints, not counted under an operator
     pub quadratic: usize,
+    /// Gurobi general constraints (`MAX`, `MIN`, `ABS`, `AND`, `OR`)
+    pub general: usize,
     /// Lazy constraints (also counted under their operator above)
     pub lazy: usize,
     /// User cuts (also counted under their operator above)
@@ -474,6 +476,9 @@ impl Display for ProblemAnalysis {
         if ct.quadratic > 0 {
             writeln!(f, "  Quadratic: {}", ct.quadratic)?;
         }
+        if ct.general > 0 {
+            writeln!(f, "  General: {}", ct.general)?;
+        }
         if ct.lazy > 0 || ct.user_cuts > 0 {
             writeln!(f, "  Lazy: {} | User cuts: {}", ct.lazy, ct.user_cuts)?;
         }
@@ -654,6 +659,7 @@ impl LpProblem {
                 | Constraint::Indicator { coefficients, .. }
                 | Constraint::Quadratic { coefficients, .. } => coefficients.len(),
                 Constraint::SOS { weights, .. } => weights.len(),
+                Constraint::General { .. } => 0,
             })
             .sum()
     }
@@ -666,6 +672,7 @@ impl LpProblem {
                 | Constraint::Indicator { coefficients, .. }
                 | Constraint::Quadratic { coefficients, .. } => coefficients.len(),
                 Constraint::SOS { weights, .. } => weights.len(),
+                Constraint::General { function, .. } => 1 + function.variables().len(),
             };
             (min_v.min(n), max_v.max(n))
         });
@@ -827,6 +834,7 @@ impl LpProblem {
                     type_distribution.quadratic += 1;
                     rhs_range.update(*rhs);
                 }
+                Constraint::General { .. } => type_distribution.general += 1,
                 Constraint::SOS { sos_type, weights, .. } => {
                     match sos_type {
                         SOSType::S1 => {
@@ -852,7 +860,8 @@ impl LpProblem {
                 + type_distribution.sos1
                 + type_distribution.sos2
                 + type_distribution.indicator
-                + type_distribution.quadratic,
+                + type_distribution.quadratic
+                + type_distribution.general,
             self.constraints.len(),
             "postcondition: constraint type distribution must sum to total constraint count"
         );
