@@ -180,7 +180,7 @@ pub fn assemble_objectives<'input>(elems: &[SpannedElem<'input>]) -> Result<Vec<
 ///
 /// Without this a user constraint genuinely called `c1_rng` and the generated
 /// half of `c1: 2 <= x <= 10` collide, and one of the two is lost.
-fn range_upper_name<'input>(base: &'input str, taken: &HashSet<&'input str>) -> Cow<'input, str> {
+pub(crate) fn range_upper_name<'input>(base: &'input str, taken: &HashSet<&'input str>) -> Cow<'input, str> {
     let mut candidate = format!("{base}_rng");
     let mut suffix: u32 = 1;
     while taken.contains(candidate.as_str()) {

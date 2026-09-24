@@ -1,9 +1,11 @@
 use std::borrow::Cow;
+use std::collections::HashSet;
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::sections::ColumnsState;
 use super::{BoundAccumulator, RowType};
+use crate::assemble::range_upper_name;
 use crate::lexer::{RawCoefficient, RawConstraint, RawObjective};
 use crate::model::{ComparisonOp, VariableType};
 
@@ -73,6 +75,9 @@ pub(super) fn build_constraints<'input>(
     debug_assert!(row_order.iter().all(|r| row_types.contains_key(r)), "every row in row_order must have a type in row_types");
 
     let mut constraints = Vec::with_capacity(row_order.len());
+    // The generated upper half of a ranged row must not collide with a real
+    // row name (`c1` ranged next to a row genuinely called `c1_rng`).
+    let taken: HashSet<&'input str> = if range_values.is_empty() { HashSet::new() } else { row_types.keys().copied().collect() };
 
     for &row_name in row_order {
         let row_type = row_types.get(row_name).copied().expect("row_order entries must exist in row_types (validated by debug_assert)");
@@ -116,7 +121,7 @@ pub(super) fn build_constraints<'input>(
 
             // Emit the upper-bound constraint (LTE)
             constraints.push(RawConstraint::Standard {
-                name: Cow::Owned(format!("{row_name}_rng")),
+                name: range_upper_name(row_name, &taken),
                 coefficients: row_coeffs,
                 operator: ComparisonOp::LTE,
                 rhs: upper_rhs,

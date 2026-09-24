@@ -644,6 +644,38 @@ ENDATA
 }
 
 #[test]
+fn test_ranges_generated_name_avoids_existing_row() {
+    let input = "\
+NAME        test
+ROWS
+ N  obj
+ G  c1
+ L  c1_rng
+COLUMNS
+    x1        obj       1
+    x1        c1        1
+    x1        c1_rng    1
+RHS
+    RHS_V     c1        1
+    RHS_V     c1_rng    7
+RANGES
+    RNG       c1        4
+ENDATA
+";
+    let result = parse_mps(input).unwrap();
+    let names: Vec<&str> = result
+        .constraints
+        .iter()
+        .map(|c| match c {
+            RawConstraint::Standard { name, .. } | RawConstraint::SOS { name, .. } => name.as_ref(),
+        })
+        .collect();
+    assert_eq!(names, ["c1", "c1_rng2", "c1_rng"]);
+    let problem = crate::LpProblem::parse_mps(input).unwrap();
+    assert_eq!(problem.constraint_count(), 3);
+}
+
+#[test]
 fn test_ranges_section_l_row() {
     // L row with range r: lower = rhs - |r|, upper = rhs
     let input = "\
