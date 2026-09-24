@@ -482,7 +482,7 @@ impl<'input> BoundsState<'input> {
                     Some(_) => parse_bound_value(value_field, line_num, bound_type)?,
                     None => f64::INFINITY,
                 };
-                if value != 0.0 && value < crate::mps::writer::SEMI_CONTINUOUS_SENTINEL_UPPER {
+                if value != 0.0 && value < crate::INFINITE_BOUND_THRESHOLD {
                     if accumulator.has_explicit_upper() {
                         return Err(LpParseError::invalid_bounds(var_name, format!("duplicate upper bound (SC) at line {line_num}")));
                     }

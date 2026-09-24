@@ -4,13 +4,13 @@ use std::fmt::{Display, Formatter, Result as FmtResult, Write as _};
 use indexmap::IndexMap;
 use indexmap::map::Entry;
 
-use crate::NUMERIC_EPSILON;
 use crate::error::{EntityKind, LpParseError, LpResult};
 use crate::interner::{NameId, NameInterner};
 use crate::lexer::{Lexer, ParseResult, RawCoefficient, RawConstraint, RawObjective};
 use crate::lp::LpProblemParser;
 use crate::model::{Coefficient, Constraint, Objective, Sense, Variable, VariableKind, VariableType};
 use crate::mps::{extract_mps_name, parse_mps};
+use crate::{INFINITE_BOUND_THRESHOLD, NUMERIC_EPSILON};
 
 /// Check if a floating-point value is effectively zero using both absolute
 /// and relative epsilon comparisons.
@@ -1050,6 +1050,18 @@ fn intern_constraints(
     constraints
 }
 
+/// Map a bound value of magnitude `>= 1e30` to the matching infinity (the
+/// CPLEX convention for "unbounded" in both LP and MPS files).
+fn saturate_infinite_bound(value: f64) -> f64 {
+    if value >= INFINITE_BOUND_THRESHOLD {
+        f64::INFINITY
+    } else if value <= -INFINITE_BOUND_THRESHOLD {
+        f64::NEG_INFINITY
+    } else {
+        value
+    }
+}
+
 /// Process bounds declarations into the variables map.
 ///
 /// Bound-shaped declarations update [`VariableBounds`]; kind-shaped declarations
@@ -1061,7 +1073,9 @@ fn process_bounds(interner: &mut NameInterner, bounds: &[(&str, VariableType)], 
             decl,
             VariableType::Free | VariableType::LowerBound(_) | VariableType::UpperBound(_) | VariableType::DoubleBound(_, _)
         );
-        let (kind, bounds_decl) = decl.clone().into_kind_and_bounds();
+        let (kind, mut bounds_decl) = decl.clone().into_kind_and_bounds();
+        bounds_decl.lower = bounds_decl.lower.map(saturate_infinite_bound);
+        bounds_decl.upper = bounds_decl.upper.map(saturate_infinite_bound);
         match variables.entry(var_id) {
             Entry::Occupied(mut entry) => {
                 let var = entry.get_mut();
@@ -1795,6 +1809,23 @@ End";
         // `such that` is a multi-word alias for `subject to`.
         let p = LpProblem::parse("minimize\nx1\nsuch that\nc1: x1 <= 1\nend").unwrap();
         assert_eq!(p.constraint_count(), 1);
+    }
+
+    #[test]
+    fn test_huge_bounds_are_infinite() {
+        let p =
+            LpProblem::parse("minimize\nx + y + z\nsubject to\nc: x + y + z >= 1\nbounds\nx <= 1e30\n-1e30 <= y <= 1e31\nz >= -2e30\nend")
+                .unwrap();
+        let var = |name: &str| p.variables[&p.name_id(name).unwrap()].bounds;
+        assert_eq!(var("x"), VariableBounds::upper(f64::INFINITY));
+        assert_eq!(var("y"), VariableBounds::free());
+        assert_eq!(var("z"), VariableBounds::lower(f64::NEG_INFINITY));
+
+        let mps = "NAME t\nROWS\n N  obj\nCOLUMNS\n    x  obj  1\n    y  obj  1\nBOUNDS\n UP BND  x  1e30\n LO BND  y  -1e30\n UP BND  y  9.99e29\nENDATA\n";
+        let p = LpProblem::parse_mps(mps).unwrap();
+        let var = |name: &str| p.variables[&p.name_id(name).unwrap()].bounds;
+        assert_eq!(var("x").upper, Some(f64::INFINITY));
+        assert_eq!(var("y"), VariableBounds::range(f64::NEG_INFINITY, 9.99e29));
     }
 
     #[test]

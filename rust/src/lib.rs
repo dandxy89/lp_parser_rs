@@ -111,3 +111,7 @@ pub use lp_grammar::lp;
 /// Tolerance for floating-point comparisons in coefficient handling.
 /// Used for checking if values are effectively zero or one.
 pub(crate) const NUMERIC_EPSILON: f64 = 1e-10;
+
+/// Magnitude at or beyond which a parsed bound is treated as infinite, per
+/// the CPLEX convention shared by LP and MPS readers (`1e30` means "no bound").
+pub(crate) const INFINITE_BOUND_THRESHOLD: f64 = 1e30;
