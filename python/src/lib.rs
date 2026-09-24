@@ -213,13 +213,14 @@ impl LpParser {
         }
         let problem = &self.problem;
         let options = LpWriterOptions { include_problem_name, max_line_length, decimal_precision, include_section_spacing };
-        Ok(write_lp_string_with_options(problem, &options))
+        write_lp_string_with_options(problem, &options).map_err(|err| to_py_err("Unable to write LP", err))
     }
 
     /// Save the current problem to an LP file
     fn save_to_file(&self, filepath: PathBuf) -> PyResult<()> {
         let problem = &self.problem;
-        let lp_content = write_lp_string_with_options(problem, &LpWriterOptions::default());
+        let lp_content =
+            write_lp_string_with_options(problem, &LpWriterOptions::default()).map_err(|err| to_py_err("Unable to write LP", err))?;
         std::fs::write(&filepath, lp_content).map_err(|err| io_err(&filepath, &err))
     }
 

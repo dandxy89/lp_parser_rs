@@ -13,14 +13,19 @@
 //!     .with_problem_name("Example")
 //!     .with_sense(lp_parser_rs::model::Sense::Maximize);
 //!
-//! let lp_content = write_lp_string(&problem);
+//! let lp_content = write_lp_string(&problem)?;
 //! println!("{}", lp_content);
+//! # Ok::<(), lp_parser_rs::LpParseError>(())
 //! ```
 
 use std::fmt::Write;
 
+use rustc_hash::FxHashSet;
+
 use crate::NUMERIC_EPSILON;
-use crate::interner::NameInterner;
+use crate::error::{LpParseError, LpResult};
+use crate::interner::{NameId, NameInterner};
+use crate::lexer::{Lexer, Token};
 use crate::model::{Coefficient, Constraint, Objective, Variable};
 use crate::problem::LpProblem;
 
@@ -54,8 +59,12 @@ impl Default for LpWriterOptions {
 /// # Returns
 ///
 /// A string containing the LP file content in standard format
-#[must_use]
-pub fn write_lp_string(problem: &LpProblem) -> String {
+///
+/// # Errors
+///
+/// Returns a validation error if a name cannot be written as an LP identifier
+/// that reads back unchanged -- see [`write_lp_string_with_options`].
+pub fn write_lp_string(problem: &LpProblem) -> LpResult<String> {
     write_lp_string_with_options(problem, &LpWriterOptions::default())
 }
 
@@ -69,13 +78,73 @@ pub fn write_lp_string(problem: &LpProblem) -> String {
 /// # Returns
 ///
 /// A string containing the LP file content
-#[must_use]
+///
+/// # Errors
+///
+/// Returns a validation error if an objective, constraint or variable name is
+/// not a single LP identifier -- e.g. a keyword such as `free` or `st`, a name
+/// starting with a digit, or one containing `:`, `<`, `=`, `+` or whitespace --
+/// or if the problem name (when written) contains a line break. Writing such a
+/// name would produce a file that fails to parse or means something else.
 // The only panic is the expect on fmt::Write to String, which is infallible.
 #[allow(clippy::missing_panics_doc)]
-pub fn write_lp_string_with_options(problem: &LpProblem, options: &LpWriterOptions) -> String {
+pub fn write_lp_string_with_options(problem: &LpProblem, options: &LpWriterOptions) -> LpResult<String> {
+    validate_lp_names(problem, options)?;
     let mut output = String::new();
     build_lp(&mut output, problem, options).expect("fmt::Write to String is infallible");
-    output
+    Ok(output)
+}
+
+/// Check that `name` lexes back as exactly one LP identifier equal to itself.
+///
+/// # Errors
+///
+/// Returns a validation error naming the offending `kind` and `name`.
+pub(crate) fn check_lp_name(name: &str, kind: &str) -> LpResult<()> {
+    let mut tokens = Lexer::new(name);
+    let is_identifier = matches!(tokens.next(), Some(Ok((0, Token::Identifier(ident), end))) if end == name.len() && ident == name);
+    if is_identifier && tokens.next().is_none() {
+        Ok(())
+    } else {
+        Err(LpParseError::validation_error(format!(
+            "{kind} name '{name}' cannot be written to LP: it does not read back as a single identifier \
+             (keywords, leading digits, whitespace and characters such as ':', '<', '=', '+' are not allowed)"
+        )))
+    }
+}
+
+/// Validate every name the LP writer will emit (see [`check_lp_name`]).
+fn validate_lp_names(problem: &LpProblem, options: &LpWriterOptions) -> LpResult<()> {
+    if options.include_problem_name
+        && let Some(name) = problem.name()
+        && name.contains(['\n', '\r'])
+    {
+        return Err(LpParseError::validation_error(format!("problem name {name:?} cannot be written to LP: it contains a line break")));
+    }
+
+    let mut checked: FxHashSet<NameId> = FxHashSet::default();
+    let mut check =
+        |id: NameId, kind: &str| -> LpResult<()> { if checked.insert(id) { check_lp_name(problem.resolve(id), kind) } else { Ok(()) } };
+    for id in problem.variables.keys() {
+        check(*id, "variable")?;
+    }
+    for objective in problem.objectives.values() {
+        check(objective.name, "objective")?;
+        for coeff in &objective.coefficients {
+            check(coeff.name, "variable")?;
+        }
+    }
+    for constraint in problem.constraints.values() {
+        check(constraint.name(), "constraint")?;
+        let terms = match constraint {
+            Constraint::Standard { coefficients, .. } => coefficients,
+            Constraint::SOS { weights, .. } => weights,
+        };
+        for coeff in terms {
+            check(coeff.name, "variable")?;
+        }
+    }
+    Ok(())
 }
 
 /// Build the full LP document into `output`.
@@ -532,7 +601,7 @@ mod tests {
     #[allow(clippy::float_cmp)]
     fn test_default_options_round_trip_exact_coefficients() {
         let problem = LpProblem::parse("minimize\nobj: 0.0000001 x + 1.23456789 y\nsubject to\nc1: x + y >= 1e-12\nend\n").unwrap();
-        let written = write_lp_string(&problem);
+        let written = write_lp_string(&problem).unwrap();
         let reparsed = LpProblem::parse(&written).unwrap_or_else(|e| panic!("written LP must re-parse: {e}\n---\n{written}"));
         let obj = reparsed.objectives.values().next().unwrap();
         let values: Vec<f64> = obj.coefficients.iter().map(|c| c.value).collect();
@@ -581,7 +650,7 @@ mod tests {
         problem.add_variable(Variable::new(x2).with_var_type(VariableType::LowerBound(f64::NEG_INFINITY)));
         problem.add_variable(Variable::new(x3).with_var_type(VariableType::DoubleBound(f64::NEG_INFINITY, 5.0)));
 
-        let result = write_lp_string(&problem);
+        let result = write_lp_string(&problem).unwrap();
         assert!(result.contains("x1 <= inf"), "got: {result}");
         assert!(result.contains("x2 >= -inf"), "got: {result}");
         assert!(result.contains("-inf <= x3 <= 5"), "got: {result}");
@@ -626,7 +695,7 @@ mod tests {
             byte_offset: None,
         });
 
-        let result = write_lp_string(&problem);
+        let result = write_lp_string(&problem).unwrap();
         // Empty expressions cannot be represented in LP syntax; a dangling
         // ` name: ` line would make the output unparseable.
         assert!(!result.contains("empty_obj"), "got: {result}");
@@ -640,17 +709,56 @@ mod tests {
     #[test]
     fn test_write_empty_problem() {
         let problem = LpProblem::new();
-        let result = write_lp_string(&problem);
+        let result = write_lp_string(&problem).unwrap();
 
         assert!(result.contains("Minimize"));
         assert!(result.contains("End"));
     }
 
     #[test]
+    fn test_check_lp_name() {
+        for good in ["x", "x1", "e1", "E12", "x.y[1]", "a-b", "free_var", "stock", "_x"] {
+            assert!(check_lp_name(good, "variable").is_ok(), "'{good}' is a valid LP identifier");
+        }
+        for bad in
+            ["", "2x", "1e5", "free", "End", "st", "s.t.", "bin", "min", "S1", "inf", "a:b", "x<y", "a=b", "a+b", "a b", "x\\c", "x\n"]
+        {
+            assert!(check_lp_name(bad, "variable").is_err(), "'{bad}' must be rejected");
+        }
+    }
+
+    #[test]
+    fn test_unrepresentable_names_are_an_error_not_bad_output() {
+        // An MPS column named `2x` used to be written as `obj: 2x + y`, which
+        // re-parses as 2 * x.
+        let mps = "NAME t\nROWS\n N obj\n L c1\nCOLUMNS\n    2x obj 1 c1 1\n    y obj 1 c1 1\nRHS\n    RHS c1 4\nENDATA\n";
+        let problem = LpProblem::parse_mps(mps).expect("fixture must parse");
+        let err = write_lp_string(&problem).expect_err("`2x` is not an LP identifier");
+        assert!(err.to_string().contains("'2x'"), "error must name the offending variable: {err}");
+
+        let mut problem = LpProblem::new();
+        let free_id = problem.intern("free");
+        let x_id = problem.intern("x");
+        problem.add_constraint(Constraint::Standard {
+            name: free_id,
+            coefficients: vec![Coefficient { name: x_id, value: 1.0 }],
+            operator: ComparisonOp::LTE,
+            rhs: 1.0,
+            byte_offset: None,
+        });
+        assert!(write_lp_string(&problem).is_err(), "a constraint named after a keyword must be rejected");
+
+        let named = LpProblem::new().with_problem_name(String::from("two\nlines"));
+        assert!(write_lp_string(&named).is_err(), "a line break in the problem name comment must be rejected");
+        let options = LpWriterOptions { include_problem_name: false, ..LpWriterOptions::default() };
+        assert!(write_lp_string_with_options(&named, &options).is_ok(), "the name is irrelevant when it is not written");
+    }
+
+    #[test]
     fn test_problem_without_constraints_round_trips() {
         let problem = LpProblem::parse("min\n obj: x\nst\nbounds\n x <= 4\nend").expect("fixture must parse");
         assert_eq!(problem.constraint_count(), 0);
-        let written = write_lp_string(&problem);
+        let written = write_lp_string(&problem).unwrap();
         assert!(written.contains("Subject To"), "grammar requires the header:\n{written}");
         let reparsed = LpProblem::parse(&written).unwrap_or_else(|e| panic!("written LP must re-parse: {e}\n---\n{written}"));
         assert_eq!(reparsed.variable_count(), 1);
@@ -685,7 +793,7 @@ mod tests {
         };
         problem.add_constraint(constraint);
 
-        let result = write_lp_string(&problem);
+        let result = write_lp_string(&problem).unwrap();
 
         assert!(result.contains("\\Problem name: Test Problem"));
         assert!(result.contains("Maximize"));
@@ -741,7 +849,7 @@ End";
         problem.rename_constraint("capacity", "resource_limit").unwrap();
 
         // Step 3: Write the modified problem back to LP format
-        let result = write_lp_string(&problem);
+        let result = write_lp_string(&problem).unwrap();
 
         assert!(result.contains("Maximize"));
         assert!(result.contains("5 x1"));
@@ -808,7 +916,7 @@ End";
         problem.update_variable_type("x2", VariableType::Binary).unwrap();
         problem.update_variable_type("x3", VariableType::Integer).unwrap();
 
-        let result = write_lp_string(&problem);
+        let result = write_lp_string(&problem).unwrap();
 
         assert!(result.contains("\\Problem name: Complex Problem"));
         assert!(result.contains("Minimize"));
@@ -848,7 +956,7 @@ End";
         assert_eq!(problem.variables.get(&x2_id).unwrap().kind, VariableKind::General);
 
         // Write back to LP format
-        let output = write_lp_string(&problem);
+        let output = write_lp_string(&problem).unwrap();
 
         // Verify Generals section is present in the output
         assert!(output.contains("Generals"), "Output should contain a Generals section:\n{output}");
@@ -919,7 +1027,7 @@ End";
     fn an_undeclared_variable_is_not_written_as_free() {
         let source = "minimize\nobj: x + y\nsubject to\nc1: x + y >= 2\nbounds\ny free\nend\n";
         let problem = LpProblem::parse(source).expect("fixture must parse");
-        let written = write_lp_string(&problem);
+        let written = write_lp_string(&problem).unwrap();
 
         assert!(!written.contains("x free"), "x was never declared free:\n{written}");
         assert!(written.contains("y free"), "y was declared free and must stay so:\n{written}");
@@ -937,7 +1045,7 @@ End";
     fn a_free_integer_variable_keeps_its_free_bound() {
         let source = "minimize\nobj: x + y\nsubject to\nc1: x + y >= -5\nbounds\nx free\ny free\ngenerals\nx\nintegers\ny\nend\n";
         let problem = LpProblem::parse(source).expect("fixture must parse");
-        let written = write_lp_string(&problem);
+        let written = write_lp_string(&problem).unwrap();
 
         assert!(written.contains("x free"), "general x was declared free:\n{written}");
         assert!(written.contains("y free"), "integer y was declared free:\n{written}");
@@ -987,7 +1095,7 @@ End
         assert_eq!(var("sc1").kind, VariableKind::SemiContinuous);
         assert_eq!(var("sw1").kind, VariableKind::Sos);
 
-        let written = write_lp_string(&original);
+        let written = write_lp_string(&original).unwrap();
         let reparsed = LpProblem::parse(&written).unwrap_or_else(|e| panic!("written LP must re-parse: {e}\n---\n{written}"));
 
         assert_problems_structurally_equal(&original, &reparsed);
@@ -1014,7 +1122,7 @@ End
             byte_offset: None,
         });
 
-        let written = write_lp_string(&problem);
+        let written = write_lp_string(&problem).unwrap();
 
         // The objective must wrap: continuation lines start with the indent.
         assert!(written.contains("\n        "), "objective should wrap with continuation indent:\n{written}");
@@ -1051,7 +1159,7 @@ End
             problem.add_variable(Variable::new(id).with_var_type(VariableType::Binary));
         }
 
-        let written = write_lp_string(&problem);
+        let written = write_lp_string(&problem).unwrap();
 
         // The Binaries section must span multiple lines under the 80-char limit.
         let binaries_start = written.find("Binaries").expect("Binaries section present");
@@ -1086,7 +1194,7 @@ End
             decimal_precision: Some(2),
             include_section_spacing: false,
         };
-        let written = write_lp_string_with_options(&problem, &options);
+        let written = write_lp_string_with_options(&problem, &options).unwrap();
 
         // include_problem_name = false: no name comment.
         assert!(!written.contains("Problem name"), "problem name must be omitted:\n{written}");
@@ -1104,7 +1212,7 @@ End
         assert!(written.lines().any(|l| l.starts_with("        ") && l.contains('y')), "continuation line expected:\n{written}");
 
         // Defaults for contrast: name comment and section spacing present.
-        let default_written = write_lp_string(&problem);
+        let default_written = write_lp_string(&problem).unwrap();
         assert!(default_written.contains("\\Problem name: Opts"));
         assert!(default_written.contains("\n\n"));
     }
@@ -1114,7 +1222,7 @@ End
         let input = "Minimize\n obj: x + y\nSubject To\n c1: x + y >= 1\nSOS\n s2c: S2:: x:1 y:2.5\nEnd";
         let problem = LpProblem::parse(input).unwrap();
 
-        let written = write_lp_string(&problem);
+        let written = write_lp_string(&problem).unwrap();
         assert!(written.contains("S2::"), "S2 marker expected:\n{written}");
         // SOS constraints must live in their own section, not under Subject To.
         let subject_to = written.find("Subject To").unwrap();
@@ -1138,7 +1246,7 @@ End
         let problem = LpProblem::parse(input).unwrap();
         assert_eq!(problem.objective_count(), 2);
 
-        let written = write_lp_string(&problem);
+        let written = write_lp_string(&problem).unwrap();
         let reparsed = LpProblem::parse(&written).unwrap_or_else(|e| panic!("written LP must re-parse: {e}\n---\n{written}"));
 
         assert_eq!(reparsed.objective_count(), 2);
@@ -1167,7 +1275,7 @@ End
         };
         problem.add_constraint(sos_constraint);
 
-        let result = write_lp_string(&problem);
+        let result = write_lp_string(&problem).unwrap();
 
         assert!(result.contains("Subject To"));
         assert!(result.contains("sos1: S1:: x1:1 x2:2 x3:3"));

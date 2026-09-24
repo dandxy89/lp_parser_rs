@@ -1769,7 +1769,7 @@ mod tests {
         let (rewritten, stats) = presolve(&problem, DEFAULT_RULES);
         assert!(!stats.is_noop(), "a no-op rewrite would make the round trip prove nothing");
 
-        let written = lp_parser_rs::writer::write_lp_string(&rewritten);
+        let written = lp_parser_rs::writer::write_lp_string(&rewritten).expect("the rewrite must write");
         let reparsed = LpProblem::parse(&written).expect("the written rewrite must parse back");
 
         assert_eq!(reparsed.constraint_count(), rewritten.constraint_count());
@@ -1843,7 +1843,7 @@ mod tests {
         // `w` writes the rewrite to disk, so the partial sums must survive a
         // round trip: an infinite bound the writer dropped would silently
         // re-impose the LP default of `part >= 0`.
-        let written = lp_parser_rs::writer::write_lp_string(&out);
+        let written = lp_parser_rs::writer::write_lp_string(&out).expect("the split must write");
         let reparsed = LpProblem::parse(&written).expect("the written split must parse back");
         assert_eq!(
             bounds_of(&reparsed, "dense__part1"),

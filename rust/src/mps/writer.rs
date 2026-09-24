@@ -106,14 +106,109 @@ pub const EMPTY_OBJECTIVE_ROW_NAME: &str = "OBJ";
 /// CPLEX/Gurobi-style MPS files.
 pub(crate) const SEMI_CONTINUOUS_SENTINEL_UPPER: f64 = 1e30;
 
-/// Fixed vector label written in the RHS section (the first field of each
-/// RHS data line). The MPS reader accepts any label; only the first
-/// encountered vector is honoured, so a single constant label is sufficient.
+/// Preferred vector label written in the RHS section (the first field of each
+/// RHS data line). The MPS reader accepts any label and honours only the
+/// first vector it sees, so one label is enough -- but a label equal to a row
+/// name would be misread as a label-less line, so [`VectorLabels`] falls back
+/// to a suffixed variant when this one is taken.
 const RHS_VECTOR_LABEL: &str = "RHS";
 
-/// Fixed vector label written in the BOUNDS section, analogous to
-/// [`RHS_VECTOR_LABEL`].
+/// Preferred vector label written in the BOUNDS section, analogous to
+/// [`RHS_VECTOR_LABEL`] (it must not collide with a column name).
 const BOUNDS_VECTOR_LABEL: &str = "BOUND";
+
+/// Preferred vector label written in the RANGES section, analogous to
+/// [`RHS_VECTOR_LABEL`].
+const RANGES_VECTOR_LABEL: &str = "RNG";
+
+/// The vector labels actually written, chosen so none collides with a name the
+/// reader would take for a row (RHS, RANGES) or a column (BOUNDS).
+struct VectorLabels {
+    rhs: String,
+    ranges: String,
+    bounds: String,
+}
+
+impl VectorLabels {
+    fn new(problem: &LpProblem, obj_row_name: &str) -> Self {
+        let is_row = |label: &str| label == obj_row_name || problem.name_id(label).is_some_and(|id| problem.constraints.contains_key(&id));
+        let is_column = |label: &str| problem.name_id(label).is_some_and(|id| problem.variables.contains_key(&id));
+        Self {
+            rhs: unused_label(RHS_VECTOR_LABEL, is_row),
+            ranges: unused_label(RANGES_VECTOR_LABEL, is_row),
+            bounds: unused_label(BOUNDS_VECTOR_LABEL, is_column),
+        }
+    }
+}
+
+/// Return `base`, or the first of `base1`, `base2`, ... for which `taken` is false.
+fn unused_label(base: &str, taken: impl Fn(&str) -> bool) -> String {
+    let mut label = base.to_string();
+    let mut suffix = 1usize;
+    while taken(&label) {
+        label = format!("{base}{suffix}");
+        suffix += 1;
+    }
+    debug_assert!(!taken(&label), "chosen label must be free");
+    label
+}
+
+/// How a BOUNDS line is written: its vector label and numeric precision.
+#[derive(Clone, Copy)]
+struct BoundStyle<'a> {
+    label: &'a str,
+    precision: Option<usize>,
+}
+
+/// Check that `name` survives the MPS reader's whitespace field splitting
+/// unchanged: non-empty, no whitespace, no leading `$` (an inline comment),
+/// and not the `'MARKER'` keyword.
+///
+/// # Errors
+///
+/// Returns a validation error naming the offending `kind` and `name`.
+fn check_mps_name(name: &str, kind: &str) -> LpResult<()> {
+    let representable = !name.is_empty() && !name.contains(char::is_whitespace) && !name.starts_with('$') && name != "'MARKER'";
+    if representable {
+        Ok(())
+    } else {
+        Err(LpParseError::validation_error(format!(
+            "{kind} name '{name}' cannot be written to MPS: names must be non-empty, contain no whitespace, not start with '$' and not be 'MARKER'"
+        )))
+    }
+}
+
+/// Validate every row, column and SOS name the MPS writer will emit.
+///
+/// # Errors
+///
+/// See [`check_mps_name`]. SOS members named `S1`/`S2` are also rejected: the
+/// reader takes such a line for a new set header.
+fn validate_mps_names(problem: &LpProblem, obj_row_name: &str) -> LpResult<()> {
+    check_mps_name(obj_row_name, "objective")?;
+    if let Some(name) = problem.name()
+        && name.contains(['\n', '\r'])
+    {
+        return Err(LpParseError::validation_error(format!("problem name {name:?} cannot be written to MPS: it contains a line break")));
+    }
+    for id in problem.variables.keys() {
+        check_mps_name(problem.resolve(*id), "variable")?;
+    }
+    for constraint in problem.constraints.values() {
+        check_mps_name(problem.resolve(constraint.name()), "constraint")?;
+        if let Constraint::SOS { weights, .. } = constraint {
+            for weight in weights {
+                let member = problem.resolve(weight.name);
+                if member.eq_ignore_ascii_case("S1") || member.eq_ignore_ascii_case("S2") {
+                    return Err(LpParseError::validation_error(format!(
+                        "SOS member '{member}' cannot be written to MPS: the reader would take it for a set header"
+                    )));
+                }
+            }
+        }
+    }
+    Ok(())
+}
 
 /// Options for controlling MPS file output format.
 #[derive(Debug, Clone, Default)]
@@ -154,7 +249,9 @@ pub fn write_mps_string_with_options(problem: &LpProblem, options: &MpsWriterOpt
 fn build_mps(output: &mut String, problem: &LpProblem, options: &MpsWriterOptions) -> LpResult<()> {
     let objective = select_objective(problem, options)?;
     let obj_row_name: &str = objective.map_or(EMPTY_OBJECTIVE_ROW_NAME, |o| problem.resolve(o.name));
+    validate_mps_names(problem, obj_row_name)?;
     let range_pairs = detect_range_pairs(problem);
+    let labels = VectorLabels::new(problem, obj_row_name);
 
     write_name_line(output, problem).expect("fmt::Write to String is infallible");
 
@@ -168,9 +265,10 @@ fn build_mps(output: &mut String, problem: &LpProblem, options: &MpsWriterOption
     let columns = build_columns(problem, objective, obj_row_name, &range_pairs);
     write_columns_section(output, problem, &columns, options).expect("fmt::Write to String is infallible");
 
-    write_rhs_section(output, problem, objective, obj_row_name, options, &range_pairs).expect("fmt::Write to String is infallible");
-    write_ranges_section(output, problem, options, &range_pairs).expect("fmt::Write to String is infallible");
-    write_bounds_section(output, problem, options)?;
+    write_rhs_section(output, problem, objective, obj_row_name, &labels.rhs, options, &range_pairs)
+        .expect("fmt::Write to String is infallible");
+    write_ranges_section(output, problem, &labels.ranges, options, &range_pairs).expect("fmt::Write to String is infallible");
+    write_bounds_section(output, problem, BoundStyle { label: &labels.bounds, precision: options.decimal_precision })?;
     write_sos_section(output, problem, options).expect("fmt::Write to String is infallible");
 
     writeln!(output, "ENDATA").expect("fmt::Write to String is infallible");
@@ -417,6 +515,7 @@ fn write_rhs_section(
     problem: &LpProblem,
     objective: Option<&Objective>,
     obj_row_name: &str,
+    label: &str,
     options: &MpsWriterOptions,
     range_pairs: &RangePairs,
 ) -> std::fmt::Result {
@@ -426,7 +525,7 @@ fn write_rhs_section(
     if let Some(obj) = objective
         && obj.constant != 0.0
     {
-        write!(output, "    {RHS_VECTOR_LABEL:<10} {obj_row_name:<10} ")?;
+        write!(output, "    {label:<10} {obj_row_name:<10} ")?;
         write_number(output, -obj.constant, options.decimal_precision)?;
         writeln!(output)?;
     }
@@ -440,7 +539,7 @@ fn write_rhs_section(
                 continue;
             }
             let resolved_name = problem.resolve(*name);
-            write!(output, "    {RHS_VECTOR_LABEL:<10} {resolved_name:<10} ")?;
+            write!(output, "    {label:<10} {resolved_name:<10} ")?;
             write_number(output, *rhs, options.decimal_precision)?;
             writeln!(output)?;
         }
@@ -449,15 +548,12 @@ fn write_rhs_section(
     Ok(())
 }
 
-/// Fixed vector label written in the RANGES section, analogous to
-/// [`RHS_VECTOR_LABEL`].
-const RANGES_VECTOR_LABEL: &str = "RNG";
-
 /// Write the `RANGES` section for detected constraint pairs (see
 /// [`RangePairs`]). Omitted entirely when there are no pairs.
 fn write_ranges_section(
     output: &mut String,
     problem: &LpProblem,
+    label: &str,
     options: &MpsWriterOptions,
     range_pairs: &RangePairs,
 ) -> std::fmt::Result {
@@ -470,7 +566,7 @@ fn write_ranges_section(
     for constraint_id in problem.constraints.keys() {
         if let Some(range_value) = range_pairs.ranges.get(constraint_id) {
             let resolved_name = problem.resolve(*constraint_id);
-            write!(output, "    {RANGES_VECTOR_LABEL:<10} {resolved_name:<10} ")?;
+            write!(output, "    {label:<10} {resolved_name:<10} ")?;
             write_number(output, *range_value, options.decimal_precision)?;
             writeln!(output)?;
         }
@@ -480,15 +576,17 @@ fn write_ranges_section(
 }
 
 /// Write a single BOUNDS line with a numeric value.
-fn write_bound_value(output: &mut String, bound_type: &str, var_name: &str, value: f64, precision: Option<usize>) -> std::fmt::Result {
-    write!(output, " {bound_type} {BOUNDS_VECTOR_LABEL:<9} {var_name:<10} ")?;
-    write_number(output, value, precision)?;
+fn write_bound_value(output: &mut String, bound_type: &str, var_name: &str, value: f64, style: BoundStyle<'_>) -> std::fmt::Result {
+    let label = style.label;
+    write!(output, " {bound_type} {label:<9} {var_name:<10} ")?;
+    write_number(output, value, style.precision)?;
     writeln!(output)
 }
 
 /// Write a single BOUNDS line without a numeric value (`FR`, `BV`).
-fn write_bound_flag(output: &mut String, bound_type: &str, var_name: &str) -> std::fmt::Result {
-    writeln!(output, " {bound_type} {BOUNDS_VECTOR_LABEL:<9} {var_name}")
+fn write_bound_flag(output: &mut String, bound_type: &str, var_name: &str, style: BoundStyle<'_>) -> std::fmt::Result {
+    let label = style.label;
+    writeln!(output, " {bound_type} {label:<9} {var_name}")
 }
 
 /// Build the validation error returned for a bound value that MPS cannot
@@ -513,7 +611,7 @@ fn write_variable_bound(
     var_name: &str,
     kind: VariableKind,
     bounds: VariableBounds,
-    precision: Option<usize>,
+    style: BoundStyle<'_>,
 ) -> LpResult<()> {
     // Kinds with a dedicated MPS bound record win over the bound shape: the
     // record already carries the bounds implied by the kind.
@@ -521,7 +619,7 @@ fn write_variable_bound(
         VariableKind::Binary => {
             // Binary is canonically [0, 1]; emit BV regardless of any redundant
             // or contradictory explicit bounds carried alongside the kind.
-            write_bound_flag(output, "BV", var_name).expect("fmt::Write to String is infallible");
+            write_bound_flag(output, "BV", var_name, style).expect("fmt::Write to String is infallible");
             return Ok(());
         }
         VariableKind::SemiContinuous => {
@@ -529,7 +627,7 @@ fn write_variable_bound(
             // needs its own LO record first; without it the round trip would
             // silently widen the variable's range down to zero.
             if let Some(lb) = bounds.lower {
-                write_lower_bound(output, var_name, lb, precision)?;
+                write_lower_bound(output, var_name, lb, style)?;
             }
             // The SC value is the upper bound (MPS specification); `+inf` and
             // "no upper bound" both map to the conventional infinite sentinel.
@@ -544,7 +642,7 @@ fn write_variable_bound(
                 Some(ub) => ub,
             };
             debug_assert!(upper.is_finite(), "SC bound value must be finite, got {upper}");
-            write_bound_value(output, "SC", var_name, upper, precision).expect("fmt::Write to String is infallible");
+            write_bound_value(output, "SC", var_name, upper, style).expect("fmt::Write to String is infallible");
             return Ok(());
         }
         // SOS membership is not itself a bound, but such a variable may still
@@ -553,9 +651,9 @@ fn write_variable_bound(
     }
 
     match (bounds.lower, bounds.upper) {
-        (Some(lb), Some(ub)) => write_double_bound(output, var_name, lb, ub, precision),
-        (Some(lb), None) => write_lower_bound(output, var_name, lb, precision),
-        (None, Some(ub)) => write_upper_bound(output, var_name, ub, precision),
+        (Some(lb), Some(ub)) => write_double_bound(output, var_name, lb, ub, style),
+        (Some(lb), None) => write_lower_bound(output, var_name, lb, style),
+        (None, Some(ub)) => write_upper_bound(output, var_name, ub, style),
         // Unbounded. Integer and General have no MPS analogue of their own:
         // both collapse to an integer column with an explicit LO 0 (see module
         // docs). An unbounded SOS member keeps the MPS default ([0, +inf)),
@@ -563,7 +661,7 @@ fn write_variable_bound(
         (None, None) => {
             match kind {
                 VariableKind::Integer | VariableKind::General => {
-                    write_bound_value(output, "LO", var_name, 0.0, precision).expect("fmt::Write to String is infallible");
+                    write_bound_value(output, "LO", var_name, 0.0, style).expect("fmt::Write to String is infallible");
                 }
                 // No bound was declared, so say nothing: MPS's own default for
                 // a column with no BOUNDS entry is [0, +inf), which is exactly
@@ -591,7 +689,7 @@ fn write_variable_bound(
 /// nonsensical -- it would leave the variable with an empty feasible region
 /// unless the upper bound is also `+inf`, which is not representable as a
 /// plain `LowerBound`).
-fn write_lower_bound(output: &mut String, var_name: &str, lb: f64, precision: Option<usize>) -> LpResult<()> {
+fn write_lower_bound(output: &mut String, var_name: &str, lb: f64, style: BoundStyle<'_>) -> LpResult<()> {
     if lb.is_nan() {
         return Err(invalid_bound_error(var_name, "has a NaN lower bound, which MPS cannot represent"));
     }
@@ -599,10 +697,10 @@ fn write_lower_bound(output: &mut String, var_name: &str, lb: f64, precision: Op
         return Err(invalid_bound_error(var_name, "has a lower bound of +inf, which MPS cannot represent"));
     }
     if lb == f64::NEG_INFINITY {
-        write_bound_flag(output, "MI", var_name).expect("fmt::Write to String is infallible");
+        write_bound_flag(output, "MI", var_name, style).expect("fmt::Write to String is infallible");
         return Ok(());
     }
-    write_bound_value(output, "LO", var_name, lb, precision).expect("fmt::Write to String is infallible");
+    write_bound_value(output, "LO", var_name, lb, style).expect("fmt::Write to String is infallible");
     Ok(())
 }
 
@@ -624,7 +722,7 @@ fn write_lower_bound(output: &mut String, var_name: &str, lb: f64, precision: Op
 /// nonsensical -- it would leave the variable with an empty feasible region
 /// unless the lower bound is also `-inf`, which is not representable as a
 /// plain `UpperBound`).
-fn write_upper_bound(output: &mut String, var_name: &str, ub: f64, precision: Option<usize>) -> LpResult<()> {
+fn write_upper_bound(output: &mut String, var_name: &str, ub: f64, style: BoundStyle<'_>) -> LpResult<()> {
     if ub.is_nan() {
         return Err(invalid_bound_error(var_name, "has a NaN upper bound, which MPS cannot represent"));
     }
@@ -632,13 +730,13 @@ fn write_upper_bound(output: &mut String, var_name: &str, ub: f64, precision: Op
         return Err(invalid_bound_error(var_name, "has an upper bound of -inf, which MPS cannot represent"));
     }
     if ub == f64::INFINITY {
-        write_bound_flag(output, "PL", var_name).expect("fmt::Write to String is infallible");
+        write_bound_flag(output, "PL", var_name, style).expect("fmt::Write to String is infallible");
         return Ok(());
     }
     if ub < 0.0 {
-        write_bound_value(output, "LO", var_name, 0.0, precision).expect("fmt::Write to String is infallible");
+        write_bound_value(output, "LO", var_name, 0.0, style).expect("fmt::Write to String is infallible");
     }
-    write_bound_value(output, "UP", var_name, ub, precision).expect("fmt::Write to String is infallible");
+    write_bound_value(output, "UP", var_name, ub, style).expect("fmt::Write to String is infallible");
     Ok(())
 }
 
@@ -658,7 +756,7 @@ fn write_upper_bound(output: &mut String, var_name: &str, ub: f64, precision: Op
 /// Returns an error if either bound is `NaN`, or if `lb` is `+inf` or `ub`
 /// is `-inf` (nonsensical combinations that MPS's `FR`/`MI`/`PL` flags
 /// cannot represent).
-fn write_double_bound(output: &mut String, var_name: &str, lb: f64, ub: f64, precision: Option<usize>) -> LpResult<()> {
+fn write_double_bound(output: &mut String, var_name: &str, lb: f64, ub: f64, style: BoundStyle<'_>) -> LpResult<()> {
     if lb.is_nan() || ub.is_nan() {
         return Err(invalid_bound_error(var_name, "has a NaN double bound, which MPS cannot represent"));
     }
@@ -668,22 +766,22 @@ fn write_double_bound(output: &mut String, var_name: &str, lb: f64, ub: f64, pre
 
     #[allow(clippy::float_cmp)]
     if lb == ub {
-        write_bound_value(output, "FX", var_name, lb, precision).expect("fmt::Write to String is infallible");
+        write_bound_value(output, "FX", var_name, lb, style).expect("fmt::Write to String is infallible");
         return Ok(());
     }
     match (lb.is_infinite() && lb < 0.0, ub.is_infinite() && ub > 0.0) {
-        (true, true) => write_bound_flag(output, "FR", var_name).expect("fmt::Write to String is infallible"),
+        (true, true) => write_bound_flag(output, "FR", var_name, style).expect("fmt::Write to String is infallible"),
         (true, false) => {
-            write_bound_flag(output, "MI", var_name).expect("fmt::Write to String is infallible");
-            write_bound_value(output, "UP", var_name, ub, precision).expect("fmt::Write to String is infallible");
+            write_bound_flag(output, "MI", var_name, style).expect("fmt::Write to String is infallible");
+            write_bound_value(output, "UP", var_name, ub, style).expect("fmt::Write to String is infallible");
         }
         (false, true) => {
-            write_bound_value(output, "LO", var_name, lb, precision).expect("fmt::Write to String is infallible");
-            write_bound_flag(output, "PL", var_name).expect("fmt::Write to String is infallible");
+            write_bound_value(output, "LO", var_name, lb, style).expect("fmt::Write to String is infallible");
+            write_bound_flag(output, "PL", var_name, style).expect("fmt::Write to String is infallible");
         }
         (false, false) => {
-            write_bound_value(output, "LO", var_name, lb, precision).expect("fmt::Write to String is infallible");
-            write_bound_value(output, "UP", var_name, ub, precision).expect("fmt::Write to String is infallible");
+            write_bound_value(output, "LO", var_name, lb, style).expect("fmt::Write to String is infallible");
+            write_bound_value(output, "UP", var_name, ub, style).expect("fmt::Write to String is infallible");
         }
     }
     Ok(())
@@ -694,7 +792,7 @@ fn write_double_bound(output: &mut String, var_name: &str, lb: f64, ub: f64, pre
 /// # Errors
 ///
 /// See [`write_variable_bound`].
-fn write_bounds_section(output: &mut String, problem: &LpProblem, options: &MpsWriterOptions) -> LpResult<()> {
+fn write_bounds_section(output: &mut String, problem: &LpProblem, style: BoundStyle<'_>) -> LpResult<()> {
     if problem.variables.is_empty() {
         return Ok(());
     }
@@ -702,7 +800,7 @@ fn write_bounds_section(output: &mut String, problem: &LpProblem, options: &MpsW
     writeln!(output, "BOUNDS").expect("fmt::Write to String is infallible");
     for (name_id, variable) in &problem.variables {
         let var_name = problem.resolve(*name_id);
-        write_variable_bound(output, var_name, variable.kind, variable.bounds, options.decimal_precision)?;
+        write_variable_bound(output, var_name, variable.kind, variable.bounds, style)?;
     }
 
     Ok(())
@@ -1083,6 +1181,72 @@ End
         let reparsed = LpProblem::parse_mps(&output).unwrap();
         let x1 = &reparsed.variables[&reparsed.name_id("x1").unwrap()];
         assert_eq!(x1.kind, VariableKind::SemiContinuous);
+    }
+
+    #[test]
+    fn vector_labels_avoid_row_and_column_names() {
+        // A row named `RHS` used to be written as `RHS RHS 1`, which the
+        // reader takes for a label-less line and rejects.
+        let mut problem = LpProblem::new();
+        let x_id = problem.intern("BOUND");
+        let y_id = problem.intern("y");
+        let obj_id = problem.intern("obj");
+        problem.add_objective(Objective {
+            name: obj_id,
+            coefficients: vec![Coefficient { name: x_id, value: 1.0 }, Coefficient { name: y_id, value: 1.0 }],
+            constant: 0.0,
+            byte_offset: None,
+        });
+        // `RNG` / `RNG_rng` fold into a RANGES entry; `RHS` is an ordinary row.
+        for (name, operator, rhs) in [("RNG", ComparisonOp::GTE, 1.0), ("RNG_rng", ComparisonOp::LTE, 3.0), ("RHS", ComparisonOp::GTE, 2.0)]
+        {
+            let id = problem.intern(name);
+            problem.add_constraint(Constraint::Standard {
+                name: id,
+                coefficients: vec![Coefficient { name: x_id, value: 1.0 }, Coefficient { name: y_id, value: 1.0 }],
+                operator,
+                rhs,
+                byte_offset: None,
+            });
+        }
+        problem.add_variable(crate::model::Variable::new(x_id).with_bounds(VariableBounds::upper(5.0)));
+
+        let output = write_mps_string(&problem).expect("must write");
+        assert!(output.contains("RHS1"), "RHS label must avoid the row named RHS:\n{output}");
+        assert!(output.contains("RNG1"), "RANGES label must avoid the row named RNG:\n{output}");
+        assert!(output.contains("BOUND1"), "BOUNDS label must avoid the column named BOUND:\n{output}");
+
+        let reparsed = LpProblem::parse_mps(&output).unwrap_or_else(|e| panic!("written MPS must re-parse: {e}\n{output}"));
+        let rhs_of = |name: &str| match &reparsed.constraints[&reparsed.name_id(name).unwrap()] {
+            Constraint::Standard { rhs, .. } => *rhs,
+            Constraint::SOS { .. } => panic!("{name} must be a standard row"),
+        };
+        assert_eq!(rhs_of("RHS"), 2.0);
+        assert_eq!(rhs_of("RNG"), 1.0);
+        assert_eq!(rhs_of("RNG_rng"), 3.0);
+        let bound = reparsed.variables[&reparsed.name_id("BOUND").unwrap()].bounds;
+        assert_eq!(bound.upper, Some(5.0));
+    }
+
+    #[test]
+    fn names_the_reader_cannot_split_are_rejected() {
+        for bad in ["two words", "$comment", "'MARKER'"] {
+            let mut problem = LpProblem::new();
+            let id = problem.intern(bad);
+            problem.add_variable(crate::model::Variable::new(id));
+            assert!(write_mps_string(&problem).is_err(), "variable '{bad}' must be rejected");
+        }
+
+        let mut problem = LpProblem::new();
+        let set_id = problem.intern("set");
+        let member_id = problem.intern("s1");
+        problem.add_constraint(Constraint::SOS {
+            name: set_id,
+            sos_type: SOSType::S1,
+            weights: vec![Coefficient { name: member_id, value: 1.0 }],
+            byte_offset: None,
+        });
+        assert!(write_mps_string(&problem).is_err(), "an SOS member named like a set header must be rejected");
     }
 
     #[test]

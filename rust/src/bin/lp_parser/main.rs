@@ -489,7 +489,7 @@ fn cmd_convert(args: ConvertArgs, verbose: bool, quiet: bool) -> Result<(), BoxE
                 decimal_precision: args.precision,
                 include_section_spacing: !args.compact,
             };
-            let output = write_lp_string_with_options(&problem, &options);
+            let output = write_lp_string_with_options(&problem, &options)?;
 
             let mut writer = OutputWriter::new(args.output)?;
             write!(writer, "{output}")?;

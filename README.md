@@ -55,7 +55,7 @@ problem.update_constraint_rhs("capacity", 200.0)?;
 problem.rename_variable("x1", "production_a")?;
 problem.update_variable_type("production_a", VariableType::Integer)?;
 
-std::fs::write("modified.lp", write_lp_string(&problem))?;
+std::fs::write("modified.lp", write_lp_string(&problem)?)?; // errors on names LP cannot represent
 ```
 
 Available modification methods on `LpProblem`: `update_objective_coefficient`, `rename_objective`, `remove_objective`, `update_constraint_coefficient`, `update_constraint_rhs`, `rename_constraint`, `remove_constraint`, `rename_variable`, `update_variable_type`, `remove_variable`.

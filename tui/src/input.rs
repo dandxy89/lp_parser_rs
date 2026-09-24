@@ -1218,8 +1218,9 @@ impl App {
         // Unlike the comparison solve, a file on disk has nothing to unscale
         // it: whoever solves it gets the rewritten units, so say so.
         let units = if stats.scaling.cols.is_empty() { "" } else { " (scaled units)" };
-        let written =
-            std::env::current_dir().and_then(|dir| std::fs::write(dir.join(&filename), lp_parser_rs::writer::write_lp_string(&rewritten)));
+        let written: Result<(), Box<dyn std::error::Error>> = lp_parser_rs::writer::write_lp_string(&rewritten)
+            .map_err(Into::into)
+            .and_then(|lp| std::env::current_dir().and_then(|dir| std::fs::write(dir.join(&filename), lp)).map_err(Into::into));
         let message = match written {
             Ok(()) => format!("Wrote {filename}{units} \u{2014} {}", stats.headline()),
             Err(error) => format!("Rewrite write failed: {error}"),

@@ -479,7 +479,7 @@ impl LpProblem {
     ///
     /// let mut problem = LpProblem::parse("Minimize\n obj: x\nSubject To\n c1: x >= 1\nEnd")?;
     /// problem.update_constraint_rhs("c1", 5.0)?;
-    /// assert!(write_lp_string(&problem).contains("c1: x >= 5"));
+    /// assert!(write_lp_string(&problem)?.contains("c1: x >= 5"));
     /// # Ok::<(), lp_parser_rs::LpParseError>(())
     /// ```
     ///
@@ -2083,7 +2083,7 @@ mod modification_tests {
         assert!(p.rename_objective("obj", "").is_err(), "empty new objective name must be rejected");
 
         // The model is untouched, so it still round-trips.
-        let written = crate::writer::write_lp_string(&p);
+        let written = crate::writer::write_lp_string(&p).expect("valid names must write");
         assert!(!written.contains("NaN"), "a rejected NaN must never reach the output: {written}");
         LpProblem::parse(&written).expect("the model must still round-trip after the rejected mutations");
     }
