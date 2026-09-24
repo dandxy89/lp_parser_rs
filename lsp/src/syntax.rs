@@ -165,6 +165,171 @@ pub fn section_of(node: Node<'_>) -> Option<Node<'_>> {
     std::iter::successors(Some(node), Node::parent).find(|n| is_section(*n))
 }
 
+/// One capture of a query pattern, as read by [`query_captures`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct QueryCapture {
+    /// Capture name without the `@` (`keyword.type`).
+    pub name: String,
+    /// Node kind captured (`bounds_keyword`, or `+` for an anonymous node).
+    pub kind: String,
+    /// Whether `kind` is a named node (`(kind)`) rather than a literal (`"kind"`).
+    pub named: bool,
+    /// Kind of the enclosing node in `(parent (kind) @name)` patterns.
+    pub parent: Option<String>,
+}
+
+/// Every capture in `source`, a query in the flat shape the grammar's query
+/// files use: `(kind) @name`, `"literal" @name`, alternations `[ ... ] @name`
+/// and one level of nesting `(parent (kind) @name)`. The source is compiled
+/// first, so it is valid; anything else (predicates, deeper nesting,
+/// captures on nodes with children) is an error, so a query the server cannot
+/// mirror is noticed rather than silently misread.
+///
+/// # Errors
+/// When the query does not compile or has an unsupported shape.
+pub fn query_captures(source: &str) -> Result<Vec<QueryCapture>, String> {
+    let query = tree_sitter::Query::new(&language(), source).map_err(|e| format!("query does not compile: {e}"))?;
+    let mut out = Vec::new();
+    for pattern in 0..query.pattern_count() {
+        let text = &source[query.start_byte_for_pattern(pattern)..query.end_byte_for_pattern(pattern)];
+        let tokens = query_tokens(text)?;
+        let mut rest = tokens.as_slice();
+        read_item(&mut rest, None, &mut out).map_err(|e| format!("unsupported query pattern `{}`: {e}", text.trim()))?;
+        if !rest.is_empty() {
+            return Err(format!("unsupported query pattern `{}`: trailing tokens", text.trim()));
+        }
+    }
+    Ok(out)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum QueryToken {
+    Open,
+    Close,
+    OpenAlt,
+    CloseAlt,
+    Literal(String),
+    Name(String),
+    Capture(String),
+}
+
+fn query_tokens(text: &str) -> Result<Vec<QueryToken>, String> {
+    let mut out = Vec::new();
+    let mut chars = text.char_indices().peekable();
+    while let Some((i, c)) = chars.next() {
+        match c {
+            c if c.is_whitespace() => {}
+            ';' => {
+                // Comment to end of line.
+                while chars.next_if(|&(_, c)| c != '\n').is_some() {}
+            }
+            '(' => out.push(QueryToken::Open),
+            ')' => out.push(QueryToken::Close),
+            '[' => out.push(QueryToken::OpenAlt),
+            ']' => out.push(QueryToken::CloseAlt),
+            '"' => {
+                let mut literal = String::new();
+                loop {
+                    match chars.next() {
+                        Some((_, '\\')) => literal.extend(chars.next().map(|(_, c)| c)),
+                        Some((_, '"')) => break,
+                        Some((_, c)) => literal.push(c),
+                        None => return Err("unterminated string".to_owned()),
+                    }
+                }
+                out.push(QueryToken::Literal(literal));
+            }
+            _ => {
+                let mut end = i + c.len_utf8();
+                while let Some(&(j, c)) = chars.peek() {
+                    if c.is_whitespace() || "()[]\";".contains(c) {
+                        break;
+                    }
+                    end = j + c.len_utf8();
+                    chars.next();
+                }
+                let word = &text[i..end];
+                match word.strip_prefix('@') {
+                    Some(capture) => out.push(QueryToken::Capture(capture.to_owned())),
+                    // `field:` prefixes do not change what is captured.
+                    None if word.ends_with(':') => {}
+                    None if word.starts_with('#') || word.starts_with('!') => return Err(format!("unsupported `{word}`")),
+                    None => out.push(QueryToken::Name(word.to_owned())),
+                }
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// Read one item (`(kind ...)`, `"literal"` or `[ ... ]`) and its captures.
+fn read_item(tokens: &mut &[QueryToken], parent: Option<&str>, out: &mut Vec<QueryCapture>) -> Result<(), String> {
+    // Leaves read before their captures: `(kind, named)`.
+    let mut leaves: Vec<(String, bool)> = Vec::new();
+    match tokens.split_first() {
+        Some((QueryToken::Open, rest)) => {
+            let Some((QueryToken::Name(kind), rest)) = rest.split_first() else { return Err("expected a node kind".to_owned()) };
+            *tokens = rest;
+            if tokens.first() == Some(&QueryToken::Close) {
+                leaves.push((kind.clone(), true));
+            } else {
+                if parent.is_some() {
+                    return Err("nesting deeper than one level".to_owned());
+                }
+                while tokens.first().is_some_and(|t| *t != QueryToken::Close) {
+                    read_item(tokens, Some(kind), out)?;
+                }
+                if tokens.get(1).is_some_and(|t| matches!(t, QueryToken::Capture(_))) {
+                    return Err("capture on a node with children".to_owned());
+                }
+            }
+            let Some((QueryToken::Close, rest)) = tokens.split_first() else { return Err("expected `)`".to_owned()) };
+            *tokens = rest;
+        }
+        Some((QueryToken::Literal(literal), rest)) => {
+            leaves.push((literal.clone(), false));
+            *tokens = rest;
+        }
+        Some((QueryToken::OpenAlt, rest)) => {
+            *tokens = rest;
+            while let Some((token, rest)) = tokens.split_first() {
+                match token {
+                    QueryToken::CloseAlt => break,
+                    QueryToken::Literal(literal) => leaves.push((literal.clone(), false)),
+                    QueryToken::Open => match rest {
+                        [QueryToken::Name(kind), QueryToken::Close, ..] => {
+                            leaves.push((kind.clone(), true));
+                            *tokens = &rest[1..];
+                        }
+                        _ => return Err("alternatives must be single nodes".to_owned()),
+                    },
+                    _ => return Err("unexpected token in an alternation".to_owned()),
+                }
+                *tokens = &tokens[1..];
+            }
+            let Some((QueryToken::CloseAlt, rest)) = tokens.split_first() else { return Err("expected `]`".to_owned()) };
+            *tokens = rest;
+        }
+        _ => return Err("expected a node, literal or alternation".to_owned()),
+    }
+    while let Some((QueryToken::Capture(name), rest)) = tokens.split_first() {
+        *tokens = rest;
+        for (kind, named) in &leaves {
+            out.push(QueryCapture { name: name.clone(), kind: kind.clone(), named: *named, parent: parent.map(str::to_owned) });
+        }
+    }
+    Ok(())
+}
+
+/// Grammar symbol ids whose kind and namedness match `kind`/`named` (aliases
+/// can give one name several ids).
+#[must_use]
+pub fn kind_ids(kind: &str, named: bool) -> Vec<u16> {
+    let language = language();
+    let count = u16::try_from(language.node_kind_count()).unwrap_or(u16::MAX);
+    (0..count).filter(|&id| language.node_kind_is_named(id) == named && language.node_kind_for_id(id) == Some(kind)).collect()
+}
+
 /// Parse a (possibly signed) numeric literal as the upstream lexer does:
 /// whitespace between sign and digits is allowed, `inf`/`infinity` in any case.
 #[must_use]
@@ -313,6 +478,38 @@ mod tests {
         assert_eq!(parse_number("+INF"), Some(f64::INFINITY));
         assert_eq!(parse_number("1e3"), Some(1000.0));
         assert_eq!(parse_number("x"), None);
+    }
+
+    #[test]
+    fn reads_every_bundled_query() {
+        for (name, source) in [
+            ("highlights", tree_sitter_lp::HIGHLIGHTS_QUERY),
+            ("locals", tree_sitter_lp::LOCALS_QUERY),
+            ("folds", tree_sitter_lp::FOLDS_QUERY),
+            ("indents", tree_sitter_lp::INDENTS_QUERY),
+        ] {
+            let captures = query_captures(source).unwrap_or_else(|e| panic!("{name}: {e}"));
+            assert!(!captures.is_empty(), "{name}");
+            for c in &captures {
+                assert!(!kind_ids(&c.kind, c.named).is_empty(), "{name}: unknown kind {c:?}");
+            }
+        }
+        let locals = query_captures(tree_sitter_lp::LOCALS_QUERY).unwrap();
+        let bound = QueryCapture {
+            name: "local.definition".to_owned(),
+            kind: "identifier".to_owned(),
+            named: true,
+            parent: Some("bound_declaration".to_owned()),
+        };
+        assert!(locals.contains(&bound), "{locals:?}");
+        let highlights = query_captures(tree_sitter_lp::HIGHLIGHTS_QUERY).unwrap();
+        assert!(highlights.iter().any(|c| c.kind == "->" && !c.named && c.name == "operator"));
+    }
+
+    #[test]
+    fn rejects_shapes_it_cannot_mirror() {
+        assert!(query_captures("((identifier) @x (#eq? @x \"y\"))").is_err());
+        assert!(query_captures("(constraint (linear_expression (term) @t))").is_err());
     }
 
     #[test]

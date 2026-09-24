@@ -173,22 +173,26 @@ pub fn format_on_type(doc: &Document, position: Position, ch: &str, settings: &F
     if ch != "\n" || position.line == 0 {
         return None;
     }
-    let layout = layout(&doc.text, &doc.tree, settings)?;
     let line = usize::try_from(position.line).ok()?;
     if line >= doc.lines.line_count() {
         return None;
     }
+    // Without a layout (syntax errors, e.g. while typing) only indent.
+    let layout = layout(&doc.text, &doc.tree, settings);
+    let units: &[Placed] = layout.as_ref().map_or(&[], |l| &l.units);
     let line_start = doc.lines.line_start(line);
     let prev = doc.lines.line_range(&doc.text, line - 1);
     let mut edits = Vec::new();
 
     // Reformat the entries on the previous line when they end before the new one.
     let on_prev = |u: &Placed| u.src.start < prev.end.max(prev.start + 1) && prev.start < u.src.end;
-    if let Some(first) = layout.units.iter().position(on_prev) {
+    if let Some(layout) = &layout
+        && let Some(first) = layout.units.iter().position(on_prev)
+    {
         let last = layout.units.iter().rposition(on_prev).unwrap_or(first);
         let (first, last) = expand_to_lines(doc, &layout.units, first, last);
         if layout.units[last].src.end < line_start {
-            edits.extend(snapped_edit(doc, &layout, first, last));
+            edits.extend(snapped_edit(doc, layout, first, last));
         }
     }
 
@@ -198,25 +202,21 @@ pub fn format_on_type(doc: &Document, position: Position, ch: &str, settings: &F
     let width = line_text.len() - line_text.trim_start_matches([' ', '\t']).len();
     let content = current.start + width;
     let has_content = !line_text.trim().is_empty();
+    // Levels come from the grammar's `indents.scm`; the formatter's own
+    // placement wins where it is deeper (SOS entries, continuation lines).
+    let level = indent_level(doc, line, has_content.then_some(content)) * settings.indent;
     let wanted = if has_content {
-        match layout.units.iter().find(|u| u.src.start <= content && content < u.src.end.max(u.src.start + 1)) {
+        match units.iter().find(|u| u.src.start <= content && content < u.src.end.max(u.src.start + 1)) {
             Some(u) if u.src.start == content => Some(u.indent),
             Some(u) if u.kind == UnitKind::Entry => Some(u.indent + settings.indent),
-            _ => None,
+            Some(_) => None,
+            None => Some(level),
         }
     } else {
-        let before = layout.units.iter().rev().find(|u| u.src.end <= current.start);
-        Some(match before {
-            None => 0,
-            Some(u) if u.kind == UnitKind::Header => {
-                if doc.text[u.src.clone()].eq_ignore_ascii_case("end") {
-                    0
-                } else {
-                    settings.indent
-                }
-            }
-            Some(u) => u.indent,
-        })
+        match units.iter().rev().find(|u| u.src.end <= current.start) {
+            Some(u) if u.kind == UnitKind::Entry => Some(u.indent.max(level)),
+            _ => Some(level),
+        }
     };
     if let Some(wanted) = wanted
         && line_text[..width] != *" ".repeat(wanted)
@@ -224,6 +224,66 @@ pub fn format_on_type(doc: &Document, position: Position, ch: &str, settings: &F
         edits.push(TextEdit { range: doc.range(current.start..content), new_text: " ".repeat(wanted) });
     }
     Some(edits)
+}
+
+/// Node kinds from the grammar's `indents.scm`: `@indent.begin` nodes indent
+/// the lines inside them, `@indent.branch` nodes sit at their parent's level.
+struct IndentKinds {
+    begin: Vec<bool>,
+    branch: Vec<bool>,
+}
+
+fn indent_kinds() -> &'static IndentKinds {
+    static KINDS: std::sync::OnceLock<IndentKinds> = std::sync::OnceLock::new();
+    KINDS.get_or_init(|| {
+        // Compiled into the binary and checked by `indents_query_is_mirrored`.
+        indent_kinds_from(tree_sitter_lp::INDENTS_QUERY).expect("bundled indents query has a supported shape")
+    })
+}
+
+fn indent_kinds_from(query: &str) -> Result<IndentKinds, String> {
+    let count = syntax::language().node_kind_count();
+    let (mut begin, mut branch) = (vec![false; count], vec![false; count]);
+    for capture in syntax::query_captures(query)? {
+        let target = match capture.name.as_str() {
+            "indent.begin" => &mut begin,
+            "indent.branch" => &mut branch,
+            other => return Err(format!("unsupported indent capture `@{other}`")),
+        };
+        if capture.parent.is_some() {
+            return Err(format!("`@{}` on `{}` depends on its parent", capture.name, capture.kind));
+        }
+        for id in syntax::kind_ids(&capture.kind, capture.named) {
+            target[usize::from(id)] = true;
+        }
+    }
+    Ok(IndentKinds { begin, branch })
+}
+
+/// Indent level of `line` per `indents.scm`: the `@indent.begin` nodes that
+/// enclose it and started on an earlier line, or none for a line starting
+/// with an `@indent.branch` node. `content` is the first non-blank offset;
+/// an empty line takes the level of the token before it.
+fn indent_level(doc: &Document, line: usize, content: Option<usize>) -> usize {
+    let kinds = indent_kinds();
+    let line_start = doc.lines.line_start(line);
+    let is = |table: &[bool], node: Node<'_>| table.get(usize::from(node.kind_id())).copied().unwrap_or(false);
+    let root = doc.tree.root_node();
+    let node = if let Some(offset) = content {
+        let Some(node) = root.descendant_for_byte_range(offset, offset) else { return 0 };
+        if std::iter::successors(Some(node), Node::parent).take_while(|n| n.start_byte() == offset).any(|n| is(&kinds.branch, n)) {
+            return 0;
+        }
+        node
+    } else {
+        let before = doc.text[..line_start].trim_end().len();
+        if before == 0 {
+            return 0;
+        }
+        let Some(node) = root.descendant_for_byte_range(before - 1, before) else { return 0 };
+        node
+    };
+    std::iter::successors(Some(node), Node::parent).filter(|n| is(&kinds.begin, *n) && n.start_byte() < line_start).count()
 }
 
 /// Widen `first..=last` to whole source lines: units sharing a line with the
@@ -662,4 +722,17 @@ fn render(source: &str, leaves: &[Leaf<'_>], units: &[Unit], settings: &FormatSe
     }
     text.push_str(newline);
     Some(Layout { text, units: placed })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn indents_query_is_mirrored() {
+        let kinds = indent_kinds_from(tree_sitter_lp::INDENTS_QUERY).unwrap();
+        let id = |k: &str| usize::from(syntax::kind_ids(k, true)[0]);
+        assert!(kinds.begin[id(kind::BOUNDS_SECTION)] && kinds.branch[id(kind::END_MARKER)]);
+        assert!(indent_kinds_from("(end_marker) @indent.dedent").is_err());
+    }
 }

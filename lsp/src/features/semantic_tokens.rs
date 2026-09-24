@@ -1,10 +1,12 @@
-//! Semantic tokens (full, range, delta) following `HIGHLIGHTS_QUERY`.
+//! Semantic tokens (full, range, delta) following `HIGHLIGHTS_QUERY` and
+//! `LOCALS_QUERY`.
 //!
 //! Every pattern in the grammar's `highlights.scm` captures a node by kind
 //! alone, so tokens come from one cursor walk with a kind-id → token table
 //! instead of the query engine (about ten times faster on large files). The
-//! query remains the specification: a test checks the walk against it on every
-//! fixture.
+//! table is read from the query at start-up, and `locals.scm`'s
+//! `@local.definition` patterns say which variables are declarations. A test
+//! checks the walk against both queries on every fixture.
 //!
 //! Capture → token type mapping (standard LSP types only):
 //!
@@ -13,7 +15,7 @@
 //! | `keyword.*`                     | `keyword`   |                                   |
 //! | `operator`                      | `operator`  |                                   |
 //! | `number`, `constant.builtin`    | `number`    | `readonly`                        |
-//! | `variable`                      | `variable`  | `declaration` in bounds and type sections |
+//! | `variable`                      | `variable`  | `declaration` where `locals.scm` defines it |
 //! | `function.builtin`              | `function`  | `defaultLibrary`                  |
 //! | `comment`                       | `comment`   |                                   |
 //! | `type`                          | `type`      |                                   |
@@ -32,7 +34,7 @@ use tower_lsp_server::ls_types::{SemanticToken, SemanticTokenModifier, SemanticT
 
 use crate::document::Document;
 use crate::position::Encoding;
-use crate::syntax::{self, kind};
+use crate::syntax;
 
 /// Legend token types; a token's type is an index into this list.
 const TYPES: [SemanticTokenType; 9] = [
@@ -92,7 +94,6 @@ fn highlights() -> &'static Highlights {
 }
 
 /// Map a highlights capture name to a token kind (`None`: no token).
-#[cfg(test)]
 fn capture_kind(name: &str) -> Option<Kind> {
     let (token_type, modifiers) = match name.split('.').next()? {
         "keyword" => (KEYWORD, 0),
@@ -109,58 +110,56 @@ fn capture_kind(name: &str) -> Option<Kind> {
     Some(Kind { token_type, modifiers })
 }
 
-/// The token for a node kind, mirroring `highlights.scm`.
-fn node_kind(name: &str, named: bool) -> Option<Kind> {
-    let (token_type, modifiers) = if named {
-        match name {
-            "sense" | "end_marker" => (KEYWORD, 0),
-            _ if name.ends_with("_keyword") => (KEYWORD, 0),
-            kind::SOS_TYPE => (TYPE, 0),
-            kind::COMPARISON_OPERATOR => (OPERATOR, 0),
-            kind::NUMBER | kind::INFINITY => (NUMBER, READONLY),
-            kind::OBJECTIVE_NAME | kind::CONSTRAINT_NAME | kind::SOS_NAME => (NAMESPACE, DECLARATION),
-            kind::ATTRIBUTE_NAME => (PROPERTY, 0),
-            kind::FUNCTION_NAME => (FUNCTION, DEFAULT_LIBRARY),
-            kind::IDENTIFIER => (VARIABLE, 0),
-            kind::LINE_COMMENT | kind::BLOCK_COMMENT => (COMMENT, 0),
-            _ => return None,
-        }
-    } else {
-        match name {
-            "=" | "->" | "+" | "-" | "/" | "^" | "*" => (OPERATOR, 0),
-            _ => return None,
-        }
-    };
-    Some(Kind { token_type, modifiers })
-}
-
-/// Token kind per grammar symbol id, and whether a top-level section with
-/// that id declares its variables.
+/// Token kind per grammar symbol id, and whether a variable directly under a
+/// node of that id is a declaration.
+#[derive(Debug)]
 struct Table {
     kinds: Vec<Option<Kind>>,
-    declaring: Vec<bool>,
+    declares: Vec<bool>,
+}
+
+impl Table {
+    /// Mirror the grammar's queries: `highlights` gives each node kind its
+    /// token (the first pattern wins, as with the query engine); the parents
+    /// in `locals`' `@local.definition` patterns declare their variables.
+    fn from_queries(highlights: &str, locals: &str) -> Result<Self, String> {
+        let count = syntax::language().node_kind_count();
+        let mut kinds: Vec<Option<Kind>> = vec![None; count];
+        for capture in syntax::query_captures(highlights)? {
+            if capture.parent.is_some() {
+                return Err(format!("highlight `@{}` on `{}` depends on its parent", capture.name, capture.kind));
+            }
+            let Some(kind) = capture_kind(&capture.name) else { continue };
+            for id in syntax::kind_ids(&capture.kind, capture.named) {
+                kinds[usize::from(id)].get_or_insert(kind);
+            }
+        }
+        let mut declares = vec![false; count];
+        for capture in syntax::query_captures(locals)?.into_iter().filter(|c| c.name == "local.definition") {
+            let Some(parent) = capture.parent else { return Err(format!("definition `{}` without a parent", capture.kind)) };
+            let variable = syntax::kind_ids(&capture.kind, capture.named)
+                .iter()
+                .all(|&id| kinds[usize::from(id)].is_some_and(|k| k.token_type == VARIABLE));
+            if !variable {
+                return Err(format!("definition `{}` is not highlighted as a variable", capture.kind));
+            }
+            for id in syntax::kind_ids(&parent, true) {
+                declares[usize::from(id)] = true;
+            }
+        }
+        Ok(Self { kinds, declares })
+    }
 }
 
 fn table() -> &'static Table {
     static TABLE: OnceLock<Table> = OnceLock::new();
     TABLE.get_or_init(|| {
-        let language = syntax::language();
-        let count = u16::try_from(language.node_kind_count()).unwrap_or(u16::MAX);
-        let (mut kinds, mut declaring) = (Vec::new(), Vec::new());
-        for id in 0..count {
-            let name = language.node_kind_for_id(id).unwrap_or("");
-            kinds.push(node_kind(name, language.node_kind_is_named(id)));
-            declaring.push(DECLARING_SECTIONS.contains(&name));
-        }
-        Table { kinds, declaring }
+        // The queries are compiled into the binary; `bundled_queries_are_mirrored`
+        // checks them, so a failure here is a build defect.
+        Table::from_queries(tree_sitter_lp::HIGHLIGHTS_QUERY, tree_sitter_lp::LOCALS_QUERY)
+            .expect("bundled highlights and locals queries have a supported shape")
     })
 }
-
-/// Sections whose variables are declarations: bound entries and type-section
-/// entries (`generals`, `integers`, `binaries`, `semi-continuous`). Every
-/// identifier in these sections is such an entry.
-const DECLARING_SECTIONS: [&str; 5] =
-    [kind::BOUNDS_SECTION, kind::GENERALS_SECTION, kind::INTEGERS_SECTION, kind::BINARIES_SECTION, kind::SEMI_CONTINUOUS_SECTION];
 
 /// Token legend declared in `initialize`.
 #[must_use]
@@ -222,11 +221,12 @@ fn walk(doc: &Document, Range { start, end }: Range<usize>, by_start: bool) -> E
     let table = table();
     let mut encoder = Encoder::new(doc);
     let mut cursor = doc.tree.walk();
-    // Whether the current top-level section declares its variables.
-    let mut declaring = false;
-    // Tracked by hand: `TreeCursor::depth` walks the cursor stack, which is
-    // deep inside sections with millions of children.
+    // Depth of the current node, and the depth of the children of the
+    // enclosing node that declares its variables, if any (such nodes never
+    // nest). Tracked by hand: `Node::parent` and `TreeCursor::depth` are slow
+    // inside sections with millions of children.
     let mut depth = 0usize;
+    let mut declared_depth: Option<usize> = None;
     // Preorder walk: emit a token for a node with a kind (skipping its
     // subtree, as the query's outermost capture wins), else descend.
     loop {
@@ -234,16 +234,13 @@ fn walk(doc: &Document, Range { start, end }: Range<usize>, by_start: bool) -> E
         if node.start_byte() >= end && node.start_byte() > start {
             break;
         }
-        if depth == 1 {
-            declaring = table.declaring.get(usize::from(node.kind_id())).copied().unwrap_or(false);
-        }
         let overlaps = node.end_byte() > start || (node.start_byte() == start && start == end);
         let owned = !by_start || (start <= node.start_byte() && node.start_byte() < end);
         let token =
             if node.is_error() || node.is_missing() { None } else { table.kinds.get(usize::from(node.kind_id())).copied().flatten() };
         let descend = match token {
             Some(mut kind) if overlaps && owned => {
-                if kind.token_type == VARIABLE && declaring {
+                if kind.token_type == VARIABLE && declared_depth == Some(depth) {
                     kind.modifiers |= DECLARATION;
                 }
                 if node.start_byte() < node.end_byte() {
@@ -258,6 +255,10 @@ fn walk(doc: &Document, Range { start, end }: Range<usize>, by_start: bool) -> E
         // have millions of children).
         if descend && (cursor.goto_first_child_for_byte(start).is_some() || cursor.goto_first_child()) {
             depth += 1;
+            if table.declares.get(usize::from(node.kind_id())).copied().unwrap_or(false) {
+                debug_assert!(declared_depth.is_none(), "declaring nodes do not nest");
+                declared_depth = Some(depth);
+            }
             continue;
         }
         loop {
@@ -266,6 +267,9 @@ fn walk(doc: &Document, Range { start, end }: Range<usize>, by_start: bool) -> E
             }
             if !cursor.goto_parent() {
                 return encoder;
+            }
+            if declared_depth == Some(depth) {
+                declared_depth = None;
             }
             depth -= 1;
         }
@@ -290,8 +294,14 @@ fn query_tokens(doc: &Document) -> Vec<SemanticToken> {
     }
     // Outermost node first, then earliest pattern: the widest capture wins.
     spans.sort_unstable_by_key(|(r, pattern, _)| (r.start, std::cmp::Reverse(r.end), *pattern));
-    let declaring: Vec<Range<usize>> =
-        doc.index().sections.iter().filter(|s| DECLARING_SECTIONS.contains(&s.kind)).map(|s| s.range.clone()).collect();
+    // Declarations straight from the locals query.
+    let locals = tree_sitter::Query::new(&syntax::language(), tree_sitter_lp::LOCALS_QUERY).expect("bundled locals query compiles");
+    let definition = locals.capture_index_for_name("local.definition").expect("locals query defines variables");
+    let mut declaring: Vec<Range<usize>> = Vec::new();
+    let mut local_matches = cursor.matches(&locals, doc.tree.root_node(), doc.text.as_bytes());
+    while let Some(m) = local_matches.next() {
+        declaring.extend(m.captures().iter().filter(|c| c.index == definition).map(|c| c.node.byte_range()));
+    }
     let mut encoder = Encoder::new(doc);
     let mut covered = 0;
     for (span, _, mut kind) in spans {
@@ -299,7 +309,7 @@ fn query_tokens(doc: &Document) -> Vec<SemanticToken> {
             continue;
         }
         covered = span.end;
-        if kind.token_type == VARIABLE && declaring.iter().any(|s| s.start <= span.start && span.end <= s.end) {
+        if kind.token_type == VARIABLE && declaring.contains(&span) {
             kind.modifiers |= DECLARATION;
         }
         encoder.push(span, kind);
@@ -414,6 +424,7 @@ mod tests {
     use tower_lsp_server::ls_types::Uri;
 
     use super::*;
+    use crate::syntax::kind;
 
     fn doc(text: &str, encoding: Encoding) -> Document {
         Document::new("file:///t.lp".parse::<Uri>().unwrap(), text.to_owned(), 1, encoding)
@@ -452,6 +463,15 @@ mod tests {
     }
 
     const SAMPLE: &str = "Maximize\n obj: 3 x + 2 y\nSubject To\n c1: x + y <= inf\nGeneral Constraints\n g: r = MAX ( x , y )\nBounds\n x free\nGenerals\n y\nSOS\n s1: S1 :: x: 1\nEnd\n";
+
+    #[test]
+    fn bundled_queries_are_mirrored() {
+        let table = Table::from_queries(tree_sitter_lp::HIGHLIGHTS_QUERY, tree_sitter_lp::LOCALS_QUERY).unwrap();
+        let id = |kind: &str| usize::from(syntax::kind_ids(kind, true)[0]);
+        assert_eq!(table.kinds[id(kind::IDENTIFIER)].map(|k| k.token_type), Some(VARIABLE));
+        assert!(table.declares[id(kind::BOUND_DECLARATION)] && table.declares[id(kind::GENERALS_SECTION)]);
+        assert!(!table.declares[id(kind::CONSTRAINTS_SECTION)]);
+    }
 
     #[test]
     fn legend_matches_indices() {

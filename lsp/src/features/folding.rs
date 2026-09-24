@@ -9,11 +9,10 @@ use tree_sitter::{Node, Query, QueryCursor};
 use crate::document::Document;
 use crate::syntax::{self, kind};
 
-const FOLDS: &str = include_str!("../../queries/folds.scm");
-
 /// Compiled `folds.scm`. The query ships with the grammar, so a failure to
 /// compile is a build defect (covered by the tests), not a runtime condition.
-static FOLDS_QUERY: LazyLock<Query> = LazyLock::new(|| Query::new(&syntax::language(), FOLDS).expect("folds.scm must compile"));
+static FOLDS_QUERY: LazyLock<Query> =
+    LazyLock::new(|| Query::new(&syntax::language(), tree_sitter_lp::FOLDS_QUERY).expect("folds.scm must compile"));
 
 static COMMENTS_QUERY: LazyLock<Query> =
     LazyLock::new(|| Query::new(&syntax::language(), "[(line_comment) (block_comment)] @comment").expect("comment query must compile"));

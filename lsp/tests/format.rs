@@ -132,7 +132,9 @@ fn syntax_errors_are_never_formatted() {
     assert_eq!(format_document(&doc(broken), &settings()), None);
     let range = Range::new(Position::new(0, 0), Position::new(1, 0));
     assert_eq!(format_range(&doc(broken), range, &settings()), None);
-    assert_eq!(format_on_type(&doc(broken), Position::new(2, 0), "\n", &settings()), None);
+    // On Enter only re-indents the new line (from `indents.scm`); nothing is reformatted.
+    let indent_only = TextEdit { range: Range::new(Position::new(2, 0), Position::new(2, 0)), new_text: "  ".to_owned() };
+    assert_eq!(format_on_type(&doc(broken), Position::new(2, 0), "\n", &settings()), Some(vec![indent_only]));
 }
 
 #[test]
@@ -227,6 +229,28 @@ fn on_type_newline_inside_entry_only_indents_continuation() {
     let d = doc(text);
     let edits = format_on_type(&d, Position::new(4, 0), "\n", &settings()).unwrap();
     assert_eq!(apply(text, &d, &edits), "min\n obj: x\nst\n  c1: x + y\n    + z >= 1\nend\n");
+}
+
+#[test]
+fn on_type_indents_while_the_document_has_errors() {
+    // `x <=` is incomplete, so the formatter cannot run; the level still
+    // comes from `indents.scm`: inside the Bounds section.
+    let text = "min\n obj: x\nst\n c1: x >= 1\nBounds\n x <=\n\nend\n";
+    let d = doc(text);
+    assert!(d.has_syntax_errors());
+    let edits = format_on_type(&d, Position::new(6, 0), "\n", &settings()).unwrap();
+    assert_eq!(apply(text, &d, &edits), "min\n obj: x\nst\n c1: x >= 1\nBounds\n x <=\n  \nend\n");
+}
+
+#[test]
+fn on_type_after_end_and_in_sos_sections() {
+    let text = "min\n obj: x\nst\n c1: x >= 1\nsos\n  s1: S1 ::\n    x : 1\n\nend\n\n";
+    let d = doc(text);
+    // After an SOS entry the formatter's deeper indent wins.
+    let edits = format_on_type(&d, Position::new(7, 0), "\n", &settings()).unwrap();
+    assert!(apply(text, &d, &edits).contains("    x: 1\n    \nend"), "{:?}", apply(text, &d, &edits));
+    // After `End`: column 0, so nothing to change.
+    assert_eq!(format_on_type(&d, Position::new(9, 0), "\n", &settings()), Some(vec![]));
 }
 
 #[test]
