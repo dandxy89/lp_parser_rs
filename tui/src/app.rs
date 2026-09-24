@@ -1168,8 +1168,18 @@ impl App {
 
     /// Record the current navigation position in the jumplist.
     pub(crate) fn record_jump(&mut self) {
-        let entry_index = self.active_section.list_index().and_then(|index| self.section_states[index].list_state.selected());
-        self.jumplist.push(JumpEntry { section: self.active_section, entry_index, detail_scroll: self.detail_scroll, filter: self.filter });
+        let entry_name = self.selected_entry_name().map(str::to_owned);
+        self.jumplist.push(JumpEntry { section: self.active_section, entry_name, detail_scroll: self.detail_scroll, filter: self.filter });
+    }
+
+    /// Report index of the entry named `name` in `section`, if it still exists.
+    fn entry_index_by_name(&self, section: Section, name: &str) -> Option<usize> {
+        match section {
+            Section::Variables => self.report.variables.entries.iter().position(|e| e.name == name),
+            Section::Constraints => self.report.constraints.entries.iter().position(|e| e.name == name),
+            Section::Objectives => self.report.objectives.entries.iter().position(|e| e.name == name),
+            Section::Summary | Section::Numerics => None,
+        }
     }
 
     /// Update active section, keeping the (now invisible) selector state in
@@ -1182,21 +1192,25 @@ impl App {
     /// Step back in the jumplist and restore that position (`Ctrl+o` / palette).
     pub(crate) fn jump_back(&mut self) {
         if let Some(entry) = self.jumplist.go_back() {
-            let entry = *entry;
-            self.restore_jump(entry);
+            let entry = entry.clone();
+            self.restore_jump(&entry);
         }
     }
 
     /// Step forward in the jumplist and restore that position (`Ctrl+i` / palette).
     pub(crate) fn jump_forward(&mut self) {
         if let Some(entry) = self.jumplist.go_forward() {
-            let entry = *entry;
-            self.restore_jump(entry);
+            let entry = entry.clone();
+            self.restore_jump(&entry);
         }
     }
 
     /// Navigate to a jumplist entry, restoring section, selection, scroll, and filter.
-    pub(crate) fn restore_jump(&mut self, entry: JumpEntry) {
+    ///
+    /// The entry is found by name among the rows now visible; when it has gone
+    /// (a reload removed it) or is hidden (`ignore_order`), the first row is
+    /// selected instead.
+    pub(crate) fn restore_jump(&mut self, entry: &JumpEntry) {
         self.set_active_section(entry.section);
         self.apply_filter(entry.filter);
         self.invalidate_cache();
@@ -1204,22 +1218,17 @@ impl App {
         self.detail_scroll = entry.detail_scroll;
 
         if let Some(index) = entry.section.list_index() {
-            if let Some(selection) = entry.entry_index {
-                let len = self.section_states[index].cached_indices().len();
-                if selection < len {
-                    self.section_states[index].list_state.select(Some(selection));
-                } else if len > 0 {
-                    self.section_states[index].list_state.select(Some(len - 1));
-                } else {
-                    self.section_states[index].list_state.select(None);
-                }
-            } else {
-                self.section_states[index].list_state.select(None);
-            }
+            let selection = entry.entry_name.as_deref().map(|name| {
+                let visible = self.section_states[index].cached_indices();
+                self.entry_index_by_name(entry.section, name)
+                    .and_then(|entry_index| visible.iter().position(|&i| i == entry_index))
+                    .or_else(|| (!visible.is_empty()).then_some(0))
+            });
+            self.section_states[index].list_state.select(selection.flatten());
         }
 
         self.focus =
-            if entry.entry_index.is_some() && entry.section.list_index().is_some() { Focus::NameList } else { Focus::SectionSelector };
+            if entry.entry_name.is_some() && entry.section.list_index().is_some() { Focus::NameList } else { Focus::SectionSelector };
     }
 
     /// Enable watch mode, anchoring the debounce baseline at the current mtimes.
@@ -1766,6 +1775,25 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Regression: the jumplist stored list positions, so once the rows moved
+    /// (here `o` hiding an order-only entry above) it restored the wrong entry.
+    #[test]
+    fn the_jumplist_returns_to_the_same_entry_after_the_rows_move() {
+        let mut app = crate::snapshot_tests::diff_app_from(
+            "min\nobj: x\nst\nc1: x + y >= 2\nc2: x <= 8\nc3: y <= 4\nend\n",
+            "min\nobj: x\nst\nc1: y + x >= 2\nc2: x <= 9\nc3: y <= 5\nend\n",
+        );
+        app.set_section(Section::Constraints);
+        app.active_name_list_state_mut().select(Some(1));
+        assert_eq!(app.selected_entry_name(), Some("c2"), "fixture: c2 is the second row");
+        app.record_jump();
+
+        app.toggle_ignore_order();
+        app.jump_back();
+
+        assert_eq!(app.selected_entry_name(), Some("c2"), "the jump must land on the recorded entry");
+    }
 
     /// Regression: search covers order-only entries that `o` hides, and the
     /// jump found no row for them (a debug panic; the wrong entry in release).

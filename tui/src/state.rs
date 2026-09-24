@@ -389,10 +389,13 @@ impl SortMode {
 const JUMPLIST_CAPACITY: usize = 100;
 
 /// A recorded navigation position in the jumplist.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct JumpEntry {
     pub section: Section,
-    pub entry_index: Option<usize>,
+    /// Name of the selected entry. A name, not a list position or report
+    /// index: re-sorting, `ignore_order`, a tolerance change or a watch reload
+    /// all move entries, and the jump must land on the same one.
+    pub entry_name: Option<String>,
     pub detail_scroll: u16,
     pub filter: DiffFilter,
 }
