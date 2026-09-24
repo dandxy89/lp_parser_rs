@@ -141,3 +141,72 @@ async fn full_session() {
 
     assert_eq!(h.request("shutdown", Value::Null).await, Value::Null);
 }
+
+/// Names returned by `workspace/symbol` for `query`, with their URIs.
+async fn symbols(h: &mut Harness, query: &str) -> Vec<(String, String)> {
+    let found = h.request("workspace/symbol", json!({ "query": query })).await;
+    found
+        .as_array()
+        .map(|items| {
+            items
+                .iter()
+                .filter(|s| s["name"] == query)
+                .map(|s| (s["name"].as_str().unwrap_or("").to_owned(), s["location"]["uri"].as_str().unwrap_or("").to_owned()))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// `workspace/symbol` matches for `query`, polling until one appears (the
+/// index is filled in the background).
+async fn eventual_symbols(h: &mut Harness, query: &str) -> Vec<(String, String)> {
+    for _ in 0..100 {
+        let found = symbols(h, query).await;
+        if !found.is_empty() {
+            return found;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    Vec::new()
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn workspace_index_tracks_disk_not_buffers() {
+    let dir = std::env::temp_dir().join(format!("lp-lsp-e2e-{}-{:?}", std::process::id(), std::thread::current().id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let dir = dir.canonicalize().unwrap();
+    std::fs::write(dir.join("a.lp"), "min\n obj: x\nst\n c1: x >= 1\nend\n").unwrap();
+    let root = format!("file://{}", dir.display());
+
+    let mut h = Harness::start();
+    h.request("initialize", json!({ "rootUri": root, "capabilities": {} })).await;
+    h.notify("initialized", json!({})).await;
+    let indexed = eventual_symbols(&mut h, "c1").await;
+    assert_eq!(indexed.len(), 1, "a.lp indexed from disk: {indexed:?}");
+
+    // The same file opened under another spelling of its URI is listed once.
+    let spelt = format!("{root}/%61.lp");
+    h.notify(
+        "textDocument/didOpen",
+        json!({ "textDocument": { "uri": spelt, "languageId": "lp", "version": 1, "text": "min\n obj: x\nst\n c1: x >= 1\nend\n" } }),
+    )
+    .await;
+    assert_eq!(symbols(&mut h, "c1").await.len(), 1, "open and indexed copies of one file are not both listed");
+
+    // Edit without saving, then close: the index must go back to the disk text.
+    h.notify(
+        "textDocument/didChange",
+        json!({
+            "textDocument": { "uri": spelt, "version": 2 },
+            "contentChanges": [{ "range": { "start": { "line": 3, "character": 1 }, "end": { "line": 3, "character": 3 } }, "text": "unsaved" }]
+        }),
+    )
+    .await;
+    h.notify("textDocument/didClose", json!({ "textDocument": { "uri": spelt } })).await;
+    let back = eventual_symbols(&mut h, "c1").await;
+    assert_eq!(back.len(), 1, "disk text re-indexed after close: {back:?}");
+    assert_eq!(symbols(&mut h, "unsaved").await, Vec::new(), "unsaved buffer text is not indexed");
+
+    assert_eq!(h.request("shutdown", Value::Null).await, Value::Null);
+    std::fs::remove_dir_all(&dir).unwrap();
+}

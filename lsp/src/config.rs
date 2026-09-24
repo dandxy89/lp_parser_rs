@@ -120,6 +120,23 @@ impl Config {
     }
 
     fn validate(&self) -> Result<(), String> {
+        let t = &self.analysis.thresholds;
+        for (name, value) in [
+            ("largeCoefficientThreshold", t.large_coefficient_threshold),
+            ("smallCoefficientThreshold", t.small_coefficient_threshold),
+            ("largeRhsThreshold", t.large_rhs_threshold),
+            ("coefficientRatioThreshold", t.coefficient_ratio_threshold),
+        ] {
+            if !(value.is_finite() && value > 0.0) {
+                return Err(format!("lp.analysis.{name} must be a positive number, got {value}"));
+            }
+        }
+        if t.small_coefficient_threshold > t.large_coefficient_threshold {
+            return Err(format!(
+                "lp.analysis.smallCoefficientThreshold ({}) must not exceed largeCoefficientThreshold ({})",
+                t.small_coefficient_threshold, t.large_coefficient_threshold
+            ));
+        }
         if self.format.indent > 16 {
             return Err(format!("lp.format.indent must be at most 16, got {}", self.format.indent));
         }
@@ -161,5 +178,7 @@ mod tests {
     fn rejects_bad_values() {
         assert!(Config::from_value(serde_json::json!({ "format": { "indent": "two" } })).is_err());
         assert!(Config::from_value(serde_json::json!({ "format": { "lineWidth": 5 } })).is_err());
+        assert!(Config::from_value(serde_json::json!({ "analysis": { "smallCoefficientThreshold": 1e12 } })).is_err());
+        assert!(Config::from_value(serde_json::json!({ "analysis": { "largeRhsThreshold": -1.0 } })).is_err());
     }
 }

@@ -1,7 +1,7 @@
 //! The `LanguageServer` implementation: document store, scheduling of the
 //! semantic pass, workspace indexing and dispatch to [`crate::features`].
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, PoisonError, RwLock};
@@ -37,10 +37,16 @@ struct ClientCaps {
 /// Shared server state. Locks are never held across `.await`.
 #[derive(Debug, Default)]
 struct State {
-    /// Open documents.
+    /// Open documents, keyed by the client's URI.
     open: RwLock<HashMap<Uri, Arc<Document>>>,
-    /// Files indexed from disk that are not open.
-    indexed: RwLock<HashMap<Uri, Arc<Document>>>,
+    /// Files indexed from disk.
+    indexed: RwLock<workspace::Index>,
+    /// Held while the workspace is indexed, so scans never overlap.
+    indexing: tokio::sync::Mutex<()>,
+    /// Held from the staleness check to the send of each diagnostics
+    /// publication, and while a close clears them, so a close can never be
+    /// followed by stale diagnostics.
+    publishing: tokio::sync::Mutex<()>,
     config: RwLock<Config>,
     encoding: RwLock<Encoding>,
     caps: RwLock<ClientCaps>,
@@ -67,6 +73,10 @@ pub struct Backend {
     client: Client,
     state: Arc<State>,
 }
+
+/// Text budget for the workspace index: files that would take it over are not
+/// indexed, so a folder of huge models cannot exhaust memory.
+const INDEX_BUDGET_BYTES: usize = 256 * 1024 * 1024;
 
 /// Documents up to this size get syntax diagnostics on every keystroke; larger
 /// ones only once the edit debounce settles.
@@ -100,7 +110,7 @@ impl Backend {
 
     /// Open document, else the indexed copy from disk.
     fn document(&self, uri: &Uri) -> Option<Arc<Document>> {
-        read(&self.state.open).get(uri).cloned().or_else(|| read(&self.state.indexed).get(uri).cloned())
+        read(&self.state.open).get(uri).cloned().or_else(|| read(&self.state.indexed).get(&workspace::key(uri)).cloned())
     }
 
     fn document_or_error(&self, uri: &Uri) -> Result<Arc<Document>> {
@@ -110,8 +120,9 @@ impl Backend {
     /// Every known document: open ones plus indexed files that are not open.
     fn all_documents(&self) -> Vec<Arc<Document>> {
         let open = read(&self.state.open);
+        let open_keys: HashSet<Uri> = open.keys().map(workspace::key).collect();
         let mut docs: Vec<Arc<Document>> = open.values().cloned().collect();
-        docs.extend(read(&self.state.indexed).iter().filter(|(uri, _)| !open.contains_key(*uri)).map(|(_, doc)| doc.clone()));
+        docs.extend(read(&self.state.indexed).iter().filter(|(uri, _)| !open_keys.contains(*uri)).map(|(_, doc)| Arc::clone(doc)));
         docs
     }
 
@@ -129,6 +140,17 @@ impl Backend {
         self.client.log_message(typ, message).await;
     }
 
+    /// Whether `uri` is open at `version`.
+    fn is_current(&self, uri: &Uri, version: i32) -> bool {
+        read(&self.state.open).get(uri).is_some_and(|doc| doc.version == version)
+    }
+
+    /// Whether a document with the same canonical URI as `uri` is open.
+    fn is_open(&self, uri: &Uri) -> bool {
+        let key = workspace::key(uri);
+        read(&self.state.open).keys().any(|open| workspace::key(open) == key)
+    }
+
     /// Push diagnostics (push mode) or ask the client to pull (pull mode).
     async fn publish(&self, uri: &Uri) {
         let caps = self.caps();
@@ -144,7 +166,14 @@ impl Backend {
         let config = self.config();
         let version = doc.version;
         match self.run(move || diagnostics::compute(&doc, &config)).await {
-            Ok(diagnostics) => self.client.publish_diagnostics(uri.clone(), diagnostics, Some(version)).await,
+            Ok(diagnostics) => {
+                // A newer edit or a close may have landed meanwhile; clients do
+                // not all check the version, so never publish stale results.
+                let _publishing = self.state.publishing.lock().await;
+                if self.is_current(uri, version) {
+                    self.client.publish_diagnostics(uri.clone(), diagnostics, Some(version)).await;
+                }
+            }
             Err(e) => self.log(MessageType::ERROR, format!("diagnostics failed for {}: {}", uri.as_str(), e.message)).await,
         }
     }
@@ -184,8 +213,10 @@ impl Backend {
             {
                 let mut open = write(&this.state.open);
                 let Some(doc) = open.get_mut(&uri) else { return };
-                if doc.version != version {
-                    return; // A newer edit arrived; its own pass will publish.
+                // A newer edit, reopen or configuration change scheduled another
+                // pass; its result replaces this one.
+                if doc.version != version || read(&this.state.generations).get(&uri) != Some(&generation) {
+                    return;
                 }
                 Arc::make_mut(doc).semantic_result = Some(result);
             }
@@ -215,6 +246,17 @@ impl Backend {
         }
     }
 
+    /// The `lp` section of client settings: `{"lp": {...}}`, or the section
+    /// itself as some clients send it. `None` when the settings hold neither.
+    fn lp_section(settings: Value) -> Option<Value> {
+        const SECTIONS: [&str; 4] = ["analysis", "semantic", "format", "inlayHints"];
+        match settings.get("lp") {
+            Some(lp) => Some(lp.clone()),
+            None if settings.is_null() || SECTIONS.iter().any(|k| settings.get(k).is_some()) => Some(settings),
+            None => None,
+        }
+    }
+
     async fn apply_config(&self, value: Value) {
         match Config::from_value(value) {
             Ok(config) => *write(&self.state.config) = config,
@@ -226,19 +268,45 @@ impl Backend {
     }
 
     /// Load `path` from disk into the workspace index, logging failures.
-    async fn index_file(&self, path: PathBuf) {
+    /// Files outside the workspace roots or in skipped directories are left
+    /// out. Returns `false` once the index budget is exhausted.
+    async fn index_file(&self, path: PathBuf) -> bool {
+        let wanted = |path: &std::path::Path| {
+            read(&self.state.roots).iter().any(|root| path.starts_with(root) && !workspace::in_skipped_dir(root, path))
+        };
+        if !wanted(&path) {
+            return true;
+        }
+        let room = INDEX_BUDGET_BYTES.saturating_sub(read(&self.state.indexed).bytes());
+        if room == 0 {
+            return false;
+        }
         let encoding = self.encoding();
-        match tokio::task::spawn_blocking(move || workspace::load(&path, encoding)).await {
-            Ok(Ok(doc)) => {
-                write(&self.state.indexed).insert(doc.uri.clone(), Arc::new(doc));
+        let loaded = tokio::task::spawn_blocking(move || workspace::load(&path, encoding, room).map(|loaded| (path, loaded))).await;
+        match loaded {
+            Ok(Ok((path, loaded))) => {
+                // Lock order: roots before indexed. A root removed meanwhile
+                // must not get its files back.
+                let roots = read(&self.state.roots);
+                if roots.iter().any(|root| path.starts_with(root)) {
+                    write(&self.state.indexed).insert(loaded);
+                }
+                true
             }
-            Ok(Err(message)) => self.log(MessageType::WARNING, message).await,
-            Err(e) => self.log(MessageType::ERROR, format!("indexing task failed: {e}")).await,
+            Ok(Err(message)) => {
+                self.log(MessageType::WARNING, message).await;
+                true
+            }
+            Err(e) => {
+                self.log(MessageType::ERROR, format!("indexing task failed: {e}")).await;
+                true
+            }
         }
     }
 
     /// Index every `*.lp` file under the workspace roots, reporting progress.
     async fn index_workspace(&self) {
+        let _scan = self.state.indexing.lock().await;
         let roots = read(&self.state.roots).clone();
         if roots.is_empty() {
             return;
@@ -254,14 +322,24 @@ impl Backend {
             self.log(MessageType::WARNING, error).await;
         }
         let token = ProgressToken::String("lp-lsp/index".to_owned());
-        let progress = if self.caps().work_done_progress && self.client.create_work_done_progress(token.clone()).await.is_ok() {
-            Some(self.client.progress(token, "Indexing LP files").with_percentage(0).begin().await)
+        let progress = if self.caps().work_done_progress {
+            match self.client.create_work_done_progress(token.clone()).await {
+                Ok(()) => Some(self.client.progress(token, "Indexing LP files").with_percentage(0).begin().await),
+                Err(e) => {
+                    self.log(MessageType::LOG, format!("no indexing progress: {e}")).await;
+                    None
+                }
+            }
         } else {
             None
         };
         let total = files.len().max(1);
         for (i, path) in files.into_iter().enumerate() {
-            self.index_file(path).await;
+            if !self.index_file(path).await {
+                let skipped = total - i;
+                self.log(MessageType::WARNING, format!("workspace index is full; {skipped} *.lp file(s) not indexed")).await;
+                break;
+            }
             if let Some(progress) = &progress {
                 let percentage = u32::try_from((i + 1) * 100 / total).unwrap_or(100);
                 progress.report(percentage).await;
@@ -279,10 +357,17 @@ impl Backend {
         let options = DidChangeWatchedFilesRegistrationOptions {
             watchers: vec![FileSystemWatcher { glob_pattern: GlobPattern::String("**/*.lp".to_owned()), kind: None }],
         };
+        let register_options = match serde_json::to_value(options) {
+            Ok(value) => value,
+            Err(e) => {
+                self.log(MessageType::ERROR, format!("cannot encode file watcher options: {e}")).await;
+                return;
+            }
+        };
         let registration = Registration {
             id: "lp-lsp/watch".to_owned(),
             method: notification::DidChangeWatchedFiles::METHOD.to_owned(),
-            register_options: serde_json::to_value(options).ok(),
+            register_options: Some(register_options),
         };
         if let Err(e) = self.client.register_capability(vec![registration]).await {
             self.log(MessageType::WARNING, format!("cannot watch *.lp files: {e}")).await;
@@ -413,8 +498,10 @@ impl LanguageServer for Backend {
         }
         *write(&self.state.roots) = roots;
 
-        if let Some(options) = params.initialization_options {
-            self.apply_config(options).await;
+        match params.initialization_options.map(Self::lp_section) {
+            Some(Some(options)) => self.apply_config(options).await,
+            Some(None) => self.log(MessageType::LOG, "initializationOptions without an `lp` section ignored").await,
+            None => {}
         }
 
         Ok(InitializeResult {
@@ -476,25 +563,32 @@ impl LanguageServer for Backend {
 
     async fn did_close(&self, params: DidCloseTextDocumentParams) {
         let uri = params.text_document.uri;
-        let closed = write(&self.state.open).remove(&uri);
+        let publishing = self.state.publishing.lock().await;
+        write(&self.state.open).remove(&uri);
         write(&self.state.generations).remove(&uri);
         write(&self.state.tokens).remove(&uri);
-        // Keep the closed file in the workspace index if it still exists on disk.
-        if let Some(doc) = closed
-            && uri.to_file_path().is_some_and(|p| p.exists())
+        // The buffer may hold unsaved edits: index what is on disk instead.
+        write(&self.state.indexed).remove(&workspace::key(&uri));
+        if let Some(path) = uri.to_file_path().map(std::borrow::Cow::into_owned).filter(|p| p.exists())
+            && workspace::is_lp_path(&path)
         {
-            write(&self.state.indexed).insert(uri.clone(), doc);
+            let this = self.clone();
+            tokio::spawn(async move { this.index_file(path).await });
         }
         if !self.caps().pull_diagnostics {
             self.client.publish_diagnostics(uri, Vec::new(), None).await;
         }
+        drop(publishing);
     }
 
     async fn did_change_configuration(&self, params: DidChangeConfigurationParams) {
         if self.caps().configuration {
             self.load_config().await;
         } else {
-            let value = params.settings.get("lp").cloned().unwrap_or(params.settings);
+            let Some(value) = Self::lp_section(params.settings) else {
+                self.log(MessageType::LOG, "configuration change without an `lp` section ignored").await;
+                return;
+            };
             self.apply_config(value).await;
         }
         let uris: Vec<Uri> = read(&self.state.open).keys().cloned().collect();
@@ -505,18 +599,12 @@ impl LanguageServer for Backend {
 
     async fn did_change_watched_files(&self, params: DidChangeWatchedFilesParams) {
         for change in params.changes {
-            if read(&self.state.open).contains_key(&change.uri) {
+            if self.is_open(&change.uri) {
                 continue;
             }
             let Some(path) = change.uri.to_file_path().map(std::borrow::Cow::into_owned) else { continue };
             if change.typ == FileChangeType::DELETED {
-                // Indexed files are keyed by the URI built from their path, which
-                // may be spelt differently from the client's.
-                let mut indexed = write(&self.state.indexed);
-                indexed.remove(&change.uri);
-                if let Some(uri) = Uri::from_file_path(&path) {
-                    indexed.remove(&uri);
-                }
+                write(&self.state.indexed).remove(&workspace::key(&change.uri));
                 continue;
             }
             self.index_file(path).await;
@@ -526,9 +614,11 @@ impl LanguageServer for Backend {
     async fn did_change_workspace_folders(&self, params: DidChangeWorkspaceFoldersParams) {
         {
             let mut roots = write(&self.state.roots);
+            let mut indexed = write(&self.state.indexed);
             for removed in &params.event.removed {
                 if let Some(path) = removed.uri.to_file_path() {
                     roots.retain(|r| r != path.as_ref());
+                    indexed.remove_where(|uri| uri.to_file_path().is_some_and(|p| p.starts_with(&path)));
                 }
             }
             roots.extend(params.event.added.iter().filter_map(|f| f.uri.to_file_path().map(std::borrow::Cow::into_owned)));
@@ -590,7 +680,8 @@ impl LanguageServer for Backend {
 
     async fn rename(&self, params: RenameParams) -> Result<Option<WorkspaceEdit>> {
         let (doc, position) = self.position_params(&params.text_document_position)?;
-        let others: Vec<Arc<Document>> = self.all_documents().into_iter().filter(|d| d.uri != doc.uri).collect();
+        let key = workspace::key(&doc.uri);
+        let others: Vec<Arc<Document>> = self.all_documents().into_iter().filter(|d| workspace::key(&d.uri) != key).collect();
         self.run(move || rename::rename(&doc, &others, position, &params.new_name)).await?.map_err(Error::invalid_params)
     }
 
@@ -716,5 +807,21 @@ impl LanguageServer for Backend {
                 Err(Error::invalid_params(message))
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    #[test]
+    fn lp_section_accepts_whole_settings_or_the_section() {
+        let section = json!({ "format": { "indent": 4 } });
+        assert_eq!(Backend::lp_section(json!({ "lp": section.clone() })), Some(section.clone()));
+        assert_eq!(Backend::lp_section(section.clone()), Some(section));
+        assert_eq!(Backend::lp_section(Value::Null), Some(Value::Null));
+        assert_eq!(Backend::lp_section(json!({ "python": { "x": 1 } })), None);
     }
 }
