@@ -194,7 +194,7 @@ std::fs::write(<span class="g">"modified.lp"</span>, write_lp_string(&amp;proble
   <div class="wrap">
     <p class="sec-label">The command line</p>
     <h2>CLI: <code>lp_parser</code></h2>
-    <p class="lead">Every subcommand writes to stdout or a file (<code>-o</code>) as text, JSON, or YAML (<code>-f</code>, plus <code>--pretty</code>). Global flags: <code>-v/--verbose</code> (repeatable), <code>-q/--quiet</code>.</p>
+    <p class="lead">Every subcommand writes to stdout or a file (<code>-o</code>) as text, JSON, or YAML (<code>-f</code>, plus <code>--pretty</code>). Global flags: <code>-v/--verbose</code>, <code>-q/--quiet</code>.</p>
 
     <h3>parse — display file structure</h3>
 <pre><code>lp_parser parse problem.lp
@@ -233,7 +233,7 @@ lp_parser analyze problem.lp --large-coeff-threshold 1e8 --ratio-threshold 1e5</
 lp_parser diff old.lp new.lp --rename <span class="g">'\[\d+\]$'</span> <span class="g">'[N]'</span> --format json --pretty</code></pre>
 
     <h3>convert — translate to another format</h3>
-    <p>Targets: <code>lp</code>, <code>csv</code>, <code>json</code>, <code>yaml</code>. LP output honours <code>--precision</code>, <code>--max-line-length</code>, <code>--no-problem-name</code>, and <code>--compact</code>; CSV writes <code>constraints.csv</code>, <code>objectives.csv</code>, and <code>variables.csv</code> to a directory.</p>
+    <p>Targets: <code>lp</code>, <code>mps</code>, <code>csv</code>, <code>json</code>, <code>yaml</code>. LP output honours <code>--precision</code>, <code>--max-line-length</code>, <code>--no-problem-name</code>, and <code>--compact</code>; MPS output honours <code>--precision</code>; CSV writes <code>constraints.csv</code>, <code>objectives.csv</code>, and <code>variables.csv</code> to a directory.</p>
 <pre><code>lp_parser convert problem.lp --format lp --precision 4 --compact
 lp_parser convert problem.lp --format csv --output ./out</code></pre>
 
