@@ -185,7 +185,7 @@ class LpParser:
         """Set the problem name."""
 
     def set_sense(self, sense: SenseInput) -> None:
-        """Set the optimisation sense ('maximize' or 'minimize')."""
+        """Set the optimisation sense: 'maximize'/'max' or 'minimize'/'min' (case-insensitive)."""
 
     def analyze(
         self,

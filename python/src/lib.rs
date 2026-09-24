@@ -371,9 +371,9 @@ impl LpParser {
         let problem = &mut self.problem;
 
         problem.sense = match sense.to_lowercase().as_str() {
-            "maximize" => Sense::Maximize,
-            "minimize" => Sense::Minimize,
-            _ => return Err(LpInvalidValueError::new_err(format!("Invalid sense: {sense}. Use 'maximize' or 'minimize'"))),
+            "maximize" | "max" => Sense::Maximize,
+            "minimize" | "min" => Sense::Minimize,
+            _ => return Err(LpInvalidValueError::new_err(format!("Invalid sense: {sense}. Use 'maximize' ('max') or 'minimize' ('min')"))),
         };
 
         Ok(())
