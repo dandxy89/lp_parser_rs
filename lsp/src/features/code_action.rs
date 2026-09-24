@@ -8,6 +8,7 @@
 use std::collections::{HashMap, HashSet};
 use std::ops::Range;
 
+use serde_json::{Value, json};
 use tower_lsp_server::ls_types::{
     CodeAction, CodeActionContext, CodeActionKind, CodeActionOrCommand, Diagnostic, NumberOrString, Range as LspRange, TextEdit,
     WorkspaceEdit,
@@ -34,10 +35,28 @@ const TYPE_SECTIONS: &[(Role, &str, &str)] = &[
 /// A byte-range replacement.
 type Edit = (Range<usize>, String);
 
-/// Code actions for `range`.
+/// Whole-document actions whose edit is computed on `codeAction/resolve`
+/// when the client supports it: they can touch every line of a huge model.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Deferred {
+    Organise,
+    NameConstraints,
+}
+
+impl Deferred {
+    const fn id(self) -> &'static str {
+        match self {
+            Self::Organise => "organise",
+            Self::NameConstraints => "nameConstraints",
+        }
+    }
+}
+
+/// Code actions for `range`. With `lazy`, whole-document actions carry no
+/// edit; [`resolve`] fills it in.
 #[must_use]
-pub fn actions(doc: &Document, range: LspRange, context: &CodeActionContext) -> Vec<CodeActionOrCommand> {
-    let mut actions = Actions { doc, context, request: doc.byte_range(range), out: Vec::new() };
+pub fn actions(doc: &Document, range: LspRange, context: &CodeActionContext, lazy: bool) -> Vec<CodeActionOrCommand> {
+    let mut actions = Actions { doc, context, request: doc.byte_range(range), lazy, out: Vec::new() };
     debug_assert!(actions.request.start <= actions.request.end && actions.request.end <= doc.text.len());
 
     if actions.wants(&CodeActionKind::QUICKFIX) {
@@ -57,18 +76,60 @@ pub fn actions(doc: &Document, range: LspRange, context: &CodeActionContext) -> 
         actions.flipped_constraints();
     }
     let organise = CodeActionKind::new(ORGANIZE_SECTIONS);
-    if actions.wants(&organise)
-        && let Some(edit) = organise_sections(doc)
-    {
-        actions.push("Organise sections".to_owned(), organise, vec![edit], None, false);
+    if actions.wants(&organise) {
+        if lazy {
+            if sections_out_of_order(doc) {
+                actions.push_deferred("Organise sections".to_owned(), organise, Deferred::Organise);
+            }
+        } else if let Some(edit) = organise_sections(doc) {
+            actions.push("Organise sections".to_owned(), organise, vec![edit], None, false);
+        }
     }
     actions.out
+}
+
+/// Fill in the edit of an action returned by [`actions`] with `lazy`.
+///
+/// # Errors
+/// When the action is not deferred, or the document changed since it was
+/// offered, or the edit can no longer be made.
+pub fn resolve(doc: &Document, mut action: CodeAction) -> Result<CodeAction, String> {
+    let data = action.data.as_ref().ok_or("this code action has nothing to resolve")?;
+    let version = data.get("version").and_then(Value::as_i64);
+    if version != Some(i64::from(doc.version)) {
+        return Err("the document changed since the action was offered; request it again".to_owned());
+    }
+    let edits = match data.get("deferred").and_then(Value::as_str) {
+        Some(id) if id == Deferred::Organise.id() => {
+            vec![organise_sections(doc).ok_or("the sections can no longer be reordered safely")?]
+        }
+        Some(id) if id == Deferred::NameConstraints.id() => {
+            generated_names(doc).into_iter().map(|(at, name)| (at..at, format!("{name}: "))).collect()
+        }
+        _ => return Err("unknown deferred code action".to_owned()),
+    };
+    if edits.is_empty() {
+        return Err("nothing left to change".to_owned());
+    }
+    action.edit = Some(workspace_edit(doc, edits));
+    Ok(action)
+}
+
+/// One-document workspace edit from byte-range replacements.
+fn workspace_edit(doc: &Document, mut edits: Vec<Edit>) -> WorkspaceEdit {
+    debug_assert!(!edits.is_empty(), "an action must edit something");
+    edits.sort_by_key(|(range, _)| (range.start, range.end));
+    debug_assert!(edits.windows(2).all(|w| w[0].0.end <= w[1].0.start), "edits must not overlap: {edits:?}");
+    let edits: Vec<TextEdit> = edits.into_iter().map(|(range, text)| TextEdit::new(doc.range(range), text)).collect();
+    WorkspaceEdit::new(HashMap::from([(doc.uri.clone(), edits)]))
 }
 
 struct Actions<'a> {
     doc: &'a Document,
     context: &'a CodeActionContext,
     request: Range<usize>,
+    /// Defer whole-document edits to [`resolve`].
+    lazy: bool,
     out: Vec<CodeActionOrCommand>,
 }
 
@@ -101,20 +162,21 @@ impl Actions<'_> {
         (!found.is_empty()).then_some(found)
     }
 
-    fn push(&mut self, title: String, kind: CodeActionKind, mut edits: Vec<Edit>, diagnostics: Option<Vec<Diagnostic>>, preferred: bool) {
-        debug_assert!(!edits.is_empty(), "an action must edit something");
-        edits.sort_by_key(|(range, _)| (range.start, range.end));
-        debug_assert!(edits.windows(2).all(|w| w[0].0.end <= w[1].0.start), "edits must not overlap: {edits:?}");
-        let edits: Vec<TextEdit> = edits.into_iter().map(|(range, text)| TextEdit::new(self.doc.range(range), text)).collect();
-        let changes = HashMap::from([(self.doc.uri.clone(), edits)]);
+    fn push(&mut self, title: String, kind: CodeActionKind, edits: Vec<Edit>, diagnostics: Option<Vec<Diagnostic>>, preferred: bool) {
         self.out.push(CodeActionOrCommand::CodeAction(CodeAction {
             title,
             kind: Some(kind),
             diagnostics,
-            edit: Some(WorkspaceEdit::new(changes)),
+            edit: Some(workspace_edit(self.doc, edits)),
             is_preferred: preferred.then_some(true),
             ..CodeAction::default()
         }));
+    }
+
+    /// An action whose edit [`resolve`] computes.
+    fn push_deferred(&mut self, title: String, kind: CodeActionKind, deferred: Deferred) {
+        let data = json!({ "uri": self.doc.uri.as_str(), "version": self.doc.version, "deferred": deferred.id() });
+        self.out.push(CodeActionOrCommand::CodeAction(CodeAction { title, kind: Some(kind), data: Some(data), ..CodeAction::default() }));
     }
 
     /// Name sites overlapping the request.
@@ -338,13 +400,19 @@ impl Actions<'_> {
             [kind::CONSTRAINTS_SECTION, kind::LAZY_CONSTRAINTS_SECTION, kind::USER_CUTS_SECTION, kind::GENERAL_CONSTRAINTS_SECTION];
         let in_section = index.sections.iter().any(|s| constraint_sections.contains(&s.kind) && self.touches(&s.range));
         let is_constraint = |k: EntityKind| matches!(k, EntityKind::Constraint | EntityKind::GeneralConstraint);
-        if !in_section || !index.entities.iter().any(|e| is_constraint(e.kind) && e.name.is_none()) {
+        let count = index.entities.iter().filter(|e| is_constraint(e.kind) && e.name.is_none()).count();
+        if !in_section || count == 0 {
+            return;
+        }
+        let noun = if count == 1 { "constraint" } else { "constraints" };
+        let title = format!("Name {count} unnamed {noun}");
+        if self.lazy {
+            self.push_deferred(title, CodeActionKind::REFACTOR_REWRITE, Deferred::NameConstraints);
             return;
         }
         let edits = generated_names(doc).into_iter().map(|(at, name)| (at..at, format!("{name}: "))).collect::<Vec<_>>();
-        let count = edits.len();
-        let noun = if count == 1 { "constraint" } else { "constraints" };
-        self.push(format!("Name {count} unnamed {noun}"), CodeActionKind::REFACTOR_REWRITE, edits, None, false);
+        debug_assert_eq!(edits.len(), count, "one generated name per unnamed constraint");
+        self.push(title, CodeActionKind::REFACTOR_REWRITE, edits, None, false);
     }
 
     /// Sort a type section's entries, keeping the layout between them.
@@ -646,16 +714,22 @@ fn generated_names(doc: &Document) -> Vec<(usize, String)> {
 
 /// Reorder the movable sections (everything after `Subject To`) canonically,
 /// each moving with the comment lines directly above it.
+/// Reorderable top-level sections with their ranks, in document order.
+fn reorderable_sections(doc: &Document) -> Vec<(usize, Node<'_>)> {
+    children(doc.tree.root_node()).into_iter().filter_map(|c| rank(c.kind()).filter(|&r| r > 1).map(|r| (r, c))).collect()
+}
+
+/// Cheap check that [`organise_sections`] has something to reorder.
+fn sections_out_of_order(doc: &Document) -> bool {
+    !doc.has_syntax_errors() && !reorderable_sections(doc).windows(2).all(|w| w[0].0 <= w[1].0)
+}
+
 fn organise_sections(doc: &Document) -> Option<Edit> {
-    if doc.has_syntax_errors() {
+    if !sections_out_of_order(doc) {
         return None;
     }
-    let root = doc.tree.root_node();
-    let top = children(root);
-    let sections: Vec<(usize, Node<'_>)> = top.iter().filter_map(|&c| rank(c.kind()).filter(|&r| r > 1).map(|r| (r, c))).collect();
-    if sections.len() < 2 || sections.windows(2).all(|w| w[0].0 <= w[1].0) {
-        return None;
-    }
+    let top = children(doc.tree.root_node());
+    let sections = reorderable_sections(doc);
     let starts: Vec<usize> = sections.iter().map(|(_, s)| attached_start(doc, s.start_byte())).collect::<Option<_>>()?;
     let tail = match top.iter().find(|c| c.kind() == kind::END_MARKER) {
         Some(end) => attached_start(doc, end.start_byte())?,
@@ -711,7 +785,7 @@ mod tests {
     }
 
     fn run_with(doc: &Document, at: Range<usize>, context: &CodeActionContext) -> Vec<CodeAction> {
-        actions(doc, doc.range(at), context)
+        actions(doc, doc.range(at), context, false)
             .into_iter()
             .map(|a| match a {
                 CodeActionOrCommand::CodeAction(action) => action,
@@ -834,6 +908,35 @@ mod tests {
         let entry = apply(&d, &find(&at(&d, "z\nend"), "Remove unused `generals` entry for `z`"));
         assert!(entry.ends_with("generals\n x\nend\n"), "{entry}");
         assert!(!titles(&at(&d, "x <= 4")).iter().any(|t| t.starts_with("Remove")));
+    }
+
+    #[test]
+    fn deferred_actions_resolve_to_the_eager_edit() {
+        let text = "min\n obj: x\nst\n x + y >= 1\n x - y <= 4\nbounds\n x <= 1\nsos\n s1: S1 :: x : 1\nbinaries\n y\nend\n";
+        let d = doc(text);
+        let at = text.find("x - y").unwrap();
+        let wanted = |lazy: bool| -> Vec<CodeAction> {
+            actions(&d, d.range(at..at), &CodeActionContext::default(), lazy)
+                .into_iter()
+                .filter_map(|a| match a {
+                    CodeActionOrCommand::CodeAction(a) if a.title.starts_with("Name") || a.title == "Organise sections" => Some(a),
+                    _ => None,
+                })
+                .collect()
+        };
+        let (eager, lazy) = (wanted(false), wanted(true));
+        assert_eq!(eager.len(), 2, "{:?}", titles(&eager));
+        for (eager, lazy) in eager.iter().zip(lazy) {
+            assert_eq!(eager.title, lazy.title);
+            assert!(lazy.edit.is_none(), "deferred actions carry no edit");
+            let resolved = resolve(&d, lazy).unwrap();
+            assert_eq!(resolved.edit, eager.edit, "{}", eager.title);
+        }
+        // A newer version invalidates the offer.
+        let stale = wanted(true).remove(0);
+        let mut newer = doc(text);
+        newer.version = 2;
+        assert!(resolve(&newer, stale).is_err());
     }
 
     #[test]

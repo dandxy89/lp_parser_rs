@@ -121,6 +121,9 @@ pub fn load(path: &Path, encoding: Encoding, max_bytes: usize) -> Result<Loaded,
 pub struct Index {
     docs: HashMap<Uri, Arc<Document>>,
     modified: HashMap<Uri, SystemTime>,
+    /// Per file, bumped whenever its indexed copy changes.
+    revisions: HashMap<Uri, u64>,
+    next_revision: u64,
     bytes: usize,
 }
 
@@ -134,6 +137,12 @@ impl Index {
     /// Every indexed file.
     pub fn iter(&self) -> impl Iterator<Item = (&Uri, &Arc<Document>)> {
         self.docs.iter()
+    }
+
+    /// Revision of the indexed copy at `key`; changes whenever it is replaced.
+    #[must_use]
+    pub fn revision(&self, key: &Uri) -> Option<u64> {
+        self.revisions.get(key).copied()
     }
 
     /// Total text size of the indexed files.
@@ -156,12 +165,15 @@ impl Index {
         if let Some(modified) = loaded.modified {
             self.modified.insert(key.clone(), modified);
         }
+        self.next_revision += 1;
+        self.revisions.insert(key.clone(), self.next_revision);
         self.docs.insert(key, Arc::new(loaded.doc));
     }
 
     /// Drop the file at canonical URI `key`.
     pub fn remove(&mut self, key: &Uri) {
         self.modified.remove(key);
+        self.revisions.remove(key);
         if let Some(doc) = self.docs.remove(key) {
             debug_assert!(self.bytes >= doc.text.len(), "index size underflow");
             self.bytes -= doc.text.len();
@@ -211,7 +223,10 @@ mod tests {
         index.insert(loaded("old", 1));
         let key: Uri = "file:///tmp/a.lp".parse().unwrap();
         assert_eq!(index.get(&key).unwrap().text, "newer");
-        assert_eq!(index.bytes(), 5);
+        let revision = index.revision(&key).unwrap();
+        index.insert(loaded("newest", 3));
+        assert_ne!(index.revision(&key), Some(revision));
+        assert_eq!(index.bytes(), 6);
         index.remove(&key);
         assert_eq!(index.bytes(), 0);
         assert!(index.get(&key).is_none());

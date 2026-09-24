@@ -11,6 +11,7 @@ pub mod diagnostics;
 mod docs;
 pub mod folding;
 pub mod format;
+pub mod hierarchy;
 pub mod hover;
 pub mod inlay;
 pub mod navigation;

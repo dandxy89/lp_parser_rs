@@ -17,7 +17,7 @@ use tower_lsp_server::{Client, LanguageServer};
 use crate::config::Config;
 use crate::document::Document;
 use crate::features::{
-    code_action, code_lens, commands, completion, diagnostics, folding, format, hover, inlay, navigation, rename, selection,
+    code_action, code_lens, commands, completion, diagnostics, folding, format, hierarchy, hover, inlay, navigation, rename, selection,
     semantic_tokens, signature, symbols,
 };
 use crate::position::Encoding;
@@ -32,6 +32,8 @@ struct ClientCaps {
     watched_files_dynamic: bool,
     work_done_progress: bool,
     inlay_hint_refresh: bool,
+    /// `codeAction/resolve` may fill in edits.
+    code_action_resolve: bool,
 }
 
 /// Shared server state. Locks are never held across `.await`.
@@ -57,6 +59,9 @@ struct State {
     /// Last semantic tokens sent per document, for deltas.
     tokens: RwLock<HashMap<Uri, (String, Vec<SemanticToken>)>>,
     next_result_id: AtomicU64,
+    /// Bumped on every configuration change; part of workspace diagnostic
+    /// result ids, since settings change the diagnostics.
+    config_epoch: AtomicU64,
 }
 
 fn read<T>(lock: &RwLock<T>) -> std::sync::RwLockReadGuard<'_, T> {
@@ -259,7 +264,10 @@ impl Backend {
 
     async fn apply_config(&self, value: Value) {
         match Config::from_value(value) {
-            Ok(config) => *write(&self.state.config) = config,
+            Ok(config) => {
+                *write(&self.state.config) = config;
+                self.state.config_epoch.fetch_add(1, Ordering::Relaxed);
+            }
             Err(message) => {
                 self.log(MessageType::ERROR, &message).await;
                 self.client.show_message(MessageType::ERROR, message).await;
@@ -301,6 +309,38 @@ impl Backend {
                 self.log(MessageType::ERROR, format!("indexing task failed: {e}")).await;
                 true
             }
+        }
+    }
+
+    /// Bring the index up to date after `uri` changed on disk. Open documents
+    /// are left alone: the editor's copy is the truth while they are open.
+    async fn file_changed(&self, uri: &Uri, deleted: bool) {
+        if self.is_open(uri) || !uri.to_file_path().is_some_and(|p| workspace::is_lp_path(&p)) {
+            return;
+        }
+        if deleted {
+            write(&self.state.indexed).remove(&workspace::key(uri));
+        } else if let Some(path) = uri.to_file_path().map(std::borrow::Cow::into_owned) {
+            self.index_file(path).await;
+        }
+    }
+
+    /// [`Self::file_changed`] for a URI given as a string (file operations).
+    async fn file_changed_str(&self, uri: &str, deleted: bool) {
+        match uri.parse::<Uri>() {
+            Ok(uri) => self.file_changed(&uri, deleted).await,
+            Err(e) => self.log(MessageType::WARNING, format!("ignoring file operation on invalid URI {uri}: {e}")).await,
+        }
+    }
+
+    /// Ask a pull-mode client to re-pull diagnostics, e.g. after the index changed.
+    async fn refresh_diagnostics(&self) {
+        let caps = self.caps();
+        if caps.pull_diagnostics
+            && caps.diagnostic_refresh
+            && let Err(e) = self.client.workspace_diagnostic_refresh().await
+        {
+            self.log(MessageType::WARNING, format!("diagnostic refresh failed: {e}")).await;
         }
     }
 
@@ -348,6 +388,7 @@ impl Backend {
         if let Some(progress) = progress {
             progress.finish().await;
         }
+        self.refresh_diagnostics().await;
     }
 
     async fn register_watchers(&self) {
@@ -385,6 +426,20 @@ impl Backend {
     }
 }
 
+/// File-operation filter matching `*.lp` files on disk.
+fn lp_file_operations() -> FileOperationRegistrationOptions {
+    FileOperationRegistrationOptions {
+        filters: vec![FileOperationFilter {
+            scheme: Some("file".to_owned()),
+            pattern: FileOperationPattern {
+                glob: "**/*.lp".to_owned(),
+                matches: Some(FileOperationPatternKind::File),
+                options: Some(FileOperationPatternOptions { ignore_case: Some(true) }),
+            },
+        }],
+    }
+}
+
 fn capabilities(pull_diagnostics: bool, encoding: Encoding) -> ServerCapabilities {
     ServerCapabilities {
         position_encoding: Some(encoding.kind()),
@@ -419,6 +474,7 @@ fn capabilities(pull_diagnostics: bool, encoding: Encoding) -> ServerCapabilitie
                 CodeActionKind::REFACTOR_REWRITE,
                 CodeActionKind::new(code_action::ORGANIZE_SECTIONS),
             ]),
+            resolve_provider: Some(true),
             ..Default::default()
         })),
         code_lens_provider: Some(CodeLensOptions { resolve_provider: Some(false) }),
@@ -441,6 +497,8 @@ fn capabilities(pull_diagnostics: bool, encoding: Encoding) -> ServerCapabilitie
             work_done_progress_options: WorkDoneProgressOptions::default(),
         })),
         inlay_hint_provider: Some(OneOf::Left(true)),
+        call_hierarchy_provider: Some(CallHierarchyServerCapability::Simple(true)),
+        linked_editing_range_provider: Some(LinkedEditingRangeServerCapabilities::Simple(true)),
         execute_command_provider: Some(ExecuteCommandOptions {
             commands: commands::ALL.iter().map(|c| (*c).to_owned()).collect(),
             work_done_progress_options: WorkDoneProgressOptions::default(),
@@ -449,7 +507,7 @@ fn capabilities(pull_diagnostics: bool, encoding: Encoding) -> ServerCapabilitie
             DiagnosticServerCapabilities::Options(DiagnosticOptions {
                 identifier: Some("lp".to_owned()),
                 inter_file_dependencies: false,
-                workspace_diagnostics: false,
+                workspace_diagnostics: true,
                 work_done_progress_options: WorkDoneProgressOptions::default(),
             })
         }),
@@ -458,7 +516,14 @@ fn capabilities(pull_diagnostics: bool, encoding: Encoding) -> ServerCapabilitie
                 supported: Some(true),
                 change_notifications: Some(OneOf::Left(true)),
             }),
-            file_operations: None,
+            // For clients without file watching: keep the index current when
+            // `*.lp` files are created, renamed or deleted from the editor.
+            file_operations: Some(WorkspaceFileOperationsServerCapabilities {
+                did_create: Some(lp_file_operations()),
+                did_rename: Some(lp_file_operations()),
+                did_delete: Some(lp_file_operations()),
+                ..Default::default()
+            }),
         }),
         ..Default::default()
     }
@@ -480,6 +545,10 @@ impl LanguageServer for Backend {
                 .unwrap_or(false),
             work_done_progress: caps.window.as_ref().and_then(|w| w.work_done_progress).unwrap_or(false),
             inlay_hint_refresh: workspace.and_then(|w| w.inlay_hint.as_ref()).and_then(|i| i.refresh_support).unwrap_or(false),
+            code_action_resolve: text
+                .and_then(|t| t.code_action.as_ref())
+                .and_then(|c| c.resolve_support.as_ref())
+                .is_some_and(|r| r.properties.iter().any(|p| p == "edit")),
         };
         *write(&self.state.encoding) = encoding;
         *write(&self.state.caps) = client_caps;
@@ -599,16 +668,73 @@ impl LanguageServer for Backend {
 
     async fn did_change_watched_files(&self, params: DidChangeWatchedFilesParams) {
         for change in params.changes {
-            if self.is_open(&change.uri) {
-                continue;
-            }
-            let Some(path) = change.uri.to_file_path().map(std::borrow::Cow::into_owned) else { continue };
-            if change.typ == FileChangeType::DELETED {
-                write(&self.state.indexed).remove(&workspace::key(&change.uri));
-                continue;
-            }
-            self.index_file(path).await;
+            self.file_changed(&change.uri, change.typ == FileChangeType::DELETED).await;
         }
+        self.refresh_diagnostics().await;
+    }
+
+    async fn did_create_files(&self, params: CreateFilesParams) {
+        for file in params.files {
+            self.file_changed_str(&file.uri, false).await;
+        }
+        self.refresh_diagnostics().await;
+    }
+
+    async fn did_rename_files(&self, params: RenameFilesParams) {
+        for file in params.files {
+            self.file_changed_str(&file.old_uri, true).await;
+            self.file_changed_str(&file.new_uri, false).await;
+        }
+        self.refresh_diagnostics().await;
+    }
+
+    async fn did_delete_files(&self, params: DeleteFilesParams) {
+        for file in params.files {
+            self.file_changed_str(&file.uri, true).await;
+        }
+        self.refresh_diagnostics().await;
+    }
+
+    async fn workspace_diagnostic(&self, params: WorkspaceDiagnosticParams) -> Result<WorkspaceDiagnosticReportResult> {
+        let epoch = self.state.config_epoch.load(Ordering::Relaxed);
+        let previous: HashMap<Uri, String> = params.previous_result_ids.into_iter().map(|p| (workspace::key(&p.uri), p.value)).collect();
+        // Open documents are reported through `textDocument/diagnostic`.
+        let docs: Vec<(Arc<Document>, String)> = {
+            let open_keys: HashSet<Uri> = read(&self.state.open).keys().map(workspace::key).collect();
+            let indexed = read(&self.state.indexed);
+            indexed
+                .iter()
+                .filter(|(key, _)| !open_keys.contains(*key))
+                .map(|(key, doc)| (Arc::clone(doc), format!("{epoch}.{}", indexed.revision(key).unwrap_or(0))))
+                .collect()
+        };
+        let config = self.config();
+        let items = self
+            .run(move || {
+                docs.into_iter()
+                    .map(|(doc, result_id)| {
+                        let uri = doc.uri.clone();
+                        if previous.get(&workspace::key(&uri)) == Some(&result_id) {
+                            WorkspaceDocumentDiagnosticReport::Unchanged(WorkspaceUnchangedDocumentDiagnosticReport {
+                                uri,
+                                version: None,
+                                unchanged_document_diagnostic_report: UnchangedDocumentDiagnosticReport { result_id },
+                            })
+                        } else {
+                            WorkspaceDocumentDiagnosticReport::Full(WorkspaceFullDocumentDiagnosticReport {
+                                uri,
+                                version: None,
+                                full_document_diagnostic_report: FullDocumentDiagnosticReport {
+                                    result_id: Some(result_id),
+                                    items: diagnostics::compute(&doc, &config),
+                                },
+                            })
+                        }
+                    })
+                    .collect()
+            })
+            .await?;
+        Ok(WorkspaceDiagnosticReportResult::Report(WorkspaceDiagnosticReport { items }))
     }
 
     async fn did_change_workspace_folders(&self, params: DidChangeWorkspaceFoldersParams) {
@@ -685,6 +811,26 @@ impl LanguageServer for Backend {
         self.run(move || rename::rename(&doc, &others, position, &params.new_name)).await?.map_err(Error::invalid_params)
     }
 
+    async fn linked_editing_range(&self, params: LinkedEditingRangeParams) -> Result<Option<LinkedEditingRanges>> {
+        let (doc, position) = self.position_params(&params.text_document_position_params)?;
+        self.run(move || navigation::linked_editing(&doc, position)).await
+    }
+
+    async fn prepare_call_hierarchy(&self, params: CallHierarchyPrepareParams) -> Result<Option<Vec<CallHierarchyItem>>> {
+        let (doc, position) = self.position_params(&params.text_document_position_params)?;
+        self.run(move || hierarchy::prepare(&doc, position)).await
+    }
+
+    async fn incoming_calls(&self, params: CallHierarchyIncomingCallsParams) -> Result<Option<Vec<CallHierarchyIncomingCall>>> {
+        let doc = self.document_or_error(&params.item.uri)?;
+        self.run(move || Some(hierarchy::incoming(&doc, &params.item))).await
+    }
+
+    async fn outgoing_calls(&self, params: CallHierarchyOutgoingCallsParams) -> Result<Option<Vec<CallHierarchyOutgoingCall>>> {
+        let doc = self.document_or_error(&params.item.uri)?;
+        self.run(move || Some(hierarchy::outgoing(&doc, &params.item))).await
+    }
+
     async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {
         let (doc, position) = self.position_params(&params.text_document_position_params)?;
         self.run(move || hover::hover(&doc, position)).await
@@ -712,7 +858,21 @@ impl LanguageServer for Backend {
 
     async fn code_action(&self, params: CodeActionParams) -> Result<Option<CodeActionResponse>> {
         let doc = self.document_or_error(&params.text_document.uri)?;
-        self.run(move || Some(code_action::actions(&doc, params.range, &params.context))).await
+        let lazy = self.caps().code_action_resolve;
+        self.run(move || Some(code_action::actions(&doc, params.range, &params.context, lazy))).await
+    }
+
+    async fn code_action_resolve(&self, action: CodeAction) -> Result<CodeAction> {
+        let uri: Uri = action
+            .data
+            .as_ref()
+            .and_then(|d| d.get("uri"))
+            .and_then(Value::as_str)
+            .ok_or_else(|| Error::invalid_params("code action has no document URI"))?
+            .parse()
+            .map_err(|e| Error::invalid_params(format!("invalid document URI: {e}")))?;
+        let doc = self.document_or_error(&uri)?;
+        self.run(move || code_action::resolve(&doc, action)).await?.map_err(Error::invalid_params)
     }
 
     async fn code_lens(&self, params: CodeLensParams) -> Result<Option<Vec<CodeLens>>> {

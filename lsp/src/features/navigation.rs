@@ -1,9 +1,9 @@
-//! Go to definition / declaration / type definition, references and document
-//! highlights.
+//! Go to definition / declaration / type definition, references, document
+//! highlights and linked editing.
 
 use std::ops::Range;
 
-use tower_lsp_server::ls_types::{DocumentHighlight, DocumentHighlightKind, Location, Position};
+use tower_lsp_server::ls_types::{DocumentHighlight, DocumentHighlightKind, LinkedEditingRanges, Location, Position};
 
 use crate::document::Document;
 use crate::index::{Role, Symbol, Variable};
@@ -70,6 +70,17 @@ pub fn highlights(doc: &Document, position: Position) -> Vec<DocumentHighlight> 
         .collect()
 }
 
+/// A name as the upstream identifier rule (and rename) accepts it, as a
+/// JavaScript regular expression: typing outside it ends linked editing.
+const NAME_PATTERN: &str = r"[A-Za-z_!#$%&(),.;?@{}~'\[\]][A-Za-z0-9_!#$%&(),.;?@{}~'\[\]|]*";
+
+/// Every occurrence of the name under the cursor, edited together.
+#[must_use]
+pub fn linked_editing(doc: &Document, position: Position) -> Option<LinkedEditingRanges> {
+    let ranges: Vec<_> = sites(doc, symbol(doc, position)?).into_iter().map(|(range, _)| doc.range(range)).collect();
+    (!ranges.is_empty()).then(|| LinkedEditingRanges { ranges, word_pattern: Some(NAME_PATTERN.to_owned()) })
+}
+
 /// Non-declaration occurrences of a variable (shared with the code lens).
 pub(crate) fn usages(doc: &Document, variable: &Variable) -> Vec<Location> {
     variable.occurrences.iter().filter(|o| !o.role.is_declaration()).map(|o| doc.location(o.range.clone())).collect()
@@ -125,6 +136,17 @@ mod tests {
 
     fn texts(doc: &Document, locations: &[Location]) -> Vec<String> {
         locations.iter().map(|l| format!("{}:{}", l.range.start.line, doc.slice(doc.byte_range(l.range)))).collect()
+    }
+
+    #[test]
+    fn linked_editing_covers_every_occurrence() {
+        let d = doc();
+        let linked = linked_editing(&d, at(&d, "x", 0)).unwrap();
+        assert_eq!(linked.ranges.len(), 5, "objective, two constraints, bound and generals");
+        assert!(linked.ranges.iter().all(|r| d.slice(d.byte_range(*r)) == "x"));
+        let pattern = linked.word_pattern.unwrap();
+        assert!(pattern.starts_with("[A-Za-z_") && pattern.contains(r"\["));
+        assert!(linked_editing(&d, at(&d, ">=", 0)).is_none());
     }
 
     #[test]

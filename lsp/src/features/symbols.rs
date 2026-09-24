@@ -114,7 +114,7 @@ const fn entity_kind(kind: EntityKind) -> SymbolKind {
     }
 }
 
-fn entity_symbol(doc: &Document, entity: &Entity) -> DocumentSymbol {
+pub(crate) fn entity_symbol(doc: &Document, entity: &Entity) -> DocumentSymbol {
     let name = entity.name.clone().unwrap_or_else(|| unnamed(doc.slice(entity.range.clone()), entity.kind));
     let selection = entity.name_range.clone().unwrap_or(entity.range.start..entity.range.start);
     symbol(name, Some(entity.kind.label().to_owned()), entity_kind(entity.kind), doc, entity.range.clone(), selection, Vec::new())

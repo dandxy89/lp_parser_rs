@@ -89,6 +89,11 @@ async fn full_session() {
     assert_eq!(init["capabilities"]["positionEncoding"], "utf-8");
     assert_eq!(init["capabilities"]["textDocumentSync"]["change"], 2, "incremental sync");
     assert!(init["capabilities"]["diagnosticProvider"].is_null(), "push mode without pull support");
+    for capability in ["callHierarchyProvider", "linkedEditingRangeProvider"] {
+        assert_eq!(init["capabilities"][capability], true, "{capability}");
+    }
+    assert_eq!(init["capabilities"]["codeActionProvider"]["resolveProvider"], true);
+    assert!(init["capabilities"]["workspace"]["fileOperations"]["didRename"].is_object());
     h.notify("initialized", json!({})).await;
 
     h.notify("textDocument/didOpen", json!({ "textDocument": { "uri": URI, "languageId": "lp", "version": 1, "text": TEXT } })).await;
