@@ -296,6 +296,13 @@ pub fn is_section_word(word: &str) -> bool {
     SECTION_WORDS.iter().any(|k| k.eq_ignore_ascii_case(word))
 }
 
+/// Whether `word` may be read as a keyword when it starts a line: a section
+/// word, or `st`/`s.t.` (`Subject To`).
+#[must_use]
+pub fn is_line_start_keyword(word: &str) -> bool {
+    is_section_word(word) || word.eq_ignore_ascii_case("st") || word.eq_ignore_ascii_case("s.t.")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

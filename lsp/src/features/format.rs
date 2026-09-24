@@ -242,7 +242,12 @@ fn expand_to_lines(doc: &Document, units: &[Placed], mut first: usize, mut last:
 /// The edit replacing units `first..=last` (widened to whole lines) with their
 /// formatted text, or nothing when already formatted.
 fn snapped_edit(doc: &Document, layout: &Layout, first: usize, last: usize) -> Option<TextEdit> {
-    let (first, last) = expand_to_lines(doc, &layout.units, first, last);
+    let (mut first, mut last) = expand_to_lines(doc, &layout.units, first, last);
+    // A unit joined onto the previous output line (`x <= 10 st <= 5`) shares
+    // that line's text: widen until the output also starts on a fresh line.
+    while first > 0 && layout.units[first].out_line_start <= layout.units[first - 1].out_end {
+        (first, last) = expand_to_lines(doc, &layout.units, first - 1, last);
+    }
     let src = doc.lines.line_start(doc.lines.line_of(layout.units[first].src.start))..layout.units[last].src.end;
     let out = layout.units[first].out_line_start..layout.units[last].out_end;
     debug_assert!(doc.text[src.start..layout.units[first].src.start].trim().is_empty(), "snapped range must start at a line start");
@@ -547,10 +552,7 @@ fn starts_like_keyword(leaves: &[Leaf<'_>]) -> bool {
     let mut sig = leaves.iter().filter(|l| !l.is_comment());
     let Some(first) = sig.next() else { return false };
     let labelled = sig.next().is_some_and(|l| !l.named && matches!(l.text, ":" | "::"));
-    // Section words plus `st`/`s.t.`, which the lexer also resolves at line start.
-    first.named
-        && !labelled
-        && (syntax::is_section_word(first.text) || first.text.eq_ignore_ascii_case("st") || first.text.eq_ignore_ascii_case("s.t."))
+    first.named && !labelled && syntax::is_line_start_keyword(first.text)
 }
 
 /// Whether `leaves` continue the previous constraint `prev`: tree-sitter may

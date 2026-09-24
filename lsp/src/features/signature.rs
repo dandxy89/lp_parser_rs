@@ -17,10 +17,29 @@ pub fn help(doc: &Document, position: Position) -> Option<SignatureHelp> {
         return None;
     }
     // Innermost unclosed `(` before the cursor within this general constraint.
-    let open = text[..offset].rfind(['(', ')', ':', '='])?;
-    if text.as_bytes()[open] != b'(' {
-        return None;
+    // Tokens are whitespace-separated, as upstream lexes them: `(`, `,` and
+    // `)` inside a name (`x(1)`, `a,b`) belong to the name.
+    let mut commas = 0;
+    let mut open = None;
+    for (start, token) in tokens_before(text, offset) {
+        match token {
+            "," => commas += 1,
+            "(" => {
+                open = Some(start);
+                break;
+            }
+            ")" | "=" => return None,
+            _ if token.ends_with(':') => return None,
+            // `ABS(x` while typing: a function name glued to its `(`.
+            _ => {
+                if let Some(i) = token.find('(').filter(|&i| docs::function(&token[..i]).is_some()) {
+                    open = Some(start + i);
+                    break;
+                }
+            }
+        }
     }
+    let open = open?;
     let head = text[..open].trim_end();
     let name_start = completion::word_start(head, completion::line_start(head, head.len()), head.len());
     let function = docs::function(&head[name_start..])?;
@@ -28,7 +47,6 @@ pub fn help(doc: &Document, position: Position) -> Option<SignatureHelp> {
         return None;
     }
 
-    let commas = text[open..offset].matches(',').count();
     debug_assert_ne!(function.params.len(), 0, "every function takes an argument");
     let active = u32::try_from(commas.min(function.params.len().saturating_sub(1))).unwrap_or(0);
     let (label, offsets) = function.signature();
@@ -48,6 +66,28 @@ pub fn help(doc: &Document, position: Position) -> Option<SignatureHelp> {
         active_parameter: Some(active),
     };
     Some(SignatureHelp { signatures: vec![signature], active_signature: Some(0), active_parameter: Some(active) })
+}
+
+/// Whitespace-separated tokens ending at or before `end`, last first, as
+/// `(start offset, token)`.
+fn tokens_before(text: &str, end: usize) -> impl Iterator<Item = (usize, &str)> {
+    debug_assert!(text.is_char_boundary(end));
+    let bytes = text.as_bytes();
+    let mut i = end;
+    std::iter::from_fn(move || {
+        while i > 0 && bytes[i - 1].is_ascii_whitespace() {
+            i -= 1;
+        }
+        if i == 0 {
+            return None;
+        }
+        let stop = i;
+        while i > 0 && !bytes[i - 1].is_ascii_whitespace() {
+            i -= 1;
+        }
+        // Next to ASCII whitespace or the text ends, so on char boundaries.
+        Some((i, &text[i..stop]))
+    })
 }
 
 #[cfg(test)]
@@ -71,6 +111,15 @@ mod tests {
         assert_eq!(active(&gc("x , |y")), Some(1));
         assert_eq!(active(&gc("x , y , z , |3")), Some(2));
         assert_eq!(active("min\n obj: x\nst\n c: x >= 1\ngenconstrs\n g: r = ABS(x|\nend\n"), Some(0));
+    }
+
+    #[test]
+    fn punctuation_inside_names_is_not_an_argument_separator() {
+        let gc = |args: &str| format!("min\n obj: x\nst\n c: x >= 1\nGeneral Constraints\n g1: r = MAX ( {args} )\nend\n");
+        assert_eq!(active(&gc("x(1)|")), Some(0));
+        assert_eq!(active(&gc("x(1) , |y")), Some(1));
+        assert_eq!(active(&gc("a,b|")), Some(0));
+        assert_eq!(active(&gc("a,b , y , |z")), Some(2));
     }
 
     #[test]

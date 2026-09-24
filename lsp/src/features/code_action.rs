@@ -259,7 +259,7 @@ impl Actions<'_> {
                     (occurrence.range.clone(), format!("`{}` entry", occurrence.role.section_name()))
                 };
                 let diagnostics = self.diagnostics(codes::UNUSED_DECLARATION, &item);
-                let edit = deletion(&doc.text, &item);
+                let Some(edit) = deletion(&doc.text, &item) else { continue };
                 self.push(format!("Remove unused {what} for `{name}`"), CodeActionKind::QUICKFIX, vec![edit], diagnostics, true);
             }
             if !occurrence.role.is_type_declaration() {
@@ -278,7 +278,7 @@ impl Actions<'_> {
                     format!("Remove conflicting `{label}` entry for `{name}` (keeps `{}`)", first.section_name())
                 };
                 let diagnostics = self.diagnostics(codes::CONFLICTING_TYPE, &occurrence.range);
-                let edit = deletion(&doc.text, &occurrence.range);
+                let Some(edit) = deletion(&doc.text, &occurrence.range) else { continue };
                 self.push(title, CodeActionKind::QUICKFIX, vec![edit], diagnostics, true);
             }
         }
@@ -321,7 +321,7 @@ impl Actions<'_> {
                 continue;
             }
             let Some(insert) = insert_entry(doc, section, header, &variable.name) else { continue };
-            let delete = deletion(&doc.text, &occurrence.range);
+            let Some(delete) = deletion(&doc.text, &occurrence.range) else { continue };
             if insert.0.start > delete.0.start && insert.0.start < delete.0.end {
                 continue;
             }
@@ -488,22 +488,27 @@ fn eol(text: &str) -> &'static str {
 }
 
 /// Deletion of `item`: its whole line when nothing else is on it, else the
-/// item and adjacent horizontal whitespace.
-fn deletion(text: &str, item: &Range<usize>) -> Edit {
+/// item and adjacent horizontal whitespace. `None` when the deletion would
+/// leave a keyword-like word (`bin`, `end`, ...) starting the line, which
+/// would then open a section.
+fn deletion(text: &str, item: &Range<usize>) -> Option<Edit> {
     debug_assert!(item.start < item.end && item.end <= text.len());
     let line_start = text[..item.start].rfind('\n').map_or(0, |i| i + 1);
     let line_end = text[item.end..].find('\n').map_or(text.len(), |i| item.end + i + 1);
     let before = &text[line_start..item.start];
     let after = &text[item.end..line_end];
     if before.trim().is_empty() && after.trim().is_empty() {
-        return (line_start..line_end, String::new());
+        return Some((line_start..line_end, String::new()));
+    }
+    if before.trim().is_empty() && after.split_whitespace().next().is_some_and(syntax::is_line_start_keyword) {
+        return None;
     }
     let trailing = after.len() - after.trim_start_matches([' ', '\t']).len();
     if trailing > 0 && !after.trim().is_empty() {
-        return (item.start..item.end + trailing, String::new());
+        return Some((item.start..item.end + trailing, String::new()));
     }
     let leading = before.len() - before.trim_end_matches([' ', '\t']).len();
-    (item.start - leading..item.end, String::new())
+    Some((item.start - leading..item.end, String::new()))
 }
 
 /// Rank of a section kind in the canonical order.
@@ -832,6 +837,15 @@ mod tests {
     }
 
     #[test]
+    fn removals_never_expose_a_section_keyword() {
+        // Deleting `z` would leave `bin` at line start, opening a Binaries section.
+        let d = doc("min\n obj: x + bin\nst\n c: x + bin >= 1\ngenerals\n z bin\nend\n");
+        let actions = at(&d, "z bin");
+        let offered = titles(&actions);
+        assert!(!offered.iter().any(|t| t.starts_with("Remove") || t.starts_with("Move")), "{offered:?}");
+    }
+
+    #[test]
     fn duplicate_type_declaration_is_removed() {
         let d = doc("min\n obj: x + y\nst\n c: x + y >= 1\ngenerals\n x y\nbinaries\n x\nsemi-continuous\n y\ngenerals\n y\nend\n");
         let conflict = find(&at(&d, "x\nsemi"), "Remove conflicting `binaries` entry for `x` (keeps `generals`)");
@@ -945,8 +959,10 @@ mod tests {
     #[test]
     fn deletion_shapes() {
         let text = "a\n x y\n z\n";
-        assert_eq!(deletion(text, &(3..4)), (3..5, String::new()));
-        assert_eq!(deletion(text, &(5..6)), (4..6, String::new()));
-        assert_eq!(deletion(text, &(8..9)), (7..10, String::new()));
+        assert_eq!(deletion(text, &(3..4)), Some((3..5, String::new())));
+        assert_eq!(deletion(text, &(5..6)), Some((4..6, String::new())));
+        assert_eq!(deletion(text, &(8..9)), Some((7..10, String::new())));
+        // Removing `x` would leave `bin` starting the line, opening Binaries.
+        assert_eq!(deletion("Generals\n x bin\n", &(10..11)), None);
     }
 }

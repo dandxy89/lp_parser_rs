@@ -176,6 +176,27 @@ fn range_snaps_to_entries_sharing_a_line() {
 }
 
 #[test]
+fn range_on_a_joined_entry_does_not_duplicate_the_previous_one() {
+    // `st` at line start would open a section, so the formatter joins it onto
+    // the previous bound; the edit must cover both source lines.
+    let text = "min\n obj: x + st\nst\n c1: x >= 1\nBounds\n x <= 10\n st <= 5\nend\n";
+    let d = doc(text);
+    let range = Range::new(Position::new(6, 1), Position::new(6, 3));
+    let edits = format_range(&d, range, &settings()).unwrap();
+    assert_eq!(apply(text, &d, &edits), "min\n obj: x + st\nst\n c1: x >= 1\nBounds\n  x <= 10 st <= 5\nend\n");
+}
+
+#[test]
+fn on_type_after_a_joined_entry_does_not_duplicate_the_previous_one() {
+    let text = "min\n obj: x + st\nst\n c1: x >= 1\nBounds\n x <= 10\n st <= 5\n\nend\n";
+    let d = doc(text);
+    let edits = format_on_type(&d, Position::new(7, 0), "\n", &settings()).unwrap();
+    let result = apply(text, &d, &edits);
+    assert_eq!(result.matches("x <= 10").count(), 1, "{result}");
+    assert!(result.contains("  x <= 10 st <= 5\n"), "{result}");
+}
+
+#[test]
 fn range_already_formatted_is_empty() {
     let formatted = fmt(EVERYTHING, &settings());
     let d = doc(&formatted);
