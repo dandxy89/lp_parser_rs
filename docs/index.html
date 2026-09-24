@@ -281,9 +281,8 @@ lp_parser convert problem.lp --format csv --output ./out</code></pre>
 <pre><code><span class="k">from</span> parse_lp <span class="k">import</span> LpParser
 
 parser = LpParser(<span class="g">"problem.lp"</span>)
-parser.parse()
 
-print(parser.name, parser.sense, parser.variable_count())
+print(parser.name, parser.sense, len(parser.variables))
 
 parser.update_objective_coefficient(<span class="g">"OBJ"</span>, <span class="g">"x1"</span>, <span class="v">5.0</span>)
 parser.rename_variable(<span class="g">"x2"</span>, <span class="g">"production"</span>)
@@ -293,6 +292,7 @@ parser.save_to_file(<span class="g">"modified_problem.lp"</span>)
 
 analysis = parser.analyze()
 print(analysis[<span class="g">"summary"</span>][<span class="g">"density"</span>])</code></pre>
+    <p>Construction parses the file; the format follows the extension (<code>.mps</code> reads MPS). <code>LpParser.from_file(path, format="mps")</code> overrides it, <code>LpParser.from_string(text)</code> parses in-memory text, and <code>to_mps_string</code> / <code>save_to_mps</code> write MPS back out.</p>
   </div>
 </section>
 
