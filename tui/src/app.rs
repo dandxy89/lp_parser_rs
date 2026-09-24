@@ -1268,7 +1268,9 @@ impl App {
     ///
     /// Diff mode writes the single `lp_diff_report_<timestamp>.csv`; inspect mode
     /// writes the model itself via the core crate's `to_csv`
-    /// (`objectives.csv`, `constraints.csv`, `variables.csv`).
+    /// (`objectives.csv`, `constraints.csv`, `variables.csv`) into a fresh
+    /// `<file stem>_csv_<timestamp>` folder, so nothing is overwritten. The
+    /// flash gives the full path written.
     pub fn export_csv(&mut self) {
         let dir = match std::env::current_dir() {
             Ok(d) => d,
@@ -1278,14 +1280,15 @@ impl App {
             }
         };
         let result: Result<String, String> = match self.mode {
-            AppMode::Diff => {
-                crate::export::write_diff_csv(&self.report, &dir).map(|filename| format!("Wrote {filename}")).map_err(|e| e.to_string())
-            }
-            AppMode::Inspect => self
-                .problem1
-                .to_csv(&dir)
-                .map(|()| "Wrote objectives.csv, constraints.csv, variables.csv".to_owned())
+            AppMode::Diff => crate::export::write_diff_csv(&self.report, &dir)
+                .map(|filename| format!("Wrote {}", dir.join(filename).display()))
                 .map_err(|e| e.to_string()),
+            AppMode::Inspect => {
+                let stem = self.file1_path.file_stem().map_or_else(|| "model".to_owned(), |stem| stem.to_string_lossy().into_owned());
+                crate::export::write_model_csv(&self.problem1, &dir, &stem)
+                    .map(|folder| format!("Wrote objectives, constraints and variables CSVs to {}", folder.display()))
+                    .map_err(|e| e.to_string())
+            }
         };
         match result {
             Ok(message) => self.flash_ok(message),

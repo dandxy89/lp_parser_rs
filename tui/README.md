@@ -107,7 +107,7 @@ Press `r` in the detail panel to toggle between the parsed diff view and a side-
 
 ### CSV Export
 
-In diff mode, press `w` to export the full diff report as a CSV file (`lp_diff_report_<timestamp>.csv`) in the current directory. The CSV includes all sections with columns for section, name, change type, and detail. In inspect mode, `w` exports the model itself as `objectives.csv`, `constraints.csv`, and `variables.csv` (via the core library's `to_csv`).
+In diff mode, press `w` to export the full diff report as a CSV file (`lp_diff_report_<timestamp>.csv`) in the current directory. The CSV includes all sections with columns for section, name, change type, and detail. In inspect mode, `w` exports the model itself as `objectives.csv`, `constraints.csv`, and `variables.csv` (via the core library's `to_csv`) into a new `<file stem>_csv_<timestamp>` folder, so an export never overwrites earlier files. The status bar shows the full path written.
 
 ### Key Bindings
 
