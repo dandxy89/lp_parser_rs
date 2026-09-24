@@ -337,6 +337,28 @@ fn frame_contains(terminal: &Terminal<TestBackend>, needle: &str) -> bool {
     text.contains(needle)
 }
 
+/// Regression: the shared divider was drawn in the sidebar's unfocused style
+/// over the focused detail border, and the sidebar's scrollbar sat on it.
+#[test]
+fn the_divider_takes_the_focused_style_and_the_scrollbar_stays_inside() {
+    let rows: Vec<String> = (0..60).map(|i| format!("c{i}: x + y >= {i}")).collect();
+    let rows = rows.join("\n") + "\n";
+    let mut app = inspect_app_from(&format!("min\nobj: x + y\nst\n{rows}end\n"));
+    app.set_section(Section::Constraints);
+    app.focus = crate::state::Focus::Detail;
+    let terminal = render(&mut app, 80, 24);
+    let divider_x = app.layout.detail.x;
+    let buffer = terminal.backend().buffer();
+    let focused = crate::widgets::focus_border_style(crate::state::Focus::Detail, crate::state::Focus::Detail).fg;
+    for y in 2..22 {
+        let cell = &buffer[(divider_x, y)];
+        assert_eq!(cell.symbol(), "\u{2502}", "the divider is unbroken at row {y}");
+        assert_eq!(Some(cell.fg), focused, "the divider carries the focused style at row {y}");
+    }
+    let thumb = (2..22).any(|y| buffer[(divider_x - 1, y)].symbol() == "\u{2503}");
+    assert!(thumb, "the sidebar scrollbar runs inside its border");
+}
+
 /// The narrowest supported width: the tab bar compacts rather than pushing
 /// the active tab off the end.
 #[test]

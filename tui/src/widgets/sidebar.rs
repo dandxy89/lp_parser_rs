@@ -304,26 +304,30 @@ fn draw_entry_name_list(frame: &mut Frame, area: Rect, params: &NameListParams<'
     // Always reserve the cursor gutter, so rows do not jump two columns
     // sideways when the selection comes and goes.
     let list = List::new(items)
-        .block(block)
         .highlight_style(selection_style(params.focused))
         .highlight_symbol(SELECTION_CURSOR)
         .highlight_spacing(HighlightSpacing::Always);
 
-    frame.render_stateful_widget(list, area, &mut slice_state);
+    // The scrollbar runs down the last column inside the border, not on it:
+    // the right border is the divider the detail panel shares, and a thumb
+    // drawn there reads as a break in that divider.
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+    let scrollable = total_items > inner_height && inner.width > 1;
+    let list_area = if scrollable { Rect { width: inner.width - 1, ..inner } } else { inner };
+    frame.render_stateful_widget(list, list_area, &mut slice_state);
 
     // Mark rows whose name is wider than the pane with a trailing ellipsis —
     // ratatui clips them silently otherwise. The selection cursor ("▍ ")
     // shifts every row's content right by 2 columns.
-    let inner_width = area.width.saturating_sub(2) as usize; // borders
-    let usable = inner_width.saturating_sub(2); // highlight symbol gutter
+    let usable = (list_area.width as usize).saturating_sub(2); // highlight symbol gutter
     if usable > 1 {
         let buf = frame.buffer_mut();
         for (i, line) in visible_lines.iter().enumerate() {
             if line.width() > usable {
-                #[allow(clippy::cast_possible_truncation)] // bounded by area width
-                let x = area.x + 1 + inner_width as u16 - 1;
+                let x = list_area.right() - 1;
                 #[allow(clippy::cast_possible_truncation)] // bounded by area height
-                let y = area.y + 1 + i as u16;
+                let y = list_area.y + i as u16;
                 if let Some(cell) = buf.cell_mut((x, y)) {
                     cell.set_symbol("\u{2026}").set_fg(t.muted);
                 }
@@ -332,9 +336,10 @@ fn draw_entry_name_list(frame: &mut Frame, area: Rect, params: &NameListParams<'
     }
 
     // Scrollbar — uses real position within the full list.
-    if total_items > inner_height {
+    if scrollable {
         let mut scrollbar_state = ScrollbarState::new(total_items).position(selected);
-        crate::widgets::render_panel_scrollbar(frame, area, &mut scrollbar_state);
+        let track = Rect { x: inner.right() - 1, width: 1, ..inner };
+        frame.render_stateful_widget(crate::widgets::panel_scrollbar(), track, &mut scrollbar_state);
     }
 }
 

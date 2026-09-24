@@ -92,16 +92,27 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     // Tab bar across the full width.
     sidebar::draw_tab_bar(frame, tab_bar_area, app);
 
-    // Detail panel first, then the sidebar: they share a border column, and the
-    // sidebar draws its scrollbar there, so it must be the one that lands last.
-    draw_detail_panel(frame, detail_area, app);
-
-    // Name List (full sidebar height).
-    sidebar::draw_name_list(frame, sidebar_area, app);
+    // The two panels share a border column, so whichever is drawn last owns
+    // it. The focused panel goes last: its highlighted border then runs
+    // unbroken down the divider instead of being overdrawn in the dim style.
+    if app.focus == Focus::Detail {
+        sidebar::draw_name_list(frame, sidebar_area, app);
+        draw_detail_panel(frame, detail_area, app);
+    } else {
+        draw_detail_panel(frame, detail_area, app);
+        sidebar::draw_name_list(frame, sidebar_area, app);
+    }
 
     // Stitch the shared column's corners into T-junctions — each panel drew its
     // own corner there, and whichever landed last read as a broken box.
-    draw_divider_junctions(frame, main_area, detail_area.x);
+    // The divider is part of both panels' borders, so it is lit whenever
+    // either of them has focus.
+    let divider_style = if matches!(app.focus, Focus::NameList | Focus::Detail) {
+        focus_border_style(app.focus, app.focus)
+    } else {
+        focus_border_style(Focus::NameList, Focus::Detail)
+    };
+    draw_divider_junctions(frame, main_area, detail_area.x, divider_style);
 
     // Detail scrollbar — the sidebar has one; the detail panel deserves the
     // same position feedback without needing focus.
@@ -282,14 +293,15 @@ fn draw_status(
 /// Replace the corners where the sidebar and detail panels meet with `┬` / `┴`,
 /// so the shared border column reads as one divider running between them.
 ///
-/// `x` is the shared column; `area` spans both panels.
-fn draw_divider_junctions(frame: &mut Frame, area: Rect, x: u16) {
+/// `x` is the shared column; `area` spans both panels. The junctions take
+/// `style`, the divider's own, so they match whichever border owns it.
+fn draw_divider_junctions(frame: &mut Frame, area: Rect, x: u16, style: Style) {
     if area.height < 2 || x <= area.x || x >= area.right() {
         return;
     }
-    let border = theme().border;
-    crate::widgets::draw_junction(frame, (x, area.y), "\u{252c}", border);
-    crate::widgets::draw_junction(frame, (x, area.bottom().saturating_sub(1)), "\u{2534}", border);
+    let colour = style.fg.unwrap_or(theme().border);
+    crate::widgets::draw_junction(frame, (x, area.y), "\u{252c}", colour);
+    crate::widgets::draw_junction(frame, (x, area.bottom().saturating_sub(1)), "\u{2534}", colour);
 }
 
 /// Render a centred "terminal too small" hint for sub-minimum window sizes.
