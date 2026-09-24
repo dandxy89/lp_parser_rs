@@ -67,10 +67,10 @@ Writer options: `write_lp_string_with_options(&problem, &LpWriterOptions { inclu
 ### Install
 
 ```bash
-cargo install lp_parser_rs --all-features
+cargo install lp_parser_rs --features cli,csv,diff,serde,lp-solvers
 # Or from source
 git clone https://github.com/dandxy89/lp_parser_rs.git
-cd lp_parser_rs/rust && cargo build --release --all-features
+cd lp_parser_rs/rust && cargo build --release --features cli,csv,diff,serde,lp-solvers
 ```
 
 Every subcommand reads LP or MPS input, choosing the parser by file extension (`.mps`, case-insensitive, reads MPS; anything else reads LP).
