@@ -1,0 +1,46 @@
+---
+source: lsp/tests/format.rs
+expression: "fmt(EVERYTHING, &settings)"
+---
+\* Problem: everything *\
+\ leading comment
+
+MAXIMIZE MULTI-OBJECTIVES
+    Cost: Priority = 2 Weight = -1 3 x + 2 y \ trailing
+        - [ x ^ 2 + 4 x * y ] / 2
+    Time: 2 x
+
+SUBJECT TO:
+    c1: x + y <= 10 \ cap
+    c2: -x \* inline *\ + 2 y >= -4
+    \ own-line comment
+
+    r1: -3 <= x - y <= 8
+    ind: b = 1 -> x + y <= 3
+    q1: x + [ x ^ 2 + y ^ 2 ] <= 4
+    10 >= x
+LAZY CONSTRAINTS
+    l1: x + y <= 20
+USER CUTS
+    u1: x-y >= -20
+GENERAL CONSTRAINTS
+    gm: r = MAX ( x , y , -3 )
+BOUNDS
+    x <= INF
+    -INF <= y <= 5
+    z FREE
+GENERALS
+    g1
+    g2
+BINARIES
+    b
+SEMI-CONTINUOUS
+    s1
+SOS
+    s1: S1::
+        x: 1
+        y: 2
+    s2: S2::
+        z: 1.5
+END
+\ after end

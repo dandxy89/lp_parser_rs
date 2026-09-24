@@ -1,0 +1,46 @@
+---
+source: lsp/tests/format.rs
+expression: out
+---
+\* Problem: everything *\
+\ leading comment
+
+MAXIMIZE multi-objectives
+  Cost: Priority = 2 Weight = -1 3 x + 2 y \ trailing
+    - [ x ^ 2 + 4 x * y ] / 2
+  Time: 2 x
+
+Subject To:
+  c1: x + y <= 10 \ cap
+  c2: -x \* inline *\ + 2 y >= -4
+  \ own-line comment
+
+  r1: -3 <= x - y <= 8
+  ind: b = 1 -> x + y <= 3
+  q1: x + [ x ^ 2 + y ^ 2 ] <= 4
+  10 >= x
+Lazy Constraints
+  l1: x + y <= 20
+User Cuts
+  u1: x-y >= -20
+General Constraints
+  gm: r = MAX ( x , y , -3 )
+BOUNDS
+  x <= inf
+  -INF <= y <= 5
+  z free
+Generals
+  g1
+  g2
+Binaries
+  b
+semi-continuous
+  s1
+SOS
+  s1: S1::
+    x: 1
+    y: 2
+  s2: s2::
+    z: 1.5
+END
+\ after end
