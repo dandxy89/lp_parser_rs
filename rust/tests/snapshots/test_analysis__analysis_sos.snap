@@ -30,7 +30,7 @@ variables:
   invalid_bounds: []
   unused_variables:
     - V8
-  discrete_variable_count: 1
+  discrete_variable_count: 2
 constraints:
   type_distribution:
     equality: 0

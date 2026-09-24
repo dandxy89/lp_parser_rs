@@ -119,7 +119,7 @@ pub struct VariableAnalysis {
     pub invalid_bounds: Vec<InvalidBound>,
     /// Variables not appearing in any constraint or objective
     pub unused_variables: Vec<String>,
-    /// Count of discrete (binary + integer) variables
+    /// Count of discrete (binary + integer + general) variables
     pub discrete_variable_count: usize,
 }
 
@@ -133,7 +133,7 @@ pub struct VariableTypeDistribution {
     /// format's default of `[0, +inf)`. Counted apart from `free`: never
     /// declaring a bound is not the same as declaring it infinite.
     pub unspecified: usize,
-    /// General (non-negative) variables
+    /// General integer variables (LP `Generals` section)
     pub general: usize,
     /// Lower-bounded only
     pub lower_bounded: usize,
@@ -425,9 +425,9 @@ impl Display for ProblemAnalysis {
         writeln!(
             f,
             "  Continuous: {} | Binary: {} | Integer: {}",
-            vt.general + vt.free + vt.unspecified + vt.lower_bounded + vt.upper_bounded + vt.double_bounded,
+            vt.free + vt.unspecified + vt.lower_bounded + vt.upper_bounded + vt.double_bounded,
             vt.binary,
-            vt.integer
+            vt.integer + vt.general
         )?;
         if vt.semi_continuous > 0 {
             writeln!(f, "  Semi-continuous: {}", vt.semi_continuous)?;
@@ -681,7 +681,7 @@ impl LpProblem {
         }
 
         let unused_variables = self.find_unused_variables();
-        let discrete_variable_count = type_distribution.binary + type_distribution.integer;
+        let discrete_variable_count = type_distribution.binary + type_distribution.integer + type_distribution.general;
 
         debug_assert_eq!(
             type_distribution.free
@@ -1127,6 +1127,15 @@ mod tests {
             "no over-constrained warning expected below the boundary: {:?}",
             analysis.issues
         );
+    }
+
+    #[test]
+    fn test_general_variables_count_as_integer() {
+        let problem = LpProblem::parse("min\n obj: x + y + z\nst\n c1: x + y + z >= 1\ngenerals\n x\nintegers\n y\nend").unwrap();
+        let analysis = problem.analyze();
+        assert_eq!(analysis.variables.discrete_variable_count, 2, "general x and integer y are discrete");
+        let text = analysis.to_string();
+        assert!(text.contains("Continuous: 1 | Binary: 0 | Integer: 2"), "{text}");
     }
 
     #[test]

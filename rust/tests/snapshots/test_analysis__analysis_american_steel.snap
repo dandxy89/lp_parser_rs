@@ -29,7 +29,7 @@ variables:
   fixed_variables: []
   invalid_bounds: []
   unused_variables: []
-  discrete_variable_count: 0
+  discrete_variable_count: 14
 constraints:
   type_distribution:
     equality: 0
