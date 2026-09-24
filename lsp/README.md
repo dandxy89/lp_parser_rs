@@ -144,5 +144,6 @@ cargo bench -p lp-lsp --bench lsp          # criterion benchmarks on a generated
 cargo build --release -p lp-lsp && python3 lsp/scripts/smoke.py target/release/lp-lsp
 ```
 
-`PLAN.md` describes the architecture. The tree-sitter grammar is vendored in `vendor/tree-sitter-lp` (generated
-C sources and queries), so building needs only a C compiler.
+`PLAN.md` describes the architecture. The tree-sitter grammar comes from the `main` branch of
+[dandxy89/treesitter-lp](https://github.com/dandxy89/treesitter-lp) (generated C sources, so building needs a C
+compiler). `queries/folds.scm` is a copy of the grammar's folds query.

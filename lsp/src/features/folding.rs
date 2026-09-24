@@ -9,7 +9,7 @@ use tree_sitter::{Node, Query, QueryCursor};
 use crate::document::Document;
 use crate::syntax::{self, kind};
 
-const FOLDS: &str = include_str!("../../vendor/tree-sitter-lp/queries/folds.scm");
+const FOLDS: &str = include_str!("../../queries/folds.scm");
 
 /// Compiled `folds.scm`. The query ships with the grammar, so a failure to
 /// compile is a build defect (covered by the tests), not a runtime condition.

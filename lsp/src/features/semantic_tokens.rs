@@ -77,7 +77,7 @@ struct Highlights {
 fn highlights() -> &'static Highlights {
     static HIGHLIGHTS: OnceLock<Highlights> = OnceLock::new();
     HIGHLIGHTS.get_or_init(|| {
-        // The query ships with the vendored grammar; failing to compile it is a
+        // The query ships with the grammar crate; failing to compile it is a
         // build defect, covered by the tests below.
         let query = Query::new(&syntax::language(), tree_sitter_lp::HIGHLIGHTS_QUERY).expect("bundled highlights query compiles");
         let kinds = query.capture_names().iter().map(|name| capture_kind(name)).collect();

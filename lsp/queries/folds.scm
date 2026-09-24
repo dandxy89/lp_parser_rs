@@ -1,3 +1,4 @@
+; Copied from https://github.com/dandxy89/treesitter-lp/blob/main/queries/folds.scm (not exported by the crate).
 ; Fold section bodies
 [
   (objectives_section)

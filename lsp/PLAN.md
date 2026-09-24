@@ -18,7 +18,7 @@ lsp/
   src/config.rs            `lp.*` settings
   src/workspace.rs         *.lp discovery and loading
   src/features/*.rs        one module per LSP feature, pure functions over &Document
-  vendor/tree-sitter-lp    grammar crate (see "Grammar dependency")
+  queries/folds.scm        copy of the grammar's folds query
   benches/                 criterion benchmarks
   tests/                   end-to-end tests through the tower service
   editors/vscode/          thin VS Code client
@@ -80,8 +80,7 @@ lsp/
 
 ## Grammar dependency
 
-The pushed `tree-sitter-lp` (rev `ce46fdd`) predates the external scanner and
-the Gurobi extensions this server needs. The grammar is vendored under
-`vendor/tree-sitter-lp` (generated `parser.c`/`scanner.c` + queries) so
-`cargo install --path lsp` works without access to the private repository.
-Swap to `tree-sitter-lp = { git = "...", rev = "..." }` once pushed.
+`tree-sitter-lp` is a git dependency on the `main` branch of
+https://github.com/dandxy89/treesitter-lp (`Cargo.lock` pins the resolved
+commit). The crate exports `HIGHLIGHTS_QUERY` and `LOCALS_QUERY` but not the
+folds query, so `queries/folds.scm` is a copy; keep it in sync with the grammar.
