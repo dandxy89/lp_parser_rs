@@ -172,12 +172,11 @@ pub(super) fn build_bounds<'input>(
 
         let var_type = if accumulator.binary {
             VariableType::Binary
-        } else if accumulator.free {
-            VariableType::Free
         } else if let Some(fixed) = accumulator.fixed {
             VariableType::DoubleBound(fixed, fixed)
         } else {
             match (accumulator.lower, accumulator.upper) {
+                (Some(lo), Some(hi)) if lo == f64::NEG_INFINITY && hi == f64::INFINITY => VariableType::Free,
                 (Some(lo), Some(hi)) => {
                     // Integer variable with bounds [0, 1] is Binary
                     if is_integer && lo == 0.0 && hi == 1.0 { VariableType::Binary } else { VariableType::DoubleBound(lo, hi) }

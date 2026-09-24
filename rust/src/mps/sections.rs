@@ -421,23 +421,23 @@ impl<'input> BoundsState<'input> {
 
         match upper.as_str() {
             "LO" | "LI" => {
-                if accumulator.lower.is_some() {
+                if accumulator.has_explicit_lower() {
                     let label = if upper == "LI" { "(LI) " } else { "" };
                     return Err(LpParseError::invalid_bounds(var_name, format!("duplicate lower bound {label}at line {line_num}")));
                 }
                 let value = parse_bound_value(value_field, line_num, bound_type)?;
-                accumulator.lower = Some(value);
+                accumulator.set_lower(value);
                 if upper == "LI" && integer_vars_set.insert(var_name) {
                     integer_vars.push(var_name);
                 }
             }
             "UP" | "UI" => {
-                if accumulator.upper.is_some() {
+                if accumulator.has_explicit_upper() {
                     let label = if upper == "UI" { "(UI) " } else { "" };
                     return Err(LpParseError::invalid_bounds(var_name, format!("duplicate upper bound {label}at line {line_num}")));
                 }
                 let value = parse_bound_value(value_field, line_num, bound_type)?;
-                accumulator.upper = Some(value);
+                accumulator.set_upper(value);
                 if upper == "UI" && integer_vars_set.insert(var_name) {
                     integer_vars.push(var_name);
                 }
@@ -450,19 +450,24 @@ impl<'input> BoundsState<'input> {
                 accumulator.fixed = Some(value);
             }
             "FR" => {
-                accumulator.free = true;
+                // Bound records apply in order: FR resets both sides, and a
+                // later LO/UP/MI/PL on the same column narrows it again.
+                accumulator.lower = Some(f64::NEG_INFINITY);
+                accumulator.upper = Some(f64::INFINITY);
+                accumulator.lower_from_free = true;
+                accumulator.upper_from_free = true;
             }
             "MI" => {
-                if accumulator.lower.is_some() {
+                if accumulator.has_explicit_lower() {
                     return Err(LpParseError::invalid_bounds(var_name, format!("duplicate lower bound (MI) at line {line_num}")));
                 }
-                accumulator.lower = Some(f64::NEG_INFINITY);
+                accumulator.set_lower(f64::NEG_INFINITY);
             }
             "PL" => {
-                if accumulator.upper.is_some() {
+                if accumulator.has_explicit_upper() {
                     return Err(LpParseError::invalid_bounds(var_name, format!("duplicate upper bound (PL) at line {line_num}")));
                 }
-                accumulator.upper = Some(f64::INFINITY);
+                accumulator.set_upper(f64::INFINITY);
             }
             "BV" => {
                 accumulator.binary = true;
@@ -478,10 +483,10 @@ impl<'input> BoundsState<'input> {
                     None => f64::INFINITY,
                 };
                 if value != 0.0 && value < crate::mps::writer::SEMI_CONTINUOUS_SENTINEL_UPPER {
-                    if accumulator.upper.is_some() {
+                    if accumulator.has_explicit_upper() {
                         return Err(LpParseError::invalid_bounds(var_name, format!("duplicate upper bound (SC) at line {line_num}")));
                     }
-                    accumulator.upper = Some(value);
+                    accumulator.set_upper(value);
                 }
                 self.semi_continuous_vars.push(var_name);
             }
@@ -489,7 +494,7 @@ impl<'input> BoundsState<'input> {
                 // Semi-integer: the model has no semi-integer type, so the closest
                 // representation is an integer variable with the given upper bound.
                 let value = parse_bound_value(value_field, line_num, bound_type)?;
-                accumulator.upper = Some(value);
+                accumulator.set_upper(value);
                 if integer_vars_set.insert(var_name) {
                     integer_vars.push(var_name);
                 }

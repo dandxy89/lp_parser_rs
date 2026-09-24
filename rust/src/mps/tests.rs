@@ -255,6 +255,31 @@ ENDATA
 }
 
 #[test]
+fn test_bounds_after_free_apply_in_order() {
+    let input = "\
+NAME        test
+ROWS
+ N  obj
+COLUMNS
+    x1        obj       1
+    x2        obj       1
+    x3        obj       1
+BOUNDS
+ FR BOUND     x1
+ UP BOUND     x1        5
+ FR BOUND     x2
+ LO BOUND     x2        -3
+ LO BOUND     x3        2
+ FR BOUND     x3
+ENDATA
+";
+    let result = parse_mps(input).unwrap();
+    assert!(result.bounds.contains(&("x1", VariableType::DoubleBound(f64::NEG_INFINITY, 5.0))), "{:?}", result.bounds);
+    assert!(result.bounds.contains(&("x2", VariableType::DoubleBound(-3.0, f64::INFINITY))), "{:?}", result.bounds);
+    assert!(result.bounds.contains(&("x3", VariableType::Free)), "{:?}", result.bounds);
+}
+
+#[test]
 fn test_multiple_constraint_types() {
     let input = "\
 NAME        test
