@@ -2,7 +2,7 @@
 name = "lp-lsp"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.88.0"
+rust-version = "1.90"
 description = "Language server for LP (linear programming) files"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/dandxy89/lp_parser_rs"
