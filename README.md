@@ -79,7 +79,7 @@ Every subcommand reads LP or MPS input, choosing the parser by file extension (`
 
 | Flag                               | Description                            |
 | ---------------------------------- | -------------------------------------- |
-| `-v`, `--verbose`                  | Increase output verbosity (repeatable) |
+| `-v`, `--verbose`                  | Print progress details to stderr       |
 | `-q`, `--quiet`                    | Suppress non-essential output          |
 | `-h`, `--help` / `-V`, `--version` | Print help / version                   |
 
