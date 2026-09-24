@@ -445,7 +445,7 @@ impl LpParser {
     }
 
     fn __repr__(&self) -> String {
-        format!("LpParser(lp_file='{}')", self.lp_file)
+        format!("LpParser(lp_file='{}', format='{}')", self.lp_file, self.format)
     }
 
     fn __str__(&self) -> String {

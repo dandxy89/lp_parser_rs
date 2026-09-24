@@ -22,6 +22,11 @@ class TestLpParserBasic:
     def test_class_module(self) -> None:
         assert LpParser.__module__ == "parse_lp"
 
+    def test_repr_shows_source_and_format(self, simple_lp_file: Path) -> None:
+        assert repr(LpParser(simple_lp_file)) == f"LpParser(lp_file='{simple_lp_file}', format='lp')"
+        from_string = LpParser.from_string("Minimize\n obj: x\nSubject To\n c1: x >= 1\nEnd\n")
+        assert repr(from_string) == "LpParser(lp_file='<string>', format='lp')"
+
     def test_create_parser_nonexistent_file(self) -> None:
         with pytest.raises(FileNotFoundError):
             LpParser("nonexistent.lp")
