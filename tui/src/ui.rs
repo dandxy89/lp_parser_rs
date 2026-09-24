@@ -30,11 +30,45 @@ use crate::widgets::{
     solve, status_bar, summary, what_if,
 };
 
-/// Minimum width for the sidebar panel in columns.
+/// Minimum width for the sidebar panel in columns, before any `<` / `>`.
 const SIDEBAR_MIN_WIDTH: u16 = 20;
 
-/// Fraction of the main area width allocated to the sidebar (1/N).
-const SIDEBAR_WIDTH_DIVISOR: u16 = 5;
+/// The narrowest `<` can make the sidebar.
+const SIDEBAR_FLOOR: u16 = 12;
+
+/// Fraction of the main area the sidebar may grow to on its own, in percent.
+const SIDEBAR_MAX_PERCENT: u16 = 35;
+
+/// Columns the detail panel always keeps, however far `>` widens the sidebar.
+const DETAIL_MIN_WIDTH: u16 = 30;
+
+/// Width of the sidebar within a main area `main_width` columns wide.
+///
+/// It grows to fit the longest entry name — plus its borders, the selection
+/// gutter, the diff badge, any delta column and the scrollbar — between
+/// [`SIDEBAR_MIN_WIDTH`] and [`SIDEBAR_MAX_PERCENT`] of the width, then
+/// `<` / `>` move it from there. The detail panel is never squeezed below
+/// [`DETAIL_MIN_WIDTH`].
+pub(crate) fn sidebar_width(app: &App, main_width: u16) -> u16 {
+    // Borders, the selection cursor's gutter, and the scrollbar.
+    let mut chrome = 2 + 2 + 1;
+    if app.mode.shows_diff_badges() {
+        chrome += 4; // "[~] "
+        if app.sort_mode != crate::state::SortMode::Name {
+            chrome += 9; // the delta column
+        }
+    } else {
+        chrome += 2; // the inspect rows' indent
+    }
+    let wanted = u16::try_from(app.longest_name + chrome).unwrap_or(u16::MAX);
+    let cap = (main_width * SIDEBAR_MAX_PERCENT / 100).max(SIDEBAR_MIN_WIDTH);
+    let auto = wanted.clamp(SIDEBAR_MIN_WIDTH, cap);
+    let adjusted = i32::from(auto) + i32::from(app.sidebar_adjust);
+    let ceiling = main_width.saturating_sub(DETAIL_MIN_WIDTH).max(SIDEBAR_FLOOR);
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)] // clamped into u16 range
+    let width = adjusted.clamp(i32::from(SIDEBAR_FLOOR), i32::from(ceiling)) as u16;
+    width.min(main_width)
+}
 
 /// Minimum terminal size below which the normal layout is unusable; a hint is
 /// shown instead of a cramped, broken UI.
@@ -69,7 +103,7 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     let tab_bar_area = outer[0];
     let main_area = outer[1];
 
-    let sidebar_width = (main_area.width / SIDEBAR_WIDTH_DIVISOR).max(SIDEBAR_MIN_WIDTH).min(main_area.width);
+    let sidebar_width = sidebar_width(app, main_area.width);
     let h_chunks = Layout::horizontal([Constraint::Length(sidebar_width), Constraint::Min(0)]).split(main_area);
 
     let sidebar_area = h_chunks[0];
@@ -426,4 +460,30 @@ fn draw_detail_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut A
     };
 
     app.layout.detail_content_lines = content_lines;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_sidebar_grows_to_fit_long_names_within_bounds() {
+        let short = crate::snapshot_tests::inspect_app_from(crate::snapshot_tests::BASE_LP);
+        assert_eq!(sidebar_width(&short, 80), SIDEBAR_MIN_WIDTH, "short names keep the minimum");
+
+        let mut long = crate::snapshot_tests::inspect_app_from("min\nobj: x\nst\nSteel_Flow_Conservation_in_Node_Chicago: x >= 1\nend\n");
+        assert_eq!(sidebar_width(&long, 80), 28, "long names grow it to 35% of the width");
+        assert_eq!(sidebar_width(&long, 200), 46, "with room, it fits the name: 39 + borders, gutter, indent, scrollbar");
+
+        long.resize_sidebar(false);
+        assert_eq!(sidebar_width(&long, 80), 24, "< narrows it by a step");
+        for _ in 0..40 {
+            long.resize_sidebar(true);
+        }
+        assert_eq!(sidebar_width(&long, 80), 80 - DETAIL_MIN_WIDTH, "> never squeezes the detail panel");
+        for _ in 0..80 {
+            long.resize_sidebar(false);
+        }
+        assert_eq!(sidebar_width(&long, 80), SIDEBAR_FLOOR);
+    }
 }

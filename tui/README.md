@@ -132,6 +132,7 @@ In diff mode, press `w` to export the full diff report as a CSV file (`lp_diff_r
 | `Enter`      | Go to detail panel        |
 | `h` / `l`    | Move to sidebar / detail  |
 | `1`–`5`      | Jump to section by number |
+| `<` / `>`    | Narrow / widen the sidebar |
 | `Esc`        | Back / clear search       |
 
 **Filters**

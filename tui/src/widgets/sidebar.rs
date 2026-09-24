@@ -6,7 +6,7 @@ use ratatui::widgets::{HighlightSpacing, List, ListItem, Paragraph, ScrollbarSta
 
 use crate::app::{App, Focus, Section};
 use crate::theme::theme;
-use crate::widgets::{SELECTION_CURSOR, focus_border_style, panel_block, selection_style, zebra_style};
+use crate::widgets::{SELECTION_CURSOR, focus_border_style, panel_block, selection_style, truncate_middle, zebra_style};
 
 /// Draw the section tab bar across the top of the frame.
 ///
@@ -245,7 +245,6 @@ fn draw_entry_name_list(frame: &mut Frame, area: Rect, params: &NameListParams<'
         params.section_label,
     );
 
-    let t = theme();
     let total_items = params.cached_lines.len();
     // Inner height excludes the top and bottom border rows.
     let inner_height = area.height.saturating_sub(2) as usize;
@@ -291,12 +290,23 @@ fn draw_entry_name_list(frame: &mut Frame, area: Rect, params: &NameListParams<'
     // subsequent frames / input handlers see a consistent value.
     *state.offset_mut() = offset;
 
+    // The scrollbar runs down the last column inside the border, not on it:
+    // the right border is the divider the detail panel shares, and a thumb
+    // drawn there reads as a break in that divider.
+    let inner = block.inner(area);
+    let scrollable = total_items > inner_height && inner.width > 1;
+    let list_area = if scrollable { Rect { width: inner.width - 1, ..inner } } else { inner };
+    // Room for a row's text: the list less the selection cursor's gutter.
+    let usable = (list_area.width as usize).saturating_sub(SELECTION_CURSOR.chars().count());
+
     // Build ListItems for only the visible slice, zebra-striped on the
-    // absolute index so stripes stay stable while scrolling.
+    // absolute index so stripes stay stable while scrolling. Names too wide
+    // for the pane lose their middle, not their end, so rows that share a
+    // long prefix stay distinguishable.
     let window_end = (offset + inner_height).min(total_items);
     let visible_lines = &params.cached_lines[offset..window_end];
     let items: Vec<ListItem> =
-        visible_lines.iter().enumerate().map(|(i, line)| ListItem::new(line.clone()).style(zebra_style(offset + i))).collect();
+        visible_lines.iter().enumerate().map(|(i, line)| ListItem::new(fit_row(line, usable)).style(zebra_style(offset + i))).collect();
 
     // Temporary state mapped to the slice coordinate space.
     let mut slice_state = ratatui::widgets::ListState::default().with_offset(0).with_selected(state.selected().map(|s| s - offset));
@@ -308,32 +318,8 @@ fn draw_entry_name_list(frame: &mut Frame, area: Rect, params: &NameListParams<'
         .highlight_symbol(SELECTION_CURSOR)
         .highlight_spacing(HighlightSpacing::Always);
 
-    // The scrollbar runs down the last column inside the border, not on it:
-    // the right border is the divider the detail panel shares, and a thumb
-    // drawn there reads as a break in that divider.
-    let inner = block.inner(area);
     frame.render_widget(block, area);
-    let scrollable = total_items > inner_height && inner.width > 1;
-    let list_area = if scrollable { Rect { width: inner.width - 1, ..inner } } else { inner };
     frame.render_stateful_widget(list, list_area, &mut slice_state);
-
-    // Mark rows whose name is wider than the pane with a trailing ellipsis —
-    // ratatui clips them silently otherwise. The selection cursor ("▍ ")
-    // shifts every row's content right by 2 columns.
-    let usable = (list_area.width as usize).saturating_sub(2); // highlight symbol gutter
-    if usable > 1 {
-        let buf = frame.buffer_mut();
-        for (i, line) in visible_lines.iter().enumerate() {
-            if line.width() > usable {
-                let x = list_area.right() - 1;
-                #[allow(clippy::cast_possible_truncation)] // bounded by area height
-                let y = list_area.y + i as u16;
-                if let Some(cell) = buf.cell_mut((x, y)) {
-                    cell.set_symbol("\u{2026}").set_fg(t.muted);
-                }
-            }
-        }
-    }
 
     // Scrollbar — uses real position within the full list.
     if scrollable {
@@ -341,6 +327,23 @@ fn draw_entry_name_list(frame: &mut Frame, area: Rect, params: &NameListParams<'
         let track = Rect { x: inner.right() - 1, width: 1, ..inner };
         frame.render_stateful_widget(crate::widgets::panel_scrollbar(), track, &mut scrollbar_state);
     }
+}
+
+/// Fit a cached sidebar row into `width` columns. The entry name is always the
+/// row's last span (after the badge and any delta column); when the row is too
+/// wide, only the name is shortened, from the middle.
+fn fit_row(line: &Line<'static>, width: usize) -> Line<'static> {
+    if line.width() <= width {
+        return line.clone();
+    }
+    let Some((name, prefix)) = line.spans.split_last() else {
+        return line.clone();
+    };
+    let prefix_width: usize = prefix.iter().map(Span::width).sum();
+    let name_width = width.saturating_sub(prefix_width).max(1);
+    let mut spans = prefix.to_vec();
+    spans.push(Span::styled(truncate_middle(&name.content, name_width).into_owned(), name.style));
+    Line::from(spans)
 }
 
 /// Render an empty detail panel with only a hint message (used by the search

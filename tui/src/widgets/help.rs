@@ -54,6 +54,7 @@ const HELP_TEXT: &[&str] = &[
     "  Enter   Go to detail",
     "  h / l   Sidebar / Detail",
     "  1–5     Jump to section (5: Numerics)",
+    "  < / >   Narrow / widen the sidebar",
     "  Esc     Back",
     "",
     "  Search (Telescope-style pop-up)",
@@ -110,6 +111,7 @@ const INSPECT_HELP_TEXT: &[&str] = &[
     "  h / l            Sidebar / Detail",
     "  1–5              Jump to section (5: Numerics)",
     "  Esc              Back",
+    "  < / >            Narrow / widen the sidebar",
     "",
     "  Analyses",
     "  ────────",
@@ -163,8 +165,8 @@ struct ColumnBlock {
 /// `HELP_TEXT` rows 1–17: Navigation, Filters, and Other/Clipboard.
 const HELP_COLUMNS: ColumnBlock = ColumnBlock { rows: 1..=17, columns: &[26, 46] };
 
-/// `INSPECT_HELP_TEXT` rows 4–19: Navigation, and Other/Clipboard.
-const INSPECT_HELP_COLUMNS: ColumnBlock = ColumnBlock { rows: 4..=19, columns: &[50] };
+/// `INSPECT_HELP_TEXT` rows 4–20: Navigation, and Other/Clipboard.
+const INSPECT_HELP_COLUMNS: ColumnBlock = ColumnBlock { rows: 4..=20, columns: &[50] };
 
 /// Narrowest the help pop-up ever gets, even for short text.
 const MIN_POPUP_WIDTH: u16 = 60;

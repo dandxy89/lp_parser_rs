@@ -191,6 +191,47 @@ pub fn truncate_with_ellipsis(name: &str, max_width: usize) -> Cow<'_, str> {
     Cow::Owned(truncated)
 }
 
+/// Shorten `name` to at most `max_width` display columns by cutting out its
+/// middle and marking the cut with `…`.
+///
+/// Model names tend to share long prefixes and differ at the end
+/// (`Steel_Flow_Conservation_in_Node_Chicago`, `…_Node_Gary`), so cutting the
+/// end off leaves a column of identical rows. Keeping both ends — the tail
+/// given the odd column — keeps them apart. Width is measured in terminal
+/// columns and cuts fall on char boundaries, so wide or multibyte names
+/// neither overflow nor panic.
+pub fn truncate_middle(name: &str, max_width: usize) -> Cow<'_, str> {
+    use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
+    if name.width() <= max_width {
+        return Cow::Borrowed(name);
+    }
+    if max_width <= 1 {
+        return Cow::Owned("\u{2026}".repeat(max_width));
+    }
+    let budget = max_width - 1;
+    let (head_budget, tail_budget) = (budget / 2, budget - budget / 2);
+    let take = |chars: &mut dyn Iterator<Item = char>, budget: usize| {
+        let mut used = 0;
+        let mut taken = Vec::new();
+        for c in chars {
+            let width = c.width().unwrap_or(0);
+            if used + width > budget {
+                break;
+            }
+            used += width;
+            taken.push(c);
+        }
+        taken
+    };
+    let head = take(&mut name.chars(), head_budget);
+    let mut tail = take(&mut name.chars().rev(), tail_budget);
+    tail.reverse();
+    let mut out: String = head.into_iter().collect();
+    out.push('\u{2026}');
+    out.extend(tail);
+    Cow::Owned(out)
+}
+
 /// Format `value` in at most `width` columns, rounding rather than clipping.
 ///
 /// The shortest exact representation is used when it fits. Otherwise the
@@ -432,6 +473,29 @@ mod tests {
     fn test_truncate_multibyte_safe() {
         // 4 chars, max 3 → 2 chars + ellipsis, no panic on char boundaries.
         assert_eq!(truncate_with_ellipsis("\u{0394}\u{0394}\u{0394}\u{0394}", 3), "\u{0394}\u{0394}\u{2026}");
+    }
+
+    #[test]
+    fn truncate_middle_keeps_both_ends() {
+        assert_eq!(truncate_middle("short", 10), "short");
+        assert_eq!(truncate_middle("exact", 5), "exact");
+        let chicago = truncate_middle("Steel_Flow_Conservation_in_Node_Chicago", 16);
+        let gary = truncate_middle("Steel_Flow_Conservation_in_Node_Gary", 16);
+        assert_eq!(chicago, "Steel_F\u{2026}_Chicago");
+        assert_ne!(chicago, gary, "names differing at the end must stay distinguishable");
+        assert_eq!(truncate_middle("abcdef", 1), "\u{2026}");
+        assert_eq!(truncate_middle("abcdef", 0), "");
+        assert_eq!(truncate_middle("abcdef", 2), "\u{2026}f");
+    }
+
+    #[test]
+    fn truncate_middle_measures_columns_not_bytes() {
+        // Four two-byte chars, one column each.
+        assert_eq!(truncate_middle("\u{0394}\u{0394}\u{0394}\u{0394}", 3), "\u{0394}\u{2026}\u{0394}");
+        // Wide CJK chars take two columns each: 5 columns fit "漢…字" (2 + 1 + 2).
+        let wide = truncate_middle("\u{6f22}\u{5b57}\u{6f22}\u{5b57}", 5);
+        assert_eq!(wide, "\u{6f22}\u{2026}\u{5b57}");
+        assert!(unicode_width::UnicodeWidthStr::width(wide.as_ref()) <= 5);
     }
 
     #[test]

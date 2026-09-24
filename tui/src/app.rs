@@ -401,6 +401,14 @@ pub struct App {
 
     /// Watch-mode session (`--watch`): debounce state + in-flight reload channel.
     pub watch: WatchSession,
+
+    /// Columns added to (or taken from) the sidebar's automatic width with
+    /// `>` / `<`.
+    pub sidebar_adjust: i16,
+
+    /// Display width of the longest entry name in the report, which the
+    /// sidebar grows towards. Recomputed with the report.
+    pub(crate) longest_name: usize,
 }
 
 /// Cached coefficient rows keyed on (section, `entry_index`).
@@ -422,6 +430,15 @@ fn append_section_haystack<T: DiffEntry>(haystack: &mut Vec<HaystackEntry>, name
 ///
 /// The haystack and name buffer are built in lockstep so that `names[i]` is the
 /// display name for `haystack[i]`. This avoids cloning each name twice.
+/// Display width of the longest entry name across all three sections.
+fn longest_entry_name(report: &LpDiffReport) -> usize {
+    use unicode_width::UnicodeWidthStr as _;
+    let variables = report.variables.entries.iter().map(|entry| entry.name.width());
+    let constraints = report.constraints.entries.iter().map(|entry| entry.name.width());
+    let objectives = report.objectives.entries.iter().map(|entry| entry.name.width());
+    variables.chain(constraints).chain(objectives).max().unwrap_or(0)
+}
+
 fn build_haystack(report: &LpDiffReport) -> (Vec<HaystackEntry>, Vec<String>) {
     let total = report.variables.entries.len() + report.constraints.entries.len() + report.objectives.entries.len();
     let mut haystack = Vec::with_capacity(total);
@@ -615,6 +632,7 @@ impl App {
         section_selector_state.select(Some(0));
 
         let (haystack, names) = build_haystack(&report);
+        let longest_name = longest_entry_name(&report);
 
         // Pre-build summary lines once (report data never changes).
         let report_summary = report.summary();
@@ -686,6 +704,8 @@ impl App {
             line_map1,
             line_map2,
             watch: WatchSession::disabled(),
+            sidebar_adjust: 0,
+            longest_name,
         }
     }
 
@@ -834,6 +854,7 @@ impl App {
         // Report-derived caches: search haystack + name buffer. The content
         // buffer is lazy — clear it and let the next `c:` query rebuild it.
         let (haystack, names) = build_haystack(&self.report);
+        self.longest_name = longest_entry_name(&self.report);
         self.search_haystack = haystack;
         self.search_name_buffer = names;
         self.search_content_buffer.clear();
@@ -1848,6 +1869,17 @@ impl App {
 
         self.focus = Focus::NameList;
         self.detail_scroll = 0;
+    }
+
+    /// Widen (`grow`) or narrow the sidebar by one step, within the bounds
+    /// [`sidebar_width`](crate::ui::sidebar_width) enforces.
+    pub(crate) fn resize_sidebar(&mut self, grow: bool) {
+        const STEP: i16 = 4;
+        // Bounded so a held key cannot wind the offset far past what the
+        // layout will ever honour.
+        const LIMIT: i16 = 200;
+        let step = if grow { STEP } else { -STEP };
+        self.sidebar_adjust = (self.sidebar_adjust + step).clamp(-LIMIT, LIMIT);
     }
 
     /// Largest useful detail-panel scroll offset: content height minus the

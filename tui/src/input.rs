@@ -325,6 +325,10 @@ impl App {
             KeyCode::Char('4') => self.set_section(Section::Objectives),
             KeyCode::Char('5') => self.set_section(Section::Numerics),
 
+            // Resize the sidebar.
+            KeyCode::Char('<') => self.resize_sidebar(false),
+            KeyCode::Char('>') => self.resize_sidebar(true),
+
             // Cycle sections from any focus (lazygit-style sub-tab navigation).
             KeyCode::Char(']') => self.cycle_section(true),
             KeyCode::Char('[') => self.cycle_section(false),

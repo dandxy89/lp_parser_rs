@@ -16,7 +16,7 @@ use crate::diff_model::{
     VarSpec, VariableDiffEntry,
 };
 use crate::theme::theme;
-use crate::widgets::{ARROW, bold_text, fit_number, kind_colour, muted, panel_block, text, truncate_with_ellipsis};
+use crate::widgets::{ARROW, bold_text, fit_number, kind_colour, muted, panel_block, text, truncate_middle};
 
 /// Build the panel title: entity label, entry name (truncated and bold), the
 /// diff-kind badge in its kind colour, and the raw-view toggle hint where the
@@ -45,7 +45,7 @@ fn detail_title(entity_label: &str, name: &str, kind: Option<DiffKind>, raw_hint
     let raw_hint = raw_hint && room >= hint_width + MIN_NAME.min(name.chars().count());
     let room = if raw_hint { room - hint_width } else { room };
 
-    let name = truncate_with_ellipsis(name, room.max(2));
+    let name = truncate_middle(name, room.max(2));
     let mut spans = vec![Span::styled(label, muted()), Span::styled(name.into_owned(), bold_text())];
     if let Some(kind) = kind {
         spans.push(Span::styled(badge, Style::default().fg(kind_colour(kind))));
@@ -74,7 +74,7 @@ fn name_column_width(longest: usize, pane_width: Option<u16>, reserved: usize) -
 /// A `    name ` cell padded to `width`, keeping at least one space before the
 /// value that follows.
 fn name_cell(name: &str, width: usize) -> String {
-    let name = truncate_with_ellipsis(name, width.max(2));
+    let name = truncate_middle(name, width.max(2));
     format!("    {name:<width$} ")
 }
 
@@ -756,7 +756,7 @@ fn render_constraint_side_by_side(
         }
 
         let (name_w, value_w) = (columns.name, columns.value);
-        let name = truncate_with_ellipsis(&row.variable, name_w.max(2));
+        let name = truncate_middle(&row.variable, name_w.max(2));
         left_lines.push(Line::from(vec![
             Span::styled(format!("  {name:<name_w$} "), left_style),
             Span::styled(format!("{old_buf:>value_w$}"), left_style),
