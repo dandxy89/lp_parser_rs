@@ -118,19 +118,15 @@ const RHS_VECTOR_LABEL: &str = "RHS";
 const BOUNDS_VECTOR_LABEL: &str = "BOUND";
 
 /// Options for controlling MPS file output format.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct MpsWriterOptions {
     /// Number of decimal places for numeric values (coefficients, RHS, bounds).
-    pub decimal_precision: usize,
+    /// `None` (the default) writes the shortest representation that parses back
+    /// to the exact same `f64`; `Some(n)` rounds to `n` places, which is lossy.
+    pub decimal_precision: Option<usize>,
     /// If the problem has more than one objective, write only the first
     /// (in insertion order) instead of returning an error.
     pub allow_multiple_objectives: bool,
-}
-
-impl Default for MpsWriterOptions {
-    fn default() -> Self {
-        Self { decimal_precision: 6, allow_multiple_objectives: false }
-    }
 }
 
 /// Write an `LpProblem` to a string in MPS format.
@@ -486,7 +482,7 @@ fn write_ranges_section(
 }
 
 /// Write a single BOUNDS line with a numeric value.
-fn write_bound_value(output: &mut String, bound_type: &str, var_name: &str, value: f64, precision: usize) -> std::fmt::Result {
+fn write_bound_value(output: &mut String, bound_type: &str, var_name: &str, value: f64, precision: Option<usize>) -> std::fmt::Result {
     write!(output, " {bound_type} {BOUNDS_VECTOR_LABEL:<9} {var_name:<10} ")?;
     write_number(output, value, precision)?;
     writeln!(output)
@@ -514,7 +510,13 @@ fn invalid_bound_error(var_name: &str, message: &str) -> LpParseError {
 /// Returns an error if a bound value is `NaN`, or is an infinite value MPS
 /// has no flag for (e.g. `UpperBound(-inf)`, `LowerBound(+inf)`) -- see
 /// [`write_upper_bound`], [`write_lower_bound`] and [`write_double_bound`].
-fn write_variable_bound(output: &mut String, var_name: &str, kind: VariableKind, bounds: VariableBounds, precision: usize) -> LpResult<()> {
+fn write_variable_bound(
+    output: &mut String,
+    var_name: &str,
+    kind: VariableKind,
+    bounds: VariableBounds,
+    precision: Option<usize>,
+) -> LpResult<()> {
     // Kinds with a dedicated MPS bound record win over the bound shape: the
     // record already carries the bounds implied by the kind.
     match kind {
@@ -579,7 +581,7 @@ fn write_variable_bound(output: &mut String, var_name: &str, kind: VariableKind,
 /// nonsensical -- it would leave the variable with an empty feasible region
 /// unless the upper bound is also `+inf`, which is not representable as a
 /// plain `LowerBound`).
-fn write_lower_bound(output: &mut String, var_name: &str, lb: f64, precision: usize) -> LpResult<()> {
+fn write_lower_bound(output: &mut String, var_name: &str, lb: f64, precision: Option<usize>) -> LpResult<()> {
     if lb.is_nan() {
         return Err(invalid_bound_error(var_name, "has a NaN lower bound, which MPS cannot represent"));
     }
@@ -612,7 +614,7 @@ fn write_lower_bound(output: &mut String, var_name: &str, lb: f64, precision: us
 /// nonsensical -- it would leave the variable with an empty feasible region
 /// unless the lower bound is also `-inf`, which is not representable as a
 /// plain `UpperBound`).
-fn write_upper_bound(output: &mut String, var_name: &str, ub: f64, precision: usize) -> LpResult<()> {
+fn write_upper_bound(output: &mut String, var_name: &str, ub: f64, precision: Option<usize>) -> LpResult<()> {
     if ub.is_nan() {
         return Err(invalid_bound_error(var_name, "has a NaN upper bound, which MPS cannot represent"));
     }
@@ -646,7 +648,7 @@ fn write_upper_bound(output: &mut String, var_name: &str, ub: f64, precision: us
 /// Returns an error if either bound is `NaN`, or if `lb` is `+inf` or `ub`
 /// is `-inf` (nonsensical combinations that MPS's `FR`/`MI`/`PL` flags
 /// cannot represent).
-fn write_double_bound(output: &mut String, var_name: &str, lb: f64, ub: f64, precision: usize) -> LpResult<()> {
+fn write_double_bound(output: &mut String, var_name: &str, lb: f64, ub: f64, precision: Option<usize>) -> LpResult<()> {
     if lb.is_nan() || ub.is_nan() {
         return Err(invalid_bound_error(var_name, "has a NaN double bound, which MPS cannot represent"));
     }

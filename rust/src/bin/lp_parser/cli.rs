@@ -213,9 +213,9 @@ pub struct ConvertArgs {
     #[arg(long)]
     pub pretty: bool,
 
-    /// Decimal precision for numbers
-    #[arg(long, default_value = "6")]
-    pub precision: usize,
+    /// Round numbers to this many decimal places (default: exact, shortest round-trip form)
+    #[arg(long)]
+    pub precision: Option<usize>,
 
     /// Maximum line length before wrapping
     #[arg(long, default_value = "80")]

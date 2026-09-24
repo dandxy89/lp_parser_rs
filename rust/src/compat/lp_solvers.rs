@@ -177,7 +177,7 @@ impl WriteToLpFileFormat for ExpressionAdapter<'_> {
                 self.interner.resolve(coeff.name),
                 coeff.value,
                 i == 0,
-                COEFFICIENT_PRECISION,
+                Some(COEFFICIENT_PRECISION),
             )?;
         }
         f.write_str(&out)

@@ -19,12 +19,10 @@ use lp_parser_rs::mps::writer::{MpsWriterOptions, write_mps_string_with_options}
 use lp_parser_rs::parser::parse_file;
 use lp_parser_rs::problem::LpProblem;
 
-/// High-precision options so RHS/coefficient round-trip assertions aren't
-/// muddied by the writer's default 6-decimal-place rounding (a formatting
-/// choice, not a correctness bug -- see `LpWriterOptions::decimal_precision`
-/// for the equivalent LP-writer behaviour).
+/// Lossless options: the default shortest round-trip number formatting, so
+/// RHS/coefficient assertions can compare bit-exactly.
 fn lossless_options() -> MpsWriterOptions {
-    MpsWriterOptions { decimal_precision: 15, ..MpsWriterOptions::default() }
+    MpsWriterOptions { decimal_precision: None, ..MpsWriterOptions::default() }
 }
 
 fn resource_path(relative: &str) -> PathBuf {

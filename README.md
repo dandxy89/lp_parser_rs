@@ -60,7 +60,7 @@ std::fs::write("modified.lp", write_lp_string(&problem))?;
 
 Available modification methods on `LpProblem`: `update_objective_coefficient`, `rename_objective`, `remove_objective`, `update_constraint_coefficient`, `update_constraint_rhs`, `rename_constraint`, `remove_constraint`, `rename_variable`, `update_variable_type`, `remove_variable`.
 
-Writer options: `write_lp_string_with_options(&problem, &LpWriterOptions { include_problem_name, max_line_length, decimal_precision, include_section_spacing })`.
+Writer options: `write_lp_string_with_options(&problem, &LpWriterOptions { include_problem_name, max_line_length, decimal_precision, include_section_spacing })`. `decimal_precision` defaults to `None`, which writes every number in its shortest exact (round-trip) form; `Some(n)` rounds to `n` decimal places.
 
 ## Command-Line Interface (`lp_parser`)
 
@@ -180,7 +180,7 @@ lp_parser analyze candidate.lp --issues-only || exit 1
 | `-o, --output <PATH>`   | stdout  | Output file or directory (required for CSV) |
 | `-f, --format <FMT>`    | `lp`    | `lp`, `mps`, `csv`, `json`, `yaml`          |
 | `--pretty`              | off     | Pretty-print JSON/YAML                      |
-| `--precision <N>`       | `6`     | Decimal precision for numbers               |
+| `--precision <N>`       | exact   | Round numbers to N decimal places (default: shortest exact form) |
 | `--max-line-length <N>` | `80`    | Line-wrap threshold for LP output            |
 | `--no-problem-name`     | off     | Omit problem-name comment in LP output      |
 | `--compact`             | off     | No section spacing                          |

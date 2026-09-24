@@ -127,7 +127,7 @@ class LpParser:
         *,
         include_problem_name: bool = True,
         max_line_length: int = 80,
-        decimal_precision: int = 6,
+        decimal_precision: int | None = None,
         include_section_spacing: bool = True,
     ) -> str:
         """Write the current problem to an LP format string, with optional custom formatting.
@@ -138,11 +138,11 @@ class LpParser:
     def save_to_file(self, filepath: StrPath) -> None:
         """Save the current problem to an LP file."""
 
-    def to_mps_string(self, *, decimal_precision: int = 6, allow_multiple_objectives: bool = False) -> str:
+    def to_mps_string(self, *, decimal_precision: int | None = None, allow_multiple_objectives: bool = False) -> str:
         """Write the current problem to an MPS format string."""
 
     def save_to_mps(
-        self, filepath: StrPath, *, decimal_precision: int = 6, allow_multiple_objectives: bool = False
+        self, filepath: StrPath, *, decimal_precision: int | None = None, allow_multiple_objectives: bool = False
     ) -> None:
         """Save the current problem to an MPS file."""
 

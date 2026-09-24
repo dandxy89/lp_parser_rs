@@ -200,12 +200,12 @@ impl LpParser {
     }
 
     /// Write the current problem to LP format string, with optional custom formatting
-    #[pyo3(signature = (*, include_problem_name=true, max_line_length=80, decimal_precision=6, include_section_spacing=true))]
+    #[pyo3(signature = (*, include_problem_name=true, max_line_length=80, decimal_precision=None, include_section_spacing=true))]
     fn to_lp_string(
         &self,
         include_problem_name: bool,
         max_line_length: usize,
-        decimal_precision: usize,
+        decimal_precision: Option<usize>,
         include_section_spacing: bool,
     ) -> PyResult<String> {
         if max_line_length == 0 {
@@ -224,16 +224,16 @@ impl LpParser {
     }
 
     /// Write the current problem to an MPS format string.
-    #[pyo3(signature = (*, decimal_precision=6, allow_multiple_objectives=false))]
-    fn to_mps_string(&self, decimal_precision: usize, allow_multiple_objectives: bool) -> PyResult<String> {
+    #[pyo3(signature = (*, decimal_precision=None, allow_multiple_objectives=false))]
+    fn to_mps_string(&self, decimal_precision: Option<usize>, allow_multiple_objectives: bool) -> PyResult<String> {
         let problem = &self.problem;
         let options = MpsWriterOptions { decimal_precision, allow_multiple_objectives };
         write_mps_string_with_options(problem, &options).map_err(|err| PyRuntimeError::new_err(format!("Unable to write MPS: {err}")))
     }
 
     /// Save the current problem to an MPS file.
-    #[pyo3(signature = (filepath, *, decimal_precision=6, allow_multiple_objectives=false))]
-    fn save_to_mps(&self, filepath: PathBuf, decimal_precision: usize, allow_multiple_objectives: bool) -> PyResult<()> {
+    #[pyo3(signature = (filepath, *, decimal_precision=None, allow_multiple_objectives=false))]
+    fn save_to_mps(&self, filepath: PathBuf, decimal_precision: Option<usize>, allow_multiple_objectives: bool) -> PyResult<()> {
         let content = self.to_mps_string(decimal_precision, allow_multiple_objectives)?;
         std::fs::write(&filepath, content).map_err(|err| io_err(&filepath, &err))
     }

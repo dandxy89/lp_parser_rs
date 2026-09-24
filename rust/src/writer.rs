@@ -31,15 +31,17 @@ pub struct LpWriterOptions {
     pub include_problem_name: bool,
     /// Maximum line length before wrapping coefficients
     pub max_line_length: usize,
-    /// Number of decimal places for coefficients
-    pub decimal_precision: usize,
+    /// Number of decimal places for numeric values. `None` (the default)
+    /// writes the shortest representation that parses back to the exact same
+    /// `f64`; `Some(n)` rounds to `n` decimal places, which is lossy.
+    pub decimal_precision: Option<usize>,
     /// Include empty lines between sections
     pub include_section_spacing: bool,
 }
 
 impl Default for LpWriterOptions {
     fn default() -> Self {
-        Self { include_problem_name: true, max_line_length: 80, decimal_precision: 6, include_section_spacing: true }
+        Self { include_problem_name: true, max_line_length: 80, decimal_precision: None, include_section_spacing: true }
     }
 }
 
@@ -400,7 +402,7 @@ pub(crate) fn write_formatted_coefficient(
     name: &str,
     value: f64,
     is_first: bool,
-    precision: usize,
+    precision: Option<usize>,
 ) -> std::fmt::Result {
     debug_assert!(!name.is_empty(), "coefficient name must not be empty");
     debug_assert!(value.is_finite(), "coefficient value must be finite, got: {value}");
@@ -432,19 +434,46 @@ pub(crate) fn write_formatted_coefficient(
     }
 }
 
-/// Write a number with specified precision directly to the output buffer: a bare
-/// integer when the value is whole, small enough (|value| < 1e10) and round-trips
-/// through `i64`; otherwise a decimal with trailing zeros trimmed.
+/// Magnitudes outside `[SCIENTIFIC_BELOW, SCIENTIFIC_FROM)` are written in
+/// scientific notation, so neither `1e300` nor `1e-300` expands to hundreds of
+/// digits.
+const SCIENTIFIC_FROM: f64 = 1e16;
+/// See [`SCIENTIFIC_FROM`].
+const SCIENTIFIC_BELOW: f64 = 1e-5;
+
+/// Write a number directly to the output buffer.
+///
+/// With `precision` of `None` the shortest representation that parses back to
+/// the identical `f64` is written (plain decimal, or scientific notation for
+/// very large or very small magnitudes). With `Some(n)` the value is rounded to
+/// `n` decimal places: a bare integer when the value is whole, small enough
+/// (|value| < 1e10) and round-trips through `i64`; otherwise a decimal with
+/// trailing zeros trimmed. Zero, including negative zero and values that round
+/// to zero, is always written as `0`.
 ///
 /// `pub(crate)` so the MPS writer ([`crate::mps::writer`]) can reuse the same
 /// numeric formatting instead of duplicating it.
 #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
-pub(crate) fn write_number(output: &mut String, value: f64, precision: usize) -> std::fmt::Result {
+pub(crate) fn write_number(output: &mut String, value: f64, precision: Option<usize>) -> std::fmt::Result {
     debug_assert!(!value.is_nan(), "write_number called with NaN");
     if value.is_infinite() {
         // Infinite bounds are legitimate LP syntax; the lexer accepts `inf`/`-inf`.
         return output.write_str(if value > 0.0 { "inf" } else { "-inf" });
     }
+    if value == 0.0 {
+        // Covers -0.0, which would otherwise print as `-0`.
+        return output.write_char('0');
+    }
+
+    let Some(precision) = precision else {
+        let abs_value = value.abs();
+        return if (SCIENTIFIC_BELOW..SCIENTIFIC_FROM).contains(&abs_value) {
+            write!(output, "{value}")
+        } else {
+            write!(output, "{value:e}")
+        };
+    };
+
     let is_whole_number = value.fract().abs() < f64::EPSILON;
     let is_safe_for_i64 = value >= (i64::MIN as f64) && value <= (i64::MAX as f64);
 
@@ -459,6 +488,11 @@ pub(crate) fn write_number(output: &mut String, value: f64, precision: usize) ->
             let trimmed_len = start + output[start..].trim_end_matches('0').trim_end_matches('.').len();
             output.truncate(trimmed_len);
         }
+        if &output[start..] == "-0" {
+            // A tiny negative value rounded away entirely.
+            output.truncate(start);
+            output.push('0');
+        }
         Ok(())
     }
 }
@@ -466,7 +500,7 @@ pub(crate) fn write_number(output: &mut String, value: f64, precision: usize) ->
 /// Format a number with specified precision, removing trailing zeros.
 /// Convenience wrapper around `write_number` for use in tests.
 #[cfg(test)]
-fn format_number(value: f64, precision: usize) -> String {
+fn format_number(value: f64, precision: Option<usize>) -> String {
     let mut s = String::new();
     write_number(&mut s, value, precision).expect("write_number failed");
     s
@@ -480,25 +514,54 @@ mod tests {
 
     #[test]
     fn test_format_number() {
-        assert_eq!(format_number(1.0, 6), "1");
-        assert_eq!(format_number(1.5, 6), "1.5");
-        assert_eq!(format_number(1.500_000, 6), "1.5");
-        assert_eq!(format_number(0.0, 6), "0");
-        assert_eq!(format_number(-1.0, 6), "-1");
-        assert_eq!(format_number(2.789, 2), "2.79");
+        assert_eq!(format_number(1.0, Some(6)), "1");
+        assert_eq!(format_number(1.5, Some(6)), "1.5");
+        assert_eq!(format_number(1.500_000, Some(6)), "1.5");
+        assert_eq!(format_number(0.0, Some(6)), "0");
+        assert_eq!(format_number(-1.0, Some(6)), "-1");
+        assert_eq!(format_number(2.789, Some(2)), "2.79");
+    }
+
+    #[test]
+    fn test_format_number_default_is_lossless() {
+        assert_eq!(format_number(0.000_000_1, None), "1e-7");
+        assert_eq!(format_number(1.234_567_89, None), "1.23456789");
+        assert_eq!(format_number(3.0, None), "3");
+        assert_eq!(format_number(-0.0, None), "0");
+        assert_eq!(format_number(1e300, None), "1e300");
+        assert_eq!(format_number(123_456_789_012.0, None), "123456789012");
+        assert_eq!(format_number(0.1 + 0.2, None), "0.30000000000000004");
+        // Negative zero, and anything rounding to it, never prints as `-0`.
+        assert_eq!(format_number(-0.0, Some(6)), "0");
+        assert_eq!(format_number(-0.000_000_1, Some(6)), "0");
+    }
+
+    #[test]
+    #[allow(clippy::float_cmp)]
+    fn test_default_options_round_trip_exact_coefficients() {
+        let problem = LpProblem::parse("minimize\nobj: 0.0000001 x + 1.23456789 y\nsubject to\nc1: x + y >= 1e-12\nend\n").unwrap();
+        let written = write_lp_string(&problem);
+        let reparsed = LpProblem::parse(&written).unwrap_or_else(|e| panic!("written LP must re-parse: {e}\n---\n{written}"));
+        let obj = reparsed.objectives.values().next().unwrap();
+        let values: Vec<f64> = obj.coefficients.iter().map(|c| c.value).collect();
+        assert_eq!(values, vec![0.000_000_1, 1.234_567_89], "{written}");
+        match reparsed.constraints.values().next().unwrap() {
+            Constraint::Standard { rhs, .. } => assert_eq!(*rhs, 1e-12, "{written}"),
+            Constraint::SOS { .. } => panic!("c1 must be a standard constraint"),
+        }
     }
 
     #[test]
     fn test_format_coefficient() {
-        fn fmt(name: &str, value: f64, is_first: bool, precision: usize) -> String {
+        fn fmt(name: &str, value: f64, is_first: bool, precision: Option<usize>) -> String {
             let mut buf = String::new();
             write_formatted_coefficient(&mut buf, name, value, is_first, precision).expect("write! to String cannot fail");
             buf
         }
-        assert_eq!(fmt("x1", 1.0, true, 6), "x1");
-        assert_eq!(fmt("x2", -1.0, true, 6), "- x2");
-        assert_eq!(fmt("x3", 2.5, false, 6), " + 2.5 x3");
-        assert_eq!(fmt("x4", -3.7, false, 6), " - 3.7 x4");
+        assert_eq!(fmt("x1", 1.0, true, None), "x1");
+        assert_eq!(fmt("x2", -1.0, true, None), "- x2");
+        assert_eq!(fmt("x3", 2.5, false, None), " + 2.5 x3");
+        assert_eq!(fmt("x4", -3.7, false, None), " - 3.7 x4");
     }
 
     #[test]
@@ -992,10 +1055,10 @@ End
     fn test_write_number_large_whole_values() {
         // Whole values at or above 1e10 take the decimal path; trailing zeros
         // and the decimal point must be trimmed away.
-        assert_eq!(format_number(1e12, 6), "1000000000000");
-        assert_eq!(format_number(-1e12, 6), "-1000000000000");
+        assert_eq!(format_number(1e12, Some(6)), "1000000000000");
+        assert_eq!(format_number(-1e12, Some(6)), "-1000000000000");
         // Just below the 1e10 threshold: the integer fast path.
-        assert_eq!(format_number(9_999_999_999.0, 6), "9999999999");
+        assert_eq!(format_number(9_999_999_999.0, Some(6)), "9999999999");
     }
 
     #[test]
@@ -1003,8 +1066,12 @@ End
         let input = "Minimize\n obj: 2.789 x + 1.111 y\nSubject To\n c1: x + y <= 3.14159\nEnd";
         let problem = LpProblem::parse(input).unwrap().with_problem_name(String::from("Opts"));
 
-        let options =
-            LpWriterOptions { include_problem_name: false, max_line_length: 10, decimal_precision: 2, include_section_spacing: false };
+        let options = LpWriterOptions {
+            include_problem_name: false,
+            max_line_length: 10,
+            decimal_precision: Some(2),
+            include_section_spacing: false,
+        };
         let written = write_lp_string_with_options(&problem, &options);
 
         // include_problem_name = false: no name comment.
