@@ -34,6 +34,7 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
+use crate::error::{LpParseError, LpResult};
 use crate::interner::NameId;
 use crate::model::{Coefficient, Constraint};
 use crate::problem::LpProblem;
@@ -65,6 +66,21 @@ impl Default for DiffTol {
 }
 
 impl DiffTol {
+    /// Build a tolerance pair, validating both values.
+    ///
+    /// # Errors
+    ///
+    /// Returns a validation error if either tolerance is negative, `NaN` or
+    /// infinite. [`DiffTol::differ`] relies on this invariant.
+    pub fn new(abs: f64, rel: f64) -> LpResult<Self> {
+        for (label, value) in [("absolute", abs), ("relative", rel)] {
+            if !(value.is_finite() && value >= 0.0) {
+                return Err(LpParseError::validation_error(format!("{label} tolerance must be finite and non-negative, got {value}")));
+            }
+        }
+        Ok(Self { abs, rel })
+    }
+
     /// Return true if `a` and `b` differ beyond both tolerances.
     #[must_use]
     pub fn differ(self, a: f64, b: f64) -> bool {
@@ -363,6 +379,14 @@ mod tests {
         assert!(!tol.differ(10.0, 18.0));
         // diff 12: above abs(10) but 12 < 0.5*24 -> not different.
         assert!(!tol.differ(12.0, 24.0));
+    }
+
+    #[test]
+    fn tol_new_rejects_invalid_tolerances() {
+        assert_eq!(DiffTol::new(0.5, 0.0).unwrap(), DiffTol { abs: 0.5, rel: 0.0 });
+        for (abs, rel) in [(-1.0, 0.0), (0.0, -1e-9), (f64::NAN, 0.0), (0.0, f64::INFINITY)] {
+            assert!(DiffTol::new(abs, rel).is_err(), "({abs}, {rel}) must be rejected");
+        }
     }
 
     #[test]

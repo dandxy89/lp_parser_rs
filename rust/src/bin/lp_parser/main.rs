@@ -420,7 +420,7 @@ fn cmd_diff(args: &DiffArgs, verbose: bool) -> Result<ExitCode, BoxError> {
         .map(|c| Ok::<_, BoxError>((regex::Regex::new(&c[0])?, c[1].clone())))
         .collect::<Result<_, _>>()?;
 
-    let tol = DiffTol { abs: args.abs_tol, rel: args.rel_tol };
+    let tol = DiffTol::new(args.abs_tol, args.rel_tol)?;
 
     if verbose {
         eprintln!("Diffing {} vs {}", args.file1.display(), args.file2.display());
