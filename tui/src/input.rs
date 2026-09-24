@@ -13,6 +13,9 @@ use crate::state::{
     SolveViewState,
 };
 
+/// Lines an overlay moves per mouse-wheel notch, matching the detail panel.
+const MOUSE_SCROLL_LINES: u16 = 3;
+
 impl App {
     pub fn handle_key(&mut self, key: KeyEvent) {
         // Windows delivers both Press and Release events; with the kitty
@@ -1489,13 +1492,20 @@ impl App {
 
     /// Handle a mouse event: scroll wheels and left-click panel selection.
     pub fn handle_mouse(&mut self, event: MouseEvent) {
-        if self.search_popup.visible || self.palette.visible || self.what_if.is_some() {
-            return;
-        }
-
-        if self.show_help {
-            if matches!(event.kind, MouseEventKind::Down(MouseButton::Left)) {
+        // An open overlay owns the mouse: the wheel scrolls it where it
+        // scrolls, and nothing reaches the lists behind it.
+        if self.has_overlay() {
+            let wheel = match event.kind {
+                MouseEventKind::ScrollDown => Some(true),
+                MouseEventKind::ScrollUp => Some(false),
+                _ => None,
+            };
+            if let (Some(down), Some(scroll)) = (wheel, self.overlay_scroll_mut()) {
+                // Each pane clamps its offset to the content when drawn.
+                *scroll = if down { scroll.saturating_add(MOUSE_SCROLL_LINES) } else { scroll.saturating_sub(MOUSE_SCROLL_LINES) };
+            } else if self.show_help && matches!(event.kind, MouseEventKind::Down(MouseButton::Left)) && !self.overlay_above_help() {
                 self.show_help = false;
+                self.help_scroll = 0;
             }
             return;
         }
@@ -1515,6 +1525,39 @@ impl App {
             }
             _ => {}
         }
+    }
+
+    /// The scroll offset of the topmost open overlay, taken in `handle_key`'s
+    /// priority order, or `None` when that overlay does not scroll (a prompt,
+    /// a picker, a running solve or analysis).
+    fn overlay_scroll_mut(&mut self) -> Option<&mut u16> {
+        if self.search_popup.visible || self.palette.visible || self.what_if.is_some() {
+            return None;
+        }
+        if let Some(pane) = &mut self.presolve_log {
+            return Some(&mut pane.scroll);
+        }
+        if self.presolve_cursor.is_some() {
+            return None;
+        }
+        if let Some(pane) = &mut self.diagnostics {
+            return Some(&mut pane.scroll);
+        }
+        if self.analysis.is_open() {
+            return match &mut self.analysis {
+                AnalysisState::Done { pane, .. } => Some(&mut pane.scroll),
+                _ => None,
+            };
+        }
+        match self.solver.state {
+            SolveState::Done(_) | SolveState::DoneBoth(_) => {
+                let tab = self.solver.view.tab.index();
+                return Some(&mut self.solver.view.scroll[tab]);
+            }
+            SolveState::Idle => {}
+            _ => return None,
+        }
+        self.show_help.then_some(&mut self.help_scroll)
     }
 
     /// Scroll the name list by one step without touching focus.
@@ -1647,6 +1690,30 @@ mod tests {
         app.solver.solved_problem = Some(Arc::clone(&app.problem2));
         let problem = app.solve_view_problem().expect("a completed solve names its model");
         assert!(Arc::ptr_eq(&problem, &app.problem2), "a single solve of file 2 must analyse file 2");
+    }
+
+    /// Regression: only a few overlays blocked the mouse, so with the solve
+    /// overlay or a pane open the wheel and clicks moved the list behind it.
+    #[test]
+    fn the_mouse_scrolls_an_open_overlay_and_never_the_list_behind() {
+        let mut app = app_with_side2_infeasible();
+        app.set_section(Section::Constraints);
+        app.layout.name_list = ratatui::layout::Rect::new(0, 0, 30, 20);
+        let before = app.active_name_list_state_mut().selected();
+        let mouse = |kind| MouseEvent { kind, column: 5, row: 3, modifiers: KeyModifiers::NONE };
+
+        app.handle_mouse(mouse(MouseEventKind::ScrollDown));
+        app.handle_mouse(mouse(MouseEventKind::Down(MouseButton::Left)));
+        assert_eq!(app.active_name_list_state_mut().selected(), before, "the list behind the solve overlay must not move");
+        let tab = app.solver.view.tab.index();
+        assert_eq!(app.solver.view.scroll[tab], MOUSE_SCROLL_LINES, "the wheel scrolls the solve overlay");
+
+        app.solver.close_overlay();
+        app.diagnostics = Some(crate::state::ScrollPane { lines: Vec::new(), scroll: 0, export: None });
+        app.handle_mouse(mouse(MouseEventKind::ScrollDown));
+        app.handle_mouse(mouse(MouseEventKind::Down(MouseButton::Left)));
+        assert_eq!(app.active_name_list_state_mut().selected(), before, "the list behind a pane must not move");
+        assert_eq!(app.diagnostics.as_ref().map(|pane| pane.scroll), Some(MOUSE_SCROLL_LINES), "the wheel scrolls the pane");
     }
 
     /// Regression: a restored comparison kept whatever view was current, so

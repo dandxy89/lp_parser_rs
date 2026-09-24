@@ -893,6 +893,12 @@ impl App {
     /// Whether any modal overlay is open — a pop-up, a prompt, or one of the
     /// analysis panes. The draw dispatcher dims the screen behind them.
     pub fn has_overlay(&self) -> bool {
+        self.overlay_above_help() || self.show_help
+    }
+
+    /// Whether an overlay other than help is open. Help sits lowest in the
+    /// key and mouse priority order, so any of these covers it.
+    pub(crate) fn overlay_above_help(&self) -> bool {
         self.search_popup.visible
             || self.palette.visible
             || !matches!(self.solver.state, crate::state::SolveState::Idle)
@@ -901,7 +907,6 @@ impl App {
             || self.presolve_log.is_some()
             || self.diagnostics.is_some()
             || self.analysis.is_open()
-            || self.show_help
     }
 
     /// Ensure the active section's cache is fresh. Call once per frame before drawing.
