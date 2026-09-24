@@ -12,10 +12,12 @@
 <meta property="og:title" content="lp_parser_rs — Rust LP file parser, writer &amp; diff toolkit">
 <meta property="og:description" content="A Rust library, CLI, interactive TUI, and Python package for parsing, analysing, modifying, diffing, and solving Linear Programming (LP) files.">
 <meta property="og:image" content="https://dandxy89.github.io/lp_parser_rs/assets/demo-poster.jpg">
+<meta property="og:image:alt" content="The lp_diff terminal UI diffing two models: section tabs for Summary, Variables, Constraints, Objectives and Numerics, with counts of removed and changed entries.">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="lp_parser_rs — Rust LP file parser, writer &amp; diff toolkit">
 <meta name="twitter:description" content="A Rust library, CLI, interactive TUI, and Python package for parsing, analysing, modifying, diffing, and solving Linear Programming (LP) files.">
 <meta name="twitter:image" content="https://dandxy89.github.io/lp_parser_rs/assets/demo-poster.jpg">
+<meta name="twitter:image:alt" content="The lp_diff terminal UI diffing two models: section tabs for Summary, Variables, Constraints, Objectives and Numerics, with counts of removed and changed entries.">
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
@@ -347,7 +349,16 @@ print(analysis[<span class="g">"summary"</span>][<span class="g">"density"</span
     var dark = function () {
       return root.dataset.theme ? root.dataset.theme === "dark" : media.matches;
     };
-    var label = function () { btn.textContent = dark() ? "light" : "dark"; };
+    var metas = document.querySelectorAll('meta[name="theme-color"]');
+    var label = function () {
+      var d = dark();
+      btn.textContent = d ? "light" : "dark";
+      btn.setAttribute("aria-pressed", d ? "true" : "false");
+      // an explicit choice overrides the media-query theme-color pair
+      if (root.dataset.theme) {
+        for (var i = 0; i < metas.length; i++) metas[i].content = d ? "#14171a" : "#ffffff";
+      }
+    };
     btn.addEventListener("click", function () {
       var next = dark() ? "light" : "dark";
       root.dataset.theme = next;
