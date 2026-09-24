@@ -9,7 +9,27 @@ Syntax is handled by an incremental, error-tolerant [tree-sitter](https://tree-s
 (`tree-sitter-lp`), so every keystroke gets fresh diagnostics, symbols and highlighting even in broken files.
 Semantics come from a debounced full `lp_parser_rs` parse and analysis, run off the main thread.
 
-<!-- FEATURES -->
+## Features
+
+| Feature | What you get |
+| --- | --- |
+| **Diagnostics** | Syntax errors (`unexpected …` / `missing …`) on every keystroke. `lp_parser_rs` parse errors at the offending token, shown only when the file has no syntax errors. Duplicate constraint/objective/SOS names (with a link to the first). A variable listed in more than one type section. Bound or type declarations for unused variables. Conflicting bounds (lower > upper). `=<`/`=>` spelling. Analysis warnings (numerical scaling, empty constraints, fixed/unused variables…) placed on the entity they concern. Each diagnostic has a `code`. Push or pull (`textDocument/diagnostic`), whichever the client supports. |
+| **Document symbols** | Sections → objectives, constraints, general constraints and SOS sets, with correct ranges. |
+| **Workspace symbols** | Fuzzy search over constraint, objective, SOS and variable names across every `*.lp` file in the workspace. Files are indexed in the background with progress and kept current via file watching. |
+| **Navigation** | Go to definition (a variable's `Bounds` entry, else its first use), declaration (its type-section entry), type definition. References honour `includeDeclaration`. Document highlights mark the definition as write and uses as read. |
+| **Rename** | Variables and constraint/objective/SOS names; names shared across workspace files are renamed there too. Rejects names that would change parsing (a section keyword at line start, `free`, `S1`, `st`…), a leading digit, `inf`/`infinity`, invalid characters and collisions, with a clear message. The result is re-parsed as a final check. |
+| **Hover** | Variables: type, bounds, objective coefficients, constraints (with coefficients) and SOS membership. Constraints: normalised form, section, `_rng` partner, indicator condition. Objectives: sense, attributes, term count. Keywords: description and every accepted alias. `MAX`/`MIN`/`ABS`/`AND`/`OR`: signature and semantics. |
+| **Completion** | Section keywords (with snippets) only at the start of a line; variables in expressions, bounds, type sections and SOS entries; `S1`/`S2` in SOS headers; general-constraint functions after `r =`; objective attributes in `multi-objectives` files; comparison operators; `free` in `Bounds`. Documentation is filled in on `completionItem/resolve`. |
+| **Signature help** | Argument lists of `MAX`, `MIN`, `ABS`, `AND`, `OR`. |
+| **Inlay hints** | Names generated for unnamed constraints (`C1:`) and objectives, the `_rng` partner of ranged constraints, a variable's type after its first use, and the folded RHS when constants sit on the left. Each can be switched off. |
+| **Code actions** | Quick fixes: add/remove `/ 2` on quadratic blocks, set an indicator value to 0/1, rename a duplicate, normalise `=<`/`=>`, remove an unused declaration or a duplicate type entry. Refactors: add a bound (creating `Bounds` if needed), move a variable between type sections, name all unnamed constraints, sort a type section, turn `10 >= x` into `x <= 10`. Source action `source.organizeSections` reorders sections canonically and keeps comments. |
+| **Formatting** | Document, range (snapped to whole entries) and on-type (`\n`). Keeps every comment and single blank lines. Canonical spacing, one entry per line, `=<` → `<=`, wrapping at `lineWidth`, optional operator alignment, keyword casing. Never formats a file with syntax errors. Tests check it is idempotent and that the parsed model is unchanged on every fixture. |
+| **Folding / selection** | Folds for sections, block comments and runs of line comments. Selection expands term → expression → constraint → section. |
+| **Semantic tokens** | Full, range and delta, from the grammar's highlight query, with `declaration`, `readonly` and `defaultLibrary` modifiers. |
+| **Code lens** | "N variables" on each constraint/objective; "used in N constraints" on each variable's definition (runs the client command `lp.showReferences`). |
+| **Commands** | `lp.analyze` (markdown analysis report), `lp.convertToMps` (writes `<name>.mps` next to the file), `lp.showModelStats`. The first argument is the document URI. |
+
+Positions are negotiated as UTF-8 when the client offers it, else UTF-16. Documents sync incrementally: each edit is applied to the tree-sitter tree and reparsed incrementally. The full `lp_parser_rs` parse and analysis runs debounced on a blocking thread, and stale results are dropped.
 
 ## Install
 
@@ -134,7 +154,18 @@ code --install-extension lp-lsp-*.vsix
 It starts `lp-lsp` from `PATH` (override with `lp.server.path`), contributes the settings above, and provides
 a TextMate grammar so files are highlighted before the server starts.
 
-<!-- BENCHMARKS -->
+## Performance
+
+`cargo bench -p lp-lsp --bench lsp` on a generated 52 MB LP file (Apple silicon, 14 cores, machine under load):
+
+| Operation | Median |
+| --- | --- |
+| Single-character edit, end to end (`apply_changes`: text, line index, incremental reparse, index rebuild) | 1.44 s |
+| Incremental reparse only | 224 ms |
+| `SymbolIndex::build` | 1.17 s |
+| Semantic tokens, full document | 2.57 s |
+
+The symbol index is rebuilt in full after each edit, and at this size that dominates. Typical models (a few MB) take tens of milliseconds. Above `lp.semantic.maxFileSizeMb` the full semantic parse only runs on open and save.
 
 ## Development
 
