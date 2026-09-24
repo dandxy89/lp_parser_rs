@@ -76,7 +76,7 @@ pub(crate) struct ClassifiedConstraints<'input> {
 }
 
 impl<'input> ClassifiedConstraints<'input> {
-    fn bucket(&mut self, class: ConstraintClass) -> &mut Vec<RawConstraint<'input>> {
+    const fn bucket(&mut self, class: ConstraintClass) -> &mut Vec<RawConstraint<'input>> {
         match class {
             ConstraintClass::Normal => &mut self.normal,
             ConstraintClass::Lazy => &mut self.lazy,
@@ -84,7 +84,7 @@ impl<'input> ClassifiedConstraints<'input> {
         }
     }
 
-    fn len(&self) -> usize {
+    const fn len(&self) -> usize {
         self.normal.len() + self.lazy.len() + self.user_cuts.len()
     }
 }
