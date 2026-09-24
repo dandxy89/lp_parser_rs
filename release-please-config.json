@@ -73,6 +73,11 @@
           "type": "generic",
           "path": "/README.md",
           "glob": false
+        },
+        {
+          "type": "generic",
+          "path": "/docs/index.html",
+          "glob": false
         }
       ]
     },
