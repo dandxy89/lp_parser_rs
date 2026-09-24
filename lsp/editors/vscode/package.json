@@ -1,0 +1,226 @@
+{
+  "name": "lp-lsp",
+  "displayName": "LP Language Support",
+  "description": "Language support for LP (linear programming) files, powered by the lp-lsp language server.",
+  "version": "0.1.0",
+  "publisher": "dandxy89",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dandxy89/lp_parser_rs",
+    "directory": "lsp/editors/vscode"
+  },
+  "bugs": {
+    "url": "https://github.com/dandxy89/lp_parser_rs/issues"
+  },
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Linters",
+    "Formatters"
+  ],
+  "keywords": [
+    "lp",
+    "linear programming",
+    "optimisation",
+    "cplex",
+    "gurobi"
+  ],
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onLanguage:lp"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "lp",
+        "aliases": [
+          "LP",
+          "Linear Programming",
+          "lp"
+        ],
+        "extensions": [
+          ".lp",
+          ".LP",
+          ".Lp"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "lp",
+        "scopeName": "source.lp",
+        "path": "./syntaxes/lp.tmLanguage.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "lp.analyze",
+        "title": "Analyse Model",
+        "category": "LP"
+      },
+      {
+        "command": "lp.convertToMps",
+        "title": "Convert to MPS",
+        "category": "LP"
+      },
+      {
+        "command": "lp.showModelStats",
+        "title": "Show Model Statistics",
+        "category": "LP"
+      },
+      {
+        "command": "lp.restartServer",
+        "title": "Restart Language Server",
+        "category": "LP"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "lp.analyze",
+          "when": "editorLangId == lp"
+        },
+        {
+          "command": "lp.convertToMps",
+          "when": "editorLangId == lp"
+        },
+        {
+          "command": "lp.showModelStats",
+          "when": "editorLangId == lp"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "LP",
+      "properties": {
+        "lp.server.path": {
+          "type": "string",
+          "default": "lp-lsp",
+          "markdownDescription": "Path to the `lp-lsp` binary. A bare name is resolved from `PATH`. Install with `cargo install --path lsp`.",
+          "scope": "machine-overridable"
+        },
+        "lp.trace.server": {
+          "type": "string",
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
+          "default": "off",
+          "description": "Trace the communication between VS Code and the LP language server."
+        },
+        "lp.analysis.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Publish analysis issues as diagnostics."
+        },
+        "lp.analysis.largeCoefficientThreshold": {
+          "type": "number",
+          "default": 1000000000,
+          "description": "Coefficients above this magnitude are flagged."
+        },
+        "lp.analysis.smallCoefficientThreshold": {
+          "type": "number",
+          "default": 1e-9,
+          "description": "Non-zero coefficients below this magnitude are flagged."
+        },
+        "lp.analysis.largeRhsThreshold": {
+          "type": "number",
+          "default": 1000000000,
+          "description": "RHS values above this magnitude are flagged."
+        },
+        "lp.analysis.coefficientRatioThreshold": {
+          "type": "number",
+          "default": 1000000,
+          "description": "Max/min coefficient ratio above which scaling is flagged."
+        },
+        "lp.semantic.maxFileSizeMb": {
+          "type": "integer",
+          "default": 20,
+          "minimum": 0,
+          "description": "Above this size (in MB) the semantic pass only runs on save."
+        },
+        "lp.semantic.debounceMs": {
+          "type": "integer",
+          "default": 300,
+          "minimum": 0,
+          "description": "Delay (in milliseconds) after the last edit before the semantic pass runs."
+        },
+        "lp.format.indent": {
+          "type": "integer",
+          "default": 2,
+          "minimum": 0,
+          "maximum": 16,
+          "description": "Body indent in spaces."
+        },
+        "lp.format.lineWidth": {
+          "type": "integer",
+          "default": 100,
+          "minimum": 20,
+          "description": "Wrap expressions longer than this."
+        },
+        "lp.format.alignOperators": {
+          "type": "boolean",
+          "default": false,
+          "description": "Align comparison operators within a section."
+        },
+        "lp.format.keywordCase": {
+          "type": "string",
+          "enum": [
+            "preserve",
+            "lower",
+            "upper",
+            "title"
+          ],
+          "enumDescriptions": [
+            "Keep keywords as written.",
+            "`subject to`",
+            "`SUBJECT TO`",
+            "`Subject To`"
+          ],
+          "default": "preserve",
+          "description": "Keyword casing."
+        },
+        "lp.inlayHints.generatedNames": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show generated names for unnamed constraints and objectives."
+        },
+        "lp.inlayHints.rangePartners": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Show the `_rng` partner of ranged constraints."
+        },
+        "lp.inlayHints.variableTypes": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the variable type after a variable's first use."
+        },
+        "lp.inlayHints.normalisedRhs": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the normalised RHS when constants appear on the left-hand side."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.0",
+    "@types/vscode": "^1.90.0",
+    "@vscode/vsce": "^3.9.2",
+    "typescript": "^5.9.3"
+  }
+}
