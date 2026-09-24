@@ -924,19 +924,21 @@ impl LpProblem {
             });
         }
 
-        // Large coefficients
-        for loc in &coefficients.large_coefficients {
-            issues.push(AnalysisIssue {
-                severity: IssueSeverity::Warning,
-                category: IssueCategory::NumericalScaling,
-                message: format!(
-                    "Large coefficient ({:.2e}) for variable '{}' in {}",
-                    loc.value,
-                    loc.variable,
-                    if loc.is_objective { "objective" } else { "constraint" }
-                ),
-                details: Some(loc.location.clone()),
-            });
+        // Large and small (non-zero) coefficients
+        for (size, locations) in [("Large", &coefficients.large_coefficients), ("Small", &coefficients.small_coefficients)] {
+            for loc in locations {
+                issues.push(AnalysisIssue {
+                    severity: IssueSeverity::Warning,
+                    category: IssueCategory::NumericalScaling,
+                    message: format!(
+                        "{size} coefficient ({:.2e}) for variable '{}' in {}",
+                        loc.value,
+                        loc.variable,
+                        if loc.is_objective { "objective" } else { "constraint" }
+                    ),
+                    details: Some(loc.location.clone()),
+                });
+            }
         }
 
         // Fixed variables (INFO)
@@ -1157,6 +1159,19 @@ mod tests {
             "a -1e12 RHS must be flagged: {:?}",
             analysis.issues
         );
+    }
+
+    #[test]
+    fn test_small_coefficient_is_reported_as_an_issue() {
+        let problem = LpProblem::parse("min\n obj: x\nst\n c1: 1e-12 x + y >= 1\nend").unwrap();
+        let analysis = problem.analyze();
+        assert!(
+            analysis.issues.iter().any(|i| i.message.contains("Small coefficient (1.00e-12) for variable 'x'")),
+            "a coefficient below the small threshold must be reported: {:?}",
+            analysis.issues
+        );
+        let lenient = AnalysisConfig { small_coefficient_threshold: 1e-15, ..AnalysisConfig::default() };
+        assert!(!problem.analyze_with_config(&lenient).issues.iter().any(|i| i.message.starts_with("Small coefficient")));
     }
 
     #[test]
