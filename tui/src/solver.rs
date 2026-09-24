@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::Write as _;
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use lp_parser_rs::interner::NameId;
@@ -663,8 +664,70 @@ fn apply_options_file(model: &mut highs::Model) -> Result<Vec<String>, String> {
 ///
 /// Returns an error if the temp log path is not UTF-8, `highs.opt` cannot be
 /// read, or the solver log cannot be read back.
+#[cfg(test)]
 pub fn solve_problem(problem: &LpProblem) -> Result<SolveResult, String> {
     solve_problem_with(problem, &[])
+}
+
+/// [`solve_problem`], stopping early once `cancel` is set.
+///
+/// `HiGHS` polls its interrupt callbacks between simplex, interior-point and
+/// branch-and-bound iterations; the callback registered here answers them
+/// with the flag, so setting it ends the solve within an iteration or so. The
+/// result then carries the `ReachedInterrupt` status.
+///
+/// # Errors
+///
+/// As [`solve_problem`], and when `HiGHS` will not register the callback.
+pub fn solve_problem_cancellable(problem: &LpProblem, cancel: &AtomicBool) -> Result<SolveResult, String> {
+    solve(problem, &[], Some(cancel))
+}
+
+/// The interrupt callback [`solve_problem_cancellable`] registers: it raises
+/// `HiGHS`'s interrupt flag once the caller's cancel flag is set.
+///
+/// `user_data` is the `AtomicBool` the solve was started with.
+unsafe extern "C" fn interrupt_on_cancel(
+    _callback_type: std::os::raw::c_int,
+    _message: *const std::os::raw::c_char,
+    _data_out: *const highs_sys::HighsCallbackDataOut,
+    data_in: *mut highs_sys::HighsCallbackDataIn,
+    user_data: *mut std::os::raw::c_void,
+) {
+    if user_data.is_null() || data_in.is_null() {
+        return;
+    }
+    // SAFETY: `user_data` is the `&AtomicBool` passed to `Highs_setCallback`
+    // in `solve`, which borrows it for the whole of the solve that calls this.
+    let cancel = unsafe { &*user_data.cast::<AtomicBool>() };
+    if cancel.load(Ordering::Relaxed) {
+        // SAFETY: `HiGHS` passes a valid, exclusively borrowed input struct to
+        // every interrupt callback; it was checked non-null above.
+        unsafe { (*data_in).user_interrupt = 1 };
+    }
+}
+
+/// Register [`interrupt_on_cancel`] on `model` for every interrupt point.
+fn register_cancel(model: &mut highs::Model, cancel: &AtomicBool) -> Result<(), String> {
+    let highs = model.as_mut_ptr();
+    let user_data = std::ptr::from_ref(cancel).cast_mut().cast::<std::os::raw::c_void>();
+    // SAFETY: `highs` is the live model `model` owns. `user_data` points at
+    // `cancel`, which the caller keeps borrowed until the solve has returned,
+    // and the callback only reads it through a shared reference.
+    let status = unsafe { highs_sys::Highs_setCallback(highs, Some(interrupt_on_cancel), user_data) };
+    if status == highs_sys::kHighsStatusError {
+        return Err("HiGHS would not register the cancel callback".to_owned());
+    }
+    for callback in
+        [highs_sys::kHighsCallbackSimplexInterrupt, highs_sys::kHighsCallbackIpmInterrupt, highs_sys::kHighsCallbackMipInterrupt]
+    {
+        // SAFETY: the same live model; starting a callback only sets a flag.
+        let status = unsafe { highs_sys::Highs_startCallback(highs, callback) };
+        if status == highs_sys::kHighsStatusError {
+            return Err(format!("HiGHS would not start interrupt callback {callback}"));
+        }
+    }
+    Ok(())
 }
 
 /// [`solve_problem`], with `extra` `HiGHS` options applied on top.
@@ -677,6 +740,11 @@ pub fn solve_problem(problem: &LpProblem) -> Result<SolveResult, String> {
 ///
 /// As [`solve_problem`].
 pub fn solve_problem_with(problem: &LpProblem, extra: &[(&str, &str)]) -> Result<SolveResult, String> {
+    solve(problem, extra, None)
+}
+
+/// The solve behind [`solve_problem_with`] and [`solve_problem_cancellable`].
+fn solve(problem: &LpProblem, extra: &[(&str, &str)], cancel: Option<&AtomicBool>) -> Result<SolveResult, String> {
     debug_assert!(!problem.variables.is_empty(), "cannot solve a problem with no variables");
     debug_assert!(
         extra.iter().all(|(key, _)| !RESERVED_OPTIONS.contains(key)),
@@ -711,6 +779,10 @@ pub fn solve_problem_with(problem: &LpProblem, extra: &[(&str, &str)]) -> Result
     for (key, value) in extra.iter().filter(|(key, _)| !RESERVED_OPTIONS.contains(key)) {
         set_option_value(&mut highs_model, key, value)?;
         applied_options.push(format!("{key} = {value}"));
+    }
+
+    if let Some(cancel) = cancel {
+        register_cancel(&mut highs_model, cancel)?;
     }
 
     let solve_start = Instant::now();
@@ -1208,6 +1280,21 @@ empty =\n";
             assert!(crate::highs_query::unbounded_ray(&problem).is_err(), "ray must refuse {source:?}");
             assert!(crate::highs_presolve::highs_presolve(&problem).is_err(), "presolve must refuse {source:?}");
         }
+    }
+
+    /// A set cancel flag stops `HiGHS` at its first interrupt check, and an
+    /// unset one leaves the solve alone.
+    #[test]
+    fn a_cancelled_solve_is_interrupted() {
+        let source = include_str!("../../rust/resources/boeing1.lp");
+        let problem = LpProblem::parse(source).expect("fixture parses");
+
+        let result = solve_problem_cancellable(&problem, &AtomicBool::new(false)).expect("solves");
+        assert_eq!(result.status, "Optimal", "an unset flag must not interrupt");
+
+        let result = solve_problem_cancellable(&problem, &AtomicBool::new(true)).expect("an interrupted solve still returns");
+        assert_eq!(result.status, "ReachedInterrupt", "a set flag must interrupt the solve");
+        assert!(result.objective_value.is_none(), "an interrupted solve reports no objective");
     }
 
     #[test]

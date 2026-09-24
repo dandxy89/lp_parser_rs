@@ -667,13 +667,7 @@ impl App {
         match &self.solver.state {
             SolveState::Idle => unreachable!("handle_solve_key called in Idle state"),
             SolveState::Picking => self.handle_solve_picker_key(key),
-            SolveState::Running { .. } | SolveState::RunningBoth { .. } => {
-                if key.code == KeyCode::Esc {
-                    self.solver.state = SolveState::Idle;
-                    self.solver.receive = None;
-                    self.solver.receive2 = None;
-                }
-            }
+            SolveState::Running { .. } | SolveState::RunningBoth { .. } => self.handle_solve_running_key(key),
             SolveState::Done(_) => self.handle_solve_done_key(key),
             SolveState::DoneBoth(_) => self.handle_solve_done_both_key(key),
             SolveState::Failed(_) => {
@@ -682,6 +676,37 @@ impl App {
                 }
             }
         }
+    }
+
+    /// Handle a key while a solve runs: `Esc` cancels it; `q` asks before
+    /// quitting, since quitting throws the solve away.
+    fn handle_solve_running_key(&mut self, key: KeyEvent) {
+        if self.solver.confirm_quit {
+            match key.code {
+                KeyCode::Char('y' | 'Y') => self.should_quit = true,
+                _ => self.solver.confirm_quit = false,
+            }
+            return;
+        }
+        match key.code {
+            KeyCode::Esc => {
+                self.solver.cancel_running();
+                self.flash_status("Solve cancelled");
+            }
+            KeyCode::Char('q') => self.solver.confirm_quit = true,
+            _ => {}
+        }
+    }
+
+    /// Refuse to start a solve while a cancelled one is still winding down:
+    /// the two would compete for the machine, and the old one cannot be
+    /// interrupted before `HiGHS` has the model. Returns `true` when refused.
+    fn refuse_while_solving(&mut self) -> bool {
+        if self.solver.solve_in_flight() {
+            self.flash_warn("The last solve is still stopping \u{2014} try again in a moment");
+            return true;
+        }
+        false
     }
 
     /// Handle keys in the solver file picker state.
@@ -869,6 +894,11 @@ impl App {
         if self.restore_cached_solve(&file_label) {
             return;
         }
+        if self.refuse_while_solving() {
+            self.solver.state = SolveState::Idle;
+            return;
+        }
+        let cancel = self.solver.arm_cancel();
         self.solver.state = SolveState::Running { file: file_label.clone(), started: Instant::now() };
         self.solver.key = file_label;
         self.solver.view = SolveViewState::default();
@@ -880,7 +910,7 @@ impl App {
         self.solver.receive = Some(receiver);
 
         std::thread::spawn(move || {
-            let result = crate::solver::solve_problem(&problem);
+            let result = crate::solver::solve_problem_cancellable(&problem, &cancel);
             // The receiver is dropped if the user dismissed the overlay, so a
             // failed send is expected and deliberately silent: stderr is the
             // alternate screen ratatui is drawing into.
@@ -951,6 +981,11 @@ impl App {
         if self.restore_cached_solve(&key) {
             return;
         }
+        if self.refuse_while_solving() {
+            self.solver.state = SolveState::Idle;
+            return;
+        }
+        let cancel = self.solver.arm_cancel();
         self.solver.state = SolveState::RunningBoth { file1: label1, file2: label2, result1: None, result2: None, started: Instant::now() };
         self.solver.key = key;
         self.solver.view = SolveViewState::default();
@@ -969,11 +1004,11 @@ impl App {
         // screen ratatui is drawing into. Side 2 is skipped once nobody is
         // waiting for it.
         std::thread::spawn(move || {
-            let result = crate::solver::solve_problem(&problem1);
-            if sender1.send(result).is_err() {
+            let result = crate::solver::solve_problem_cancellable(&problem1, &cancel);
+            if sender1.send(result).is_err() || cancel.load(std::sync::atomic::Ordering::Relaxed) {
                 return;
             }
-            let mut result = crate::solver::solve_problem(&problem2);
+            let mut result = crate::solver::solve_problem_cancellable(&problem2, &cancel);
             if let Ok(solved) = &mut result {
                 scaling2.unscale(solved);
             }
@@ -1667,6 +1702,36 @@ mod tests {
         modified.update_constraint_rhs("c1", 5.0).expect("rhs update must succeed");
         assert_eq!(baseline_constraint_rhs(&modified, "c1"), Some(5.0), "modified copy must carry the new rhs");
         assert_eq!(baseline_constraint_rhs(&baseline, "c1"), Some(2.0), "baseline must be untouched by the what-if edit");
+    }
+
+    /// `Esc` interrupts a running solve; `q` asks first; and no new solve can
+    /// start while the cancelled one's worker is still winding down.
+    #[test]
+    fn a_running_solve_can_be_cancelled_and_quit_is_confirmed() {
+        let mut app = crate::snapshot_tests::inspect_app_from(crate::snapshot_tests::BASE_LP);
+        let worker = app.solver.arm_cancel();
+        app.solver.state = SolveState::Running { file: "model.lp".to_owned(), started: Instant::now() };
+
+        app.handle_key(KeyEvent::from(KeyCode::Char('q')));
+        assert!(app.solver.confirm_quit && !app.should_quit, "q asks before quitting a running solve");
+        app.handle_key(KeyEvent::from(KeyCode::Char('n')));
+        assert!(!app.solver.confirm_quit && !app.should_quit, "anything but y keeps solving");
+
+        app.handle_key(KeyEvent::from(KeyCode::Esc));
+        assert!(matches!(app.solver.state, SolveState::Idle), "Esc closes the overlay");
+        assert!(worker.load(std::sync::atomic::Ordering::Relaxed), "Esc interrupts HiGHS");
+
+        // The worker still holds its clone: a new solve must wait for it.
+        app.handle_key(KeyEvent::from(KeyCode::Char('S')));
+        assert!(matches!(app.solver.state, SolveState::Idle), "no second solve while the first is stopping");
+        drop(worker);
+        assert!(!app.solver.solve_in_flight(), "the worker's exit frees the solver");
+
+        app.solver.arm_cancel();
+        app.solver.state = SolveState::Running { file: "model.lp".to_owned(), started: Instant::now() };
+        app.handle_key(KeyEvent::from(KeyCode::Char('q')));
+        app.handle_key(KeyEvent::from(KeyCode::Char('y')));
+        assert!(app.should_quit, "y confirms the quit");
     }
 
     /// A comparison whose second side is infeasible, as the solve overlay holds it.

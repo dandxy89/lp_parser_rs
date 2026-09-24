@@ -190,7 +190,8 @@ Search mode prefixes (type in the pop-up input):
 | `e`                 | Diagnose infeasibility                                                         |
 | `w`                 | Write diff to CSV (both mode)                                                  |
 | `y`                 | Yank solve results to clipboard                                                |
-| `Esc`               | Close solver overlay                                                           |
+| `Esc`               | Close solver overlay; while solving, interrupt HiGHS                           |
+| `q`                 | While solving, ask before quitting (`y` quits)                                 |
 
 **Rewrite & Diagnostics**
 

@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, mpsc};
 use std::time::Instant;
 
@@ -200,6 +201,12 @@ pub struct SolverSession {
     /// ponytail: linear scan over at most `SOLVE_CACHE_CAPACITY` entries; make
     /// it a map if the number of distinct solve targets ever grows.
     pub cache: Vec<CachedSolve>,
+    /// Cancel flag shared with the most recent solve's worker thread. Setting
+    /// it interrupts `HiGHS`; the worker's clone is dropped when the thread
+    /// ends, which is how a solve still winding down is detected.
+    pub cancel: Option<Arc<AtomicBool>>,
+    /// `q` was pressed while a solve runs: the running pop-up asks to confirm.
+    pub confirm_quit: bool,
 }
 
 impl SolverSession {
@@ -216,7 +223,36 @@ impl SolverSession {
             what_if_problem: None,
             key: String::new(),
             cache: Vec::new(),
+            cancel: None,
+            confirm_quit: false,
         }
+    }
+
+    /// Whether a solve's worker thread is still running — including one that
+    /// was cancelled and has not yet stopped.
+    pub(crate) fn solve_in_flight(&self) -> bool {
+        self.cancel.as_ref().is_some_and(|flag| Arc::strong_count(flag) > 1)
+    }
+
+    /// Stop the running solve: interrupt `HiGHS` and drop the result channels,
+    /// so whatever the worker sends when it stops is discarded.
+    pub(crate) fn cancel_running(&mut self) {
+        if let Some(flag) = &self.cancel {
+            flag.store(true, Ordering::Relaxed);
+        }
+        self.state = SolveState::Idle;
+        self.receive = None;
+        self.receive2 = None;
+        self.confirm_quit = false;
+    }
+
+    /// A fresh cancel flag for a solve about to start, kept here and returned
+    /// for the worker thread.
+    pub(crate) fn arm_cancel(&mut self) -> Arc<AtomicBool> {
+        let flag = Arc::new(AtomicBool::new(false));
+        self.cancel = Some(Arc::clone(&flag));
+        self.confirm_quit = false;
+        flag
     }
 
     /// Discard any in-flight or completed diagnosis (new solve or overlay closed).

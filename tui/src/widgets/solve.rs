@@ -35,9 +35,10 @@ pub fn draw_solve_overlay(frame: &mut Frame, area: Rect, app: &mut App) {
     match &app.solver.state {
         SolveState::Idle => {}
         SolveState::Picking => draw_picker(frame, area, app),
-        SolveState::Running { file, started } => draw_running(frame, area, file, started.elapsed()),
+        SolveState::Running { file, started } => draw_running(frame, area, file, started.elapsed(), app.solver.confirm_quit),
         SolveState::RunningBoth { file1, file2, result1, result2, started } => {
-            draw_running_both(frame, area, file1, file2, result1.is_some(), result2.is_some(), started.elapsed());
+            let sides = [(file1.as_str(), result1.is_some()), (file2.as_str(), result2.is_some())];
+            draw_running_both(frame, area, sides, started.elapsed(), app.solver.confirm_quit);
         }
         SolveState::Done(result) => {
             let scroll = draw_done(frame, area, result, &app.solver.view, &app.solver.render_cache, &app.solver.diagnosis);
@@ -83,17 +84,50 @@ fn draw_picker(frame: &mut Frame, area: Rect, app: &App) {
     frame.render_widget(paragraph, popup);
 }
 
-fn draw_running(frame: &mut Frame, area: Rect, file: &str, elapsed: std::time::Duration) {
+/// A solve label for the running pop-up: a file path is shortened to its
+/// file name (keeping a `baseline: ` style prefix), since the full path is
+/// already in the tab bar's world and only crowds the pop-up. Labels that
+/// describe an edit rather than name a file are left alone.
+fn short_label(label: &str) -> String {
+    let is_model_path = |path: &str| {
+        let extension = std::path::Path::new(path).extension().and_then(std::ffi::OsStr::to_str).unwrap_or("");
+        ["lp", "mps", "gz", "bz2", "xz"].iter().any(|known| extension.eq_ignore_ascii_case(known))
+    };
+    match label.split_once(": ") {
+        Some((prefix, path)) if is_model_path(path) => format!("{prefix}: {}", super::short_filename(path)),
+        None if is_model_path(label) => super::short_filename(label),
+        _ => label.to_owned(),
+    }
+}
+
+/// The last line of a running pop-up: how to cancel, or — after `q` — the
+/// quit confirmation.
+fn running_footer(confirm_quit: bool) -> Line<'static> {
     let t = theme();
-    let popup = super::centred_rect(area, 50, 5);
+    if confirm_quit {
+        Line::from(vec![
+            Span::styled("  Solve running \u{2014} quit? ", Style::default().fg(t.modified).add_modifier(Modifier::BOLD)),
+            Span::styled("y", Style::default().fg(t.accent).add_modifier(Modifier::BOLD)),
+            Span::styled("/", Style::default().fg(t.muted)),
+            Span::styled("n", Style::default().fg(t.accent).add_modifier(Modifier::BOLD)),
+        ])
+    } else {
+        Line::from(vec![Span::styled("  Esc", Style::default().fg(t.accent)), Span::styled(": cancel", Style::default().fg(t.muted))])
+    }
+}
+
+fn draw_running(frame: &mut Frame, area: Rect, file: &str, elapsed: std::time::Duration, confirm_quit: bool) {
+    let t = theme();
+    let popup = super::centred_rect(area, 50, 6);
     let lines = vec![
         Line::from(""),
         Line::from(vec![
             Span::styled(format!("  {} Solving ", spinner_frame(elapsed)), Style::default().fg(t.modified).add_modifier(Modifier::BOLD)),
-            Span::styled(file.to_owned(), Style::default().fg(t.text)),
+            Span::styled(short_label(file), Style::default().fg(t.text)),
             Span::styled(format!(" ({}s)", elapsed.as_secs()), Style::default().fg(t.modified)),
         ]),
         Line::from(""),
+        running_footer(confirm_quit),
     ];
 
     let block = panel_block(Style::default().fg(t.modified).add_modifier(Modifier::BOLD))
@@ -611,11 +645,13 @@ const LABEL_WIDTH: usize = 46;
 /// and borders.
 const LABEL_POPUP_WIDTH: u16 = 70;
 
-fn draw_running_both(frame: &mut Frame, area: Rect, file1: &str, file2: &str, done1: bool, done2: bool, elapsed: std::time::Duration) {
+fn draw_running_both(frame: &mut Frame, area: Rect, sides: [(&str, bool); 2], elapsed: std::time::Duration, confirm_quit: bool) {
     let t = theme();
+    let [(file1, done1), (file2, done2)] = sides;
+    let (file1, file2) = (short_label(file1), short_label(file2));
     // Wide enough for a what-if or presolve label, which describe an edit
     // rather than naming a file and so run much longer than a path.
-    let popup = super::centred_rect(area, LABEL_POPUP_WIDTH, 7);
+    let popup = super::centred_rect(area, LABEL_POPUP_WIDTH, 8);
     let running_label = format!("solving\u{2026} ({}s)", elapsed.as_secs());
     let spinner = spinner_frame(elapsed);
     let icon1 = if done1 { "\u{2713}" } else { spinner };
@@ -630,7 +666,7 @@ fn draw_running_both(frame: &mut Frame, area: Rect, file1: &str, file2: &str, do
         Line::from(vec![
             Span::styled(format!("  {icon1} "), if done1 { style_done } else { style_running }),
             Span::styled(
-                format!("{:<width$}", truncate_with_ellipsis(file1, LABEL_WIDTH), width = LABEL_WIDTH + 2),
+                format!("{:<width$}", truncate_with_ellipsis(&file1, LABEL_WIDTH), width = LABEL_WIDTH + 2),
                 Style::default().fg(t.text),
             ),
             Span::styled(status1, if done1 { style_done } else { style_running }),
@@ -638,12 +674,13 @@ fn draw_running_both(frame: &mut Frame, area: Rect, file1: &str, file2: &str, do
         Line::from(vec![
             Span::styled(format!("  {icon2} "), if done2 { style_done } else { style_running }),
             Span::styled(
-                format!("{:<width$}", truncate_with_ellipsis(file2, LABEL_WIDTH), width = LABEL_WIDTH + 2),
+                format!("{:<width$}", truncate_with_ellipsis(&file2, LABEL_WIDTH), width = LABEL_WIDTH + 2),
                 Style::default().fg(t.text),
             ),
             Span::styled(status2, if done2 { style_done } else { style_running }),
         ]),
         Line::from(""),
+        running_footer(confirm_quit),
     ];
 
     let block = panel_block(Style::default().fg(t.secondary_accent).add_modifier(Modifier::BOLD))

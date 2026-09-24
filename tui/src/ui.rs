@@ -245,7 +245,9 @@ fn overlay_hints(app: &App) -> Option<&'static str> {
     match app.solver.state {
         SolveState::Idle => {}
         SolveState::Picking => return Some("1:file 1  2:file 2  3:both  Esc:cancel"),
-        SolveState::Running { .. } | SolveState::RunningBoth { .. } => return Some("Esc:cancel"),
+        SolveState::Running { .. } | SolveState::RunningBoth { .. } => {
+            return Some(if app.solver.confirm_quit { "y:quit  n:keep solving" } else { "q:quit  Esc:cancel" });
+        }
         SolveState::Done(_) => return Some("1-5:tabs  j/k:scroll  e:diagnose  I:IIS  w:csv  y:yank  Esc:close"),
         SolveState::DoneBoth(_) => return Some("1-5:tabs  j/k:scroll  d:diff only  t/T:threshold  w:csv  y:yank  Esc:close"),
         SolveState::Failed(_) => return Some("Esc:close"),
