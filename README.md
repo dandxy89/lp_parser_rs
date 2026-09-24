@@ -119,8 +119,11 @@ Adds to the `parse` options:
 | ----------------------------- | ------- | --------------------------------------------- |
 | `--issues-only`               | off     | Skip full analysis; show warnings/errors only |
 | `--large-coeff-threshold <F>` | `1e9`   | Warn on coefficients larger than this         |
-| `--small-coeff-threshold <F>` | `1e-9`  | Warn on coefficients smaller than this        |
+| `--small-coeff-threshold <F>` | `1e-9`  | Warn on non-zero coefficients smaller than this |
+| `--large-rhs-threshold <F>`   | `1e9`   | Warn on RHS values larger than this in magnitude |
 | `--ratio-threshold <F>`       | `1e6`   | Warn on coefficient scaling ratios above this |
+
+Thresholds must be finite and greater than zero.
 
 ```bash
 lp_parser analyze problem.lp

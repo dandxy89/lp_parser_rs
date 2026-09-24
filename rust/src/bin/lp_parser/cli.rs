@@ -99,16 +99,26 @@ pub struct AnalyzeArgs {
     pub issues_only: bool,
 
     /// Large coefficient warning threshold
-    #[arg(long, default_value = "1000000000")]
+    #[arg(long, default_value = "1000000000", value_parser = positive_finite)]
     pub large_coeff_threshold: f64,
 
     /// Small coefficient warning threshold
-    #[arg(long, default_value = "0.000000001")]
+    #[arg(long, default_value = "0.000000001", value_parser = positive_finite)]
     pub small_coeff_threshold: f64,
 
+    /// Large RHS warning threshold (applied to the RHS magnitude)
+    #[arg(long, default_value = "1000000000", value_parser = positive_finite)]
+    pub large_rhs_threshold: f64,
+
     /// Coefficient ratio warning threshold
-    #[arg(long, default_value = "1000000")]
+    #[arg(long, default_value = "1000000", value_parser = positive_finite)]
     pub ratio_threshold: f64,
+}
+
+/// Parse a threshold that must be a finite number greater than zero.
+fn positive_finite(value: &str) -> Result<f64, String> {
+    let parsed: f64 = value.parse().map_err(|err| format!("'{value}' is not a number: {err}"))?;
+    if parsed.is_finite() && parsed > 0.0 { Ok(parsed) } else { Err(format!("'{value}' must be a finite number greater than zero")) }
 }
 
 #[derive(clap::Args)]
@@ -261,4 +271,18 @@ pub struct SolveArgs {
     /// Pretty-print structured output (JSON only; YAML is unaffected)
     #[arg(long)]
     pub pretty: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::positive_finite;
+
+    #[test]
+    fn thresholds_must_be_positive_and_finite() {
+        assert!(positive_finite("1e9").is_ok());
+        assert!(positive_finite("0.5").is_ok());
+        for bad in ["0", "-1", "NaN", "inf", "-inf", "abc"] {
+            assert!(positive_finite(bad).is_err(), "'{bad}' must be rejected");
+        }
+    }
 }

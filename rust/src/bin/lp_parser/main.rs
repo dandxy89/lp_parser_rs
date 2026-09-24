@@ -103,10 +103,13 @@ fn cmd_analyze(args: AnalyzeArgs, verbose: bool) -> Result<ExitCode, BoxError> {
         eprintln!("Analyzing file: {}", args.file.display());
     }
 
+    if args.small_coeff_threshold > args.large_coeff_threshold {
+        return Err("--small-coeff-threshold must not exceed --large-coeff-threshold".into());
+    }
     let config = AnalysisConfig {
         large_coefficient_threshold: args.large_coeff_threshold,
         small_coefficient_threshold: args.small_coeff_threshold,
-        large_rhs_threshold: args.large_coeff_threshold,
+        large_rhs_threshold: args.large_rhs_threshold,
         coefficient_ratio_threshold: args.ratio_threshold,
     };
 
