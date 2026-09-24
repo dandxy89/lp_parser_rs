@@ -1727,6 +1727,13 @@ impl App {
         let Some(list_index) = section.list_index() else {
             return;
         };
+        // Search covers every entry, including the order-only ones `o` hides;
+        // reveal them rather than land on whatever row is at the stale position.
+        if self.ignore_order && !self.section_states[list_index].cached_indices().contains(&entry_index) {
+            self.toggle_ignore_order();
+            self.ensure_active_section_cache();
+            self.flash_status("Showing order-only changes to reach the match");
+        }
         let filtered = self.section_states[list_index].cached_indices();
         debug_assert!(
             filtered.contains(&entry_index),
@@ -1754,6 +1761,24 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Regression: search covers order-only entries that `o` hides, and the
+    /// jump found no row for them (a debug panic; the wrong entry in release).
+    #[test]
+    fn jumping_to_a_hidden_order_only_entry_reveals_it() {
+        let mut app = crate::snapshot_tests::diff_app_from(
+            "min\nobj: x\nst\nc1: x + y >= 2\nc2: x <= 8\nend\n",
+            "min\nobj: x\nst\nc1: y + x >= 2\nc2: x <= 9\nend\n",
+        );
+        let c1 = app.report.constraints.entries.iter().position(|entry| entry.name == "c1").expect("c1 is in the report");
+        assert!(app.report.constraints.entries[c1].order_only, "fixture: c1 differs only in term order");
+        app.toggle_ignore_order();
+
+        app.jump_to_entry(Section::Constraints, c1);
+
+        assert!(!app.ignore_order, "the jump must reveal order-only entries");
+        assert_eq!(app.selected_entry_index(), Some(c1), "the jump must land on the match");
+    }
 
     /// Closing a completed overlay must file the result under its key, serve it
     /// back once for the same input, and never serve it for a different one.
