@@ -19,6 +19,9 @@ class TestLpParserBasic:
         parser = LpParser(str(simple_lp_file))
         assert parser.lp_file == str(simple_lp_file)
 
+    def test_class_module(self) -> None:
+        assert LpParser.__module__ == "parse_lp"
+
     def test_create_parser_nonexistent_file(self) -> None:
         with pytest.raises(FileNotFoundError):
             LpParser("nonexistent.lp")

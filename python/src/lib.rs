@@ -24,7 +24,7 @@ create_exception!(
 );
 create_exception!(parse_lp, LpInvalidValueError, PyRuntimeError, "Raised when an input value is invalid.");
 
-#[pyclass]
+#[pyclass(module = "parse_lp")]
 pub struct LpParser {
     lp_file: String,
     /// The file the problem was read from; `None` when built from a string.
