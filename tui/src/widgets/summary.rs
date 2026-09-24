@@ -4,6 +4,8 @@
 //! per-section change counts, and a comparative structural analysis derived
 //! from `ProblemAnalysis`.
 
+use std::fmt::Write as _;
+
 use lp_parser_rs::analysis::{IssueSeverity, ProblemAnalysis};
 use ratatui::Frame;
 use ratatui::buffer::Buffer;
@@ -27,10 +29,11 @@ pub fn build_summary_lines(
 
     build_header(&mut lines, report);
     lines.push(Line::from(""));
-    build_column_headings(&mut lines);
-    build_section_rows(&mut lines, summary);
-    build_separator(&mut lines);
-    build_totals_row(&mut lines, summary);
+    let show_renamed = summary.aggregate_counts().renamed > 0;
+    build_column_headings(&mut lines, show_renamed);
+    build_section_rows(&mut lines, summary, show_renamed);
+    build_separator(&mut lines, show_renamed);
+    build_totals_row(&mut lines, summary, show_renamed);
 
     // Comparative Analysis
     lines.push(Line::from(""));
@@ -238,44 +241,73 @@ fn build_header(lines: &mut Vec<Line<'static>>, report: &LpDiffReport) {
     }
 }
 
-fn build_column_headings(lines: &mut Vec<Line<'static>>) {
-    let t = theme();
-    lines.push(Line::from(vec![Span::styled(
-        format!("  {:<14}{:>7}{:>9}{:>12}{:>9}{:>9}", "Section", "Added", "Removed", "Modified", "Renamed", "Total"),
-        Style::default().fg(t.muted).add_modifier(Modifier::BOLD),
-    )]));
-    lines.push(Line::from(vec![Span::styled(format!("  {}", rule_str(60)), Style::default().fg(t.muted))]));
+/// Column widths of the change-count table: `Section` then one column per
+/// kind and the entry count. Sized to fit an 80-column terminal's detail
+/// pane, which leaves 59 columns inside its borders.
+const COUNT_LABEL_WIDTH: usize = 13;
+const COUNT_COLUMNS: [(&str, usize); 5] = [("Added", 7), ("Removed", 8), ("Modified", 9), ("Renamed", 8), ("Entries", 8)];
+
+/// Which count columns to show: `Renamed` only when some rename was detected,
+/// since it is zero unless `--rename` rules or rename detection matched.
+fn count_columns(show_renamed: bool) -> impl Iterator<Item = (usize, &'static str, usize)> {
+    COUNT_COLUMNS
+        .into_iter()
+        .enumerate()
+        .filter(move |(index, _)| show_renamed || *index != 3)
+        .map(|(index, (label, width))| (index, label, width))
 }
 
-fn build_section_rows(lines: &mut Vec<Line<'static>>, summary: &DiffSummary) {
+/// Width of the rule under the count table heading.
+fn count_rule_width(show_renamed: bool) -> usize {
+    COUNT_LABEL_WIDTH + count_columns(show_renamed).map(|(_, _, width)| width).sum::<usize>()
+}
+
+fn build_column_headings(lines: &mut Vec<Line<'static>>, show_renamed: bool) {
+    let t = theme();
+    let mut heading = format!("  {:<COUNT_LABEL_WIDTH$}", "Section");
+    for (_, label, width) in count_columns(show_renamed) {
+        write!(heading, "{label:>width$}").expect("writing to a String is infallible");
+    }
+    lines.push(Line::from(vec![Span::styled(heading, Style::default().fg(t.muted).add_modifier(Modifier::BOLD))]));
+    lines.push(Line::from(vec![Span::styled(format!("  {}", rule_str(count_rule_width(show_renamed))), Style::default().fg(t.muted))]));
+}
+
+fn build_section_rows(lines: &mut Vec<Line<'static>>, summary: &DiffSummary, show_renamed: bool) {
     for (label, counts) in [("Variables", summary.variables), ("Constraints", summary.constraints), ("Objectives", summary.objectives)] {
-        lines.push(format_count_row(label, &counts, false));
+        lines.push(format_count_row(label, &counts, false, show_renamed));
     }
 }
 
-fn build_separator(lines: &mut Vec<Line<'static>>) {
+fn build_separator(lines: &mut Vec<Line<'static>>, show_renamed: bool) {
     let t = theme();
-    lines.push(Line::from(vec![Span::styled(format!("  {}", rule_str(60)), Style::default().fg(t.muted))]));
+    lines.push(Line::from(vec![Span::styled(format!("  {}", rule_str(count_rule_width(show_renamed))), Style::default().fg(t.muted))]));
 }
 
-fn build_totals_row(lines: &mut Vec<Line<'static>>, summary: &DiffSummary) {
+fn build_totals_row(lines: &mut Vec<Line<'static>>, summary: &DiffSummary, show_renamed: bool) {
     let totals = summary.aggregate_counts();
-    lines.push(format_count_row("TOTAL", &totals, true));
+    lines.push(format_count_row("TOTAL", &totals, true, show_renamed));
 }
 
-fn format_count_row(label: &str, counts: &DiffCounts, is_total: bool) -> Line<'static> {
+/// One row of the change-count table. The last column counts every entry in
+/// the section, changed or not — the status bar's "N changes" is the sum of
+/// the kind columns instead, which is why it is headed `Entries`, not `Total`.
+fn format_count_row(label: &str, counts: &DiffCounts, is_total: bool, show_renamed: bool) -> Line<'static> {
     let t = theme();
     let label_style = if is_total { Style::default().fg(t.text).add_modifier(Modifier::BOLD) } else { Style::default().fg(t.text) };
-    let total_style = if is_total { Style::default().fg(t.text).add_modifier(Modifier::BOLD) } else { Style::default().fg(t.text) };
+    let entries_style = if is_total { Style::default().fg(t.text).add_modifier(Modifier::BOLD) } else { Style::default().fg(t.text) };
 
-    Line::from(vec![
-        Span::styled(format!("  {label:<14}"), label_style),
-        Span::styled(format!("{:>7}", counts.added), Style::default().fg(t.added)),
-        Span::styled(format!("{:>9}", counts.removed), Style::default().fg(t.removed)),
-        Span::styled(format!("{:>12}", counts.modified), Style::default().fg(t.modified)),
-        Span::styled(format!("{:>9}", counts.renamed), Style::default().fg(t.accent)),
-        Span::styled(format!("{:>9}", counts.total()), total_style),
-    ])
+    let mut spans = vec![Span::styled(format!("  {label:<COUNT_LABEL_WIDTH$}"), label_style)];
+    for (index, _, width) in count_columns(show_renamed) {
+        let (value, style) = match index {
+            0 => (counts.added, Style::default().fg(t.added)),
+            1 => (counts.removed, Style::default().fg(t.removed)),
+            2 => (counts.modified, Style::default().fg(t.modified)),
+            3 => (counts.renamed, Style::default().fg(t.accent)),
+            _ => (counts.total(), entries_style),
+        };
+        spans.push(Span::styled(format!("{value:>width$}"), style));
+    }
+    Line::from(spans)
 }
 
 /// Render a section heading in the shared style used by every pane.
