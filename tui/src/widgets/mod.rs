@@ -191,6 +191,43 @@ pub fn truncate_with_ellipsis(name: &str, max_width: usize) -> Cow<'_, str> {
     Cow::Owned(truncated)
 }
 
+/// Format `value` in at most `width` columns, rounding rather than clipping.
+///
+/// The shortest exact representation is used when it fits. Otherwise the
+/// value is rounded to fewer decimal places, and when even the integer part
+/// (or a tiny magnitude) will not fit in fixed notation, to scientific
+/// notation with fewer mantissa digits. A number cut off mid-digit reads as a
+/// different number, so when nothing fits the shortest scientific form is
+/// returned wider than asked for — the caller's column then overflows rather
+/// than lies.
+pub fn fit_number(value: f64, width: usize) -> String {
+    let exact = format!("{value}");
+    if exact.chars().count() <= width || !value.is_finite() {
+        return exact;
+    }
+    // Fixed notation keeps the integer digits, so it is only worth trying for
+    // magnitudes where it still shows a significant digit.
+    let magnitude = value.abs();
+    if (1e-4..1e15).contains(&magnitude) {
+        for decimals in (0..=15).rev() {
+            let fixed = format!("{value:.decimals$}");
+            let fixed = if fixed.contains('.') { fixed.trim_end_matches('0').trim_end_matches('.').to_owned() } else { fixed };
+            if fixed.chars().count() <= width && fixed.trim_start_matches('-') != "0" {
+                return fixed;
+            }
+        }
+    }
+    let mut shortest = exact;
+    for digits in (0..=15).rev() {
+        let scientific = format!("{value:.digits$e}");
+        if scientific.chars().count() <= width {
+            return scientific;
+        }
+        shortest = scientific;
+    }
+    shortest
+}
+
 /// Return a `─` rule of the given display width (clamped to 120 columns).
 pub fn rule_str(width: usize) -> String {
     "\u{2500}".repeat(width.min(120))
@@ -394,6 +431,18 @@ mod tests {
     fn test_truncate_multibyte_safe() {
         // 4 chars, max 3 → 2 chars + ellipsis, no panic on char boundaries.
         assert_eq!(truncate_with_ellipsis("\u{0394}\u{0394}\u{0394}\u{0394}", 3), "\u{0394}\u{0394}\u{2026}");
+    }
+
+    #[test]
+    fn fit_number_rounds_instead_of_clipping() {
+        assert_eq!(fit_number(41.19926, 10), "41.19926", "fits as is");
+        assert_eq!(fit_number(41.19926, 5), "41.2", "rounded, never clipped to 41.19");
+        assert_eq!(fit_number(41.19926, 2), "41");
+        assert_eq!(fit_number(-0.123_456_789, 6), "-0.123");
+        assert_eq!(fit_number(123_456_789.0, 6), "1.23e8", "integer digits that do not fit go scientific");
+        assert_eq!(fit_number(0.000_012_345, 7), "1.23e-5", "tiny magnitudes never round to 0");
+        // Nothing fits: the shortest honest form, wider than asked.
+        assert_eq!(fit_number(123_456_789.0, 2), "1e8");
     }
 
     #[test]

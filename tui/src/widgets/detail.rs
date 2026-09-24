@@ -18,7 +18,7 @@ use crate::diff_model::{
     VarSpec, VariableDiffEntry,
 };
 use crate::theme::theme;
-use crate::widgets::{ARROW, bold_text, kind_colour, muted, panel_block, text, truncate_with_ellipsis};
+use crate::widgets::{ARROW, bold_text, fit_number, kind_colour, muted, panel_block, text, truncate_with_ellipsis};
 
 /// Build the panel title: entity label, entry name (truncated and bold), the
 /// diff-kind badge in its kind colour, and the raw-view toggle hint where the
@@ -672,9 +672,8 @@ fn render_constraint_side_by_side(
         right_lines.push(Line::default());
     }
 
-    // Name column sized to the half-pane width: whatever remains after the
-    // value column (10), badge (4), and leading space.
-    let name_w = ((v_chunks[1].width / 2) as usize).saturating_sub(17).clamp(12, 48);
+    let h_chunks = Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]).split(v_chunks[1]);
+    let columns = SideBySideColumns::fit(h_chunks[0].width.min(h_chunks[1].width) as usize);
 
     // Build styled Lines only for the visible window.
     // Reuse string buffers across rows to avoid per-row heap allocations.
@@ -692,22 +691,23 @@ fn render_constraint_side_by_side(
 
         old_buf.clear();
         if let Some(v) = row.old_value {
-            write!(old_buf, "{v}").expect("writing f64 to String is infallible");
+            old_buf.push_str(&fit_number(v, columns.value));
         }
         new_buf.clear();
         if let Some(v) = row.new_value {
-            write!(new_buf, "{v}").expect("writing f64 to String is infallible");
+            new_buf.push_str(&fit_number(v, columns.value));
         }
 
-        let name = truncate_with_ellipsis(&row.variable, name_w);
+        let (name_w, value_w) = (columns.name, columns.value);
+        let name = truncate_with_ellipsis(&row.variable, name_w.max(2));
         left_lines.push(Line::from(vec![
-            Span::styled(format!("  {name:<name_w$}"), left_style),
-            Span::styled(format!("{old_buf:>10}"), left_style),
+            Span::styled(format!("  {name:<name_w$} "), left_style),
+            Span::styled(format!("{old_buf:>value_w$}"), left_style),
             Span::styled(badge, left_style),
         ]));
         right_lines.push(Line::from(vec![
-            Span::styled(format!("  {name:<name_w$}"), right_style),
-            Span::styled(format!("{new_buf:>10}"), right_style),
+            Span::styled(format!("  {name:<name_w$} "), right_style),
+            Span::styled(format!("{new_buf:>value_w$}"), right_style),
             Span::styled(badge, right_style),
         ]));
     }
@@ -719,14 +719,44 @@ fn render_constraint_side_by_side(
         right_lines.push(Line::default());
     }
 
-    let h_chunks = Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]).split(v_chunks[1]);
-
     let left_paragraph = Paragraph::new(left_lines).scroll((coefficient_scroll, 0));
     let right_paragraph = Paragraph::new(right_lines).scroll((coefficient_scroll, 0));
     frame.render_widget(left_paragraph, h_chunks[0]);
     frame.render_widget(right_paragraph, h_chunks[1]);
 
     header_line_count + 1 + rows.len()
+}
+
+/// Column widths for one half of the side-by-side coefficient view:
+/// `"  " name " " value badge`, with a column spare at the right edge.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct SideBySideColumns {
+    name: usize,
+    value: usize,
+}
+
+impl SideBySideColumns {
+    /// Indent before the name, and the gap between name and value.
+    const CHROME: usize = 2 + 1;
+    /// The ` [~]` change badge, plus a spare column at the right edge.
+    const BADGE: usize = 4 + 1;
+    /// The value column's width when there is room for it.
+    const VALUE: usize = 10;
+    /// The narrowest name column worth drawing; below this the value shrinks.
+    const MIN_NAME: usize = 3;
+
+    /// Size the columns to a half-pane `width`. The name gives way first — it
+    /// is middle-truncated, while a value cut short reads as a different
+    /// number — and the value only shrinks (rounded to fit) once the name is
+    /// down to its minimum.
+    fn fit(width: usize) -> Self {
+        let available = width.saturating_sub(Self::CHROME + Self::BADGE);
+        if available >= Self::VALUE + Self::MIN_NAME {
+            Self { name: available - Self::VALUE, value: Self::VALUE }
+        } else {
+            Self { name: Self::MIN_NAME, value: available.saturating_sub(Self::MIN_NAME).max(1) }
+        }
+    }
 }
 
 /// Compute the visible range of coefficient rows for windowed rendering.
@@ -852,4 +882,17 @@ fn render_panel(frame: &mut Frame, area: Rect, title: Line<'static>, lines: Vec<
     let paragraph = Paragraph::new(lines).block(block).scroll((scroll, 0));
     frame.render_widget(paragraph, area);
     line_count
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn side_by_side_columns_shrink_the_name_before_the_value() {
+        assert_eq!(SideBySideColumns::fit(30), SideBySideColumns { name: 12, value: 10 });
+        assert_eq!(SideBySideColumns::fit(21), SideBySideColumns { name: 3, value: 10 });
+        assert_eq!(SideBySideColumns::fit(16), SideBySideColumns { name: 3, value: 5 }, "the value shrinks once the name is at its floor");
+        assert_eq!(SideBySideColumns::fit(0), SideBySideColumns { name: 3, value: 1 });
+    }
 }

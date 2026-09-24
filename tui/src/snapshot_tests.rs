@@ -337,6 +337,20 @@ fn frame_contains(terminal: &Terminal<TestBackend>, needle: &str) -> bool {
     text.contains(needle)
 }
 
+/// Regression: at narrow widths the side-by-side coefficient values were
+/// clipped (`41.19926` drawn as `41.19`) and the change badge fell off the end.
+#[test]
+fn narrow_side_by_side_values_are_rounded_and_keep_their_badge() {
+    let mut app = diff_app_from(
+        "min\nobj: x\nst\nc1: 41.19926 long_variable_name_x + y >= 2\nend\n",
+        "min\nobj: x\nst\nc1: 41.29926 long_variable_name_x + y >= 2\nend\n",
+    );
+    app.set_section(Section::Constraints);
+    let terminal = render(&mut app, 64, 20);
+    assert!(!frame_contains(&terminal, "41.19 "), "a value must never be clipped mid-digit");
+    assert!(frame_contains(&terminal, "[~]"), "the change badge must stay in view");
+}
+
 /// Regression: `j` grew the solve overlay's scroll offset without bound, so
 /// over-scrolling left a blank pane that `k` had to climb back out of.
 #[test]
