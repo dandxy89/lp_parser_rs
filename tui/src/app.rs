@@ -1324,9 +1324,31 @@ impl App {
         self.rebuild_report();
 
         self.solver = SolverSession::new();
+        self.discard_model_derived_state();
 
         "reloaded".clone_into(&mut self.yank.message);
         self.yank.flash = Some(Instant::now());
+    }
+
+    /// Drop everything computed from the old models on a reload, so no stale
+    /// result is presented as describing the new files.
+    ///
+    /// An in-flight analysis is discarded by dropping its receiver: the worker's
+    /// send then fails harmlessly. An open what-if prompt keeps the user's
+    /// typing but takes the constraint's new RHS, closing if it is gone. The
+    /// jumplist records entries by name, so it survives as is.
+    fn discard_model_derived_state(&mut self) {
+        self.analysis = AnalysisState::Idle;
+        self.receive_analysis = None;
+        self.diagnostics = None;
+        self.presolve_log = None;
+        self.last_presolve = None;
+        if let Some(prompt) = &mut self.what_if {
+            match crate::input::baseline_constraint_rhs(&self.problem1, &prompt.constraint_name) {
+                Some(rhs) => prompt.current_rhs = rhs,
+                None => self.what_if = None,
+            }
+        }
     }
 
     /// Whether any time-driven UI is active and needs tick-driven redraws:
@@ -1775,6 +1797,37 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Regression: a watch reload reset only the solver session, so analyses,
+    /// panes and presolve results of the old files were shown as current.
+    #[test]
+    fn a_reload_discards_results_computed_from_the_old_models() {
+        let mut app = crate::snapshot_tests::diff_app_from(crate::snapshot_tests::BASE_LP, crate::snapshot_tests::BASE_LP);
+        let pane = || ScrollPane { lines: Vec::new(), scroll: 0, export: None };
+        let (_sender, receiver) = mpsc::channel();
+        app.analysis = AnalysisState::Running { label: "Ranging", started: Instant::now() };
+        app.receive_analysis = Some(receiver);
+        app.diagnostics = Some(pane());
+        app.presolve_log = Some(pane());
+        app.last_presolve = Some(crate::presolve::presolve(&app.problem1, app.presolve_rules).1);
+        app.what_if = Some(crate::state::WhatIfPrompt {
+            constraint_name: "c1".to_owned(),
+            current_rhs: 2.0,
+            input: tui_input::Input::default(),
+            error: None,
+        });
+
+        let reparse = |source: &str| crate::parse::parse_text(source, false, "a.lp").expect("fixture parses");
+        let changed = crate::snapshot_tests::BASE_LP.replace("c1: x + y >= 2", "c1: x + y >= 7");
+        app.apply_reload((reparse(&changed), reparse(&changed)));
+
+        assert!(matches!(app.analysis, AnalysisState::Idle), "an in-flight analysis of the old model is discarded");
+        assert!(app.receive_analysis.is_none(), "its result channel is dropped");
+        assert!(app.diagnostics.is_none(), "the diagnostics pane described the old model");
+        assert!(app.presolve_log.is_none(), "the presolve log described the old model");
+        assert!(app.last_presolve.is_none(), "the presolve stats described the old model");
+        assert_eq!(app.what_if.as_ref().map(|prompt| prompt.current_rhs), Some(7.0), "the what-if prompt shows the new RHS");
+    }
 
     /// Regression: the jumplist stored list positions, so once the rows moved
     /// (here `o` hiding an order-only entry above) it restored the wrong entry.
