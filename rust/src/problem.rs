@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::fmt::{Display, Formatter, Result as FmtResult, Write as _};
 
 use indexmap::IndexMap;
@@ -935,12 +936,23 @@ fn from_parse_result(parsed: ParseResult<'_>, problem_name: Option<String>) -> L
     let mut variables: IndexMap<NameId, Variable> = IndexMap::with_capacity(estimated_variables);
     let mut constraint_counter: u32 = 0;
 
+    // Auto-generated names (`C<n>`, `SOS<n>`) must not collide with a name the
+    // file declares explicitly, even one that appears later in the file.
+    let reserved: HashSet<&str> = parsed
+        .constraints
+        .iter()
+        .chain(&parsed.sos)
+        .filter_map(|c| match c {
+            RawConstraint::Standard { name, .. } | RawConstraint::SOS { name, .. } => (name != "__c__").then_some(name.as_ref()),
+        })
+        .collect();
+
     let objectives = intern_objectives(&mut interner, &parsed.objectives, &mut variables);
-    let mut constraints = intern_constraints(&mut interner, &parsed.constraints, &mut variables, &mut constraint_counter);
+    let mut constraints = intern_constraints(&mut interner, &parsed.constraints, &mut variables, &mut constraint_counter, &reserved);
 
     process_bounds(&mut interner, &parsed.bounds, &mut variables);
     process_variable_types(&mut interner, &parsed, &mut variables);
-    intern_sos_constraints(&mut interner, &parsed.sos, &mut variables, &mut constraints, &mut constraint_counter);
+    intern_sos_constraints(&mut interner, &parsed.sos, &mut variables, &mut constraints, &mut constraint_counter, &reserved);
 
     LpProblem { name: problem_name, sense: parsed.sense, objectives, constraints, variables, interner }
 }
@@ -968,15 +980,23 @@ fn intern_objectives(
     let mut objectives = IndexMap::with_capacity(raw_objectives.len());
     let mut obj_counter: u32 = 0;
     let mut name_buf = String::with_capacity(16);
+    // `OBJ<n>` must skip names declared explicitly anywhere in the section.
+    let reserved: HashSet<&str> = raw_objectives.iter().map(|o| o.name.as_ref()).filter(|n| *n != "__obj__").collect();
 
     for raw_obj in raw_objectives {
         let mut obj = intern_objective(interner, raw_obj);
 
         if raw_obj.name == "__obj__" {
-            obj_counter += 1;
-            name_buf.clear();
-            write!(name_buf, "OBJ{obj_counter}").expect("writing to String cannot fail");
+            loop {
+                obj_counter += 1;
+                name_buf.clear();
+                write!(name_buf, "OBJ{obj_counter}").expect("writing to String cannot fail");
+                if !reserved.contains(name_buf.as_str()) {
+                    break;
+                }
+            }
             obj.name = interner.intern(&name_buf);
+            debug_assert!(!objectives.contains_key(&obj.name), "auto-generated objective name must be unused");
         }
 
         register_variables_from_coefficients(variables, &obj.coefficients, None);
@@ -995,13 +1015,14 @@ fn intern_constraints(
     raw_constraints: &[RawConstraint<'_>],
     variables: &mut IndexMap<NameId, Variable>,
     constraint_counter: &mut u32,
+    reserved: &HashSet<&str>,
 ) -> IndexMap<NameId, Constraint> {
     let mut constraints = IndexMap::with_capacity(raw_constraints.len());
     let mut name_buf = String::with_capacity(16);
 
     for raw_con in raw_constraints {
         let mut con = intern_constraint(interner, raw_con);
-        let final_id = assign_constraint_name(interner, &constraints, &mut con, constraint_counter, "C", &mut name_buf);
+        let final_id = assign_constraint_name(interner, &constraints, reserved, &mut con, constraint_counter, "C", &mut name_buf);
         register_constraint_variables(variables, &con);
         if constraints.insert(final_id, con).is_some() {
             eprintln!("duplicate constraint name '{}': the later definition replaces the earlier one", interner.resolve(final_id));
@@ -1055,6 +1076,7 @@ fn intern_sos_constraints(
     variables: &mut IndexMap<NameId, Variable>,
     constraints: &mut IndexMap<NameId, Constraint>,
     constraint_counter: &mut u32,
+    reserved: &HashSet<&str>,
 ) {
     let mut name_buf = String::with_capacity(16);
     for raw_sos_con in raw_sos {
@@ -1062,12 +1084,12 @@ fn intern_sos_constraints(
             continue;
         }
         let mut sos = intern_constraint(interner, raw_sos_con);
-        let mut final_id = assign_constraint_name(interner, constraints, &mut sos, constraint_counter, "SOS", &mut name_buf);
+        let mut final_id = assign_constraint_name(interner, constraints, reserved, &mut sos, constraint_counter, "SOS", &mut name_buf);
         if constraints.contains_key(&final_id) {
             // An SOS entry sharing a name with an existing constraint would
             // delete that constraint outright; rename the SOS entry instead.
             eprintln!("SOS constraint name '{}' is already in use: the SOS entry has been renamed", interner.resolve(final_id));
-            final_id = generate_constraint_name(interner, constraints, constraint_counter, "SOS", &mut name_buf);
+            final_id = generate_constraint_name(interner, constraints, reserved, constraint_counter, "SOS", &mut name_buf);
             set_constraint_name(&mut sos, final_id);
         }
         register_constraint_variables(variables, &sos);
@@ -1082,6 +1104,7 @@ fn intern_sos_constraints(
 fn assign_constraint_name(
     interner: &mut NameInterner,
     existing: &IndexMap<NameId, Constraint>,
+    reserved: &HashSet<&str>,
     constraint: &mut Constraint,
     counter: &mut u32,
     prefix: &str,
@@ -1090,18 +1113,21 @@ fn assign_constraint_name(
     let current_name = interner.resolve(constraint.name());
     let is_unnamed = current_name == "__c__" || current_name.is_empty();
 
-    let final_id = if is_unnamed { generate_constraint_name(interner, existing, counter, prefix, name_buf) } else { constraint.name() };
+    let final_id =
+        if is_unnamed { generate_constraint_name(interner, existing, reserved, counter, prefix, name_buf) } else { constraint.name() };
 
     set_constraint_name(constraint, final_id);
 
     final_id
 }
 
-/// Generate `{prefix}{n}` for the first `n` that no existing constraint claims,
-/// so an auto-generated name can never displace one already in the map.
+/// Generate `{prefix}{n}` for the first `n` that no existing constraint claims
+/// and no explicit name in the file reserves, so an auto-generated name can
+/// never displace one already in the map or be displaced by a later one.
 fn generate_constraint_name(
     interner: &mut NameInterner,
     existing: &IndexMap<NameId, Constraint>,
+    reserved: &HashSet<&str>,
     counter: &mut u32,
     prefix: &str,
     name_buf: &mut String,
@@ -1110,6 +1136,9 @@ fn generate_constraint_name(
         *counter += 1;
         name_buf.clear();
         write!(name_buf, "{prefix}{}", *counter).expect("writing to String cannot fail");
+        if reserved.contains(name_buf.as_str()) {
+            continue;
+        }
         let candidate = interner.intern(name_buf);
         if !existing.contains_key(&candidate) {
             return candidate;
@@ -1734,6 +1763,19 @@ End";
         // `such that` is a multi-word alias for `subject to`.
         let p = LpProblem::parse("minimize\nx1\nsuch that\nc1: x1 <= 1\nend").unwrap();
         assert_eq!(p.constraint_count(), 1);
+    }
+
+    #[test]
+    fn test_auto_generated_names_skip_later_explicit_names() {
+        let p = LpProblem::parse("minimize\nx\nsubject to\nx >= 1\nC1: x <= 5\nend").unwrap();
+        assert_eq!(p.constraint_count(), 2);
+        assert!(p.constraints.contains_key(&p.name_id("C1").unwrap()));
+        assert!(p.constraints.contains_key(&p.name_id("C2").unwrap()));
+
+        let p = LpProblem::parse("minimize\nx\nOBJ1: y\nsubject to\nc: x + y >= 1\nend").unwrap();
+        assert_eq!(p.objective_count(), 2);
+        assert!(p.objectives.contains_key(&p.name_id("OBJ1").unwrap()));
+        assert!(p.objectives.contains_key(&p.name_id("OBJ2").unwrap()));
     }
 
     #[test]
