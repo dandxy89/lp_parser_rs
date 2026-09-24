@@ -125,8 +125,6 @@ fn draw_done(
     // list below can borrow them alongside the cached tab lines.
     let tab_bar = build_tab_bar(active);
     let blank = Line::from("");
-    let footer =
-        Line::from(Span::styled("  1-5: tabs  Tab/S-Tab: cycle  j/k: scroll  w: csv  y: yank  Esc: close", Style::default().fg(t.muted)));
 
     // The cache is always populated before the state becomes `Done`, so the
     // cached tab lines are the only source of content.
@@ -149,8 +147,6 @@ fn draw_done(
     lines.push(&blank);
     lines.extend(cached.iter());
     lines.extend(diag.iter());
-    lines.push(&blank);
-    lines.push(&footer);
 
     let block = panel_block(Style::default().fg(t.added).add_modifier(Modifier::BOLD))
         .title(Span::styled(" Solve Results ", Style::default().fg(t.added).add_modifier(Modifier::BOLD)));
@@ -713,7 +709,6 @@ fn done_both_lines(
     scroll: u16,
     height: u16,
 ) -> Option<Vec<Line<'static>>> {
-    let t = theme();
     let active = view.tab;
 
     let tab_bar = build_tab_bar(active);
@@ -743,11 +738,6 @@ fn done_both_lines(
         append_diagnosis_block(&mut lines, diagnosis);
     }
 
-    lines.push(Line::from(""));
-    lines.push(Line::from(Span::styled(
-        "  1-5: tabs  Tab/S-Tab: cycle  j/k: scroll  d: toggle diff  t/T: threshold  w: csv  y: yank  Esc: close",
-        Style::default().fg(t.muted),
-    )));
     Some(lines)
 }
 

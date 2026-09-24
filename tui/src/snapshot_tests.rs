@@ -394,12 +394,20 @@ fn solve_overlay_scroll_is_clamped_to_its_content() {
     let result2 = crate::solver::solve_problem(&app.problem2).expect("changed solves");
 
     let cache = crate::widgets::solve::build_single_solve_cache(&result1, 78);
+    // The tab bar and a blank line, then the summary tab's lines.
+    let summary_lines = 2 + cache[0].len();
     app.solver.render_cache = crate::app::SolveRenderCache::Single(cache);
     app.solver.state = crate::state::SolveState::Done(Box::new(result1.clone()));
     app.solver.view.scroll = [u16::MAX; 5];
     let terminal = render(&mut app, 80, 24);
-    assert!(app.solver.view.scroll[0] < u16::MAX, "the offset must be written back clamped");
-    assert!(frame_contains(&terminal, "Esc: close"), "the footer must be in view at the clamp");
+    // 24 rows, less the status bar and the overlay's two borders.
+    let visible = 24 - 1 - 2;
+    assert_eq!(
+        app.solver.view.scroll[0] as usize,
+        summary_lines.saturating_sub(visible),
+        "the clamp lands the last line on the bottom row"
+    );
+    assert!(frame_contains(&terminal, "Esc:close"), "the overlay's keys are in the status bar");
 
     let diff = crate::solver::diff_results("a.lp".to_owned(), "b.lp".to_owned(), result1, result2, 0.0);
     app.solver.render_cache = crate::widgets::solve::build_diff_solve_cache(&diff, 78);
@@ -409,5 +417,5 @@ fn solve_overlay_scroll_is_clamped_to_its_content() {
     app.solver.view.scroll[variables] = u16::MAX;
     let terminal = render(&mut app, 80, 24);
     assert!(app.solver.view.scroll[variables] < u16::MAX, "the comparison offset must be written back clamped");
-    assert!(frame_contains(&terminal, "1-5: tabs"), "the comparison footer must be in view at the clamp");
+    assert!(frame_contains(&terminal, "Esc:close"), "the comparison's way out is in the status bar");
 }

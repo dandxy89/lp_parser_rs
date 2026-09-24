@@ -16,6 +16,8 @@
 //! The two panels share the divider column rather than each drawing its own
 //! border there.
 
+use std::borrow::Cow;
+
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Modifier, Style};
@@ -160,9 +162,11 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     draw_status(frame, outer[2], app, &report_summary, total_changes, filter_count);
 
     // Modal overlays sit over a dimmed screen, so the layer that takes the keys
-    // is unmistakably the one in front.
+    // is unmistakably the one in front. The status bar stays lit: it carries
+    // the overlay's key hints.
     if app.has_overlay() {
-        crate::widgets::draw_scrim(frame, frame.area());
+        let full = frame.area();
+        crate::widgets::draw_scrim(frame, Rect { height: full.height.saturating_sub(1), ..full });
     }
 
     // Search pop-up overlay — rendered on top of main content.
@@ -211,17 +215,70 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     }
 }
 
+/// Key hints for the topmost open overlay, in `handle_key`'s priority order —
+/// the layer that takes the keys is the one whose keys are advertised. The
+/// last pair of each is the way out, which the status bar always keeps.
+fn overlay_hints(app: &App) -> Option<&'static str> {
+    use crate::state::SolveState;
+    if app.search_popup.visible {
+        return Some("\u{2193}/\u{2191}:move  Tab:complete  Enter:jump  Esc:cancel");
+    }
+    if app.palette.visible {
+        return Some("\u{2193}/\u{2191}:move  Enter:run  Esc:close");
+    }
+    if app.what_if.is_some() {
+        return Some("Enter:solve  Esc:cancel");
+    }
+    if app.presolve_log.is_some() {
+        return Some("j/k:scroll  w:write .txt  Esc:close");
+    }
+    if app.presolve_cursor.is_some() {
+        // The full key list sits on the picker's own border, where it fits.
+        return Some("space:toggle  Enter:solve  Esc:close");
+    }
+    if app.diagnostics.is_some() {
+        return Some("j/k:scroll  PgDn/PgUp:page  Esc:close");
+    }
+    if app.analysis.is_open() {
+        return Some(if app.analysis.pane().is_some() { "j/k:scroll  w:write .txt  Esc:close" } else { "Esc:cancel" });
+    }
+    match app.solver.state {
+        SolveState::Idle => {}
+        SolveState::Picking => return Some("1:file 1  2:file 2  3:both  Esc:cancel"),
+        SolveState::Running { .. } | SolveState::RunningBoth { .. } => return Some("Esc:cancel"),
+        SolveState::Done(_) => return Some("1-5:tabs  j/k:scroll  e:diagnose  I:IIS  w:csv  y:yank  Esc:close"),
+        SolveState::DoneBoth(_) => return Some("1-5:tabs  j/k:scroll  d:diff only  t/T:threshold  w:csv  y:yank  Esc:close"),
+        SolveState::Failed(_) => return Some("Esc:close"),
+    }
+    app.show_help.then_some("j/k:scroll  any key:close")
+}
+
 /// Pick the context-sensitive key hints for the status bar's right segment:
-/// the handful of most useful actions for the current mode and section, so the
-/// app's power features are advertised where they apply instead of only in `?`.
-const fn context_hints(app: &App) -> &'static str {
+/// the handful of most useful actions for whatever takes the keys — the
+/// topmost overlay, else the focused panel in the current mode and section —
+/// so the app's power features are advertised where they apply instead of
+/// only in `?`. A kind filter adds the key that clears it.
+fn context_hints(app: &App) -> Cow<'static, str> {
+    if let Some(hints) = overlay_hints(app) {
+        return Cow::Borrowed(hints);
+    }
     // Which-key hint for the pending `y` chord — the chord family is invisible
     // otherwise unless memorised.
     if matches!(app.pending_yank, PendingYank::WaitingForTarget) {
-        return match app.mode {
+        return Cow::Borrowed(match app.mode {
             AppMode::Diff => "y \u{2192}  y:name  o:old (file 1)  n:new (file 2)",
             AppMode::Inspect => "y \u{2192}  y:name",
-        };
+        });
+    }
+    let hints = focus_hints(app);
+    if app.filter == crate::state::DiffFilter::All { Cow::Borrowed(hints) } else { Cow::Owned(format!("a:clear filter  {hints}")) }
+}
+
+/// Hints for the main view, by focus, mode and section.
+const fn focus_hints(app: &App) -> &'static str {
+    if matches!(app.focus, Focus::Detail) {
+        let raw = matches!(app.mode, AppMode::Diff) && matches!(app.active_section, Section::Constraints | Section::Objectives);
+        return if raw { "j/k:scroll  r:raw  Y:yank detail  h:back  ?:help" } else { "j/k:scroll  Y:yank detail  h:back  ?:help" };
     }
     match (app.mode, app.active_section) {
         (_, Section::Summary | Section::Numerics) => "1-5:section  S:solve  w:csv  /:search  ^p:palette  ?:help",
@@ -291,6 +348,7 @@ fn draw_status(
     // segment only shown) in inspect mode; it lives here so InspectInfo can
     // borrow it across the draw call below.
     let inspect_file = (app.mode == AppMode::Inspect).then(|| crate::widgets::short_filename(&app.report.file1));
+    let hints = context_hints(app);
     let inspect = inspect_file.as_deref().map(|file| {
         // The label is the plural-correct noun for the count, so the status bar
         // prints it as-is: "2 variables", not "2 variables entries".
@@ -322,7 +380,7 @@ fn draw_status(
             tolerance_label: tolerance_label.as_deref(),
             watch_reloading,
             inspect,
-            hints: context_hints(app),
+            hints: &hints,
         },
     );
 }
@@ -465,6 +523,26 @@ fn draw_detail_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut A
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hints_follow_the_layer_that_takes_the_keys() {
+        let mut app = crate::snapshot_tests::diff_app_from(crate::snapshot_tests::BASE_LP, crate::snapshot_tests::INFEASIBLE_LP);
+        app.set_section(Section::Constraints);
+        assert!(context_hints(&app).starts_with("E:what-if"), "the sidebar's section hints");
+
+        app.focus = Focus::Detail;
+        assert!(context_hints(&app).starts_with("j/k:scroll  r:raw"), "the detail panel's own keys when it has focus");
+
+        app.set_filter(crate::state::DiffFilter::Modified);
+        assert!(context_hints(&app).starts_with("a:clear filter"), "an active filter advertises how to clear it");
+
+        app.solver.state = crate::state::SolveState::Picking;
+        assert!(context_hints(&app).ends_with("Esc:cancel"), "the topmost overlay's keys win");
+        app.show_help = true;
+        assert!(context_hints(&app).ends_with("Esc:cancel"), "help sits below the solve overlay");
+        app.solver.state = crate::state::SolveState::Idle;
+        assert_eq!(context_hints(&app), "j/k:scroll  any key:close");
+    }
 
     #[test]
     fn the_sidebar_grows_to_fit_long_names_within_bounds() {
