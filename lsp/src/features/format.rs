@@ -330,21 +330,21 @@ fn collect_leaves<'a>(root: Node<'_>, source: &'a str) -> Vec<Leaf<'a>> {
 fn leaf<'a>(path: &[Node<'_>], source: &'a str) -> Leaf<'a> {
     debug_assert!(!path.is_empty(), "path must contain the leaf");
     let node = path[path.len() - 1];
-    let parent = if path.len() >= 2 { path[path.len() - 2].kind() } else { "" };
+    let parent = if path.len() >= 2 { syntax::static_kind(path[path.len() - 2]) } else { "" };
     let in_section = path.len() >= 3 && syntax::is_section(path[1]);
     let unit_node = if in_section { path[2] } else { path.get(1).copied().unwrap_or(node) };
     let unit =
         if unit_node.kind() == kind::SENSE || unit_node.kind() == kind::MULTI_OBJECTIVES_KEYWORD { SENSE_KEY } else { unit_node.id() };
     Leaf {
-        kind: node.kind(),
+        kind: syntax::static_kind(node),
         named: node.is_named(),
         parent,
         text: syntax::text(node, source),
         start: node.start_byte(),
         end: node.end_byte(),
         unit,
-        unit_kind: unit_node.kind(),
-        section: if in_section { path[1].kind() } else { kind::SOURCE_FILE },
+        unit_kind: syntax::static_kind(unit_node),
+        section: if in_section { syntax::static_kind(path[1]) } else { kind::SOURCE_FILE },
         section_id: if in_section { path[1].id() } else { 0 },
     }
 }

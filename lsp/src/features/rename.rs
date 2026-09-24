@@ -268,7 +268,7 @@ fn leaves(tree: &Tree) -> Vec<(&'static str, Range<usize>)> {
         }
         let node = cursor.node();
         if node.start_byte() < node.end_byte() && !matches!(node.kind(), kind::LINE_COMMENT | kind::BLOCK_COMMENT) {
-            out.push((node.kind(), node.byte_range()));
+            out.push((syntax::static_kind(node), node.byte_range()));
         }
         while !cursor.goto_next_sibling() {
             if !cursor.goto_parent() {

@@ -2,10 +2,11 @@
 //! in one linear walk. Drives navigation, rename, hover, completion, code lens
 //! and workspace symbols.
 
-use std::collections::HashMap;
 use std::ops::Range;
+use std::sync::OnceLock;
 
-use tree_sitter::{Node, Tree};
+use rustc_hash::FxHashMap;
+use tree_sitter::{Node, Tree, TreeCursor};
 
 use crate::syntax::{self, kind};
 
@@ -274,7 +275,7 @@ pub struct SymbolIndex {
     pub sections: Vec<SectionSpan>,
     /// Name collisions within a namespace.
     pub duplicates: Vec<Duplicate>,
-    variable_ids: HashMap<String, usize>,
+    variable_ids: FxHashMap<String, usize>,
     /// Every name site, sorted by start offset.
     sites: Vec<(Range<usize>, Symbol)>,
 }
@@ -283,12 +284,17 @@ impl SymbolIndex {
     /// Build the index from a parsed tree. `ERROR` subtrees are skipped.
     #[must_use]
     pub fn build(tree: &Tree, text: &str) -> Self {
-        let mut builder = Builder { text, index: Self::default() };
-        let root = tree.root_node();
-        let mut cursor = root.walk();
-        for child in root.named_children(&mut cursor) {
-            builder.section(child);
-        }
+        let mut index = Self::default();
+        // Rough capacities from the text size avoid repeated regrowth on large files.
+        index.sites.reserve(text.len() / 16);
+        index.entities.reserve(text.len() / 64);
+        let mut builder = Builder { text, ids: Ids::get(), index };
+        let mut cursor = tree.root_node().walk();
+        builder.children(&mut cursor, |b, c| {
+            if c.node().is_named() {
+                b.section(c);
+            }
+        });
         builder.index.find_duplicates();
         debug_assert!(builder.index.sites.windows(2).all(|w| w[0].0.start <= w[1].0.start), "sites must be in document order");
         builder.index
@@ -345,7 +351,7 @@ impl SymbolIndex {
     }
 
     fn find_duplicates(&mut self) {
-        let mut seen: HashMap<(Namespace, &str), usize> = HashMap::new();
+        let mut seen: FxHashMap<(Namespace, &str), usize> = FxHashMap::default();
         for (i, entity) in self.entities.iter().enumerate() {
             let Some(name) = entity.name.as_deref() else { continue };
             match seen.get(&(entity.kind.namespace(), name)) {
@@ -358,197 +364,318 @@ impl SymbolIndex {
     }
 }
 
+/// Grammar symbol and field ids, resolved once. Comparing `u16` ids avoids the
+/// UTF-8 check and string compare behind every `Node::kind()`.
+struct Ids {
+    objectives_section: u16,
+    constraints_section: u16,
+    lazy_constraints_section: u16,
+    user_cuts_section: u16,
+    general_constraints_section: u16,
+    bounds_section: u16,
+    generals_section: u16,
+    integers_section: u16,
+    binaries_section: u16,
+    semi_continuous_section: u16,
+    sos_section: u16,
+    named_objective: u16,
+    objective_attribute: u16,
+    linear_expression: u16,
+    constraint: u16,
+    general_constraint: u16,
+    bound_declaration: u16,
+    indicator: u16,
+    term: u16,
+    quadratic_block: u16,
+    quadratic_term: u16,
+    sos_constraint_header: u16,
+    sos_entry: u16,
+    identifier: u16,
+    number: u16,
+    plus: u16,
+    minus: u16,
+    name_field: u16,
+    resultant_field: u16,
+}
+
+impl Ids {
+    fn get() -> &'static Self {
+        static IDS: OnceLock<Ids> = OnceLock::new();
+        IDS.get_or_init(|| {
+            let language = syntax::language();
+            let named = |kind: &str| {
+                let id = language.id_for_node_kind(kind, true);
+                debug_assert_ne!(id, 0, "unknown node kind {kind}");
+                id
+            };
+            let field = |name: &str| language.field_id_for_name(name).map_or(0, std::num::NonZeroU16::get);
+            Self {
+                objectives_section: named(kind::OBJECTIVES_SECTION),
+                constraints_section: named(kind::CONSTRAINTS_SECTION),
+                lazy_constraints_section: named(kind::LAZY_CONSTRAINTS_SECTION),
+                user_cuts_section: named(kind::USER_CUTS_SECTION),
+                general_constraints_section: named(kind::GENERAL_CONSTRAINTS_SECTION),
+                bounds_section: named(kind::BOUNDS_SECTION),
+                generals_section: named(kind::GENERALS_SECTION),
+                integers_section: named(kind::INTEGERS_SECTION),
+                binaries_section: named(kind::BINARIES_SECTION),
+                semi_continuous_section: named(kind::SEMI_CONTINUOUS_SECTION),
+                sos_section: named(kind::SOS_SECTION),
+                named_objective: named(kind::NAMED_OBJECTIVE),
+                objective_attribute: named(kind::OBJECTIVE_ATTRIBUTE),
+                linear_expression: named(kind::LINEAR_EXPRESSION),
+                constraint: named(kind::CONSTRAINT),
+                general_constraint: named(kind::GENERAL_CONSTRAINT),
+                bound_declaration: named(kind::BOUND_DECLARATION),
+                indicator: named(kind::INDICATOR),
+                term: named(kind::TERM),
+                quadratic_block: named(kind::QUADRATIC_BLOCK),
+                quadratic_term: named(kind::QUADRATIC_TERM),
+                sos_constraint_header: named(kind::SOS_CONSTRAINT_HEADER),
+                sos_entry: named(kind::SOS_ENTRY),
+                identifier: named(kind::IDENTIFIER),
+                number: named(kind::NUMBER),
+                plus: language.id_for_node_kind("+", false),
+                minus: language.id_for_node_kind("-", false),
+                name_field: field("name"),
+                resultant_field: field("resultant"),
+            }
+        })
+    }
+}
+
+/// Single-cursor tree walk. Every visit takes the cursor on a node and leaves
+/// it on that same node.
 struct Builder<'a> {
     text: &'a str,
+    ids: &'static Ids,
     index: SymbolIndex,
 }
 
-impl Builder<'_> {
-    fn section(&mut self, node: Node<'_>) {
+impl<'t> Builder<'_> {
+    /// Call `f` with the cursor on each child of the current node.
+    fn children(&mut self, cursor: &mut TreeCursor<'t>, mut f: impl FnMut(&mut Self, &mut TreeCursor<'t>)) {
+        if cursor.goto_first_child() {
+            loop {
+                f(self, cursor);
+                if !cursor.goto_next_sibling() {
+                    break;
+                }
+            }
+            cursor.goto_parent();
+        }
+    }
+
+    fn section(&mut self, cursor: &mut TreeCursor<'t>) {
+        let node = cursor.node();
         if !syntax::is_section(node) {
             return;
         }
         let header = node.child(0).filter(|c| c.kind().ends_with("_keyword")).map(|c| c.byte_range());
         self.index.sections.push(SectionSpan { kind: static_kind(node.kind()), range: node.byte_range(), header });
 
-        let mut cursor = node.walk();
-        let children: Vec<Node<'_>> = node.named_children(&mut cursor).collect();
-        match node.kind() {
-            kind::OBJECTIVES_SECTION => {
-                for child in children {
-                    match child.kind() {
-                        kind::LINEAR_EXPRESSION => {
-                            let entity = self.entity(EntityKind::Objective, Section::Objectives, None, child);
-                            self.expression(child, entity, Role::ObjectiveTerm);
-                        }
-                        kind::NAMED_OBJECTIVE => self.named_objective(child),
-                        _ => {}
-                    }
+        let ids = self.ids;
+        let id = node.kind_id();
+        if id == ids.objectives_section {
+            self.children(cursor, |b, c| {
+                let child = c.node().kind_id();
+                if child == ids.linear_expression {
+                    let entity = b.entity(EntityKind::Objective, Section::Objectives, None, c.node());
+                    b.expression(c, entity, Role::ObjectiveTerm);
+                } else if child == ids.named_objective {
+                    b.named_objective(c);
                 }
+            });
+        } else if id == ids.constraints_section || id == ids.lazy_constraints_section || id == ids.user_cuts_section {
+            let section = if id == ids.constraints_section {
+                Section::SubjectTo
+            } else if id == ids.lazy_constraints_section {
+                Section::Lazy
+            } else {
+                Section::UserCuts
+            };
+            self.children(cursor, |b, c| {
+                if c.node().kind_id() == ids.constraint {
+                    b.constraint(c, section);
+                }
+            });
+        } else if id == ids.general_constraints_section {
+            self.children(cursor, |b, c| {
+                if c.node().kind_id() == ids.general_constraint {
+                    b.general_constraint(c);
+                }
+            });
+        } else if id == ids.bounds_section {
+            self.children(cursor, |b, c| {
+                if c.node().kind_id() == ids.bound_declaration {
+                    b.identifiers(c, Role::Bound, None);
+                }
+            });
+        } else if id == ids.sos_section {
+            self.sos_section(cursor);
+        } else {
+            let role = if id == ids.generals_section {
+                Role::Generals
+            } else if id == ids.integers_section {
+                Role::Integers
+            } else if id == ids.binaries_section {
+                Role::Binaries
+            } else {
+                debug_assert_eq!(id, ids.semi_continuous_section);
+                Role::SemiContinuous
+            };
+            self.identifiers(cursor, role, None);
+        }
+    }
+
+    /// Record every identifier child of the current node.
+    fn identifiers(&mut self, cursor: &mut TreeCursor<'t>, role: Role, entity: Option<usize>) {
+        let identifier = self.ids.identifier;
+        self.children(cursor, |b, c| {
+            if c.node().kind_id() == identifier {
+                b.occurrence(c.node(), role, entity, None);
             }
-            kind::CONSTRAINTS_SECTION | kind::LAZY_CONSTRAINTS_SECTION | kind::USER_CUTS_SECTION => {
-                let section = match node.kind() {
-                    kind::CONSTRAINTS_SECTION => Section::SubjectTo,
-                    kind::LAZY_CONSTRAINTS_SECTION => Section::Lazy,
-                    _ => Section::UserCuts,
+        });
+    }
+
+    fn named_objective(&mut self, cursor: &mut TreeCursor<'t>) {
+        let node = cursor.node();
+        let ids = self.ids;
+        let entity = self.entity(EntityKind::Objective, Section::Objectives, node.child_by_field_id(ids.name_field), node);
+        self.children(cursor, |b, c| {
+            let child = c.node();
+            if child.kind_id() == ids.objective_attribute {
+                if let Some(attr) = child.child_by_field_id(ids.name_field) {
+                    let id = b.index.attributes.len();
+                    b.index.attributes.push(Attribute {
+                        objective: entity,
+                        name: syntax::text(attr, b.text).to_owned(),
+                        name_range: attr.byte_range(),
+                        range: child.byte_range(),
+                    });
+                    b.index.sites.push((attr.byte_range(), Symbol::Attribute(id)));
+                }
+            } else if child.kind_id() == ids.linear_expression {
+                b.expression(c, entity, Role::ObjectiveTerm);
+            }
+        });
+    }
+
+    fn constraint(&mut self, cursor: &mut TreeCursor<'t>, section: Section) {
+        let node = cursor.node();
+        let ids = self.ids;
+        let entity = self.entity(EntityKind::Constraint, section, node.child_by_field_id(ids.name_field), node);
+        self.children(cursor, |b, c| {
+            let child = c.node().kind_id();
+            if child == ids.indicator {
+                if let Some(id) = c.node().named_child(0).filter(|n| n.kind_id() == ids.identifier) {
+                    b.occurrence(id, Role::Indicator, Some(entity), None);
+                }
+            } else if child == ids.linear_expression {
+                b.expression(c, entity, Role::ConstraintTerm);
+            }
+        });
+    }
+
+    fn general_constraint(&mut self, cursor: &mut TreeCursor<'t>) {
+        let node = cursor.node();
+        let ids = self.ids;
+        let entity = self.entity(EntityKind::GeneralConstraint, Section::General, node.child_by_field_id(ids.name_field), node);
+        self.children(cursor, |b, c| {
+            let child = c.node();
+            if child.kind_id() == ids.identifier {
+                let role = if c.field_id().map(std::num::NonZeroU16::get) == Some(ids.resultant_field) {
+                    Role::Resultant
+                } else {
+                    Role::GeneralArgument
                 };
-                for child in children.into_iter().filter(|c| c.kind() == kind::CONSTRAINT) {
-                    self.constraint(child, section);
-                }
+                b.occurrence(child, role, Some(entity), None);
             }
-            kind::GENERAL_CONSTRAINTS_SECTION => {
-                for child in children.into_iter().filter(|c| c.kind() == kind::GENERAL_CONSTRAINT) {
-                    self.general_constraint(child);
-                }
-            }
-            kind::BOUNDS_SECTION => {
-                for declaration in children.into_iter().filter(|c| c.kind() == kind::BOUND_DECLARATION) {
-                    let mut cursor = declaration.walk();
-                    for id in declaration.named_children(&mut cursor).filter(|c| c.kind() == kind::IDENTIFIER) {
-                        self.occurrence(id, Role::Bound, None, None);
-                    }
-                }
-            }
-            kind::GENERALS_SECTION | kind::INTEGERS_SECTION | kind::BINARIES_SECTION | kind::SEMI_CONTINUOUS_SECTION => {
-                let role = match node.kind() {
-                    kind::GENERALS_SECTION => Role::Generals,
-                    kind::INTEGERS_SECTION => Role::Integers,
-                    kind::BINARIES_SECTION => Role::Binaries,
-                    _ => Role::SemiContinuous,
-                };
-                for id in children.into_iter().filter(|c| c.kind() == kind::IDENTIFIER) {
-                    self.occurrence(id, role, None, None);
-                }
-            }
-            kind::SOS_SECTION => self.sos_section(&children),
-            _ => {}
-        }
+        });
     }
 
-    fn named_objective(&mut self, node: Node<'_>) {
-        let name = node.child_by_field_name("name");
-        let entity = self.entity(EntityKind::Objective, Section::Objectives, name, node);
-        let mut cursor = node.walk();
-        for child in node.named_children(&mut cursor) {
-            match child.kind() {
-                kind::OBJECTIVE_ATTRIBUTE => {
-                    if let Some(attr) = child.child_by_field_name("name") {
-                        let id = self.index.attributes.len();
-                        self.index.attributes.push(Attribute {
-                            objective: entity,
-                            name: syntax::text(attr, self.text).to_owned(),
-                            name_range: attr.byte_range(),
-                            range: child.byte_range(),
-                        });
-                        self.index.sites.push((attr.byte_range(), Symbol::Attribute(id)));
-                    }
-                }
-                kind::LINEAR_EXPRESSION => self.expression(child, entity, Role::ObjectiveTerm),
-                _ => {}
-            }
-        }
-    }
-
-    fn constraint(&mut self, node: Node<'_>, section: Section) {
-        let name = node.child_by_field_name("name");
-        let entity = self.entity(EntityKind::Constraint, section, name, node);
-        let mut cursor = node.walk();
-        for child in node.named_children(&mut cursor) {
-            match child.kind() {
-                kind::INDICATOR => {
-                    if let Some(id) = child.named_child(0).filter(|c| c.kind() == kind::IDENTIFIER) {
-                        self.occurrence(id, Role::Indicator, Some(entity), None);
-                    }
-                }
-                kind::LINEAR_EXPRESSION => self.expression(child, entity, Role::ConstraintTerm),
-                _ => {}
-            }
-        }
-    }
-
-    fn general_constraint(&mut self, node: Node<'_>) {
-        let name = node.child_by_field_name("name");
-        let entity = self.entity(EntityKind::GeneralConstraint, Section::General, name, node);
-        let resultant = node.child_by_field_name("resultant");
-        let mut cursor = node.walk();
-        for child in node.named_children(&mut cursor).filter(|c| c.kind() == kind::IDENTIFIER) {
-            let role = if Some(child) == resultant { Role::Resultant } else { Role::GeneralArgument };
-            self.occurrence(child, role, Some(entity), None);
-        }
-    }
-
-    fn sos_section(&mut self, children: &[Node<'_>]) {
+    fn sos_section(&mut self, cursor: &mut TreeCursor<'t>) {
+        let ids = self.ids;
         let mut current: Option<usize> = None;
-        for &child in children {
-            match child.kind() {
-                kind::SOS_CONSTRAINT_HEADER => {
-                    let name = child.child_by_field_name("name");
-                    current = Some(self.entity(EntityKind::Sos, Section::Sos, name, child));
+        self.children(cursor, |b, c| {
+            let child = c.node();
+            if child.kind_id() == ids.sos_constraint_header {
+                current = Some(b.entity(EntityKind::Sos, Section::Sos, child.child_by_field_id(ids.name_field), child));
+            } else if child.kind_id() == ids.sos_entry {
+                if let Some(entity) = current {
+                    b.index.entities[entity].range.end = child.end_byte();
                 }
-                kind::SOS_ENTRY => {
-                    if let Some(entity) = current {
-                        self.index.entities[entity].range.end = child.end_byte();
+                // `name : [sign] value`
+                let (mut name, mut sign, mut weight) = (None, 1.0, None);
+                b.children(c, |b, c| {
+                    let part = c.node();
+                    let id = part.kind_id();
+                    if id == ids.identifier && name.is_none() {
+                        name = Some(part);
+                    } else if id == ids.minus {
+                        sign = -1.0;
+                    } else if part.is_named() && name.is_some() {
+                        weight = syntax::parse_number(syntax::text(part, b.text)).map(|w| sign * w);
                     }
-                    let weight = child.named_child(1).map(|n| signed_value(n, self.text));
-                    if let Some(id) = child.named_child(0).filter(|c| c.kind() == kind::IDENTIFIER) {
-                        self.occurrence(id, Role::SosEntry, current, weight.flatten());
-                    }
+                });
+                if let Some(name) = name {
+                    b.occurrence(name, Role::SosEntry, current, weight);
                 }
-                _ => {}
             }
-        }
+        });
     }
 
     /// Walk a `linear_expression`, tracking the sign before each item.
-    fn expression(&mut self, node: Node<'_>, entity: usize, role: Role) {
+    fn expression(&mut self, cursor: &mut TreeCursor<'t>, entity: usize, role: Role) {
+        let ids = self.ids;
         let mut sign = 1.0;
-        let mut cursor = node.walk();
-        for child in node.children(&mut cursor) {
-            match child.kind() {
-                "-" => sign = -1.0,
-                "+" => sign = 1.0,
-                kind::TERM => {
-                    if let Some(id) = last_child(child).filter(|c| c.kind() == kind::IDENTIFIER) {
-                        let coefficient = child
-                            .child(0)
-                            .filter(|c| c.id() != id.id())
-                            .map_or(Some(1.0), |c| syntax::parse_number(syntax::text(c, self.text)));
-                        self.occurrence(id, role, Some(entity), coefficient.map(|c| sign * c));
-                    }
-                    sign = 1.0;
+        self.children(cursor, |b, c| {
+            let child = c.node();
+            let id = child.kind_id();
+            if id == ids.minus {
+                sign = -1.0;
+            } else if id == ids.plus {
+                sign = 1.0;
+            } else if id == ids.term {
+                // `[constant] identifier` or a bare constant.
+                let count = child.child_count();
+                if let Some(name) = child.child(count.saturating_sub(1)).filter(|n| n.kind_id() == ids.identifier) {
+                    let coefficient =
+                        if count > 1 { child.child(0).and_then(|n| syntax::parse_number(syntax::text(n, b.text))) } else { Some(1.0) };
+                    b.occurrence(name, role, Some(entity), coefficient.map(|v| sign * v));
                 }
-                kind::QUADRATIC_BLOCK => {
-                    self.quadratic(child, entity, sign);
-                    sign = 1.0;
-                }
-                _ => {}
+                sign = 1.0;
+            } else if id == ids.quadratic_block {
+                b.quadratic(c, entity, sign);
+                sign = 1.0;
             }
-        }
+        });
     }
 
-    fn quadratic(&mut self, block: Node<'_>, entity: usize, block_sign: f64) {
+    fn quadratic(&mut self, cursor: &mut TreeCursor<'t>, entity: usize, block_sign: f64) {
+        let ids = self.ids;
         let mut sign = block_sign;
-        let mut cursor = block.walk();
-        for child in block.children(&mut cursor) {
-            match child.kind() {
-                "-" => sign = -block_sign,
-                "+" => sign = block_sign,
-                kind::QUADRATIC_TERM => {
-                    let mut inner = child.walk();
-                    let parts: Vec<Node<'_>> = child.named_children(&mut inner).collect();
-                    let coefficient = parts
-                        .first()
-                        .filter(|n| n.kind() == kind::NUMBER)
-                        .and_then(|n| syntax::parse_number(syntax::text(*n, self.text)))
-                        .unwrap_or(1.0);
-                    for id in parts.iter().filter(|n| n.kind() == kind::IDENTIFIER) {
-                        self.occurrence(*id, Role::QuadraticTerm, Some(entity), Some(sign * coefficient));
+        self.children(cursor, |b, c| {
+            let id = c.node().kind_id();
+            if id == ids.minus {
+                sign = -block_sign;
+            } else if id == ids.plus {
+                sign = block_sign;
+            } else if id == ids.quadratic_term {
+                let mut coefficient = 1.0;
+                let mut first = true;
+                b.children(c, |b, c| {
+                    let part = c.node();
+                    if first && part.kind_id() == ids.number {
+                        coefficient = syntax::parse_number(syntax::text(part, b.text)).unwrap_or(1.0);
+                    } else if part.kind_id() == ids.identifier {
+                        b.occurrence(part, Role::QuadraticTerm, Some(entity), Some(sign * coefficient));
                     }
-                    sign = block_sign;
-                }
-                _ => {}
+                    first = false;
+                });
+                sign = block_sign;
             }
-        }
+        });
     }
 
     fn entity(&mut self, kind: EntityKind, section: Section, name: Option<Node<'_>>, node: Node<'_>) -> usize {
@@ -584,20 +711,6 @@ impl Builder<'_> {
         self.index.sites.push((node.byte_range(), Symbol::Variable(var, occurrences.len())));
         occurrences.push(Occurrence { range: node.byte_range(), role, entity, coefficient });
     }
-}
-
-/// Last child of `node`.
-fn last_child(node: Node<'_>) -> Option<Node<'_>> {
-    let mut cursor = node.walk();
-    node.children(&mut cursor).last()
-}
-
-/// Value of a `_numeric_value` whose last token is `node` (a number or
-/// infinity), including a preceding sign token.
-fn signed_value(node: Node<'_>, text: &str) -> Option<f64> {
-    let value = syntax::parse_number(syntax::text(node, text))?;
-    let negative = node.prev_sibling().is_some_and(|s| s.kind() == "-");
-    Some(if negative { -value } else { value })
 }
 
 fn static_kind(kind: &str) -> &'static str {

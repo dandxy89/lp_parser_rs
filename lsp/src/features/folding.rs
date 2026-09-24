@@ -83,7 +83,7 @@ fn captures<'t>(query: &Query, root: Node<'t>, text: &str) -> Vec<Node<'t>> {
     let mut matches = cursor.matches(query, root, text.as_bytes());
     let mut nodes = Vec::new();
     while let Some(m) = matches.next() {
-        nodes.extend(m.captures.iter().map(|c| c.node));
+        nodes.extend(m.captures().iter().map(|c| c.node));
     }
     nodes
 }

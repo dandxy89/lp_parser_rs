@@ -107,6 +107,24 @@ pub fn parse(text: &str, old: Option<&Tree>) -> Tree {
     })
 }
 
+/// `node.kind()` as a `&'static str`. tree-sitter 0.27 ties kind names to the
+/// tree's lifetime; the names come from the static grammar, so they are copied
+/// once into a table that lives for the whole process.
+#[must_use]
+pub fn static_kind(node: Node<'_>) -> &'static str {
+    static NAMES: std::sync::OnceLock<Vec<&'static str>> = std::sync::OnceLock::new();
+    let names = NAMES.get_or_init(|| {
+        let language = language();
+        (0..u16::try_from(language.node_kind_count()).unwrap_or(u16::MAX))
+            .map(|id| &*Box::leak(language.node_kind_for_id(id).unwrap_or("").to_owned().into_boxed_str()))
+            .collect()
+    });
+    if node.is_error() {
+        return kind::ERROR;
+    }
+    names.get(usize::from(node.kind_id())).copied().unwrap_or("")
+}
+
 /// Source text of `node`.
 #[must_use]
 pub fn text<'a>(node: Node<'_>, source: &'a str) -> &'a str {

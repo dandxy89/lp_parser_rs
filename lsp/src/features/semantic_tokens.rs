@@ -130,7 +130,7 @@ pub fn tokens(doc: &Document, range: Option<Range<usize>>) -> Vec<SemanticToken>
     let mut spans: Vec<(Range<usize>, usize, Kind)> = Vec::new();
     let mut matches = cursor.matches(&highlights.query, doc.tree.root_node(), doc.text.as_bytes());
     while let Some(m) = matches.next() {
-        for capture in m.captures {
+        for capture in m.captures() {
             let Some(kind) = highlights.kinds[capture.index as usize] else { continue };
             spans.push((capture.node.byte_range(), m.pattern_index, kind));
         }
