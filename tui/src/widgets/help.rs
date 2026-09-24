@@ -55,6 +55,7 @@ const HELP_TEXT: &[&str] = &[
     "  h / l   Sidebar / Detail",
     "  1–5     Jump to section (5: Numerics)",
     "  < / >   Narrow / widen the sidebar",
+    "  M       Mouse capture on/off (off: select text)",
     "  Esc     Back",
     "",
     "  Search (Telescope-style pop-up)",
@@ -85,7 +86,9 @@ const HELP_TEXT: &[&str] = &[
     "  Esc       Close (result cached until input changes)",
     "  Esc       While solving: interrupt HiGHS (q asks to quit)",
     "",
-    "  Mouse: scroll wheel navigates, click selects",
+    "  Mouse: scroll wheel navigates, click selects.",
+    "  To select text, hold Shift while dragging (Option",
+    "  on macOS terminals), or press M to release the mouse.",
     "",
 ];
 
@@ -113,6 +116,7 @@ const INSPECT_HELP_TEXT: &[&str] = &[
     "  1–5              Jump to section (5: Numerics)",
     "  Esc              Back",
     "  < / >            Narrow / widen the sidebar",
+    "  M                Mouse capture on/off (off: select text)",
     "",
     "  Analyses",
     "  ────────",
@@ -153,7 +157,9 @@ const INSPECT_HELP_TEXT: &[&str] = &[
     "  Esc       Close (result cached until input changes)",
     "  Esc       While solving: interrupt HiGHS (q asks to quit)",
     "",
-    "  Mouse: scroll wheel navigates, click selects",
+    "  Mouse: scroll wheel navigates, click selects.",
+    "  To select text, hold Shift while dragging (Option",
+    "  on macOS terminals), or press M to release the mouse.",
     "",
 ];
 
@@ -167,8 +173,8 @@ struct ColumnBlock {
 /// `HELP_TEXT` rows 1–17: Navigation, Filters, and Other/Clipboard.
 const HELP_COLUMNS: ColumnBlock = ColumnBlock { rows: 1..=17, columns: &[26, 46] };
 
-/// `INSPECT_HELP_TEXT` rows 4–20: Navigation, and Other/Clipboard.
-const INSPECT_HELP_COLUMNS: ColumnBlock = ColumnBlock { rows: 4..=20, columns: &[50] };
+/// `INSPECT_HELP_TEXT` rows 4–21: Navigation, and Other/Clipboard.
+const INSPECT_HELP_COLUMNS: ColumnBlock = ColumnBlock { rows: 4..=21, columns: &[50] };
 
 /// Narrowest the help pop-up ever gets, even for short text.
 const MIN_POPUP_WIDTH: u16 = 60;

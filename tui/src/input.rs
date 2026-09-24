@@ -329,6 +329,9 @@ impl App {
             KeyCode::Char('<') => self.resize_sidebar(false),
             KeyCode::Char('>') => self.resize_sidebar(true),
 
+            // Hand the mouse back to the terminal for native text selection.
+            KeyCode::Char('M') => self.toggle_mouse_capture(),
+
             // Cycle sections from any focus (lazygit-style sub-tab navigation).
             KeyCode::Char(']') => self.cycle_section(true),
             KeyCode::Char('[') => self.cycle_section(false),

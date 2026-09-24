@@ -237,7 +237,17 @@ fn run_event_loop<W: io::Write>(
     events: &EventHandler,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut needs_redraw = true;
+    // The capture state the terminal is in, so a toggle is applied once.
+    let mut mouse_captured = true;
     while !app.should_quit {
+        if app.mouse_capture != mouse_captured {
+            if app.mouse_capture {
+                execute!(terminal.backend_mut(), EnableMouseCapture)?;
+            } else {
+                execute!(terminal.backend_mut(), DisableMouseCapture)?;
+            }
+            mouse_captured = app.mouse_capture;
+        }
         if needs_redraw {
             terminal.draw(|frame| ui::draw(frame, app))?;
         }
@@ -249,6 +259,9 @@ fn run_event_loop<W: io::Write>(
                 #[cfg(unix)]
                 if key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) && key.code == crossterm::event::KeyCode::Char('z') {
                     suspend(terminal)?;
+                    // Resuming turns capture back on; the check at the top of
+                    // the loop turns it off again if the user had it off.
+                    mouse_captured = true;
                     needs_redraw = true;
                     continue;
                 }

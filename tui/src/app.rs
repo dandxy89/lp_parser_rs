@@ -290,6 +290,7 @@ impl SolverSession {
     }
 }
 
+#[allow(clippy::struct_excessive_bools)] // independent toggles (help, ignore-order, mouse capture, quit), not a hidden state machine
 pub struct App {
     /// Diff (two files) or Inspect (single file). Fixed at startup.
     pub mode: AppMode,
@@ -445,6 +446,11 @@ pub struct App {
     /// Columns added to (or taken from) the sidebar's automatic width with
     /// `>` / `<`.
     pub sidebar_adjust: i16,
+
+    /// Whether the TUI captures the mouse (`M` toggles it). Off, the terminal
+    /// handles the mouse itself, so text can be selected and copied natively.
+    /// The main loop applies changes to the terminal.
+    pub mouse_capture: bool,
 
     /// Display width of the longest entry name in the report, which the
     /// sidebar grows towards. Recomputed with the report.
@@ -760,6 +766,7 @@ impl App {
             line_map2,
             watch: WatchSession::disabled(),
             sidebar_adjust: 0,
+            mouse_capture: true,
             longest_name,
         }
     }
@@ -1948,6 +1955,16 @@ impl App {
         self.detail_scroll = 0;
     }
 
+    /// Toggle mouse capture (`M`), saying what the new state is for.
+    pub(crate) fn toggle_mouse_capture(&mut self) {
+        self.mouse_capture = !self.mouse_capture;
+        if self.mouse_capture {
+            self.flash_status("Mouse on: scroll and click (M to select text instead)");
+        } else {
+            self.flash_status("Mouse off: select text with the terminal (M to restore)");
+        }
+    }
+
     /// Widen (`grow`) or narrow the sidebar by one step, within the bounds
     /// [`sidebar_width`](crate::ui::sidebar_width) enforces.
     pub(crate) fn resize_sidebar(&mut self, grow: bool) {
@@ -2022,6 +2039,18 @@ mod tests {
         app.jump_back();
 
         assert_eq!(app.selected_entry_name(), Some("c2"), "the jump must land on the recorded entry");
+    }
+
+    /// `M` hands the mouse to the terminal and back.
+    #[test]
+    fn m_toggles_mouse_capture() {
+        let mut app = crate::snapshot_tests::inspect_app_from(crate::snapshot_tests::BASE_LP);
+        assert!(app.mouse_capture, "the TUI starts with the mouse");
+        app.handle_key(crossterm::event::KeyEvent::from(crossterm::event::KeyCode::Char('M')));
+        assert!(!app.mouse_capture, "M releases it for native selection");
+        assert!(app.yank.message.contains("select text"), "and says what for");
+        app.handle_key(crossterm::event::KeyEvent::from(crossterm::event::KeyCode::Char('M')));
+        assert!(app.mouse_capture, "M again takes it back");
     }
 
     /// An error flash does not expire on the timer; the next key press clears
