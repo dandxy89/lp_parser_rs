@@ -349,6 +349,23 @@ class TestUpdateVariableType:
             parser.update_variable_type("missing", "continuous")
 
 
+class TestConstraintClass:
+    LP = (
+        "Minimize\n obj: x + y\nSubject To\n c1: x + y >= 1\n"
+        "Lazy Constraints\n l1: x <= 4\nUser Cuts\n u1: x + y <= 9\nEnd\n"
+    )
+
+    def test_class_of_each_constraint(self) -> None:
+        parser = LpParser.from_string(self.LP)
+        classes = {c["name"]: c["class"] for c in parser.constraints if c["type"] == "standard"}
+        assert classes == {"c1": "normal", "l1": "lazy", "u1": "user_cut"}
+
+    def test_sections_round_trip(self) -> None:
+        written = LpParser.from_string(self.LP).to_lp_string()
+        assert "Lazy Constraints\n l1: x <= 4" in written
+        assert "User Cuts\n u1: x + y <= 9" in written
+
+
 class TestThresholdValidation:
     LP = "Minimize\n obj: x\nSubject To\n c1: x >= 1000\nEnd\n"
 

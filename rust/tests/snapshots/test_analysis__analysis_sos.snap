@@ -41,6 +41,8 @@ constraints:
     greater_than: 0
     sos1: 1
     sos2: 1
+    lazy: 0
+    user_cuts: 0
   empty_constraints: []
   singleton_constraints:
     - name: CON1

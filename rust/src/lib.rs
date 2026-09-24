@@ -77,7 +77,7 @@ pub use interner::{NameId, NameInterner};
 use lalrpop_util::lalrpop_mod;
 pub use lexer::ParseResult;
 pub use line_index::{LineIndex, SourceLocation};
-pub use model::{VariableBounds, VariableKind};
+pub use model::{ConstraintClass, VariableBounds, VariableKind};
 pub use mps::{extract_mps_name, parse_mps};
 pub use problem::LpProblem;
 
@@ -87,6 +87,7 @@ pub use problem::LpProblem;
     clippy::cognitive_complexity,
     clippy::elidable_lifetime_names,
     clippy::ignored_unit_patterns,
+    clippy::large_enum_variant,
     clippy::match_same_arms,
     clippy::missing_const_for_fn,
     clippy::missing_errors_doc,

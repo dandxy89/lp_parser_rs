@@ -27,6 +27,7 @@ Beyond linear objectives, constraints, bounds and variable-type sections, the pa
 | Feature | LP syntax | Model | MPS |
 | --- | --- | --- | --- |
 | Semi-integer variables | variable listed in both `Generals` (or `Integers`) and `Semi-Continuous` (CPLEX) | `VariableKind::SemiInteger` | `SI` bound (read and written) |
+| Lazy constraints / user cuts | `Lazy Constraints` and `User Cuts` sections after `Subject To` (CPLEX) | ordinary constraints tagged in `LpProblem::constraint_classes` (`ConstraintClass::Lazy` / `UserCut`) | `LAZYCONS` / `USERCUTS` sections (read and written) |
 
 ## Library Usage
 

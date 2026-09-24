@@ -7,7 +7,7 @@ use super::sections::ColumnsState;
 use super::{BoundAccumulator, RowType};
 use crate::assemble::range_upper_name;
 use crate::lexer::{RawCoefficient, RawConstraint, RawObjective};
-use crate::model::{ComparisonOp, VariableType};
+use crate::model::{ComparisonOp, ConstraintClass, VariableType};
 
 /// Collect the coefficients of a single row in column order.
 ///
@@ -57,7 +57,32 @@ pub(super) fn build_objectives<'input>(
     objectives
 }
 
+/// Constraints built from the MPS rows, split by [`ConstraintClass`].
+#[derive(Default)]
+pub(super) struct ClassifiedConstraints<'input> {
+    pub(super) normal: Vec<RawConstraint<'input>>,
+    pub(super) lazy: Vec<RawConstraint<'input>>,
+    pub(super) user_cuts: Vec<RawConstraint<'input>>,
+}
+
+impl<'input> ClassifiedConstraints<'input> {
+    fn bucket(&mut self, class: ConstraintClass) -> &mut Vec<RawConstraint<'input>> {
+        match class {
+            ConstraintClass::Normal => &mut self.normal,
+            ConstraintClass::Lazy => &mut self.lazy,
+            ConstraintClass::UserCut => &mut self.user_cuts,
+        }
+    }
+
+    fn len(&self) -> usize {
+        self.normal.len() + self.lazy.len() + self.user_cuts.len()
+    }
+}
+
 /// Build constraints from the parsed MPS data, including RANGES expansion.
+///
+/// Rows declared in `LAZYCONS` / `USERCUTS` (`row_classes`) land in the
+/// matching bucket; both halves of a ranged row share its class.
 ///
 /// For rows with a RANGES entry, the single constraint is expanded into two
 /// constraints to represent both bounds:
@@ -68,13 +93,14 @@ pub(super) fn build_objectives<'input>(
 pub(super) fn build_constraints<'input>(
     row_types: &FxHashMap<&'input str, RowType>,
     row_order: &[&'input str],
+    row_classes: &FxHashMap<&'input str, ConstraintClass>,
     columns: &ColumnsState<'input>,
     rhs_values: &FxHashMap<&'input str, f64>,
     range_values: &FxHashMap<&'input str, f64>,
-) -> Vec<RawConstraint<'input>> {
+) -> ClassifiedConstraints<'input> {
     debug_assert!(row_order.iter().all(|r| row_types.contains_key(r)), "every row in row_order must have a type in row_types");
 
-    let mut constraints = Vec::with_capacity(row_order.len());
+    let mut constraints = ClassifiedConstraints::default();
     // The generated upper half of a ranged row must not collide with a real
     // row name (`c1` ranged next to a row genuinely called `c1_rng`).
     let taken: HashSet<&'input str> = if range_values.is_empty() { HashSet::new() } else { row_types.keys().copied().collect() };
@@ -91,6 +117,7 @@ pub(super) fn build_constraints<'input>(
         };
 
         let row_coeffs = row_coefficients(columns, row_name);
+        let bucket = constraints.bucket(row_classes.get(row_name).copied().unwrap_or_default());
 
         let rhs = rhs_values.get(row_name).copied().unwrap_or(0.0);
 
@@ -111,7 +138,7 @@ pub(super) fn build_constraints<'input>(
             };
 
             // Emit the lower-bound constraint (GTE)
-            constraints.push(RawConstraint::Standard {
+            bucket.push(RawConstraint::Standard {
                 name: Cow::Borrowed(row_name),
                 coefficients: row_coeffs.clone(),
                 operator: ComparisonOp::GTE,
@@ -120,7 +147,7 @@ pub(super) fn build_constraints<'input>(
             });
 
             // Emit the upper-bound constraint (LTE)
-            constraints.push(RawConstraint::Standard {
+            bucket.push(RawConstraint::Standard {
                 name: range_upper_name(row_name, &taken),
                 coefficients: row_coeffs,
                 operator: ComparisonOp::LTE,
@@ -128,7 +155,7 @@ pub(super) fn build_constraints<'input>(
                 byte_offset: None,
             });
         } else {
-            constraints.push(RawConstraint::Standard {
+            bucket.push(RawConstraint::Standard {
                 name: Cow::Borrowed(row_name),
                 coefficients: row_coeffs,
                 operator,

@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 
-use lp_parser_rs::model::{VariableBounds, VariableKind};
+use lp_parser_rs::model::{ConstraintClass, VariableBounds, VariableKind};
 use lp_parser_rs::mps::writer::write_mps_string;
 use lp_parser_rs::problem::LpProblem;
 use lp_parser_rs::writer::write_lp_string;
@@ -84,4 +84,108 @@ fn semi_integer_is_counted_by_analysis() {
     assert_eq!(analysis.variables.type_distribution.semi_integer, 2);
     // x, w (semi-integer) and z (general) are discrete.
     assert_eq!(analysis.variables.discrete_variable_count, 3);
+}
+
+// --- Lazy constraints and user cuts ------------------------------------------
+
+fn class_of(problem: &LpProblem, name: &str) -> ConstraintClass {
+    let id = problem.name_id(name).unwrap_or_else(|| panic!("constraint '{name}' must exist"));
+    assert!(problem.constraints.contains_key(&id), "constraint '{name}' must exist");
+    problem.constraint_class(id)
+}
+
+#[test]
+fn lazy_and_user_cut_fixture_parses() {
+    let problem = parse_resource("lazy_user_cuts.lp");
+    assert_eq!(problem.constraint_count(), 7, "the ranged l2 expands into two constraints");
+    assert_eq!(class_of(&problem, "c1"), ConstraintClass::Normal);
+    assert_eq!(class_of(&problem, "c2"), ConstraintClass::Normal);
+    assert_eq!(class_of(&problem, "l1"), ConstraintClass::Lazy);
+    assert_eq!(class_of(&problem, "l2"), ConstraintClass::Lazy);
+    assert_eq!(class_of(&problem, "l2_rng"), ConstraintClass::Lazy);
+    assert_eq!(class_of(&problem, "u1"), ConstraintClass::UserCut);
+    assert_eq!(class_of(&problem, "C1"), ConstraintClass::UserCut, "an unnamed cut gets a generated name");
+}
+
+#[test]
+fn lazy_and_user_cut_lp_round_trip() {
+    let problem = parse_resource("lazy_user_cuts.lp");
+    let written = write_lp_string(&problem).unwrap();
+    let lazy_at = written.find("Lazy Constraints").expect("a Lazy Constraints section");
+    let cuts_at = written.find("User Cuts").expect("a User Cuts section");
+    assert!(written.find("Subject To").unwrap() < lazy_at && lazy_at < cuts_at, "{written}");
+    assert!(cuts_at < written.find("Bounds").unwrap(), "{written}");
+
+    let reparsed = lp_round_trip(&problem);
+    for name in ["c1", "c2", "l1", "l2", "l2_rng", "u1", "C1"] {
+        assert_eq!(class_of(&reparsed, name), class_of(&problem, name), "constraint {name}");
+    }
+}
+
+#[test]
+fn lazy_and_user_cut_mps_round_trip() {
+    let problem = parse_resource("lazy_user_cuts.lp");
+    let mps = write_mps_string(&problem).expect("lazy constraints and user cuts are representable in MPS");
+    assert!(mps.contains("\nLAZYCONS\n") && mps.contains("\nUSERCUTS\n"), "{mps}");
+    let reparsed = LpProblem::parse_mps(&mps).expect("written MPS must re-parse");
+    assert_eq!(reparsed.constraint_count(), problem.constraint_count());
+    for name in ["c1", "c2", "l1", "l2", "l2_rng", "u1", "C1"] {
+        assert_eq!(class_of(&reparsed, name), class_of(&problem, name), "constraint {name}");
+    }
+    // The lazy range pair is written back as a single ranged LAZYCONS row.
+    assert!(mps.contains("RANGES"), "{mps}");
+}
+
+#[test]
+fn mps_lazycons_rejects_an_objective_row() {
+    let mps = "NAME t\nROWS\n N obj\nLAZYCONS\n N other\nCOLUMNS\n x obj 1\nENDATA\n";
+    assert!(LpProblem::parse_mps(mps).is_err());
+}
+
+#[test]
+fn lazy_keyword_words_alone_are_names() {
+    let problem = LpProblem::parse("minimize\nobj: lazy + cuts\nsubject to\nuser: lazy + cuts >= 1\nend").unwrap();
+    assert_eq!(problem.variable_count(), 2);
+    assert_eq!(class_of(&problem, "user"), ConstraintClass::Normal);
+}
+
+#[test]
+fn constraint_class_follows_rename_and_remove() {
+    let mut problem = parse_resource("lazy_user_cuts.lp");
+    problem.rename_constraint("l1", "lazy_one").unwrap();
+    assert_eq!(class_of(&problem, "lazy_one"), ConstraintClass::Lazy);
+    problem.remove_constraint("lazy_one").unwrap();
+    assert!(problem.constraint_classes.keys().all(|id| problem.constraints.contains_key(id)));
+    problem.set_constraint_class("c1", ConstraintClass::UserCut).unwrap();
+    assert_eq!(class_of(&problem, "c1"), ConstraintClass::UserCut);
+    problem.set_constraint_class("c1", ConstraintClass::Normal).unwrap();
+    assert_eq!(class_of(&problem, "c1"), ConstraintClass::Normal);
+    assert!(problem.set_constraint_class("missing", ConstraintClass::Lazy).is_err());
+}
+
+#[cfg(feature = "diff")]
+#[test]
+fn constraint_class_change_is_detected_by_diff() {
+    let lazy = LpProblem::parse("minimize\nobj: x\nsubject to\nc: x >= 1\nlazy constraints\nl: x <= 5\nend").unwrap();
+    let normal = LpProblem::parse("minimize\nobj: x\nsubject to\nc: x >= 1\nl: x <= 5\nend").unwrap();
+    let diff = lazy.diff(&normal, &lp_parser_rs::diff::DiffOptions::default());
+    assert_eq!(diff.cons_modified, vec![("l".to_string(), vec!["class Lazy -> Normal".to_string()])]);
+}
+
+#[test]
+fn lazy_and_user_cuts_are_counted_by_analysis() {
+    let analysis = parse_resource("lazy_user_cuts.lp").analyze();
+    assert_eq!(analysis.constraints.type_distribution.lazy, 3);
+    assert_eq!(analysis.constraints.type_distribution.user_cuts, 2);
+}
+
+#[cfg(feature = "serde")]
+#[test]
+fn constraint_class_survives_serde() {
+    let problem = parse_resource("lazy_user_cuts.lp");
+    let json = serde_json::to_string(&problem).unwrap();
+    let back: LpProblem = serde_json::from_str(&json).unwrap();
+    for name in ["c1", "l1", "l2_rng", "u1", "C1"] {
+        assert_eq!(class_of(&back, name), class_of(&problem, name), "constraint {name}");
+    }
 }

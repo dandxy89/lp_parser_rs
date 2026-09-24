@@ -7,7 +7,7 @@ use super::sections::{
 use super::{MpsSection, RawCoefficient, RowType, SOSType};
 use crate::error::{LpParseError, LpResult};
 use crate::lexer::{ParseResult, RawConstraint};
-use crate::model::Sense;
+use crate::model::{ConstraintClass, Sense};
 
 /// Accumulated mutable state for the MPS parser.
 ///
@@ -22,6 +22,8 @@ pub(super) struct MpsParseState<'input> {
     objective_rows: Vec<&'input str>,
     row_types: FxHashMap<&'input str, RowType>,
     row_order: Vec<&'input str>,
+    /// Rows declared in `LAZYCONS` / `USERCUTS` rather than `ROWS`.
+    row_classes: FxHashMap<&'input str, ConstraintClass>,
 
     // COLUMNS section state
     columns: ColumnsState<'input>,
@@ -56,6 +58,7 @@ impl<'input> MpsParseState<'input> {
             objective_rows: Vec::new(),
             row_types: FxHashMap::default(),
             row_order: Vec::new(),
+            row_classes: FxHashMap::default(),
             columns: ColumnsState::default(),
             rhs_values: FxHashMap::default(),
             rhs_vector_label: None,
@@ -101,6 +104,14 @@ impl<'input> MpsParseState<'input> {
                 self.section = Some(MpsSection::Rows);
                 self.has_rows = true;
             }
+            "LAZYCONS" => {
+                self.section = Some(MpsSection::LazyCons);
+                self.has_rows = true;
+            }
+            "USERCUTS" => {
+                self.section = Some(MpsSection::UserCuts);
+                self.has_rows = true;
+            }
             "COLUMNS" => {
                 self.section = Some(MpsSection::Columns);
                 self.has_columns = true;
@@ -127,7 +138,7 @@ impl<'input> MpsParseState<'input> {
                 );
                 return Ok(true);
             }
-            "LAZYCONS" | "USERCUTS" | "QUADOBJ" | "QCMATRIX" | "QMATRIX" | "PWLOBJ" | "INDICATORS" | "GENCONS" | "SCENARIOS" => {
+            "QUADOBJ" | "QCMATRIX" | "QMATRIX" | "PWLOBJ" | "INDICATORS" | "GENCONS" | "SCENARIOS" => {
                 eprintln!("Line {line_num}: unsupported section '{header}' will be skipped");
                 self.section = Some(MpsSection::Unsupported);
             }
@@ -151,6 +162,18 @@ impl<'input> MpsParseState<'input> {
             }
             MpsSection::Rows => {
                 parse_rows_line(line, line_num, &mut self.objective_rows, &mut self.row_types, &mut self.row_order)?;
+            }
+            MpsSection::LazyCons | MpsSection::UserCuts => {
+                let class = if current_section == MpsSection::LazyCons { ConstraintClass::Lazy } else { ConstraintClass::UserCut };
+                let objective_count = self.objective_rows.len();
+                let row_count = self.row_order.len();
+                parse_rows_line(line, line_num, &mut self.objective_rows, &mut self.row_types, &mut self.row_order)?;
+                if self.objective_rows.len() != objective_count {
+                    return Err(LpParseError::parse_error(line_num, "an objective (N) row cannot be a lazy constraint or user cut"));
+                }
+                if let Some(&row_name) = self.row_order.get(row_count) {
+                    self.row_classes.insert(row_name, class);
+                }
             }
             MpsSection::Columns => {
                 self.columns.parse_line(line, line_num, &self.row_types, &self.objective_rows)?;
@@ -208,7 +231,8 @@ impl<'input> MpsParseState<'input> {
         }
 
         let objectives = build_objectives(&self.objective_rows, &self.columns, &self.rhs_values);
-        let constraints = build_constraints(&self.row_types, &self.row_order, &self.columns, &self.rhs_values, &self.range_values);
+        let constraints =
+            build_constraints(&self.row_types, &self.row_order, &self.row_classes, &self.columns, &self.rhs_values, &self.range_values);
         let bounds = build_bounds(
             &self.bounds_state.accumulators,
             &self.bounds_state.order,
@@ -229,13 +253,15 @@ impl<'input> MpsParseState<'input> {
         Ok(ParseResult {
             sense: self.sense,
             objectives,
-            constraints,
+            constraints: constraints.normal,
             bounds,
             generals: Vec::new(),
             integers: self.columns.integer_vars,
             binaries: self.bounds_state.binary_vars,
             semi_continuous: self.bounds_state.semi_continuous_vars,
             sos: self.sos_constraints,
+            lazy_constraints: constraints.lazy,
+            user_cuts: constraints.user_cuts,
         })
     }
 }

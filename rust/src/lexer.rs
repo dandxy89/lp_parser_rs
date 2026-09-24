@@ -21,7 +21,8 @@
 //! Remaining reserved words: `inf` / `infinity` always lex as infinity, and a
 //! section keyword alone at the start of a line (e.g. a variable named `bin`
 //! listed on its own line in a `generals` section) is read as a section
-//! header. The multi-word `subject to` / `such that` are always keywords.
+//! header. The multi-word `subject to` / `such that`, `lazy constraints` and
+//! `user cuts` are always keywords.
 
 use std::borrow::Cow;
 use std::fmt::{Display, Formatter, Result as FmtResult};
@@ -122,6 +123,10 @@ pub enum OptionalSection<'input> {
     SemiContinuous(Vec<&'input str>),
     /// `SOS` section: special ordered set constraints.
     SOS(Vec<RawConstraint<'input>>),
+    /// `Lazy Constraints` section (CPLEX): an unassembled constraint body.
+    Lazy(Vec<crate::assemble::SpannedElem<'input>>),
+    /// `User Cuts` section (CPLEX): an unassembled constraint body.
+    UserCuts(Vec<crate::assemble::SpannedElem<'input>>),
 }
 
 /// Structured result from the LALRPOP parser, replacing the previous 9-tuple.
@@ -145,6 +150,12 @@ pub struct ParseResult<'input> {
     pub semi_continuous: Vec<&'input str>,
     /// Raw SOS constraints.
     pub sos: Vec<RawConstraint<'input>>,
+    /// Raw constraints from `Lazy Constraints` sections (LP) or the
+    /// `LAZYCONS` section (MPS).
+    pub lazy_constraints: Vec<RawConstraint<'input>>,
+    /// Raw constraints from `User Cuts` sections (LP) or the `USERCUTS`
+    /// section (MPS).
+    pub user_cuts: Vec<RawConstraint<'input>>,
 }
 
 impl Display for LexerError {
@@ -168,6 +179,14 @@ pub enum Token<'input> {
     /// Subject to / constraints header
     #[regex(r"(?i)subject[ \t]+to|such[ \t]+that|s\.t\.|st", priority = 10)]
     SubjectTo,
+
+    /// Lazy constraints section header (CPLEX)
+    #[regex(r"(?i)lazy[ \t]+constraints", priority = 10)]
+    LazyConstraints,
+
+    /// User cuts section header (CPLEX)
+    #[regex(r"(?i)user[ \t]+cuts", priority = 10)]
+    UserCuts,
 
     /// Bounds section header
     #[regex(r"(?i)bounds?", priority = 10)]
@@ -495,6 +514,12 @@ mod tests {
         assert_eq!(tokenize_keywords("st"), vec![Token::SubjectTo]);
         assert_eq!(tokenize("st:"), vec![Token::SubjectTo]);
         assert_eq!(tokenize("Subject To:"), vec![Token::SubjectTo]);
+
+        assert_eq!(tokenize_keywords("lazy constraints"), vec![Token::LazyConstraints]);
+        assert_eq!(tokenize_keywords("Lazy  Constraints"), vec![Token::LazyConstraints]);
+        assert_eq!(tokenize_keywords("USER CUTS"), vec![Token::UserCuts]);
+        // Each word alone is an ordinary name.
+        assert_eq!(tokenize("lazy + cuts"), vec![Token::Identifier("lazy"), Token::Plus, Token::Identifier("cuts")]);
 
         assert_eq!(tokenize_keywords("bounds"), vec![Token::Bounds]);
         assert_eq!(tokenize_keywords("bound"), vec![Token::Bounds]);

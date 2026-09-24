@@ -26,6 +26,10 @@ pub(super) enum MpsSection {
     Name,
     ObjSense,
     Rows,
+    /// CPLEX `LAZYCONS`: rows (in `ROWS` format) that are lazy constraints.
+    LazyCons,
+    /// CPLEX `USERCUTS`: rows (in `ROWS` format) that are user cuts.
+    UserCuts,
     Columns,
     Rhs,
     Ranges,

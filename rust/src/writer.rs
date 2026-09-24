@@ -27,7 +27,7 @@ use crate::NUMERIC_EPSILON;
 use crate::error::{LpParseError, LpResult};
 use crate::interner::{NameId, NameInterner};
 use crate::lexer::Token;
-use crate::model::{Coefficient, Constraint, Objective, Variable};
+use crate::model::{Coefficient, Constraint, ConstraintClass, Objective, Variable};
 use crate::problem::LpProblem;
 
 /// Options for controlling LP file output format
@@ -211,6 +211,10 @@ fn build_lp(output: &mut String, problem: &LpProblem, options: &LpWriterOptions)
     }
     write_constraints_section(output, problem, options)?;
 
+    // Lazy constraints and user cuts follow `Subject To` (CPLEX).
+    write_classed_constraints_section(output, problem, options, ConstraintClass::Lazy, "Lazy Constraints")?;
+    write_classed_constraints_section(output, problem, options, ConstraintClass::UserCut, "User Cuts")?;
+
     // Write bounds
     write_bounds_section(output, problem, options)?;
 
@@ -266,12 +270,43 @@ fn write_objective(output: &mut String, objective: &Objective, interner: &NameIn
 fn write_constraints_section(output: &mut String, problem: &LpProblem, options: &LpWriterOptions) -> std::fmt::Result {
     writeln!(output, "Subject To")?;
 
-    for constraint in problem.constraints.values() {
-        if matches!(constraint, Constraint::Standard { .. }) {
+    for (id, constraint) in &problem.constraints {
+        if matches!(constraint, Constraint::Standard { .. }) && problem.constraint_class(*id).is_normal() {
             write_constraint(output, constraint, &problem.interner, options)?;
         }
     }
 
+    Ok(())
+}
+
+/// Write the constraints of one non-ordinary [`ConstraintClass`] under their
+/// own section header (`Lazy Constraints` / `User Cuts`), if there are any.
+fn write_classed_constraints_section(
+    output: &mut String,
+    problem: &LpProblem,
+    options: &LpWriterOptions,
+    class: ConstraintClass,
+    header: &str,
+) -> std::fmt::Result {
+    debug_assert!(!class.is_normal(), "ordinary constraints belong under `Subject To`");
+    if !problem.constraint_classes.values().any(|c| *c == class) {
+        return Ok(());
+    }
+    let mut wrote_header = false;
+    // Constraint order, not class-map order, so output follows the model.
+    for (id, constraint) in &problem.constraints {
+        if problem.constraint_class(*id) != class {
+            continue;
+        }
+        if !wrote_header {
+            if options.include_section_spacing {
+                writeln!(output)?;
+            }
+            writeln!(output, "{header}")?;
+            wrote_header = true;
+        }
+        write_constraint(output, constraint, &problem.interner, options)?;
+    }
     Ok(())
 }
 

@@ -205,6 +205,10 @@ fn diff_modified_constraints(
         let c1 = &p1.constraints[&ccons1[name]];
         let c2 = &p2.constraints[&ccons2[name]];
         let mut changes = Vec::new();
+        let (class1, class2) = (p1.constraint_class(ccons1[name]), p2.constraint_class(ccons2[name]));
+        if class1 != class2 {
+            changes.push(format!("class {class1} -> {class2}"));
+        }
         match (c1, c2) {
             (
                 Constraint::Standard { coefficients: cf1, operator: op1, rhs: r1, .. },

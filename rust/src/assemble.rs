@@ -223,9 +223,34 @@ const fn flip(op: ComparisonOp) -> ComparisonOp {
 /// Returns an error for malformed term sequences, a missing comparison
 /// operator, or a non-numeric right-hand side / range bound.
 pub fn assemble_constraints<'input>(elems: &[SpannedElem<'input>]) -> Result<Vec<RawConstraint<'input>>, LexerError> {
-    let explicit_names: HashSet<&'input str> =
-        elems.iter().filter_map(|(_, elem)| if let Elem::Name(n) = *elem { Some(n) } else { None }).collect();
+    let mut sections = assemble_constraint_sections(&[elems])?;
+    debug_assert_eq!(sections.len(), 1, "one body in, one constraint list out");
+    Ok(sections.pop().unwrap_or_default())
+}
 
+/// Assemble several constraint section bodies (`Subject To`, `Lazy
+/// Constraints`, `User Cuts`), returning one constraint list per body.
+///
+/// The bodies share one name space: the generated upper half of a ranged
+/// constraint avoids an explicit name written in *any* of them.
+///
+/// # Errors
+///
+/// See [`assemble_constraints`].
+pub fn assemble_constraint_sections<'input>(bodies: &[&[SpannedElem<'input>]]) -> Result<Vec<Vec<RawConstraint<'input>>>, LexerError> {
+    let explicit_names: HashSet<&'input str> = bodies
+        .iter()
+        .flat_map(|elems| elems.iter())
+        .filter_map(|(_, elem)| if let Elem::Name(n) = *elem { Some(n) } else { None })
+        .collect();
+    bodies.iter().map(|elems| assemble_body(elems, &explicit_names)).collect()
+}
+
+/// Assemble one constraint body; see [`assemble_constraints`].
+fn assemble_body<'input>(
+    elems: &[SpannedElem<'input>],
+    explicit_names: &HashSet<&'input str>,
+) -> Result<Vec<RawConstraint<'input>>, LexerError> {
     let mut constraints = Vec::new();
     let mut i = 0;
 
@@ -268,7 +293,7 @@ pub fn assemble_constraints<'input>(elems: &[SpannedElem<'input>]) -> Result<Vec
                 i = next;
 
                 let lower_name: Cow<'input, str> = name.map_or(Cow::Borrowed("__c__"), Cow::Borrowed);
-                let upper_name: Cow<'input, str> = name.map_or(Cow::Borrowed("__c__"), |n| range_upper_name(n, &explicit_names));
+                let upper_name: Cow<'input, str> = name.map_or(Cow::Borrowed("__c__"), |n| range_upper_name(n, explicit_names));
                 constraints.push(RawConstraint::Standard {
                     name: lower_name,
                     coefficients: mid.coefficients.clone(),

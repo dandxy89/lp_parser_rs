@@ -181,6 +181,48 @@ impl Constraint {
     }
 }
 
+/// How a solver should treat a constraint (CPLEX LP `Lazy Constraints` and
+/// `User Cuts` sections; MPS `LAZYCONS` and `USERCUTS`).
+///
+/// The class does not change the constraint itself: a lazy constraint is part
+/// of the model that a solver may enforce only once it is violated, and a user
+/// cut must not remove any integer-feasible point. A solver that ignores the
+/// class and treats every constraint as ordinary solves the same model.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+pub enum ConstraintClass {
+    /// An ordinary constraint (`Subject To`).
+    #[default]
+    Normal,
+    /// A lazy constraint (`Lazy Constraints`).
+    Lazy,
+    /// A user cut (`User Cuts`).
+    UserCut,
+}
+
+impl ConstraintClass {
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::Normal => "Normal",
+            Self::Lazy => "Lazy",
+            Self::UserCut => "UserCut",
+        }
+    }
+
+    /// Whether this is the default class (an ordinary constraint).
+    #[must_use]
+    pub const fn is_normal(self) -> bool {
+        matches!(self, Self::Normal)
+    }
+}
+
+impl Display for ConstraintClass {
+    #[inline]
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        f.write_str(self.as_str())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 /// Represents an optimisation objective with a name and a list of coefficients.
 pub struct Objective {

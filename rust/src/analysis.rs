@@ -27,7 +27,7 @@ use std::fmt::{Display, Formatter, Result as FmtResult};
 use rustc_hash::FxHashSet;
 
 use crate::interner::NameId;
-use crate::model::{ComparisonOp, Constraint, SOSType, VariableKind};
+use crate::model::{ComparisonOp, Constraint, ConstraintClass, SOSType, VariableKind};
 use crate::problem::LpProblem;
 
 /// Configuration for analysis behaviour and thresholds.
@@ -209,6 +209,10 @@ pub struct ConstraintTypeDistribution {
     pub sos1: usize,
     /// SOS Type 2 constraints
     pub sos2: usize,
+    /// Lazy constraints (also counted under their operator above)
+    pub lazy: usize,
+    /// User cuts (also counted under their operator above)
+    pub user_cuts: usize,
 }
 
 /// A singleton constraint (only one variable).
@@ -448,6 +452,9 @@ impl Display for ProblemAnalysis {
         writeln!(f, "  Equality (=): {} | (<=): {} | (>=): {}", ct.equality, ct.less_than_equal, ct.greater_than_equal)?;
         if ct.less_than > 0 || ct.greater_than > 0 {
             writeln!(f, "  Strict: (<): {} | (>): {}", ct.less_than, ct.greater_than)?;
+        }
+        if ct.lazy > 0 || ct.user_cuts > 0 {
+            writeln!(f, "  Lazy: {} | User cuts: {}", ct.lazy, ct.user_cuts)?;
         }
         if ct.sos1 > 0 || ct.sos2 > 0 {
             writeln!(f, "  SOS1: {} | SOS2: {}", ct.sos1, ct.sos2)?;
@@ -816,6 +823,14 @@ impl LpProblem {
             self.constraints.len(),
             "postcondition: constraint type distribution must sum to total constraint count"
         );
+
+        for class in self.constraint_classes.values() {
+            match class {
+                ConstraintClass::Lazy => type_distribution.lazy += 1,
+                ConstraintClass::UserCut => type_distribution.user_cuts += 1,
+                ConstraintClass::Normal => debug_assert!(false, "constraint_classes must not store the default class"),
+            }
+        }
 
         ConstraintAnalysis { type_distribution, empty_constraints, singleton_constraints, rhs_range: rhs_range.finalise(), sos_summary }
     }

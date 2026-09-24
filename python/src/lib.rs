@@ -9,7 +9,7 @@ use lp_parser_rs::model::{Constraint, Sense, VariableType};
 use lp_parser_rs::mps::writer::{MpsWriterOptions, write_mps_string_with_options};
 use lp_parser_rs::problem::LpProblem;
 use lp_parser_rs::writer::{LpWriterOptions, write_lp_string_with_options};
-use lp_parser_rs::{EntityKind, LpParseError as CoreError, VariableKind};
+use lp_parser_rs::{ConstraintClass, EntityKind, LpParseError as CoreError, VariableKind};
 use pyo3::create_exception;
 use pyo3::exceptions::{PyFileNotFoundError, PyNotADirectoryError, PyOSError, PyRuntimeError};
 use pyo3::prelude::*;
@@ -165,6 +165,7 @@ impl LpParser {
                     dict.set_item("coefficients", coefficients_to_list(py, problem, coefficients)?)?;
                     dict.set_item("operator", format!("{operator:?}"))?;
                     dict.set_item("rhs", rhs)?;
+                    dict.set_item("class", constraint_class_name(problem.constraint_class(*name_id)))?;
                 }
                 Constraint::SOS { weights, sos_type, .. } => {
                     dict.set_item("type", "sos")?;
@@ -523,6 +524,15 @@ fn analysis_to_dict(py: Python, analysis: &lp_parser_rs::analysis::ProblemAnalys
 }
 
 /// Build a list of `{name, value}` dicts from coefficients, resolving interned names.
+/// The Python spelling of a constraint class (`"normal"`, `"lazy"`, `"user_cut"`).
+const fn constraint_class_name(class: ConstraintClass) -> &'static str {
+    match class {
+        ConstraintClass::Normal => "normal",
+        ConstraintClass::Lazy => "lazy",
+        ConstraintClass::UserCut => "user_cut",
+    }
+}
+
 fn coefficients_to_list<'py>(
     py: Python<'py>,
     problem: &LpProblem,

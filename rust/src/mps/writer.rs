@@ -19,7 +19,9 @@
 //! # Sections emitted
 //!
 //! `NAME`, `OBJSENSE` (only when the sense is `Maximize` -- `Minimize` is the
-//! MPS default and is left implicit), `ROWS`, `COLUMNS` (integer/general/binary
+//! MPS default and is left implicit), `ROWS`, `LAZYCONS` / `USERCUTS` (CPLEX:
+//! lazy constraints and user cuts, listed like `ROWS` and otherwise ordinary
+//! rows in `COLUMNS`, `RHS` and `RANGES`), `COLUMNS` (integer/general/binary
 //! variables wrapped in `'MARKER'` `INTORG`/`INTEND` blocks), `RHS`, `RANGES`
 //! (see below), `BOUNDS`, `SOS`, `ENDATA`.
 //!
@@ -94,7 +96,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::error::{LpParseError, LpResult};
 use crate::interner::NameId;
-use crate::model::{Coefficient, ComparisonOp, Constraint, Objective, Sense, VariableBounds, VariableKind};
+use crate::model::{Coefficient, ComparisonOp, Constraint, ConstraintClass, Objective, Sense, VariableBounds, VariableKind};
 use crate::problem::LpProblem;
 use crate::writer::write_number;
 
@@ -325,6 +327,10 @@ fn detect_range_pairs(problem: &LpProblem) -> RangePairs {
         if !upper_rhs.is_finite() || !lower_rhs.is_finite() || upper_rhs < lower_rhs {
             continue;
         }
+        // One ranged row has one class, so both halves must share it.
+        if problem.constraint_class(*name_id) != problem.constraint_class(base_id) {
+            continue;
+        }
         if !coefficients_match(base_coefficients, coefficients) {
             continue;
         }
@@ -384,19 +390,32 @@ fn row_type_letter(operator: ComparisonOp, constraint_name: &str) -> LpResult<ch
 }
 
 /// Write the `ROWS` section: the objective's `N` row followed by one row per
-/// standard constraint. Ranged companion rows are omitted (see [`RangePairs`]).
+/// ordinary standard constraint, then the `LAZYCONS` and `USERCUTS` sections
+/// (same line format) for lazy constraints and user cuts. Ranged companion
+/// rows are omitted (see [`RangePairs`]).
 fn write_rows_section(output: &mut String, problem: &LpProblem, obj_row_name: &str, range_pairs: &RangePairs) -> LpResult<()> {
     writeln!(output, "ROWS").expect("fmt::Write to String is infallible");
     writeln!(output, " N  {obj_row_name}").expect("fmt::Write to String is infallible");
 
-    for (name_id, constraint) in &problem.constraints {
-        if range_pairs.skip.contains(name_id) {
-            continue;
-        }
-        if let Constraint::Standard { name, operator, .. } = constraint {
-            let resolved_name = problem.resolve(*name);
-            let letter = row_type_letter(*operator, resolved_name)?;
-            writeln!(output, " {letter}  {resolved_name}").expect("fmt::Write to String is infallible");
+    for (class, header) in
+        [(ConstraintClass::Normal, None), (ConstraintClass::Lazy, Some("LAZYCONS")), (ConstraintClass::UserCut, Some("USERCUTS"))]
+    {
+        let mut wrote_header = false;
+        for (name_id, constraint) in &problem.constraints {
+            if range_pairs.skip.contains(name_id) || problem.constraint_class(*name_id) != class {
+                continue;
+            }
+            if let Constraint::Standard { name, operator, .. } = constraint {
+                if let Some(header) = header
+                    && !wrote_header
+                {
+                    writeln!(output, "{header}").expect("fmt::Write to String is infallible");
+                    wrote_header = true;
+                }
+                let resolved_name = problem.resolve(*name);
+                let letter = row_type_letter(*operator, resolved_name)?;
+                writeln!(output, " {letter}  {resolved_name}").expect("fmt::Write to String is infallible");
+            }
         }
     }
 

@@ -50,12 +50,21 @@ class LpDiffResult(TypedDict):
     objs_modified: list[tuple[str, list[str]]]
     is_empty: bool
 
-class StandardConstraint(TypedDict):
-    name: str
-    type: Literal["standard"]
-    coefficients: list[Coefficient]
-    operator: str
-    rhs: float
+# "lazy" / "user_cut" for the CPLEX `Lazy Constraints` / `User Cuts` sections.
+ConstraintClass: TypeAlias = Literal["normal", "lazy", "user_cut"]
+
+# Functional syntax: `class` is a Python keyword.
+StandardConstraint = TypedDict(
+    "StandardConstraint",
+    {
+        "name": str,
+        "type": Literal["standard"],
+        "coefficients": list[Coefficient],
+        "operator": str,
+        "rhs": float,
+        "class": ConstraintClass,
+    },
+)
 
 class SOSConstraint(TypedDict):
     name: str

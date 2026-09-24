@@ -40,6 +40,8 @@ constraints:
     greater_than: 0
     sos1: 0
     sos2: 0
+    lazy: 0
+    user_cuts: 0
   empty_constraints: []
   singleton_constraints:
     - name: X05

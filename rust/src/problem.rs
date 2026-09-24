@@ -8,7 +8,7 @@ use crate::error::{EntityKind, LpParseError, LpResult};
 use crate::interner::{NameId, NameInterner};
 use crate::lexer::{Lexer, ParseResult, RawCoefficient, RawConstraint, RawObjective};
 use crate::lp::LpProblemParser;
-use crate::model::{Coefficient, Constraint, Objective, Sense, Variable, VariableKind, VariableType};
+use crate::model::{Coefficient, Constraint, ConstraintClass, Objective, Sense, Variable, VariableKind, VariableType};
 use crate::mps::{extract_mps_name, parse_mps};
 use crate::{INFINITE_BOUND_THRESHOLD, NUMERIC_EPSILON};
 
@@ -199,6 +199,13 @@ pub struct LpProblem {
     pub constraints: IndexMap<NameId, Constraint>,
     /// Variables keyed by interned name.
     pub variables: IndexMap<NameId, Variable>,
+    /// Class of each constraint that is not an ordinary one (lazy constraints
+    /// and user cuts), keyed by constraint name. A constraint with no entry is
+    /// [`ConstraintClass::Normal`]; use [`Self::constraint_class`] to read it.
+    ///
+    /// Invariant: every key names a constraint in [`Self::constraints`] and no
+    /// value is [`ConstraintClass::Normal`].
+    pub constraint_classes: IndexMap<NameId, ConstraintClass>,
     /// The name interner holding all interned strings.
     pub interner: NameInterner,
 }
@@ -351,10 +358,45 @@ impl LpProblem {
         self.variables.insert(variable.name, variable);
     }
 
+    /// The class of the constraint named by `id`: [`ConstraintClass::Normal`]
+    /// unless it was declared lazy or a user cut.
+    #[inline]
+    #[must_use]
+    pub fn constraint_class(&self, id: NameId) -> ConstraintClass {
+        self.constraint_classes.get(&id).copied().unwrap_or_default()
+    }
+
+    /// Set the class of a constraint (ordinary, lazy or user cut).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the constraint does not exist, or if it is an SOS
+    /// constraint and `class` is not [`ConstraintClass::Normal`] (SOS sets
+    /// have their own section and cannot be lazy or a cut).
+    pub fn set_constraint_class(&mut self, constraint_name: &str, class: ConstraintClass) -> LpResult<()> {
+        Self::check_name(constraint_name, "constraint_name")?;
+        let con_id = self
+            .interner
+            .get(constraint_name)
+            .filter(|id| self.constraints.contains_key(id))
+            .ok_or_else(|| LpParseError::not_found(EntityKind::Constraint, constraint_name))?;
+        if class.is_normal() {
+            self.constraint_classes.shift_remove(&con_id);
+            return Ok(());
+        }
+        if matches!(self.constraints[&con_id], Constraint::SOS { .. }) {
+            return Err(LpParseError::invalid_operation("SOS constraints cannot be lazy constraints or user cuts"));
+        }
+        self.constraint_classes.insert(con_id, class);
+        Ok(())
+    }
+
     #[inline]
     /// Add a new constraint to the problem.
     ///
-    /// If a constraint with the same name already exists, it will be replaced.
+    /// If a constraint with the same name already exists, it will be replaced,
+    /// and the replacement is an ordinary constraint (see
+    /// [`Self::set_constraint_class`]).
     pub fn add_constraint(&mut self, constraint: Constraint) {
         debug_assert!(!self.interner.resolve(constraint.name()).is_empty(), "constraint name must not be empty");
         let name_id = constraint.name();
@@ -373,6 +415,7 @@ impl LpProblem {
             }
         }
 
+        self.constraint_classes.shift_remove(&name_id);
         self.constraints.insert(name_id, constraint);
     }
 
@@ -599,6 +642,9 @@ impl LpProblem {
         }
 
         self.constraints.insert(new_id, constraint);
+        if let Some(class) = self.constraint_classes.shift_remove(&old_id) {
+            self.constraint_classes.insert(new_id, class);
+        }
 
         debug_assert!(!self.constraints.contains_key(&old_id), "postcondition: old_id must be gone from constraints");
         debug_assert!(self.constraints.contains_key(&new_id), "postcondition: new_id must be present in constraints");
@@ -688,6 +734,7 @@ impl LpProblem {
         if self.constraints.shift_remove(&con_id).is_none() {
             return Err(LpParseError::not_found(EntityKind::Constraint, constraint_name));
         }
+        self.constraint_classes.shift_remove(&con_id);
         Ok(())
     }
 
@@ -742,7 +789,7 @@ mod serde_support {
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
     use crate::interner::{NameId, NameInterner};
-    use crate::model::{Coefficient, ComparisonOp, Constraint, Objective, SOSType, Sense, Variable, VariableType};
+    use crate::model::{Coefficient, ComparisonOp, Constraint, ConstraintClass, Objective, SOSType, Sense, Variable, VariableType};
     use crate::problem::LpProblem;
 
     #[derive(Serialize, Deserialize)]
@@ -754,8 +801,20 @@ mod serde_support {
     #[derive(Serialize, Deserialize)]
     #[serde(tag = "type")]
     enum SerdeConstraint {
-        Standard { name: String, coefficients: Vec<SerdeCoefficient>, operator: ComparisonOp, rhs: f64 },
-        Sos { name: String, sos_type: SOSType, weights: Vec<SerdeCoefficient> },
+        Standard {
+            name: String,
+            coefficients: Vec<SerdeCoefficient>,
+            operator: ComparisonOp,
+            rhs: f64,
+            /// Omitted for ordinary constraints, so older snapshots still load.
+            #[serde(default, skip_serializing_if = "is_normal")]
+            class: ConstraintClass,
+        },
+        Sos {
+            name: String,
+            sos_type: SOSType,
+            weights: Vec<SerdeCoefficient>,
+        },
     }
 
     #[derive(Serialize, Deserialize)]
@@ -787,6 +846,12 @@ mod serde_support {
         objectives: Vec<SerdeObjective>,
         constraints: Vec<SerdeConstraint>,
         variables: Vec<SerdeVariable>,
+    }
+
+    // Serde's `skip_serializing_if` passes the field by reference.
+    #[allow(clippy::trivially_copy_pass_by_ref)]
+    const fn is_normal(class: &ConstraintClass) -> bool {
+        class.is_normal()
     }
 
     fn coeff_to_serde(c: &Coefficient, interner: &NameInterner) -> SerdeCoefficient {
@@ -828,6 +893,7 @@ mod serde_support {
                             coefficients: coeffs_to_serde(coefficients, &self.interner),
                             operator: *operator,
                             rhs: *rhs,
+                            class: self.constraint_class(*name),
                         },
                         Constraint::SOS { name, sos_type, weights, .. } => SerdeConstraint::Sos {
                             name: self.interner.resolve(*name).to_string(),
@@ -871,12 +937,16 @@ mod serde_support {
                 })
                 .collect();
 
+            let mut constraint_classes: IndexMap<NameId, ConstraintClass> = IndexMap::new();
             let constraints: IndexMap<NameId, Constraint> = proxy
                 .constraints
                 .iter()
                 .map(|sc| match sc {
-                    SerdeConstraint::Standard { name, coefficients, operator, rhs } => {
+                    SerdeConstraint::Standard { name, coefficients, operator, rhs, class } => {
                         let name_id = interner.intern(name);
+                        if !class.is_normal() {
+                            constraint_classes.insert(name_id, *class);
+                        }
                         let con = Constraint::Standard {
                             name: name_id,
                             coefficients: coeffs_from_serde(coefficients, &mut interner),
@@ -913,7 +983,7 @@ mod serde_support {
                 })
                 .collect();
 
-            Ok(Self { name: proxy.name, sense: proxy.sense, objectives, constraints, variables, interner })
+            Ok(Self { name: proxy.name, sense: proxy.sense, objectives, constraints, variables, constraint_classes, interner })
         }
     }
 }
@@ -956,6 +1026,8 @@ fn from_parse_result(parsed: ParseResult<'_>, problem_name: Option<String>) -> L
     let reserved: HashSet<&str> = parsed
         .constraints
         .iter()
+        .chain(&parsed.lazy_constraints)
+        .chain(&parsed.user_cuts)
         .chain(&parsed.sos)
         .filter_map(|c| match c {
             RawConstraint::Standard { name, .. } | RawConstraint::SOS { name, .. } => (name != "__c__").then_some(name.as_ref()),
@@ -963,13 +1035,30 @@ fn from_parse_result(parsed: ParseResult<'_>, problem_name: Option<String>) -> L
         .collect();
 
     let objectives = intern_objectives(&mut interner, &parsed.objectives, &mut variables);
-    let mut constraints = intern_constraints(&mut interner, &parsed.constraints, &mut variables, &mut constraint_counter, &reserved);
+    let mut constraints = IndexMap::with_capacity(parsed.constraints.len() + parsed.lazy_constraints.len() + parsed.user_cuts.len());
+    let mut constraint_classes = IndexMap::new();
+    for (raw, class) in [
+        (&parsed.constraints, ConstraintClass::Normal),
+        (&parsed.lazy_constraints, ConstraintClass::Lazy),
+        (&parsed.user_cuts, ConstraintClass::UserCut),
+    ] {
+        let mut names = NameAllocation { counter: &mut constraint_counter, reserved: &reserved };
+        for id in intern_constraints(&mut interner, raw, &mut variables, &mut constraints, &mut names) {
+            if class.is_normal() {
+                // A later ordinary definition replaces a lazy one of the same name.
+                constraint_classes.shift_remove(&id);
+            } else {
+                constraint_classes.insert(id, class);
+            }
+        }
+    }
 
     process_bounds(&mut interner, &parsed.bounds, &mut variables);
     process_variable_types(&mut interner, &parsed, &mut variables);
     intern_sos_constraints(&mut interner, &parsed.sos, &mut variables, &mut constraints, &mut constraint_counter, &reserved);
 
-    LpProblem { name: problem_name, sense: parsed.sense, objectives, constraints, variables, interner }
+    debug_assert!(constraint_classes.keys().all(|id| constraints.contains_key(id)), "every classed constraint must exist");
+    LpProblem { name: problem_name, sense: parsed.sense, objectives, constraints, variables, constraint_classes, interner }
 }
 
 impl TryFrom<&str> for LpProblem {
@@ -1024,27 +1113,36 @@ fn intern_objectives(
     objectives
 }
 
-/// Intern raw constraints, assigning auto-names to unnamed ones.
+/// State for generating constraint names: the running `C<n>` counter and
+/// the names the file declares explicitly.
+struct NameAllocation<'a, 'r> {
+    counter: &'a mut u32,
+    reserved: &'a HashSet<&'r str>,
+}
+
+/// Intern raw constraints into `constraints`, assigning auto-names to unnamed
+/// ones. Returns the final name of each constraint, in order.
 fn intern_constraints(
     interner: &mut NameInterner,
     raw_constraints: &[RawConstraint<'_>],
     variables: &mut IndexMap<NameId, Variable>,
-    constraint_counter: &mut u32,
-    reserved: &HashSet<&str>,
-) -> IndexMap<NameId, Constraint> {
-    let mut constraints = IndexMap::with_capacity(raw_constraints.len());
+    constraints: &mut IndexMap<NameId, Constraint>,
+    names: &mut NameAllocation<'_, '_>,
+) -> Vec<NameId> {
     let mut name_buf = String::with_capacity(16);
+    let mut ids = Vec::with_capacity(raw_constraints.len());
 
     for raw_con in raw_constraints {
         let mut con = intern_constraint(interner, raw_con);
-        let final_id = assign_constraint_name(interner, &constraints, reserved, &mut con, constraint_counter, "C", &mut name_buf);
+        let final_id = assign_constraint_name(interner, constraints, names.reserved, &mut con, names.counter, "C", &mut name_buf);
         register_constraint_variables(variables, &con);
         if constraints.insert(final_id, con).is_some() {
             eprintln!("duplicate constraint name '{}': the later definition replaces the earlier one", interner.resolve(final_id));
         }
+        ids.push(final_id);
     }
 
-    constraints
+    ids
 }
 
 /// Map a bound value of magnitude `>= 1e30` to the matching infinity (the
