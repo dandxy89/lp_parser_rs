@@ -226,7 +226,8 @@ pub struct SearchResult {
     pub entry_index: usize,
     /// Fuzzy match score (0 for regex/substring modes).
     pub score: u16,
-    /// Character positions in the name that matched (for highlighting).
+    /// Byte positions in the name that matched (for highlighting), ascending;
+    /// a multi-byte character contributes one per matched byte.
     pub match_indices: Vec<usize>,
     /// Index into the pre-built `search_haystack` for name/kind resolution.
     pub haystack_index: usize,
