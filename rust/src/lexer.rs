@@ -423,7 +423,14 @@ impl<'input> Iterator for Lexer<'input> {
                 self.prev = Some(tok.clone());
                 Some(Ok((span.start, tok, span.end)))
             }
-            Err(e) => Some(Err(e)),
+            Err(mut e) => {
+                // Logos errors carry no location: point at the offending text.
+                e.position = span.start;
+                if e.message.is_none() {
+                    e.message = Some(format!("unrecognised token '{}'", &self.input[span]));
+                }
+                Some(Err(e))
+            }
         }
     }
 }
@@ -951,6 +958,14 @@ mod tests {
 
         // `st` is only the header once.
         assert_eq!(tokenize("st\nst: x <= 1")[..3], [Token::SubjectTo, Identifier("st"), Colon]);
+    }
+
+    #[test]
+    fn test_lexer_error_reports_its_position() {
+        let input = "min\nx\nst\nc1: x >= 1\nc2: x ^ 3\nend";
+        let err = Lexer::new(input).find_map(Result::err).expect("'^' must be a lexer error");
+        assert_eq!(err.position, input.find('^').unwrap());
+        assert_eq!(err.message.as_deref(), Some("unrecognised token '^'"));
     }
 
     #[test]

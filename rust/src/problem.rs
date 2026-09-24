@@ -1891,6 +1891,13 @@ End";
         // propagate out of `parse` rather than panic or be swallowed.
         assert!(LpProblem::parse("minimize\nx1\nsubject to\nc1: x1 <= | 1\nend").is_err());
         assert!(LpProblem::parse("minimize\n| x1\nsubject to\nc1: x1 <= 1\nend").is_err());
+
+        // The error points at the offending line, not the start of the input.
+        let err = LpProblem::parse("minimize\nx\nsubject to\nc1: x >= 1\nc2: x ^ 3\nend").unwrap_err();
+        let crate::LpParseError::ParseError { context: Some(context), .. } = &err else {
+            panic!("expected a parse error with context: {err:?}")
+        };
+        assert_eq!((context.line, context.column), (5, 7));
     }
 }
 
