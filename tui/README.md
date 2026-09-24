@@ -99,7 +99,7 @@ Press `?` at any time to open the key bindings pop up.
 
 ### Side-by-Side Constraint View
 
-Modified standard constraints are displayed in a two-column layout showing old and new coefficients side by side. Added coefficients are highlighted in green, removed in red, and modified in yellow. Unchanged coefficients appear in grey.
+Modified standard constraints are displayed as a table with the old and new coefficients side by side, aligned on their decimal points. Modified coefficients also show the change (`Δ`) and relative change (`%Δ`); a side a coefficient is missing from shows a dimmed `—`. Added coefficients are highlighted in green, removed in red, and modified in yellow. Unchanged coefficients appear in grey. On a narrow pane the `%Δ` and then `Δ` columns are dropped before the names are shortened.
 
 ### Raw Text View
 

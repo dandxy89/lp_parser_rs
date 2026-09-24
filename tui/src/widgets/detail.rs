@@ -673,8 +673,15 @@ fn render_inspect_coefficients(
 /// Render a side-by-side old/new coefficient comparison for modified
 /// standard constraints. Returns the total content line count.
 ///
+/// One row per variable: the name, the old and new values, and — where both
+/// sides exist and differ — the change `Δ` and relative change `%Δ`. Values
+/// are aligned on their decimal points, and a side the variable is missing
+/// from shows a dimmed `—`. The optional `%Δ` then `Δ` columns give way on a
+/// narrow pane before the name is cut below [`SideBySideColumns::MIN_NAME`].
+///
 /// Uses windowed rendering: only builds `Line` objects for coefficient rows
 /// visible in the viewport, avoiding `O(total_rows)` allocations per frame.
+/// Column widths come from the visible rows too.
 #[allow(clippy::too_many_arguments)]
 fn render_constraint_side_by_side(
     frame: &mut Frame,
@@ -714,105 +721,179 @@ fn render_constraint_side_by_side(
     let visible_height = v_chunks[1].height as usize;
 
     // Windowed rendering: only build Lines for visible coefficient rows.
-    // The "Old"/"New" column header occupies the first line of the coefficient area.
+    // The column header occupies the first line of the coefficient area.
     let column_header_lines: usize = 1;
     let data_skip = (coefficient_scroll as usize).saturating_sub(column_header_lines);
     let data_take = if coefficient_scroll == 0 { visible_height.saturating_sub(column_header_lines) } else { visible_height };
+    let window = &rows[data_skip.min(rows.len())..(data_skip + data_take).min(rows.len())];
 
-    let mut left_lines: Vec<Line<'_>> =
-        vec![Line::from(Span::styled("  Old", Style::default().fg(t.removed).add_modifier(Modifier::BOLD)))];
-    let mut right_lines: Vec<Line<'_>> = vec![Line::from(Span::styled("  New", Style::default().fg(t.added).add_modifier(Modifier::BOLD)))];
+    // Cell text for the visible rows, then each column aligned on the point.
+    let cells: Vec<[Option<String>; 4]> = window.iter().map(side_by_side_cells).collect();
+    let column = |index: usize| decimal_align(&cells.iter().map(|row| row[index].as_deref()).collect::<Vec<_>>());
+    let (old, new, delta, percent) = (column(0), column(1), column(2), column(3));
+    let widths = [&old, &new, &delta, &percent].map(|cells| cells.iter().map(|cell| cell.chars().count()).max().unwrap_or(0));
+    let longest_name = window.iter().map(|row| row.variable.chars().count()).max().unwrap_or(0);
+    let columns = SideBySideColumns::fit(v_chunks[1].width as usize, longest_name, widths);
+    let [old_w, new_w, delta_w, percent_w] = columns.values;
+    let name_w = columns.name;
+
+    let heading = Style::default().fg(t.muted).add_modifier(Modifier::BOLD);
+    let mut header = vec![
+        Span::styled(format!("  {:<name_w$} ", "Variable"), heading),
+        Span::styled(format!("{:>old_w$}", "Old"), Style::default().fg(t.removed).add_modifier(Modifier::BOLD)),
+        Span::styled(format!("{GAP}{:>new_w$}", "New"), Style::default().fg(t.added).add_modifier(Modifier::BOLD)),
+    ];
+    if columns.delta {
+        header.push(Span::styled(format!("{GAP}{:>delta_w$}", "\u{394}"), heading));
+    }
+    if columns.percent {
+        header.push(Span::styled(format!("{GAP}{:>percent_w$}", "%\u{394}"), heading));
+    }
+    let mut lines: Vec<Line<'_>> = vec![Line::from(header)];
 
     // Placeholder lines for data rows scrolled above the viewport.
     for _ in 0..data_skip.min(rows.len()) {
-        left_lines.push(Line::default());
-        right_lines.push(Line::default());
+        lines.push(Line::default());
     }
 
-    let h_chunks = Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]).split(v_chunks[1]);
-    let columns = SideBySideColumns::fit(h_chunks[0].width.min(h_chunks[1].width) as usize);
-
-    // Build styled Lines only for the visible window.
-    // Reuse string buffers across rows to avoid per-row heap allocations.
-    let mut old_buf = String::with_capacity(16);
-    let mut new_buf = String::with_capacity(16);
-    for row in rows.iter().skip(data_skip).take(data_take) {
-        let (left_style, right_style, badge) = match row.change_kind {
-            Some(DiffKind::Added) => (Style::default().fg(t.muted), Style::default().fg(t.added), " [+]"),
-            Some(DiffKind::Removed) => (Style::default().fg(t.removed), Style::default().fg(t.muted), " [-]"),
+    let dim = Style::default().fg(t.border);
+    let change = Style::default().fg(t.accent);
+    for (index, row) in window.iter().enumerate() {
+        let (name_style, old_style, new_style, badge) = match row.change_kind {
+            Some(DiffKind::Added) => (Style::default().fg(t.added), dim, Style::default().fg(t.added), " [+]"),
+            Some(DiffKind::Removed) => (Style::default().fg(t.removed), Style::default().fg(t.removed), dim, " [-]"),
             // Renamed never occurs on coefficient rows (asserted in build_coeff_rows);
             // folded with Modified to keep the match exhaustive.
-            Some(DiffKind::Modified | DiffKind::Renamed) => (Style::default().fg(t.removed), Style::default().fg(t.added), " [~]"),
-            None => (Style::default().fg(t.muted), Style::default().fg(t.muted), ""),
+            Some(DiffKind::Modified | DiffKind::Renamed) => {
+                (Style::default().fg(t.modified), Style::default().fg(t.removed), Style::default().fg(t.added), " [~]")
+            }
+            None => (Style::default().fg(t.muted), Style::default().fg(t.muted), Style::default().fg(t.muted), ""),
         };
-
-        old_buf.clear();
-        if let Some(v) = row.old_value {
-            old_buf.push_str(&fit_number(v, columns.value));
-        }
-        new_buf.clear();
-        if let Some(v) = row.new_value {
-            new_buf.push_str(&fit_number(v, columns.value));
-        }
-
-        let (name_w, value_w) = (columns.name, columns.value);
+        // The missing side's `—` is dimmed whatever the row's colour.
+        let side_style = |value: Option<f64>, style: Style| if value.is_some() { style } else { dim };
         let name = truncate_middle(&row.variable, name_w.max(2));
-        left_lines.push(Line::from(vec![
-            Span::styled(format!("  {name:<name_w$} "), left_style),
-            Span::styled(format!("{old_buf:>value_w$}"), left_style),
-            Span::styled(badge, left_style),
-        ]));
-        right_lines.push(Line::from(vec![
-            Span::styled(format!("  {name:<name_w$} "), right_style),
-            Span::styled(format!("{new_buf:>value_w$}"), right_style),
-            Span::styled(badge, right_style),
-        ]));
+        let mut spans = vec![
+            Span::styled(format!("  {name:<name_w$} "), name_style),
+            Span::styled(format!("{:>old_w$}", old[index]), side_style(row.old_value, old_style)),
+            Span::styled(format!("{GAP}{:>new_w$}", new[index]), side_style(row.new_value, new_style)),
+        ];
+        if columns.delta {
+            spans.push(Span::styled(format!("{GAP}{:>delta_w$}", delta[index]), change));
+        }
+        if columns.percent {
+            spans.push(Span::styled(format!("{GAP}{:>percent_w$}", percent[index]), change));
+        }
+        spans.push(Span::styled(badge, name_style));
+        lines.push(Line::from(spans));
     }
 
     // Placeholder lines for data rows below the viewport.
-    let built_data = data_skip.min(rows.len()) + rows.len().saturating_sub(data_skip).min(data_take);
-    for _ in built_data..rows.len() {
-        left_lines.push(Line::default());
-        right_lines.push(Line::default());
+    for _ in data_skip.min(rows.len()) + window.len()..rows.len() {
+        lines.push(Line::default());
     }
 
-    let left_paragraph = Paragraph::new(left_lines).scroll((coefficient_scroll, 0));
-    let right_paragraph = Paragraph::new(right_lines).scroll((coefficient_scroll, 0));
-    frame.render_widget(left_paragraph, h_chunks[0]);
-    frame.render_widget(right_paragraph, h_chunks[1]);
+    frame.render_widget(Paragraph::new(lines).scroll((coefficient_scroll, 0)), v_chunks[1]);
 
     header_line_count + 1 + rows.len()
 }
 
-/// Column widths for one half of the side-by-side coefficient view:
-/// `"  " name " " value badge`, with a column spare at the right edge.
+/// The gap between the side-by-side view's value columns.
+const GAP: &str = "  ";
+
+/// The cells of one side-by-side row: old, new, `Δ` and `%Δ`. A side the
+/// variable is missing from is `—`; the change columns are only filled for a
+/// modified coefficient, which has both sides.
+fn side_by_side_cells(row: &crate::detail_model::CoefficientRow) -> [Option<String>; 4] {
+    const VALUE: usize = SideBySideColumns::VALUE;
+    let side = |value: Option<f64>| Some(value.map_or_else(|| "\u{2014}".to_owned(), |v| fit_number(v, VALUE)));
+    let modified = matches!(row.change_kind, Some(DiffKind::Modified));
+    let (delta, percent) = match (row.old_value, row.new_value) {
+        (Some(old), Some(new)) if modified => {
+            let delta = new - old;
+            let sign = if delta > 0.0 { "+" } else { "" };
+            let percent = (old.abs() > 0.0).then(|| format!("{:+.1}%", delta / old.abs() * 100.0));
+            (Some(format!("{sign}{}", fit_number(delta, VALUE - sign.len()))), percent)
+        }
+        _ => (None, None),
+    };
+    [side(row.old_value), side(row.new_value), delta, percent]
+}
+
+/// Align a column of numbers on their decimal points: integer parts
+/// right-aligned, fractions left-aligned. Cells without a point (integers,
+/// scientific notation, `—`) align as though the point followed them; `None`
+/// cells come back blank.
+fn decimal_align(cells: &[Option<&str>]) -> Vec<String> {
+    let split = |cell: &str| -> (usize, usize) {
+        let integer = if cell.contains('e') { cell.len() } else { cell.find('.').unwrap_or(cell.len()) };
+        let integer_width = cell[..integer].chars().count();
+        (integer_width, cell.chars().count() - integer_width)
+    };
+    let (integer_width, fraction_width) =
+        cells.iter().flatten().map(|cell| split(cell)).fold((0, 0), |(integer, fraction), (i, f)| (integer.max(i), fraction.max(f)));
+    cells
+        .iter()
+        .map(|cell| match cell {
+            Some(cell) => {
+                let (integer, _) = split(cell);
+                let pad = integer_width - integer;
+                let text = format!("{:pad$}{cell}", "");
+                format!("{text:<width$}", width = integer_width + fraction_width)
+            }
+            None => " ".repeat(integer_width + fraction_width),
+        })
+        .collect()
+}
+
+/// Column layout of the side-by-side coefficient view.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct SideBySideColumns {
     name: usize,
-    value: usize,
+    /// Widths of the old, new, `Δ` and `%Δ` columns.
+    values: [usize; 4],
+    /// Whether the `Δ` column is drawn.
+    delta: bool,
+    /// Whether the `%Δ` column is drawn.
+    percent: bool,
 }
 
 impl SideBySideColumns {
-    /// Indent before the name, and the gap between name and value.
+    /// Indent before the name, and the gap after it.
     const CHROME: usize = 2 + 1;
     /// The ` [~]` change badge, plus a spare column at the right edge.
     const BADGE: usize = 4 + 1;
-    /// The value column's width when there is room for it.
+    /// Widest a value is formatted; longer ones are rounded to fit.
     const VALUE: usize = 10;
-    /// The narrowest name column worth drawing; below this the value shrinks.
-    const MIN_NAME: usize = 3;
+    /// The narrowest name column worth keeping the change columns for.
+    const MIN_NAME: usize = 8;
+    /// Header labels, which set each value column's minimum width.
+    const HEADERS: [&str; 4] = ["Old", "New", "\u{394}", "%\u{394}"];
 
-    /// Size the columns to a half-pane `width`. The name gives way first — it
-    /// is middle-truncated, while a value cut short reads as a different
-    /// number — and the value only shrinks (rounded to fit) once the name is
-    /// down to its minimum.
-    fn fit(width: usize) -> Self {
-        let available = width.saturating_sub(Self::CHROME + Self::BADGE);
-        if available >= Self::VALUE + Self::MIN_NAME {
-            Self { name: available - Self::VALUE, value: Self::VALUE }
-        } else {
-            Self { name: Self::MIN_NAME, value: available.saturating_sub(Self::MIN_NAME).max(1) }
+    /// Lay the columns out in `width`, given the longest visible name and the
+    /// visible cells' `widths` (zero for a column with no cells). `%Δ` goes
+    /// first when room is short, then `Δ`; only then does the name shrink
+    /// below [`Self::MIN_NAME`].
+    fn fit(width: usize, longest_name: usize, widths: [usize; 4]) -> Self {
+        let mut values = widths;
+        for (value, header) in values.iter_mut().zip(Self::HEADERS) {
+            *value = (*value).max(header.chars().count());
         }
+        let gap = GAP.len();
+        let base = Self::CHROME + values[0] + gap + values[1] + Self::BADGE;
+        let with_delta = base + gap + values[2];
+        let with_percent = with_delta + gap + values[3];
+        let min_name = Self::MIN_NAME.min(longest_name.max("Variable".len()));
+        // A change column with nothing in it (no modified row in view) is not drawn.
+        let (has_delta, has_percent) = (widths[2] > 0, widths[3] > 0);
+        let (used, delta, percent) = if has_delta && has_percent && width >= with_percent + min_name {
+            (with_percent, true, true)
+        } else if has_delta && width >= with_delta + min_name {
+            (with_delta, true, false)
+        } else {
+            (base, false, false)
+        };
+        let name = width.saturating_sub(used).clamp(3, longest_name.max("Variable".len()));
+        Self { name, values, delta, percent }
     }
 }
 
@@ -1031,10 +1112,41 @@ mod tests {
     }
 
     #[test]
-    fn side_by_side_columns_shrink_the_name_before_the_value() {
-        assert_eq!(SideBySideColumns::fit(30), SideBySideColumns { name: 12, value: 10 });
-        assert_eq!(SideBySideColumns::fit(21), SideBySideColumns { name: 3, value: 10 });
-        assert_eq!(SideBySideColumns::fit(16), SideBySideColumns { name: 3, value: 5 }, "the value shrinks once the name is at its floor");
-        assert_eq!(SideBySideColumns::fit(0), SideBySideColumns { name: 3, value: 1 });
+    fn side_by_side_drops_the_change_columns_before_the_name() {
+        let widths = [7, 7, 6, 6];
+        let wide = SideBySideColumns::fit(80, 20, widths);
+        assert!(wide.delta && wide.percent, "a wide pane shows both change columns");
+        let unchanged = SideBySideColumns::fit(80, 20, [7, 7, 0, 0]);
+        assert!(!unchanged.delta && !unchanged.percent, "empty change columns are not drawn");
+        assert_eq!(wide.name, 20, "the name column is no wider than the longest name");
+        let medium = SideBySideColumns::fit(45, 20, widths);
+        assert!(medium.delta && !medium.percent, "%\u{394} goes first");
+        let narrow = SideBySideColumns::fit(35, 20, widths);
+        assert!(!narrow.delta && !narrow.percent, "then \u{394}");
+        assert!(narrow.name >= SideBySideColumns::MIN_NAME, "the name keeps its minimum: {narrow:?}");
+    }
+
+    #[test]
+    fn decimal_align_lines_up_the_points() {
+        let aligned = decimal_align(&[Some("1086.9"), Some("41.19926"), Some("2"), Some("\u{2014}"), None]);
+        assert_eq!(aligned, ["1086.9    ", "  41.19926", "   2      ", "   \u{2014}      ", "          "]);
+        let dots: Vec<usize> = aligned[..2].iter().map(|cell| cell.find('.').expect("has a point")).collect();
+        assert_eq!(dots[0], dots[1], "the points share a column");
+    }
+
+    #[test]
+    fn side_by_side_cells_fill_the_change_only_where_both_sides_differ() {
+        let row = |old, new, kind| crate::detail_model::CoefficientRow {
+            variable: "x".to_owned(),
+            old_value: old,
+            new_value: new,
+            change_kind: kind,
+        };
+        let modified = side_by_side_cells(&row(Some(2.0), Some(3.0), Some(DiffKind::Modified)));
+        assert_eq!(modified, [Some("2".to_owned()), Some("3".to_owned()), Some("+1".to_owned()), Some("+50.0%".to_owned())]);
+        let added = side_by_side_cells(&row(None, Some(3.0), Some(DiffKind::Added)));
+        assert_eq!(added, [Some("\u{2014}".to_owned()), Some("3".to_owned()), None, None], "the missing side is a dash");
+        let from_zero = side_by_side_cells(&row(Some(0.0), Some(3.0), Some(DiffKind::Modified)));
+        assert_eq!(from_zero[3], None, "no relative change from zero");
     }
 }
