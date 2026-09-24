@@ -63,6 +63,32 @@ pub(crate) fn new_issue_indices(old: &[AnalysisIssue], new: &[AnalysisIssue]) ->
         .collect()
 }
 
+/// The issues the Numerics tab flags in its label: how many, and the worst
+/// severity among them.
+///
+/// Inspect mode counts the model's errors and warnings (informational notes
+/// are not worth a badge). Diff mode counts the issues that are new in file 2
+/// — the ones the change introduced. `None` when there is nothing to flag.
+pub(crate) fn numerics_badge(mode: crate::state::AppMode, report: &LpDiffReport) -> Option<(usize, IssueSeverity)> {
+    let flagged: Vec<IssueSeverity> = match mode {
+        crate::state::AppMode::Inspect => {
+            report.analysis1.issues.iter().map(|issue| issue.severity).filter(|severity| !matches!(severity, IssueSeverity::Info)).collect()
+        }
+        crate::state::AppMode::Diff => new_issue_indices(&report.analysis1.issues, &report.analysis2.issues)
+            .into_iter()
+            .map(|index| report.analysis2.issues[index].severity)
+            .collect(),
+    };
+    let worst = if flagged.iter().any(|severity| matches!(severity, IssueSeverity::Error)) {
+        IssueSeverity::Error
+    } else if flagged.iter().any(|severity| matches!(severity, IssueSeverity::Warning)) {
+        IssueSeverity::Warning
+    } else {
+        IssueSeverity::Info
+    };
+    (!flagged.is_empty()).then_some((flagged.len(), worst))
+}
+
 /// Count issues by severity: `(errors, warnings, infos)`.
 pub(crate) fn count_by_severity(issues: &[AnalysisIssue]) -> (usize, usize, usize) {
     let mut errors = 0;
@@ -414,6 +440,17 @@ mod tests {
         let old = [issue(IssueSeverity::Warning, IssueCategory::Other, "same")];
         let new = [issue(IssueSeverity::Error, IssueCategory::Other, "same")];
         assert!(new_issue_indices(&old, &new).is_empty(), "expected empty, got {:?}", new_issue_indices(&old, &new));
+    }
+
+    #[test]
+    fn the_numerics_badge_counts_what_the_tab_should_flag() {
+        use crate::state::AppMode;
+        let same = crate::snapshot_tests::diff_app_from(crate::snapshot_tests::BASE_LP, crate::snapshot_tests::BASE_LP);
+        assert_eq!(numerics_badge(AppMode::Diff, &same.report), None, "identical files introduce no issues");
+
+        let inspect = crate::snapshot_tests::inspect_app_from(crate::snapshot_tests::BASE_LP);
+        let flagged = inspect.report.analysis1.issues.iter().filter(|issue| !matches!(issue.severity, IssueSeverity::Info)).count();
+        assert_eq!(numerics_badge(AppMode::Inspect, &inspect.report).map(|(count, _)| count), (flagged > 0).then_some(flagged));
     }
 
     #[test]

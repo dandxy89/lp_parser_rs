@@ -26,11 +26,23 @@ pub(super) enum MpsSection {
     Name,
     ObjSense,
     Rows,
+    /// CPLEX `LAZYCONS`: rows (in `ROWS` format) that are lazy constraints.
+    LazyCons,
+    /// CPLEX `USERCUTS`: rows (in `ROWS` format) that are user cuts.
+    UserCuts,
     Columns,
     Rhs,
     Ranges,
     Bounds,
     Sos,
+    /// CPLEX `INDICATORS`: `IF row column value` lines.
+    Indicators,
+    /// `QUADOBJ`: upper triangle of the objective's `Q` (`c'x + 1/2 x'Qx`).
+    QuadObj,
+    /// `QMATRIX`: the full objective `Q` (`c'x + 1/2 x'Qx`).
+    QMatrix,
+    /// `QCMATRIX row`: the full `Q` of a quadratic constraint (`a'x + x'Qx`).
+    QcMatrix,
     Unsupported,
 }
 
@@ -53,8 +65,36 @@ pub(super) struct BoundAccumulator {
     pub(super) lower: Option<f64>,
     pub(super) upper: Option<f64>,
     pub(super) fixed: Option<f64>,
-    pub(super) free: bool,
+    /// `lower` was set by an `FR` record, so a later bound record on that side
+    /// overrides it instead of counting as a duplicate.
+    pub(super) lower_from_free: bool,
+    /// `upper` was set by an `FR` record (see `lower_from_free`).
+    pub(super) upper_from_free: bool,
     pub(super) binary: bool,
+}
+
+impl BoundAccumulator {
+    /// Whether a lower bound has been declared by a record other than `FR`.
+    pub(super) const fn has_explicit_lower(&self) -> bool {
+        self.lower.is_some() && !self.lower_from_free
+    }
+
+    /// Whether an upper bound has been declared by a record other than `FR`.
+    pub(super) const fn has_explicit_upper(&self) -> bool {
+        self.upper.is_some() && !self.upper_from_free
+    }
+
+    /// Record an explicit lower bound, replacing any `FR`-derived one.
+    pub(super) const fn set_lower(&mut self, value: f64) {
+        self.lower = Some(value);
+        self.lower_from_free = false;
+    }
+
+    /// Record an explicit upper bound, replacing any `FR`-derived one.
+    pub(super) const fn set_upper(&mut self, value: f64) {
+        self.upper = Some(value);
+        self.upper_from_free = false;
+    }
 }
 
 /// Maximum number of whitespace-separated fields on an MPS data line.

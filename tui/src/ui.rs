@@ -3,7 +3,7 @@
 //! Renders a unified single-window layout:
 //!
 //! ```text
-//!  Summary │ Numerics │ Variables │ Constraints │ Objectives
+//!  Summary │ Variables │ Constraints │ Objectives │ Numerics
 //! ╭──────────────────┬───────────────────────────────────╮
 //! │ Name List        │                                   │
 //! │ (filtered)       │         Detail Panel              │
@@ -15,6 +15,8 @@
 //!
 //! The two panels share the divider column rather than each drawing its own
 //! border there.
+
+use std::borrow::Cow;
 
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
@@ -30,11 +32,43 @@ use crate::widgets::{
     solve, status_bar, summary, what_if,
 };
 
-/// Minimum width for the sidebar panel in columns.
+/// Minimum width for the sidebar panel in columns, before any `<` / `>`.
 const SIDEBAR_MIN_WIDTH: u16 = 20;
 
-/// Fraction of the main area width allocated to the sidebar (1/N).
-const SIDEBAR_WIDTH_DIVISOR: u16 = 5;
+/// The narrowest `<` can make the sidebar.
+const SIDEBAR_FLOOR: u16 = 12;
+
+/// Fraction of the main area the sidebar may grow to on its own, in percent.
+const SIDEBAR_MAX_PERCENT: u16 = 35;
+
+/// Columns the detail panel always keeps, however far `>` widens the sidebar.
+const DETAIL_MIN_WIDTH: u16 = 30;
+
+/// Width of the sidebar within a main area `main_width` columns wide.
+///
+/// It grows to fit the longest entry name — plus its borders, the selection
+/// gutter, the diff badge, any delta column and the scrollbar — between
+/// [`SIDEBAR_MIN_WIDTH`] and [`SIDEBAR_MAX_PERCENT`] of the width, then
+/// `<` / `>` move it from there. The detail panel is never squeezed below
+/// [`DETAIL_MIN_WIDTH`].
+pub(crate) fn sidebar_width(app: &App, main_width: u16) -> u16 {
+    // Borders, the selection cursor's gutter, and the scrollbar.
+    let mut chrome = 2 + 2 + 1;
+    if app.mode.shows_diff_badges() {
+        chrome += 4; // "[~] "
+        if app.sort_mode != crate::state::SortMode::Name {
+            chrome += 9; // the delta column
+        }
+    }
+    let wanted = u16::try_from(app.longest_name + chrome).unwrap_or(u16::MAX);
+    let cap = (main_width * SIDEBAR_MAX_PERCENT / 100).max(SIDEBAR_MIN_WIDTH);
+    let auto = wanted.clamp(SIDEBAR_MIN_WIDTH, cap);
+    let adjusted = i32::from(auto) + i32::from(app.sidebar_adjust);
+    let ceiling = main_width.saturating_sub(DETAIL_MIN_WIDTH).max(SIDEBAR_FLOOR);
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)] // clamped into u16 range
+    let width = adjusted.clamp(i32::from(SIDEBAR_FLOOR), i32::from(ceiling)) as u16;
+    width.min(main_width)
+}
 
 /// Minimum terminal size below which the normal layout is unusable; a hint is
 /// shown instead of a cramped, broken UI.
@@ -69,7 +103,7 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     let tab_bar_area = outer[0];
     let main_area = outer[1];
 
-    let sidebar_width = (main_area.width / SIDEBAR_WIDTH_DIVISOR).max(SIDEBAR_MIN_WIDTH).min(main_area.width);
+    let sidebar_width = sidebar_width(app, main_area.width);
     let h_chunks = Layout::horizontal([Constraint::Length(sidebar_width), Constraint::Min(0)]).split(main_area);
 
     let sidebar_area = h_chunks[0];
@@ -92,16 +126,27 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     // Tab bar across the full width.
     sidebar::draw_tab_bar(frame, tab_bar_area, app);
 
-    // Detail panel first, then the sidebar: they share a border column, and the
-    // sidebar draws its scrollbar there, so it must be the one that lands last.
-    draw_detail_panel(frame, detail_area, app);
-
-    // Name List (full sidebar height).
-    sidebar::draw_name_list(frame, sidebar_area, app);
+    // The two panels share a border column, so whichever is drawn last owns
+    // it. The focused panel goes last: its highlighted border then runs
+    // unbroken down the divider instead of being overdrawn in the dim style.
+    if app.focus == Focus::Detail {
+        sidebar::draw_name_list(frame, sidebar_area, app);
+        draw_detail_panel(frame, detail_area, app);
+    } else {
+        draw_detail_panel(frame, detail_area, app);
+        sidebar::draw_name_list(frame, sidebar_area, app);
+    }
 
     // Stitch the shared column's corners into T-junctions — each panel drew its
     // own corner there, and whichever landed last read as a broken box.
-    draw_divider_junctions(frame, main_area, detail_area.x);
+    // The divider is part of both panels' borders, so it is lit whenever
+    // either of them has focus.
+    let divider_style = if matches!(app.focus, Focus::NameList | Focus::Detail) {
+        focus_border_style(app.focus, app.focus)
+    } else {
+        focus_border_style(Focus::NameList, Focus::Detail)
+    };
+    draw_divider_junctions(frame, main_area, detail_area.x, divider_style);
 
     // Detail scrollbar — the sidebar has one; the detail panel deserves the
     // same position feedback without needing focus.
@@ -115,9 +160,11 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     draw_status(frame, outer[2], app, &report_summary, total_changes, filter_count);
 
     // Modal overlays sit over a dimmed screen, so the layer that takes the keys
-    // is unmistakably the one in front.
+    // is unmistakably the one in front. The status bar stays lit: it carries
+    // the overlay's key hints.
     if app.has_overlay() {
-        crate::widgets::draw_scrim(frame, frame.area());
+        let full = frame.area();
+        crate::widgets::draw_scrim(frame, Rect { height: full.height.saturating_sub(1), ..full });
     }
 
     // Search pop-up overlay — rendered on top of main content.
@@ -166,17 +213,72 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     }
 }
 
+/// Key hints for the topmost open overlay, in `handle_key`'s priority order —
+/// the layer that takes the keys is the one whose keys are advertised. The
+/// last pair of each is the way out, which the status bar always keeps.
+fn overlay_hints(app: &App) -> Option<&'static str> {
+    use crate::state::SolveState;
+    if app.search_popup.visible {
+        return Some("\u{2193}/\u{2191}:move  Tab:complete  Enter:jump  Esc:cancel");
+    }
+    if app.palette.visible {
+        return Some("\u{2193}/\u{2191}:move  Enter:run  Esc:close");
+    }
+    if app.what_if.is_some() {
+        return Some("Enter:solve  Esc:cancel");
+    }
+    if app.presolve_log.is_some() {
+        return Some("j/k:scroll  w:write .txt  Esc:close");
+    }
+    if app.presolve_cursor.is_some() {
+        // The full key list sits on the picker's own border, where it fits.
+        return Some("space:toggle  Enter:solve  Esc:close");
+    }
+    if app.diagnostics.is_some() {
+        return Some("j/k:scroll  PgDn/PgUp:page  Esc:close");
+    }
+    if app.analysis.is_open() {
+        return Some(if app.analysis.pane().is_some() { "j/k:scroll  w:write .txt  Esc:close" } else { "Esc:cancel" });
+    }
+    match app.solver.state {
+        SolveState::Idle => {}
+        SolveState::Picking => return Some("1:file 1  2:file 2  3:both  Esc:cancel"),
+        SolveState::Running { .. } | SolveState::RunningBoth { .. } => {
+            return Some(if app.solver.confirm_quit { "y:quit  n:keep solving" } else { "q:quit  Esc:cancel" });
+        }
+        SolveState::Done(_) => return Some("1-5:tabs  j/k:scroll  e:diagnose  I:IIS  w:csv  y:yank  Esc:close"),
+        SolveState::DoneBoth(_) => return Some("1-5:tabs  j/k:scroll  d:diff only  t/T:threshold  w:csv  y:yank  Esc:close"),
+        SolveState::Failed(_) => return Some("Esc:close"),
+    }
+    app.show_help.then_some("j/k:scroll  any key:close")
+}
+
 /// Pick the context-sensitive key hints for the status bar's right segment:
-/// the handful of most useful actions for the current mode and section, so the
-/// app's power features are advertised where they apply instead of only in `?`.
-const fn context_hints(app: &App) -> &'static str {
+/// the handful of most useful actions for whatever takes the keys — the
+/// topmost overlay, else the focused panel in the current mode and section —
+/// so the app's power features are advertised where they apply instead of
+/// only in `?`. A kind filter adds the key that clears it.
+fn context_hints(app: &App) -> Cow<'static, str> {
+    if let Some(hints) = overlay_hints(app) {
+        return Cow::Borrowed(hints);
+    }
     // Which-key hint for the pending `y` chord — the chord family is invisible
     // otherwise unless memorised.
     if matches!(app.pending_yank, PendingYank::WaitingForTarget) {
-        return match app.mode {
+        return Cow::Borrowed(match app.mode {
             AppMode::Diff => "y \u{2192}  y:name  o:old (file 1)  n:new (file 2)",
             AppMode::Inspect => "y \u{2192}  y:name",
-        };
+        });
+    }
+    let hints = focus_hints(app);
+    if app.filter == crate::state::DiffFilter::All { Cow::Borrowed(hints) } else { Cow::Owned(format!("a:clear filter  {hints}")) }
+}
+
+/// Hints for the main view, by focus, mode and section.
+const fn focus_hints(app: &App) -> &'static str {
+    if matches!(app.focus, Focus::Detail) {
+        let raw = matches!(app.mode, AppMode::Diff) && matches!(app.active_section, Section::Constraints | Section::Objectives);
+        return if raw { "j/k:scroll  r:raw  Y:yank detail  h:back  ?:help" } else { "j/k:scroll  Y:yank detail  h:back  ?:help" };
     }
     match (app.mode, app.active_section) {
         (_, Section::Summary | Section::Numerics) => "1-5:section  S:solve  w:csv  /:search  ^p:palette  ?:help",
@@ -205,8 +307,11 @@ fn draw_status(
     // A pending `y` chord shows its which-key hint in the right segment; the
     // hint must win over a lingering yank flash or the chord keys stay hidden.
     let pending_chord = app.pending_yank == PendingYank::WaitingForTarget;
-    let yank_flash =
-        if app.yank.flash.is_some() && !pending_chord { Some(status_bar::YankFlash { message: &app.yank.message }) } else { None };
+    let yank_flash = if app.yank.flash.is_some() && !pending_chord {
+        Some(status_bar::YankFlash { message: &app.yank.message, level: app.yank.level })
+    } else {
+        None
+    };
     // Tolerance indicator — only shown when at least one tolerance is active.
     let tolerance_label = {
         let options = &app.diff_options;
@@ -243,6 +348,7 @@ fn draw_status(
     // segment only shown) in inspect mode; it lives here so InspectInfo can
     // borrow it across the draw call below.
     let inspect_file = (app.mode == AppMode::Inspect).then(|| crate::widgets::short_filename(&app.report.file1));
+    let hints = context_hints(app);
     let inspect = inspect_file.as_deref().map(|file| {
         // The label is the plural-correct noun for the count, so the status bar
         // prints it as-is: "2 variables", not "2 variables entries".
@@ -274,7 +380,7 @@ fn draw_status(
             tolerance_label: tolerance_label.as_deref(),
             watch_reloading,
             inspect,
-            hints: context_hints(app),
+            hints: &hints,
         },
     );
 }
@@ -282,14 +388,15 @@ fn draw_status(
 /// Replace the corners where the sidebar and detail panels meet with `┬` / `┴`,
 /// so the shared border column reads as one divider running between them.
 ///
-/// `x` is the shared column; `area` spans both panels.
-fn draw_divider_junctions(frame: &mut Frame, area: Rect, x: u16) {
+/// `x` is the shared column; `area` spans both panels. The junctions take
+/// `style`, the divider's own, so they match whichever border owns it.
+fn draw_divider_junctions(frame: &mut Frame, area: Rect, x: u16, style: Style) {
     if area.height < 2 || x <= area.x || x >= area.right() {
         return;
     }
-    let border = theme().border;
-    crate::widgets::draw_junction(frame, (x, area.y), "\u{252c}", border);
-    crate::widgets::draw_junction(frame, (x, area.bottom().saturating_sub(1)), "\u{2534}", border);
+    let colour = style.fg.unwrap_or(theme().border);
+    crate::widgets::draw_junction(frame, (x, area.y), "\u{252c}", colour);
+    crate::widgets::draw_junction(frame, (x, area.bottom().saturating_sub(1)), "\u{2534}", colour);
 }
 
 /// Render a centred "terminal too small" hint for sub-minimum window sizes.
@@ -411,4 +518,50 @@ fn draw_detail_panel(frame: &mut Frame, area: ratatui::layout::Rect, app: &mut A
     };
 
     app.layout.detail_content_lines = content_lines;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn hints_follow_the_layer_that_takes_the_keys() {
+        let mut app = crate::snapshot_tests::diff_app_from(crate::snapshot_tests::BASE_LP, crate::snapshot_tests::INFEASIBLE_LP);
+        app.set_section(Section::Constraints);
+        assert!(context_hints(&app).starts_with("E:what-if"), "the sidebar's section hints");
+
+        app.focus = Focus::Detail;
+        assert!(context_hints(&app).starts_with("j/k:scroll  r:raw"), "the detail panel's own keys when it has focus");
+
+        app.set_filter(crate::state::DiffFilter::Modified);
+        assert!(context_hints(&app).starts_with("a:clear filter"), "an active filter advertises how to clear it");
+
+        app.solver.state = crate::state::SolveState::Picking;
+        assert!(context_hints(&app).ends_with("Esc:cancel"), "the topmost overlay's keys win");
+        app.show_help = true;
+        assert!(context_hints(&app).ends_with("Esc:cancel"), "help sits below the solve overlay");
+        app.solver.state = crate::state::SolveState::Idle;
+        assert_eq!(context_hints(&app), "j/k:scroll  any key:close");
+    }
+
+    #[test]
+    fn the_sidebar_grows_to_fit_long_names_within_bounds() {
+        let short = crate::snapshot_tests::inspect_app_from(crate::snapshot_tests::BASE_LP);
+        assert_eq!(sidebar_width(&short, 80), SIDEBAR_MIN_WIDTH, "short names keep the minimum");
+
+        let mut long = crate::snapshot_tests::inspect_app_from("min\nobj: x\nst\nSteel_Flow_Conservation_in_Node_Chicago: x >= 1\nend\n");
+        assert_eq!(sidebar_width(&long, 80), 28, "long names grow it to 35% of the width");
+        assert_eq!(sidebar_width(&long, 200), 44, "with room, it fits the name: 39 + borders, gutter, scrollbar");
+
+        long.resize_sidebar(false);
+        assert_eq!(sidebar_width(&long, 80), 24, "< narrows it by a step");
+        for _ in 0..40 {
+            long.resize_sidebar(true);
+        }
+        assert_eq!(sidebar_width(&long, 80), 80 - DETAIL_MIN_WIDTH, "> never squeezes the detail panel");
+        for _ in 0..80 {
+            long.resize_sidebar(false);
+        }
+        assert_eq!(sidebar_width(&long, 80), SIDEBAR_FLOOR);
+    }
 }

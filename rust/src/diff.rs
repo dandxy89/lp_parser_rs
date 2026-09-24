@@ -34,8 +34,9 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
+use crate::error::{LpParseError, LpResult};
 use crate::interner::NameId;
-use crate::model::{Coefficient, Constraint};
+use crate::model::{Coefficient, Constraint, GeneralFunction, QuadraticTerm};
 use crate::problem::LpProblem;
 
 /// A name normaliser: rewrites a name before matching.
@@ -65,6 +66,21 @@ impl Default for DiffTol {
 }
 
 impl DiffTol {
+    /// Build a tolerance pair, validating both values.
+    ///
+    /// # Errors
+    ///
+    /// Returns a validation error if either tolerance is negative, `NaN` or
+    /// infinite. [`DiffTol::differ`] relies on this invariant.
+    pub fn new(abs: f64, rel: f64) -> LpResult<Self> {
+        for (label, value) in [("absolute", abs), ("relative", rel)] {
+            if !(value.is_finite() && value >= 0.0) {
+                return Err(LpParseError::validation_error(format!("{label} tolerance must be finite and non-negative, got {value}")));
+            }
+        }
+        Ok(Self { abs, rel })
+    }
+
     /// Return true if `a` and `b` differ beyond both tolerances.
     #[must_use]
     pub fn differ(self, a: f64, b: f64) -> bool {
@@ -105,6 +121,8 @@ pub struct DiffOptions<'a> {
 /// of human-readable change descriptions.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct LpDiff {
+    /// The optimisation sense, `(old, new)`, when it differs between the problems.
+    pub sense_changed: Option<(String, String)>,
     /// Variables present only in the second problem.
     pub vars_added: Vec<String>,
     /// Variables present only in the first problem.
@@ -130,7 +148,8 @@ impl LpDiff {
     /// options used, i.e. no additions, removals, or modifications were found.
     #[must_use]
     pub const fn is_empty(&self) -> bool {
-        self.vars_added.is_empty()
+        self.sense_changed.is_none()
+            && self.vars_added.is_empty()
             && self.vars_removed.is_empty()
             && self.vars_type_changed.is_empty()
             && self.cons_added.is_empty()
@@ -155,6 +174,18 @@ impl LpProblem {
 /// Build a coefficient map keyed by canonical (normalised) variable name.
 fn coeff_map(problem: &LpProblem, coeffs: &[Coefficient], normalise: Normaliser) -> BTreeMap<String, f64> {
     coeffs.iter().map(|c| (normalise(problem.resolve(c.name)), c.value)).collect()
+}
+
+/// Build a quadratic-term map keyed by the canonical (normalised, sorted)
+/// variable pair, so `x * y` and `y * x` match. Repeated pairs are summed.
+fn quad_map(problem: &LpProblem, terms: &[QuadraticTerm], normalise: Normaliser) -> BTreeMap<String, f64> {
+    let mut map = BTreeMap::new();
+    for term in terms {
+        let (a, b) = (normalise(problem.resolve(term.var1)), normalise(problem.resolve(term.var2)));
+        let key = if a <= b { format!("{a}*{b}") } else { format!("{b}*{a}") };
+        *map.entry(key).or_insert(0.0) += term.coefficient;
+    }
+    map
 }
 
 /// Count coefficients that changed value, were removed, or were added.
@@ -186,6 +217,10 @@ fn diff_modified_constraints(
         let c1 = &p1.constraints[&ccons1[name]];
         let c2 = &p2.constraints[&ccons2[name]];
         let mut changes = Vec::new();
+        let (class1, class2) = (p1.constraint_class(ccons1[name]), p2.constraint_class(ccons2[name]));
+        if class1 != class2 {
+            changes.push(format!("class {class1} -> {class2}"));
+        }
         match (c1, c2) {
             (
                 Constraint::Standard { coefficients: cf1, operator: op1, rhs: r1, .. },
@@ -202,18 +237,94 @@ fn diff_modified_constraints(
                     changes.push(format!("{coef_diffs} coefficient change(s)"));
                 }
             }
-            (Constraint::SOS { .. }, Constraint::SOS { .. }) => {
-                if c1 != c2 {
+            (Constraint::SOS { sos_type: t1, weights: w1, .. }, Constraint::SOS { sos_type: t2, weights: w2, .. }) => {
+                // Compare by resolved (normalised) member name: the two problems'
+                // NameIds come from different interners, and an SOS set's order is
+                // given by its weights, not by the order the members are listed in.
+                if t1 != t2 || count_coeff_diffs(&coeff_map(p1, w1, normalise), &coeff_map(p2, w2, normalise), tol) > 0 {
                     changes.push("SOS definition changed".to_string());
                 }
             }
-            _ => changes.push("constraint kind changed (Standard <-> SOS)".to_string()),
+            (
+                Constraint::Indicator { variable: v1, active_value: a1, coefficients: cf1, operator: op1, rhs: r1, .. },
+                Constraint::Indicator { variable: v2, active_value: a2, coefficients: cf2, operator: op2, rhs: r2, .. },
+            ) => {
+                let (var1, var2) = (normalise(p1.resolve(*v1)), normalise(p2.resolve(*v2)));
+                if var1 != var2 || a1 != a2 {
+                    changes.push(format!("indicator {var1} = {} -> {var2} = {}", u8::from(*a1), u8::from(*a2)));
+                }
+                if op1 != op2 {
+                    changes.push(format!("operator {op1} -> {op2}"));
+                }
+                if tol.differ(*r1, *r2) {
+                    changes.push(format!("rhs {r1} -> {r2}"));
+                }
+                let coef_diffs = count_coeff_diffs(&coeff_map(p1, cf1, normalise), &coeff_map(p2, cf2, normalise), tol);
+                if coef_diffs > 0 {
+                    changes.push(format!("{coef_diffs} coefficient change(s)"));
+                }
+            }
+            (
+                Constraint::Quadratic { coefficients: cf1, quadratic: q1, operator: op1, rhs: r1, .. },
+                Constraint::Quadratic { coefficients: cf2, quadratic: q2, operator: op2, rhs: r2, .. },
+            ) => {
+                if op1 != op2 {
+                    changes.push(format!("operator {op1} -> {op2}"));
+                }
+                if tol.differ(*r1, *r2) {
+                    changes.push(format!("rhs {r1} -> {r2}"));
+                }
+                let coef_diffs = count_coeff_diffs(&coeff_map(p1, cf1, normalise), &coeff_map(p2, cf2, normalise), tol);
+                if coef_diffs > 0 {
+                    changes.push(format!("{coef_diffs} coefficient change(s)"));
+                }
+                let quad_diffs = count_coeff_diffs(&quad_map(p1, q1, normalise), &quad_map(p2, q2, normalise), tol);
+                if quad_diffs > 0 {
+                    changes.push(format!("{quad_diffs} quadratic term change(s)"));
+                }
+            }
+            (Constraint::General { resultant: r1, function: f1, .. }, Constraint::General { resultant: r2, function: f2, .. }) => {
+                changes.extend(general_constraint_change((p1, *r1, f1), (p2, *r2, f2), normalise, tol));
+            }
+            _ => changes.push(format!("constraint kind changed ({} <-> {})", constraint_kind(c1), constraint_kind(c2))),
         }
         if !changes.is_empty() {
             modified.push((name.clone(), changes));
         }
     }
     modified
+}
+
+/// A Gurobi general constraint as `(problem, resultant, function)`.
+type GeneralSide<'a> = (&'a LpProblem, NameId, &'a GeneralFunction);
+
+/// Describe a change between two general constraints, if there is one.
+fn general_constraint_change(old: GeneralSide<'_>, new: GeneralSide<'_>, normalise: Normaliser, tol: DiffTol) -> Option<String> {
+    let describe = |(p, resultant, function): GeneralSide<'_>| {
+        let args: Vec<String> = function.variables().iter().map(|v| normalise(p.resolve(*v))).collect();
+        let constant = function.constant().map_or_else(String::new, |c| format!(", {c}"));
+        format!("{} = {} ({}{constant})", normalise(p.resolve(resultant)), function.keyword(), args.join(", "))
+    };
+    let constants_differ = match (old.2.constant(), new.2.constant()) {
+        (Some(a), Some(b)) => tol.differ(a, b),
+        (a, b) => a.is_some() != b.is_some(),
+    };
+    let names = |(p, resultant, function): GeneralSide<'_>| -> Vec<String> {
+        std::iter::once(&resultant).chain(function.variables()).map(|v| normalise(p.resolve(*v))).collect()
+    };
+    let structure_differs = old.2.keyword() != new.2.keyword() || names(old) != names(new);
+    (structure_differs || constants_differ).then(|| format!("general constraint {} -> {}", describe(old), describe(new)))
+}
+
+/// Short name of a constraint's kind, for "kind changed" descriptions.
+const fn constraint_kind(constraint: &Constraint) -> &'static str {
+    match constraint {
+        Constraint::Standard { .. } => "Standard",
+        Constraint::SOS { .. } => "SOS",
+        Constraint::Indicator { .. } => "Indicator",
+        Constraint::Quadratic { .. } => "Quadratic",
+        Constraint::General { .. } => "General",
+    }
 }
 
 /// Describe how each common objective's coefficients changed.
@@ -237,6 +348,26 @@ fn diff_modified_objectives(
         }
         if tol.differ(o1.constant, o2.constant) {
             changes.push(format!("constant: {} -> {}", o1.constant, o2.constant));
+        }
+        let quad_diffs = count_coeff_diffs(&quad_map(p1, &o1.quadratic, normalise), &quad_map(p2, &o2.quadratic, normalise), tol);
+        if quad_diffs > 0 {
+            changes.push(format!("{quad_diffs} quadratic term change(s)"));
+        }
+        if o1.attributes.priority != o2.attributes.priority {
+            changes.push(format!("priority: {:?} -> {:?}", o1.attributes.priority, o2.attributes.priority));
+        }
+        for (label, a, b) in [
+            ("weight", o1.attributes.weight, o2.attributes.weight),
+            ("abs_tol", o1.attributes.abs_tol, o2.attributes.abs_tol),
+            ("rel_tol", o1.attributes.rel_tol, o2.attributes.rel_tol),
+        ] {
+            let differs = match (a, b) {
+                (Some(a), Some(b)) => tol.differ(a, b),
+                _ => a.is_some() != b.is_some(),
+            };
+            if differs {
+                changes.push(format!("{label}: {a:?} -> {b:?}"));
+            }
         }
         if !changes.is_empty() {
             modified.push((name.clone(), changes));
@@ -291,7 +422,10 @@ pub fn compare(p1: &LpProblem, p2: &LpProblem, options: &DiffOptions) -> LpDiff 
         }
     }
 
+    let sense_changed = (p1.sense != p2.sense).then(|| (p1.sense.to_string(), p2.sense.to_string()));
+
     LpDiff {
+        sense_changed,
         vars_added: vars2.difference(&vars1).cloned().collect(),
         vars_removed: vars1.difference(&vars2).cloned().collect(),
         vars_type_changed,
@@ -354,6 +488,14 @@ mod tests {
         assert!(!tol.differ(10.0, 18.0));
         // diff 12: above abs(10) but 12 < 0.5*24 -> not different.
         assert!(!tol.differ(12.0, 24.0));
+    }
+
+    #[test]
+    fn tol_new_rejects_invalid_tolerances() {
+        assert_eq!(DiffTol::new(0.5, 0.0).unwrap(), DiffTol { abs: 0.5, rel: 0.0 });
+        for (abs, rel) in [(-1.0, 0.0), (0.0, -1e-9), (f64::NAN, 0.0), (0.0, f64::INFINITY)] {
+            assert!(DiffTol::new(abs, rel).is_err(), "({abs}, {rel}) must be rejected");
+        }
     }
 
     #[test]
@@ -485,6 +627,29 @@ mod tests {
         let (name, changes) = &diff.cons_modified[0];
         assert_eq!(name, "sos_a");
         assert_eq!(changes, &vec!["SOS definition changed".to_string()]);
+    }
+
+    #[test]
+    fn identical_sos_sets_listed_in_a_different_order_do_not_differ() {
+        // `y` is interned before `x` in p2, so the NameIds differ as well.
+        let p1 = parse("Minimize\n obj: x + y\nSubject To\n c1: x + y >= 1\nSOS\n s: S1:: x:1 y:2\nEnd");
+        let p2 = parse("Minimize\n obj: y + x\nSubject To\n c1: y + x >= 1\nSOS\n s: S1:: y:2 x:1\nEnd");
+        let diff = p1.diff(&p2, &opts(DiffTol::default()));
+        assert!(diff.cons_modified.is_empty(), "expected no change, got {:?}", diff.cons_modified);
+
+        let p3 = parse("Minimize\n obj: x + y\nSubject To\n c1: x + y >= 1\nSOS\n s: S2:: x:1 y:2\nEnd");
+        let diff = p1.diff(&p3, &opts(DiffTol::default()));
+        assert_eq!(diff.cons_modified, vec![("s".to_string(), vec!["SOS definition changed".to_string()])]);
+    }
+
+    #[test]
+    fn detects_sense_change() {
+        let p1 = parse("Minimize\n obj: x\nSubject To\n c1: x >= 1\nEnd");
+        let p2 = parse("Maximize\n obj: x\nSubject To\n c1: x >= 1\nEnd");
+        let diff = p1.diff(&p2, &opts(DiffTol::default()));
+        assert_eq!(diff.sense_changed, Some(("Minimize".to_string(), "Maximize".to_string())));
+        assert!(!diff.is_empty(), "a sense change is a difference");
+        assert_eq!(p1.diff(&p1, &opts(DiffTol::default())).sense_changed, None);
     }
 
     #[test]

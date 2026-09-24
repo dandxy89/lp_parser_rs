@@ -10,6 +10,8 @@ summary:
   variable_count: 473
   total_nonzeros: 3574
   density: 0.02171
+  quadratic_objective_terms: 0
+  quadratic_constraint_terms: 0
 sparsity:
   min_vars_per_constraint: 1
   max_vars_per_constraint: 314
@@ -24,6 +26,7 @@ variables:
     binary: 0
     integer: 0
     semi_continuous: 0
+    semi_integer: 0
     sos: 0
   free_variables: []
   fixed_variables: []
@@ -39,6 +42,11 @@ constraints:
     greater_than: 0
     sos1: 0
     sos2: 0
+    indicator: 0
+    quadratic: 0
+    general: 0
+    lazy: 0
+    user_cuts: 0
   empty_constraints: []
   singleton_constraints:
     - name: DMSFOOAK

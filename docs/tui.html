@@ -12,10 +12,12 @@
 <meta property="og:title" content="lp_diff — the terminal LP/MPS model explorer">
 <meta property="og:description" content="An interactive terminal explorer and diff viewer for LP and MPS models, with a HiGHS solver, what-if analysis, solution-preserving rewrites, and conditioning diagnostics.">
 <meta property="og:image" content="https://dandxy89.github.io/lp_parser_rs/assets/demo-poster.jpg">
+<meta property="og:image:alt" content="The lp_diff terminal UI diffing two models: section tabs for Summary, Variables, Constraints, Objectives and Numerics, with counts of removed and changed entries.">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="lp_diff — the terminal LP/MPS model explorer">
 <meta name="twitter:description" content="An interactive terminal explorer and diff viewer for LP and MPS models, with a HiGHS solver, what-if analysis, solution-preserving rewrites, and conditioning diagnostics.">
 <meta name="twitter:image" content="https://dandxy89.github.io/lp_parser_rs/assets/demo-poster.jpg">
+<meta name="twitter:image:alt" content="The lp_diff terminal UI diffing two models: section tabs for Summary, Variables, Constraints, Objectives and Numerics, with counts of removed and changed entries.">
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
@@ -94,7 +96,7 @@
         <a href="https://github.com/dandxy89/lp_parser_rs/blob/main/tui/README.md">tui README</a>
       </div>
     </div>
-    <video class="demo" width="1280" height="800" autoplay loop muted playsinline controls
+    <video class="demo" width="1280" height="800" loop muted playsinline controls
            poster="assets/demo-poster.jpg" aria-label="Diffing an MPS file against an LP file: a coefficient-level constraint diff, raw text view, fuzzy search and a parallel HiGHS solve, then a single model with presolve rewrites and the diagnostics pane.">
       <source src="assets/demo.webm" type="video/webm">
       <source src="assets/demo.mp4" type="video/mp4">
@@ -150,7 +152,7 @@ lp_diff base.lp modified.lp --summary</code></pre>
       <tr><td>--abs-tol</td><td>Absolute tolerance: equal when <code>|a - b| &lt;= abs_tol</code>. An epsilon floor always applies, so ordinary float noise never registers as a change.</td></tr>
       <tr><td>--rel-tol</td><td>Relative tolerance, scaled by magnitude: equal when <code>|a - b| &lt;= rel_tol * max(|a|, |b|)</code>.</td></tr>
       <tr><td>--rename</td><td>Regex rewrite applied to names in <em>both</em> files before matching. Repeatable; rules apply in order.</td></tr>
-      <tr><td>--theme</td><td><code>auto</code> (detects from <code>COLORFGBG</code>), <code>dark</code>, or <code>light</code>.</td></tr>
+      <tr><td>--theme</td><td><code>auto</code> (detects from <code>COLORFGBG</code>, then by asking the terminal for its background colour), <code>dark</code>, or <code>light</code>.</td></tr>
     </table></div>
 
     <div class="note"><b>Why <code>--rename</code> exists.</b> Renumbering a model, whether inserting a time period or reindexing a
@@ -483,6 +485,8 @@ time_limit = 300</code></pre>
   default           Optimal       0.041s       0.038s          312
   presolve off      Optimal       0.118s       0.115s          904
   simplex dual      Optimal       0.038s       0.035s          298
+  simplex primal    Optimal       0.052s       0.049s          377
+  ipm               Optimal       0.063s       0.060s           21
   <span class="ok">&#9656; local presolve  Optimal       0.029s       0.021s          201</span>
 
   <span class="ok">fastest: local presolve &#8212; 1.41x over default</span></code></pre>
@@ -504,7 +508,7 @@ time_limit = 300</code></pre>
     <p class="sec-label">Living in a terminal</p>
     <h2>Terminal manners</h2>
     <ul class="constraints">
-      <li><span class="cname">Theme</span><span class="cbody">Detects light or dark from <code>COLORFGBG</code>, or force it with <code>--theme</code>. <a href="https://no-color.org"><code>NO_COLOR</code></a> forces monochrome, unless you passed <code>--theme</code> explicitly, which wins.</span></li>
+      <li><span class="cname">Theme</span><span class="cbody">Detects light or dark from <code>COLORFGBG</code>, or else by asking the terminal for its background colour (OSC 11, with a 100&nbsp;ms limit); force it with <code>--theme</code>. <a href="https://no-color.org"><code>NO_COLOR</code></a> forces monochrome, unless you passed <code>--theme</code> explicitly, which wins.</span></li>
       <li><span class="cname">Watch</span><span class="cbody"><code>--watch</code> reloads when a file changes on disk and rebuilds the diff in place, keeping your position. Stale solve results are discarded; the model has moved under them.</span></li>
       <li><span class="cname">Suspend</span><span class="cbody"><kbd>Ctrl+Z</kbd> suspends and resumes cleanly, restoring the alternate screen and raw mode on the way back.</span></li>
       <li><span class="cname">Small terminals</span><span class="cbody">Guards against terminals too small to draw into, and every overlay scrolls.</span></li>
@@ -532,6 +536,8 @@ time_limit = 300</code></pre>
       <tr><td><kbd>Tab</kbd> / <kbd>⇧Tab</kbd></td><td>Next / previous panel</td></tr>
       <tr><td><kbd>h</kbd> <kbd>l</kbd></td><td>Sidebar / detail</td></tr>
       <tr><td><kbd>1</kbd>–<kbd>5</kbd>, <kbd>[</kbd> <kbd>]</kbd></td><td>Jump to section / cycle sections</td></tr>
+      <tr><td><kbd>&lt;</kbd> <kbd>&gt;</kbd></td><td>Narrow / widen the sidebar (it grows to fit long names on its own)</td></tr>
+      <tr><td><kbd>M</kbd></td><td>Mouse capture on / off; off hands the mouse to the terminal to select text (or hold <kbd>Shift</kbd> while dragging)</td></tr>
     </table></div>
 
     <h3>Analysis</h3>
@@ -591,6 +597,22 @@ cargo run -p lp_parser_tui -- base.lp modified.mps</code></pre>
 </footer>
 
 <script>
+  // play the demo only for readers who have not asked for reduced motion,
+  // and only once it scrolls into view; otherwise the poster and controls remain
+  (function () {
+    var video = document.querySelector("video.demo");
+    if (!video || !window.matchMedia("(prefers-reduced-motion: no-preference)").matches) return;
+    // a rejected play() (e.g. a browser autoplay policy) just leaves the poster up
+    var play = function () { video.play().catch(function () {}); };
+    if (!("IntersectionObserver" in window)) { play(); return; }
+    var io = new IntersectionObserver(function (entries) {
+      if (entries[0].isIntersecting) { play(); io.disconnect(); }
+    });
+    io.observe(video);
+  })();
+</script>
+
+<script>
   (function () {
     var root = document.documentElement;
     var btn = document.querySelector(".theme-toggle");
@@ -598,7 +620,16 @@ cargo run -p lp_parser_tui -- base.lp modified.mps</code></pre>
     var dark = function () {
       return root.dataset.theme ? root.dataset.theme === "dark" : media.matches;
     };
-    var label = function () { btn.textContent = dark() ? "light" : "dark"; };
+    var metas = document.querySelectorAll('meta[name="theme-color"]');
+    var label = function () {
+      var d = dark();
+      btn.textContent = d ? "light" : "dark";
+      btn.setAttribute("aria-pressed", d ? "true" : "false");
+      // an explicit choice overrides the media-query theme-color pair
+      if (root.dataset.theme) {
+        for (var i = 0; i < metas.length; i++) metas[i].content = d ? "#14171a" : "#ffffff";
+      }
+    };
     btn.addEventListener("click", function () {
       var next = dark() ? "light" : "dark";
       root.dataset.theme = next;

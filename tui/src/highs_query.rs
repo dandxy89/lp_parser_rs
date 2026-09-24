@@ -252,15 +252,15 @@ pub fn iis(problem: &LpProblem) -> Result<Iis, String> {
 
     let started = Instant::now();
     let (relaxed, relaxed_integrality) = relax_integrality(problem);
-    let built = build_highs_model(&relaxed);
+    let built = build_highs_model(&relaxed)?;
     let (variable_names, row_names) = (built.variable_names, built.row_constraint_names);
     let skipped_sos = built.skipped_sos;
 
-    let mut model = built.row_problem.optimise(built.sense);
+    let mut model = crate::solver::pass_model(built.row_problem, built.sense)?;
     model.make_quiet();
     model.try_set_option("iis_strategy", IIS_STRATEGY_FROM_LP).map_err(|_| "HiGHS refused the iis_strategy option".to_owned())?;
 
-    let mut solved = model.solve();
+    let mut solved = crate::solver::run_model(model)?;
     let status = format!("{:?}", solved.status());
 
     let (num_col, num_row) = (variable_names.len(), row_names.len());
@@ -385,15 +385,15 @@ pub fn ranging(problem: &LpProblem) -> Result<Ranging, String> {
 
     let started = Instant::now();
     let (relaxed, relaxed_integrality) = relax_integrality(problem);
-    let built = build_highs_model(&relaxed);
+    let built = build_highs_model(&relaxed)?;
     let (variable_names, row_names) = (built.variable_names, built.row_constraint_names);
     let skipped_sos = built.skipped_sos;
     let costs_by_id = primary_objective_coefficients(&relaxed);
 
-    let mut model = built.row_problem.optimise(built.sense);
+    let mut model = crate::solver::pass_model(built.row_problem, built.sense)?;
     model.make_quiet();
 
-    let mut solved = model.solve();
+    let mut solved = crate::solver::run_model(model)?;
     let status = format!("{:?}", solved.status());
     if status != "Optimal" {
         return Err(format!("ranging needs an optimal basis; this model solved as {status}"));
@@ -513,18 +513,18 @@ pub fn unbounded_ray(problem: &LpProblem) -> Result<UnboundedRay, String> {
 
     let started = Instant::now();
     let (relaxed, relaxed_integrality) = relax_integrality(problem);
-    let built = build_highs_model(&relaxed);
+    let built = build_highs_model(&relaxed)?;
     let variable_names = built.variable_names;
     let skipped_sos = built.skipped_sos;
     let costs = primary_objective_coefficients(&relaxed);
 
-    let mut model = built.row_problem.optimise(built.sense);
+    let mut model = crate::solver::pass_model(built.row_problem, built.sense)?;
     // The solver log would otherwise land in the terminal underneath the TUI.
     model.make_quiet();
     // A presolve that stops at "unbounded or infeasible" has no ray to give.
     model.try_set_option("presolve", "off").map_err(|_| "HiGHS refused to disable presolve".to_owned())?;
 
-    let mut solved = model.solve();
+    let mut solved = crate::solver::run_model(model)?;
     let status = format!("{:?}", solved.status());
 
     let mut directions = Vec::new();

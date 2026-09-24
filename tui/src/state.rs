@@ -226,7 +226,8 @@ pub struct SearchResult {
     pub entry_index: usize,
     /// Fuzzy match score (0 for regex/substring modes).
     pub score: u16,
-    /// Character positions in the name that matched (for highlighting).
+    /// Byte positions in the name that matched (for highlighting), ascending;
+    /// a multi-byte character contributes one per matched byte.
     pub match_indices: Vec<usize>,
     /// Index into the pre-built `search_haystack` for name/kind resolution.
     pub haystack_index: usize,
@@ -293,6 +294,17 @@ impl Section {
             Self::Constraints => "Constraints",
             Self::Objectives => "Objectives",
             Self::Numerics => "Numerics",
+        }
+    }
+
+    /// Abbreviated label for a tab bar too narrow for [`label`](Self::label).
+    pub const fn short_label(self) -> &'static str {
+        match self {
+            Self::Summary => "Sum",
+            Self::Variables => "Vars",
+            Self::Constraints => "Cons",
+            Self::Objectives => "Objs",
+            Self::Numerics => "Num",
         }
     }
 
@@ -388,10 +400,13 @@ impl SortMode {
 const JUMPLIST_CAPACITY: usize = 100;
 
 /// A recorded navigation position in the jumplist.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct JumpEntry {
     pub section: Section,
-    pub entry_index: Option<usize>,
+    /// Name of the selected entry. A name, not a list position or report
+    /// index: re-sorting, `ignore_order`, a tolerance change or a watch reload
+    /// all move entries, and the jump must land on the same one.
+    pub entry_name: Option<String>,
     pub detail_scroll: u16,
     pub filter: DiffFilter,
 }
@@ -537,7 +552,9 @@ impl SectionViewState {
                 Line::from(spans)
             } else {
                 // Inspect mode: plain name, no diff badge, default text colour.
-                Line::from(vec![Span::raw("  "), Span::styled(entry.name().to_owned(), text())])
+                // No indent either: with no badge column to line up with, it
+                // was only dead space after the selection gutter.
+                Line::from(vec![Span::styled(entry.name().to_owned(), text())])
             };
             self.cached_lines.push(line);
         }

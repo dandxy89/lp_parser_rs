@@ -79,8 +79,8 @@ The interface is a three-panel layout:
 
 | Panel            | Description                                                                             |
 | ---------------- | --------------------------------------------------------------------------------------- |
-| Section Selector | Left sidebar — choose between Summary, Variables, Constraints, Objectives, and Numerics |
-| Name List        | Left sidebar — filterable list of changed entries for the selected section              |
+| Section tabs     | Tab bar across the top — Summary, Variables, Constraints, Objectives, and Numerics      |
+| Name List        | Left sidebar — filterable list of changed entries for the selected section (on Summary and Numerics, an overview whose rows open their section when clicked) |
 | Detail           | Right panel — full diff detail for the selected entry                                   |
 
 The status bar at the bottom shows total changes, per-section diff statistics (`+N -N ~N`), the active filter, and scroll position.
@@ -99,7 +99,7 @@ Press `?` at any time to open the key bindings pop up.
 
 ### Side-by-Side Constraint View
 
-Modified standard constraints are displayed in a two-column layout showing old and new coefficients side by side. Added coefficients are highlighted in green, removed in red, and modified in yellow. Unchanged coefficients appear in grey.
+Modified standard constraints are displayed as a table with the old and new coefficients side by side, aligned on their decimal points. Modified coefficients also show the change (`Δ`) and relative change (`%Δ`); a side a coefficient is missing from shows a dimmed `—`. Added coefficients are highlighted in green, removed in red, and modified in yellow. Unchanged coefficients appear in grey. On a narrow pane the `%Δ` and then `Δ` columns are dropped before the names are shortened.
 
 ### Raw Text View
 
@@ -107,7 +107,7 @@ Press `r` in the detail panel to toggle between the parsed diff view and a side-
 
 ### CSV Export
 
-In diff mode, press `w` to export the full diff report as a CSV file (`lp_diff_report_<timestamp>.csv`) in the current directory. The CSV includes all sections with columns for section, name, change type, and detail. In inspect mode, `w` exports the model itself as `objectives.csv`, `constraints.csv`, and `variables.csv` (via the core library's `to_csv`).
+In diff mode, press `w` to export the full diff report as a CSV file (`lp_diff_report_<timestamp>.csv`) in the current directory. The CSV includes all sections with columns for section, name, change type, and detail. In inspect mode, `w` exports the model itself as `objectives.csv`, `constraints.csv`, and `variables.csv` (via the core library's `to_csv`) into a new `<file stem>_csv_<timestamp>` folder, so an export never overwrites earlier files. The status bar shows the full path written.
 
 ### Key Bindings
 
@@ -117,8 +117,8 @@ In diff mode, press `w` to export the full diff report as a CSV file (`lp_diff_r
 | ------------ | ------------------------- |
 | `j` / `↓`    | Move down                 |
 | `k` / `↑`    | Move up                   |
-| `n`          | Move down                 |
-| `N`          | Move up                   |
+| `n`          | Next search match         |
+| `N`          | Previous search match     |
 | `g` / `Home` | Jump to top               |
 | `G` / `End`  | Jump to bottom            |
 | `Ctrl+d`     | Half page down            |
@@ -132,6 +132,8 @@ In diff mode, press `w` to export the full diff report as a CSV file (`lp_diff_r
 | `Enter`      | Go to detail panel        |
 | `h` / `l`    | Move to sidebar / detail  |
 | `1`–`5`      | Jump to section by number |
+| `<` / `>`    | Narrow / widen the sidebar |
+| `M`          | Toggle mouse capture (off: select text with the terminal) |
 | `Esc`        | Back / clear search       |
 
 **Filters**
@@ -150,8 +152,8 @@ In diff mode, press `w` to export the full diff report as a CSV file (`lp_diff_r
 | Key       | Action                                                       |
 | --------- | ------------------------------------------------------------ |
 | `/`       | Open search pop-up (searches across all sections)            |
-| `j` / `↓` | Next result (in pop-up)                                      |
-| `k` / `↑` | Previous result (in pop-up)                                  |
+| `↓` / `Ctrl+n` | Next result (in pop-up; plain `j`/`k` are typed into the query) |
+| `↑` / `Ctrl+p` | Previous result (in pop-up)                                  |
 | `Tab`     | Complete query with selected result's name                   |
 | `Enter`   | Jump to selected entry                                       |
 | `Esc`     | Cancel search                                                |
@@ -174,6 +176,8 @@ Search mode prefixes (type in the pop-up input):
 | `yn` | Yank new (file 2) version of entry to clipboard |
 | `Y`  | Yank full detail panel content to clipboard     |
 
+Over SSH or inside tmux (`SSH_TTY` or `TMUX` set), yanks go through the terminal as an OSC 52 escape instead, so they land on the clipboard of the machine you are sitting at; locally, OSC 52 is the fallback when the system clipboard is unavailable. The status bar says which route was taken. Under tmux, OSC 52 needs `set -g set-clipboard on`.
+
 **Solver**
 
 | Key                 | Action                                                                         |
@@ -189,7 +193,8 @@ Search mode prefixes (type in the pop-up input):
 | `e`                 | Diagnose infeasibility                                                         |
 | `w`                 | Write diff to CSV (both mode)                                                  |
 | `y`                 | Yank solve results to clipboard                                                |
-| `Esc`               | Close solver overlay                                                           |
+| `Esc`               | Close solver overlay; while solving, interrupt HiGHS                           |
+| `q`                 | While solving, ask before quitting (`y` quits)                                 |
 
 **Rewrite & Diagnostics**
 

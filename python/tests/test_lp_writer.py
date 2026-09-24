@@ -135,6 +135,11 @@ class TestLpModification:
         parser.set_sense("minimize")
         assert parser.sense == "minimize"
 
+        # Short aliases, as SenseInput allows, case-insensitively
+        for alias, expected in (("max", "maximize"), ("MIN", "minimize")):
+            parser.set_sense(alias)  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
+            assert str(parser.sense) == expected
+
         # Invalid sense
         with pytest.raises(RuntimeError, match="Invalid sense"):
             parser.set_sense("invalid_sense")  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]

@@ -255,6 +255,31 @@ ENDATA
 }
 
 #[test]
+fn test_bounds_after_free_apply_in_order() {
+    let input = "\
+NAME        test
+ROWS
+ N  obj
+COLUMNS
+    x1        obj       1
+    x2        obj       1
+    x3        obj       1
+BOUNDS
+ FR BOUND     x1
+ UP BOUND     x1        5
+ FR BOUND     x2
+ LO BOUND     x2        -3
+ LO BOUND     x3        2
+ FR BOUND     x3
+ENDATA
+";
+    let result = parse_mps(input).unwrap();
+    assert!(result.bounds.contains(&("x1", VariableType::DoubleBound(f64::NEG_INFINITY, 5.0))), "{:?}", result.bounds);
+    assert!(result.bounds.contains(&("x2", VariableType::DoubleBound(-3.0, f64::INFINITY))), "{:?}", result.bounds);
+    assert!(result.bounds.contains(&("x3", VariableType::Free)), "{:?}", result.bounds);
+}
+
+#[test]
 fn test_multiple_constraint_types() {
     let input = "\
 NAME        test
@@ -395,15 +420,69 @@ BOUNDS
 ENDATA
 ";
     let result = parse_mps(input).unwrap();
-    // SC: semi-continuity is preserved; the (unrepresentable) upper bound is dropped.
+    // SC: semi-continuity is preserved and the value is the upper bound.
     assert!(result.semi_continuous.contains(&"x1"));
     assert!(!result.integers.contains(&"x1"));
-    assert!(result.bounds.iter().all(|(name, _)| *name != "x1"), "SC-only variable must not resolve to a plain bound");
-    // SI: the model has no semi-integer type; the closest representation is
-    // an integer variable with the given upper bound.
-    assert!(!result.semi_continuous.contains(&"x2"));
+    assert!(result.bounds.contains(&("x1", VariableType::UpperBound(100.0))));
+    // SI: integer *and* semi-continuous, which the model reads as semi-integer;
+    // the value is the upper bound.
+    assert!(result.semi_continuous.contains(&"x2"));
     assert!(result.integers.contains(&"x2"));
     assert!(result.bounds.contains(&("x2", VariableType::UpperBound(200.0))));
+
+    let problem = crate::problem::LpProblem::parse_mps(input).unwrap();
+    let x2 = &problem.variables[&problem.name_id("x2").unwrap()];
+    assert_eq!(x2.kind, crate::model::VariableKind::SemiInteger);
+    assert_eq!(x2.bounds, crate::model::VariableBounds::upper(200.0));
+    let x1 = &problem.variables[&problem.name_id("x1").unwrap()];
+    assert_eq!(x1.kind, crate::model::VariableKind::SemiContinuous);
+}
+
+#[test]
+fn test_semi_integer_upper_bound_of_one_is_not_collapsed_to_binary() {
+    // An SI column is not an INTORG column: the integer-in-[0, 1]-is-binary
+    // collapse must not turn it into a binary variable.
+    let input = "\
+NAME        test
+ROWS
+ N  obj
+COLUMNS
+    x         obj       1
+BOUNDS
+ SI BOUND     x         1
+ENDATA
+";
+    let problem = crate::problem::LpProblem::parse_mps(input).unwrap();
+    let x = &problem.variables[&problem.name_id("x").unwrap()];
+    assert_eq!(x.kind, crate::model::VariableKind::SemiInteger);
+    assert_eq!(x.bounds, crate::model::VariableBounds::upper(1.0));
+}
+
+#[test]
+fn test_semi_continuous_bound_value_round_trips_to_model() {
+    let input = "\
+NAME        test
+ROWS
+ N  obj
+COLUMNS
+    x1        obj       1
+    x2        obj       1
+    x3        obj       1
+BOUNDS
+ SC BOUND     x1        10
+ SC BOUND     x2        0
+ SC BOUND     x3        1e30
+ENDATA
+";
+    let problem = crate::LpProblem::parse_mps(input).unwrap();
+    let var = |name: &str| &problem.variables[&problem.name_id(name).unwrap()];
+    for name in ["x1", "x2", "x3"] {
+        assert_eq!(var(name).kind, crate::model::VariableKind::SemiContinuous, "{name}");
+    }
+    assert_eq!(var("x1").bounds, crate::model::VariableBounds::upper(10.0));
+    // Zero and the 1e30 sentinel both mean "no upper bound".
+    assert_eq!(var("x2").bounds.upper, None);
+    assert_eq!(var("x3").bounds.upper, None);
 }
 
 #[test]
@@ -589,6 +668,32 @@ ENDATA
     } else {
         panic!("Expected Standard constraint");
     }
+}
+
+#[test]
+fn test_ranges_generated_name_avoids_existing_row() {
+    let input = "\
+NAME        test
+ROWS
+ N  obj
+ G  c1
+ L  c1_rng
+COLUMNS
+    x1        obj       1
+    x1        c1        1
+    x1        c1_rng    1
+RHS
+    RHS_V     c1        1
+    RHS_V     c1_rng    7
+RANGES
+    RNG       c1        4
+ENDATA
+";
+    let result = parse_mps(input).unwrap();
+    let names: Vec<&str> = result.constraints.iter().map(RawConstraint::name).collect();
+    assert_eq!(names, ["c1", "c1_rng2", "c1_rng"]);
+    let problem = crate::LpProblem::parse_mps(input).unwrap();
+    assert_eq!(problem.constraint_count(), 3);
 }
 
 #[test]
@@ -975,6 +1080,37 @@ fn assert_all_err(inputs: &[&str]) {
     }
 }
 
+/// Degenerate external input must produce errors (or parse), never trip a
+/// debug assertion.
+#[test]
+fn test_degenerate_input_does_not_panic() {
+    for input in ["", "   \n", "ROWS", "ENDATA", "COLUMNS\nENDATA\n"] {
+        assert!(parse_mps(input).is_err(), "expected parse error for {input:?}");
+        assert!(crate::LpProblem::parse_mps(input).is_err(), "expected parse error for {input:?}");
+    }
+    assert_eq!(extract_mps_name(""), None);
+
+    // No trailing newline after ENDATA.
+    let problem = crate::LpProblem::parse_mps("NAME t\nROWS\n N  obj\nCOLUMNS\n    x1        obj       1\nENDATA").unwrap();
+    assert_eq!(problem.variable_count(), 1);
+}
+
+#[test]
+fn test_errors_report_byte_position_and_line() {
+    let input = "NAME t\nROWS\n N  obj\nCOLUMNS\n    x1        obj       1\n    x1        nosuch    1\nENDATA\n";
+    let err = parse_mps(input).unwrap_err();
+    let crate::LpParseError::ParseError { position, context: Some(context), .. } = &err else {
+        panic!("expected parse error with context: {err:?}")
+    };
+    assert_eq!(*position, input.find("    x1        nosuch").unwrap());
+    assert_eq!(context.line, 6);
+    assert!(err.to_string().contains("line 6"), "{err}");
+
+    let input = "NAME t\nROWS\n N  obj\nCOLUMNS\n    x1        obj       abc\nENDATA\n";
+    let err = parse_mps(input).unwrap_err();
+    assert_eq!(err, crate::LpParseError::invalid_number("abc", input.find("abc").unwrap()));
+}
+
 #[test]
 fn test_rows_section_errors() {
     assert_all_err(&[
@@ -996,6 +1132,10 @@ fn test_columns_section_errors() {
         "ROWS\n N  obj\nCOLUMNS\n    x1        nosuchrow 1\nENDATA\n",
         // Invalid number
         "ROWS\n N  obj\nCOLUMNS\n    x1        obj       abc\nENDATA\n",
+        // Non-finite coefficients
+        "ROWS\n N  obj\nCOLUMNS\n    x1        obj       inf\nENDATA\n",
+        "ROWS\n N  obj\nCOLUMNS\n    x1        obj       1e400\nENDATA\n",
+        "ROWS\n N  obj\nCOLUMNS\n    x1        obj       NaN\nENDATA\n",
     ]);
 }
 

@@ -20,9 +20,26 @@ pub struct DetailPosition {
     pub content_lines: usize,
 }
 
-/// Optional yank flash state for the status bar.
+/// Optional flash message for the status bar.
 pub struct YankFlash<'a> {
     pub message: &'a str,
+    /// Severity, which picks the colour.
+    pub level: crate::app::FlashLevel,
+}
+
+/// Colour of a flash at `level`: errors in the removal red, warnings in the
+/// modification amber, successes in the addition green, and neutral feedback
+/// in the accent — so a failure never reads as a green success.
+fn flash_style(level: crate::app::FlashLevel) -> Style {
+    use crate::app::FlashLevel;
+    let t = theme();
+    let colour = match level {
+        FlashLevel::Info => t.accent,
+        FlashLevel::Ok => t.added,
+        FlashLevel::Warn => t.modified,
+        FlashLevel::Err => t.removed,
+    };
+    Style::default().fg(colour).add_modifier(Modifier::BOLD)
 }
 
 /// Inspect-mode left segment: the single filename and current section counts.
@@ -58,16 +75,13 @@ pub struct StatusBarParams<'a> {
     pub hints: &'a str,
 }
 
+/// Prefix of the renamed count, here and in the tab bar.
+pub const RENAMED: &str = "\u{21c4}";
+
 /// Muted separator between status bar segments.
 const SEPARATOR: &str = "  \u{2502}  ";
 
-/// Separator between key hints in the right-hand segment.
-const HINT_SEPARATOR: &str = " \u{b7} ";
-
-/// Fraction of the status bar the key hints may occupy before pairs are
-/// dropped: two thirds, leaving a third for the counts on the left.
-const HINT_WIDTH_NUMERATOR: u16 = 2;
-const HINT_WIDTH_DENOMINATOR: u16 = 3;
+use crate::widgets::HINT_SEPARATOR;
 
 /// Split the packed hint string (`"S:solve  w:csv"`) into styled spans, and
 /// return their total display width.
@@ -106,25 +120,7 @@ fn hint_spans(hints: &str, max_width: usize) -> (Vec<Span<'_>>, usize) {
     width += last.chars().count();
     kept.push(last);
 
-    let t = theme();
-    let key_style = Style::default().fg(t.muted).add_modifier(Modifier::BOLD);
-    let label_style = Style::default().fg(t.muted);
-    let mut spans = Vec::with_capacity(kept.len() * 3);
-    for (i, pair) in kept.iter().enumerate() {
-        if i > 0 {
-            spans.push(Span::styled(HINT_SEPARATOR, Style::default().fg(t.border)));
-        }
-        match pair.split_once(':') {
-            Some((key, action)) => {
-                spans.push(Span::styled(key, key_style));
-                spans.push(Span::styled(":", label_style));
-                spans.push(Span::styled(action, label_style));
-            }
-            // No colon: a plain fragment such as the `y →` chord prefix.
-            None => spans.push(Span::styled(*pair, label_style)),
-        }
-    }
-    (spans, width)
+    (crate::widgets::key_hint_spans(&kept), width)
 }
 
 /// Assemble segments into one line, separated by [`SEPARATOR`], keeping only
@@ -133,7 +129,7 @@ fn hint_spans(hints: &str, max_width: usize) -> (Vec<Span<'_>>, usize) {
 /// Segments are dropped whole from the end rather than clipped: half a label
 /// (`filter:` with its value cut off) reads as a bug, where a missing segment
 /// just reads as a narrow terminal.
-fn fit_segments<'a>(segments: Vec<Vec<Span<'a>>>, separator: &Span<'a>, available: usize) -> Vec<Span<'a>> {
+fn fit_segments<'a>(segments: Vec<Vec<Span<'a>>>, separator: &Span<'a>, available: usize) -> (Vec<Span<'a>>, usize) {
     let separator_width = separator.content.chars().count();
     let mut spans: Vec<Span<'a>> = Vec::with_capacity(segments.len() * 3);
     let mut width = 0;
@@ -149,7 +145,7 @@ fn fit_segments<'a>(segments: Vec<Vec<Span<'a>>>, separator: &Span<'a>, availabl
         spans.extend(segment);
         width += gap + segment_width;
     }
-    spans
+    (spans, width)
 }
 
 /// Draw the status bar across the given area.
@@ -163,21 +159,6 @@ pub fn draw_status_bar(frame: &mut Frame, area: Rect, params: &StatusBarParams<'
     let t = theme();
     let separator = Span::styled(SEPARATOR, Style::default().fg(t.border));
 
-    // Right: yank flash or key hints, right-aligned in its own chunk so the
-    // left segments can flow (and drop) independently.
-    let (mut right_spans, right_width) = params.yank_flash.map_or_else(
-        || hint_spans(params.hints, (area.width * HINT_WIDTH_NUMERATOR / HINT_WIDTH_DENOMINATOR) as usize),
-        |flash| {
-            (vec![Span::styled(flash.message, Style::default().fg(t.added).add_modifier(Modifier::BOLD))], flash.message.chars().count())
-        },
-    );
-    // A leading space keeps a visible gap between the two halves.
-    right_spans.insert(0, Span::raw(" "));
-
-    #[allow(clippy::cast_possible_truncation)] // hint strings are far below u16::MAX
-    let right_len = (right_width as u16).saturating_add(2).min(area.width);
-    let chunks = Layout::horizontal([Constraint::Min(0), Constraint::Length(right_len)]).split(area);
-
     // Left: one group per fact. Inspect mode shows the filename and section
     // count; diff mode shows total/per-kind change counts and the active filter.
     let mut segments: Vec<Vec<Span<'_>>> = Vec::with_capacity(8);
@@ -185,19 +166,28 @@ pub fn draw_status_bar(frame: &mut Frame, area: Rect, params: &StatusBarParams<'
         segments.push(vec![Span::styled(format!(" {}", inspect.file), Style::default().fg(t.accent).add_modifier(Modifier::BOLD))]);
         segments.push(vec![Span::styled(format!("{} {}", inspect.entry_count, inspect.section_label), Style::default().fg(t.text))]);
     } else {
-        segments.push(vec![Span::styled(
-            format!(" {} changes", params.total_changes),
-            Style::default().fg(t.added).add_modifier(Modifier::BOLD),
-        )]);
-        segments.push(vec![
-            Span::styled(format!("+{}", params.section_counts.added), Style::default().fg(t.added)),
+        // No changes is a quiet fact, not a headline.
+        let changes_style = if params.total_changes == 0 {
+            Style::default().fg(t.muted)
+        } else {
+            Style::default().fg(t.added).add_modifier(Modifier::BOLD)
+        };
+        segments.push(vec![Span::styled(format!(" {}", crate::format::plural(params.total_changes, "change", "changes")), changes_style)]);
+        let counts = params.section_counts;
+        let mut kinds = vec![
+            Span::styled(format!("+{}", counts.added), Style::default().fg(t.added)),
             Span::raw(" "),
-            Span::styled(format!("-{}", params.section_counts.removed), Style::default().fg(t.removed)),
+            Span::styled(format!("-{}", counts.removed), Style::default().fg(t.removed)),
             Span::raw(" "),
-            Span::styled(format!("~{}", params.section_counts.modified), Style::default().fg(t.modified)),
-            Span::raw(" "),
-            Span::styled(format!(">{}", params.section_counts.renamed), Style::default().fg(t.accent)),
-        ]);
+            Span::styled(format!("~{}", counts.modified), Style::default().fg(t.modified)),
+        ];
+        // Renames only happen under rename rules or detection; a permanent
+        // `>0` was noise, and `>` read as a comparison.
+        if counts.renamed > 0 {
+            kinds.push(Span::raw(" "));
+            kinds.push(Span::styled(format!("{RENAMED}{}", counts.renamed), Style::default().fg(t.accent)));
+        }
+        segments.push(kinds);
         segments.push(vec![
             Span::styled("filter:", Style::default().fg(t.muted)),
             Span::styled(format!("{} ({})", params.filter_label, params.filter_count), Style::default().fg(t.modified)),
@@ -226,7 +216,83 @@ pub fn draw_status_bar(frame: &mut Frame, area: Rect, params: &StatusBarParams<'
         segments.push(vec![Span::styled(format!("L{top_line}/{}", position.content_lines), Style::default().fg(t.accent))]);
     }
 
-    let left_spans = fit_segments(segments, &separator, chunks[0].width as usize);
+    // The state on the left outranks the hints on the right: the left
+    // segments take what they need, less the room for the one hint that is
+    // never dropped (`?:help`), and the hints fill whatever is left over.
+    // A flash is transient and is the thing the user is waiting to read, so
+    // it keeps its full width instead.
+    let available = area.width as usize;
+    let right_floor = params.yank_flash.map_or_else(|| last_hint_width(params.hints), |flash| flash.message.chars().count()) + 2;
+    let (left_spans, left_width) = fit_segments(segments, &separator, available.saturating_sub(right_floor));
+
+    let (mut right_spans, right_width) = params.yank_flash.map_or_else(
+        || hint_spans(params.hints, available.saturating_sub(left_width + 2)),
+        |flash| (vec![Span::styled(flash.message, flash_style(flash.level))], flash.message.chars().count()),
+    );
+    // A leading space keeps a visible gap between the two halves.
+    right_spans.insert(0, Span::raw(" "));
+
+    #[allow(clippy::cast_possible_truncation)] // hint strings are far below u16::MAX
+    let right_len = (right_width as u16).saturating_add(2).min(area.width);
+    let chunks = Layout::horizontal([Constraint::Min(0), Constraint::Length(right_len)]).split(area);
     frame.render_widget(Paragraph::new(Line::from(left_spans)), chunks[0]);
     frame.render_widget(Paragraph::new(Line::from(right_spans)), chunks[1]);
+}
+
+/// Width of the last hint pair — `?:help`, which is always kept.
+fn last_hint_width(hints: &str) -> usize {
+    hints.split("  ").filter(|pair| !pair.is_empty()).last().map_or(0, |pair| pair.chars().count())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Render a diff-mode status bar with the given counts; returns its text
+    /// and the cell under the first character of the change count.
+    fn render_counts(total_changes: usize, renamed: usize) -> (String, ratatui::buffer::Cell) {
+        let counts = DiffCounts { renamed, ..DiffCounts::default() };
+        let params = StatusBarParams {
+            total_changes,
+            section_counts: &counts,
+            filter_label: "All",
+            filter_count: 0,
+            detail_position: None,
+            yank_flash: None,
+            ignore_order: false,
+            sort_label: None,
+            tolerance_label: None,
+            watch_reloading: None,
+            inspect: None,
+            hints: "?:help",
+        };
+        let mut terminal = ratatui::Terminal::new(ratatui::backend::TestBackend::new(80, 1)).expect("test terminal");
+        terminal.draw(|frame| draw_status_bar(frame, frame.area(), &params)).expect("draws");
+        let buffer = terminal.backend().buffer().clone();
+        let text = buffer.content().iter().map(ratatui::buffer::Cell::symbol).collect();
+        (text, buffer[(1, 0)].clone())
+    }
+
+    #[test]
+    fn no_changes_is_quiet_and_renames_show_only_when_present() {
+        let (text, cell) = render_counts(0, 0);
+        assert!(text.contains("0 changes"), "{text:?}");
+        assert_eq!(cell.fg, theme().muted, "no changes is muted");
+        assert!(!text.contains(RENAMED), "no renames, no rename count: {text:?}");
+
+        let (text, cell) = render_counts(1, 2);
+        assert!(text.contains("1 change "), "singular for one: {text:?}");
+        assert_eq!(cell.fg, theme().added);
+        assert!(text.contains("\u{21c4}2"), "renames carry the swap arrow: {text:?}");
+    }
+
+    #[test]
+    fn hints_shrink_to_help_before_the_state_is_dropped() {
+        let hints = "E:what-if  r:raw  s:sort  ?:help";
+        assert_eq!(last_hint_width(hints), "?:help".len());
+        let (_, width) = hint_spans(hints, 6);
+        assert_eq!(width, 6, "only ?:help survives a tight budget");
+        let (_, width) = hint_spans(hints, 18);
+        assert_eq!(width, "E:what-if · ?:help".chars().count(), "the leading pairs come back as room allows");
+    }
 }

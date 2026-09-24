@@ -116,6 +116,128 @@ pub struct Coefficient {
     pub value: f64,
 }
 
+/// A quadratic term `coefficient * var1 * var2` (`var1 == var2` for a square).
+///
+/// The coefficient is the term's own coefficient in the expression it belongs
+/// to. In an objective that differs from what an LP file writes: CPLEX and
+/// Gurobi write objective quadratics as `[ ... ] / 2`, so `[ x ^ 2 ] / 2` is
+/// stored as `0.5 x x`. Constraint quadratics are written without the halving.
+#[derive(Debug, Clone, PartialEq)]
+pub struct QuadraticTerm {
+    /// Interned name of the first variable.
+    pub var1: NameId,
+    /// Interned name of the second variable (equal to `var1` for a square).
+    pub var2: NameId,
+    /// Coefficient of the product `var1 * var2`.
+    pub coefficient: f64,
+}
+
+impl QuadraticTerm {
+    /// Whether this term is a square (`x ^ 2`).
+    #[must_use]
+    pub fn is_square(&self) -> bool {
+        self.var1 == self.var2
+    }
+
+    /// Whether this term multiplies the same (unordered) pair of variables as `other`.
+    #[must_use]
+    pub fn same_pair(&self, other: &Self) -> bool {
+        (self.var1 == other.var1 && self.var2 == other.var2) || (self.var1 == other.var2 && self.var2 == other.var1)
+    }
+}
+
+/// The function of a Gurobi general constraint (`resultant = FUNCTION ( ... )`),
+/// generic over how variables are named ([`NameId`] in the model, `&str` while
+/// parsing).
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, PartialEq)]
+pub enum GeneralFunction<V = NameId> {
+    /// `MAX ( x1 , x2 , c )`: the largest of the variables and the constant.
+    Max {
+        /// Argument variables.
+        variables: Vec<V>,
+        /// Constant argument, if any.
+        constant: Option<f64>,
+    },
+    /// `MIN ( x1 , x2 , c )`: the smallest of the variables and the constant.
+    Min {
+        /// Argument variables.
+        variables: Vec<V>,
+        /// Constant argument, if any.
+        constant: Option<f64>,
+    },
+    /// `ABS ( x )`: the absolute value of a variable.
+    Abs {
+        /// The argument variable.
+        variable: V,
+    },
+    /// `AND ( b1 , b2 )`: the conjunction of binary variables.
+    And {
+        /// Argument (binary) variables.
+        variables: Vec<V>,
+    },
+    /// `OR ( b1 , b2 )`: the disjunction of binary variables.
+    Or {
+        /// Argument (binary) variables.
+        variables: Vec<V>,
+    },
+}
+
+impl<V> GeneralFunction<V> {
+    /// The function's LP keyword (`MAX`, `MIN`, `ABS`, `AND`, `OR`).
+    #[must_use]
+    pub const fn keyword(&self) -> &'static str {
+        match self {
+            Self::Max { .. } => "MAX",
+            Self::Min { .. } => "MIN",
+            Self::Abs { .. } => "ABS",
+            Self::And { .. } => "AND",
+            Self::Or { .. } => "OR",
+        }
+    }
+
+    /// The argument variables, in order.
+    #[must_use]
+    pub fn variables(&self) -> &[V] {
+        match self {
+            Self::Max { variables, .. } | Self::Min { variables, .. } | Self::And { variables } | Self::Or { variables } => variables,
+            Self::Abs { variable } => std::slice::from_ref(variable),
+        }
+    }
+
+    /// The constant argument of `MAX` / `MIN`, if any.
+    #[must_use]
+    pub const fn constant(&self) -> Option<f64> {
+        match self {
+            Self::Max { constant, .. } | Self::Min { constant, .. } => *constant,
+            Self::Abs { .. } | Self::And { .. } | Self::Or { .. } => None,
+        }
+    }
+
+    /// Mutable access to the argument variables.
+    pub fn variables_mut(&mut self) -> &mut [V] {
+        match self {
+            Self::Max { variables, .. } | Self::Min { variables, .. } | Self::And { variables } | Self::Or { variables } => variables,
+            Self::Abs { variable } => std::slice::from_mut(variable),
+        }
+    }
+
+    /// Rename every argument variable with `f`, keeping the function.
+    pub fn map_variables<W>(&self, mut f: impl FnMut(&V) -> W) -> GeneralFunction<W> {
+        match self {
+            Self::Max { variables, constant } => {
+                GeneralFunction::Max { variables: variables.iter().map(&mut f).collect(), constant: *constant }
+            }
+            Self::Min { variables, constant } => {
+                GeneralFunction::Min { variables: variables.iter().map(&mut f).collect(), constant: *constant }
+            }
+            Self::Abs { variable } => GeneralFunction::Abs { variable: f(variable) },
+            Self::And { variables } => GeneralFunction::And { variables: variables.iter().map(&mut f).collect() },
+            Self::Or { variables } => GeneralFunction::Or { variables: variables.iter().map(&mut f).collect() },
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 /// Represents a constraint in an optimisation problem, which can be either a
 /// standard linear constraint or a special ordered set (SOS) constraint.
@@ -144,6 +266,54 @@ pub enum Constraint {
         /// Byte offset of this constraint in the source text (for line number mapping).
         byte_offset: Option<usize>,
     },
+    /// A quadratic constraint (`name: x + [ x ^ 2 + 2 x * y ] <= 4`): linear
+    /// coefficients plus quadratic terms, compared against the right-hand side.
+    Quadratic {
+        /// Interned constraint name.
+        name: NameId,
+        /// Linear left-hand-side coefficients.
+        coefficients: Vec<Coefficient>,
+        /// Quadratic left-hand-side terms (never empty).
+        quadratic: Vec<QuadraticTerm>,
+        /// Comparison operator between the LHS and the RHS.
+        operator: ComparisonOp,
+        /// Right-hand-side value.
+        rhs: f64,
+        /// Byte offset of this constraint in the source text (for line number mapping).
+        byte_offset: Option<usize>,
+    },
+    /// A Gurobi general constraint (`General Constraints` section):
+    /// `resultant = FUNCTION ( arguments )`.
+    General {
+        /// Interned constraint name.
+        name: NameId,
+        /// The variable the function's value is assigned to.
+        resultant: NameId,
+        /// The function and its arguments.
+        function: GeneralFunction,
+        /// Byte offset of this constraint in the source text (for line number mapping).
+        byte_offset: Option<usize>,
+    },
+    /// An indicator constraint (`name: b = 1 -> x + y <= 3`): the linear
+    /// constraint must hold whenever the binary `variable` equals
+    /// `active_value`, and is unconstrained otherwise.
+    Indicator {
+        /// Interned constraint name.
+        name: NameId,
+        /// Interned name of the (binary) indicator variable.
+        variable: NameId,
+        /// `true` when the constraint is active for `variable = 1`, `false`
+        /// for `variable = 0`.
+        active_value: bool,
+        /// Left-hand-side coefficients of the linear constraint.
+        coefficients: Vec<Coefficient>,
+        /// Comparison operator of the linear constraint.
+        operator: ComparisonOp,
+        /// Right-hand-side value of the linear constraint.
+        rhs: f64,
+        /// Byte offset of this constraint in the source text (for line number mapping).
+        byte_offset: Option<usize>,
+    },
 }
 
 impl PartialEq for Constraint {
@@ -156,6 +326,17 @@ impl PartialEq for Constraint {
             (Self::SOS { name: n1, sos_type: t1, weights: w1, .. }, Self::SOS { name: n2, sos_type: t2, weights: w2, .. }) => {
                 n1 == n2 && t1 == t2 && w1 == w2
             }
+            (
+                Self::Indicator { name: n1, variable: v1, active_value: a1, coefficients: c1, operator: o1, rhs: r1, .. },
+                Self::Indicator { name: n2, variable: v2, active_value: a2, coefficients: c2, operator: o2, rhs: r2, .. },
+            ) => n1 == n2 && v1 == v2 && a1 == a2 && c1 == c2 && o1 == o2 && r1 == r2,
+            (
+                Self::Quadratic { name: n1, coefficients: c1, quadratic: q1, operator: o1, rhs: r1, .. },
+                Self::Quadratic { name: n2, coefficients: c2, quadratic: q2, operator: o2, rhs: r2, .. },
+            ) => n1 == n2 && c1 == c2 && q1 == q2 && o1 == o2 && r1 == r2,
+            (Self::General { name: n1, resultant: r1, function: f1, .. }, Self::General { name: n2, resultant: r2, function: f2, .. }) => {
+                n1 == n2 && r1 == r2 && f1 == f2
+            }
             _ => false,
         }
     }
@@ -167,7 +348,11 @@ impl Constraint {
     /// Returns the interned name of the constraint.
     pub const fn name(&self) -> NameId {
         match self {
-            Self::Standard { name, .. } | Self::SOS { name, .. } => *name,
+            Self::Standard { name, .. }
+            | Self::SOS { name, .. }
+            | Self::Indicator { name, .. }
+            | Self::Quadratic { name, .. }
+            | Self::General { name, .. } => *name,
         }
     }
 
@@ -176,8 +361,141 @@ impl Constraint {
     /// Returns the byte offset of this constraint in the source text, if available.
     pub const fn byte_offset(&self) -> Option<usize> {
         match self {
-            Self::Standard { byte_offset, .. } | Self::SOS { byte_offset, .. } => *byte_offset,
+            Self::Standard { byte_offset, .. }
+            | Self::SOS { byte_offset, .. }
+            | Self::Indicator { byte_offset, .. }
+            | Self::Quadratic { byte_offset, .. }
+            | Self::General { byte_offset, .. } => *byte_offset,
         }
+    }
+
+    #[must_use]
+    #[inline]
+    /// Returns a mutable reference to the interned name of the constraint.
+    pub const fn name_mut(&mut self) -> &mut NameId {
+        match self {
+            Self::Standard { name, .. }
+            | Self::SOS { name, .. }
+            | Self::Indicator { name, .. }
+            | Self::Quadratic { name, .. }
+            | Self::General { name, .. } => name,
+        }
+    }
+
+    /// The linear row of a standard or indicator constraint as
+    /// `(coefficients, operator, rhs)`; `None` for an SOS or quadratic
+    /// constraint (a quadratic constraint has no purely linear row). For an
+    /// indicator constraint this is the constraint that holds when the
+    /// indicator is active.
+    #[must_use]
+    pub fn linear_row(&self) -> Option<(&[Coefficient], ComparisonOp, f64)> {
+        match self {
+            Self::Standard { coefficients, operator, rhs, .. } | Self::Indicator { coefficients, operator, rhs, .. } => {
+                Some((coefficients, *operator, *rhs))
+            }
+            Self::SOS { .. } | Self::Quadratic { .. } | Self::General { .. } => None,
+        }
+    }
+
+    /// Calls `f` with every variable the constraint references: its
+    /// coefficients (or SOS members) and, for an indicator constraint, the
+    /// indicator variable first.
+    pub fn for_each_variable(&self, mut f: impl FnMut(NameId)) {
+        match self {
+            Self::Standard { coefficients: terms, .. } | Self::SOS { weights: terms, .. } => {
+                for term in terms {
+                    f(term.name);
+                }
+            }
+            Self::Indicator { variable, coefficients, .. } => {
+                f(*variable);
+                for term in coefficients {
+                    f(term.name);
+                }
+            }
+            Self::Quadratic { coefficients, quadratic, .. } => {
+                for term in coefficients {
+                    f(term.name);
+                }
+                for term in quadratic {
+                    f(term.var1);
+                    f(term.var2);
+                }
+            }
+            Self::General { resultant, function, .. } => {
+                f(*resultant);
+                for variable in function.variables() {
+                    f(*variable);
+                }
+            }
+        }
+    }
+}
+
+/// How a solver should treat a constraint (CPLEX LP `Lazy Constraints` and
+/// `User Cuts` sections; MPS `LAZYCONS` and `USERCUTS`).
+///
+/// The class does not change the constraint itself: a lazy constraint is part
+/// of the model that a solver may enforce only once it is violated, and a user
+/// cut must not remove any integer-feasible point. A solver that ignores the
+/// class and treats every constraint as ordinary solves the same model.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+pub enum ConstraintClass {
+    /// An ordinary constraint (`Subject To`).
+    #[default]
+    Normal,
+    /// A lazy constraint (`Lazy Constraints`).
+    Lazy,
+    /// A user cut (`User Cuts`).
+    UserCut,
+}
+
+impl ConstraintClass {
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::Normal => "Normal",
+            Self::Lazy => "Lazy",
+            Self::UserCut => "UserCut",
+        }
+    }
+
+    /// Whether this is the default class (an ordinary constraint).
+    #[must_use]
+    pub const fn is_normal(self) -> bool {
+        matches!(self, Self::Normal)
+    }
+}
+
+impl Display for ConstraintClass {
+    #[inline]
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        f.write_str(self.as_str())
+    }
+}
+
+/// Gurobi multi-objective attributes of an objective (`Minimize
+/// multi-objectives` followed by `OBJ0: Priority=2 Weight=1 AbsTol=0
+/// RelTol=0`). Every attribute is optional; an objective of an ordinary
+/// (single- or plain multi-objective) file has none.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct ObjectiveAttributes {
+    /// Priority in hierarchical (lexicographic) optimisation; higher first.
+    pub priority: Option<i64>,
+    /// Weight when objectives of the same priority are blended.
+    pub weight: Option<f64>,
+    /// Absolute degradation allowed when optimising lower-priority objectives.
+    pub abs_tol: Option<f64>,
+    /// Relative degradation allowed when optimising lower-priority objectives.
+    pub rel_tol: Option<f64>,
+}
+
+impl ObjectiveAttributes {
+    /// Whether no attribute is set.
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        self.priority.is_none() && self.weight.is_none() && self.abs_tol.is_none() && self.rel_tol.is_none()
     }
 }
 
@@ -190,6 +508,12 @@ pub struct Objective {
     pub coefficients: Vec<Coefficient>,
     /// Constant term of the objective function.
     pub constant: f64,
+    /// Quadratic terms of the objective (empty for a linear objective). Each
+    /// coefficient is the term's actual coefficient: the `/ 2` of the LP
+    /// syntax is already applied (see [`QuadraticTerm`]).
+    pub quadratic: Vec<QuadraticTerm>,
+    /// Gurobi multi-objective attributes (all unset for an ordinary objective).
+    pub attributes: ObjectiveAttributes,
     /// Byte offset of this objective in the source text (for line number mapping).
     pub byte_offset: Option<usize>,
 }
@@ -209,6 +533,12 @@ pub enum VariableKind {
     Binary,
     /// Semi-continuous variable.
     SemiContinuous,
+    /// Semi-integer variable: either zero or an integer within its bounds.
+    ///
+    /// LP files declare one by listing the variable in both a `generals` (or
+    /// `integers`) section and the `semi-continuous` section (CPLEX
+    /// semantics); MPS files use the `SI` bound type.
+    SemiInteger,
     /// Variable participating in an SOS set.
     Sos,
 }
@@ -221,14 +551,29 @@ impl VariableKind {
             Self::Integer => "Integer",
             Self::Binary => "Binary",
             Self::SemiContinuous => "SemiContinuous",
+            Self::SemiInteger => "SemiInteger",
             Self::Sos => "Sos",
         }
     }
 
-    /// Whether this kind is treated as integer-valued by solvers.
+    /// Whether this kind is an ordinary integer kind (integer, general or
+    /// binary).
+    ///
+    /// [`Self::SemiInteger`] is deliberately excluded, like
+    /// [`Self::SemiContinuous`]: it is integer-valued only away from zero, and
+    /// code that treats it as a plain integer (for example by relaxing it to a
+    /// continuous `[lb, ub]` range) would drop the zero branch. See
+    /// [`Self::is_semi`].
     #[must_use]
     pub const fn is_integer(self) -> bool {
         matches!(self, Self::Integer | Self::General | Self::Binary)
+    }
+
+    /// Whether this kind is semi-continuous or semi-integer (the variable may
+    /// also take the value zero outside its bounds).
+    #[must_use]
+    pub const fn is_semi(self) -> bool {
+        matches!(self, Self::SemiContinuous | Self::SemiInteger)
     }
 }
 
@@ -394,6 +739,8 @@ pub enum VariableType {
     Integer,
     /// Semi-continuous variable.
     SemiContinuous,
+    /// Semi-integer variable (zero, or an integer within its bounds).
+    SemiInteger,
     /// Special Order Set (SOS)
     SOS,
 }
@@ -409,6 +756,7 @@ impl VariableType {
             Self::Binary => "Binary",
             Self::Integer => "Integer",
             Self::SemiContinuous => "Semi-Continuous",
+            Self::SemiInteger => "Semi-Integer",
             Self::SOS => "SOS",
         }
     }
@@ -429,6 +777,7 @@ impl VariableType {
             Self::Binary => (VariableKind::Binary, VariableBounds::unspecified()),
             Self::Integer => (VariableKind::Integer, VariableBounds::unspecified()),
             Self::SemiContinuous => (VariableKind::SemiContinuous, VariableBounds::unspecified()),
+            Self::SemiInteger => (VariableKind::SemiInteger, VariableBounds::unspecified()),
             Self::SOS => (VariableKind::Sos, VariableBounds::unspecified()),
         }
     }
@@ -602,12 +951,26 @@ mod tests {
         let profit = interner.intern("profit");
         let x1 = interner.intern("x1");
 
-        let obj = Objective { name: profit, coefficients: vec![Coefficient { name: x1, value: 5.0 }], constant: 0.0, byte_offset: None };
+        let obj = Objective {
+            name: profit,
+            coefficients: vec![Coefficient { name: x1, value: 5.0 }],
+            constant: 0.0,
+            quadratic: Vec::new(),
+            attributes: crate::model::ObjectiveAttributes::default(),
+            byte_offset: None,
+        };
         assert_eq!(interner.resolve(obj.name), "profit");
         assert_eq!(obj.coefficients.len(), 1);
 
         let dynamic = interner.intern("dynamic");
-        let obj_empty = Objective { name: dynamic, coefficients: vec![], constant: 0.0, byte_offset: None };
+        let obj_empty = Objective {
+            name: dynamic,
+            coefficients: vec![],
+            constant: 0.0,
+            quadratic: Vec::new(),
+            attributes: crate::model::ObjectiveAttributes::default(),
+            byte_offset: None,
+        };
         assert_eq!(interner.resolve(obj_empty.name), "dynamic");
         assert!(obj_empty.coefficients.is_empty(), "expected empty, got {:?}", obj_empty.coefficients);
     }
@@ -622,6 +985,7 @@ mod tests {
             (VariableType::Binary, "Binary"),
             (VariableType::Integer, "Integer"),
             (VariableType::SemiContinuous, "Semi-Continuous"),
+            (VariableType::SemiInteger, "Semi-Integer"),
             (VariableType::SOS, "SOS"),
             (VariableType::LowerBound(5.0), "LowerBound"),
             (VariableType::UpperBound(10.0), "UpperBound"),
@@ -639,6 +1003,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::float_cmp)]
     fn test_variable() {
         let mut interner = NameInterner::new();
         let x1 = interner.intern("x1");

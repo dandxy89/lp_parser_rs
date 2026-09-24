@@ -22,7 +22,7 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Commands {
-    /// Parse an LP file and display its structure
+    /// Parse an LP or MPS file and display its structure
     Parse(ParseArgs),
 
     /// Show detailed statistics about an LP problem
@@ -32,12 +32,12 @@ pub enum Commands {
     /// Exits 1 when any error-severity issue is found, 2 on failure.
     Analyze(AnalyzeArgs),
 
-    /// Compare two LP files.
+    /// Compare two LP or MPS files.
     /// Exits 0 when the problems match, 1 when they differ, 2 on failure.
     #[cfg(feature = "diff")]
     Diff(DiffArgs),
 
-    /// Convert LP file to another format
+    /// Convert an LP or MPS file to another format
     Convert(ConvertArgs),
 
     /// Solve an LP problem using external solvers
@@ -60,7 +60,7 @@ pub enum OutputFormat {
 
 #[derive(clap::Args)]
 pub struct ParseArgs {
-    /// Path to the LP file
+    /// Path to the LP or MPS file (`.mps` extension reads MPS)
     pub file: PathBuf,
 
     /// Write output to file instead of stdout
@@ -79,7 +79,7 @@ pub struct ParseArgs {
 #[derive(clap::Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct AnalyzeArgs {
-    /// Path to the LP file
+    /// Path to the LP or MPS file (`.mps` extension reads MPS)
     pub file: PathBuf,
 
     /// Write output to file instead of stdout
@@ -99,22 +99,32 @@ pub struct AnalyzeArgs {
     pub issues_only: bool,
 
     /// Large coefficient warning threshold
-    #[arg(long, default_value = "1000000000")]
+    #[arg(long, default_value = "1000000000", value_parser = positive_finite)]
     pub large_coeff_threshold: f64,
 
     /// Small coefficient warning threshold
-    #[arg(long, default_value = "0.000000001")]
+    #[arg(long, default_value = "0.000000001", value_parser = positive_finite)]
     pub small_coeff_threshold: f64,
 
+    /// Large RHS warning threshold (applied to the RHS magnitude)
+    #[arg(long, default_value = "1000000000", value_parser = positive_finite)]
+    pub large_rhs_threshold: f64,
+
     /// Coefficient ratio warning threshold
-    #[arg(long, default_value = "1000000")]
+    #[arg(long, default_value = "1000000", value_parser = positive_finite)]
     pub ratio_threshold: f64,
+}
+
+/// Parse a threshold that must be a finite number greater than zero.
+fn positive_finite(value: &str) -> Result<f64, String> {
+    let parsed: f64 = value.parse().map_err(|err| format!("'{value}' is not a number: {err}"))?;
+    if parsed.is_finite() && parsed > 0.0 { Ok(parsed) } else { Err(format!("'{value}' must be a finite number greater than zero")) }
 }
 
 #[derive(clap::Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct InfoArgs {
-    /// Path to the LP file
+    /// Path to the LP or MPS file (`.mps` extension reads MPS)
     pub file: PathBuf,
 
     /// Write output to file instead of stdout
@@ -145,10 +155,10 @@ pub struct InfoArgs {
 #[cfg(feature = "diff")]
 #[derive(clap::Args)]
 pub struct DiffArgs {
-    /// First LP file (base)
+    /// First LP or MPS file (base)
     pub file1: PathBuf,
 
-    /// Second LP file (to compare against)
+    /// Second LP or MPS file (to compare against)
     pub file2: PathBuf,
 
     /// Write output to file instead of stdout
@@ -198,7 +208,7 @@ pub enum ConvertFormat {
 
 #[derive(clap::Args)]
 pub struct ConvertArgs {
-    /// Path to the LP file
+    /// Path to the LP or MPS file (`.mps` extension reads MPS)
     pub file: PathBuf,
 
     /// Output file or directory (required for CSV)
@@ -213,9 +223,9 @@ pub struct ConvertArgs {
     #[arg(long)]
     pub pretty: bool,
 
-    /// Decimal precision for numbers
-    #[arg(long, default_value = "6")]
-    pub precision: usize,
+    /// Round numbers to this many decimal places (default: exact, shortest round-trip form)
+    #[arg(long)]
+    pub precision: Option<usize>,
 
     /// Maximum line length before wrapping
     #[arg(long, default_value = "80")]
@@ -243,7 +253,7 @@ pub enum Solver {
 #[cfg(feature = "lp-solvers")]
 #[derive(clap::Args)]
 pub struct SolveArgs {
-    /// Path to the LP file
+    /// Path to the LP or MPS file (`.mps` extension reads MPS)
     pub file: PathBuf,
 
     /// Solver to use
@@ -261,4 +271,18 @@ pub struct SolveArgs {
     /// Pretty-print structured output (JSON only; YAML is unaffected)
     #[arg(long)]
     pub pretty: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::positive_finite;
+
+    #[test]
+    fn thresholds_must_be_positive_and_finite() {
+        assert!(positive_finite("1e9").is_ok());
+        assert!(positive_finite("0.5").is_ok());
+        for bad in ["0", "-1", "NaN", "inf", "-inf", "abc"] {
+            assert!(positive_finite(bad).is_err(), "'{bad}' must be rejected");
+        }
+    }
 }

@@ -1,6 +1,6 @@
 use lalrpop_util::ParseError;
 
-use crate::assemble::{Elem, SpannedElem, assemble_constraints, assemble_objectives};
+use crate::assemble::{Elem, SpannedElem, assemble_constraint_sections, assemble_general_constraints, assemble_objectives};
 use crate::lexer::{Token, LexerError, RawCoefficient, RawConstraint, OptionalSection, ParseResult, SosEntryKind};
 use crate::model::{ComparisonOp, SOSType, Sense, VariableType};
 
@@ -13,7 +13,11 @@ extern {
     enum Token<'input> {
         // Keywords
         "sense" => Token::SenseKw(<Sense>),
+        "multi-objectives" => Token::MultiObjectives,
         "subject to" => Token::SubjectTo,
+        "lazy constraints" => Token::LazyConstraints,
+        "user cuts" => Token::UserCuts,
+        "general constraints" => Token::GeneralConstraints,
         "bounds" => Token::Bounds,
         "generals" => Token::Generals,
         "integers" => Token::Integers,
@@ -39,11 +43,18 @@ extern {
         "-" => Token::Minus,
         ":" => Token::Colon,
         "::" => Token::DoubleColon,
+        "->" => Token::Implies,
+        "[" => Token::LBracket,
+        "]" => Token::RBracket,
+        "^" => Token::Caret,
+        "*" => Token::Star,
+        "/" => Token::Slash,
     }
 }
 
 pub LpProblem: ParseResult<'input> = {
     <sense:"sense">
+    <multi:"multi-objectives"?>
     <obj_elems:ObjElem*>
     "subject to"
     <con_elems:ConElem*>
@@ -54,8 +65,7 @@ pub LpProblem: ParseResult<'input> = {
         // lists and assembled in Rust: entry boundaries (e.g. a trailing
         // constant vs. a coefficient of the next objective's name) need more
         // than one token of lookahead. See `crate::assemble`.
-        let objectives = assemble_objectives(&obj_elems).map_err(|error| ParseError::User { error })?;
-        let constraints = assemble_constraints(&con_elems).map_err(|error| ParseError::User { error })?;
+        let objectives = assemble_objectives(&obj_elems, multi.is_some()).map_err(|error| ParseError::User { error })?;
 
         let mut bounds: Vec<(&'input str, VariableType)> = Vec::new();
         let mut generals: Vec<&'input str> = Vec::new();
@@ -63,6 +73,9 @@ pub LpProblem: ParseResult<'input> = {
         let mut binaries: Vec<&'input str> = Vec::new();
         let mut semi_continuous: Vec<&'input str> = Vec::new();
         let mut sos: Vec<RawConstraint<'input>> = Vec::new();
+        let mut lazy_bodies: Vec<Vec<SpannedElem<'input>>> = Vec::new();
+        let mut user_cut_bodies: Vec<Vec<SpannedElem<'input>>> = Vec::new();
+        let mut general_bodies: Vec<Vec<SpannedElem<'input>>> = Vec::new();
 
         for section in sections {
             match section {
@@ -72,10 +85,31 @@ pub LpProblem: ParseResult<'input> = {
                 OptionalSection::Binaries(b) => binaries.extend(b),
                 OptionalSection::SemiContinuous(s) => semi_continuous.extend(s),
                 OptionalSection::SOS(s) => sos.extend(s),
+                OptionalSection::Lazy(elems) => lazy_bodies.push(elems),
+                OptionalSection::UserCuts(elems) => user_cut_bodies.push(elems),
+                OptionalSection::GeneralConstraints(elems) => general_bodies.push(elems),
             }
         }
 
-        Ok(ParseResult { sense, objectives, constraints, bounds, generals, integers, binaries, semi_continuous, sos })
+        // The `Subject To`, `Lazy Constraints` and `User Cuts` bodies are
+        // assembled together so a generated range name avoids the explicit
+        // names of every section.
+        let mut bodies: Vec<&[SpannedElem<'input>]> = Vec::with_capacity(1 + lazy_bodies.len() + user_cut_bodies.len());
+        bodies.push(&con_elems);
+        bodies.extend(lazy_bodies.iter().map(Vec::as_slice));
+        bodies.extend(user_cut_bodies.iter().map(Vec::as_slice));
+        let mut assembled = assemble_constraint_sections(&bodies).map_err(|error| ParseError::User { error })?.into_iter();
+        let mut constraints = assembled.next().unwrap_or_default();
+        // General constraints are ordinary (not lazy) constraints of their own kind.
+        for body in &general_bodies {
+            constraints.extend(assemble_general_constraints(body).map_err(|error| ParseError::User { error })?);
+        }
+        let lazy_constraints: Vec<RawConstraint<'input>> = assembled.by_ref().take(lazy_bodies.len()).flatten().collect();
+        let user_cuts: Vec<RawConstraint<'input>> = assembled.flatten().collect();
+
+        Ok(ParseResult {
+            sense, objectives, constraints, bounds, generals, integers, binaries, semi_continuous, sos, lazy_constraints, user_cuts,
+        })
     }
 };
 
@@ -87,6 +121,10 @@ AnySection: OptionalSection<'input> = {
     <b:BinariesSection> => OptionalSection::Binaries(b),
     <s:SemiSection> => OptionalSection::SemiContinuous(s),
     <s:SosSection> => OptionalSection::SOS(s),
+    // Constraint bodies are assembled in the top-level action (see above).
+    "lazy constraints" <elems:ConElem*> => OptionalSection::Lazy(elems),
+    "user cuts" <elems:ConElem*> => OptionalSection::UserCuts(elems),
+    "general constraints" <elems:ConElem*> => OptionalSection::GeneralConstraints(elems),
 };
 
 // One element of the objective section body. `name ":"` is folded into a
@@ -98,6 +136,18 @@ ObjElem: SpannedElem<'input> = {
     <loc:@L> <i:"infinity"> => (loc, Elem::Num(i)),
     <loc:@L> "+" => (loc, Elem::Plus),
     <loc:@L> "-" => (loc, Elem::Minus),
+    <loc:@L> <q:QuadElem> => (loc, q),
+    // Only valid in a multi-objective attribute (`Priority=2`).
+    <loc:@L> "=" => (loc, Elem::Op(ComparisonOp::EQ)),
+};
+
+// Quadratic-block punctuation, shared by objectives and constraints.
+QuadElem: Elem<'input> = {
+    "[" => Elem::LBracket,
+    "]" => Elem::RBracket,
+    "^" => Elem::Caret,
+    "*" => Elem::Star,
+    "/" => Elem::Slash,
 };
 
 // One element of the constraint section body. Also admits `name "::"` and
@@ -111,6 +161,8 @@ ConElem: SpannedElem<'input> = {
     <loc:@L> "+" => (loc, Elem::Plus),
     <loc:@L> "-" => (loc, Elem::Minus),
     <loc:@L> <op:CompOp> => (loc, Elem::Op(op)),
+    <loc:@L> "->" => (loc, Elem::Implies),
+    <loc:@L> <q:QuadElem> => (loc, q),
 };
 
 BoundsSection: Vec<(&'input str, VariableType)> = {

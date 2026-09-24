@@ -3,16 +3,15 @@
 
 use std::path::{Path, PathBuf};
 
-use lp_parser_rs::LpParseError as CoreError;
 use lp_parser_rs::analysis::AnalysisConfig;
 use lp_parser_rs::diff::DiffOptions;
-use lp_parser_rs::model::{Constraint, Sense, VariableType};
+use lp_parser_rs::model::{Constraint, QuadraticTerm, Sense, VariableType};
 use lp_parser_rs::mps::writer::{MpsWriterOptions, write_mps_string_with_options};
-use lp_parser_rs::parser::parse_file;
 use lp_parser_rs::problem::LpProblem;
 use lp_parser_rs::writer::{LpWriterOptions, write_lp_string_with_options};
+use lp_parser_rs::{ConstraintClass, EntityKind, LpParseError as CoreError, VariableKind};
 use pyo3::create_exception;
-use pyo3::exceptions::{PyFileNotFoundError, PyNotADirectoryError, PyRuntimeError};
+use pyo3::exceptions::{PyFileNotFoundError, PyNotADirectoryError, PyOSError, PyRuntimeError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
 
@@ -25,9 +24,14 @@ create_exception!(
 );
 create_exception!(parse_lp, LpInvalidValueError, PyRuntimeError, "Raised when an input value is invalid.");
 
-#[pyclass]
+#[pyclass(module = "parse_lp")]
 pub struct LpParser {
     lp_file: String,
+    /// The file the problem was read from; `None` when built from a string.
+    source_path: Option<PathBuf>,
+    /// Source format, normalised to `"lp"` or `"mps"`, so `parse()` re-reads
+    /// the file with the same parser.
+    format: &'static str,
     problem: LpProblem,
 }
 
@@ -39,7 +43,7 @@ impl LpParser {
     /// -> LP); pass `format` to [`from_file`] to override it.
     #[new]
     #[pyo3(signature = (lp_file))]
-    fn new(py: Python, lp_file: String) -> PyResult<Self> {
+    fn new(py: Python, lp_file: PathBuf) -> PyResult<Self> {
         Self::from_file(py, lp_file, None)
     }
 
@@ -49,8 +53,9 @@ impl LpParser {
     #[staticmethod]
     #[pyo3(signature = (text, format="lp"))]
     fn from_string(py: Python, text: String, format: &str) -> PyResult<Self> {
+        let format = normalise_format(format)?;
         let problem = py.detach(|| parse_source(&text, format))?;
-        Ok(Self { lp_file: "<string>".to_string(), problem })
+        Ok(Self { lp_file: "<string>".to_string(), source_path: None, format, problem })
     }
 
     /// Construct a parser from a file, parsing it immediately.
@@ -59,20 +64,21 @@ impl LpParser {
     /// extension (`.mps` -> MPS, everything else -> LP).
     #[staticmethod]
     #[pyo3(signature = (path, format=None))]
-    fn from_file(py: Python, path: String, format: Option<&str>) -> PyResult<Self> {
-        if !Path::new(&path).is_file() {
-            return Err(PyFileNotFoundError::new_err(format!("File '{path}' does not exist or is not a file")));
+    fn from_file(py: Python, path: PathBuf, format: Option<&str>) -> PyResult<Self> {
+        if !path.is_file() {
+            return Err(PyFileNotFoundError::new_err(format!("File '{}' does not exist or is not a file", path.display())));
         }
-        let inferred = format.map_or_else(
-            || if Path::new(&path).extension().is_some_and(|ext| ext.eq_ignore_ascii_case("mps")) { "mps" } else { "lp" },
-            |fmt| fmt,
-        );
-        let file_path = PathBuf::from(&path);
-        let problem = py.detach(move || {
-            let input = parse_file(&file_path).map_err(|err| LpParseError::new_err(format!("Unable to read file: {err}")))?;
+        let inferred = match format {
+            Some(fmt) => normalise_format(fmt)?,
+            None if path.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("mps")) => "mps",
+            None => "lp",
+        };
+        let file_path = path;
+        let problem = py.detach(|| {
+            let input = std::fs::read_to_string(&file_path).map_err(|err| io_err(&file_path, &err))?;
             parse_source(&input, inferred)
         })?;
-        Ok(Self { lp_file: path, problem })
+        Ok(Self { lp_file: file_path.to_string_lossy().into_owned(), source_path: Some(file_path), format: inferred, problem })
     }
 
     #[getter]
@@ -80,27 +86,34 @@ impl LpParser {
         self.lp_file.clone()
     }
 
-    /// Re-read and re-parse the source file. Construction already parses, so this
-    /// is only needed to pick up changes made to the file since.
+    /// Re-read and re-parse the source file, in the format it was first parsed
+    /// as. Construction already parses, so this is only needed to pick up
+    /// changes made to the file since.
     fn parse(&mut self, py: Python) -> PyResult<()> {
-        let path = PathBuf::from(&self.lp_file);
+        let Some(path) = self.source_path.as_deref() else {
+            return Err(LpInvalidValueError::new_err(
+                "parse() re-reads the source file, but this parser was built from a string and has none",
+            ));
+        };
+        let format = self.format;
         // Release the GIL while reading and parsing so other Python threads
         // are not blocked by the heavy pure-Rust work.
-        self.problem = py.detach(move || {
-            let input = parse_file(&path).map_err(|err| LpParseError::new_err(format!("Unable to read LP file: {err}")))?;
-            LpProblem::parse(&input).map_err(|err| LpParseError::new_err(format!("Unable to parse LpProblem: {err}")))
+        self.problem = py.detach(|| {
+            let input = std::fs::read_to_string(path).map_err(|err| io_err(path, &err))?;
+            parse_source(&input, format)
         })?;
         Ok(())
     }
 
-    fn to_csv(&self, base_directory: &str) -> PyResult<()> {
-        if !Path::new(&base_directory).is_dir() {
-            return Err(PyNotADirectoryError::new_err(format!("Path {base_directory} is not a directory.")));
+    fn to_csv(&self, base_directory: PathBuf) -> PyResult<()> {
+        if !base_directory.is_dir() {
+            return Err(PyNotADirectoryError::new_err(format!("Path {} is not a directory.", base_directory.display())));
         }
 
-        self.problem
-            .to_csv(Path::new(base_directory))
-            .map_err(|err| PyRuntimeError::new_err(format!("Unable to write to .csv files: {err}")))?;
+        self.problem.to_csv(&base_directory).map_err(|err| match err.downcast::<std::io::Error>() {
+            Ok(io) => io_err(&base_directory, &io),
+            Err(err) => PyRuntimeError::new_err(format!("Unable to write to .csv files: {err}")),
+        })?;
 
         Ok(())
     }
@@ -131,6 +144,14 @@ impl LpParser {
             let dict = PyDict::new(py);
             dict.set_item("name", problem.resolve(*name_id))?;
             dict.set_item("coefficients", coefficients_to_list(py, problem, &obj.coefficients)?)?;
+            dict.set_item("quadratic", quadratic_to_list(py, problem, &obj.quadratic)?)?;
+            // Gurobi multi-objective attributes; each is None when unset.
+            let attributes = PyDict::new(py);
+            attributes.set_item("priority", obj.attributes.priority)?;
+            attributes.set_item("weight", obj.attributes.weight)?;
+            attributes.set_item("abs_tol", obj.attributes.abs_tol)?;
+            attributes.set_item("rel_tol", obj.attributes.rel_tol)?;
+            dict.set_item("attributes", attributes)?;
             list.append(dict)?;
         }
 
@@ -152,6 +173,32 @@ impl LpParser {
                     dict.set_item("coefficients", coefficients_to_list(py, problem, coefficients)?)?;
                     dict.set_item("operator", format!("{operator:?}"))?;
                     dict.set_item("rhs", rhs)?;
+                    dict.set_item("class", constraint_class_name(problem.constraint_class(*name_id)))?;
+                }
+                Constraint::General { resultant, function, .. } => {
+                    dict.set_item("type", "general")?;
+                    dict.set_item("resultant", problem.resolve(*resultant))?;
+                    dict.set_item("function", function.keyword())?;
+                    let arguments: Vec<&str> = function.variables().iter().map(|v| problem.resolve(*v)).collect();
+                    dict.set_item("arguments", arguments)?;
+                    dict.set_item("constant", function.constant())?;
+                }
+                Constraint::Quadratic { coefficients, quadratic, operator, rhs, .. } => {
+                    dict.set_item("type", "quadratic")?;
+                    dict.set_item("coefficients", coefficients_to_list(py, problem, coefficients)?)?;
+                    dict.set_item("quadratic", quadratic_to_list(py, problem, quadratic)?)?;
+                    dict.set_item("operator", format!("{operator:?}"))?;
+                    dict.set_item("rhs", rhs)?;
+                    dict.set_item("class", constraint_class_name(problem.constraint_class(*name_id)))?;
+                }
+                Constraint::Indicator { variable, active_value, coefficients, operator, rhs, .. } => {
+                    dict.set_item("type", "indicator")?;
+                    dict.set_item("indicator_variable", problem.resolve(*variable))?;
+                    dict.set_item("indicator_value", u8::from(*active_value))?;
+                    dict.set_item("coefficients", coefficients_to_list(py, problem, coefficients)?)?;
+                    dict.set_item("operator", format!("{operator:?}"))?;
+                    dict.set_item("rhs", rhs)?;
+                    dict.set_item("class", constraint_class_name(problem.constraint_class(*name_id)))?;
                 }
                 Constraint::SOS { weights, sos_type, .. } => {
                     dict.set_item("type", "sos")?;
@@ -175,7 +222,8 @@ impl LpParser {
             let var_dict = PyDict::new(py);
             var_dict.set_item("name", resolved_name)?;
             // Structured kind + bounds rather than a Debug string: `lower`/`upper`
-            // are `None` when unbounded on that side.
+            // are `None` when undeclared on that side (the format default
+            // applies), and -inf/+inf when explicitly free.
             var_dict.set_item("kind", var.kind.to_string())?;
             var_dict.set_item("lower", var.bounds.lower)?;
             var_dict.set_item("upper", var.bounds.upper)?;
@@ -186,44 +234,48 @@ impl LpParser {
     }
 
     /// Write the current problem to LP format string, with optional custom formatting
-    #[pyo3(signature = (*, include_problem_name=true, max_line_length=80, decimal_precision=6, include_section_spacing=true))]
+    #[pyo3(signature = (*, include_problem_name=true, max_line_length=80, decimal_precision=None, include_section_spacing=true))]
     fn to_lp_string(
         &self,
         include_problem_name: bool,
         max_line_length: usize,
-        decimal_precision: usize,
+        decimal_precision: Option<usize>,
         include_section_spacing: bool,
     ) -> PyResult<String> {
+        if max_line_length == 0 {
+            return Err(LpInvalidValueError::new_err("max_line_length must be positive, got 0"));
+        }
         let problem = &self.problem;
         let options = LpWriterOptions { include_problem_name, max_line_length, decimal_precision, include_section_spacing };
-        Ok(write_lp_string_with_options(problem, &options))
+        write_lp_string_with_options(problem, &options).map_err(|err| to_py_err("Unable to write LP", err))
     }
 
     /// Save the current problem to an LP file
-    fn save_to_file(&self, filepath: String) -> PyResult<()> {
+    fn save_to_file(&self, filepath: PathBuf) -> PyResult<()> {
         let problem = &self.problem;
-        let lp_content = write_lp_string_with_options(problem, &LpWriterOptions::default());
-        std::fs::write(&filepath, lp_content).map_err(|err| PyRuntimeError::new_err(format!("Failed to write file: {err}")))
+        let lp_content =
+            write_lp_string_with_options(problem, &LpWriterOptions::default()).map_err(|err| to_py_err("Unable to write LP", err))?;
+        std::fs::write(&filepath, lp_content).map_err(|err| io_err(&filepath, &err))
     }
 
     /// Write the current problem to an MPS format string.
-    #[pyo3(signature = (*, decimal_precision=6, allow_multiple_objectives=false))]
-    fn to_mps_string(&self, decimal_precision: usize, allow_multiple_objectives: bool) -> PyResult<String> {
+    #[pyo3(signature = (*, decimal_precision=None, allow_multiple_objectives=false))]
+    fn to_mps_string(&self, decimal_precision: Option<usize>, allow_multiple_objectives: bool) -> PyResult<String> {
         let problem = &self.problem;
         let options = MpsWriterOptions { decimal_precision, allow_multiple_objectives };
         write_mps_string_with_options(problem, &options).map_err(|err| PyRuntimeError::new_err(format!("Unable to write MPS: {err}")))
     }
 
     /// Save the current problem to an MPS file.
-    #[pyo3(signature = (filepath, *, decimal_precision=6, allow_multiple_objectives=false))]
-    fn save_to_mps(&self, filepath: String, decimal_precision: usize, allow_multiple_objectives: bool) -> PyResult<()> {
+    #[pyo3(signature = (filepath, *, decimal_precision=None, allow_multiple_objectives=false))]
+    fn save_to_mps(&self, filepath: PathBuf, decimal_precision: Option<usize>, allow_multiple_objectives: bool) -> PyResult<()> {
         let content = self.to_mps_string(decimal_precision, allow_multiple_objectives)?;
-        std::fs::write(&filepath, content).map_err(|err| PyRuntimeError::new_err(format!("Failed to write file: {err}")))
+        std::fs::write(&filepath, content).map_err(|err| io_err(&filepath, &err))
     }
 
     /// Compare this problem against another parser's problem.
     ///
-    /// Returns a dict with `vars_added`, `vars_removed`, `vars_type_changed`,
+    /// Returns a dict with `sense_changed`, `vars_added`, `vars_removed`, `vars_type_changed`,
     /// `cons_added`, `cons_removed`, `cons_modified`, `objs_added`,
     /// `objs_removed`, `objs_modified`, and `is_empty`.
     fn diff(&self, py: Python, other: &Self) -> PyResult<Py<PyAny>> {
@@ -233,6 +285,7 @@ impl LpParser {
         let is_empty = result.is_empty();
 
         let dict = PyDict::new(py);
+        dict.set_item("sense_changed", result.sense_changed)?;
         dict.set_item("vars_added", result.vars_added)?;
         dict.set_item("vars_removed", result.vars_removed)?;
         dict.set_item("vars_type_changed", result.vars_type_changed)?;
@@ -314,19 +367,37 @@ impl LpParser {
     }
 
     /// Update variable type (e.g., Binary, Integer, etc.)
+    ///
+    /// `continuous` changes only the kind and keeps any declared bounds. The
+    /// discrete kinds (`binary`, `integer`, `general`, `semicontinuous`,
+    /// `semiinteger`) set
+    /// the kind and clear declared bounds, so the format default applies.
+    /// `free` is a bound, not a kind: it makes the variable continuous with
+    /// bounds `(-inf, +inf)`.
     fn update_variable_type(&mut self, variable_name: String, var_type: String) -> PyResult<()> {
         let problem = &mut self.problem;
 
         // Parse the variable type string
         let variable_type = match var_type.to_lowercase().as_str() {
+            "continuous" => {
+                let variable = problem
+                    .name_id(&variable_name)
+                    .and_then(|id| problem.variables.get_mut(&id))
+                    .ok_or_else(|| CoreError::not_found(EntityKind::Variable, variable_name.as_str()))
+                    .map_err(|err| to_py_err("Failed to update variable type", err))?;
+                variable.set_kind(VariableKind::Continuous);
+                return Ok(());
+            }
             "binary" => VariableType::Binary,
             "integer" => VariableType::Integer,
             "general" => VariableType::General,
             "free" => VariableType::Free,
             "semicontinuous" => VariableType::SemiContinuous,
+            "semiinteger" => VariableType::SemiInteger,
             _ => {
                 return Err(LpInvalidValueError::new_err(format!(
-                    "Unknown variable type: {var_type}. Supported types: binary, integer, general, free, semicontinuous",
+                    "Unknown variable type: {var_type}. Supported types: continuous, binary, integer, general, free, semicontinuous, \
+                     semiinteger",
                 )));
             }
         };
@@ -357,9 +428,9 @@ impl LpParser {
         let problem = &mut self.problem;
 
         problem.sense = match sense.to_lowercase().as_str() {
-            "maximize" => Sense::Maximize,
-            "minimize" => Sense::Minimize,
-            _ => return Err(LpInvalidValueError::new_err(format!("Invalid sense: {sense}. Use 'maximize' or 'minimize'"))),
+            "maximize" | "max" => Sense::Maximize,
+            "minimize" | "min" => Sense::Minimize,
+            _ => return Err(LpInvalidValueError::new_err(format!("Invalid sense: {sense}. Use 'maximize' ('max') or 'minimize' ('min')"))),
         };
 
         Ok(())
@@ -379,13 +450,33 @@ impl LpParser {
     ///     `large_coeff_threshold`: Threshold for large coefficient warnings (default: 1e9)
     ///     `small_coeff_threshold`: Threshold for small coefficient warnings (default: 1e-9)
     ///     `ratio_threshold`: Coefficient ratio threshold for scaling warnings (default: 1e6)
-    #[pyo3(signature = (*, large_coeff_threshold=1e9, small_coeff_threshold=1e-9, ratio_threshold=1e6))]
-    fn analyze(&self, py: Python, large_coeff_threshold: f64, small_coeff_threshold: f64, ratio_threshold: f64) -> PyResult<Py<PyAny>> {
+    ///     `large_rhs_threshold`: Threshold for large right-hand side warnings (default: 1e9)
+    ///
+    /// Every threshold must be finite and positive.
+    #[pyo3(signature = (*, large_coeff_threshold=1e9, small_coeff_threshold=1e-9, ratio_threshold=1e6, large_rhs_threshold=1e9))]
+    fn analyze(
+        &self,
+        py: Python,
+        large_coeff_threshold: f64,
+        small_coeff_threshold: f64,
+        ratio_threshold: f64,
+        large_rhs_threshold: f64,
+    ) -> PyResult<Py<PyAny>> {
+        for (name, value) in [
+            ("large_coeff_threshold", large_coeff_threshold),
+            ("small_coeff_threshold", small_coeff_threshold),
+            ("ratio_threshold", ratio_threshold),
+            ("large_rhs_threshold", large_rhs_threshold),
+        ] {
+            if !(value.is_finite() && value > 0.0) {
+                return Err(LpInvalidValueError::new_err(format!("{name} must be finite and positive, got {value}")));
+            }
+        }
         let problem = &self.problem;
         let config = AnalysisConfig {
             large_coefficient_threshold: large_coeff_threshold,
             small_coefficient_threshold: small_coeff_threshold,
-            large_rhs_threshold: large_coeff_threshold,
+            large_rhs_threshold,
             coefficient_ratio_threshold: ratio_threshold,
         };
         let analysis = problem.analyze_with_config(&config);
@@ -393,7 +484,7 @@ impl LpParser {
     }
 
     fn __repr__(&self) -> String {
-        format!("LpParser(lp_file='{}')", self.lp_file)
+        format!("LpParser(lp_file='{}', format='{}')", self.lp_file, self.format)
     }
 
     fn __str__(&self) -> String {
@@ -413,17 +504,43 @@ fn to_py_err(context: &str, err: CoreError) -> PyErr {
         | CoreError::InvalidNumber { .. }
         | CoreError::ValidationError { .. } => LpInvalidValueError::new_err(message),
         CoreError::MissingSection { .. } | CoreError::ParseError { .. } => LpParseError::new_err(message),
-        CoreError::IoError { .. } => PyRuntimeError::new_err(message),
+        CoreError::IoError { .. } => PyOSError::new_err(message),
+    }
+}
+
+/// Raise an I/O failure as `OSError`. Given an OS error code, Python's
+/// `OSError(errno, strerror, filename)` picks the matching subclass
+/// (`FileNotFoundError`, `PermissionError`, `IsADirectoryError`, ...).
+fn io_err(path: &Path, err: &std::io::Error) -> PyErr {
+    let filename = path.display().to_string();
+    match err.raw_os_error() {
+        Some(errno) => {
+            // Rust appends " (os error N)"; Python already shows `[Errno N]`.
+            let message = err.to_string();
+            let strerror = message.split(" (os error").next().unwrap_or(&message).to_string();
+            PyOSError::new_err((errno, strerror, filename))
+        }
+        None => PyOSError::new_err(format!("{filename}: {err}")),
+    }
+}
+
+/// Normalise a user-supplied format name (`"lp"` or `"mps"`, case-insensitive).
+fn normalise_format(format: &str) -> PyResult<&'static str> {
+    match format.to_lowercase().as_str() {
+        "lp" => Ok("lp"),
+        "mps" => Ok("mps"),
+        other => Err(LpInvalidValueError::new_err(format!("Unknown format: {other}. Use 'lp' or 'mps'"))),
     }
 }
 
 /// Parse LP or MPS source text into an [`LpProblem`], selecting the parser by
-/// `format` (`"lp"` or `"mps"`, case-insensitive).
-fn parse_source(text: &str, format: &str) -> PyResult<LpProblem> {
-    match format.to_lowercase().as_str() {
-        "lp" => LpProblem::parse(text).map_err(|err| LpParseError::new_err(format!("Unable to parse LpProblem: {err}"))),
-        "mps" => LpProblem::parse_mps(text).map_err(|err| LpParseError::new_err(format!("Unable to parse MPS: {err}"))),
-        other => Err(LpInvalidValueError::new_err(format!("Unknown format: {other}. Use 'lp' or 'mps'"))),
+/// a format already passed through [`normalise_format`].
+fn parse_source(text: &str, format: &'static str) -> PyResult<LpProblem> {
+    debug_assert!(format == "lp" || format == "mps", "format must be normalised");
+    if format == "mps" {
+        LpProblem::parse_mps(text).map_err(|err| LpParseError::new_err(format!("Unable to parse MPS: {err}")))
+    } else {
+        LpProblem::parse(text).map_err(|err| LpParseError::new_err(format!("Unable to parse LpProblem: {err}")))
     }
 }
 
@@ -440,6 +557,29 @@ fn analysis_to_dict(py: Python, analysis: &lp_parser_rs::analysis::ProblemAnalys
 }
 
 /// Build a list of `{name, value}` dicts from coefficients, resolving interned names.
+/// Quadratic terms as `[{"var1", "var2", "coefficient"}]`; each coefficient is
+/// the term's actual coefficient (an objective's LP `/ 2` already applied).
+fn quadratic_to_list<'py>(py: Python<'py>, problem: &LpProblem, terms: &[QuadraticTerm]) -> PyResult<Bound<'py, PyList>> {
+    let list = PyList::empty(py);
+    for term in terms {
+        let dict = PyDict::new(py);
+        dict.set_item("var1", problem.resolve(term.var1))?;
+        dict.set_item("var2", problem.resolve(term.var2))?;
+        dict.set_item("coefficient", term.coefficient)?;
+        list.append(dict)?;
+    }
+    Ok(list)
+}
+
+/// The Python spelling of a constraint class (`"normal"`, `"lazy"`, `"user_cut"`).
+const fn constraint_class_name(class: ConstraintClass) -> &'static str {
+    match class {
+        ConstraintClass::Normal => "normal",
+        ConstraintClass::Lazy => "lazy",
+        ConstraintClass::UserCut => "user_cut",
+    }
+}
+
 fn coefficients_to_list<'py>(
     py: Python<'py>,
     problem: &LpProblem,

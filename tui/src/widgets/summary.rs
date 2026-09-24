@@ -4,6 +4,8 @@
 //! per-section change counts, and a comparative structural analysis derived
 //! from `ProblemAnalysis`.
 
+use std::fmt::Write as _;
+
 use lp_parser_rs::analysis::{IssueSeverity, ProblemAnalysis};
 use ratatui::Frame;
 use ratatui::buffer::Buffer;
@@ -27,10 +29,11 @@ pub fn build_summary_lines(
 
     build_header(&mut lines, report);
     lines.push(Line::from(""));
-    build_column_headings(&mut lines);
-    build_section_rows(&mut lines, summary);
-    build_separator(&mut lines);
-    build_totals_row(&mut lines, summary);
+    let show_renamed = summary.aggregate_counts().renamed > 0;
+    build_column_headings(&mut lines, show_renamed);
+    build_section_rows(&mut lines, summary, show_renamed);
+    build_separator(&mut lines, show_renamed);
+    build_totals_row(&mut lines, summary, show_renamed);
 
     // Comparative Analysis
     lines.push(Line::from(""));
@@ -91,7 +94,7 @@ pub fn build_inspect_summary_lines(
     inspect_value_row(&mut lines, "Variables", &analysis.summary.variable_count.to_string());
     inspect_value_row(&mut lines, "Constraints", &analysis.summary.constraint_count.to_string());
     inspect_value_row(&mut lines, "Non-zeros", &analysis.summary.total_nonzeros.to_string());
-    inspect_value_row(&mut lines, "Density", &format!("{:.4}%", analysis.summary.density * 100.0));
+    inspect_value_row(&mut lines, "Density", &density(analysis.summary.density));
     inspect_value_row(
         &mut lines,
         "Vars/constraint",
@@ -238,44 +241,73 @@ fn build_header(lines: &mut Vec<Line<'static>>, report: &LpDiffReport) {
     }
 }
 
-fn build_column_headings(lines: &mut Vec<Line<'static>>) {
-    let t = theme();
-    lines.push(Line::from(vec![Span::styled(
-        format!("  {:<14}{:>7}{:>9}{:>12}{:>9}{:>9}", "Section", "Added", "Removed", "Modified", "Renamed", "Total"),
-        Style::default().fg(t.muted).add_modifier(Modifier::BOLD),
-    )]));
-    lines.push(Line::from(vec![Span::styled(format!("  {}", rule_str(60)), Style::default().fg(t.muted))]));
+/// Column widths of the change-count table: `Section` then one column per
+/// kind and the entry count. Sized to fit an 80-column terminal's detail
+/// pane, which leaves 59 columns inside its borders.
+const COUNT_LABEL_WIDTH: usize = 13;
+const COUNT_COLUMNS: [(&str, usize); 5] = [("Added", 7), ("Removed", 8), ("Modified", 9), ("Renamed", 8), ("Entries", 8)];
+
+/// Which count columns to show: `Renamed` only when some rename was detected,
+/// since it is zero unless `--rename` rules or rename detection matched.
+fn count_columns(show_renamed: bool) -> impl Iterator<Item = (usize, &'static str, usize)> {
+    COUNT_COLUMNS
+        .into_iter()
+        .enumerate()
+        .filter(move |(index, _)| show_renamed || *index != 3)
+        .map(|(index, (label, width))| (index, label, width))
 }
 
-fn build_section_rows(lines: &mut Vec<Line<'static>>, summary: &DiffSummary) {
+/// Width of the rule under the count table heading.
+fn count_rule_width(show_renamed: bool) -> usize {
+    COUNT_LABEL_WIDTH + count_columns(show_renamed).map(|(_, _, width)| width).sum::<usize>()
+}
+
+fn build_column_headings(lines: &mut Vec<Line<'static>>, show_renamed: bool) {
+    let t = theme();
+    let mut heading = format!("  {:<COUNT_LABEL_WIDTH$}", "Section");
+    for (_, label, width) in count_columns(show_renamed) {
+        write!(heading, "{label:>width$}").expect("writing to a String is infallible");
+    }
+    lines.push(Line::from(vec![Span::styled(heading, Style::default().fg(t.muted).add_modifier(Modifier::BOLD))]));
+    lines.push(Line::from(vec![Span::styled(format!("  {}", rule_str(count_rule_width(show_renamed))), Style::default().fg(t.muted))]));
+}
+
+fn build_section_rows(lines: &mut Vec<Line<'static>>, summary: &DiffSummary, show_renamed: bool) {
     for (label, counts) in [("Variables", summary.variables), ("Constraints", summary.constraints), ("Objectives", summary.objectives)] {
-        lines.push(format_count_row(label, &counts, false));
+        lines.push(format_count_row(label, &counts, false, show_renamed));
     }
 }
 
-fn build_separator(lines: &mut Vec<Line<'static>>) {
+fn build_separator(lines: &mut Vec<Line<'static>>, show_renamed: bool) {
     let t = theme();
-    lines.push(Line::from(vec![Span::styled(format!("  {}", rule_str(60)), Style::default().fg(t.muted))]));
+    lines.push(Line::from(vec![Span::styled(format!("  {}", rule_str(count_rule_width(show_renamed))), Style::default().fg(t.muted))]));
 }
 
-fn build_totals_row(lines: &mut Vec<Line<'static>>, summary: &DiffSummary) {
+fn build_totals_row(lines: &mut Vec<Line<'static>>, summary: &DiffSummary, show_renamed: bool) {
     let totals = summary.aggregate_counts();
-    lines.push(format_count_row("TOTAL", &totals, true));
+    lines.push(format_count_row("TOTAL", &totals, true, show_renamed));
 }
 
-fn format_count_row(label: &str, counts: &DiffCounts, is_total: bool) -> Line<'static> {
+/// One row of the change-count table. The last column counts every entry in
+/// the section, changed or not — the status bar's "N changes" is the sum of
+/// the kind columns instead, which is why it is headed `Entries`, not `Total`.
+fn format_count_row(label: &str, counts: &DiffCounts, is_total: bool, show_renamed: bool) -> Line<'static> {
     let t = theme();
     let label_style = if is_total { Style::default().fg(t.text).add_modifier(Modifier::BOLD) } else { Style::default().fg(t.text) };
-    let total_style = if is_total { Style::default().fg(t.text).add_modifier(Modifier::BOLD) } else { Style::default().fg(t.text) };
+    let entries_style = if is_total { Style::default().fg(t.text).add_modifier(Modifier::BOLD) } else { Style::default().fg(t.text) };
 
-    Line::from(vec![
-        Span::styled(format!("  {label:<14}"), label_style),
-        Span::styled(format!("{:>7}", counts.added), Style::default().fg(t.added)),
-        Span::styled(format!("{:>9}", counts.removed), Style::default().fg(t.removed)),
-        Span::styled(format!("{:>12}", counts.modified), Style::default().fg(t.modified)),
-        Span::styled(format!("{:>9}", counts.renamed), Style::default().fg(t.accent)),
-        Span::styled(format!("{:>9}", counts.total()), total_style),
-    ])
+    let mut spans = vec![Span::styled(format!("  {label:<COUNT_LABEL_WIDTH$}"), label_style)];
+    for (index, _, width) in count_columns(show_renamed) {
+        let (value, style) = match index {
+            0 => (counts.added, Style::default().fg(t.added)),
+            1 => (counts.removed, Style::default().fg(t.removed)),
+            2 => (counts.modified, Style::default().fg(t.modified)),
+            3 => (counts.renamed, Style::default().fg(t.accent)),
+            _ => (counts.total(), entries_style),
+        };
+        spans.push(Span::styled(format!("{value:>width$}"), style));
+    }
+    Line::from(spans)
 }
 
 /// Render a section heading in the shared style used by every pane.
@@ -309,23 +341,19 @@ fn comparison_row_usize(lines: &mut Vec<Line<'static>>, label: &str, label_width
     ]));
 }
 
-/// Render a comparison row with f64 percentage values and a delta.
+/// Render a comparison row with fractional values shown as percentages, and
+/// their difference in percentage points: 2.17% → 5.36% is `+3.19 pp`, not
+/// the raw difference of the fractions.
 fn comparison_row_pct(lines: &mut Vec<Line<'static>>, label: &str, label_width: usize, a: f64, b: f64) {
     let t = theme();
-    let delta = b - a;
-    let delta_str = if delta.abs() < 1e-10 { "\u{2014}".to_string() } else { format!("{delta:+.2}%") };
-    let delta_colour = if delta.abs() < 1e-10 {
-        t.muted
-    } else if delta > 0.0 {
-        t.added
-    } else {
-        t.removed
-    };
+    let delta = percentage_point_delta(a, b);
+    let delta_str = if delta.abs() < 1e-8 { "\u{2014}".to_string() } else { format!("{delta:+.2} pp") };
+    let delta_colour = delta_colour(if delta.abs() < 1e-8 { std::cmp::Ordering::Equal } else { delta.total_cmp(&0.0) });
 
     lines.push(Line::from(vec![
         Span::styled(format!("  {label:<label_width$}"), Style::default().fg(t.text)),
-        Span::styled(format!("{:>11.2}%", a * 100.0), Style::default().fg(t.text)),
-        Span::styled(format!("{:>11.2}%", b * 100.0), Style::default().fg(t.text)),
+        Span::styled(format!("{:>12}", density(a)), Style::default().fg(t.text)),
+        Span::styled(format!("{:>12}", density(b)), Style::default().fg(t.text)),
         Span::styled(format!("{delta_str:>12}"), Style::default().fg(delta_colour)),
     ]));
 }
@@ -340,6 +368,18 @@ fn comparison_row_str(lines: &mut Vec<Line<'static>>, label: &str, label_width: 
     ]));
 }
 
+/// A density (a fraction) as a percentage, in the shared number format —
+/// the same in the inspect and diff summaries, and never rounded to `0.00%`
+/// for a sparse model.
+fn density(fraction: f64) -> String {
+    format!("{}%", crate::format::fmt_num(fraction * 100.0))
+}
+
+/// Difference between two fractions in percentage points.
+fn percentage_point_delta(a: f64, b: f64) -> f64 {
+    (b - a) * 100.0
+}
+
 fn format_delta_i64(delta: i64) -> String {
     match delta.cmp(&0) {
         std::cmp::Ordering::Equal => "\u{2014}".to_string(),
@@ -349,11 +389,19 @@ fn format_delta_i64(delta: i64) -> String {
 }
 
 fn delta_colour_i64(delta: i64) -> Color {
+    delta_colour(delta.cmp(&0))
+}
+
+/// Colour of a dimension delta by its sign alone. More variables or a denser
+/// matrix is neither good nor bad, so the add/remove green and red — which
+/// read as a verdict — are kept for diff kinds; a rise takes the accent, a
+/// fall the secondary accent, and no change recedes.
+fn delta_colour(sign: std::cmp::Ordering) -> Color {
     let t = theme();
-    match delta.cmp(&0) {
+    match sign {
         std::cmp::Ordering::Equal => t.muted,
-        std::cmp::Ordering::Greater => t.added,
-        std::cmp::Ordering::Less => t.removed,
+        std::cmp::Ordering::Greater => t.accent,
+        std::cmp::Ordering::Less => t.secondary_accent,
     }
 }
 
@@ -516,4 +564,30 @@ fn format_issue_line(file_label: &str, issue: &lp_parser_rs::analysis::AnalysisI
         Span::styled(format!("{file_label}: "), Style::default().fg(t.muted)),
         Span::styled(issue.message.clone(), Style::default().fg(t.text)),
     ])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dimension_deltas_are_coloured_neutrally() {
+        let t = theme();
+        assert_eq!(delta_colour_i64(3), t.accent);
+        assert_eq!(delta_colour_i64(-3), t.secondary_accent);
+        assert_eq!(delta_colour_i64(0), t.muted);
+        assert_ne!(delta_colour_i64(3), t.added, "a rise is not a verdict");
+    }
+
+    #[test]
+    fn density_delta_is_in_percentage_points() {
+        let delta = percentage_point_delta(0.0217, 0.0536);
+        assert!((delta - 3.19).abs() < 1e-9, "2.17% to 5.36% is +3.19 pp, got {delta}");
+        let line = {
+            let mut lines = Vec::new();
+            comparison_row_pct(&mut lines, "Density", 18, 0.0217, 0.0536);
+            crate::widgets::plain(&lines)
+        };
+        assert!(line.contains("+3.19 pp"), "the row must show the percentage-point delta: {line:?}");
+    }
 }

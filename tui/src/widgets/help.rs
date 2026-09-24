@@ -54,6 +54,8 @@ const HELP_TEXT: &[&str] = &[
     "  Enter   Go to detail",
     "  h / l   Sidebar / Detail",
     "  1–5     Jump to section (5: Numerics)",
+    "  < / >   Narrow / widen the sidebar",
+    "  M       Mouse capture on/off (off: select text)",
     "  Esc     Back",
     "",
     "  Search (Telescope-style pop-up)",
@@ -81,9 +83,12 @@ const HELP_TEXT: &[&str] = &[
     "  t / T     Cycle delta threshold (both mode)",
     "  e         Diagnose infeasibility",
     "  1–5       Switch tab",
-    "  Esc       Close overlay (result cached until input changes)",
+    "  Esc       Close (result cached until input changes)",
+    "  Esc       While solving: interrupt HiGHS (q asks to quit)",
     "",
-    "  Mouse: scroll wheel navigates, click selects",
+    "  Mouse: scroll wheel navigates, click selects.",
+    "  To select text, hold Shift while dragging (Option",
+    "  on macOS terminals), or press M to release the mouse.",
     "",
 ];
 
@@ -110,6 +115,8 @@ const INSPECT_HELP_TEXT: &[&str] = &[
     "  h / l            Sidebar / Detail",
     "  1–5              Jump to section (5: Numerics)",
     "  Esc              Back",
+    "  < / >            Narrow / widen the sidebar",
+    "  M                Mouse capture on/off (off: select text)",
     "",
     "  Analyses",
     "  ────────",
@@ -147,11 +154,27 @@ const INSPECT_HELP_TEXT: &[&str] = &[
     "  t / T     Cycle delta threshold (both mode)",
     "  e         Diagnose infeasibility",
     "  1–5       Switch tab",
-    "  Esc       Close overlay (result cached until input changes)",
+    "  Esc       Close (result cached until input changes)",
+    "  Esc       While solving: interrupt HiGHS (q asks to quit)",
     "",
-    "  Mouse: scroll wheel navigates, click selects",
+    "  Mouse: scroll wheel navigates, click selects.",
+    "  To select text, hold Shift while dragging (Option",
+    "  on macOS terminals), or press M to release the mouse.",
     "",
 ];
+
+/// The side-by-side key tables of each help text: the rows they span, and
+/// the column at which each table after the first begins.
+struct ColumnBlock {
+    rows: std::ops::RangeInclusive<usize>,
+    columns: &'static [usize],
+}
+
+/// `HELP_TEXT` rows 1–17: Navigation, Filters, and Other/Clipboard.
+const HELP_COLUMNS: ColumnBlock = ColumnBlock { rows: 1..=17, columns: &[26, 46] };
+
+/// `INSPECT_HELP_TEXT` rows 4–21: Navigation, and Other/Clipboard.
+const INSPECT_HELP_COLUMNS: ColumnBlock = ColumnBlock { rows: 4..=21, columns: &[50] };
 
 /// Narrowest the help pop-up ever gets, even for short text.
 const MIN_POPUP_WIDTH: u16 = 60;
@@ -160,25 +183,65 @@ const MIN_POPUP_WIDTH: u16 = 60;
 /// padding. The inspect help lays its keys out in two columns and needs more
 /// room than the diff help; deriving the width keeps both legible instead of
 /// silently cutting the right-hand column off mid-word.
-fn desired_width(text: &[&str]) -> u16 {
-    let longest = text.iter().map(|line| line.chars().count()).max().unwrap_or(0);
+fn desired_width<S: AsRef<str>>(text: &[S]) -> u16 {
+    let longest = text.iter().map(|line| line.as_ref().chars().count()).max().unwrap_or(0);
     let longest = u16::try_from(longest).unwrap_or(u16::MAX);
     longest.saturating_add(4).max(MIN_POPUP_WIDTH)
 }
 /// Desired popup height for a given help text: all lines plus top/bottom borders.
 /// Clamped to the terminal at draw time, so on short terminals the content
 /// scrolls instead of being silently truncated.
-const fn desired_height(text: &[&str]) -> u16 {
+const fn desired_height(lines: usize) -> u16 {
     #[allow(clippy::cast_possible_truncation)] // help text is a few dozen lines
-    let lines = text.len() as u16;
+    let lines = lines as u16;
     lines.saturating_add(2)
+}
+
+/// Re-flow `text` for a narrow terminal: the side-by-side key tables in
+/// `block` are stacked one above the next instead, so no table is cut off at
+/// the right edge. Blank runs inside a table collapse to one separator line.
+fn stack_columns(text: &[&str], block: &ColumnBlock) -> Vec<String> {
+    let slice = |line: &str, from: usize, to: Option<usize>| -> String {
+        let chars = line.chars().skip(from);
+        let segment: String = match to {
+            Some(to) => chars.take(to.saturating_sub(from)).collect(),
+            None => chars.collect(),
+        };
+        segment.trim_end().to_owned()
+    };
+    let rows = &text[block.rows.clone()];
+    let mut out: Vec<String> = text[..*block.rows.start()].iter().map(|line| (*line).to_owned()).collect();
+    let mut starts = vec![0];
+    starts.extend_from_slice(block.columns);
+    for (index, &from) in starts.iter().enumerate() {
+        let to = starts.get(index + 1).copied();
+        let mut column: Vec<String> = Vec::new();
+        for row in rows {
+            let segment = slice(row, from, to);
+            // Later tables begin mid-line; indent them like the first.
+            let segment = if index > 0 && !segment.is_empty() { format!("  {segment}") } else { segment };
+            if segment.is_empty() && column.last().is_none_or(String::is_empty) {
+                continue;
+            }
+            column.push(segment);
+        }
+        while column.last().is_some_and(String::is_empty) {
+            column.pop();
+        }
+        if index > 0 {
+            out.push(String::new());
+        }
+        out.extend(column);
+    }
+    out.extend(text[block.rows.end() + 1..].iter().map(|line| (*line).to_owned()));
+    out
 }
 
 /// Style the help text so its structure is visible: the rules under group
 /// headings drop back to the muted colour, and the heading each rule sits under
 /// comes forward in the accent. The help screen is otherwise one flat wall of
 /// text, and it is the screen a new user reads first.
-fn style_help(text: &'static [&'static str]) -> Vec<Line<'static>> {
+fn style_help<S: AsRef<str>>(text: &[S]) -> Vec<Line<'static>> {
     let t = theme();
     let body = Style::default().fg(t.text);
     let rule = Style::default().fg(t.muted);
@@ -189,15 +252,16 @@ fn style_help(text: &'static [&'static str]) -> Vec<Line<'static>> {
     };
     text.iter()
         .enumerate()
-        .map(|(index, &line)| {
+        .map(|(index, line)| {
+            let line = line.as_ref();
             let style = if is_rule(line) {
                 rule
-            } else if text.get(index + 1).is_some_and(|next| is_rule(next)) {
+            } else if text.get(index + 1).is_some_and(|next| is_rule(next.as_ref())) {
                 heading
             } else {
                 body
             };
-            Line::from(Span::styled(line, style))
+            Line::from(Span::styled(line.to_owned(), style))
         })
         .collect()
 }
@@ -208,11 +272,22 @@ static HELP_LINES: LazyLock<Vec<Line<'static>>> = LazyLock::new(|| style_help(HE
 /// Pre-built inspect help text lines, cached to avoid per-frame allocation.
 static INSPECT_HELP_LINES: LazyLock<Vec<Line<'static>>> = LazyLock::new(|| style_help(INSPECT_HELP_TEXT));
 
+/// The diff help with its key tables stacked, for narrow terminals.
+static NARROW_HELP_TEXT: LazyLock<Vec<String>> = LazyLock::new(|| stack_columns(HELP_TEXT, &HELP_COLUMNS));
+static NARROW_HELP_LINES: LazyLock<Vec<Line<'static>>> = LazyLock::new(|| style_help(&NARROW_HELP_TEXT));
+
+/// The inspect help with its key tables stacked, for narrow terminals.
+static NARROW_INSPECT_HELP_TEXT: LazyLock<Vec<String>> = LazyLock::new(|| stack_columns(INSPECT_HELP_TEXT, &INSPECT_HELP_COLUMNS));
+static NARROW_INSPECT_HELP_LINES: LazyLock<Vec<Line<'static>>> = LazyLock::new(|| style_help(&NARROW_INSPECT_HELP_TEXT));
+
 /// Draw a centred help pop-up overlay on top of the current frame.
 ///
 /// Takes `&mut App` so the scroll offset can be clamped to the real content
 /// height: `G`/End sets `help_scroll` to `u16::MAX`, which is corrected here
 /// once the visible window is known.
+///
+/// Below the width the side-by-side key tables need, the stacked layout is
+/// drawn instead, so the right-hand table is never cut off.
 pub fn draw_help(frame: &mut Frame, area: Rect, app: &mut App) {
     // A zero-sized area is an environmental condition (shrunken terminal), not a
     // programming error: drawing into it is a no-op.
@@ -220,23 +295,51 @@ pub fn draw_help(frame: &mut Frame, area: Rect, app: &mut App) {
         return;
     }
     let inspect = app.mode == crate::state::AppMode::Inspect;
-    let (help_text, help_lines): (&[&str], &LazyLock<Vec<Line<'static>>>) =
-        if inspect { (INSPECT_HELP_TEXT, &INSPECT_HELP_LINES) } else { (HELP_TEXT, &HELP_LINES) };
+    let wide_text = if inspect { INSPECT_HELP_TEXT } else { HELP_TEXT };
+    let narrow = area.width < desired_width(wide_text);
+    let (width, help_lines): (u16, &[Line<'static>]) = match (inspect, narrow) {
+        (false, false) => (desired_width(HELP_TEXT), &HELP_LINES),
+        (true, false) => (desired_width(INSPECT_HELP_TEXT), &INSPECT_HELP_LINES),
+        (false, true) => (desired_width(&NARROW_HELP_TEXT), &NARROW_HELP_LINES),
+        (true, true) => (desired_width(&NARROW_INSPECT_HELP_TEXT), &NARROW_INSPECT_HELP_LINES),
+    };
 
-    let popup = super::centred_rect(area, desired_width(help_text), desired_height(help_text));
+    let popup = super::centred_rect(area, width, desired_height(help_lines.len()));
 
     let inner_height = popup.height.saturating_sub(2) as usize;
     #[allow(clippy::cast_possible_truncation)] // help text is a few dozen lines
-    let max_scroll = help_text.len().saturating_sub(inner_height) as u16;
+    let max_scroll = help_lines.len().saturating_sub(inner_height) as u16;
     app.help_scroll = app.help_scroll.min(max_scroll);
 
     let t = theme();
     let border_style = Style::default().fg(t.accent).add_modifier(Modifier::BOLD);
-    let title = if max_scroll > 0 { " Keybindings  (j/k scroll · Esc close) " } else { " Keybindings " };
-    let block = panel_block(border_style).title(Span::styled(title, border_style));
+    let title = if max_scroll > 0 {
+        super::title_with_hints("Keybindings", "j/k:scroll  Esc:close", border_style)
+    } else {
+        Line::styled(" Keybindings ", border_style)
+    };
+    let block = panel_block(border_style).title(title);
 
-    let paragraph = Paragraph::new((**help_lines).clone()).block(block).scroll((app.help_scroll, 0));
+    let paragraph = Paragraph::new(help_lines.to_vec()).block(block).scroll((app.help_scroll, 0));
 
     frame.render_widget(Clear, popup);
     frame.render_widget(paragraph, popup);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn stacked_help_keeps_every_key_and_fits_a_narrow_terminal() {
+        for (text, block) in [(HELP_TEXT, &HELP_COLUMNS), (INSPECT_HELP_TEXT, &INSPECT_HELP_COLUMNS)] {
+            let stacked = stack_columns(text, block);
+            assert!(desired_width(&stacked) <= 64, "the stacked help must fit 64 columns: {}", desired_width(&stacked));
+            for key in ["Ctrl-p  Command palette", "yy      Yank name", "Ctrl-C  Force quit", "Search Modes"] {
+                assert!(stacked.iter().any(|line| line.contains(key)), "{key:?} must survive the re-flow");
+            }
+        }
+        let stacked = stack_columns(HELP_TEXT, &HELP_COLUMNS);
+        assert!(stacked.iter().any(|line| line.trim_start().starts_with("a   All")), "the Filters table is stacked");
+    }
 }

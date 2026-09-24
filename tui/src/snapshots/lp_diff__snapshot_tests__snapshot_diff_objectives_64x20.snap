@@ -1,0 +1,24 @@
+---
+source: tui/src/snapshot_tests.rs
+expression: terminal.backend()
+---
+" 1 Sum │ 2 Vars │ 3 Cons +1 -1 ~1 │ 4 Objs ~1 │ 5 Num           "
+"╭ 1/1 objectives ──┬ Objective: obj [Modified] · r:raw ────────╮"
+"│▍ [~] obj         │  Coefficients:                            │"
+"│                  │    x          2                           │"
+"│                  │    y          3  →  4          [~]        │"
+"│                  │                                           │"
+"│                  │                                           │"
+"│                  │                                           │"
+"│                  │                                           │"
+"│                  │                                           │"
+"│                  │                                           │"
+"│                  │                                           │"
+"│                  │                                           │"
+"│                  │                                           │"
+"│                  │                                           │"
+"│                  │                                           │"
+"│                  │                                           │"
+"│                  │                                           │"
+"╰──────────────────┴───────────────────────────────────────────╯"
+" 4 changes  │  +0 -0 ~1  │  filter:All (1)       r:raw · ?:help "

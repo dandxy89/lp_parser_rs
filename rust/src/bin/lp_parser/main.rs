@@ -23,8 +23,7 @@ use lp_parser_rs::problem::LpProblem;
 type BoxError = Box<dyn std::error::Error>;
 
 fn cmd_parse(args: ParseArgs, verbose: bool) -> Result<(), BoxError> {
-    let content = parse_file(&args.file)?;
-    let problem = LpProblem::parse(&content)?;
+    let problem = read_problem(&args.file)?;
 
     if verbose {
         eprintln!("Parsed file: {}", args.file.display());
@@ -57,12 +56,12 @@ fn cmd_parse(args: ParseArgs, verbose: bool) -> Result<(), BoxError> {
         }
     }
 
+    writer.finish()?;
     Ok(())
 }
 
 fn cmd_info(args: &InfoArgs, verbose: bool) -> Result<(), BoxError> {
-    let content = parse_file(&args.file)?;
-    let problem = LpProblem::parse(&content)?;
+    let problem = read_problem(&args.file)?;
 
     if verbose {
         eprintln!("Analyzing file: {}", args.file.display());
@@ -91,22 +90,25 @@ fn cmd_info(args: &InfoArgs, verbose: bool) -> Result<(), BoxError> {
         }
     }
 
+    writer.finish()?;
     Ok(())
 }
 
 /// Returns `ExitCode` 1 when any error-severity issue is found (CI gating), 0 otherwise.
 fn cmd_analyze(args: AnalyzeArgs, verbose: bool) -> Result<ExitCode, BoxError> {
-    let content = parse_file(&args.file)?;
-    let problem = LpProblem::parse(&content)?;
+    let problem = read_problem(&args.file)?;
 
     if verbose {
         eprintln!("Analyzing file: {}", args.file.display());
     }
 
+    if args.small_coeff_threshold > args.large_coeff_threshold {
+        return Err("--small-coeff-threshold must not exceed --large-coeff-threshold".into());
+    }
     let config = AnalysisConfig {
         large_coefficient_threshold: args.large_coeff_threshold,
         small_coefficient_threshold: args.small_coeff_threshold,
-        large_rhs_threshold: args.large_coeff_threshold,
+        large_rhs_threshold: args.large_rhs_threshold,
         coefficient_ratio_threshold: args.ratio_threshold,
     };
 
@@ -154,6 +156,7 @@ fn cmd_analyze(args: AnalyzeArgs, verbose: bool) -> Result<ExitCode, BoxError> {
         }
     }
 
+    writer.finish()?;
     let has_errors = analysis.issues.iter().any(|issue| issue.severity == IssueSeverity::Error);
     Ok(if has_errors { ExitCode::from(1) } else { ExitCode::SUCCESS })
 }
@@ -169,7 +172,8 @@ fn count_variable_types(problem: &LpProblem) -> (usize, usize, usize) {
             VariableKind::Binary => binary += 1,
             // General is LP format's other integral declaration; both are
             // integer variables as far as the counts are concerned.
-            VariableKind::Integer | VariableKind::General => integer += 1,
+            // A semi-integer variable is integral wherever it is non-zero.
+            VariableKind::Integer | VariableKind::General | VariableKind::SemiInteger => integer += 1,
             VariableKind::Continuous | VariableKind::SemiContinuous | VariableKind::Sos => continuous += 1,
         }
     }
@@ -216,6 +220,18 @@ fn write_info_text<W: Write>(writer: &mut W, problem: &LpProblem, args: &InfoArg
                 }
                 Constraint::SOS { sos_type, weights, .. } => {
                     writeln!(writer, "  {name}: {sos_type} with {} variables", weights.len())?;
+                }
+                Constraint::Quadratic { coefficients, quadratic, operator, rhs, .. } => {
+                    writeln!(writer, "  {name}: {} terms + {} quadratic terms {operator} {rhs}", coefficients.len(), quadratic.len())?;
+                }
+                Constraint::General { resultant, function, .. } => {
+                    let resultant = problem.resolve(*resultant);
+                    writeln!(writer, "  {name}: {resultant} = {} of {} variables", function.keyword(), function.variables().len())?;
+                }
+                Constraint::Indicator { variable, active_value, coefficients, operator, rhs, .. } => {
+                    let indicator = problem.resolve(*variable);
+                    let value = u8::from(*active_value);
+                    writeln!(writer, "  {name}: {indicator} = {value} -> {} terms {operator} {rhs}", coefficients.len())?;
                 }
             }
         }
@@ -265,6 +281,22 @@ fn build_info_value(problem: &LpProblem, args: &InfoArgs) -> serde_json::Value {
                         ("standard", format!("{} terms {operator} {rhs}", coefficients.len()))
                     }
                     Constraint::SOS { sos_type, weights, .. } => ("sos", format!("{sos_type} with {} variables", weights.len())),
+                    Constraint::General { resultant, function, .. } => (
+                        "general",
+                        format!("{} = {} of {} variables", problem.resolve(*resultant), function.keyword(), function.variables().len()),
+                    ),
+                    Constraint::Quadratic { coefficients, quadratic, operator, rhs, .. } => {
+                        ("quadratic", format!("{} terms + {} quadratic terms {operator} {rhs}", coefficients.len(), quadratic.len()))
+                    }
+                    Constraint::Indicator { variable, active_value, coefficients, operator, rhs, .. } => (
+                        "indicator",
+                        format!(
+                            "{} = {} -> {} terms {operator} {rhs}",
+                            problem.resolve(*variable),
+                            u8::from(*active_value),
+                            coefficients.len()
+                        ),
+                    ),
                 };
                 serde_json::json!({ "name": problem.resolve(*name_id), "constraint_type": constraint_type, "details": details })
             })
@@ -383,6 +415,7 @@ fn build_diff_json(args: &DiffArgs, p1: &LpProblem, p2: &LpProblem, diff: &LpDif
         "abs_tol": tol.abs,
         "rel_tol": tol.rel,
         "rename_rule_count": rule_count,
+        "sense_changed": diff.sense_changed,
         "counts": {
             "objectives": [p1.objective_count(), p2.objective_count()],
             "constraints": [p1.constraint_count(), p2.constraint_count()],
@@ -416,17 +449,15 @@ fn cmd_diff(args: &DiffArgs, verbose: bool) -> Result<ExitCode, BoxError> {
         .map(|c| Ok::<_, BoxError>((regex::Regex::new(&c[0])?, c[1].clone())))
         .collect::<Result<_, _>>()?;
 
-    let tol = DiffTol { abs: args.abs_tol, rel: args.rel_tol };
+    let tol = DiffTol::new(args.abs_tol, args.rel_tol)?;
 
     if verbose {
         eprintln!("Diffing {} vs {}", args.file1.display(), args.file2.display());
         eprintln!("abs_tol={} rel_tol={} rename_rules={}", tol.abs, tol.rel, rules.len());
     }
 
-    let content1 = parse_file(&args.file1)?;
-    let content2 = parse_file(&args.file2)?;
-    let p1 = LpProblem::parse(&content1)?;
-    let p2 = LpProblem::parse(&content2)?;
+    let p1 = read_problem(&args.file1)?;
+    let p2 = read_problem(&args.file2)?;
 
     // Hand the CLI's regex rename rules to the library engine as a normaliser
     // closure, keeping `regex` out of the core crate.
@@ -455,27 +486,24 @@ fn cmd_diff(args: &DiffArgs, verbose: bool) -> Result<ExitCode, BoxError> {
         }
     }
 
+    writer.finish()?;
     Ok(if diff.is_empty() { ExitCode::SUCCESS } else { ExitCode::from(1) })
 }
 
-/// Parse `content` as MPS if `path` has a `.mps` extension (case-insensitive),
-/// otherwise as LP. Scoped to `convert` so that `MPS -> MPS` round trips work;
-/// other subcommands are unaffected and remain LP-only.
-fn parse_convert_input(path: &std::path::Path, content: &str) -> Result<LpProblem, BoxError> {
+/// Read and parse `path`: as MPS if it has a `.mps` extension
+/// (case-insensitive), otherwise as LP. Every subcommand reads its input
+/// through this, so each accepts either format.
+fn read_problem(path: &std::path::Path) -> Result<LpProblem, BoxError> {
+    let content = parse_file(path)?;
     let is_mps = path.extension().and_then(|ext| ext.to_str()).is_some_and(|ext| ext.eq_ignore_ascii_case("mps"));
-    if is_mps { Ok(LpProblem::parse_mps(content)?) } else { Ok(LpProblem::parse(content)?) }
+    if is_mps { Ok(LpProblem::parse_mps(&content)?) } else { Ok(LpProblem::parse(&content)?) }
 }
 
-// `quiet` suppresses the CSV branch's "files written to" note, and that is the
-// only message this command emits on success, so without the `csv` feature the
-// parameter has nothing left to gate.
-#[cfg_attr(not(feature = "csv"), allow(unused_variables, reason = "`quiet` only gates the CSV progress message"))]
 fn cmd_convert(args: ConvertArgs, verbose: bool, quiet: bool) -> Result<(), BoxError> {
     use lp_parser_rs::mps::writer::{MpsWriterOptions, write_mps_string_with_options};
-    use lp_parser_rs::writer::{LpWriterOptions, write_lp_string_with_options};
+    use lp_parser_rs::writer::{LpWriterOptions, write_lp_string_with_warnings};
 
-    let content = parse_file(&args.file)?;
-    let problem = parse_convert_input(&args.file, &content)?;
+    let problem = read_problem(&args.file)?;
 
     if verbose {
         eprintln!("Converting file: {}", args.file.display());
@@ -489,10 +517,16 @@ fn cmd_convert(args: ConvertArgs, verbose: bool, quiet: bool) -> Result<(), BoxE
                 decimal_precision: args.precision,
                 include_section_spacing: !args.compact,
             };
-            let output = write_lp_string_with_options(&problem, &options);
+            let (output, warnings) = write_lp_string_with_warnings(&problem, &options)?;
+            if !quiet {
+                for warning in &warnings {
+                    eprintln!("Warning: {warning}");
+                }
+            }
 
             let mut writer = OutputWriter::new(args.output)?;
             write!(writer, "{output}")?;
+            writer.finish()?;
         }
         ConvertFormat::Mps => {
             let options = MpsWriterOptions { decimal_precision: args.precision, ..MpsWriterOptions::default() };
@@ -500,6 +534,7 @@ fn cmd_convert(args: ConvertArgs, verbose: bool, quiet: bool) -> Result<(), BoxE
 
             let mut writer = OutputWriter::new(args.output)?;
             write!(writer, "{output}")?;
+            writer.finish()?;
         }
         #[cfg(feature = "csv")]
         ConvertFormat::Csv => {
@@ -522,11 +557,13 @@ fn cmd_convert(args: ConvertArgs, verbose: bool, quiet: bool) -> Result<(), BoxE
                 serde_json::to_writer(&mut writer, &problem)?;
             }
             writeln!(writer)?;
+            writer.finish()?;
         }
         #[cfg(feature = "serde")]
         ConvertFormat::Yaml => {
             let mut writer = OutputWriter::new(args.output)?;
             serde_yaml::to_writer(&mut writer, &problem)?;
+            writer.finish()?;
         }
     }
 
@@ -553,8 +590,7 @@ fn cmd_solve(args: SolveArgs, verbose: bool, quiet: bool) -> Result<(), BoxError
     use lp_parser_rs::compat::lp_solvers::LpSolversCompat;
     use lp_solvers::solvers::{CbcSolver, GlpkSolver, SolverTrait, Status};
 
-    let content = parse_file(&args.file)?;
-    let problem = LpProblem::parse(&content)?;
+    let problem = read_problem(&args.file)?;
 
     if verbose {
         eprintln!("Loading problem: {}", args.file.display());
@@ -624,20 +660,27 @@ fn cmd_solve(args: SolveArgs, verbose: bool, quiet: bool) -> Result<(), BoxError
         }
     }
 
+    writer.finish()?;
     Ok(())
 }
 
 enum OutputWriter {
     Stdout(Stdout),
-    File(fs::File),
+    File(io::BufWriter<fs::File>),
 }
 
 impl OutputWriter {
     fn new(path: Option<PathBuf>) -> io::Result<Self> {
         match path {
-            Some(p) => Ok(Self::File(fs::File::create(p)?)),
+            Some(p) => Ok(Self::File(io::BufWriter::new(fs::File::create(p)?))),
             None => Ok(Self::Stdout(io::stdout())),
         }
+    }
+
+    /// Flush buffered output. Call this once writing is done: dropping a
+    /// `BufWriter` flushes too, but silently discards any error.
+    fn finish(mut self) -> io::Result<()> {
+        self.flush()
     }
 }
 
@@ -677,4 +720,20 @@ fn main() -> ExitCode {
         eprintln!("Error: {error}");
         ExitCode::from(2)
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use super::read_problem;
+
+    #[test]
+    fn read_problem_picks_the_parser_by_extension() {
+        let resources = Path::new(env!("CARGO_MANIFEST_DIR")).join("resources");
+        let mps = read_problem(&resources.join("enlight4.mps")).expect("an .mps file must be read as MPS");
+        assert_eq!(mps.name(), Some("enlight4"));
+        let lp = read_problem(&resources.join("afiro.lp")).expect("an .lp file must be read as LP");
+        assert!(lp.constraint_count() > 0);
+    }
 }

@@ -77,7 +77,7 @@ pub use interner::{NameId, NameInterner};
 use lalrpop_util::lalrpop_mod;
 pub use lexer::ParseResult;
 pub use line_index::{LineIndex, SourceLocation};
-pub use model::{VariableBounds, VariableKind};
+pub use model::{ConstraintClass, GeneralFunction, ObjectiveAttributes, QuadraticTerm, VariableBounds, VariableKind};
 pub use mps::{extract_mps_name, parse_mps};
 pub use problem::LpProblem;
 
@@ -87,6 +87,7 @@ pub use problem::LpProblem;
     clippy::cognitive_complexity,
     clippy::elidable_lifetime_names,
     clippy::ignored_unit_patterns,
+    clippy::large_enum_variant,
     clippy::match_same_arms,
     clippy::missing_const_for_fn,
     clippy::missing_errors_doc,
@@ -111,3 +112,7 @@ pub use lp_grammar::lp;
 /// Tolerance for floating-point comparisons in coefficient handling.
 /// Used for checking if values are effectively zero or one.
 pub(crate) const NUMERIC_EPSILON: f64 = 1e-10;
+
+/// Magnitude at or beyond which a parsed bound is treated as infinite, per
+/// the CPLEX convention shared by LP and MPS readers (`1e30` means "no bound").
+pub(crate) const INFINITE_BOUND_THRESHOLD: f64 = 1e30;

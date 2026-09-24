@@ -13,6 +13,9 @@ use crate::state::{
     SolveViewState,
 };
 
+/// Lines an overlay moves per mouse-wheel notch, matching the detail panel.
+const MOUSE_SCROLL_LINES: u16 = 3;
+
 impl App {
     pub fn handle_key(&mut self, key: KeyEvent) {
         // Windows delivers both Press and Release events; with the kitty
@@ -20,6 +23,11 @@ impl App {
         // every keystroke fires twice.
         if key.kind != KeyEventKind::Press {
             return;
+        }
+
+        // An error flash stays up until the user has had a key press to see it.
+        if self.yank.level == crate::app::FlashLevel::Err {
+            self.yank.clear();
         }
 
         // Ctrl-C is an unconditional quit regardless of any other mode.
@@ -316,6 +324,13 @@ impl App {
             KeyCode::Char('3') => self.set_section(Section::Constraints),
             KeyCode::Char('4') => self.set_section(Section::Objectives),
             KeyCode::Char('5') => self.set_section(Section::Numerics),
+
+            // Resize the sidebar.
+            KeyCode::Char('<') => self.resize_sidebar(false),
+            KeyCode::Char('>') => self.resize_sidebar(true),
+
+            // Hand the mouse back to the terminal for native text selection.
+            KeyCode::Char('M') => self.toggle_mouse_capture(),
 
             // Cycle sections from any focus (lazygit-style sub-tab navigation).
             KeyCode::Char(']') => self.cycle_section(true),
@@ -655,13 +670,7 @@ impl App {
         match &self.solver.state {
             SolveState::Idle => unreachable!("handle_solve_key called in Idle state"),
             SolveState::Picking => self.handle_solve_picker_key(key),
-            SolveState::Running { .. } | SolveState::RunningBoth { .. } => {
-                if key.code == KeyCode::Esc {
-                    self.solver.state = SolveState::Idle;
-                    self.solver.receive = None;
-                    self.solver.receive2 = None;
-                }
-            }
+            SolveState::Running { .. } | SolveState::RunningBoth { .. } => self.handle_solve_running_key(key),
             SolveState::Done(_) => self.handle_solve_done_key(key),
             SolveState::DoneBoth(_) => self.handle_solve_done_both_key(key),
             SolveState::Failed(_) => {
@@ -670,6 +679,37 @@ impl App {
                 }
             }
         }
+    }
+
+    /// Handle a key while a solve runs: `Esc` cancels it; `q` asks before
+    /// quitting, since quitting throws the solve away.
+    fn handle_solve_running_key(&mut self, key: KeyEvent) {
+        if self.solver.confirm_quit {
+            match key.code {
+                KeyCode::Char('y' | 'Y') => self.should_quit = true,
+                _ => self.solver.confirm_quit = false,
+            }
+            return;
+        }
+        match key.code {
+            KeyCode::Esc => {
+                self.solver.cancel_running();
+                self.flash_status("Solve cancelled");
+            }
+            KeyCode::Char('q') => self.solver.confirm_quit = true,
+            _ => {}
+        }
+    }
+
+    /// Refuse to start a solve while a cancelled one is still winding down:
+    /// the two would compete for the machine, and the old one cannot be
+    /// interrupted before `HiGHS` has the model. Returns `true` when refused.
+    fn refuse_while_solving(&mut self) -> bool {
+        if self.solver.solve_in_flight() {
+            self.flash_warn("The last solve is still stopping \u{2014} try again in a moment");
+            return true;
+        }
+        false
     }
 
     /// Handle keys in the solver file picker state.
@@ -729,7 +769,7 @@ impl App {
                 }
             }
             KeyCode::Char('e') => self.start_diagnosis_single(),
-            KeyCode::Char('I') => self.open_iis(),
+            KeyCode::Char('I') => self.open_iis_for_solve(),
             KeyCode::Char('w') => {
                 let written = match &self.solver.state {
                     SolveState::Done(result) => Some(
@@ -749,11 +789,10 @@ impl App {
 
     /// Flash the status bar with the outcome of a solve CSV write.
     fn flash_csv_write(&mut self, written: Result<(String, String), String>) {
-        self.yank.message = match written {
-            Ok((file1, file2)) => format!("Wrote {file1} and {file2}"),
-            Err(e) => format!("CSV write failed: {e}"),
-        };
-        self.yank.flash = Some(std::time::Instant::now());
+        match written {
+            Ok((file1, file2)) => self.flash_ok(format!("Wrote {file1} and {file2}")),
+            Err(e) => self.flash_error(format!("CSV write failed: {e}")),
+        }
     }
 
     /// Start an infeasibility diagnosis for the single-solve result, if it is
@@ -818,10 +857,10 @@ impl App {
 
         std::thread::spawn(move || {
             let result = crate::solver::diagnose_infeasibility(&problem);
-            // Receiver may be dropped if the user dismissed the overlay — this is expected.
-            if sender.send(result).is_err() {
-                eprintln!("diagnosis result dropped: receiver closed");
-            }
+            // The receiver is dropped if the user dismissed the overlay, so a
+            // failed send is expected and deliberately silent: stderr is the
+            // alternate screen ratatui is drawing into.
+            drop(sender.send(result));
         });
     }
 
@@ -829,8 +868,10 @@ impl App {
     /// the overlay was restored and no solve is needed.
     ///
     /// The formatted lines are rebuilt rather than cached: the terminal may
-    /// have been resized since the solve ran. `view` is deliberately left
-    /// alone so the user lands back on the tab and scroll offset they closed.
+    /// have been resized since the solve ran. The view comes back with the
+    /// result: the user lands on the tab and scroll offset they closed, and a
+    /// comparison's threshold label matches the threshold its rows were
+    /// diffed at.
     fn restore_cached_solve(&mut self, key: &str) -> bool {
         let Some(cached) = self.solver.take_cached(key) else {
             return false;
@@ -844,6 +885,7 @@ impl App {
         self.solver.state = cached.state;
         self.solver.solved_problem = cached.solved_problem;
         self.solver.what_if_problem = cached.what_if_problem;
+        self.solver.view = cached.view;
         key.clone_into(&mut self.solver.key);
         self.solver.reset_diagnosis();
         self.flash_status("Restored cached solve (unchanged input)");
@@ -855,6 +897,11 @@ impl App {
         if self.restore_cached_solve(&file_label) {
             return;
         }
+        if self.refuse_while_solving() {
+            self.solver.state = SolveState::Idle;
+            return;
+        }
+        let cancel = self.solver.arm_cancel();
         self.solver.state = SolveState::Running { file: file_label.clone(), started: Instant::now() };
         self.solver.key = file_label;
         self.solver.view = SolveViewState::default();
@@ -866,11 +913,11 @@ impl App {
         self.solver.receive = Some(receiver);
 
         std::thread::spawn(move || {
-            let result = crate::solver::solve_problem(&problem);
-            // Receiver may be dropped if the user dismissed the overlay — this is expected.
-            if sender.send(result).is_err() {
-                eprintln!("solve result dropped: receiver closed");
-            }
+            let result = crate::solver::solve_problem_cancellable(&problem, &cancel);
+            // The receiver is dropped if the user dismissed the overlay, so a
+            // failed send is expected and deliberately silent: stderr is the
+            // alternate screen ratatui is drawing into.
+            drop(sender.send(result));
         });
     }
 
@@ -898,7 +945,7 @@ impl App {
                 }
             }
             KeyCode::Char('e') => self.start_diagnosis_both(),
-            KeyCode::Char('I') => self.open_iis(),
+            KeyCode::Char('I') => self.open_iis_for_solve(),
             KeyCode::Char('w') => {
                 let written = match &self.solver.state {
                     SolveState::DoneBoth(diff) => Some(
@@ -937,6 +984,11 @@ impl App {
         if self.restore_cached_solve(&key) {
             return;
         }
+        if self.refuse_while_solving() {
+            self.solver.state = SolveState::Idle;
+            return;
+        }
+        let cancel = self.solver.arm_cancel();
         self.solver.state = SolveState::RunningBoth { file1: label1, file2: label2, result1: None, result2: None, started: Instant::now() };
         self.solver.key = key;
         self.solver.view = SolveViewState::default();
@@ -950,19 +1002,20 @@ impl App {
 
         // One thread, in order: side 1's result reaches the UI while side 2 is
         // still running, and the two solves never compete for the machine.
-        // Receivers may be dropped if the user dismissed the overlay.
+        // Receivers are dropped if the user dismissed the overlay, so a failed
+        // send is expected and deliberately silent: stderr is the alternate
+        // screen ratatui is drawing into. Side 2 is skipped once nobody is
+        // waiting for it.
         std::thread::spawn(move || {
-            let result = crate::solver::solve_problem(&problem1);
-            if sender1.send(result).is_err() {
-                eprintln!("solve result 1 dropped: receiver closed");
+            let result = crate::solver::solve_problem_cancellable(&problem1, &cancel);
+            if sender1.send(result).is_err() || cancel.load(std::sync::atomic::Ordering::Relaxed) {
+                return;
             }
-            let mut result = crate::solver::solve_problem(&problem2);
+            let mut result = crate::solver::solve_problem_cancellable(&problem2, &cancel);
             if let Ok(solved) = &mut result {
                 scaling2.unscale(solved);
             }
-            if sender2.send(result).is_err() {
-                eprintln!("solve result 2 dropped: receiver closed");
-            }
+            drop(sender2.send(result));
         });
     }
 
@@ -974,15 +1027,15 @@ impl App {
     /// case a hint is flashed instead.
     fn open_what_if(&mut self) {
         if self.active_section != Section::Constraints {
-            self.flash_status("What-if: select a constraint first (section 3)");
+            self.flash_warn("What-if: select a constraint first (section 3)");
             return;
         }
         let Some(name) = self.selected_constraint_name() else {
-            self.flash_status("What-if: select a constraint first");
+            self.flash_warn("What-if: select a constraint first");
             return;
         };
         let Some(current_rhs) = baseline_constraint_rhs(&self.problem1, &name) else {
-            self.flash_status("What-if: constraint is not a standard constraint in file 1");
+            self.flash_warn("What-if: constraint is not a standard constraint in file 1");
             return;
         };
         self.what_if =
@@ -1117,7 +1170,7 @@ impl App {
                 self.presolve_cursor = None;
                 self.presolve_log = Some(crate::state::ScrollPane { lines, scroll: 0, export: Some(export) });
             }
-            Err(error) => self.flash_status(format!("HiGHS presolve: {error}")),
+            Err(error) => self.flash_error(format!("HiGHS presolve: {error}")),
         }
     }
 
@@ -1164,11 +1217,10 @@ impl App {
         let stem = self.file1_path.file_stem().unwrap_or_else(|| std::ffi::OsStr::new("model")).to_string_lossy().into_owned();
         let filename = format!("{stem}_{suffix}");
         let written = std::env::current_dir().and_then(|dir| std::fs::write(dir.join(&filename), body));
-        let message = match written {
-            Ok(()) => format!("Wrote {filename} \u{2014} {lines} line(s)"),
-            Err(error) => format!("Report write failed: {error}"),
-        };
-        self.flash_status(message);
+        match written {
+            Ok(()) => self.flash_ok(format!("Wrote {filename} \u{2014} {lines} line(s)")),
+            Err(error) => self.flash_error(format!("Report write failed: {error}")),
+        }
     }
 
     /// Apply the enabled rules to the baseline problem.
@@ -1177,7 +1229,7 @@ impl App {
     /// using: no rule selected, the model proved infeasible, or nothing fired.
     fn rewrite_baseline(&mut self) -> Option<(LpProblem, crate::presolve::PresolveStats)> {
         if self.presolve_rules.iter().all(|on| !on) {
-            self.flash_status("Rewrite: enable at least one rule (space toggles)");
+            self.flash_warn("Rewrite: enable at least one rule (space toggles)");
             return None;
         }
 
@@ -1185,7 +1237,7 @@ impl App {
         self.presolve_cursor = None;
 
         if let Some(reason) = &stats.infeasible {
-            self.flash_status(format!("Rewrite proved the model infeasible: {reason}"));
+            self.flash_warn(format!("Rewrite proved the model infeasible: {reason}"));
             self.last_presolve = Some(stats);
             return None;
         }
@@ -1211,14 +1263,14 @@ impl App {
         // Unlike the comparison solve, a file on disk has nothing to unscale
         // it: whoever solves it gets the rewritten units, so say so.
         let units = if stats.scaling.cols.is_empty() { "" } else { " (scaled units)" };
-        let written =
-            std::env::current_dir().and_then(|dir| std::fs::write(dir.join(&filename), lp_parser_rs::writer::write_lp_string(&rewritten)));
-        let message = match written {
-            Ok(()) => format!("Wrote {filename}{units} \u{2014} {}", stats.headline()),
-            Err(error) => format!("Rewrite write failed: {error}"),
-        };
+        let written: Result<(), Box<dyn std::error::Error>> = lp_parser_rs::writer::write_lp_string(&rewritten)
+            .map_err(Into::into)
+            .and_then(|lp| std::env::current_dir().and_then(|dir| std::fs::write(dir.join(&filename), lp)).map_err(Into::into));
+        match written {
+            Ok(()) => self.flash_ok(format!("Wrote {filename}{units} \u{2014} {}", stats.headline())),
+            Err(error) => self.flash_error(format!("Rewrite write failed: {error}")),
+        }
         self.last_presolve = Some(stats);
-        self.flash_status(message);
     }
 
     /// Rewrite the baseline problem with the selected rules and launch an
@@ -1307,12 +1359,21 @@ impl App {
     where
         F: FnOnce(&LpProblem) -> Result<crate::state::ScrollPane, String> + Send + 'static,
     {
+        self.spawn_analysis_on(label, Arc::clone(&self.problem1), build);
+    }
+
+    /// [`spawn_analysis`](Self::spawn_analysis) against `problem` rather than
+    /// the baseline.
+    fn spawn_analysis_on<F>(&mut self, label: &'static str, problem: Arc<LpProblem>, build: F)
+    where
+        F: FnOnce(&LpProblem) -> Result<crate::state::ScrollPane, String> + Send + 'static,
+    {
         if matches!(self.analysis, AnalysisState::Running { .. }) {
-            self.flash_status(format!("{label}: already running"));
+            self.flash_warn(format!("{label}: already running"));
             return;
         }
-        if self.problem1.variables.is_empty() {
-            self.flash_status(format!("{label}: the model has no variables"));
+        if problem.variables.is_empty() {
+            self.flash_warn(format!("{label}: the model has no variables"));
             return;
         }
 
@@ -1320,7 +1381,6 @@ impl App {
         let (sender, receiver) = mpsc::channel();
         self.receive_analysis = Some(receiver);
 
-        let problem = Arc::clone(&self.problem1);
         std::thread::spawn(move || {
             // The receiver is dropped when the user closes the pane early, which
             // is a supported action ("any key to cancel"), so a failed send is
@@ -1344,14 +1404,37 @@ impl App {
 
     /// `I` — the minimal set of constraints and bounds that cannot hold together.
     pub(crate) fn open_iis(&mut self) {
-        self.spawn_analysis("Irreducible infeasible subsystem", |problem| {
-            let report = crate::highs_query::iis(problem)?;
-            Ok(crate::state::ScrollPane {
-                lines: crate::widgets::highs_query::iis_lines(&report),
-                scroll: 0,
-                export: Some(("iis.txt", crate::widgets::highs_query::iis_export(&report))),
-            })
-        });
+        self.spawn_analysis("Irreducible infeasible subsystem", iis_pane);
+    }
+
+    /// `I` from the solve overlay — the IIS of the model whose result is on
+    /// screen, which may be file 2 or a what-if/rewrite side rather than the
+    /// baseline.
+    fn open_iis_for_solve(&mut self) {
+        match self.solve_view_problem() {
+            Some(problem) => self.spawn_analysis_on("Irreducible infeasible subsystem", problem, iis_pane),
+            None => self.open_iis(),
+        }
+    }
+
+    /// The model behind the completed solve on screen: the solved model for a
+    /// single solve, and for a comparison the infeasible side (side 1 when both
+    /// or neither are), mirroring which side `e` diagnoses.
+    fn solve_view_problem(&self) -> Option<Arc<LpProblem>> {
+        match &self.solver.state {
+            SolveState::Done(_) => self.solver.solved_problem.clone(),
+            SolveState::DoneBoth(diff) => {
+                let side2_only =
+                    !crate::solver::status_is_infeasible(&diff.result1.status) && crate::solver::status_is_infeasible(&diff.result2.status);
+                Some(if side2_only {
+                    // Side 2 is the modified model in a what-if or rewrite run, `problem2` otherwise.
+                    self.solver.what_if_problem.clone().unwrap_or_else(|| Arc::clone(&self.problem2))
+                } else {
+                    Arc::clone(&self.problem1)
+                })
+            }
+            _ => None,
+        }
     }
 
     /// `R` — how far each coefficient can move before the basis changes.
@@ -1382,21 +1465,27 @@ impl App {
         });
     }
 
-    /// The most recent single-file solve result, if one is still to hand.
+    /// The most recent solve result of the baseline model (`problem1`), if one
+    /// is still to hand.
     ///
-    /// Prefers the live overlay state, then the newest cached solve. A "both"
-    /// comparison contributes its first side, which is the one that pairs with
-    /// `problem1`.
+    /// Prefers the live overlay state, then the newest cached solve. A single
+    /// solve counts only when it solved `problem1` — a solve of file 2 joined
+    /// onto file 1's rows would pair values with the wrong constraints. A
+    /// "both" comparison contributes its first side, which is always
+    /// `problem1` (every comparison is spawned with the baseline as side 1).
     fn latest_solve_result(&self) -> Option<&crate::solver::SolveResult> {
-        match &self.solver.state {
-            SolveState::Done(result) => return Some(result),
-            SolveState::DoneBoth(diff) => return Some(&diff.result1),
-            _ => {}
-        }
-        self.solver.cache.iter().rev().find_map(|cached| match &cached.state {
-            SolveState::Done(result) => Some(&**result),
+        let is_baseline = |solved: Option<&Arc<LpProblem>>| solved.is_some_and(|problem| Arc::ptr_eq(problem, &self.problem1));
+        let live = match &self.solver.state {
+            SolveState::Done(result) if is_baseline(self.solver.solved_problem.as_ref()) => Some(&**result),
             SolveState::DoneBoth(diff) => Some(&diff.result1),
             _ => None,
+        };
+        live.or_else(|| {
+            self.solver.cache.iter().rev().find_map(|cached| match &cached.state {
+                SolveState::Done(result) if is_baseline(cached.solved_problem.as_ref()) => Some(&**result),
+                SolveState::DoneBoth(diff) => Some(&diff.result1),
+                _ => None,
+            })
         })
     }
 
@@ -1419,7 +1508,7 @@ impl App {
             self.set_active_section(new_section);
             self.invalidate_cache();
             self.ensure_active_section_cache();
-            self.reset_name_list_selection();
+            self.reselect_entry(None);
             self.detail_scroll = 0;
         }
     }
@@ -1429,7 +1518,7 @@ impl App {
         self.set_active_section(section);
         self.invalidate_cache();
         self.ensure_active_section_cache();
-        self.reset_name_list_selection();
+        self.reselect_entry(None);
         self.detail_scroll = 0;
         // Land focus on the section's content so navigation keys act on it
         // immediately, rather than on the tab bar.
@@ -1439,22 +1528,30 @@ impl App {
     pub(crate) fn set_filter(&mut self, filter: DiffFilter) {
         if self.filter != filter {
             self.record_jump();
+            let selected = self.selected_entry_index();
             self.apply_filter(filter);
             self.invalidate_cache();
             self.ensure_active_section_cache();
-            self.reset_name_list_selection();
+            self.reselect_entry(selected);
         }
     }
 
     /// Handle a mouse event: scroll wheels and left-click panel selection.
     pub fn handle_mouse(&mut self, event: MouseEvent) {
-        if self.search_popup.visible || self.palette.visible || self.what_if.is_some() {
-            return;
-        }
-
-        if self.show_help {
-            if matches!(event.kind, MouseEventKind::Down(MouseButton::Left)) {
+        // An open overlay owns the mouse: the wheel scrolls it where it
+        // scrolls, and nothing reaches the lists behind it.
+        if self.has_overlay() {
+            let wheel = match event.kind {
+                MouseEventKind::ScrollDown => Some(true),
+                MouseEventKind::ScrollUp => Some(false),
+                _ => None,
+            };
+            if let (Some(down), Some(scroll)) = (wheel, self.overlay_scroll_mut()) {
+                // Each pane clamps its offset to the content when drawn.
+                *scroll = if down { scroll.saturating_add(MOUSE_SCROLL_LINES) } else { scroll.saturating_sub(MOUSE_SCROLL_LINES) };
+            } else if self.show_help && matches!(event.kind, MouseEventKind::Down(MouseButton::Left)) && !self.overlay_above_help() {
                 self.show_help = false;
+                self.help_scroll = 0;
             }
             return;
         }
@@ -1474,6 +1571,39 @@ impl App {
             }
             _ => {}
         }
+    }
+
+    /// The scroll offset of the topmost open overlay, taken in `handle_key`'s
+    /// priority order, or `None` when that overlay does not scroll (a prompt,
+    /// a picker, a running solve or analysis).
+    fn overlay_scroll_mut(&mut self) -> Option<&mut u16> {
+        if self.search_popup.visible || self.palette.visible || self.what_if.is_some() {
+            return None;
+        }
+        if let Some(pane) = &mut self.presolve_log {
+            return Some(&mut pane.scroll);
+        }
+        if self.presolve_cursor.is_some() {
+            return None;
+        }
+        if let Some(pane) = &mut self.diagnostics {
+            return Some(&mut pane.scroll);
+        }
+        if self.analysis.is_open() {
+            return match &mut self.analysis {
+                AnalysisState::Done { pane, .. } => Some(&mut pane.scroll),
+                _ => None,
+            };
+        }
+        match self.solver.state {
+            SolveState::Done(_) | SolveState::DoneBoth(_) => {
+                let tab = self.solver.view.tab.index();
+                return Some(&mut self.solver.view.scroll[tab]);
+            }
+            SolveState::Idle => {}
+            _ => return None,
+        }
+        self.show_help.then_some(&mut self.help_scroll)
     }
 
     /// Scroll the name list by one step without touching focus.
@@ -1523,6 +1653,12 @@ impl App {
                     self.set_section(new_section);
                 }
             }
+        } else if over_name_list && self.active_section.list_index().is_none() {
+            // The Overview shown for Summary and Numerics: each row opens its section.
+            let relative_row = row.saturating_sub(self.layout.name_list.y + 1) as usize;
+            if let Some(&section) = crate::widgets::sidebar::OVERVIEW_SECTIONS.get(relative_row) {
+                self.set_section(section);
+            }
         } else if over_name_list {
             self.focus = Focus::NameList;
             let len = self.name_list_len();
@@ -1543,12 +1679,24 @@ impl App {
 
 /// Return the RHS of a standard constraint in `problem`, or `None` if the
 /// constraint is missing or is an SOS constraint.
-fn baseline_constraint_rhs(problem: &LpProblem, name: &str) -> Option<f64> {
+pub(crate) fn baseline_constraint_rhs(problem: &LpProblem, name: &str) -> Option<f64> {
     let id = problem.name_id(name)?;
     match problem.constraints.get(&id)? {
-        lp_parser_rs::model::Constraint::Standard { rhs, .. } => Some(*rhs),
-        lp_parser_rs::model::Constraint::SOS { .. } => None,
+        lp_parser_rs::model::Constraint::Standard { rhs, .. }
+        | lp_parser_rs::model::Constraint::Indicator { rhs, .. }
+        | lp_parser_rs::model::Constraint::Quadratic { rhs, .. } => Some(*rhs),
+        lp_parser_rs::model::Constraint::SOS { .. } | lp_parser_rs::model::Constraint::General { .. } => None,
     }
+}
+
+/// Build the IIS pane for `problem`; runs on the analysis worker thread.
+fn iis_pane(problem: &LpProblem) -> Result<crate::state::ScrollPane, String> {
+    let report = crate::highs_query::iis(problem)?;
+    Ok(crate::state::ScrollPane {
+        lines: crate::widgets::highs_query::iis_lines(&report),
+        scroll: 0,
+        export: Some(("iis.txt", crate::widgets::highs_query::iis_export(&report))),
+    })
 }
 
 #[cfg(test)]
@@ -1565,6 +1713,149 @@ mod tests {
         modified.update_constraint_rhs("c1", 5.0).expect("rhs update must succeed");
         assert_eq!(baseline_constraint_rhs(&modified, "c1"), Some(5.0), "modified copy must carry the new rhs");
         assert_eq!(baseline_constraint_rhs(&baseline, "c1"), Some(2.0), "baseline must be untouched by the what-if edit");
+    }
+
+    /// A click on an Overview row (Summary and Numerics) opens that section.
+    #[test]
+    fn clicking_an_overview_row_opens_its_section() {
+        let mut app = crate::snapshot_tests::inspect_app_from(crate::snapshot_tests::BASE_LP);
+        assert_eq!(app.active_section, Section::Summary, "fixture: starts on Summary");
+        app.layout.name_list = ratatui::layout::Rect::new(0, 1, 20, 20);
+        let click = |row| MouseEvent { kind: MouseEventKind::Down(MouseButton::Left), column: 4, row, modifiers: KeyModifiers::NONE };
+        app.handle_mouse(click(3));
+        assert_eq!(app.active_section, Section::Constraints, "the second row is Constraints");
+        assert!(app.selected_entry_index().is_some(), "and lands on its first entry");
+    }
+
+    /// `Esc` interrupts a running solve; `q` asks first; and no new solve can
+    /// start while the cancelled one's worker is still winding down.
+    #[test]
+    fn a_running_solve_can_be_cancelled_and_quit_is_confirmed() {
+        let mut app = crate::snapshot_tests::inspect_app_from(crate::snapshot_tests::BASE_LP);
+        let worker = app.solver.arm_cancel();
+        app.solver.state = SolveState::Running { file: "model.lp".to_owned(), started: Instant::now() };
+
+        app.handle_key(KeyEvent::from(KeyCode::Char('q')));
+        assert!(app.solver.confirm_quit && !app.should_quit, "q asks before quitting a running solve");
+        app.handle_key(KeyEvent::from(KeyCode::Char('n')));
+        assert!(!app.solver.confirm_quit && !app.should_quit, "anything but y keeps solving");
+
+        app.handle_key(KeyEvent::from(KeyCode::Esc));
+        assert!(matches!(app.solver.state, SolveState::Idle), "Esc closes the overlay");
+        assert!(worker.load(std::sync::atomic::Ordering::Relaxed), "Esc interrupts HiGHS");
+
+        // The worker still holds its clone: a new solve must wait for it.
+        app.handle_key(KeyEvent::from(KeyCode::Char('S')));
+        assert!(matches!(app.solver.state, SolveState::Idle), "no second solve while the first is stopping");
+        drop(worker);
+        assert!(!app.solver.solve_in_flight(), "the worker's exit frees the solver");
+
+        app.solver.arm_cancel();
+        app.solver.state = SolveState::Running { file: "model.lp".to_owned(), started: Instant::now() };
+        app.handle_key(KeyEvent::from(KeyCode::Char('q')));
+        app.handle_key(KeyEvent::from(KeyCode::Char('y')));
+        assert!(app.should_quit, "y confirms the quit");
+    }
+
+    /// A comparison whose second side is infeasible, as the solve overlay holds it.
+    fn app_with_side2_infeasible() -> App {
+        let mut app = crate::snapshot_tests::diff_app_from(crate::snapshot_tests::BASE_LP, crate::snapshot_tests::INFEASIBLE_LP);
+        let result1 = crate::solver::solve_problem(&app.problem1).expect("base solves");
+        let result2 = crate::solver::solve_problem(&app.problem2).expect("infeasible model still solves");
+        assert!(crate::solver::status_is_infeasible(&result2.status), "fixture must be infeasible");
+        let diff = crate::solver::diff_results("a.lp".to_owned(), "b.lp".to_owned(), result1, result2, 0.0);
+        app.solver.state = SolveState::DoneBoth(Box::new(diff));
+        app
+    }
+
+    /// Regression: `I` in the solve overlay always analysed file 1, even when
+    /// the infeasible model on screen was file 2 or a what-if side.
+    #[test]
+    fn iis_from_the_solve_overlay_analyses_the_side_on_screen() {
+        let mut app = app_with_side2_infeasible();
+        let problem = app.solve_view_problem().expect("a completed comparison names a side");
+        assert!(Arc::ptr_eq(&problem, &app.problem2), "the infeasible side 2 must be analysed");
+
+        let what_if = Arc::new((*app.problem2).clone());
+        app.solver.what_if_problem = Some(Arc::clone(&what_if));
+        let problem = app.solve_view_problem().expect("a completed comparison names a side");
+        assert!(Arc::ptr_eq(&problem, &what_if), "a what-if side 2 must be analysed, not file 2");
+
+        let result = crate::solver::solve_problem(&app.problem2).expect("solves");
+        app.solver.state = SolveState::Done(Box::new(result));
+        app.solver.solved_problem = Some(Arc::clone(&app.problem2));
+        let problem = app.solve_view_problem().expect("a completed solve names its model");
+        assert!(Arc::ptr_eq(&problem, &app.problem2), "a single solve of file 2 must analyse file 2");
+    }
+
+    /// Regression: only a few overlays blocked the mouse, so with the solve
+    /// overlay or a pane open the wheel and clicks moved the list behind it.
+    #[test]
+    fn the_mouse_scrolls_an_open_overlay_and_never_the_list_behind() {
+        let mut app = app_with_side2_infeasible();
+        app.set_section(Section::Constraints);
+        app.layout.name_list = ratatui::layout::Rect::new(0, 0, 30, 20);
+        let before = app.active_name_list_state_mut().selected();
+        let mouse = |kind| MouseEvent { kind, column: 5, row: 3, modifiers: KeyModifiers::NONE };
+
+        app.handle_mouse(mouse(MouseEventKind::ScrollDown));
+        app.handle_mouse(mouse(MouseEventKind::Down(MouseButton::Left)));
+        assert_eq!(app.active_name_list_state_mut().selected(), before, "the list behind the solve overlay must not move");
+        let tab = app.solver.view.tab.index();
+        assert_eq!(app.solver.view.scroll[tab], MOUSE_SCROLL_LINES, "the wheel scrolls the solve overlay");
+
+        app.solver.close_overlay();
+        app.diagnostics = Some(crate::state::ScrollPane { lines: Vec::new(), scroll: 0, export: None });
+        app.handle_mouse(mouse(MouseEventKind::ScrollDown));
+        app.handle_mouse(mouse(MouseEventKind::Down(MouseButton::Left)));
+        assert_eq!(app.active_name_list_state_mut().selected(), before, "the list behind a pane must not move");
+        assert_eq!(app.diagnostics.as_ref().map(|pane| pane.scroll), Some(MOUSE_SCROLL_LINES), "the wheel scrolls the pane");
+    }
+
+    /// Regression: a restored comparison kept whatever view was current, so
+    /// its threshold label no longer matched the threshold its rows used.
+    #[test]
+    fn a_restored_comparison_brings_back_its_threshold() {
+        let mut app = app_with_side2_infeasible();
+        app.solver.view.cycle_threshold_forward();
+        app.recompute_solve_diff();
+        let threshold_index = app.solver.view.threshold_index;
+        app.solver.key = "pair".to_owned();
+        app.solver.close_overlay();
+
+        // Another solve in between starts from the default view.
+        app.solver.view = SolveViewState::default();
+        assert_ne!(app.solver.view.threshold_index, threshold_index, "fixture: the thresholds must differ");
+
+        assert!(app.restore_cached_solve("pair"), "the comparison must be cached");
+        assert_eq!(app.solver.view.threshold_index, threshold_index, "the view must come back with its result");
+    }
+
+    /// Regression: `D` joined the newest solve onto file 1's structure even
+    /// when that solve was of file 2.
+    #[test]
+    fn diagnostics_only_use_a_solve_of_the_baseline_model() {
+        let mut app = crate::snapshot_tests::diff_app_from(crate::snapshot_tests::BASE_LP, crate::snapshot_tests::INFEASIBLE_LP);
+        let result2 = crate::solver::solve_problem(&app.problem2).expect("solves");
+        app.solver.state = SolveState::Done(Box::new(result2));
+        app.solver.solved_problem = Some(Arc::clone(&app.problem2));
+        assert!(app.latest_solve_result().is_none(), "a solve of file 2 must not pair with file 1");
+
+        let result1 = crate::solver::solve_problem(&app.problem1).expect("solves");
+        app.solver.state = SolveState::Done(Box::new(result1));
+        app.solver.solved_problem = Some(Arc::clone(&app.problem1));
+        assert!(app.latest_solve_result().is_some(), "a solve of file 1 pairs with file 1");
+
+        // Filed in the cache, the file 1 solve is still found behind a newer file 2 one.
+        app.solver.key = "a.lp".to_owned();
+        app.solver.close_overlay();
+        let result2 = crate::solver::solve_problem(&app.problem2).expect("solves");
+        app.solver.state = SolveState::Done(Box::new(result2));
+        app.solver.solved_problem = Some(Arc::clone(&app.problem2));
+        app.solver.key = "b.lp".to_owned();
+        app.solver.close_overlay();
+        let found = app.latest_solve_result().expect("the cached file 1 solve must be found");
+        assert_eq!(found.status, "Optimal", "the found solve is file 1's, not infeasible file 2's");
     }
 
     /// A finished analysis pane must scroll and close like the other read-only

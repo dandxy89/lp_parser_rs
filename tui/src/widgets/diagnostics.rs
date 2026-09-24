@@ -290,19 +290,14 @@ fn col_table(lines: &mut Vec<Line<'static>>, title: &str, cols: &[ColStat], note
     }
 }
 
-/// Format a dual value, collapsing both signed zeros to a plain `0`.
+/// Format a dual value in the shared display format.
 fn format_dual(value: f64) -> String {
-    if value == 0.0 { "0".to_owned() } else { format!("{value:.3e}") }
+    crate::format::fmt_num(value)
 }
 
-/// Format a solution value compactly, preferring plain decimals in the range
-/// where they are shorter and easier to compare by eye.
+/// Format a solution value in the shared display format.
 fn format_value(value: f64) -> String {
-    if value == 0.0 {
-        return "0".to_owned();
-    }
-    let magnitude = value.abs();
-    if (1e-3..1e7).contains(&magnitude) { format!("{value:.4}") } else { format!("{value:.3e}") }
+    crate::format::fmt_num(value)
 }
 
 /// Draw the diagnostics pane over the current frame.
@@ -310,8 +305,6 @@ fn format_value(value: f64) -> String {
 /// Takes `&mut App` so the scroll offset can be clamped to the real content
 /// height once the visible window is known, matching the help overlay.
 pub fn draw_diagnostics(frame: &mut ratatui::Frame, area: ratatui::layout::Rect, app: &mut crate::app::App) {
-    use ratatui::widgets::{Clear, Paragraph};
-
     let Some(pane) = &mut app.diagnostics else {
         return;
     };
@@ -322,18 +315,17 @@ pub fn draw_diagnostics(frame: &mut ratatui::Frame, area: ratatui::layout::Rect,
 
     // Near-full-screen: the tables are wide, and the value is in reading
     // several of them against each other.
-    let popup = crate::widgets::report_rect(area);
+    let popup = crate::widgets::report_rect(area, pane.lines.len());
 
     let inner_height = popup.height.saturating_sub(2) as usize;
     let max_scroll = u16::try_from(pane.lines.len().saturating_sub(inner_height)).unwrap_or(u16::MAX);
     pane.scroll = pane.scroll.min(max_scroll);
 
     let border_style = Style::default().fg(t.accent).add_modifier(Modifier::BOLD);
-    let title = if max_scroll > 0 { " Diagnostics  (j/k scroll \u{b7} Esc close) " } else { " Diagnostics  (Esc close) " };
-    let block = crate::widgets::panel_block(border_style).title(Span::styled(title, border_style));
+    let hints = if max_scroll > 0 { "j/k:scroll  Esc:close" } else { "Esc:close" };
+    let block = crate::widgets::panel_block(border_style).title(crate::widgets::title_with_hints("Diagnostics", hints, border_style));
 
-    frame.render_widget(Clear, popup);
-    frame.render_widget(Paragraph::new(pane.lines.clone()).block(block).scroll((pane.scroll, 0)), popup);
+    crate::widgets::draw_scroll_pane(frame, popup, &pane.lines, pane.scroll, block);
 }
 
 #[cfg(test)]

@@ -14,11 +14,29 @@ Supported specifications: [IBM CPLEX v22.1.1](https://www.ibm.com/docs/en/icos/2
 
 - **Parsing & writing** — round-trip LP files (parse → modify → write → parse) with configurable formatting; MPS files can also be written via [`mps::writer`](https://docs.rs/lp_parser_rs) (`write_mps_string`), letting LP and MPS problems convert to either format
 - **Problem modification** — rename / update / remove objectives, constraints, variables, coefficients, and RHS values
-- **Variable types** — integer, general, bounded, free, semi-continuous
+- **Variable types** — integer, general, bounded, free, semi-continuous, semi-integer
 - **Analysis** — statistics, matrix density, sparsity, coefficient ranges, issue detection with configurable thresholds
 - **Diff** (`diff` feature) — structural and numeric comparison between two LP problems, callable from the library via [`LpProblem::diff`](https://docs.rs/lp_parser_rs) or `diff::compare`
 - **Serialisation** (`serde` feature) — JSON / YAML support
 - **External solvers** (`lp-solvers` feature) — CBC, Gurobi, CPLEX, GLPK via the [lp-solvers](https://crates.io/crates/lp-solvers) crate
+
+### Extended LP syntax
+
+Beyond linear objectives, constraints, bounds and variable-type sections, the parser, both writers, the diff engine and the analysis understand:
+
+| Feature | LP syntax | Model | MPS |
+| --- | --- | --- | --- |
+| Semi-integer variables | variable listed in both `Generals` (or `Integers`) and `Semi-Continuous` (CPLEX) | `VariableKind::SemiInteger` | `SI` bound (read and written) |
+| Lazy constraints / user cuts | `Lazy Constraints` and `User Cuts` sections after `Subject To` (CPLEX) | ordinary constraints tagged in `LpProblem::constraint_classes` (`ConstraintClass::Lazy` / `UserCut`) | `LAZYCONS` / `USERCUTS` sections (read and written) |
+| Indicator constraints | `name: b = 1 -> x + y <= 3` (or `b = 0`) in `Subject To` / lazy sections (CPLEX, Gurobi); `<->` and `<-` are not supported | `Constraint::Indicator` | `INDICATORS` section (`IF row column value`, read and written) |
+| Quadratic objectives | `obj: 2 x + [ x ^ 2 + 4 x * y ] / 2` (the `/ 2` is mandatory, as in CPLEX and Gurobi) | `Objective::quadratic` (`QuadraticTerm`, stored with the `/ 2` applied) | `QUADOBJ` / `QMATRIX` read, `QUADOBJ` written |
+| Quadratic constraints | `c: x + [ x ^ 2 + y ^ 2 ] <= 4` (no `/ 2`) | `Constraint::Quadratic` | `QCMATRIX` (read and written) |
+| General constraints | `General Constraints` section (Gurobi; also `General Constrs`, `Gen Cons`, `GenConstrs`): `g: r = MAX ( x1 , x2 , 3 )`, `MIN`, `ABS ( x )`, `AND ( b1 , b2 )`, `OR`; `PWL` is not supported | `Constraint::General` (`GeneralFunction`) | not supported: the writer returns an error, the reader skips `GENCONS` with a warning |
+| Multi-objective attributes | `Minimize multi-objectives`, then `OBJ0: Priority=2 Weight=1 AbsTol=0 RelTol=0` before each objective's expression (Gurobi; every attribute optional) | `Objective::attributes` (`ObjectiveAttributes`) | not supported: the writer returns an error unless `allow_multiple_objectives` is set (which already drops all but the first objective) |
+
+A lone `[` or `]` is always a quadratic bracket, so it must be separated from neighbouring names by whitespace (names such as `x[1]` are unaffected). Likewise the parentheses and commas of a general constraint must be separated by whitespace, as Gurobi writes them, since `(`, `)` and `,` are name characters.
+
+The `lp-solvers` adapter refuses models containing indicator, quadratic or general constraints, or a quadratic objective, rather than silently dropping them. The `lp_diff` HiGHS solver refuses indicator, quadratic and general constraints, and passes a quadratic objective to HiGHS as a Hessian (continuous QPs only: HiGHS cannot solve MIQPs, and the IIS/ranging/presolve queries refuse QPs).
 
 ## Library Usage
 
@@ -55,29 +73,31 @@ problem.update_constraint_rhs("capacity", 200.0)?;
 problem.rename_variable("x1", "production_a")?;
 problem.update_variable_type("production_a", VariableType::Integer)?;
 
-std::fs::write("modified.lp", write_lp_string(&problem))?;
+std::fs::write("modified.lp", write_lp_string(&problem)?)?; // errors on names LP cannot represent
 ```
 
 Available modification methods on `LpProblem`: `update_objective_coefficient`, `rename_objective`, `remove_objective`, `update_constraint_coefficient`, `update_constraint_rhs`, `rename_constraint`, `remove_constraint`, `rename_variable`, `update_variable_type`, `remove_variable`.
 
-Writer options: `write_lp_string_with_options(&problem, &LpWriterOptions { include_problem_name, max_line_length, decimal_precision, include_section_spacing })`.
+Writer options: `write_lp_string_with_options(&problem, &LpWriterOptions { include_problem_name, max_line_length, decimal_precision, include_section_spacing })`. `decimal_precision` defaults to `None`, which writes every number in its shortest exact (round-trip) form; `Some(n)` rounds to `n` decimal places.
 
 ## Command-Line Interface (`lp_parser`)
 
 ### Install
 
 ```bash
-cargo install lp_parser_rs --all-features
+cargo install lp_parser_rs --features cli,csv,diff,serde,lp-solvers
 # Or from source
 git clone https://github.com/dandxy89/lp_parser_rs.git
-cd lp_parser_rs/rust && cargo build --release --all-features
+cd lp_parser_rs/rust && cargo build --release --features cli,csv,diff,serde,lp-solvers
 ```
+
+Every subcommand reads LP or MPS input, choosing the parser by file extension (`.mps`, case-insensitive, reads MPS; anything else reads LP).
 
 ### Global options
 
 | Flag                               | Description                            |
 | ---------------------------------- | -------------------------------------- |
-| `-v`, `--verbose`                  | Increase output verbosity (repeatable) |
+| `-v`, `--verbose`                  | Print progress details to stderr       |
 | `-q`, `--quiet`                    | Suppress non-essential output          |
 | `-h`, `--help` / `-V`, `--version` | Print help / version                   |
 
@@ -85,7 +105,7 @@ cd lp_parser_rs/rust && cargo build --release --all-features
 
 | Option                | Default | Description                            |
 | --------------------- | ------- | -------------------------------------- |
-| `<FILE>`              | —       | Path to the LP file (required)         |
+| `<FILE>`              | —       | Path to the LP or MPS file (required)  |
 | `-o, --output <PATH>` | stdout  | Write output to file                   |
 | `-f, --format <FMT>`  | `text`  | `text`, `json` (serde), `yaml` (serde) |
 | `--pretty`            | off     | Pretty-print JSON/YAML                 |
@@ -119,8 +139,11 @@ Adds to the `parse` options:
 | ----------------------------- | ------- | --------------------------------------------- |
 | `--issues-only`               | off     | Skip full analysis; show warnings/errors only |
 | `--large-coeff-threshold <F>` | `1e9`   | Warn on coefficients larger than this         |
-| `--small-coeff-threshold <F>` | `1e-9`  | Warn on coefficients smaller than this        |
+| `--small-coeff-threshold <F>` | `1e-9`  | Warn on non-zero coefficients smaller than this |
+| `--large-rhs-threshold <F>`   | `1e9`   | Warn on RHS values larger than this in magnitude |
 | `--ratio-threshold <F>`       | `1e6`   | Warn on coefficient scaling ratios above this |
+
+Thresholds must be finite and greater than zero.
 
 ```bash
 lp_parser analyze problem.lp
@@ -141,11 +164,11 @@ issues: []
 ```
 </details>
 
-### `diff` — compare two LP files (requires `diff` feature)
+### `diff` — compare two LP or MPS files (requires `diff` feature)
 
 | Option                      | Default | Description                                                              |
 | --------------------------- | ------- | ------------------------------------------------------------------------ |
-| `<FILE1> <FILE2>`           | —       | Base and comparison files                                                |
+| `<FILE1> <FILE2>`           | —       | Base and comparison files (LP or MPS)                                    |
 | `-o, --output <PATH>`       | stdout  | Write output to file                                                     |
 | `-f, --format <FMT>`        | `text`  | `text`, `json`, `yaml`                                                   |
 | `--pretty`                  | off     | Pretty-print structured output                                           |
@@ -180,7 +203,7 @@ lp_parser analyze candidate.lp --issues-only || exit 1
 | `-o, --output <PATH>`   | stdout  | Output file or directory (required for CSV) |
 | `-f, --format <FMT>`    | `lp`    | `lp`, `mps`, `csv`, `json`, `yaml`          |
 | `--pretty`              | off     | Pretty-print JSON/YAML                      |
-| `--precision <N>`       | `6`     | Decimal precision for numbers               |
+| `--precision <N>`       | exact   | Round numbers to N decimal places (default: shortest exact form) |
 | `--max-line-length <N>` | `80`    | Line-wrap threshold for LP output            |
 | `--no-problem-name`     | off     | Omit problem-name comment in LP output      |
 | `--compact`             | off     | No section spacing                          |
@@ -204,7 +227,7 @@ lp_parser convert problem.mps --format mps -o rewritten.mps  # MPS -> MPS
 
 | Option                | Default | Description                      |
 | --------------------- | ------- | -------------------------------- |
-| `<FILE>`              | —       | Path to the LP file              |
+| `<FILE>`              | —       | Path to the LP or MPS file       |
 | `-s, --solver <NAME>` | `cbc`   | `cbc`, `glpk`                    |
 | `-o, --output <PATH>` | stdout  | Write solution to file           |
 | `-f, --format <FMT>`  | `text`  | `text`, `json`, `yaml`           |

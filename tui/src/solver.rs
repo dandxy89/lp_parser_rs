@@ -4,10 +4,11 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::Write as _;
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use lp_parser_rs::interner::NameId;
-use lp_parser_rs::model::{ComparisonOp, Constraint, Variable};
+use lp_parser_rs::model::{ComparisonOp, Constraint, Variable, VariableKind};
 use lp_parser_rs::problem::LpProblem;
 
 /// Result returned after a successful solve.
@@ -357,6 +358,9 @@ pub fn rank_by_magnitude(values: &[(String, f64)]) -> Vec<usize> {
 /// order.
 pub(crate) struct BuiltModel {
     pub(crate) row_problem: highs::RowProblem,
+    /// Quadratic part of the primary objective as `(column, column, coefficient)`
+    /// of `coefficient * x_i * x_j`; empty for a linear objective.
+    objective_quadratic: Vec<(usize, usize, f64)>,
     pub(crate) variable_names: Vec<String>,
     sorted_var_ids: Vec<NameId>,
     objective_coefficients: HashMap<NameId, f64>,
@@ -371,6 +375,7 @@ struct SolveMetadata {
     variable_names: Vec<String>,
     sorted_var_ids: Vec<NameId>,
     objective_coefficients: HashMap<NameId, f64>,
+    objective_quadratic: Vec<(usize, usize, f64)>,
     row_constraint_names: Vec<String>,
     skipped_sos: usize,
 }
@@ -414,9 +419,52 @@ fn sorted_variable_ids(problem: &LpProblem) -> Vec<NameId> {
     sorted_var_ids
 }
 
-/// Build a `HiGHS` `RowProblem` from an `LpProblem`.
-pub(crate) fn build_highs_model(problem: &LpProblem) -> BuiltModel {
+/// Reject a model containing constraints `HiGHS` cannot express, rather than
+/// silently solving the model without them.
+///
+/// # Errors
+///
+/// Returns an error naming the first unsupported constraint.
+pub(crate) fn check_supported(problem: &LpProblem) -> Result<(), String> {
+    for (name_id, constraint) in &problem.constraints {
+        let kind = match constraint {
+            Constraint::Indicator { .. } => "indicator",
+            Constraint::Quadratic { .. } => "quadratic",
+            Constraint::General { .. } => "general",
+            Constraint::Standard { .. } | Constraint::SOS { .. } => continue,
+        };
+        return Err(format!("{kind} constraint '{}' is not supported by the HiGHS solver", problem.resolve(*name_id)));
+    }
+    Ok(())
+}
+
+/// Build a `HiGHS` `RowProblem` from an `LpProblem` with a linear objective.
+///
+/// Used by the queries (IIS, ranging, rays, presolve), which have no quadratic
+/// counterpart; only `solve_problem` passes a quadratic objective on.
+///
+/// # Errors
+///
+/// Returns an error when the model has a constraint `HiGHS` cannot express
+/// (see [`check_supported`]) or a quadratic objective.
+pub(crate) fn build_highs_model(problem: &LpProblem) -> Result<BuiltModel, String> {
+    let built = build_highs_qp_model(problem)?;
+    if !built.objective_quadratic.is_empty() {
+        return Err("the objective has quadratic terms, which only a full solve supports".to_owned());
+    }
+    Ok(built)
+}
+
+/// Build a `HiGHS` `RowProblem` from an `LpProblem`, keeping the primary
+/// objective's quadratic terms in [`BuiltModel::objective_quadratic`] for the
+/// caller to pass as a Hessian.
+///
+/// # Errors
+///
+/// As [`build_highs_model`], except that a quadratic objective is allowed.
+fn build_highs_qp_model(problem: &LpProblem) -> Result<BuiltModel, String> {
     debug_assert!(!problem.variables.is_empty(), "cannot build a HiGHS model with no variables");
+    check_supported(problem)?;
 
     // Sort variable NameIds by resolved name for deterministic ordering.
     let sorted_var_ids = sorted_variable_ids(problem);
@@ -440,7 +488,12 @@ pub(crate) fn build_highs_model(problem: &LpProblem) -> BuiltModel {
 
         let (is_integer, lower, upper) = variable_bounds(variable);
 
-        let col = row_problem.add_column_with_integrality(objective_coefficient, lower..=upper, is_integer);
+        // A semi-integer column is passed as such (HiGHS rejects one with an
+        // infinite upper bound, which surfaces as a model error rather than a
+        // silently relaxed solve).
+        let integrality =
+            if variable.is_some_and(|v| v.kind == VariableKind::SemiInteger) { highs::Integrality::SemiInteger } else { is_integer.into() };
+        let col = row_problem.add_column_with_integrality_kind(objective_coefficient, lower..=upper, integrality);
         columns.push(col);
     }
 
@@ -476,6 +529,9 @@ pub(crate) fn build_highs_model(problem: &LpProblem) -> BuiltModel {
             Constraint::SOS { .. } => {
                 skipped_sos += 1;
             }
+            Constraint::Indicator { .. } | Constraint::Quadratic { .. } | Constraint::General { .. } => {
+                unreachable!("rejected by check_supported")
+            }
         }
     }
 
@@ -486,7 +542,54 @@ pub(crate) fn build_highs_model(problem: &LpProblem) -> BuiltModel {
 
     debug_assert_eq!(columns.len(), variable_names.len(), "column count must match variable count");
 
-    BuiltModel { row_problem, variable_names, sorted_var_ids, objective_coefficients, row_constraint_names, skipped_sos, sense }
+    // The primary objective, as in `primary_objective_coefficients`.
+    let objective_quadratic: Vec<(usize, usize, f64)> = problem
+        .objectives
+        .iter()
+        .min_by_key(|(id, _)| problem.resolve(**id))
+        .map(|(_, objective)| {
+            objective
+                .quadratic
+                .iter()
+                .filter_map(|t| Some((*variable_index.get(&t.var1)?, *variable_index.get(&t.var2)?, t.coefficient)))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    Ok(BuiltModel {
+        row_problem,
+        objective_quadratic,
+        variable_names,
+        sorted_var_ids,
+        objective_coefficients,
+        row_constraint_names,
+        skipped_sos,
+        sense,
+    })
+}
+
+/// Hand a built problem to `HiGHS`, reporting a rejected model as an error.
+///
+/// The crate's `optimise` panics when `HiGHS` refuses the model, which it does
+/// for an infinite right-hand side, bound or coefficient — all of which the
+/// parser accepts — so every caller goes through the fallible variant.
+///
+/// # Errors
+///
+/// Returns an error when `HiGHS` rejects the model.
+pub(crate) fn pass_model(row_problem: highs::RowProblem, sense: highs::Sense) -> Result<highs::Model, String> {
+    row_problem
+        .try_optimise(sense)
+        .map_err(|status| format!("HiGHS rejected the model ({status:?}): check for an infinite right-hand side, bound or coefficient"))
+}
+
+/// Run `HiGHS` on `model`, reporting a solver error instead of panicking.
+///
+/// # Errors
+///
+/// Returns an error when `HiGHS` reports an error while solving.
+pub(crate) fn run_model(model: highs::Model) -> Result<highs::SolvedModel, String> {
+    model.try_solve().map_err(|status| format!("HiGHS failed to solve the model ({status:?})"))
 }
 
 /// Extract the solution from a solved `HiGHS` model into a `SolveResult`.
@@ -514,7 +617,12 @@ fn extract_solution(
                         let coefficient = metadata.objective_coefficients.get(&metadata.sorted_var_ids[i]).copied().unwrap_or(0.0);
                         value * coefficient
                     })
-                    .sum::<f64>(),
+                    .sum::<f64>()
+                    + metadata
+                        .objective_quadratic
+                        .iter()
+                        .map(|&(i, j, coefficient)| coefficient * solution.columns()[i] * solution.columns()[j])
+                        .sum::<f64>(),
             );
 
             let variables: Vec<(String, f64)> =
@@ -639,11 +747,73 @@ fn apply_options_file(model: &mut highs::Model) -> Result<Vec<String>, String> {
 ///
 /// Returns an error if the temp log path is not UTF-8, `highs.opt` cannot be
 /// read, or the solver log cannot be read back.
+#[cfg(test)]
 pub fn solve_problem(problem: &LpProblem) -> Result<SolveResult, String> {
     solve_problem_with(problem, &[])
 }
 
-/// [`solve_problem`], with `extra` `HiGHS` options applied on top.
+/// `solve_problem`, stopping early once `cancel` is set.
+///
+/// `HiGHS` polls its interrupt callbacks between simplex, interior-point and
+/// branch-and-bound iterations; the callback registered here answers them
+/// with the flag, so setting it ends the solve within an iteration or so. The
+/// result then carries the `ReachedInterrupt` status.
+///
+/// # Errors
+///
+/// As `solve_problem`, and when `HiGHS` will not register the callback.
+pub fn solve_problem_cancellable(problem: &LpProblem, cancel: &AtomicBool) -> Result<SolveResult, String> {
+    solve(problem, &[], Some(cancel))
+}
+
+/// The interrupt callback [`solve_problem_cancellable`] registers: it raises
+/// `HiGHS`'s interrupt flag once the caller's cancel flag is set.
+///
+/// `user_data` is the `AtomicBool` the solve was started with.
+unsafe extern "C" fn interrupt_on_cancel(
+    _callback_type: std::os::raw::c_int,
+    _message: *const std::os::raw::c_char,
+    _data_out: *const highs_sys::HighsCallbackDataOut,
+    data_in: *mut highs_sys::HighsCallbackDataIn,
+    user_data: *mut std::os::raw::c_void,
+) {
+    if user_data.is_null() || data_in.is_null() {
+        return;
+    }
+    // SAFETY: `user_data` is the `&AtomicBool` passed to `Highs_setCallback`
+    // in `solve`, which borrows it for the whole of the solve that calls this.
+    let cancel = unsafe { &*user_data.cast::<AtomicBool>() };
+    if cancel.load(Ordering::Relaxed) {
+        // SAFETY: `HiGHS` passes a valid, exclusively borrowed input struct to
+        // every interrupt callback; it was checked non-null above.
+        unsafe { (*data_in).user_interrupt = 1 };
+    }
+}
+
+/// Register [`interrupt_on_cancel`] on `model` for every interrupt point.
+fn register_cancel(model: &mut highs::Model, cancel: &AtomicBool) -> Result<(), String> {
+    let highs = model.as_mut_ptr();
+    let user_data = std::ptr::from_ref(cancel).cast_mut().cast::<std::os::raw::c_void>();
+    // SAFETY: `highs` is the live model `model` owns. `user_data` points at
+    // `cancel`, which the caller keeps borrowed until the solve has returned,
+    // and the callback only reads it through a shared reference.
+    let status = unsafe { highs_sys::Highs_setCallback(highs, Some(interrupt_on_cancel), user_data) };
+    if status == highs_sys::kHighsStatusError {
+        return Err("HiGHS would not register the cancel callback".to_owned());
+    }
+    for callback in
+        [highs_sys::kHighsCallbackSimplexInterrupt, highs_sys::kHighsCallbackIpmInterrupt, highs_sys::kHighsCallbackMipInterrupt]
+    {
+        // SAFETY: the same live model; starting a callback only sets a flag.
+        let status = unsafe { highs_sys::Highs_startCallback(highs, callback) };
+        if status == highs_sys::kHighsStatusError {
+            return Err(format!("HiGHS would not start interrupt callback {callback}"));
+        }
+    }
+    Ok(())
+}
+
+/// `solve_problem`, with `extra` `HiGHS` options applied on top.
 ///
 /// `extra` is applied *after* `highs.opt`, so a caller-supplied preset wins over
 /// a stale options file in the working directory. Keys reserved by the solve
@@ -651,8 +821,13 @@ pub fn solve_problem(problem: &LpProblem) -> Result<SolveResult, String> {
 ///
 /// # Errors
 ///
-/// As [`solve_problem`].
+/// As `solve_problem`.
 pub fn solve_problem_with(problem: &LpProblem, extra: &[(&str, &str)]) -> Result<SolveResult, String> {
+    solve(problem, extra, None)
+}
+
+/// The solve behind [`solve_problem_with`] and [`solve_problem_cancellable`].
+fn solve(problem: &LpProblem, extra: &[(&str, &str)], cancel: Option<&AtomicBool>) -> Result<SolveResult, String> {
     debug_assert!(!problem.variables.is_empty(), "cannot solve a problem with no variables");
     debug_assert!(
         extra.iter().all(|(key, _)| !RESERVED_OPTIONS.contains(key)),
@@ -660,8 +835,11 @@ pub fn solve_problem_with(problem: &LpProblem, extra: &[(&str, &str)]) -> Result
     );
 
     let build_start = Instant::now();
-    let model = build_highs_model(problem);
+    let model = build_highs_qp_model(problem)?;
     let build_time = build_start.elapsed();
+    if !model.objective_quadratic.is_empty() && problem.variables.values().any(|v| v.kind != VariableKind::Continuous) {
+        return Err("HiGHS cannot solve a quadratic objective with integer, semi-continuous or SOS variables (MIQP)".to_owned());
+    }
 
     // pid+sequence-named temp file + explicit cleanup instead of the
     // tempfile crate. The sequence number keeps concurrent solves in one process
@@ -669,12 +847,27 @@ pub fn solve_problem_with(problem: &LpProblem, extra: &[(&str, &str)]) -> Result
     let log_seq = SOLVE_LOG_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let log_path = std::env::temp_dir().join(format!("lp_diff_solver_{}_{log_seq}.log", std::process::id()));
 
-    let BuiltModel { row_problem, sense, variable_names, sorted_var_ids, objective_coefficients, row_constraint_names, skipped_sos } =
-        model;
+    let BuiltModel {
+        row_problem,
+        objective_quadratic,
+        sense,
+        variable_names,
+        sorted_var_ids,
+        objective_coefficients,
+        row_constraint_names,
+        skipped_sos,
+    } = model;
 
-    let metadata = SolveMetadata { variable_names, sorted_var_ids, objective_coefficients, row_constraint_names, skipped_sos };
+    let hessian = hessian_columns(&objective_quadratic, variable_names.len());
+    let metadata =
+        SolveMetadata { variable_names, sorted_var_ids, objective_coefficients, objective_quadratic, row_constraint_names, skipped_sos };
 
-    let mut highs_model = row_problem.optimise(sense);
+    let mut highs_model = pass_model(row_problem, sense)?;
+    if let Some(columns) = hessian {
+        highs_model
+            .try_pass_hessian(highs::HessianFormat::Triangular, columns)
+            .map_err(|e| format!("HiGHS rejected the quadratic objective: {e}"))?;
+    }
     highs_model.set_option("output_flag", true);
     highs_model.set_option("log_file", log_path.to_str().ok_or_else(|| "temp file path is not valid UTF-8".to_owned())?);
     // After `log_file`, so anything `HiGHS` rejects is written to the log the pane
@@ -689,8 +882,15 @@ pub fn solve_problem_with(problem: &LpProblem, extra: &[(&str, &str)]) -> Result
         applied_options.push(format!("{key} = {value}"));
     }
 
+    if let Some(cancel) = cancel {
+        register_cancel(&mut highs_model, cancel)?;
+    }
+
     let solve_start = Instant::now();
-    let solved = highs_model.solve();
+    let solved = run_model(highs_model).map_err(|error| match std::fs::remove_file(&log_path) {
+        Ok(()) => error,
+        Err(e) => format!("{error} (and failed to remove solver log {}: {e})", log_path.display()),
+    })?;
     let solve_time = solve_start.elapsed();
 
     let mut solver_log = std::fs::read_to_string(&log_path).map_err(|e| format!("failed to read solver log: {e}"))?;
@@ -710,6 +910,24 @@ pub fn solve_problem_with(problem: &LpProblem, extra: &[(&str, &str)]) -> Result
     result.extract_time = extract_start.elapsed();
 
     Ok(result)
+}
+
+/// Lower-triangular Hessian columns for `HiGHS`, whose objective is
+/// `c'x + 1/2 x'Qx`: a square term `c x_i^2` is `Q_ii = 2c` and a product
+/// `c x_i x_j` is `Q_ij = Q_ji = c`, stored once at row `max(i, j)` of column
+/// `min(i, j)`. `None` for a linear objective.
+fn hessian_columns(terms: &[(usize, usize, f64)], column_count: usize) -> Option<Vec<Vec<(usize, f64)>>> {
+    if terms.is_empty() {
+        return None;
+    }
+    let mut columns: Vec<std::collections::BTreeMap<usize, f64>> = vec![std::collections::BTreeMap::new(); column_count];
+    for &(i, j, coefficient) in terms {
+        debug_assert!(i < column_count && j < column_count, "quadratic term indices must name columns");
+        let (row, col) = (i.max(j), i.min(j));
+        let value = if i == j { 2.0 * coefficient } else { coefficient };
+        *columns[col].entry(row).or_insert(0.0) += value;
+    }
+    Some(columns.into_iter().map(|column| column.into_iter().collect()).collect())
 }
 
 /// Return `true` if a solve status string (as produced by `extract_solution`,
@@ -793,6 +1011,7 @@ pub fn collect_violations(slack_names: &[String], slack_values: &[f64], toleranc
 pub fn diagnose_infeasibility(problem: &LpProblem) -> Result<InfeasibilityDiagnosis, String> {
     debug_assert!(!problem.variables.is_empty(), "cannot diagnose a problem with no variables");
 
+    check_supported(problem)?;
     let start = Instant::now();
     let sorted_var_ids = sorted_variable_ids(problem);
     let variable_index: HashMap<NameId, usize> = {
@@ -873,11 +1092,11 @@ pub fn diagnose_infeasibility(problem: &LpProblem) -> Result<InfeasibilityDiagno
 
     debug_assert_eq!(slack_names.len(), slack_cols.len(), "slack names and columns must be in sync");
 
-    let mut highs_model = row_problem.optimise(highs::Sense::Minimise);
+    let mut highs_model = pass_model(row_problem, highs::Sense::Minimise)?;
     // Suppress solver output: the diagnosis runs while the TUI owns the terminal.
     highs_model.set_option("output_flag", false);
 
-    let solved = highs_model.solve();
+    let solved = run_model(highs_model)?;
     let status = solved.status();
     debug_assert!(
         matches!(status, highs::HighsModelStatus::Optimal),
@@ -1163,6 +1382,42 @@ empty =\n";
     }
 
     #[test]
+    fn test_infinite_model_data_is_an_error_not_a_panic() {
+        // Regression: the crate's `optimise` panics when HiGHS rejects the model,
+        // and the parser accepts infinite right-hand sides and bounds (infinite
+        // coefficients are now a parse error). Presolve ran on the UI thread, so it took the TUI down.
+        let sources = [
+            "Minimize\n obj: x + y\nSubject To\n c1: x + y >= inf\nEnd",
+            "Minimize\n obj: x\nSubject To\n c1: x >= 1\nBounds\n x >= inf\nEnd",
+        ];
+        for source in sources {
+            let problem = LpProblem::parse(source).expect("fixture must parse");
+            let error = solve_problem(&problem).expect_err("solve must refuse the model");
+            assert!(error.contains("HiGHS rejected"), "unexpected error for {source:?}: {error}");
+            assert!(diagnose_infeasibility(&problem).is_err(), "diagnosis must refuse {source:?}");
+            assert!(crate::highs_query::iis(&problem).is_err(), "IIS must refuse {source:?}");
+            assert!(crate::highs_query::ranging(&problem).is_err(), "ranging must refuse {source:?}");
+            assert!(crate::highs_query::unbounded_ray(&problem).is_err(), "ray must refuse {source:?}");
+            assert!(crate::highs_presolve::highs_presolve(&problem).is_err(), "presolve must refuse {source:?}");
+        }
+    }
+
+    /// A set cancel flag stops `HiGHS` at its first interrupt check, and an
+    /// unset one leaves the solve alone.
+    #[test]
+    fn a_cancelled_solve_is_interrupted() {
+        let source = include_str!("../../rust/resources/boeing1.lp");
+        let problem = LpProblem::parse(source).expect("fixture parses");
+
+        let result = solve_problem_cancellable(&problem, &AtomicBool::new(false)).expect("solves");
+        assert_eq!(result.status, "Optimal", "an unset flag must not interrupt");
+
+        let result = solve_problem_cancellable(&problem, &AtomicBool::new(true)).expect("an interrupted solve still returns");
+        assert_eq!(result.status, "ReachedInterrupt", "a set flag must interrupt the solve");
+        assert!(result.objective_value.is_none(), "an interrupted solve reports no objective");
+    }
+
+    #[test]
     fn test_options_of_each_type_are_accepted() {
         // One option per HiGHS setter type, since `set_option_value` discovers
         // the type by trying them in turn: string, double, int, bool.
@@ -1184,7 +1439,7 @@ empty =\n";
     fn test_an_options_file_key_that_highs_refuses_is_noted_not_fatal() {
         // A user's `highs.opt` is not under our control, so a bad line is
         // reported into the log rather than losing them the solve.
-        let mut model = build_highs_model(&tiny_lp()).row_problem.optimise(highs::Sense::Minimise);
+        let mut model = build_highs_model(&tiny_lp()).expect("tiny LP is supported").row_problem.optimise(highs::Sense::Minimise);
         model.make_quiet();
         assert!(set_option_value(&mut model, "made_up_option", "7").is_err(), "an unknown option must be refused");
         assert!(set_option_value(&mut model, "presolve", "off").is_ok(), "a known option must still apply afterwards");
@@ -1214,6 +1469,50 @@ empty =\n";
 
         let objective = result.objective_value.expect("an optimal solve has an objective");
         assert!((objective - 0.0).abs() < 1e-9, "an undeclared x is non-negative, got {objective}");
+    }
+
+    #[test]
+    fn test_a_semi_integer_variable_keeps_its_zero_branch() {
+        // x is 0 or an integer in [2, 10]. Minimising x reaches 0; solving it
+        // as a plain integer in [2, 10] would report 2 instead.
+        let source =
+            "Maximize\n obj: - x + 0.5 y\nSubject To\n c1: y - x <= 0.5\nBounds\n 2 <= x <= 10\nGenerals\n x\nSemi-Continuous\n x\nEnd";
+        let problem = LpProblem::parse(source).expect("must parse");
+        let result = solve_problem(&problem).expect("a bounded MIP must solve");
+        let objective = result.objective_value.expect("an optimal solve has an objective");
+        assert!((objective - 0.25).abs() < 1e-9, "x = 0, y = 0.5 is optimal, got {objective}");
+    }
+
+    #[test]
+    fn test_unsupported_constraints_are_refused_not_dropped() {
+        let problem =
+            LpProblem::parse("Minimize\n obj: x\nSubject To\n c1: x >= 1\n ind: b = 1 -> x <= 0\nBinaries\n b\nEnd").expect("must parse");
+        let error = solve_problem(&problem).expect_err("an indicator constraint must not be silently dropped");
+        assert!(error.contains("indicator constraint 'ind'"), "unexpected error: {error}");
+        assert!(diagnose_infeasibility(&problem).is_err(), "diagnosis must refuse too");
+
+        let general = LpProblem::parse("Minimize\n obj: r\nSubject To\n c1: x >= 1\nGeneral Constraints\n g: r = ABS ( x )\nEnd")
+            .expect("must parse");
+        let error = solve_problem(&general).expect_err("a general constraint must not be silently dropped");
+        assert!(error.contains("general constraint 'g'"), "unexpected error: {error}");
+    }
+
+    #[test]
+    fn test_a_quadratic_objective_is_solved_as_a_qp() {
+        // min x^2 + y^2 s.t. x + y >= 2: optimum x = y = 1, objective 2. Solving
+        // only the (empty) linear part would report 0.
+        let problem = LpProblem::parse("Minimize\n obj: [ 2 x ^ 2 + 2 y ^ 2 ] / 2\nSubject To\n c1: x + y >= 2\nEnd").expect("must parse");
+        let result = solve_problem(&problem).expect("a convex QP must solve");
+        let objective = result.objective_value.expect("an optimal solve has an objective");
+        assert!((objective - 2.0).abs() < 1e-6, "x = y = 1 is optimal, got {objective}");
+
+        // The queries have no quadratic counterpart and must say so.
+        let error = crate::highs_query::ranging(&problem).expect_err("ranging must refuse a QP");
+        assert!(error.contains("quadratic"), "unexpected error: {error}");
+
+        let with_constraint = LpProblem::parse("Minimize\n obj: x\nSubject To\n q: [ x ^ 2 ] <= 4\nEnd").expect("must parse");
+        let error = solve_problem(&with_constraint).expect_err("a quadratic constraint must not be dropped");
+        assert!(error.contains("quadratic constraint 'q'"), "unexpected error: {error}");
     }
 
     #[test]

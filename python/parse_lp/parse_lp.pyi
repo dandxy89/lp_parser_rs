@@ -1,3 +1,4 @@
+import os
 from typing import Any, Literal, TypedDict
 
 from typing_extensions import TypeAlias
@@ -15,24 +16,44 @@ class LpInvalidValueError(RuntimeError):
 # Type definitions for structured data
 Sense: TypeAlias = Literal["maximize", "minimize"]
 SenseInput: TypeAlias = Literal["maximize", "max", "minimize", "min"]
-VariableType: TypeAlias = Literal["binary", "integer", "general", "free", "semicontinuous"]
+VariableType: TypeAlias = Literal["continuous", "binary", "integer", "general", "free", "semicontinuous", "semiinteger"]
 Format: TypeAlias = Literal["lp", "mps"]
+StrPath: TypeAlias = str | os.PathLike[str]
 
 class Coefficient(TypedDict):
     name: str
     value: float
 
+class QuadraticTerm(TypedDict):
+    var1: str
+    var2: str
+    # The term's actual coefficient: an objective's LP `[ ... ] / 2` is applied.
+    coefficient: float
+
+class ObjectiveAttributes(TypedDict):
+    # Gurobi multi-objective attributes (`Minimize multi-objectives`); None when unset.
+    priority: int | None
+    weight: float | None
+    abs_tol: float | None
+    rel_tol: float | None
+
 class Objective(TypedDict):
     name: str
     coefficients: list[Coefficient]
+    quadratic: list[QuadraticTerm]
+    attributes: ObjectiveAttributes
 
 class VariableInfo(TypedDict):
     name: str
-    kind: str  # Continuous | General | Integer | Binary | SemiContinuous | Sos
-    lower: float | None  # None when unbounded below
-    upper: float | None  # None when unbounded above
+    kind: str  # Continuous | General | Integer | Binary | SemiContinuous | SemiInteger | Sos
+    # None means no bound was declared on that side, so the format default
+    # applies (in LP: lower 0, upper +inf). An explicit `free` bound is
+    # reported as -inf / +inf, not None.
+    lower: float | None
+    upper: float | None
 
 class LpDiffResult(TypedDict):
+    sense_changed: tuple[str, str] | None
     vars_added: list[str]
     vars_removed: list[str]
     vars_type_changed: list[tuple[str, str, str]]
@@ -44,12 +65,21 @@ class LpDiffResult(TypedDict):
     objs_modified: list[tuple[str, list[str]]]
     is_empty: bool
 
-class StandardConstraint(TypedDict):
-    name: str
-    type: Literal["standard"]
-    coefficients: list[Coefficient]
-    operator: str
-    rhs: float
+# "lazy" / "user_cut" for the CPLEX `Lazy Constraints` / `User Cuts` sections.
+ConstraintClass: TypeAlias = Literal["normal", "lazy", "user_cut"]
+
+# Functional syntax: `class` is a Python keyword.
+StandardConstraint = TypedDict(
+    "StandardConstraint",
+    {
+        "name": str,
+        "type": Literal["standard"],
+        "coefficients": list[Coefficient],
+        "operator": str,
+        "rhs": float,
+        "class": ConstraintClass,
+    },
+)
 
 class SOSConstraint(TypedDict):
     name: str
@@ -57,7 +87,48 @@ class SOSConstraint(TypedDict):
     sos_type: str
     weights: list[Coefficient]
 
-Constraint: TypeAlias = StandardConstraint | SOSConstraint
+# `b = 1 -> x + y <= 3`: the linear part holds whenever the (binary)
+# indicator variable equals indicator_value.
+IndicatorConstraint = TypedDict(
+    "IndicatorConstraint",
+    {
+        "name": str,
+        "type": Literal["indicator"],
+        "indicator_variable": str,
+        "indicator_value": Literal[0, 1],
+        "coefficients": list[Coefficient],
+        "operator": str,
+        "rhs": float,
+        "class": ConstraintClass,
+    },
+)
+
+# `x + [ x ^ 2 + 2 x * y ] <= 4`
+QuadraticConstraint = TypedDict(
+    "QuadraticConstraint",
+    {
+        "name": str,
+        "type": Literal["quadratic"],
+        "coefficients": list[Coefficient],
+        "quadratic": list[QuadraticTerm],
+        "operator": str,
+        "rhs": float,
+        "class": ConstraintClass,
+    },
+)
+
+# Gurobi `General Constraints`: `resultant = FUNCTION ( arguments )`.
+class GeneralConstraint(TypedDict):
+    name: str
+    type: Literal["general"]
+    resultant: str
+    function: Literal["MAX", "MIN", "ABS", "AND", "OR"]
+    arguments: list[str]
+    constant: float | None  # MAX / MIN only
+
+Constraint: TypeAlias = (
+    StandardConstraint | SOSConstraint | IndicatorConstraint | QuadraticConstraint | GeneralConstraint
+)
 
 # Analysis result dictionary as built in src/lib.rs; see analyze() docs for the
 # keys (summary, sparsity, variables, constraints, coefficients, issues).
@@ -66,11 +137,14 @@ ProblemAnalysis: TypeAlias = dict[str, Any]
 class LpParser:
     """Parser, modifier and writer for LP format files, powered by Rust."""
 
-    def __init__(self, lp_file: str) -> None:
+    def __init__(self, lp_file: StrPath) -> None:
         """Create a parser for the given LP file path, parsing it immediately.
 
         Raises FileNotFoundError if the path is not a file. The format is inferred
         from the extension; use `from_file` to override it.
+
+        I/O failures here and in the save/export methods raise OSError (or the
+        matching subclass, e.g. PermissionError); parse failures raise LpParseError.
         """
 
     @staticmethod
@@ -78,7 +152,7 @@ class LpParser:
         """Construct a parser from in-memory LP or MPS text, parsing it immediately."""
 
     @staticmethod
-    def from_file(path: str, format: Format | None = None) -> LpParser:
+    def from_file(path: StrPath, format: Format | None = None) -> LpParser:
         """Construct a parser from a file, parsing immediately; format inferred from the extension when omitted (.mps -> MPS)."""
 
     @property
@@ -106,9 +180,12 @@ class LpParser:
         """Mapping of variable name to variable information."""
 
     def parse(self) -> None:
-        """Re-read and re-parse the LP file, picking up changes made since construction."""
+        """Re-read and re-parse the source file in its original format (LP or MPS), picking up changes made since construction.
 
-    def to_csv(self, base_directory: str) -> None:
+        Raises LpInvalidValueError for a parser built with `from_string`, which has no file to re-read.
+        """
+
+    def to_csv(self, base_directory: StrPath) -> None:
         """Export the problem to CSV files in the given directory."""
 
     def to_lp_string(
@@ -116,19 +193,22 @@ class LpParser:
         *,
         include_problem_name: bool = True,
         max_line_length: int = 80,
-        decimal_precision: int = 6,
+        decimal_precision: int | None = None,
         include_section_spacing: bool = True,
     ) -> str:
-        """Write the current problem to an LP format string, with optional custom formatting."""
+        """Write the current problem to an LP format string, with optional custom formatting.
 
-    def save_to_file(self, filepath: str) -> None:
+        Raises LpInvalidValueError if max_line_length is 0.
+        """
+
+    def save_to_file(self, filepath: StrPath) -> None:
         """Save the current problem to an LP file."""
 
-    def to_mps_string(self, *, decimal_precision: int = 6, allow_multiple_objectives: bool = False) -> str:
+    def to_mps_string(self, *, decimal_precision: int | None = None, allow_multiple_objectives: bool = False) -> str:
         """Write the current problem to an MPS format string."""
 
     def save_to_mps(
-        self, filepath: str, *, decimal_precision: int = 6, allow_multiple_objectives: bool = False
+        self, filepath: StrPath, *, decimal_precision: int | None = None, allow_multiple_objectives: bool = False
     ) -> None:
         """Save the current problem to an MPS file."""
 
@@ -170,7 +250,14 @@ class LpParser:
         """Rename a variable across all objectives and constraints."""
 
     def update_variable_type(self, variable_name: str, var_type: VariableType) -> None:
-        """Change a variable's type (binary, integer, general, free, semicontinuous)."""
+        """Change a variable's type (case-insensitive).
+
+        - "continuous" changes only the kind; declared bounds are kept.
+        - "binary", "integer", "general", "semicontinuous", "semiinteger" set the kind and clear
+          declared bounds, so the format default applies (LP: lower 0).
+        - "free" is a bound, not a kind: the variable becomes continuous with
+          bounds (-inf, +inf).
+        """
 
     def remove_variable(self, variable_name: str) -> None:
         """Remove a variable from all objectives and constraints."""
@@ -179,7 +266,7 @@ class LpParser:
         """Set the problem name."""
 
     def set_sense(self, sense: SenseInput) -> None:
-        """Set the optimisation sense ('maximize' or 'minimize')."""
+        """Set the optimisation sense: 'maximize'/'max' or 'minimize'/'min' (case-insensitive)."""
 
     def analyze(
         self,
@@ -187,5 +274,9 @@ class LpParser:
         large_coeff_threshold: float = 1e9,
         small_coeff_threshold: float = 1e-9,
         ratio_threshold: float = 1e6,
+        large_rhs_threshold: float = 1e9,
     ) -> ProblemAnalysis:
-        """Perform comprehensive analysis of the problem (statistics, structure and issues)."""
+        """Perform comprehensive analysis of the problem (statistics, structure and issues).
+
+        Every threshold must be finite and positive, else LpInvalidValueError is raised.
+        """

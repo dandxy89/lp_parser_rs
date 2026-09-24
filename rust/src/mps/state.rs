@@ -6,8 +6,8 @@ use super::sections::{
 };
 use super::{MpsSection, RawCoefficient, RowType, SOSType};
 use crate::error::{LpParseError, LpResult};
-use crate::lexer::{ParseResult, RawConstraint};
-use crate::model::Sense;
+use crate::lexer::{ParseResult, RawConstraint, RawQuadraticTerm};
+use crate::model::{ConstraintClass, Sense};
 
 /// Accumulated mutable state for the MPS parser.
 ///
@@ -22,6 +22,8 @@ pub(super) struct MpsParseState<'input> {
     objective_rows: Vec<&'input str>,
     row_types: FxHashMap<&'input str, RowType>,
     row_order: Vec<&'input str>,
+    /// Rows declared in `LAZYCONS` / `USERCUTS` rather than `ROWS`.
+    row_classes: FxHashMap<&'input str, ConstraintClass>,
 
     // COLUMNS section state
     columns: ColumnsState<'input>,
@@ -44,6 +46,14 @@ pub(super) struct MpsParseState<'input> {
     current_sos_type: Option<SOSType>,
     current_sos_weights: Vec<RawCoefficient<'input>>,
 
+    // QUADOBJ / QMATRIX entries, already converted to term coefficients.
+    objective_quadratic: Vec<RawQuadraticTerm<'input>>,
+    // QCMATRIX entries per row (with the header's line number), in file order.
+    constraint_quadratic: Vec<(&'input str, usize, Vec<RawQuadraticTerm<'input>>)>,
+
+    // INDICATORS section data: (row, indicator column, active value, line)
+    indicators: Vec<(&'input str, &'input str, bool, usize)>,
+
     has_rows: bool,
     has_columns: bool,
 }
@@ -56,6 +66,7 @@ impl<'input> MpsParseState<'input> {
             objective_rows: Vec::new(),
             row_types: FxHashMap::default(),
             row_order: Vec::new(),
+            row_classes: FxHashMap::default(),
             columns: ColumnsState::default(),
             rhs_values: FxHashMap::default(),
             rhs_vector_label: None,
@@ -67,6 +78,9 @@ impl<'input> MpsParseState<'input> {
             current_sos_name: None,
             current_sos_type: None,
             current_sos_weights: Vec::new(),
+            objective_quadratic: Vec::new(),
+            constraint_quadratic: Vec::new(),
+            indicators: Vec::new(),
             has_rows: false,
             has_columns: false,
         }
@@ -101,6 +115,14 @@ impl<'input> MpsParseState<'input> {
                 self.section = Some(MpsSection::Rows);
                 self.has_rows = true;
             }
+            "LAZYCONS" => {
+                self.section = Some(MpsSection::LazyCons);
+                self.has_rows = true;
+            }
+            "USERCUTS" => {
+                self.section = Some(MpsSection::UserCuts);
+                self.has_rows = true;
+            }
             "COLUMNS" => {
                 self.section = Some(MpsSection::Columns);
                 self.has_columns = true;
@@ -117,6 +139,35 @@ impl<'input> MpsParseState<'input> {
             "SOS" => {
                 self.section = Some(MpsSection::Sos);
             }
+            "INDICATORS" => {
+                self.section = Some(MpsSection::Indicators);
+            }
+            "QUADOBJ" => {
+                self.section = Some(MpsSection::QuadObj);
+            }
+            "QMATRIX" => {
+                self.section = Some(MpsSection::QMatrix);
+            }
+            "QCMATRIX" => {
+                let row = line
+                    .split_whitespace()
+                    .nth(1)
+                    .ok_or_else(|| LpParseError::parse_error(line_num, "QCMATRIX header must name its row"))?;
+                match self.row_types.get(row) {
+                    Some(RowType::N) | None => {
+                        return Err(LpParseError::parse_error(
+                            line_num,
+                            format!("QCMATRIX references '{row}', which is not a constraint row"),
+                        ));
+                    }
+                    Some(_) => {}
+                }
+                if self.constraint_quadratic.iter().any(|(r, ..)| *r == row) {
+                    return Err(LpParseError::parse_error(line_num, format!("row '{row}' has more than one QCMATRIX section")));
+                }
+                self.constraint_quadratic.push((row, line_num, Vec::new()));
+                self.section = Some(MpsSection::QcMatrix);
+            }
             "ENDATA" => {
                 // Flush any pending SOS constraint
                 flush_sos_constraint(
@@ -127,7 +178,7 @@ impl<'input> MpsParseState<'input> {
                 );
                 return Ok(true);
             }
-            "LAZYCONS" | "USERCUTS" | "QUADOBJ" | "QCMATRIX" | "QMATRIX" | "PWLOBJ" | "INDICATORS" | "GENCONS" | "SCENARIOS" => {
+            "PWLOBJ" | "GENCONS" | "SCENARIOS" => {
                 eprintln!("Line {line_num}: unsupported section '{header}' will be skipped");
                 self.section = Some(MpsSection::Unsupported);
             }
@@ -152,6 +203,18 @@ impl<'input> MpsParseState<'input> {
             MpsSection::Rows => {
                 parse_rows_line(line, line_num, &mut self.objective_rows, &mut self.row_types, &mut self.row_order)?;
             }
+            MpsSection::LazyCons | MpsSection::UserCuts => {
+                let class = if current_section == MpsSection::LazyCons { ConstraintClass::Lazy } else { ConstraintClass::UserCut };
+                let objective_count = self.objective_rows.len();
+                let row_count = self.row_order.len();
+                parse_rows_line(line, line_num, &mut self.objective_rows, &mut self.row_types, &mut self.row_order)?;
+                if self.objective_rows.len() != objective_count {
+                    return Err(LpParseError::parse_error(line_num, "an objective (N) row cannot be a lazy constraint or user cut"));
+                }
+                if let Some(&row_name) = self.row_order.get(row_count) {
+                    self.row_classes.insert(row_name, class);
+                }
+            }
             MpsSection::Columns => {
                 self.columns.parse_line(line, line_num, &self.row_types, &self.objective_rows)?;
             }
@@ -174,6 +237,12 @@ impl<'input> MpsParseState<'input> {
             MpsSection::Name | MpsSection::Unsupported => {
                 // NAME is captured by extract_mps_name; unsupported sections are skipped.
             }
+            MpsSection::QuadObj | MpsSection::QMatrix | MpsSection::QcMatrix => {
+                self.parse_quadratic_line(current_section, line, line_num)?;
+            }
+            MpsSection::Indicators => {
+                self.parse_indicator_line(line, line_num)?;
+            }
             MpsSection::Sos => {
                 parse_sos_line(
                     line,
@@ -188,9 +257,76 @@ impl<'input> MpsParseState<'input> {
         Ok(())
     }
 
+    /// Parse one `column column value` line of a `QUADOBJ`, `QMATRIX` or
+    /// `QCMATRIX` section.
+    fn parse_quadratic_line(&mut self, current_section: MpsSection, line: &'input str, line_num: usize) -> LpResult<()> {
+        let fields: Vec<&str> = line.split_whitespace().take_while(|f| !f.starts_with('$')).collect();
+        let [var1, var2, value] = fields.as_slice() else {
+            if fields.is_empty() {
+                return Ok(());
+            }
+            return Err(LpParseError::parse_error(line_num, "quadratic entry must be 'column column value'"));
+        };
+        let value: f64 = value.parse().map_err(|_| LpParseError::invalid_number(*value, line_num))?;
+        if !value.is_finite() {
+            return Err(LpParseError::parse_error(line_num, format!("non-finite quadratic coefficient for '{var1}' * '{var2}'")));
+        }
+        // Convert a matrix entry into the coefficient of `var1 * var2`
+        // (entries of the same pair are summed when interned).
+        let coefficient = match current_section {
+            // Upper triangle of Q in 1/2 x'Qx: Q_ii -> Q_ii / 2 x_i^2,
+            // Q_ij (listed once) -> Q_ij x_i x_j.
+            MpsSection::QuadObj if var1 == var2 => value / 2.0,
+            // Full Q in 1/2 x'Qx: every entry contributes half.
+            MpsSection::QMatrix => value / 2.0,
+            // Off-diagonal QUADOBJ entries, and QCMATRIX (full Q in
+            // x'Qx), contribute in full.
+            _ => value,
+        };
+        let term = RawQuadraticTerm { var1, var2, coefficient };
+        if current_section == MpsSection::QcMatrix {
+            let Some((_, _, terms)) = self.constraint_quadratic.last_mut() else {
+                unreachable!("the QCMATRIX header registers its row");
+            };
+            terms.push(term);
+        } else {
+            self.objective_quadratic.push(term);
+        }
+        Ok(())
+    }
+
+    /// Parse one `IF row column value` line of the `INDICATORS` section.
+    fn parse_indicator_line(&mut self, line: &'input str, line_num: usize) -> LpResult<()> {
+        let fields: Vec<&str> = line.split_whitespace().take_while(|f| !f.starts_with('$')).collect();
+        match fields.as_slice() {
+            [] => {}
+            [kind, row, column, value] if kind.eq_ignore_ascii_case("IF") => {
+                let active_value = match *value {
+                    "1" => true,
+                    "0" => false,
+                    other => {
+                        return Err(LpParseError::parse_error(line_num, format!("indicator value must be 0 or 1, got '{other}'")));
+                    }
+                };
+                match self.row_types.get(row) {
+                    Some(RowType::N) | None => {
+                        return Err(LpParseError::parse_error(
+                            line_num,
+                            format!("INDICATORS references '{row}', which is not a constraint row"),
+                        ));
+                    }
+                    Some(_) => {}
+                }
+                self.indicators.push((row, column, active_value, line_num));
+            }
+            _ => {
+                return Err(LpParseError::parse_error(line_num, "INDICATORS line must be 'IF row column value'"));
+            }
+        }
+        Ok(())
+    }
     /// Validate required sections and build the final [`ParseResult`].
     fn build_result(mut self) -> LpResult<ParseResult<'input>> {
-        debug_assert!(self.has_rows || !self.has_columns, "COLUMNS without ROWS is inconsistent state");
         if self.columns.in_integer_block {
             eprintln!("unclosed INTORG marker block at end of MPS input; trailing columns treated as integer");
         }
@@ -209,7 +345,18 @@ impl<'input> MpsParseState<'input> {
         }
 
         let objectives = build_objectives(&self.objective_rows, &self.columns, &self.rhs_values);
-        let constraints = build_constraints(&self.row_types, &self.row_order, &self.columns, &self.rhs_values, &self.range_values);
+        let mut constraints =
+            build_constraints(&self.row_types, &self.row_order, &self.row_classes, &self.columns, &self.rhs_values, &self.range_values);
+        apply_indicators(&mut constraints, &self.indicators, &self.range_values)?;
+        apply_constraint_quadratics(&mut constraints, self.constraint_quadratic, &self.range_values)?;
+        let mut objectives = objectives;
+        if !self.objective_quadratic.is_empty() {
+            // MPS has one objective row; its quadratic part belongs to it.
+            let Some(first) = objectives.first_mut() else {
+                unreachable!("build_objectives always yields at least one objective");
+            };
+            first.quadratic = self.objective_quadratic;
+        }
         let bounds = build_bounds(
             &self.bounds_state.accumulators,
             &self.bounds_state.order,
@@ -230,15 +377,96 @@ impl<'input> MpsParseState<'input> {
         Ok(ParseResult {
             sense: self.sense,
             objectives,
-            constraints,
+            constraints: constraints.normal,
             bounds,
             generals: Vec::new(),
             integers: self.columns.integer_vars,
             binaries: self.bounds_state.binary_vars,
             semi_continuous: self.bounds_state.semi_continuous_vars,
             sos: self.sos_constraints,
+            lazy_constraints: constraints.lazy,
+            user_cuts: constraints.user_cuts,
         })
     }
+}
+
+/// Turn each row named in the `INDICATORS` section into an indicator
+/// constraint whose linear part is that row.
+///
+/// # Errors
+///
+/// Returns an error for a ranged indicator row (a range is two rows, and an
+/// indicator constrains exactly one) or a row given two indicators.
+fn apply_indicators<'input>(
+    constraints: &mut super::builders::ClassifiedConstraints<'input>,
+    indicators: &[(&'input str, &'input str, bool, usize)],
+    range_values: &FxHashMap<&'input str, f64>,
+) -> LpResult<()> {
+    let mut seen: FxHashSet<&str> = FxHashSet::default();
+    for &(row, column, active_value, line_num) in indicators {
+        if !seen.insert(row) {
+            return Err(LpParseError::parse_error(line_num, format!("row '{row}' has more than one indicator")));
+        }
+        if range_values.contains_key(row) {
+            return Err(LpParseError::parse_error(line_num, format!("indicator row '{row}' cannot have a RANGES entry")));
+        }
+        let slot = [&mut constraints.normal, &mut constraints.lazy, &mut constraints.user_cuts]
+            .into_iter()
+            .flat_map(|bucket| bucket.iter_mut())
+            .find(|c| c.name() == row)
+            .ok_or_else(|| LpParseError::parse_error(line_num, format!("INDICATORS references unknown row '{row}'")))?;
+        let RawConstraint::Standard { name, coefficients, operator, rhs, byte_offset } = slot else {
+            return Err(LpParseError::parse_error(line_num, format!("row '{row}' cannot take an indicator")));
+        };
+        *slot = RawConstraint::Indicator {
+            name: std::mem::take(name),
+            variable: column,
+            active_value,
+            coefficients: std::mem::take(coefficients),
+            operator: *operator,
+            rhs: *rhs,
+            byte_offset: *byte_offset,
+        };
+    }
+    Ok(())
+}
+
+/// Turn each row with a `QCMATRIX` section into a quadratic constraint.
+///
+/// # Errors
+///
+/// Returns an error for a ranged row, a row that is also an indicator, or a
+/// `QCMATRIX` section with no entries.
+fn apply_constraint_quadratics<'input>(
+    constraints: &mut super::builders::ClassifiedConstraints<'input>,
+    quadratics: Vec<(&'input str, usize, Vec<RawQuadraticTerm<'input>>)>,
+    range_values: &FxHashMap<&'input str, f64>,
+) -> LpResult<()> {
+    for (row, line_num, terms) in quadratics {
+        if terms.is_empty() {
+            return Err(LpParseError::parse_error(line_num, format!("QCMATRIX section for row '{row}' has no entries")));
+        }
+        if range_values.contains_key(row) {
+            return Err(LpParseError::parse_error(line_num, format!("quadratic row '{row}' cannot have a RANGES entry")));
+        }
+        let slot = [&mut constraints.normal, &mut constraints.lazy, &mut constraints.user_cuts]
+            .into_iter()
+            .flat_map(|bucket| bucket.iter_mut())
+            .find(|c| c.name() == row)
+            .ok_or_else(|| LpParseError::parse_error(line_num, format!("QCMATRIX references unknown row '{row}'")))?;
+        let RawConstraint::Standard { name, coefficients, operator, rhs, byte_offset } = slot else {
+            return Err(LpParseError::parse_error(line_num, format!("row '{row}' cannot be both an indicator and quadratic")));
+        };
+        *slot = RawConstraint::Quadratic {
+            name: std::mem::take(name),
+            coefficients: std::mem::take(coefficients),
+            quadratic: terms,
+            operator: *operator,
+            rhs: *rhs,
+            byte_offset: *byte_offset,
+        };
+    }
+    Ok(())
 }
 
 /// Parse an OBJSENSE value (`MIN`/`MINIMIZE`/`MAX`/`MAXIMIZE`, case-insensitive).
@@ -262,7 +490,6 @@ pub fn parse_mps(input: &str) -> LpResult<ParseResult<'_>> {
     if input.trim().is_empty() {
         return Err(LpParseError::parse_error(0, "MPS input is empty"));
     }
-    debug_assert!(input.contains('\n'), "parse_mps input must contain at least one newline (multi-line MPS expected)");
 
     let mut state = MpsParseState::new();
 
@@ -278,17 +505,38 @@ pub fn parse_mps(input: &str) -> LpResult<ParseResult<'_>> {
         let first_char = line.as_bytes().first().copied();
         let is_section_header = first_char.is_some_and(|c| !c.is_ascii_whitespace());
 
-        if is_section_header {
-            if state.process_section_header(line, line_num)? {
-                break;
-            }
-            continue;
+        let reached_end = if is_section_header {
+            state.process_section_header(line, line_num)
+        } else {
+            state.dispatch_data_line(line, line_num).map(|()| false)
+        };
+        if reached_end.map_err(|err| locate_error(err, input, line))? {
+            break;
         }
-
-        state.dispatch_data_line(line, line_num)?;
     }
 
     state.build_result()
+}
+
+/// Re-anchor an error raised while parsing `line` at a byte offset in `input`.
+///
+/// The section parsers only know the 1-based line number and report it in the
+/// `position` field; the public contract of that field is a byte offset (as
+/// for LP input), and a parse error gains line/column source context from it.
+fn locate_error(err: LpParseError, input: &str, line: &str) -> LpParseError {
+    // `line` is a subslice of `input` (from `str::lines`), so the pointer
+    // difference is its byte offset.
+    let line_start = (line.as_ptr() as usize).wrapping_sub(input.as_ptr() as usize);
+    debug_assert!(line_start + line.len() <= input.len(), "line must be a subslice of input");
+
+    match err {
+        LpParseError::ParseError { message, .. } => LpParseError::parse_error(line_start, message).with_source(input),
+        LpParseError::InvalidNumber { value, .. } => {
+            let offset = line.find(value.as_str()).unwrap_or(0);
+            LpParseError::invalid_number(value, line_start + offset)
+        }
+        other => other,
+    }
 }
 
 /// Extract the problem name from MPS input (the NAME section line).
@@ -303,9 +551,6 @@ pub fn parse_mps(input: &str) -> LpResult<ParseResult<'_>> {
 /// ```
 #[must_use]
 pub fn extract_mps_name(input: &str) -> Option<String> {
-    debug_assert!(!input.is_empty(), "extract_mps_name called with empty input");
-    debug_assert!(input.is_ascii() || input.is_char_boundary(0), "input must be valid UTF-8");
-
     for line in input.lines() {
         if line.trim().is_empty() || line.starts_with('*') {
             continue;

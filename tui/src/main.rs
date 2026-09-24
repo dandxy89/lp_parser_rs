@@ -15,12 +15,14 @@
 
 mod app;
 mod cli_output;
+mod clipboard;
 mod detail_model;
 mod detail_text;
 mod diagnostics;
 mod diff_model;
 mod event;
 mod export;
+mod format;
 mod highs_presolve;
 mod highs_query;
 mod input;
@@ -40,8 +42,8 @@ mod widgets;
 
 use std::io::{self, Write as _, stderr};
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use clap::Parser;
@@ -103,7 +105,7 @@ struct Cli {
 /// `--theme` argument values.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
 enum ThemeArg {
-    /// Detect from `COLORFGBG`, falling back to dark
+    /// Detect from `COLORFGBG`, then by asking the terminal, falling back to dark
     Auto,
     Dark,
     Light,
@@ -114,8 +116,10 @@ impl ThemeArg {
     ///
     /// `NO_COLOR` (<https://no-color.org>) forces monochrome, but only when the
     /// user left `--theme` at its default: an explicit `--theme dark|light` is
-    /// an intentional override and wins.
-    fn resolve(self) -> theme::ThemeMode {
+    /// an intentional override and wins. Without `COLORFGBG`, the terminal is
+    /// asked for its background colour (OSC 11) when `query_terminal` allows —
+    /// not for `--summary`, which draws nothing and may be piped.
+    fn resolve(self, query_terminal: bool) -> theme::ThemeMode {
         match self {
             Self::Dark => theme::ThemeMode::Dark,
             Self::Light => theme::ThemeMode::Light,
@@ -126,11 +130,17 @@ impl ThemeArg {
                 std::env::var("COLORFGBG")
                     .ok()
                     .and_then(|value| theme::detect_mode_from_colorfgbg(&value))
+                    .or_else(|| query_terminal.then(|| theme::query_background_mode(BACKGROUND_QUERY_TIMEOUT)).flatten())
                     .unwrap_or(theme::ThemeMode::Dark)
             }
         }
     }
 }
+
+/// How long to wait for the terminal to report its background colour. A
+/// terminal that answers at all answers within a few milliseconds; one that
+/// does not must not hold up the start.
+const BACKGROUND_QUERY_TIMEOUT: Duration = Duration::from_millis(100);
 
 /// Compile the `--rename` pairs into a list of `(Regex, replacement)` tuples.
 ///
@@ -153,6 +163,40 @@ fn build_rename_rules(raw: &[String]) -> Result<Vec<(regex::Regex, String)>, Box
 /// Needed by suspend/resume and the panic hook, both of which must mirror the
 /// push/pop; a global saves threading it through the event loop.
 static KEYBOARD_ENHANCED: AtomicBool = AtomicBool::new(false);
+
+/// The most recent panic on a background thread, recorded by the panic hook.
+///
+/// A worker's panic must not touch the terminal the main loop is still drawing
+/// on, so the hook parks the message here instead of printing it, and the
+/// channel-disconnect handlers fold it into the error they show.
+static WORKER_PANIC: Mutex<Option<String>> = Mutex::new(None);
+
+/// The error to show when `what`'s worker thread hung up without a result,
+/// naming the panic that killed it when the hook recorded one.
+pub(crate) fn disconnected(what: &str) -> String {
+    debug_assert!(!what.is_empty(), "a disconnected worker must be named");
+    // A poisoned lock only means another thread panicked while holding it; the
+    // message it guards is still a plain `Option<String>`.
+    let panic = WORKER_PANIC.lock().unwrap_or_else(std::sync::PoisonError::into_inner).take();
+    match panic {
+        Some(message) => format!("{what} thread panicked: {message}"),
+        None => format!("{what} thread disconnected"),
+    }
+}
+
+/// Describe a panic as `message (at file:line)` for [`WORKER_PANIC`].
+fn describe_panic(info: &std::panic::PanicHookInfo<'_>) -> String {
+    let payload = info.payload();
+    let message = payload
+        .downcast_ref::<&str>()
+        .copied()
+        .or_else(|| payload.downcast_ref::<String>().map(String::as_str))
+        .unwrap_or("non-string panic payload");
+    match info.location() {
+        Some(location) => format!("{message} (at {}:{})", location.file(), location.line()),
+        None => message.to_owned(),
+    }
+}
 
 /// Suspend the process (Ctrl+Z) and resume cleanly.
 ///
@@ -193,7 +237,17 @@ fn run_event_loop<W: io::Write>(
     events: &EventHandler,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut needs_redraw = true;
+    // The capture state the terminal is in, so a toggle is applied once.
+    let mut mouse_captured = true;
     while !app.should_quit {
+        if app.mouse_capture != mouse_captured {
+            if app.mouse_capture {
+                execute!(terminal.backend_mut(), EnableMouseCapture)?;
+            } else {
+                execute!(terminal.backend_mut(), DisableMouseCapture)?;
+            }
+            mouse_captured = app.mouse_capture;
+        }
         if needs_redraw {
             terminal.draw(|frame| ui::draw(frame, app))?;
         }
@@ -205,6 +259,9 @@ fn run_event_loop<W: io::Write>(
                 #[cfg(unix)]
                 if key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) && key.code == crossterm::event::KeyCode::Char('z') {
                     suspend(terminal)?;
+                    // Resuming turns capture back on; the check at the top of
+                    // the loop turns it off again if the user had it off.
+                    mouse_captured = true;
                     needs_redraw = true;
                     continue;
                 }
@@ -226,12 +283,13 @@ fn run_event_loop<W: io::Write>(
                 // still painted.
                 let was_animating = app.is_animating();
 
-                // Clear yank flash after 1.5 seconds.
+                // Clear the flash after 1.5 seconds — unless it reports an
+                // error, which stays until the next key press.
                 if let Some(flash_time) = app.yank.flash
+                    && app.yank.expires()
                     && flash_time.elapsed() >= Duration::from_millis(1500)
                 {
-                    app.yank.flash = None;
-                    app.yank.message.clear();
+                    app.yank.clear();
                 }
 
                 app.poll_solve();
@@ -248,7 +306,7 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let args = Cli::parse();
 
     // Fix the palette before any cached lines are built against it.
-    theme::init_theme(args.theme.resolve());
+    theme::init_theme(args.theme.resolve(!args.summary));
 
     // Validate file existence at the CLI boundary before doing any work.
     if !args.file1.exists() {
@@ -400,8 +458,18 @@ fn launch_tui(mut app: App, watch: bool) -> Result<(), Box<dyn std::error::Error
     // Errors are deliberately ignored here: we are already panicking and must not
     // double-panic, so each restoration step is attempted independently to ensure
     // one failure cannot skip the rest.
+    //
+    // The hook is process-global, but only the main thread owns the terminal: a
+    // background worker's panic is recorded for the UI to report (its channel
+    // disconnects) rather than tearing the screen down under a live main loop.
     let original_hook = std::panic::take_hook();
+    let main_thread = std::thread::current().id();
     std::panic::set_hook(Box::new(move |panic_info| {
+        if std::thread::current().id() != main_thread {
+            let message = describe_panic(panic_info);
+            *WORKER_PANIC.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = Some(message);
+            return;
+        }
         if KEYBOARD_ENHANCED.load(Ordering::Relaxed) {
             let _ = execute!(io::stderr(), PopKeyboardEnhancementFlags);
         }
@@ -437,4 +505,19 @@ fn launch_tui(mut app: App, watch: bool) -> Result<(), Box<dyn std::error::Error
     paste?;
     cursor?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_recorded_worker_panic_is_reported_once_by_the_disconnect_error() {
+        // Regression: a worker panic used to run the process-global hook, which
+        // restored the terminal while the main loop kept drawing. The hook now
+        // parks the message for the channel-disconnect error to report instead.
+        *WORKER_PANIC.lock().expect("test lock") = Some("boom (at x.rs:1)".to_owned());
+        assert_eq!(disconnected("Solver"), "Solver thread panicked: boom (at x.rs:1)");
+        assert_eq!(disconnected("Solver"), "Solver thread disconnected", "the message is consumed by the first report");
+    }
 }

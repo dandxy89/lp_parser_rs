@@ -90,6 +90,25 @@ pub enum LpSolversCompatError {
         /// The unsupported operator (< or >).
         operator: String,
     },
+
+    /// The objective has quadratic terms, which the lp-solvers LP format
+    /// cannot express; solving only its linear part would be a different model.
+    #[error("objective '{objective}' has quadratic terms, which lp-solvers does not support")]
+    QuadraticObjective {
+        /// The name of the quadratic objective.
+        objective: String,
+    },
+
+    /// A constraint kind the lp-solvers LP format cannot express (an
+    /// indicator, quadratic or general constraint). Dropping it would solve a
+    /// different model, so conversion fails instead.
+    #[error("{kind} constraint '{constraint}' is not supported by lp-solvers")]
+    UnsupportedConstraint {
+        /// The name of the unsupported constraint.
+        constraint: String,
+        /// The kind of constraint (e.g. "indicator").
+        kind: &'static str,
+    },
 }
 
 /// Warnings about features that are not fully supported but can be approximated.
@@ -106,6 +125,12 @@ pub enum LpSolversCompatWarning {
         /// The name of the semi-continuous variable.
         name: String,
     },
+
+    /// A semi-integer variable is being treated as a plain integer variable.
+    SemiIntegerApproximated {
+        /// The name of the semi-integer variable.
+        name: String,
+    },
 }
 
 impl fmt::Display for LpSolversCompatWarning {
@@ -116,6 +141,9 @@ impl fmt::Display for LpSolversCompatWarning {
             }
             Self::SemiContinuousApproximated { name } => {
                 write!(f, "semi-continuous variable '{name}' is not directly supported; treating as continuous")
+            }
+            Self::SemiIntegerApproximated { name } => {
+                write!(f, "semi-integer variable '{name}' is not directly supported; treating as integer")
             }
         }
     }
@@ -134,7 +162,8 @@ impl AsVariable for VariableAdapter<'_> {
     }
 
     fn is_integer(&self) -> bool {
-        self.variable.kind.is_integer()
+        // A semi-integer is approximated as a plain integer (with a warning).
+        self.variable.kind.is_integer() || self.variable.kind == VariableKind::SemiInteger
     }
 
     fn lower_bound(&self) -> f64 {
@@ -177,7 +206,7 @@ impl WriteToLpFileFormat for ExpressionAdapter<'_> {
                 self.interner.resolve(coeff.name),
                 coeff.value,
                 i == 0,
-                COEFFICIENT_PRECISION,
+                Some(COEFFICIENT_PRECISION),
             )?;
         }
         f.write_str(&out)
@@ -235,6 +264,9 @@ impl<'a> Iterator for ConstraintIterator<'a> {
                     });
                 }
                 Some(Constraint::SOS { .. }) => {} // Skip SOS constraints
+                Some(Constraint::Indicator { .. } | Constraint::Quadratic { .. } | Constraint::General { .. }) => {
+                    unreachable!("indicator, quadratic and general constraints are rejected during validation")
+                }
                 None => return None,
             }
         }
@@ -258,6 +290,8 @@ impl<'a> LpSolversCompat<'a> {
     /// - The Problem has multiple objectives
     /// - The Problem has no objectives
     /// - Any constraint uses strict inequalities (`<` or `>`)
+    /// - Any constraint is an indicator, quadratic or general constraint
+    /// - The objective has quadratic terms
     ///
     /// # Panics
     ///
@@ -272,6 +306,9 @@ impl<'a> LpSolversCompat<'a> {
         }
 
         let objective = problem.objectives.values().next().expect("objective must exist: length check passed");
+        if !objective.quadratic.is_empty() {
+            return Err(LpSolversCompatError::QuadraticObjective { objective: problem.interner.resolve(objective.name).to_string() });
+        }
         let mut warnings = Vec::new();
 
         // Validate constraints (no strict inequalities)
@@ -288,14 +325,34 @@ impl<'a> LpSolversCompat<'a> {
                 Constraint::SOS { name, .. } => {
                     warnings.push(LpSolversCompatWarning::SosConstraintIgnored { name: problem.interner.resolve(*name).to_string() });
                 }
+                Constraint::Indicator { name, .. } => {
+                    return Err(LpSolversCompatError::UnsupportedConstraint {
+                        constraint: problem.interner.resolve(*name).to_string(),
+                        kind: "indicator",
+                    });
+                }
+                Constraint::Quadratic { name, .. } => {
+                    return Err(LpSolversCompatError::UnsupportedConstraint {
+                        constraint: problem.interner.resolve(*name).to_string(),
+                        kind: "quadratic",
+                    });
+                }
+                Constraint::General { name, .. } => {
+                    return Err(LpSolversCompatError::UnsupportedConstraint {
+                        constraint: problem.interner.resolve(*name).to_string(),
+                        kind: "general",
+                    });
+                }
             }
         }
 
         // Check for semi-continuous variables
         for variable in problem.variables.values() {
-            if variable.kind == VariableKind::SemiContinuous {
-                warnings
-                    .push(LpSolversCompatWarning::SemiContinuousApproximated { name: problem.interner.resolve(variable.name).to_string() });
+            let name = || problem.interner.resolve(variable.name).to_string();
+            match variable.kind {
+                VariableKind::SemiContinuous => warnings.push(LpSolversCompatWarning::SemiContinuousApproximated { name: name() }),
+                VariableKind::SemiInteger => warnings.push(LpSolversCompatWarning::SemiIntegerApproximated { name: name() }),
+                _ => {}
             }
         }
 
@@ -351,7 +408,14 @@ mod tests {
         let c1_id = p.intern("c1");
         p.objectives.insert(
             obj_id,
-            Objective { name: obj_id, coefficients: vec![Coefficient { name: x_id, value: 2.0 }], constant: 0.0, byte_offset: None },
+            Objective {
+                name: obj_id,
+                coefficients: vec![Coefficient { name: x_id, value: 2.0 }],
+                constant: 0.0,
+                quadratic: Vec::new(),
+                attributes: crate::model::ObjectiveAttributes::default(),
+                byte_offset: None,
+            },
         );
         p.constraints.insert(
             c1_id,
@@ -390,7 +454,17 @@ mod tests {
         // Multiple objectives
         let mut p = simple_problem();
         let obj2_id = p.intern("obj2");
-        p.objectives.insert(obj2_id, Objective { name: obj2_id, coefficients: vec![], constant: 0.0, byte_offset: None });
+        p.objectives.insert(
+            obj2_id,
+            Objective {
+                name: obj2_id,
+                coefficients: vec![],
+                constant: 0.0,
+                quadratic: Vec::new(),
+                attributes: crate::model::ObjectiveAttributes::default(),
+                byte_offset: None,
+            },
+        );
         assert!(matches!(LpSolversCompat::try_new(&p), Err(LpSolversCompatError::MultipleObjectives { count: 2 })));
 
         // Strict inequalities
@@ -419,6 +493,13 @@ mod tests {
         p.variables.insert(y_id, Variable::new(y_id).with_var_type(VariableType::SemiContinuous));
         let c = LpSolversCompat::try_new(&p).unwrap();
         assert!(matches!(&c.warnings()[0], LpSolversCompatWarning::SemiContinuousApproximated { .. }));
+
+        // Semi-integer
+        let mut p = simple_problem();
+        let y_id = p.intern("y");
+        p.variables.insert(y_id, Variable::new(y_id).with_var_type(VariableType::SemiInteger));
+        let c = LpSolversCompat::try_new(&p).unwrap();
+        assert!(matches!(&c.warnings()[0], LpSolversCompatWarning::SemiIntegerApproximated { .. }));
     }
 
     #[test]
@@ -433,6 +514,8 @@ mod tests {
             (VariableType::DoubleBound(-10.0, 10.0), -10.0, 10.0, false),
             // Semi-continuous is approximated as a continuous non-negative variable.
             (VariableType::SemiContinuous, 0.0, f64::INFINITY, false),
+            // Semi-integer is approximated as a plain integer variable.
+            (VariableType::SemiInteger, 0.0, f64::INFINITY, true),
             // SOS membership carries no bounds of its own, so the format default
             // of [0, +inf) applies — the same treatment the MPS writer gives an
             // SOS column with no BOUNDS entry. Only an explicit `free` makes a

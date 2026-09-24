@@ -52,6 +52,44 @@ impl LpProblem {
                         const_writer.write_record(vals)?;
                     }
                 }
+                Constraint::Indicator { variable, active_value, coefficients, operator: op, rhs, .. } => {
+                    // The indicator condition travels in the constraint type.
+                    let kind = format!("Indicator({}={})", self.interner.resolve(*variable), u8::from(*active_value));
+                    let rhs_str = rhs.to_string();
+                    for c in coefficients {
+                        let var_name = self.interner.resolve(c.name);
+                        let coeff = c.value.to_string();
+                        let vals: [&[u8]; 7] =
+                            [name_bytes, kind.as_bytes(), var_name.as_bytes(), coeff.as_bytes(), op.as_ref(), rhs_str.as_bytes(), b""];
+                        const_writer.write_record(vals)?;
+                    }
+                }
+                Constraint::Quadratic { coefficients, quadratic, operator: op, rhs, .. } => {
+                    let rhs_str = rhs.to_string();
+                    let linear = coefficients.iter().map(|c| (self.interner.resolve(c.name).to_string(), c.value));
+                    let products = quadratic
+                        .iter()
+                        .map(|t| (format!("{}*{}", self.interner.resolve(t.var1), self.interner.resolve(t.var2)), t.coefficient));
+                    for (var_name, value) in linear.chain(products) {
+                        let coeff = value.to_string();
+                        let vals: [&[u8]; 7] =
+                            [name_bytes, b"Quadratic", var_name.as_bytes(), coeff.as_bytes(), op.as_ref(), rhs_str.as_bytes(), b""];
+                        const_writer.write_record(vals)?;
+                    }
+                }
+                Constraint::General { resultant, function, .. } => {
+                    // One row per variable: the resultant, then the arguments;
+                    // the function (and any constant) travels in the type.
+                    let kind = match function.constant() {
+                        Some(constant) => format!("General({}, {constant})", function.keyword()),
+                        None => format!("General({})", function.keyword()),
+                    };
+                    for variable in std::iter::once(resultant).chain(function.variables()) {
+                        let var_name = self.interner.resolve(*variable);
+                        let vals: [&[u8]; 7] = [name_bytes, kind.as_bytes(), var_name.as_bytes(), b"", b"", b"", b""];
+                        const_writer.write_record(vals)?;
+                    }
+                }
                 Constraint::SOS { sos_type, weights, .. } => {
                     for c in weights {
                         let var_name = self.interner.resolve(c.name);
@@ -76,6 +114,12 @@ impl LpProblem {
                 let var_name = self.interner.resolve(coef.name);
                 let coeff = coef.value.to_string();
                 obj_writer.write_record([name.as_bytes(), var_name.as_bytes(), coeff.as_bytes()])?;
+            }
+            // A quadratic term is written as `x*y` with its actual coefficient.
+            for term in &objective.quadratic {
+                let product = format!("{}*{}", self.interner.resolve(term.var1), self.interner.resolve(term.var2));
+                let coeff = term.coefficient.to_string();
+                obj_writer.write_record([name.as_bytes(), product.as_bytes(), coeff.as_bytes()])?;
             }
         }
         obj_writer.flush()?;
@@ -198,6 +242,8 @@ End
             name: obj_id,
             coefficients: vec![Coefficient { name: var_id, value: 1.0 }],
             constant: 0.0,
+            quadratic: Vec::new(),
+            attributes: crate::model::ObjectiveAttributes::default(),
             byte_offset: None,
         });
 

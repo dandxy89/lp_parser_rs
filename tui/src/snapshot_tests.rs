@@ -17,7 +17,7 @@ use crate::parse::parse_text;
 use crate::state::Section;
 use crate::ui;
 
-const BASE_LP: &str = "min\nobj: 2 x + 3 y\nst\nc1: x + y >= 2\nc2: x - y <= 8\nbounds\n0 <= x <= 10\n0 <= y <= 10\nend\n";
+pub(crate) const BASE_LP: &str = "min\nobj: 2 x + 3 y\nst\nc1: x + y >= 2\nc2: x - y <= 8\nbounds\n0 <= x <= 10\n0 <= y <= 10\nend\n";
 
 const CHANGED_LP: &str = "min\nobj: 2 x + 4 y\nst\nc1: x + y >= 3\nc3: 2 x + y <= 12\nbounds\n0 <= x <= 10\n0 <= y <= 10\nend\n";
 
@@ -40,8 +40,13 @@ pub(crate) fn inspect_app_from(source: &str) -> App {
 
 /// Build a diff-mode app comparing two in-memory LP models.
 fn diff_app() -> App {
-    let (problem1, analysis1, line_map1, raw_text1) = parse_text(BASE_LP, false, "a.lp").expect("base LP must parse");
-    let (problem2, analysis2, line_map2, raw_text2) = parse_text(CHANGED_LP, false, "b.lp").expect("changed LP must parse");
+    diff_app_from(BASE_LP, CHANGED_LP)
+}
+
+/// Build a diff-mode app comparing the two given LP sources.
+pub(crate) fn diff_app_from(base: &str, changed: &str) -> App {
+    let (problem1, analysis1, line_map1, raw_text1) = parse_text(base, false, "a.lp").expect("base LP must parse");
+    let (problem2, analysis2, line_map2, raw_text2) = parse_text(changed, false, "b.lp").expect("changed LP must parse");
     let options = DiffOptions::default();
     let report = build_diff_report(&DiffInput {
         file1: "a.lp",
@@ -266,7 +271,7 @@ fn snapshot_unbounded_ray_pane_120x40() {
 
 /// Two rows that cannot both hold, with a third that can: the IIS must name
 /// the first two and leave the third out.
-const INFEASIBLE_LP: &str = "min\nobj: x + y\nst\nc1: x >= 5\nc2: x <= 3\nc3: y >= 1\nend\n";
+pub(crate) const INFEASIBLE_LP: &str = "min\nobj: x + y\nst\nc1: x >= 5\nc2: x <= 3\nc3: y >= 1\nend\n";
 
 #[test]
 fn snapshot_iis_pane_120x40() {
@@ -324,4 +329,106 @@ fn snapshot_yank_summary_plain() {
     app.set_section(Section::Summary);
     let text = crate::detail_text::render_detail_plain(&app).expect("summary always yields text");
     insta::assert_snapshot!(text);
+}
+
+/// Whether the rendered frame contains `needle`.
+fn frame_contains(terminal: &Terminal<TestBackend>, needle: &str) -> bool {
+    let text: String = terminal.backend().buffer().content().iter().map(ratatui::buffer::Cell::symbol).collect();
+    text.contains(needle)
+}
+
+/// Regression: the shared divider was drawn in the sidebar's unfocused style
+/// over the focused detail border, and the sidebar's scrollbar sat on it.
+#[test]
+fn the_divider_takes_the_focused_style_and_the_scrollbar_stays_inside() {
+    let rows: Vec<String> = (0..60).map(|i| format!("c{i}: x + y >= {i}")).collect();
+    let rows = rows.join("\n") + "\n";
+    let mut app = inspect_app_from(&format!("min\nobj: x + y\nst\n{rows}end\n"));
+    app.set_section(Section::Constraints);
+    app.focus = crate::state::Focus::Detail;
+    let terminal = render(&mut app, 80, 24);
+    let divider_x = app.layout.detail.x;
+    let buffer = terminal.backend().buffer();
+    let focused = crate::widgets::focus_border_style(crate::state::Focus::Detail, crate::state::Focus::Detail).fg;
+    for y in 2..22 {
+        let cell = &buffer[(divider_x, y)];
+        assert_eq!(cell.symbol(), "\u{2502}", "the divider is unbroken at row {y}");
+        assert_eq!(Some(cell.fg), focused, "the divider carries the focused style at row {y}");
+    }
+    let thumb = (2..22).any(|y| buffer[(divider_x - 1, y)].symbol() == "\u{2503}");
+    assert!(thumb, "the sidebar scrollbar runs inside its border");
+}
+
+/// A report pane taller than the screen shows where in it the reader is.
+#[test]
+fn a_long_report_pane_has_a_scrollbar() {
+    let mut app = inspect_app();
+    let lines = (0..200).map(|i| ratatui::text::Line::from(format!("line {i}"))).collect();
+    app.diagnostics = Some(crate::state::ScrollPane { lines, scroll: 50, export: None });
+    let terminal = render(&mut app, 80, 24);
+    let buffer = terminal.backend().buffer();
+    let thumb = (0..24).any(|y| buffer[(79, y)].symbol() == "\u{2503}");
+    assert!(thumb, "the pane's right edge carries the scrollbar thumb");
+    assert!(frame_contains(&terminal, "line 50"), "the pane draws from its offset");
+}
+
+/// The narrowest supported width: the tab bar compacts rather than pushing
+/// the active tab off the end.
+#[test]
+fn snapshot_diff_objectives_64x20() {
+    let mut app = diff_app();
+    app.set_section(Section::Objectives);
+    let terminal = render(&mut app, 64, 20);
+    let tab_bar: String = (0..64).map(|x| terminal.backend().buffer()[(x, 0)].symbol().to_owned()).collect();
+    assert!(tab_bar.contains("Objs"), "the active tab must be visible: {tab_bar:?}");
+    insta::assert_snapshot!(terminal.backend());
+}
+
+/// Regression: at narrow widths the side-by-side coefficient values were
+/// clipped (`41.19926` drawn as `41.19`) and the change badge fell off the end.
+#[test]
+fn narrow_side_by_side_values_are_rounded_and_keep_their_badge() {
+    let mut app = diff_app_from(
+        "min\nobj: x\nst\nc1: 41.19926 long_variable_name_x + y >= 2\nend\n",
+        "min\nobj: x\nst\nc1: 41.29926 long_variable_name_x + y >= 2\nend\n",
+    );
+    app.set_section(Section::Constraints);
+    let terminal = render(&mut app, 64, 20);
+    assert!(!frame_contains(&terminal, "41.19 "), "a value must never be clipped mid-digit");
+    assert!(frame_contains(&terminal, "[~]"), "the change badge must stay in view");
+}
+
+/// Regression: `j` grew the solve overlay's scroll offset without bound, so
+/// over-scrolling left a blank pane that `k` had to climb back out of.
+#[test]
+fn solve_overlay_scroll_is_clamped_to_its_content() {
+    let mut app = diff_app();
+    let result1 = crate::solver::solve_problem(&app.problem1).expect("base solves");
+    let result2 = crate::solver::solve_problem(&app.problem2).expect("changed solves");
+
+    let cache = crate::widgets::solve::build_single_solve_cache(&result1, 78);
+    // The tab bar and a blank line, then the summary tab's lines.
+    let summary_lines = 2 + cache[0].len();
+    app.solver.render_cache = crate::app::SolveRenderCache::Single(cache);
+    app.solver.state = crate::state::SolveState::Done(Box::new(result1.clone()));
+    app.solver.view.scroll = [u16::MAX; 5];
+    let terminal = render(&mut app, 80, 24);
+    // 24 rows, less the status bar and the overlay's two borders.
+    let visible = 24 - 1 - 2;
+    assert_eq!(
+        app.solver.view.scroll[0] as usize,
+        summary_lines.saturating_sub(visible),
+        "the clamp lands the last line on the bottom row"
+    );
+    assert!(frame_contains(&terminal, "Esc:close"), "the overlay's keys are in the status bar");
+
+    let diff = crate::solver::diff_results("a.lp".to_owned(), "b.lp".to_owned(), result1, result2, 0.0);
+    app.solver.render_cache = crate::widgets::solve::build_diff_solve_cache(&diff, 78);
+    app.solver.state = crate::state::SolveState::DoneBoth(Box::new(diff));
+    app.solver.view.tab = crate::state::SolveTab::Variables;
+    let variables = app.solver.view.tab.index();
+    app.solver.view.scroll[variables] = u16::MAX;
+    let terminal = render(&mut app, 80, 24);
+    assert!(app.solver.view.scroll[variables] < u16::MAX, "the comparison offset must be written back clamped");
+    assert!(frame_contains(&terminal, "Esc:close"), "the comparison's way out is in the status bar");
 }

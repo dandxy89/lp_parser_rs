@@ -4,7 +4,7 @@
 //! and objective changes.
 
 use std::error::Error;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::diff_model::{ConstraintDiffDetail, DiffKind, LpDiffReport};
@@ -14,6 +14,40 @@ use crate::diff_model::{ConstraintDiffDetail, DiffKind, LpDiffReport};
 /// filename needs, and formatting local time would cost a dependency.
 pub fn file_stamp() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |since| since.as_secs())
+}
+
+/// Write a single model's CSV files (`objectives.csv`, `constraints.csv`,
+/// `variables.csv`) into a fresh `<stem>_csv_<stamp>` folder under `dir`.
+///
+/// A folder of its own per export, like the diff report's stamped filename,
+/// means `w` never overwrites an earlier export or files of the same name the
+/// user already had in the working directory.
+///
+/// Returns the folder written to.
+///
+/// # Errors
+///
+/// Returns an error if the folder cannot be created or a file written.
+pub fn write_model_csv(problem: &lp_parser_rs::problem::LpProblem, dir: &Path, stem: &str) -> Result<PathBuf, Box<dyn Error>> {
+    debug_assert!(dir.is_dir(), "write_model_csv: dir must be an existing directory");
+    debug_assert!(!stem.is_empty(), "write_model_csv: the folder needs a stem");
+    let base = format!("{stem}_csv_{}", file_stamp());
+    // Two exports inside one second share a stamp; count up rather than
+    // write into the first one's folder.
+    let mut folder = dir.join(&base);
+    let mut attempt = 1;
+    loop {
+        match std::fs::create_dir(&folder) {
+            Ok(()) => break,
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                attempt += 1;
+                folder = dir.join(format!("{base}_{attempt}"));
+            }
+            Err(error) => return Err(format!("could not create {}: {error}", folder.display()).into()),
+        }
+    }
+    problem.to_csv(&folder)?;
+    Ok(folder)
 }
 
 /// Write the full diff report as a CSV file in `dir`.
@@ -126,4 +160,28 @@ fn constraint_detail(entry: &crate::diff_model::ConstraintDiffEntry) -> String {
         ConstraintDiffDetail::AddedOrRemoved(_) => {}
     }
     parts.join("; ")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Regression: `w` in inspect mode overwrote `objectives.csv` and friends
+    /// in the working directory without a word.
+    #[test]
+    fn model_exports_never_overwrite_each_other() {
+        let dir = std::env::temp_dir().join(format!("lp_diff_export_test_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let problem = lp_parser_rs::problem::LpProblem::parse("min\nobj: x\nst\nc1: x >= 1\nend").expect("tiny LP parses");
+
+        let first = write_model_csv(&problem, &dir, "model").expect("first export");
+        let second = write_model_csv(&problem, &dir, "model").expect("second export");
+        assert_ne!(first, second, "a second export in the same second gets its own folder");
+        for folder in [&first, &second] {
+            for file in ["objectives.csv", "constraints.csv", "variables.csv"] {
+                assert!(folder.join(file).is_file(), "{} must hold {file}", folder.display());
+            }
+        }
+        std::fs::remove_dir_all(&dir).expect("clean up the temp dir");
+    }
 }

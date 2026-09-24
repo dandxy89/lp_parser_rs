@@ -173,6 +173,12 @@ impl<'input> ColumnsState<'input> {
         }
 
         let value: f64 = value_str.parse().map_err(|_| LpParseError::invalid_number(value_str, line_num))?;
+        if !value.is_finite() {
+            return Err(LpParseError::parse_error(
+                line_num,
+                format!("non-finite coefficient '{value_str}' for column '{var_name}' in row '{row_name}'"),
+            ));
+        }
 
         // Accumulate coefficient (additive -- MPS allows split entries)
         match self.coefficients.entry((var_name, row_name)) {
@@ -415,23 +421,23 @@ impl<'input> BoundsState<'input> {
 
         match upper.as_str() {
             "LO" | "LI" => {
-                if accumulator.lower.is_some() {
+                if accumulator.has_explicit_lower() {
                     let label = if upper == "LI" { "(LI) " } else { "" };
                     return Err(LpParseError::invalid_bounds(var_name, format!("duplicate lower bound {label}at line {line_num}")));
                 }
                 let value = parse_bound_value(value_field, line_num, bound_type)?;
-                accumulator.lower = Some(value);
+                accumulator.set_lower(value);
                 if upper == "LI" && integer_vars_set.insert(var_name) {
                     integer_vars.push(var_name);
                 }
             }
             "UP" | "UI" => {
-                if accumulator.upper.is_some() {
+                if accumulator.has_explicit_upper() {
                     let label = if upper == "UI" { "(UI) " } else { "" };
                     return Err(LpParseError::invalid_bounds(var_name, format!("duplicate upper bound {label}at line {line_num}")));
                 }
                 let value = parse_bound_value(value_field, line_num, bound_type)?;
-                accumulator.upper = Some(value);
+                accumulator.set_upper(value);
                 if upper == "UI" && integer_vars_set.insert(var_name) {
                     integer_vars.push(var_name);
                 }
@@ -444,43 +450,52 @@ impl<'input> BoundsState<'input> {
                 accumulator.fixed = Some(value);
             }
             "FR" => {
-                accumulator.free = true;
+                // Bound records apply in order: FR resets both sides, and a
+                // later LO/UP/MI/PL on the same column narrows it again.
+                accumulator.lower = Some(f64::NEG_INFINITY);
+                accumulator.upper = Some(f64::INFINITY);
+                accumulator.lower_from_free = true;
+                accumulator.upper_from_free = true;
             }
             "MI" => {
-                if accumulator.lower.is_some() {
+                if accumulator.has_explicit_lower() {
                     return Err(LpParseError::invalid_bounds(var_name, format!("duplicate lower bound (MI) at line {line_num}")));
                 }
-                accumulator.lower = Some(f64::NEG_INFINITY);
+                accumulator.set_lower(f64::NEG_INFINITY);
             }
             "PL" => {
-                if accumulator.upper.is_some() {
+                if accumulator.has_explicit_upper() {
                     return Err(LpParseError::invalid_bounds(var_name, format!("duplicate upper bound (PL) at line {line_num}")));
                 }
-                accumulator.upper = Some(f64::INFINITY);
+                accumulator.set_upper(f64::INFINITY);
             }
             "BV" => {
                 accumulator.binary = true;
                 self.binary_vars.push(var_name);
             }
-            "SC" => {
-                let value = parse_bound_value(value_field, line_num, bound_type)?;
-                // Semi-continuity is represented by `VariableType::SemiContinuous`,
-                // which carries no bound value: recording the SC upper bound in the
-                // accumulator would resolve the variable to `UpperBound` instead and
-                // lose the semi-continuity (it also broke the MPS round trip). The
-                // bound value is dropped; warn when it is a meaningful finite bound
-                // rather than the conventional 1e30/infinity sentinel.
-                if value.is_finite() && value < crate::mps::writer::SEMI_CONTINUOUS_SENTINEL_UPPER {
-                    eprintln!("line {line_num}: SC upper bound {value} on '{var_name}' cannot be represented and is dropped");
+            "SC" | "SI" => {
+                // Per the MPS spec the SC / SI value is the upper bound of the
+                // semi-continuous / semi-integer variable; a missing, zero or
+                // `>= 1e30` value means it is unbounded above. Semi-continuity
+                // itself is applied later from `ParseResult::semi_continuous`.
+                let value = match value_field {
+                    Some(_) => parse_bound_value(value_field, line_num, bound_type)?,
+                    None => f64::INFINITY,
+                };
+                if value != 0.0 && value < crate::INFINITE_BOUND_THRESHOLD {
+                    if accumulator.has_explicit_upper() {
+                        return Err(LpParseError::invalid_bounds(var_name, format!("duplicate upper bound ({upper}) at line {line_num}")));
+                    }
+                    accumulator.set_upper(value);
                 }
                 self.semi_continuous_vars.push(var_name);
-            }
-            "SI" => {
-                // Semi-integer: the model has no semi-integer type, so the closest
-                // representation is an integer variable with the given upper bound.
-                let value = parse_bound_value(value_field, line_num, bound_type)?;
-                accumulator.upper = Some(value);
-                if integer_vars_set.insert(var_name) {
+                if upper == "SI" {
+                    // Integer *and* semi-continuous makes the variable
+                    // semi-integer (see `problem::apply_variable_kind`). The
+                    // column deliberately stays out of `integer_vars_set`: that
+                    // set drives the INTORG default bounds of `[0, 1]` and the
+                    // integer-in-`[0, 1]`-is-binary collapse, neither of which
+                    // applies to an SI column.
                     integer_vars.push(var_name);
                 }
             }

@@ -18,9 +18,10 @@ fn heading(lines: &mut Vec<Line<'static>>, title: &str, note: &str) {
     crate::widgets::push_heading(lines, title, note);
 }
 
-/// Render a bound, using the infinity sign where there is none.
+/// Render a value for a pane, in the shared display format, with an explicit
+/// `+` on a positive infinity so an unbounded side reads as a direction.
 fn bound(value: f64) -> String {
-    number(value, 4)
+    if value.is_infinite() && value > 0.0 { "+\u{221e}".to_owned() } else { crate::format::fmt_num(value) }
 }
 
 /// Render a value at `precision` decimal places, using the infinity sign rather
@@ -68,7 +69,7 @@ pub fn ray_lines(report: &UnboundedRay) -> Vec<Line<'static>> {
     }
 
     lines.push(Line::from(Span::styled(
-        format!("  objective improves by {:.6} per unit along the ray", report.objective_rate),
+        format!("  objective improves by {} per unit along the ray", bound(report.objective_rate)),
         Style::default().fg(t.text),
     )));
 
@@ -84,8 +85,8 @@ pub fn ray_lines(report: &UnboundedRay) -> Vec<Line<'static>> {
     for entry in &report.directions {
         lines.push(Line::from(vec![
             Span::styled(format!("  {:<NAME_WIDTH$}", truncate_with_ellipsis(&entry.name, NAME_WIDTH)), Style::default().fg(t.text)),
-            Span::styled(format!("{:>NUMBER_WIDTH$.4}", entry.ray), Style::default().fg(t.removed)),
-            Span::styled(format!("{:>NUMBER_WIDTH$.4}", entry.cost), Style::default().fg(t.accent)),
+            Span::styled(format!("{:>NUMBER_WIDTH$}", bound(entry.ray)), Style::default().fg(t.removed)),
+            Span::styled(format!("{:>NUMBER_WIDTH$}", bound(entry.cost)), Style::default().fg(t.accent)),
             Span::styled(format!("{:>NUMBER_WIDTH$}", bound(entry.lower)), Style::default().fg(t.muted)),
             Span::styled(format!("{:>NUMBER_WIDTH$}", bound(entry.upper)), Style::default().fg(t.muted)),
         ]));
@@ -115,7 +116,7 @@ fn suspect_table(lines: &mut Vec<Line<'static>>, report: &UnboundedRay) {
     for suspect in &report.suspects {
         lines.push(Line::from(vec![
             Span::styled(format!("  {:<NAME_WIDTH$}", truncate_with_ellipsis(&suspect.name, NAME_WIDTH)), Style::default().fg(t.text)),
-            Span::styled(format!("{:>NUMBER_WIDTH$.4}", suspect.cost), Style::default().fg(t.accent)),
+            Span::styled(format!("{:>NUMBER_WIDTH$}", bound(suspect.cost)), Style::default().fg(t.accent)),
             Span::styled(format!("   {}", suspect.direction), Style::default().fg(t.removed)),
         ]));
     }
@@ -127,17 +128,20 @@ fn footer(lines: &mut Vec<Line<'static>>, report: &UnboundedRay) {
     lines.push(Line::from(""));
     if report.relaxed_integrality > 0 {
         lines.push(Line::from(Span::styled(
-            format!("  {} integer column(s) relaxed: a ray is an LP concept", report.relaxed_integrality),
+            format!(
+                "  {} relaxed: a ray is an LP concept",
+                crate::format::plural(report.relaxed_integrality, "integer column", "integer columns")
+            ),
             Style::default().fg(t.modified),
         )));
     }
     if report.skipped_sos > 0 {
         lines.push(Line::from(Span::styled(
-            format!("  {} SOS constraint(s) not modelled", report.skipped_sos),
+            format!("  {} not modelled", crate::format::plural(report.skipped_sos, "SOS constraint", "SOS constraints")),
             Style::default().fg(t.modified),
         )));
     }
-    lines.push(Line::from(Span::styled(format!("  took {:.3}s", report.duration.as_secs_f64()), Style::default().fg(t.muted))));
+    lines.push(Line::from(Span::styled(format!("  took {}", crate::format::fmt_duration(report.duration)), Style::default().fg(t.muted))));
 }
 
 /// Plain-text form of the ray report, for `w`.
@@ -174,12 +178,12 @@ pub fn ray_export(report: &UnboundedRay) -> String {
     }
 
     if report.relaxed_integrality > 0 {
-        let _ = writeln!(out, "\n{} integer column(s) relaxed", report.relaxed_integrality);
+        let _ = writeln!(out, "\n{} relaxed", crate::format::plural(report.relaxed_integrality, "integer column", "integer columns"));
     }
     if report.skipped_sos > 0 {
-        let _ = writeln!(out, "{} SOS constraint(s) not modelled", report.skipped_sos);
+        let _ = writeln!(out, "{} not modelled", crate::format::plural(report.skipped_sos, "SOS constraint", "SOS constraints"));
     }
-    let _ = writeln!(out, "took {:.3}s", report.duration.as_secs_f64());
+    let _ = writeln!(out, "took {}", crate::format::fmt_duration(report.duration));
     out
 }
 
@@ -201,7 +205,11 @@ pub fn iis_lines(report: &Iis) -> Vec<Line<'static>> {
     }
 
     lines.push(Line::from(Span::styled(
-        format!("  {} row(s) and {} bound(s) that cannot hold together", report.rows.len(), report.cols.len()),
+        format!(
+            "  {} and {} that cannot hold together",
+            crate::format::plural(report.rows.len(), "row", "rows"),
+            crate::format::plural(report.cols.len(), "bound", "bounds")
+        ),
         Style::default().fg(t.removed).add_modifier(Modifier::BOLD),
     )));
     lines.push(Line::from(Span::styled(
@@ -244,17 +252,20 @@ fn iis_footer(lines: &mut Vec<Line<'static>>, report: &Iis) {
     lines.push(Line::from(""));
     if report.relaxed_integrality > 0 {
         lines.push(Line::from(Span::styled(
-            format!("  {} integer column(s) relaxed: an IIS is an LP concept", report.relaxed_integrality),
+            format!(
+                "  {} relaxed: an IIS is an LP concept",
+                crate::format::plural(report.relaxed_integrality, "integer column", "integer columns")
+            ),
             Style::default().fg(t.modified),
         )));
     }
     if report.skipped_sos > 0 {
         lines.push(Line::from(Span::styled(
-            format!("  {} SOS constraint(s) not modelled", report.skipped_sos),
+            format!("  {} not modelled", crate::format::plural(report.skipped_sos, "SOS constraint", "SOS constraints")),
             Style::default().fg(t.modified),
         )));
     }
-    lines.push(Line::from(Span::styled(format!("  took {:.3}s", report.duration.as_secs_f64()), Style::default().fg(t.muted))));
+    lines.push(Line::from(Span::styled(format!("  took {}", crate::format::fmt_duration(report.duration)), Style::default().fg(t.muted))));
 }
 
 /// Plain-text form of the subsystem report, for `w`.
@@ -267,7 +278,12 @@ pub fn iis_export(report: &Iis) -> String {
     if report.is_empty() {
         out.push_str("no subsystem isolated\n");
     } else {
-        let _ = writeln!(out, "{} row(s) and {} bound(s) that cannot hold together\n", report.rows.len(), report.cols.len());
+        let _ = writeln!(
+            out,
+            "{} and {} that cannot hold together\n",
+            crate::format::plural(report.rows.len(), "row", "rows"),
+            crate::format::plural(report.cols.len(), "bound", "bounds")
+        );
         for (title, entries) in [("constraints", &report.rows), ("variable bounds", &report.cols)] {
             if entries.is_empty() {
                 continue;
@@ -281,12 +297,12 @@ pub fn iis_export(report: &Iis) -> String {
     }
 
     if report.relaxed_integrality > 0 {
-        let _ = writeln!(out, "{} integer column(s) relaxed", report.relaxed_integrality);
+        let _ = writeln!(out, "{} relaxed", crate::format::plural(report.relaxed_integrality, "integer column", "integer columns"));
     }
     if report.skipped_sos > 0 {
-        let _ = writeln!(out, "{} SOS constraint(s) not modelled", report.skipped_sos);
+        let _ = writeln!(out, "{} not modelled", crate::format::plural(report.skipped_sos, "SOS constraint", "SOS constraints"));
     }
-    let _ = writeln!(out, "took {:.3}s", report.duration.as_secs_f64());
+    let _ = writeln!(out, "took {}", crate::format::fmt_duration(report.duration));
     out
 }
 
@@ -319,7 +335,7 @@ pub fn ranging_lines(report: &Ranging, selected: Option<&str>) -> Vec<Line<'stat
             format!("  {} \u{2014} {kind}", entry.name),
             Style::default().fg(t.accent).add_modifier(Modifier::BOLD),
         )));
-        lines.push(Line::from(Span::styled(format!("  currently   {:.6}", entry.current), Style::default().fg(t.text))));
+        lines.push(Line::from(Span::styled(format!("  currently   {}", bound(entry.current)), Style::default().fg(t.text))));
         lines.push(Line::from(Span::styled(
             format!("  holds over  [{}, {}]", bound(entry.down), bound(entry.up)),
             Style::default().fg(t.text),
@@ -342,17 +358,20 @@ pub fn ranging_lines(report: &Ranging, selected: Option<&str>) -> Vec<Line<'stat
     lines.push(Line::from(""));
     if report.relaxed_integrality > 0 {
         lines.push(Line::from(Span::styled(
-            format!("  {} integer column(s) relaxed: ranging reads an LP basis", report.relaxed_integrality),
+            format!(
+                "  {} relaxed: ranging reads an LP basis",
+                crate::format::plural(report.relaxed_integrality, "integer column", "integer columns")
+            ),
             Style::default().fg(t.modified),
         )));
     }
     if report.skipped_sos > 0 {
         lines.push(Line::from(Span::styled(
-            format!("  {} SOS constraint(s) not modelled", report.skipped_sos),
+            format!("  {} not modelled", crate::format::plural(report.skipped_sos, "SOS constraint", "SOS constraints")),
             Style::default().fg(t.modified),
         )));
     }
-    lines.push(Line::from(Span::styled(format!("  took {:.3}s", report.duration.as_secs_f64()), Style::default().fg(t.muted))));
+    lines.push(Line::from(Span::styled(format!("  took {}", crate::format::fmt_duration(report.duration)), Style::default().fg(t.muted))));
     lines
 }
 
@@ -371,7 +390,7 @@ fn range_table(lines: &mut Vec<Line<'static>>, title: &str, entries: &[RangeEntr
     for entry in entries.iter().take(MAX_RANGE_ROWS) {
         lines.push(Line::from(vec![
             Span::styled(format!("  {:<NAME_WIDTH$}", truncate_with_ellipsis(&entry.name, NAME_WIDTH)), Style::default().fg(t.text)),
-            Span::styled(format!("{:>NUMBER_WIDTH$.4}", entry.current), Style::default().fg(t.accent)),
+            Span::styled(format!("{:>NUMBER_WIDTH$}", bound(entry.current)), Style::default().fg(t.accent)),
             Span::styled(format!("{:>NUMBER_WIDTH$}", bound(entry.down)), Style::default().fg(t.muted)),
             Span::styled(format!("{:>NUMBER_WIDTH$}", bound(entry.up)), Style::default().fg(t.muted)),
         ]));
@@ -416,12 +435,12 @@ pub fn ranging_export(report: &Ranging) -> String {
     }
 
     if report.relaxed_integrality > 0 {
-        let _ = writeln!(out, "{} integer column(s) relaxed", report.relaxed_integrality);
+        let _ = writeln!(out, "{} relaxed", crate::format::plural(report.relaxed_integrality, "integer column", "integer columns"));
     }
     if report.skipped_sos > 0 {
-        let _ = writeln!(out, "{} SOS constraint(s) not modelled", report.skipped_sos);
+        let _ = writeln!(out, "{} not modelled", crate::format::plural(report.skipped_sos, "SOS constraint", "SOS constraints"));
     }
-    let _ = writeln!(out, "took {:.3}s", report.duration.as_secs_f64());
+    let _ = writeln!(out, "took {}", crate::format::fmt_duration(report.duration));
     out
 }
 

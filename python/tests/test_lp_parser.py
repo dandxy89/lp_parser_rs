@@ -19,6 +19,14 @@ class TestLpParserBasic:
         parser = LpParser(str(simple_lp_file))
         assert parser.lp_file == str(simple_lp_file)
 
+    def test_class_module(self) -> None:
+        assert LpParser.__module__ == "parse_lp"
+
+    def test_repr_shows_source_and_format(self, simple_lp_file: Path) -> None:
+        assert repr(LpParser(simple_lp_file)) == f"LpParser(lp_file='{simple_lp_file}', format='lp')"
+        from_string = LpParser.from_string("Minimize\n obj: x\nSubject To\n c1: x >= 1\nEnd\n")
+        assert repr(from_string) == "LpParser(lp_file='<string>', format='lp')"
+
     def test_create_parser_nonexistent_file(self) -> None:
         with pytest.raises(FileNotFoundError):
             LpParser("nonexistent.lp")
@@ -98,6 +106,13 @@ class TestLpParserComponents:
         assert x1["name"] == "x1"
         assert x1["kind"] == "Continuous"
         assert x1["lower"] is not None
+
+    def test_undeclared_bounds_are_none_and_free_is_infinite(self) -> None:
+        """None means "not declared" (format default applies), not "unbounded"."""
+        parser = LpParser.from_string("Minimize\n obj: x + y\nSubject To\n c1: x + y >= 1\nBounds\n y free\nEnd\n")
+        variables = parser.variables
+        assert (variables["x"]["lower"], variables["x"]["upper"]) == (None, None)
+        assert (variables["y"]["lower"], variables["y"]["upper"]) == (float("-inf"), float("inf"))
 
 
 class TestLpParserCSV:
@@ -236,3 +251,208 @@ class TestMutationErrors:
         with pytest.raises(LpInvalidValueError):
             parser.update_constraint_rhs("c1", float("nan"))
         assert "NaN" not in parser.to_lp_string()
+
+
+class TestReparse:
+    """parse() must re-read the source with the parser it was built with."""
+
+    def test_reparse_mps_file(self, simple_lp_file: Path, tmp_path: Path) -> None:
+        mps_path = tmp_path / "simple.mps"
+        LpParser(str(simple_lp_file)).save_to_mps(str(mps_path))
+        parser = LpParser(str(mps_path))
+        parser.parse()
+        assert len(parser.variables) == 2
+
+    def test_reparse_explicit_format(self, simple_lp_file: Path, tmp_path: Path) -> None:
+        mps_path = tmp_path / "simple.txt"
+        LpParser(str(simple_lp_file)).save_to_mps(str(mps_path))
+        parser = LpParser.from_file(str(mps_path), "mps")
+        parser.parse()
+        assert len(parser.variables) == 2
+
+    def test_reparse_string_backed_parser_raises(self) -> None:
+        parser = LpParser.from_string("Minimize\n obj: x\nSubject To\n c1: x >= 1\nEnd\n")
+        with pytest.raises(LpInvalidValueError, match="built from a string"):
+            parser.parse()
+
+
+class TestPathLikeArguments:
+    """Every path argument accepts os.PathLike as well as str."""
+
+    def test_pathlib_paths_accepted(self, simple_lp_file: Path, tmp_path: Path) -> None:
+        parser = LpParser(simple_lp_file)
+        assert parser.lp_file == str(simple_lp_file)
+        assert len(LpParser.from_file(simple_lp_file).variables) == 2
+
+        parser.save_to_file(tmp_path / "out.lp")
+        parser.save_to_mps(tmp_path / "out.mps")
+        parser.to_csv(tmp_path)
+        assert (tmp_path / "out.lp").is_file()
+        assert (tmp_path / "out.mps").is_file()
+        assert (tmp_path / "variables.csv").is_file()
+
+
+class TestIoErrors:
+    """I/O failures raise OSError subclasses, not LpParseError."""
+
+    def test_reparse_deleted_file_raises_file_not_found(self, simple_lp_file: Path, tmp_path: Path) -> None:
+        path = tmp_path / "gone.lp"
+        path.write_text(simple_lp_file.read_text())
+        parser = LpParser(path)
+        path.unlink()
+        with pytest.raises(FileNotFoundError) as info:
+            parser.parse()
+        assert not isinstance(info.value, RuntimeError)
+        assert info.value.filename == str(path)
+
+    def test_save_into_missing_directory_raises_os_error(self, simple_lp_file: Path, tmp_path: Path) -> None:
+        parser = LpParser(simple_lp_file)
+        with pytest.raises(FileNotFoundError):
+            parser.save_to_file(tmp_path / "missing" / "out.lp")
+        with pytest.raises(FileNotFoundError):
+            parser.save_to_mps(tmp_path / "missing" / "out.mps")
+
+    def test_save_onto_directory_raises_os_error(self, simple_lp_file: Path, tmp_path: Path) -> None:
+        with pytest.raises(IsADirectoryError):
+            LpParser(simple_lp_file).save_to_file(tmp_path)
+
+
+class TestUpdateVariableType:
+    LP = "Minimize\n obj: x + y\nSubject To\n c1: x + y >= 1\nBounds\n 2 <= x <= 5\nGenerals\n x\nEnd\n"
+
+    def test_continuous_changes_kind_and_keeps_bounds(self) -> None:
+        parser = LpParser.from_string(self.LP)
+        parser.update_variable_type("x", "continuous")
+        x = parser.variables["x"]
+        assert (x["kind"], x["lower"], x["upper"]) == ("Continuous", 2.0, 5.0)
+
+    def test_free_sets_continuous_with_infinite_bounds(self) -> None:
+        parser = LpParser.from_string(self.LP)
+        parser.update_variable_type("x", "free")
+        x = parser.variables["x"]
+        assert (x["kind"], x["lower"], x["upper"]) == ("Continuous", float("-inf"), float("inf"))
+
+    def test_generals_and_semi_continuous_make_a_semi_integer(self) -> None:
+        parser = LpParser.from_string(self.LP.replace("End", "Semi-Continuous\n x\nEnd"))
+        x = parser.variables["x"]
+        assert (x["kind"], x["lower"], x["upper"]) == ("SemiInteger", 2.0, 5.0)
+        assert "Semi-Continuous\n x" in parser.to_lp_string()
+
+    def test_semiinteger_sets_the_kind(self) -> None:
+        parser = LpParser.from_string(self.LP)
+        parser.update_variable_type("y", "semiinteger")
+        assert parser.variables["y"]["kind"] == "SemiInteger"
+
+    def test_continuous_on_missing_variable_raises_not_found(self) -> None:
+        parser = LpParser.from_string(self.LP)
+        with pytest.raises(LpObjectNotFoundError):
+            parser.update_variable_type("missing", "continuous")
+
+
+class TestConstraintClass:
+    LP = (
+        "Minimize\n obj: x + y\nSubject To\n c1: x + y >= 1\n"
+        "Lazy Constraints\n l1: x <= 4\nUser Cuts\n u1: x + y <= 9\nEnd\n"
+    )
+
+    def test_class_of_each_constraint(self) -> None:
+        parser = LpParser.from_string(self.LP)
+        classes = {c["name"]: c["class"] for c in parser.constraints if c["type"] == "standard"}
+        assert classes == {"c1": "normal", "l1": "lazy", "u1": "user_cut"}
+
+    def test_sections_round_trip(self) -> None:
+        written = LpParser.from_string(self.LP).to_lp_string()
+        assert "Lazy Constraints\n l1: x <= 4" in written
+        assert "User Cuts\n u1: x + y <= 9" in written
+
+
+class TestIndicatorConstraint:
+    LP = "Minimize\n obj: x + b\nSubject To\n ind: b = 0 -> x >= 2\nBinaries\n b\nEnd\n"
+
+    def test_indicator_is_exposed(self) -> None:
+        (constraint,) = LpParser.from_string(self.LP).constraints
+        assert constraint["type"] == "indicator"
+        assert (constraint["indicator_variable"], constraint["indicator_value"]) == ("b", 0)
+        assert (constraint["operator"], constraint["rhs"], constraint["class"]) == ("GTE", 2.0, "normal")
+
+    def test_indicator_round_trips(self) -> None:
+        assert " ind: b = 0 -> x >= 2" in LpParser.from_string(self.LP).to_lp_string()
+
+
+class TestQuadratic:
+    LP = "Minimize\n obj: x + [ x ^ 2 + 4 x * y ] / 2\nSubject To\n q: y + [ y ^ 2 ] <= 4\nEnd\n"
+
+    def test_objective_terms_are_halved(self) -> None:
+        (objective,) = LpParser.from_string(self.LP).objectives
+        assert objective["quadratic"] == [
+            {"var1": "x", "var2": "x", "coefficient": 0.5},
+            {"var1": "x", "var2": "y", "coefficient": 2.0},
+        ]
+
+    def test_quadratic_constraint(self) -> None:
+        (constraint,) = LpParser.from_string(self.LP).constraints
+        assert constraint["type"] == "quadratic"
+        assert constraint["quadratic"] == [{"var1": "y", "var2": "y", "coefficient": 1.0}]
+
+    def test_round_trip(self) -> None:
+        written = LpParser.from_string(self.LP).to_lp_string()
+        assert " obj: x + [ x ^ 2 + 4 x * y ] / 2" in written
+        assert " q: y + [ y ^ 2 ] <= 4" in written
+
+
+class TestGeneralConstraint:
+    LP = "Maximize\n obj: r\nSubject To\n c1: x + y <= 4\nGeneral Constraints\n g: r = MIN ( x , y , 2 )\nEnd\n"
+
+    def test_general_constraint_is_exposed(self) -> None:
+        general = next(c for c in LpParser.from_string(self.LP).constraints if c["type"] == "general")
+        assert (general["resultant"], general["function"], general["arguments"], general["constant"]) == (
+            "r",
+            "MIN",
+            ["x", "y"],
+            2.0,
+        )
+
+    def test_round_trip(self) -> None:
+        assert "General Constraints\n g: r = MIN ( x , y , 2 )" in LpParser.from_string(self.LP).to_lp_string()
+
+
+class TestMultiObjective:
+    LP = (
+        "Minimize multi-objectives\n Cost: Priority=2 Weight=1 AbsTol=0 RelTol=0.1\n  x + y\n"
+        " Time:\n  x\nSubject To\n c1: x + y >= 1\nEnd\n"
+    )
+
+    def test_attributes_are_exposed(self) -> None:
+        cost, time = LpParser.from_string(self.LP).objectives
+        assert cost["attributes"] == {"priority": 2, "weight": 1.0, "abs_tol": 0.0, "rel_tol": 0.1}
+        assert time["attributes"] == {"priority": None, "weight": None, "abs_tol": None, "rel_tol": None}
+
+    def test_round_trip(self) -> None:
+        written = LpParser.from_string(self.LP).to_lp_string()
+        assert written.startswith("Minimize multi-objectives\n Cost: Priority=2 Weight=1 AbsTol=0 RelTol=0.1\n")
+
+
+class TestThresholdValidation:
+    LP = "Minimize\n obj: x\nSubject To\n c1: x >= 1000\nEnd\n"
+
+    @staticmethod
+    def _messages(parser: LpParser, **thresholds: float) -> list[str]:
+        return [issue["message"] for issue in parser.analyze(**thresholds)["issues"]]
+
+    def test_large_rhs_threshold_is_independent_of_coefficient_threshold(self) -> None:
+        parser = LpParser.from_string(self.LP)
+        assert not any("Large RHS" in m for m in self._messages(parser, large_coeff_threshold=10.0))
+        assert any("Large RHS" in m for m in self._messages(parser, large_rhs_threshold=10.0))
+
+    @pytest.mark.parametrize(
+        "name", ["large_coeff_threshold", "small_coeff_threshold", "ratio_threshold", "large_rhs_threshold"]
+    )
+    @pytest.mark.parametrize("bad", [0.0, -1.0, float("nan"), float("inf")])
+    def test_invalid_threshold_raises(self, name: str, bad: float) -> None:
+        parser = LpParser.from_string(self.LP)
+        with pytest.raises(LpInvalidValueError, match=name):
+            parser.analyze(**{name: bad})
+
+    def test_zero_max_line_length_raises(self) -> None:
+        with pytest.raises(LpInvalidValueError, match="max_line_length"):
+            LpParser.from_string(self.LP).to_lp_string(max_line_length=0)

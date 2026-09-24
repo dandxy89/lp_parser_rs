@@ -159,7 +159,8 @@ for issue in analysis['issues']:
 analysis = parser.analyze(
     large_coeff_threshold=1e8,      # Flag coefficients above this
     small_coeff_threshold=1e-10,    # Flag coefficients below this
-    ratio_threshold=1e5             # Flag if max/min ratio exceeds this
+    ratio_threshold=1e5,            # Flag if max/min ratio exceeds this
+    large_rhs_threshold=1e8,        # Flag right-hand sides above this
 )
 ```
 
@@ -240,7 +241,9 @@ print(f"Successfully modified and re-parsed: {new_parser.name}")
         # Discrete kind, independent of the bounds below:
         #   "Continuous", "General", "Integer", "Binary", "SemiContinuous", "Sos"
         "kind": "Integer",
-        # None on a side means unbounded in that direction.
+        # None on a side means no bound was declared there, so the format
+        # default applies (LP: lower 0, upper +inf). A variable declared
+        # `free` reports -inf / inf instead.
         "lower": 0.0,
         "upper": 100.0
     }
@@ -305,17 +308,20 @@ print(f"Successfully modified and re-parsed: {new_parser.name}")
 
 ### Analysis Methods
 
-- `analyze(large_coeff_threshold, small_coeff_threshold, ratio_threshold)` - Get complete problem analysis including statistics and issues, with optional custom thresholds
+- `analyze(large_coeff_threshold, small_coeff_threshold, ratio_threshold, large_rhs_threshold)` - Get complete problem analysis including statistics and issues, with optional custom thresholds
 
 ### Variable Types
 
 Supported variable types for `update_variable_type()`:
 
+- `"continuous"` - Continuous variables; changes only the kind and keeps declared bounds
 - `"binary"` - Binary variables (0 or 1)
 - `"integer"` - General integer variables
 - `"general"` - General integer variables
-- `"free"` - Free variables (no bounds)
 - `"semicontinuous"` - Semi-continuous variables
+- `"free"` - A bound rather than a kind: makes the variable continuous with bounds `(-inf, +inf)`
+
+The discrete kinds (`binary`, `integer`, `general`, `semicontinuous`) clear any declared bounds, so the format default applies (LP: lower bound 0).
 
 ## Supported LP Format Features
 

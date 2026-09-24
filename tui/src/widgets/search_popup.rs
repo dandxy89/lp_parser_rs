@@ -162,30 +162,37 @@ fn draw_results_list(frame: &mut Frame, area: Rect, cached_lines: &[Line<'static
 /// Build owned spans for a name with fuzzy match positions highlighted.
 ///
 /// Returns `Span<'static>` with owned strings, suitable for caching across frames.
+///
+/// `match_indices` are the byte positions frizbee reports, one per matched
+/// *byte*: a multi-byte character (e.g. the `é` in an MPS name like `café`)
+/// yields several. Names are walked by `char`, highlighting each character any
+/// of whose bytes matched, so no slice ever splits a character. Indices past
+/// the end of the name are ignored.
 fn build_highlighted_name_owned(name: &str, match_indices: &[usize], base_style: Style) -> Vec<Span<'static>> {
-    debug_assert!(name.is_ascii(), "fuzzy match highlighting assumes ASCII names");
+    debug_assert!(match_indices.is_sorted(), "match indices must be ascending: {match_indices:?}");
     if match_indices.is_empty() {
         return vec![Span::styled(name.to_owned(), base_style)];
     }
 
     let highlight_style = base_style.add_modifier(Modifier::BOLD | Modifier::UNDERLINED);
-    let mut spans = Vec::new();
-    let mut last_end = 0;
+    let mut spans: Vec<Span<'static>> = Vec::new();
+    let mut run = String::new();
+    let mut run_highlighted = false;
+    let mut pending = match_indices.iter().copied().peekable();
 
-    for &idx in match_indices {
-        if idx > name.len() {
-            continue;
+    for (start, character) in name.char_indices() {
+        while pending.next_if(|&idx| idx < start).is_some() {}
+        let highlighted = pending.peek().is_some_and(|&idx| idx < start + character.len_utf8());
+        if highlighted != run_highlighted && !run.is_empty() {
+            let style = if run_highlighted { highlight_style } else { base_style };
+            spans.push(Span::styled(std::mem::take(&mut run), style));
         }
-        if idx > last_end {
-            spans.push(Span::styled(name[last_end..idx].to_owned(), base_style));
-        }
-        let end = (idx + 1).min(name.len());
-        spans.push(Span::styled(name[idx..end].to_owned(), highlight_style));
-        last_end = end;
+        run_highlighted = highlighted;
+        run.push(character);
     }
-
-    if last_end < name.len() {
-        spans.push(Span::styled(name[last_end..].to_owned(), base_style));
+    if !run.is_empty() {
+        let style = if run_highlighted { highlight_style } else { base_style };
+        spans.push(Span::styled(run, style));
     }
 
     spans
@@ -262,21 +269,19 @@ fn draw_detail_preview(frame: &mut Frame, area: Rect, app: &App) {
 /// Draw the hint bar at the bottom of the pop-up.
 fn draw_hints(frame: &mut Frame, area: Rect) {
     let t = theme();
-    let hints = Line::from(vec![
-        Span::styled("  r:", Style::default().fg(t.accent).add_modifier(Modifier::BOLD)),
-        Span::styled("regex  ", Style::default().fg(t.muted)),
-        Span::styled("s:", Style::default().fg(t.accent).add_modifier(Modifier::BOLD)),
-        Span::styled("substring  ", Style::default().fg(t.muted)),
-        Span::styled("c:", Style::default().fg(t.accent).add_modifier(Modifier::BOLD)),
-        Span::styled("content  ", Style::default().fg(t.muted)),
-        Span::styled("(default: fuzzy)  ", Style::default().fg(t.muted)),
-        Span::styled("\u{2191}/\u{2193}", Style::default().fg(t.accent)),
-        Span::styled(" navigate  ", Style::default().fg(t.muted)),
-        Span::styled("Enter", Style::default().fg(t.accent)),
-        Span::styled(" select  ", Style::default().fg(t.muted)),
-        Span::styled("Esc", Style::default().fg(t.accent)),
-        Span::styled(" cancel", Style::default().fg(t.muted)),
-    ]);
+    // The mode prefixes are typed, not pressed, but render the same way — and
+    // `r:regex` spells the very prefix to type.
+    let mut spans = vec![Span::raw(" ")];
+    spans.extend(crate::widgets::key_hint_spans(&[
+        "r:regex",
+        "s:substring",
+        "c:content",
+        "(none):fuzzy",
+        "\u{2191}/\u{2193}:navigate",
+        "Enter:select",
+        "Esc:cancel",
+    ]));
+    let hints = Line::from(spans);
 
     let block = panel_block(Style::default().fg(t.muted));
 
@@ -304,6 +309,36 @@ mod tests {
     /// Concatenate a rendered line's span contents into one string.
     fn line_text(line: &Line<'_>) -> String {
         line.spans.iter().map(|span| span.content.as_ref()).collect()
+    }
+
+    /// The highlighted spans' text, in order.
+    fn highlighted(spans: &[Span<'_>]) -> Vec<String> {
+        spans.iter().filter(|span| span.style.add_modifier.contains(Modifier::BOLD)).map(|span| span.content.to_string()).collect()
+    }
+
+    #[test]
+    fn test_non_ascii_names_highlight_by_character_without_panicking() {
+        // Regression: each matched byte was sliced as a one-byte range, so a
+        // match on a multi-byte character sliced through it and panicked.
+        let names = ["café".to_owned(), "é_x".to_owned()];
+        let config = frizbee::Config::default();
+        let matches = frizbee::Matcher::new("é", &config).match_list_indices(&names);
+        assert_eq!(matches.len(), 2, "both names contain the needle");
+        for matched in matches {
+            let name = &names[matched.index as usize];
+            let mut indices: Vec<usize> = matched.indices.into_iter().map(|i| i as usize).collect();
+            indices.sort_unstable();
+            let spans = build_highlighted_name_owned(name, &indices, Style::default());
+            let text: String = spans.iter().map(|span| span.content.as_ref()).collect();
+            assert_eq!(&text, name, "highlighting must not drop or split characters");
+            assert_eq!(highlighted(&spans), ["é"], "the matched character is highlighted in {name:?}");
+        }
+    }
+
+    #[test]
+    fn test_out_of_range_match_indices_are_ignored() {
+        let spans = build_highlighted_name_owned("ab", &[1, 5], Style::default());
+        assert_eq!(highlighted(&spans), ["b"]);
     }
 
     #[test]

@@ -113,20 +113,21 @@ pub fn extract_entry_text(raw_text: &str, byte_offset: usize) -> &str {
 /// - A line that looks like a named entry: `identifier:` (but not `::` for SOS).
 /// - EOF
 fn find_next_entry_boundary(text: &str) -> usize {
+    // `split_inclusive` keeps each line's terminator, so `offset` advances by
+    // the bytes actually consumed: `lines()` strips `\r\n` as well as `\n`, and
+    // counting one byte per terminator fell short on CRLF files.
     let mut offset = 0;
-    let mut first_line = true;
 
-    for line in text.lines() {
+    for (line_number, line) in text.split_inclusive('\n').enumerate() {
         // Skip the first line (it's the start of the current entry).
-        if first_line {
-            first_line = false;
-            offset += line.len() + 1; // +1 for newline
+        if line_number == 0 {
+            offset += line.len();
             continue;
         }
 
         let trimmed = line.trim();
         if trimmed.is_empty() {
-            offset += line.len() + 1;
+            offset += line.len();
             continue;
         }
 
@@ -141,9 +142,10 @@ fn find_next_entry_boundary(text: &str) -> usize {
             return offset;
         }
 
-        offset += line.len() + 1;
+        offset += line.len();
     }
 
+    debug_assert_eq!(offset, text.len(), "every byte of the text must be consumed");
     text.len()
 }
 
@@ -230,6 +232,16 @@ mod tests {
         let c1_offset = text.find("c1:").unwrap();
         let extracted = extract_entry_text(text, c1_offset);
         assert_eq!(extracted, "c1: x1 <= 10");
+    }
+
+    #[test]
+    fn test_extract_entry_text_crlf_keeps_the_whole_entry() {
+        // Regression: offsets counted one byte per line terminator, so on CRLF
+        // files each line lost a byte and a multi-line entry lost its tail.
+        let text = "subject to\r\nc1: x1\r\n + x2\r\n + x3\r\n <= 10\r\nc2: x3 >= 5\r\nend\r\n";
+        let c1_offset = text.find("c1:").unwrap();
+        let extracted = extract_entry_text(text, c1_offset);
+        assert_eq!(extracted, "c1: x1\r\n + x2\r\n + x3\r\n <= 10");
     }
 
     #[test]

@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, mpsc};
 use std::time::Instant;
 
@@ -69,12 +70,42 @@ pub struct LayoutRects {
     pub tab_bounds: [(u16, u16); 5],
 }
 
-/// Yank (clipboard) flash state.
+/// How a status-bar flash is coloured, and how long it stays.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum FlashLevel {
+    /// Neutral feedback: a mode changed, a match was reached.
+    #[default]
+    Info,
+    /// An action succeeded: a yank, a file written.
+    Ok,
+    /// The action was refused or did nothing, but nothing failed.
+    Warn,
+    /// An action failed. Stays until the next key press rather than expiring,
+    /// so it is not missed.
+    Err,
+}
+
+/// Status-bar flash state (it began as the yank confirmation, hence the name).
 pub struct YankState {
-    /// Timestamp of the last successful yank, used for the flash message.
+    /// When the flash was raised; `None` when no flash is showing.
     pub flash: Option<Instant>,
-    /// Message displayed in the status bar after a successful yank.
+    /// Message displayed in the status bar while the flash shows.
     pub message: String,
+    /// Severity: picks the colour, and whether the flash expires on its own.
+    pub level: FlashLevel,
+}
+
+impl YankState {
+    /// Whether the flash clears itself on a timer (everything but errors).
+    pub(crate) const fn expires(&self) -> bool {
+        self.flash.is_some() && !matches!(self.level, FlashLevel::Err)
+    }
+
+    /// Drop the flash.
+    pub(crate) fn clear(&mut self) {
+        self.flash = None;
+        self.message.clear();
+    }
 }
 
 /// A single entry in the pre-built flat search haystack.
@@ -127,6 +158,10 @@ pub struct CachedSolve {
     /// Modified problem behind side 2 of a comparison solve — a what-if RHS
     /// edit or a presolve rewrite.
     pub what_if_problem: Option<Arc<LpProblem>>,
+    /// The overlay's view when it was closed. A comparison's rows were diffed
+    /// at this view's threshold, so the two must be restored together or the
+    /// threshold label would describe a different diff.
+    pub view: SolveViewState,
 }
 
 /// Cache capacity: file 1, file 2, both, and one what-if edit.
@@ -166,6 +201,12 @@ pub struct SolverSession {
     /// ponytail: linear scan over at most `SOLVE_CACHE_CAPACITY` entries; make
     /// it a map if the number of distinct solve targets ever grows.
     pub cache: Vec<CachedSolve>,
+    /// Cancel flag shared with the most recent solve's worker thread. Setting
+    /// it interrupts `HiGHS`; the worker's clone is dropped when the thread
+    /// ends, which is how a solve still winding down is detected.
+    pub cancel: Option<Arc<AtomicBool>>,
+    /// `q` was pressed while a solve runs: the running pop-up asks to confirm.
+    pub confirm_quit: bool,
 }
 
 impl SolverSession {
@@ -182,7 +223,36 @@ impl SolverSession {
             what_if_problem: None,
             key: String::new(),
             cache: Vec::new(),
+            cancel: None,
+            confirm_quit: false,
         }
+    }
+
+    /// Whether a solve's worker thread is still running — including one that
+    /// was cancelled and has not yet stopped.
+    pub(crate) fn solve_in_flight(&self) -> bool {
+        self.cancel.as_ref().is_some_and(|flag| Arc::strong_count(flag) > 1)
+    }
+
+    /// Stop the running solve: interrupt `HiGHS` and drop the result channels,
+    /// so whatever the worker sends when it stops is discarded.
+    pub(crate) fn cancel_running(&mut self) {
+        if let Some(flag) = &self.cancel {
+            flag.store(true, Ordering::Relaxed);
+        }
+        self.state = SolveState::Idle;
+        self.receive = None;
+        self.receive2 = None;
+        self.confirm_quit = false;
+    }
+
+    /// A fresh cancel flag for a solve about to start, kept here and returned
+    /// for the worker thread.
+    pub(crate) fn arm_cancel(&mut self) -> Arc<AtomicBool> {
+        let flag = Arc::new(AtomicBool::new(false));
+        self.cancel = Some(Arc::clone(&flag));
+        self.confirm_quit = false;
+        flag
     }
 
     /// Discard any in-flight or completed diagnosis (new solve or overlay closed).
@@ -207,6 +277,7 @@ impl SolverSession {
                 state,
                 solved_problem: self.solved_problem.clone(),
                 what_if_problem: self.what_if_problem.clone(),
+                view: std::mem::take(&mut self.view),
             });
         }
         self.reset_diagnosis();
@@ -219,6 +290,7 @@ impl SolverSession {
     }
 }
 
+#[allow(clippy::struct_excessive_bools)] // independent toggles (help, ignore-order, mouse capture, quit), not a hidden state machine
 pub struct App {
     /// Diff (two files) or Inspect (single file). Fixed at startup.
     pub mode: AppMode,
@@ -344,6 +416,10 @@ pub struct App {
     /// Rebuilt in `rebuild_report()` since the analyses change on watch reloads.
     pub(crate) numerics_lines: Vec<Line<'static>>,
 
+    /// The Numerics tab's issue badge (see `numerics_badge`), rebuilt with
+    /// `numerics_lines`.
+    pub(crate) numerics_badge: Option<(usize, lp_parser_rs::analysis::IssueSeverity)>,
+
     /// Pre-computed diff summary. Built once in `App::new()` since
     /// the report data never changes, avoiding repeated recomputation.
     pub(crate) cached_summary: DiffSummary,
@@ -366,6 +442,19 @@ pub struct App {
 
     /// Watch-mode session (`--watch`): debounce state + in-flight reload channel.
     pub watch: WatchSession,
+
+    /// Columns added to (or taken from) the sidebar's automatic width with
+    /// `>` / `<`.
+    pub sidebar_adjust: i16,
+
+    /// Whether the TUI captures the mouse (`M` toggles it). Off, the terminal
+    /// handles the mouse itself, so text can be selected and copied natively.
+    /// The main loop applies changes to the terminal.
+    pub mouse_capture: bool,
+
+    /// Display width of the longest entry name in the report, which the
+    /// sidebar grows towards. Recomputed with the report.
+    pub(crate) longest_name: usize,
 }
 
 /// Cached coefficient rows keyed on (section, `entry_index`).
@@ -387,6 +476,15 @@ fn append_section_haystack<T: DiffEntry>(haystack: &mut Vec<HaystackEntry>, name
 ///
 /// The haystack and name buffer are built in lockstep so that `names[i]` is the
 /// display name for `haystack[i]`. This avoids cloning each name twice.
+/// Display width of the longest entry name across all three sections.
+fn longest_entry_name(report: &LpDiffReport) -> usize {
+    use unicode_width::UnicodeWidthStr as _;
+    let variables = report.variables.entries.iter().map(|entry| entry.name.width());
+    let constraints = report.constraints.entries.iter().map(|entry| entry.name.width());
+    let objectives = report.objectives.entries.iter().map(|entry| entry.name.width());
+    variables.chain(constraints).chain(objectives).max().unwrap_or(0)
+}
+
 fn build_haystack(report: &LpDiffReport) -> (Vec<HaystackEntry>, Vec<String>) {
     let total = report.variables.entries.len() + report.constraints.entries.len() + report.objectives.entries.len();
     let mut haystack = Vec::with_capacity(total);
@@ -427,6 +525,8 @@ fn build_mode_numerics_lines(mode: AppMode, report: &LpDiffReport, _problem: &Lp
 pub(crate) struct TabLabel {
     /// Section name; inspect mode appends its entry count (e.g. "Variables (8)").
     pub name: Cow<'static, str>,
+    /// The compact form drawn when the full labels do not fit (e.g. "Vars (8)").
+    pub short: Cow<'static, str>,
     /// Coloured count spans (e.g. `+2 -1 ~5`, or `~5/12` under a kind filter).
     /// Empty for static sections, inspect mode, and sections with no changes.
     pub counts: Vec<ratatui::text::Span<'static>>,
@@ -446,7 +546,7 @@ fn tab_count_spans(counts: &crate::diff_model::DiffCounts, filter: DiffFilter) -
         (counts.added, "+", t.added),
         (counts.removed, "-", t.removed),
         (counts.modified, "~", t.modified),
-        (counts.renamed, ">", t.accent),
+        (counts.renamed, crate::widgets::status_bar::RENAMED, t.accent),
     ];
     match filter {
         DiffFilter::All => {
@@ -477,9 +577,22 @@ fn tab_count_spans(counts: &crate::diff_model::DiffCounts, filter: DiffFilter) -
     }
 }
 
-/// Build pre-computed tab bar labels: list sections carry their entry/change counts.
-pub(crate) fn build_section_labels(summary: &DiffSummary, mode: AppMode, filter: DiffFilter) -> [TabLabel; 5] {
+/// Build pre-computed tab bar labels: list sections carry their entry/change
+/// counts, and Numerics its issue badge (`!N`, coloured by the worst severity).
+pub(crate) fn build_section_labels(
+    summary: &DiffSummary,
+    mode: AppMode,
+    filter: DiffFilter,
+    numerics_badge: Option<(usize, lp_parser_rs::analysis::IssueSeverity)>,
+) -> [TabLabel; 5] {
     Section::ALL.map(|section| {
+        if section == Section::Numerics {
+            let counts = numerics_badge.map_or_else(Vec::new, |(count, severity)| {
+                let style = ratatui::style::Style::default().fg(crate::widgets::severity_colour(severity));
+                vec![ratatui::text::Span::styled(format!("!{count}"), style)]
+            });
+            return TabLabel { name: Cow::Borrowed(section.label()), short: Cow::Borrowed(section.short_label()), counts };
+        }
         let counts = match section {
             Section::Summary | Section::Numerics => None,
             Section::Variables => Some(&summary.variables),
@@ -487,11 +600,17 @@ pub(crate) fn build_section_labels(summary: &DiffSummary, mode: AppMode, filter:
             Section::Objectives => Some(&summary.objectives),
         };
         match (mode, counts) {
-            (_, None) => TabLabel { name: Cow::Borrowed(section.label()), counts: Vec::new() },
-            (AppMode::Inspect, Some(counts)) => {
-                TabLabel { name: Cow::Owned(format!("{} ({})", section.label(), counts.changed())), counts: Vec::new() }
-            }
-            (AppMode::Diff, Some(counts)) => TabLabel { name: Cow::Borrowed(section.label()), counts: tab_count_spans(counts, filter) },
+            (_, None) => TabLabel { name: Cow::Borrowed(section.label()), short: Cow::Borrowed(section.short_label()), counts: Vec::new() },
+            (AppMode::Inspect, Some(counts)) => TabLabel {
+                name: Cow::Owned(format!("{} ({})", section.label(), counts.changed())),
+                short: Cow::Owned(format!("{} ({})", section.short_label(), counts.changed())),
+                counts: Vec::new(),
+            },
+            (AppMode::Diff, Some(counts)) => TabLabel {
+                name: Cow::Borrowed(section.label()),
+                short: Cow::Borrowed(section.short_label()),
+                counts: tab_count_spans(counts, filter),
+            },
         }
     })
 }
@@ -572,11 +691,13 @@ impl App {
         section_selector_state.select(Some(0));
 
         let (haystack, names) = build_haystack(&report);
+        let longest_name = longest_entry_name(&report);
 
         // Pre-build summary lines once (report data never changes).
         let report_summary = report.summary();
         let summary_lines = build_mode_summary_lines(mode, &report, &report_summary, &problem1);
         let numerics_lines = build_mode_numerics_lines(mode, &report, &problem1);
+        let numerics_badge = crate::widgets::numerics::numerics_badge(mode, &report);
 
         Self {
             mode,
@@ -608,7 +729,7 @@ impl App {
                 detail_content_lines: 0,
                 tab_bounds: [(0, 0); 5],
             },
-            yank: YankState { flash: None, message: String::new() },
+            yank: YankState { flash: None, message: String::new(), level: FlashLevel::Info },
             pending_yank: PendingYank::None,
             search_popup: SearchPopupState {
                 visible: false,
@@ -636,6 +757,7 @@ impl App {
             coeff_row_cache: None,
             summary_lines,
             numerics_lines,
+            numerics_badge,
             cached_summary: report_summary,
             ignore_order: false,
             sort_mode: SortMode::default(),
@@ -643,6 +765,9 @@ impl App {
             line_map1,
             line_map2,
             watch: WatchSession::disabled(),
+            sidebar_adjust: 0,
+            mouse_capture: true,
+            longest_name,
         }
     }
 
@@ -651,16 +776,37 @@ impl App {
         self.filter = filter;
     }
 
-    /// Flash a transient status-bar message (reuses the yank flash channel).
-    pub(crate) fn flash_status(&mut self, message: impl Into<String>) {
+    /// Flash a status-bar message at the given severity.
+    pub(crate) fn flash(&mut self, level: FlashLevel, message: impl Into<String>) {
         self.yank.message = message.into();
+        self.yank.level = level;
         self.yank.flash = Some(Instant::now());
+    }
+
+    /// Flash neutral feedback.
+    pub(crate) fn flash_status(&mut self, message: impl Into<String>) {
+        self.flash(FlashLevel::Info, message);
+    }
+
+    /// Flash a success.
+    pub(crate) fn flash_ok(&mut self, message: impl Into<String>) {
+        self.flash(FlashLevel::Ok, message);
+    }
+
+    /// Flash a refusal or no-op.
+    pub(crate) fn flash_warn(&mut self, message: impl Into<String>) {
+        self.flash(FlashLevel::Warn, message);
+    }
+
+    /// Flash a failure; it stays until the next key press.
+    pub(crate) fn flash_error(&mut self, message: impl Into<String>) {
+        self.flash(FlashLevel::Err, message);
     }
 
     /// A diff-only action was pressed in inspect mode: brief no-op hint.
     pub(crate) fn flash_diff_only(&mut self) {
         debug_assert!(matches!(self.mode, AppMode::Inspect), "flash_diff_only is only reachable in inspect mode");
-        self.flash_status("Not available in inspect mode (single file)");
+        self.flash_warn("Not available in inspect mode (single file)");
     }
 
     /// Toggle between parsed and raw text detail views.
@@ -674,9 +820,12 @@ impl App {
 
     /// Toggle hiding of order-only diff entries.
     pub fn toggle_ignore_order(&mut self) {
+        let selected = self.selected_entry_index();
         self.ignore_order = !self.ignore_order;
         self.invalidate_cache();
         self.rebuild_summary();
+        self.ensure_active_section_cache();
+        self.reselect_entry(selected);
     }
 
     /// Rebuild the cached summary and summary lines, adjusting counts when
@@ -695,17 +844,17 @@ impl App {
 
     /// Cycle the sidebar sort mode: Name → `AbsDelta` → `RelDelta` → Name.
     pub fn cycle_sort_mode(&mut self) {
+        let selected = self.selected_entry_index();
         self.sort_mode = self.sort_mode.next();
         self.invalidate_cache();
         self.ensure_active_section_cache();
-        self.reset_name_list_selection();
+        self.reselect_entry(selected);
         let label = match self.sort_mode {
             SortMode::Name => "Sort: name",
             SortMode::AbsDelta => "Sort: |\u{394}| (largest first)",
             SortMode::RelDelta => "Sort: rel\u{394} (largest first)",
         };
-        label.clone_into(&mut self.yank.message);
-        self.yank.flash = Some(Instant::now());
+        self.flash_status(label);
     }
 
     /// Cycle the relative tolerance through the presets and rebuild the diff.
@@ -713,8 +862,7 @@ impl App {
         let value = next_tolerance_preset(self.diff_options.rel_tol);
         self.diff_options.rel_tol = value;
         self.rebuild_report_inner(false);
-        self.yank.message = format!("rel_tol = {}", format_tolerance(value));
-        self.yank.flash = Some(Instant::now());
+        self.flash_status(format!("rel_tol = {}", format_tolerance(value)));
     }
 
     /// Cycle the absolute tolerance through the presets and rebuild the diff.
@@ -722,8 +870,7 @@ impl App {
         let value = next_tolerance_preset(self.diff_options.abs_tol);
         self.diff_options.abs_tol = value;
         self.rebuild_report_inner(false);
-        self.yank.message = format!("abs_tol = {}", format_tolerance(value));
-        self.yank.flash = Some(Instant::now());
+        self.flash_status(format!("abs_tol = {}", format_tolerance(value)));
     }
 
     /// Rebuild the diff report from the stored problems with the current
@@ -769,6 +916,7 @@ impl App {
         // Report-derived caches: search haystack + name buffer. The content
         // buffer is lazy — clear it and let the next `c:` query rebuild it.
         let (haystack, names) = build_haystack(&self.report);
+        self.longest_name = longest_entry_name(&self.report);
         self.search_haystack = haystack;
         self.search_name_buffer = names;
         self.search_content_buffer.clear();
@@ -784,6 +932,7 @@ impl App {
         // reloads but not on tolerance changes -- skip the rebuild otherwise.
         if analyses_changed {
             self.numerics_lines = build_mode_numerics_lines(self.mode, &self.report, &self.problem1);
+            self.numerics_badge = crate::widgets::numerics::numerics_badge(self.mode, &self.report);
         }
 
         // Filtered indices, cached sidebar lines, and coefficient row cache.
@@ -888,6 +1037,12 @@ impl App {
     /// Whether any modal overlay is open — a pop-up, a prompt, or one of the
     /// analysis panes. The draw dispatcher dims the screen behind them.
     pub fn has_overlay(&self) -> bool {
+        self.overlay_above_help() || self.show_help
+    }
+
+    /// Whether an overlay other than help is open. Help sits lowest in the
+    /// key and mouse priority order, so any of these covers it.
+    pub(crate) fn overlay_above_help(&self) -> bool {
         self.search_popup.visible
             || self.palette.visible
             || !matches!(self.solver.state, crate::state::SolveState::Idle)
@@ -896,7 +1051,6 @@ impl App {
             || self.presolve_log.is_some()
             || self.diagnostics.is_some()
             || self.analysis.is_open()
-            || self.show_help
     }
 
     /// Ensure the active section's cache is fresh. Call once per frame before drawing.
@@ -986,10 +1140,24 @@ impl App {
         self.active_section.list_index().is_some() && self.name_list_len() > 0
     }
 
-    pub(crate) const fn reset_name_list_selection(&mut self) {
-        if let Some(index) = self.active_section.list_index() {
-            self.section_states[index].list_state.select(None);
+    /// Re-select `entry` (a report index) in the active section's freshly
+    /// recomputed list, or the first row when it is no longer visible.
+    ///
+    /// A filter or sort change must not drop the selection: the list would
+    /// read `0/N` and the detail panel fall back to the cheat sheet, as though
+    /// the user had never picked anything. Must be called after
+    /// `ensure_active_section_cache`.
+    pub(crate) fn reselect_entry(&mut self, entry: Option<usize>) {
+        let Some(index) = self.active_section.list_index() else {
+            return;
+        };
+        let visible = self.section_states[index].cached_indices();
+        let kept = entry.and_then(|entry| visible.iter().position(|&i| i == entry));
+        let position = kept.or_else(|| (!visible.is_empty()).then_some(0));
+        if kept.is_none() {
+            self.detail_scroll = 0;
         }
+        self.section_states[index].list_state.select(position);
     }
 
     /// Move down by `n` steps in the focused panel. No-op for `SectionSelector`.
@@ -1049,29 +1217,41 @@ impl App {
     /// Copy `text` to the system clipboard and show a flash message in the status bar.
     ///
     /// `label` is a short description shown on success (e.g. "Yanked: x1").
+    ///
+    /// Over SSH or inside tmux the system clipboard `arboard` reaches is the
+    /// wrong machine's (or none at all), so the text goes to the terminal
+    /// instead, as an OSC 52 escape the terminal copies from. Locally,
+    /// `arboard` is tried first and OSC 52 is the fallback when it fails. The
+    /// flash names the route taken, since OSC 52 cannot confirm it landed.
     pub(crate) fn set_yank_flash(&mut self, label: &str, text: &str) {
         thread_local! {
             static CLIPBOARD: std::cell::RefCell<Option<arboard::Clipboard>> = const { std::cell::RefCell::new(None) };
+        }
+
+        let remote = std::env::var_os("SSH_TTY").is_some() || std::env::var_os("TMUX").is_some();
+        if remote {
+            match crate::clipboard::write_osc52(text) {
+                Ok(()) => self.flash_ok(format!("{label} (via terminal, OSC 52)")),
+                Err(error) => self.flash_error(format!("Yank failed: could not write OSC 52: {error}")),
+            }
+            return;
         }
 
         let result: Result<(), String> = CLIPBOARD.with_borrow_mut(|cb| {
             if cb.is_none() {
                 // Surface initialisation failure (common on SSH/Wayland sessions) instead of
                 // silently appearing to succeed; the next yank will retry initialisation.
-                *cb = Some(arboard::Clipboard::new().map_err(|error| format!("Clipboard unavailable: {error}"))?);
+                *cb = Some(arboard::Clipboard::new().map_err(|error| format!("clipboard unavailable: {error}"))?);
             }
-            cb.as_mut().expect("clipboard initialised above").set_text(text).map_err(|error| format!("Yank failed: {error}"))
+            cb.as_mut().expect("clipboard initialised above").set_text(text).map_err(|error| format!("clipboard failed: {error}"))
         });
 
         match result {
-            Ok(()) => {
-                label.clone_into(&mut self.yank.message);
-                self.yank.flash = Some(Instant::now());
-            }
-            Err(message) => {
-                self.yank.message = message;
-                self.yank.flash = Some(Instant::now());
-            }
+            Ok(()) => self.flash_ok(format!("{label} (clipboard)")),
+            Err(clipboard_error) => match crate::clipboard::write_osc52(text) {
+                Ok(()) => self.flash_warn(format!("{label} (via terminal, OSC 52 \u{2014} {clipboard_error})")),
+                Err(error) => self.flash_error(format!("Yank failed: {clipboard_error}; OSC 52: {error}")),
+            },
         }
     }
 
@@ -1096,8 +1276,7 @@ impl App {
                 Side::Old => "No old version",
                 Side::New => "No new version",
             };
-            msg.clone_into(&mut self.yank.message);
-            self.yank.flash = Some(Instant::now());
+            self.flash_warn(msg);
         }
     }
 
@@ -1116,31 +1295,32 @@ impl App {
     ///
     /// Diff mode writes the single `lp_diff_report_<timestamp>.csv`; inspect mode
     /// writes the model itself via the core crate's `to_csv`
-    /// (`objectives.csv`, `constraints.csv`, `variables.csv`).
+    /// (`objectives.csv`, `constraints.csv`, `variables.csv`) into a fresh
+    /// `<file stem>_csv_<timestamp>` folder, so nothing is overwritten. The
+    /// flash gives the full path written.
     pub fn export_csv(&mut self) {
         let dir = match std::env::current_dir() {
             Ok(d) => d,
             Err(e) => {
-                self.yank.message = format!("CSV export failed: {e}");
-                self.yank.flash = Some(Instant::now());
+                self.flash_error(format!("CSV export failed: {e}"));
                 return;
             }
         };
         let result: Result<String, String> = match self.mode {
-            AppMode::Diff => {
-                crate::export::write_diff_csv(&self.report, &dir).map(|filename| format!("Wrote {filename}")).map_err(|e| e.to_string())
-            }
-            AppMode::Inspect => self
-                .problem1
-                .to_csv(&dir)
-                .map(|()| "Wrote objectives.csv, constraints.csv, variables.csv".to_owned())
+            AppMode::Diff => crate::export::write_diff_csv(&self.report, &dir)
+                .map(|filename| format!("Wrote {}", dir.join(filename).display()))
                 .map_err(|e| e.to_string()),
+            AppMode::Inspect => {
+                let stem = self.file1_path.file_stem().map_or_else(|| "model".to_owned(), |stem| stem.to_string_lossy().into_owned());
+                crate::export::write_model_csv(&self.problem1, &dir, &stem)
+                    .map(|folder| format!("Wrote objectives, constraints and variables CSVs to {}", folder.display()))
+                    .map_err(|e| e.to_string())
+            }
         };
         match result {
-            Ok(message) => self.yank.message = message,
-            Err(e) => self.yank.message = format!("CSV export failed: {e}"),
+            Ok(message) => self.flash_ok(message),
+            Err(e) => self.flash_error(format!("CSV export failed: {e}")),
         }
-        self.yank.flash = Some(Instant::now());
     }
 
     /// Return the name of an entry given section and entry index.
@@ -1163,8 +1343,18 @@ impl App {
 
     /// Record the current navigation position in the jumplist.
     pub(crate) fn record_jump(&mut self) {
-        let entry_index = self.active_section.list_index().and_then(|index| self.section_states[index].list_state.selected());
-        self.jumplist.push(JumpEntry { section: self.active_section, entry_index, detail_scroll: self.detail_scroll, filter: self.filter });
+        let entry_name = self.selected_entry_name().map(str::to_owned);
+        self.jumplist.push(JumpEntry { section: self.active_section, entry_name, detail_scroll: self.detail_scroll, filter: self.filter });
+    }
+
+    /// Report index of the entry named `name` in `section`, if it still exists.
+    fn entry_index_by_name(&self, section: Section, name: &str) -> Option<usize> {
+        match section {
+            Section::Variables => self.report.variables.entries.iter().position(|e| e.name == name),
+            Section::Constraints => self.report.constraints.entries.iter().position(|e| e.name == name),
+            Section::Objectives => self.report.objectives.entries.iter().position(|e| e.name == name),
+            Section::Summary | Section::Numerics => None,
+        }
     }
 
     /// Update active section, keeping the (now invisible) selector state in
@@ -1177,21 +1367,25 @@ impl App {
     /// Step back in the jumplist and restore that position (`Ctrl+o` / palette).
     pub(crate) fn jump_back(&mut self) {
         if let Some(entry) = self.jumplist.go_back() {
-            let entry = *entry;
-            self.restore_jump(entry);
+            let entry = entry.clone();
+            self.restore_jump(&entry);
         }
     }
 
     /// Step forward in the jumplist and restore that position (`Ctrl+i` / palette).
     pub(crate) fn jump_forward(&mut self) {
         if let Some(entry) = self.jumplist.go_forward() {
-            let entry = *entry;
-            self.restore_jump(entry);
+            let entry = entry.clone();
+            self.restore_jump(&entry);
         }
     }
 
     /// Navigate to a jumplist entry, restoring section, selection, scroll, and filter.
-    pub(crate) fn restore_jump(&mut self, entry: JumpEntry) {
+    ///
+    /// The entry is found by name among the rows now visible; when it has gone
+    /// (a reload removed it) or is hidden (`ignore_order`), the first row is
+    /// selected instead.
+    pub(crate) fn restore_jump(&mut self, entry: &JumpEntry) {
         self.set_active_section(entry.section);
         self.apply_filter(entry.filter);
         self.invalidate_cache();
@@ -1199,22 +1393,17 @@ impl App {
         self.detail_scroll = entry.detail_scroll;
 
         if let Some(index) = entry.section.list_index() {
-            if let Some(selection) = entry.entry_index {
-                let len = self.section_states[index].cached_indices().len();
-                if selection < len {
-                    self.section_states[index].list_state.select(Some(selection));
-                } else if len > 0 {
-                    self.section_states[index].list_state.select(Some(len - 1));
-                } else {
-                    self.section_states[index].list_state.select(None);
-                }
-            } else {
-                self.section_states[index].list_state.select(None);
-            }
+            let selection = entry.entry_name.as_deref().map(|name| {
+                let visible = self.section_states[index].cached_indices();
+                self.entry_index_by_name(entry.section, name)
+                    .and_then(|entry_index| visible.iter().position(|&i| i == entry_index))
+                    .or_else(|| (!visible.is_empty()).then_some(0))
+            });
+            self.section_states[index].list_state.select(selection.flatten());
         }
 
         self.focus =
-            if entry.entry_index.is_some() && entry.section.list_index().is_some() { Focus::NameList } else { Focus::SectionSelector };
+            if entry.entry_name.is_some() && entry.section.list_index().is_some() { Focus::NameList } else { Focus::SectionSelector };
     }
 
     /// Enable watch mode, anchoring the debounce baseline at the current mtimes.
@@ -1243,14 +1432,12 @@ impl App {
                 Ok(Err(error)) => {
                     // Keep the old report; the watcher retries on the next change.
                     self.watch.receive = None;
-                    self.yank.message = format!("reload failed: {error}");
-                    self.yank.flash = Some(Instant::now());
+                    self.flash_error(format!("reload failed: {error}"));
                 }
                 Err(mpsc::TryRecvError::Empty) => {} // still parsing
                 Err(mpsc::TryRecvError::Disconnected) => {
                     self.watch.receive = None;
-                    "reload failed: parse thread disconnected".clone_into(&mut self.yank.message);
-                    self.yank.flash = Some(Instant::now());
+                    self.flash_error(format!("reload failed: {}", crate::disconnected("parse")));
                 }
             }
             return;
@@ -1282,10 +1469,10 @@ impl App {
 
         std::thread::spawn(move || {
             let outcome = crate::watch::reload_files(&path1, &path2);
-            // Receiver may be dropped if the app quit — this is expected.
-            if sender.send(outcome).is_err() {
-                eprintln!("reload result dropped: receiver closed");
-            }
+            // The receiver is dropped if the app quit, so a failed send is
+            // expected and deliberately silent: stderr is the alternate screen
+            // ratatui is drawing into, and printing there garbles the frame.
+            drop(sender.send(outcome));
         });
     }
 
@@ -1310,9 +1497,30 @@ impl App {
         self.rebuild_report();
 
         self.solver = SolverSession::new();
+        self.discard_model_derived_state();
 
-        "reloaded".clone_into(&mut self.yank.message);
-        self.yank.flash = Some(Instant::now());
+        self.flash_ok("reloaded");
+    }
+
+    /// Drop everything computed from the old models on a reload, so no stale
+    /// result is presented as describing the new files.
+    ///
+    /// An in-flight analysis is discarded by dropping its receiver: the worker's
+    /// send then fails harmlessly. An open what-if prompt keeps the user's
+    /// typing but takes the constraint's new RHS, closing if it is gone. The
+    /// jumplist records entries by name, so it survives as is.
+    fn discard_model_derived_state(&mut self) {
+        self.analysis = AnalysisState::Idle;
+        self.receive_analysis = None;
+        self.diagnostics = None;
+        self.presolve_log = None;
+        self.last_presolve = None;
+        if let Some(prompt) = &mut self.what_if {
+            match crate::input::baseline_constraint_rhs(&self.problem1, &prompt.constraint_name) {
+                Some(rhs) => prompt.current_rhs = rhs,
+                None => self.what_if = None,
+            }
+        }
     }
 
     /// Whether any time-driven UI is active and needs tick-driven redraws:
@@ -1320,7 +1528,7 @@ impl App {
     /// watch reload, or a visible yank flash. Everything else only changes
     /// in response to input, so the main loop skips idle-tick repaints.
     pub const fn is_animating(&self) -> bool {
-        self.yank.flash.is_some()
+        self.yank.expires()
             || self.watch.is_reloading()
             || matches!(self.solver.state, SolveState::Running { .. } | SolveState::RunningBoth { .. })
             || matches!(self.solver.diagnosis, DiagnosisState::Running { .. })
@@ -1357,7 +1565,7 @@ impl App {
             }
             Err(mpsc::TryRecvError::Empty) => {} // still running
             Err(mpsc::TryRecvError::Disconnected) => {
-                self.analysis = AnalysisState::Failed { label, error: format!("{label} thread disconnected") };
+                self.analysis = AnalysisState::Failed { label, error: crate::disconnected(label) };
                 self.receive_analysis = None;
             }
         }
@@ -1382,7 +1590,7 @@ impl App {
             }
             Err(mpsc::TryRecvError::Empty) => {} // still running
             Err(mpsc::TryRecvError::Disconnected) => {
-                self.solver.diagnosis = DiagnosisState::Failed("Diagnosis thread disconnected".to_owned());
+                self.solver.diagnosis = DiagnosisState::Failed(crate::disconnected("Diagnosis"));
                 self.solver.receive_diagnosis = None;
             }
         }
@@ -1415,7 +1623,7 @@ impl App {
             }
             Err(mpsc::TryRecvError::Empty) => {} // still running
             Err(mpsc::TryRecvError::Disconnected) => {
-                self.solver.state = SolveState::Failed("Solver thread disconnected".to_owned());
+                self.solver.state = SolveState::Failed(crate::disconnected("Solver"));
                 self.solver.receive = None;
             }
         }
@@ -1427,14 +1635,14 @@ impl App {
         let got1 = self.solver.receive.as_ref().and_then(|rx| match rx.try_recv() {
             Ok(result) => Some(result),
             Err(mpsc::TryRecvError::Empty) => None,
-            Err(mpsc::TryRecvError::Disconnected) => Some(Err("Solver thread 1 disconnected".to_owned())),
+            Err(mpsc::TryRecvError::Disconnected) => Some(Err(crate::disconnected("Solver 1"))),
         });
 
         // Poll channel 2.
         let got2 = self.solver.receive2.as_ref().and_then(|rx| match rx.try_recv() {
             Ok(result) => Some(result),
             Err(mpsc::TryRecvError::Empty) => None,
-            Err(mpsc::TryRecvError::Disconnected) => Some(Err("Solver thread 2 disconnected".to_owned())),
+            Err(mpsc::TryRecvError::Disconnected) => Some(Err(crate::disconnected("Solver 2"))),
         });
 
         // Handle errors first.
@@ -1699,7 +1907,7 @@ impl App {
     /// search, wrapping around. Bound to `n`/`N` in normal mode.
     pub(crate) fn repeat_search(&mut self, forward: bool) {
         if self.last_search.is_empty() {
-            self.flash_status("No previous search (press / to search)");
+            self.flash_warn("No previous search (press / to search)");
             return;
         }
         let len = self.last_search.len();
@@ -1727,6 +1935,13 @@ impl App {
         let Some(list_index) = section.list_index() else {
             return;
         };
+        // Search covers every entry, including the order-only ones `o` hides;
+        // reveal them rather than land on whatever row is at the stale position.
+        if self.ignore_order && !self.section_states[list_index].cached_indices().contains(&entry_index) {
+            self.toggle_ignore_order();
+            self.ensure_active_section_cache();
+            self.flash_status("Showing order-only changes to reach the match");
+        }
         let filtered = self.section_states[list_index].cached_indices();
         debug_assert!(
             filtered.contains(&entry_index),
@@ -1738,6 +1953,27 @@ impl App {
 
         self.focus = Focus::NameList;
         self.detail_scroll = 0;
+    }
+
+    /// Toggle mouse capture (`M`), saying what the new state is for.
+    pub(crate) fn toggle_mouse_capture(&mut self) {
+        self.mouse_capture = !self.mouse_capture;
+        if self.mouse_capture {
+            self.flash_status("Mouse on: scroll and click (M to select text instead)");
+        } else {
+            self.flash_status("Mouse off: select text with the terminal (M to restore)");
+        }
+    }
+
+    /// Widen (`grow`) or narrow the sidebar by one step, within the bounds
+    /// [`sidebar_width`](crate::ui::sidebar_width) enforces.
+    pub(crate) fn resize_sidebar(&mut self, grow: bool) {
+        const STEP: i16 = 4;
+        // Bounded so a held key cannot wind the offset far past what the
+        // layout will ever honour.
+        const LIMIT: i16 = 200;
+        let step = if grow { STEP } else { -STEP };
+        self.sidebar_adjust = (self.sidebar_adjust + step).clamp(-LIMIT, LIMIT);
     }
 
     /// Largest useful detail-panel scroll offset: content height minus the
@@ -1754,6 +1990,124 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Regression: a watch reload reset only the solver session, so analyses,
+    /// panes and presolve results of the old files were shown as current.
+    #[test]
+    fn a_reload_discards_results_computed_from_the_old_models() {
+        let mut app = crate::snapshot_tests::diff_app_from(crate::snapshot_tests::BASE_LP, crate::snapshot_tests::BASE_LP);
+        let pane = || ScrollPane { lines: Vec::new(), scroll: 0, export: None };
+        let (_sender, receiver) = mpsc::channel();
+        app.analysis = AnalysisState::Running { label: "Ranging", started: Instant::now() };
+        app.receive_analysis = Some(receiver);
+        app.diagnostics = Some(pane());
+        app.presolve_log = Some(pane());
+        app.last_presolve = Some(crate::presolve::presolve(&app.problem1, app.presolve_rules).1);
+        app.what_if = Some(crate::state::WhatIfPrompt {
+            constraint_name: "c1".to_owned(),
+            current_rhs: 2.0,
+            input: tui_input::Input::default(),
+            error: None,
+        });
+
+        let reparse = |source: &str| crate::parse::parse_text(source, false, "a.lp").expect("fixture parses");
+        let changed = crate::snapshot_tests::BASE_LP.replace("c1: x + y >= 2", "c1: x + y >= 7");
+        app.apply_reload((reparse(&changed), reparse(&changed)));
+
+        assert!(matches!(app.analysis, AnalysisState::Idle), "an in-flight analysis of the old model is discarded");
+        assert!(app.receive_analysis.is_none(), "its result channel is dropped");
+        assert!(app.diagnostics.is_none(), "the diagnostics pane described the old model");
+        assert!(app.presolve_log.is_none(), "the presolve log described the old model");
+        assert!(app.last_presolve.is_none(), "the presolve stats described the old model");
+        assert_eq!(app.what_if.as_ref().map(|prompt| prompt.current_rhs), Some(7.0), "the what-if prompt shows the new RHS");
+    }
+
+    /// Regression: the jumplist stored list positions, so once the rows moved
+    /// (here `o` hiding an order-only entry above) it restored the wrong entry.
+    #[test]
+    fn the_jumplist_returns_to_the_same_entry_after_the_rows_move() {
+        let mut app = crate::snapshot_tests::diff_app_from(
+            "min\nobj: x\nst\nc1: x + y >= 2\nc2: x <= 8\nc3: y <= 4\nend\n",
+            "min\nobj: x\nst\nc1: y + x >= 2\nc2: x <= 9\nc3: y <= 5\nend\n",
+        );
+        app.set_section(Section::Constraints);
+        app.active_name_list_state_mut().select(Some(1));
+        assert_eq!(app.selected_entry_name(), Some("c2"), "fixture: c2 is the second row");
+        app.record_jump();
+
+        app.toggle_ignore_order();
+        app.jump_back();
+
+        assert_eq!(app.selected_entry_name(), Some("c2"), "the jump must land on the recorded entry");
+    }
+
+    /// `M` hands the mouse to the terminal and back.
+    #[test]
+    fn m_toggles_mouse_capture() {
+        let mut app = crate::snapshot_tests::inspect_app_from(crate::snapshot_tests::BASE_LP);
+        assert!(app.mouse_capture, "the TUI starts with the mouse");
+        app.handle_key(crossterm::event::KeyEvent::from(crossterm::event::KeyCode::Char('M')));
+        assert!(!app.mouse_capture, "M releases it for native selection");
+        assert!(app.yank.message.contains("select text"), "and says what for");
+        app.handle_key(crossterm::event::KeyEvent::from(crossterm::event::KeyCode::Char('M')));
+        assert!(app.mouse_capture, "M again takes it back");
+    }
+
+    /// An error flash does not expire on the timer; the next key press clears
+    /// it. Other flashes expire, and only they keep the tick redrawing.
+    #[test]
+    fn an_error_flash_stays_until_the_next_key_press() {
+        let mut app = crate::snapshot_tests::diff_app_from(crate::snapshot_tests::BASE_LP, crate::snapshot_tests::BASE_LP);
+        app.flash_ok("Yanked: x");
+        assert!(app.yank.expires() && app.is_animating(), "a success expires on the timer");
+
+        app.flash_error("CSV export failed: disk full");
+        assert_eq!(app.yank.level, FlashLevel::Err);
+        assert!(!app.yank.expires(), "an error must not expire on its own");
+        assert!(!app.is_animating(), "a standing error needs no redraw ticks");
+
+        app.handle_key(crossterm::event::KeyEvent::from(crossterm::event::KeyCode::Char('j')));
+        assert!(app.yank.flash.is_none(), "the next key press clears the error");
+    }
+
+    /// Regression: a filter or sort change dropped the selection, so the list
+    /// read `0/N` and the detail panel fell back to the cheat sheet.
+    #[test]
+    fn filter_and_sort_changes_keep_the_selected_entry() {
+        let mut app = crate::snapshot_tests::diff_app_from(
+            "min\nobj: x\nst\nc1: x + y >= 2\nc2: x <= 8\nc3: y <= 4\nend\n",
+            "min\nobj: x\nst\nc1: x + y >= 3\nc2: x <= 9\nc4: y <= 5\nend\n",
+        );
+        app.set_section(Section::Constraints);
+        let c2 = app.report.constraints.entries.iter().position(|entry| entry.name == "c2").expect("c2 is in the report");
+        let position = app.section_states[1].cached_indices().iter().position(|&i| i == c2).expect("c2 is listed");
+        app.active_name_list_state_mut().select(Some(position));
+
+        app.cycle_sort_mode();
+        assert_eq!(app.selected_entry_name(), Some("c2"), "a sort change keeps the entry");
+        app.set_filter(DiffFilter::Modified);
+        assert_eq!(app.selected_entry_name(), Some("c2"), "a filter that still shows the entry keeps it");
+        app.set_filter(DiffFilter::Added);
+        assert_eq!(app.active_name_list_state_mut().selected(), Some(0), "a filter hiding the entry falls back to the first row");
+    }
+
+    /// Regression: search covers order-only entries that `o` hides, and the
+    /// jump found no row for them (a debug panic; the wrong entry in release).
+    #[test]
+    fn jumping_to_a_hidden_order_only_entry_reveals_it() {
+        let mut app = crate::snapshot_tests::diff_app_from(
+            "min\nobj: x\nst\nc1: x + y >= 2\nc2: x <= 8\nend\n",
+            "min\nobj: x\nst\nc1: y + x >= 2\nc2: x <= 9\nend\n",
+        );
+        let c1 = app.report.constraints.entries.iter().position(|entry| entry.name == "c1").expect("c1 is in the report");
+        assert!(app.report.constraints.entries[c1].order_only, "fixture: c1 differs only in term order");
+        app.toggle_ignore_order();
+
+        app.jump_to_entry(Section::Constraints, c1);
+
+        assert!(!app.ignore_order, "the jump must reveal order-only entries");
+        assert_eq!(app.selected_entry_index(), Some(c1), "the jump must land on the match");
+    }
 
     /// Closing a completed overlay must file the result under its key, serve it
     /// back once for the same input, and never serve it for a different one.

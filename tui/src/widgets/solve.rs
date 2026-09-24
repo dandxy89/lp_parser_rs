@@ -22,7 +22,11 @@ fn name_column_width(inner_width: u16, fixed: usize) -> usize {
 }
 
 /// Draw the solver overlay on top of the current frame, based on the current solve state.
-pub fn draw_solve_overlay(frame: &mut Frame, area: Rect, app: &App) {
+///
+/// Takes `app` mutably to write back the results view's scroll offset,
+/// clamped to the content, so scrolling past the end does not leave a dead
+/// zone that `k` has to climb back out of.
+pub fn draw_solve_overlay(frame: &mut Frame, area: Rect, app: &mut App) {
     // A zero-sized area is an environmental condition (shrunken terminal), not a
     // programming error: drawing into it is a no-op.
     if area.width == 0 || area.height == 0 {
@@ -31,12 +35,21 @@ pub fn draw_solve_overlay(frame: &mut Frame, area: Rect, app: &App) {
     match &app.solver.state {
         SolveState::Idle => {}
         SolveState::Picking => draw_picker(frame, area, app),
-        SolveState::Running { file, started } => draw_running(frame, area, file, started.elapsed()),
+        SolveState::Running { file, started } => draw_running(frame, area, file, started.elapsed(), app.solver.confirm_quit),
         SolveState::RunningBoth { file1, file2, result1, result2, started } => {
-            draw_running_both(frame, area, file1, file2, result1.is_some(), result2.is_some(), started.elapsed());
+            let sides = [(file1.as_str(), result1.is_some()), (file2.as_str(), result2.is_some())];
+            draw_running_both(frame, area, sides, started.elapsed(), app.solver.confirm_quit);
         }
-        SolveState::Done(result) => draw_done(frame, area, result, &app.solver.view, &app.solver.render_cache, &app.solver.diagnosis),
-        SolveState::DoneBoth(diff) => draw_done_both(frame, area, diff, &app.solver.view, &app.solver.render_cache, &app.solver.diagnosis),
+        SolveState::Done(result) => {
+            let scroll = draw_done(frame, area, result, &app.solver.view, &app.solver.render_cache, &app.solver.diagnosis);
+            let tab = app.solver.view.tab.index();
+            app.solver.view.scroll[tab] = scroll;
+        }
+        SolveState::DoneBoth(diff) => {
+            let scroll = draw_done_both(frame, area, diff, &app.solver.view, &app.solver.render_cache, &app.solver.diagnosis);
+            let tab = app.solver.view.tab.index();
+            app.solver.view.scroll[tab] = scroll;
+        }
         SolveState::Failed(error) => draw_failed(frame, area, error),
     }
 }
@@ -71,17 +84,52 @@ fn draw_picker(frame: &mut Frame, area: Rect, app: &App) {
     frame.render_widget(paragraph, popup);
 }
 
-fn draw_running(frame: &mut Frame, area: Rect, file: &str, elapsed: std::time::Duration) {
+/// A solve label for the running pop-up: a file path is shortened to its
+/// file name (keeping a `baseline: ` style prefix), since the full path is
+/// already in the tab bar's world and only crowds the pop-up. Labels that
+/// describe an edit rather than name a file are left alone.
+fn short_label(label: &str) -> String {
+    let is_model_path = |path: &str| {
+        let extension = std::path::Path::new(path).extension().and_then(std::ffi::OsStr::to_str).unwrap_or("");
+        ["lp", "mps", "gz", "bz2", "xz"].iter().any(|known| extension.eq_ignore_ascii_case(known))
+    };
+    match label.split_once(": ") {
+        Some((prefix, path)) if is_model_path(path) => format!("{prefix}: {}", super::short_filename(path)),
+        None if is_model_path(label) => super::short_filename(label),
+        _ => label.to_owned(),
+    }
+}
+
+/// The last line of a running pop-up: how to cancel, or — after `q` — the
+/// quit confirmation.
+fn running_footer(confirm_quit: bool) -> Line<'static> {
     let t = theme();
-    let popup = super::centred_rect(area, 50, 5);
+    if confirm_quit {
+        Line::from(vec![
+            Span::styled("  Solve running \u{2014} quit? ", Style::default().fg(t.modified).add_modifier(Modifier::BOLD)),
+            Span::styled("y", Style::default().fg(t.accent).add_modifier(Modifier::BOLD)),
+            Span::styled("/", Style::default().fg(t.muted)),
+            Span::styled("n", Style::default().fg(t.accent).add_modifier(Modifier::BOLD)),
+        ])
+    } else {
+        let mut spans = vec![Span::raw("  ")];
+        spans.extend(super::key_hint_spans(&["Esc:cancel", "q:quit"]));
+        Line::from(spans)
+    }
+}
+
+fn draw_running(frame: &mut Frame, area: Rect, file: &str, elapsed: std::time::Duration, confirm_quit: bool) {
+    let t = theme();
+    let popup = super::centred_rect(area, 50, 6);
     let lines = vec![
         Line::from(""),
         Line::from(vec![
             Span::styled(format!("  {} Solving ", spinner_frame(elapsed)), Style::default().fg(t.modified).add_modifier(Modifier::BOLD)),
-            Span::styled(file.to_owned(), Style::default().fg(t.text)),
+            Span::styled(short_label(file), Style::default().fg(t.text)),
             Span::styled(format!(" ({}s)", elapsed.as_secs()), Style::default().fg(t.modified)),
         ]),
         Line::from(""),
+        running_footer(confirm_quit),
     ];
 
     let block = panel_block(Style::default().fg(t.modified).add_modifier(Modifier::BOLD))
@@ -92,6 +140,8 @@ fn draw_running(frame: &mut Frame, area: Rect, file: &str, elapsed: std::time::D
     frame.render_widget(paragraph, popup);
 }
 
+/// Draw a single solve's results, returning the scroll offset actually used:
+/// the requested one, clamped so the last line can still reach the bottom.
 fn draw_done(
     frame: &mut Frame,
     area: Rect,
@@ -99,7 +149,7 @@ fn draw_done(
     view: &SolveViewState,
     cache: &SolveRenderCache,
     diagnosis: &DiagnosisState,
-) {
+) -> u16 {
     let t = theme();
     // Full screen bar the bottom row, so the status bar stays visible.
     let popup = Rect { height: area.height.saturating_sub(1), ..area };
@@ -111,14 +161,12 @@ fn draw_done(
     // list below can borrow them alongside the cached tab lines.
     let tab_bar = build_tab_bar(active);
     let blank = Line::from("");
-    let footer =
-        Line::from(Span::styled("  1-5: tabs  Tab/S-Tab: cycle  j/k: scroll  w: csv  y: yank  Esc: close", Style::default().fg(t.muted)));
 
     // The cache is always populated before the state becomes `Done`, so the
     // cached tab lines are the only source of content.
     let SolveRenderCache::Single(tabs) = cache else {
         debug_assert!(false, "render cache must be Single when solve state is Done");
-        return;
+        return scroll;
     };
     let cached: &[Line<'static>] = &tabs[active.index()];
 
@@ -135,14 +183,13 @@ fn draw_done(
     lines.push(&blank);
     lines.extend(cached.iter());
     lines.extend(diag.iter());
-    lines.push(&blank);
-    lines.push(&footer);
 
     let block = panel_block(Style::default().fg(t.added).add_modifier(Modifier::BOLD))
         .title(Span::styled(" Solve Results ", Style::default().fg(t.added).add_modifier(Modifier::BOLD)));
     let inner = block.inner(popup);
     frame.render_widget(Clear, popup);
     frame.render_widget(block, popup);
+    let scroll = clamp_scroll(scroll, lines.len(), inner.height);
 
     // Windowed render honouring vertical scroll (same idiom as `draw_summary`),
     // clipping long lines to width like the previous unwrapped `Paragraph`.
@@ -152,6 +199,7 @@ fn draw_done(
         let y = inner.y + i as u16;
         buf.set_line(inner.x, y, line, inner.width);
     }
+    scroll
 }
 
 /// Build the tab bar line with the active tab highlighted.
@@ -190,7 +238,10 @@ fn build_summary_tab(lines: &mut Vec<Line<'static>>, result: &SolveResult) {
         lines.push(Line::from(vec![
             Span::styled("  Warning:   ", Style::default().fg(t.modified).add_modifier(Modifier::BOLD)),
             Span::styled(
-                format!("{} SOS constraint(s) skipped — solution may not satisfy them", result.skipped_sos),
+                format!(
+                    "{} skipped \u{2014} solution may not satisfy them",
+                    crate::format::plural(result.skipped_sos, "SOS constraint", "SOS constraints")
+                ),
                 Style::default().fg(t.modified),
             ),
         ]));
@@ -216,19 +267,19 @@ fn build_summary_tab(lines: &mut Vec<Line<'static>>, result: &SolveResult) {
     crate::widgets::push_heading(lines, "Timings", "");
     lines.push(Line::from(vec![
         Span::styled("  Build:         ", Style::default().fg(t.muted)),
-        Span::styled(format!("{:.3}s", result.build_time.as_secs_f64()), Style::default().fg(t.accent)),
+        Span::styled(crate::format::fmt_duration(result.build_time), Style::default().fg(t.accent)),
     ]));
     lines.push(Line::from(vec![
         Span::styled("  Solve:         ", Style::default().fg(t.muted)),
-        Span::styled(format!("{:.3}s", result.solve_time.as_secs_f64()), Style::default().fg(t.accent)),
+        Span::styled(crate::format::fmt_duration(result.solve_time), Style::default().fg(t.accent)),
     ]));
     lines.push(Line::from(vec![
         Span::styled("  Extract:       ", Style::default().fg(t.muted)),
-        Span::styled(format!("{:.3}s", result.extract_time.as_secs_f64()), Style::default().fg(t.accent)),
+        Span::styled(crate::format::fmt_duration(result.extract_time), Style::default().fg(t.accent)),
     ]));
     lines.push(Line::from(vec![
         Span::styled("  Total:         ", Style::default().fg(t.muted)),
-        Span::styled(format!("{:.3}s", total.as_secs_f64()), Style::default().fg(t.text).add_modifier(Modifier::BOLD)),
+        Span::styled(crate::format::fmt_duration(total), Style::default().fg(t.text).add_modifier(Modifier::BOLD)),
     ]));
 }
 
@@ -522,7 +573,10 @@ fn append_diagnosis_block(lines: &mut Vec<Line<'static>>, diagnosis: &DiagnosisS
             lines.push(Line::from(vec![
                 Span::styled("  Total violation: ", Style::default().fg(t.muted)),
                 Span::styled(format!("{:.6}", diagnosis.total_violation), Style::default().fg(t.modified).add_modifier(Modifier::BOLD)),
-                Span::styled(format!("  (elastic solve: {:.3}s)", diagnosis.solve_time.as_secs_f64()), Style::default().fg(t.muted)),
+                Span::styled(
+                    format!("  (elastic solve: {})", crate::format::fmt_duration(diagnosis.solve_time)),
+                    Style::default().fg(t.muted),
+                ),
             ]));
             // This block answers "what is cheapest to relax". The IIS answers
             // "what is minimally in conflict" — a different question, and often
@@ -599,11 +653,13 @@ const LABEL_WIDTH: usize = 46;
 /// and borders.
 const LABEL_POPUP_WIDTH: u16 = 70;
 
-fn draw_running_both(frame: &mut Frame, area: Rect, file1: &str, file2: &str, done1: bool, done2: bool, elapsed: std::time::Duration) {
+fn draw_running_both(frame: &mut Frame, area: Rect, sides: [(&str, bool); 2], elapsed: std::time::Duration, confirm_quit: bool) {
     let t = theme();
+    let [(file1, done1), (file2, done2)] = sides;
+    let (file1, file2) = (short_label(file1), short_label(file2));
     // Wide enough for a what-if or presolve label, which describe an edit
     // rather than naming a file and so run much longer than a path.
-    let popup = super::centred_rect(area, LABEL_POPUP_WIDTH, 7);
+    let popup = super::centred_rect(area, LABEL_POPUP_WIDTH, 8);
     let running_label = format!("solving\u{2026} ({}s)", elapsed.as_secs());
     let spinner = spinner_frame(elapsed);
     let icon1 = if done1 { "\u{2713}" } else { spinner };
@@ -618,7 +674,7 @@ fn draw_running_both(frame: &mut Frame, area: Rect, file1: &str, file2: &str, do
         Line::from(vec![
             Span::styled(format!("  {icon1} "), if done1 { style_done } else { style_running }),
             Span::styled(
-                format!("{:<width$}", truncate_with_ellipsis(file1, LABEL_WIDTH), width = LABEL_WIDTH + 2),
+                format!("{:<width$}", truncate_with_ellipsis(&file1, LABEL_WIDTH), width = LABEL_WIDTH + 2),
                 Style::default().fg(t.text),
             ),
             Span::styled(status1, if done1 { style_done } else { style_running }),
@@ -626,12 +682,13 @@ fn draw_running_both(frame: &mut Frame, area: Rect, file1: &str, file2: &str, do
         Line::from(vec![
             Span::styled(format!("  {icon2} "), if done2 { style_done } else { style_running }),
             Span::styled(
-                format!("{:<width$}", truncate_with_ellipsis(file2, LABEL_WIDTH), width = LABEL_WIDTH + 2),
+                format!("{:<width$}", truncate_with_ellipsis(&file2, LABEL_WIDTH), width = LABEL_WIDTH + 2),
                 Style::default().fg(t.text),
             ),
             Span::styled(status2, if done2 { style_done } else { style_running }),
         ]),
         Line::from(""),
+        running_footer(confirm_quit),
     ];
 
     let block = panel_block(Style::default().fg(t.secondary_accent).add_modifier(Modifier::BOLD))
@@ -642,6 +699,8 @@ fn draw_running_both(frame: &mut Frame, area: Rect, file1: &str, file2: &str, do
     frame.render_widget(paragraph, popup);
 }
 
+/// Draw the comparison overlay, returning the scroll offset actually used:
+/// the requested one, clamped so the last line can still reach the bottom.
 fn draw_done_both(
     frame: &mut Frame,
     area: Rect,
@@ -649,13 +708,53 @@ fn draw_done_both(
     view: &SolveViewState,
     cache: &SolveRenderCache,
     diagnosis: &DiagnosisState,
-) {
+) -> u16 {
     let t = theme();
     // Full screen bar the bottom row, so the status bar stays visible.
     let popup = Rect { height: area.height.saturating_sub(1), ..area };
 
+    let mut scroll = view.scroll[view.tab.index()];
+    let Some(mut lines) = done_both_lines(diff, view, cache, diagnosis, scroll, popup.height) else {
+        return scroll;
+    };
+    // The line count does not depend on the offset (off-screen rows are
+    // placeholders), so an over-scrolled view is rebuilt once at the clamp.
+    let clamped = clamp_scroll(scroll, lines.len(), popup.height.saturating_sub(2));
+    if clamped != scroll {
+        scroll = clamped;
+        let Some(rebuilt) = done_both_lines(diff, view, cache, diagnosis, scroll, popup.height) else {
+            return scroll;
+        };
+        lines = rebuilt;
+    }
+
+    let block = panel_block(Style::default().fg(t.secondary_accent).add_modifier(Modifier::BOLD))
+        .title(Span::styled(" Solve Comparison ", Style::default().fg(t.secondary_accent).add_modifier(Modifier::BOLD)));
+
+    let paragraph = Paragraph::new(lines).block(block).scroll((scroll, 0));
+    frame.render_widget(Clear, popup);
+    frame.render_widget(paragraph, popup);
+    scroll
+}
+
+/// Largest useful scroll offset for `line_count` lines in `visible` rows,
+/// applied to `scroll`.
+fn clamp_scroll(scroll: u16, line_count: usize, visible: u16) -> u16 {
+    let max = line_count.saturating_sub(visible as usize);
+    scroll.min(u16::try_from(max).unwrap_or(u16::MAX))
+}
+
+/// The comparison overlay's lines at `scroll`, or `None` if the render cache
+/// is not a diff cache.
+fn done_both_lines(
+    diff: &SolveDiffResult,
+    view: &SolveViewState,
+    cache: &SolveRenderCache,
+    diagnosis: &DiagnosisState,
+    scroll: u16,
+    height: u16,
+) -> Option<Vec<Line<'static>>> {
     let active = view.tab;
-    let scroll = view.scroll[active.index()];
 
     let tab_bar = build_tab_bar(active);
     let mut lines = vec![tab_bar, Line::from("")];
@@ -666,14 +765,14 @@ fn draw_done_both(
         cache
     else {
         debug_assert!(false, "render cache must be Diff when solve state is DoneBoth");
-        return;
+        return None;
     };
 
     match active {
         SolveTab::Summary => lines.extend(summary.iter().cloned()),
-        SolveTab::Variables => build_diff_variables_tab_cached(&mut lines, variable_count_label, variable_rows, view, scroll, popup.height),
+        SolveTab::Variables => build_diff_variables_tab_cached(&mut lines, variable_count_label, variable_rows, view, scroll, height),
         SolveTab::Constraints => {
-            build_diff_constraints_tab_cached(&mut lines, constraint_count_label, constraint_rows, view, scroll, popup.height);
+            build_diff_constraints_tab_cached(&mut lines, constraint_count_label, constraint_rows, view, scroll, height);
         }
         SolveTab::Log => lines.extend(log.iter().cloned()),
         SolveTab::Duals => lines.extend(duals.iter().cloned()),
@@ -684,18 +783,7 @@ fn draw_done_both(
         append_diagnosis_block(&mut lines, diagnosis);
     }
 
-    lines.push(Line::from(""));
-    lines.push(Line::from(Span::styled(
-        "  1-5: tabs  Tab/S-Tab: cycle  j/k: scroll  d: toggle diff  t/T: threshold  w: csv  y: yank  Esc: close",
-        Style::default().fg(t.muted),
-    )));
-
-    let block = panel_block(Style::default().fg(t.secondary_accent).add_modifier(Modifier::BOLD))
-        .title(Span::styled(" Solve Comparison ", Style::default().fg(t.secondary_accent).add_modifier(Modifier::BOLD)));
-
-    let paragraph = Paragraph::new(lines).block(block).scroll((scroll, 0));
-    frame.render_widget(Clear, popup);
-    frame.render_widget(paragraph, popup);
+    Some(lines)
 }
 
 /// Pre-format all 5 tab contents for a single solve result.
@@ -1097,8 +1185,8 @@ fn build_diff_summary_metrics(lines: &mut Vec<Line<'static>>, diff: &SolveDiffRe
     {
         lines.push(Line::from(vec![
             Span::styled(format!("  {label:<label_w$}"), Style::default().fg(t.muted)),
-            Span::styled(format!("{:<col_w$}", format!("{:.3}s", d1.as_secs_f64())), Style::default().fg(t.accent)),
-            Span::styled(format!("{:<col_w$}", format!("{:.3}s", d2.as_secs_f64())), Style::default().fg(t.accent)),
+            Span::styled(format!("{:<col_w$}", crate::format::fmt_duration(d1)), Style::default().fg(t.accent)),
+            Span::styled(format!("{:<col_w$}", crate::format::fmt_duration(d2)), Style::default().fg(t.accent)),
         ]));
     }
 

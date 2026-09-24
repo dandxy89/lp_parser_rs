@@ -27,7 +27,7 @@ use std::fmt::{Display, Formatter, Result as FmtResult};
 use rustc_hash::FxHashSet;
 
 use crate::interner::NameId;
-use crate::model::{ComparisonOp, Constraint, SOSType, VariableKind};
+use crate::model::{ComparisonOp, Constraint, ConstraintClass, SOSType, VariableKind};
 use crate::problem::LpProblem;
 
 /// Configuration for analysis behaviour and thresholds.
@@ -91,6 +91,10 @@ pub struct ProblemSummary {
     pub total_nonzeros: usize,
     /// Matrix density (nonzeros / (constraints * variables))
     pub density: f64,
+    /// Quadratic terms across all objectives
+    pub quadratic_objective_terms: usize,
+    /// Quadratic terms across all constraints
+    pub quadratic_constraint_terms: usize,
 }
 
 /// Sparsity and structural metrics.
@@ -119,7 +123,7 @@ pub struct VariableAnalysis {
     pub invalid_bounds: Vec<InvalidBound>,
     /// Variables not appearing in any constraint or objective
     pub unused_variables: Vec<String>,
-    /// Count of discrete (binary + integer) variables
+    /// Count of discrete (binary + integer + general + semi-integer) variables
     pub discrete_variable_count: usize,
 }
 
@@ -133,7 +137,7 @@ pub struct VariableTypeDistribution {
     /// format's default of `[0, +inf)`. Counted apart from `free`: never
     /// declaring a bound is not the same as declaring it infinite.
     pub unspecified: usize,
-    /// General (non-negative) variables
+    /// General integer variables (LP `Generals` section)
     pub general: usize,
     /// Lower-bounded only
     pub lower_bounded: usize,
@@ -147,6 +151,8 @@ pub struct VariableTypeDistribution {
     pub integer: usize,
     /// Semi-continuous variables
     pub semi_continuous: usize,
+    /// Semi-integer variables (zero, or an integer within their bounds)
+    pub semi_integer: usize,
     /// SOS variables
     pub sos: usize,
 }
@@ -207,6 +213,16 @@ pub struct ConstraintTypeDistribution {
     pub sos1: usize,
     /// SOS Type 2 constraints
     pub sos2: usize,
+    /// Indicator constraints (`b = 1 -> ...`), not counted under an operator
+    pub indicator: usize,
+    /// Quadratic constraints, not counted under an operator
+    pub quadratic: usize,
+    /// Gurobi general constraints (`MAX`, `MIN`, `ABS`, `AND`, `OR`)
+    pub general: usize,
+    /// Lazy constraints (also counted under their operator above)
+    pub lazy: usize,
+    /// User cuts (also counted under their operator above)
+    pub user_cuts: usize,
 }
 
 /// A singleton constraint (only one variable).
@@ -241,9 +257,9 @@ pub struct SOSSummary {
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Debug, Clone)]
 pub struct CoefficientAnalysis {
-    /// Constraint coefficient range statistics
+    /// Range of the absolute values of the non-zero constraint coefficients
     pub constraint_coeff_range: RangeStats,
-    /// Objective coefficient range statistics
+    /// Range of the absolute values of the non-zero objective coefficients
     pub objective_coeff_range: RangeStats,
     /// Locations of very large coefficients
     pub large_coefficients: Vec<CoefficientLocation>,
@@ -412,6 +428,13 @@ impl Display for ProblemAnalysis {
             self.summary.objective_count, self.summary.constraint_count, self.summary.variable_count
         )?;
         writeln!(f, "  Non-zeros: {} | Density: {:.2}%", self.summary.total_nonzeros, self.summary.density * 100.0)?;
+        if self.summary.quadratic_objective_terms > 0 || self.summary.quadratic_constraint_terms > 0 {
+            writeln!(
+                f,
+                "  Quadratic terms: {} in objectives | {} in constraints",
+                self.summary.quadratic_objective_terms, self.summary.quadratic_constraint_terms
+            )?;
+        }
         writeln!(f)?;
 
         // Sparsity
@@ -425,12 +448,15 @@ impl Display for ProblemAnalysis {
         writeln!(
             f,
             "  Continuous: {} | Binary: {} | Integer: {}",
-            vt.general + vt.free + vt.unspecified + vt.lower_bounded + vt.upper_bounded + vt.double_bounded,
+            vt.free + vt.unspecified + vt.lower_bounded + vt.upper_bounded + vt.double_bounded,
             vt.binary,
-            vt.integer
+            vt.integer + vt.general
         )?;
         if vt.semi_continuous > 0 {
             writeln!(f, "  Semi-continuous: {}", vt.semi_continuous)?;
+        }
+        if vt.semi_integer > 0 {
+            writeln!(f, "  Semi-integer: {}", vt.semi_integer)?;
         }
         if vt.sos > 0 {
             writeln!(f, "  SOS: {}", vt.sos)?;
@@ -443,6 +469,18 @@ impl Display for ProblemAnalysis {
         writeln!(f, "  Equality (=): {} | (<=): {} | (>=): {}", ct.equality, ct.less_than_equal, ct.greater_than_equal)?;
         if ct.less_than > 0 || ct.greater_than > 0 {
             writeln!(f, "  Strict: (<): {} | (>): {}", ct.less_than, ct.greater_than)?;
+        }
+        if ct.indicator > 0 {
+            writeln!(f, "  Indicator: {}", ct.indicator)?;
+        }
+        if ct.quadratic > 0 {
+            writeln!(f, "  Quadratic: {}", ct.quadratic)?;
+        }
+        if ct.general > 0 {
+            writeln!(f, "  General: {}", ct.general)?;
+        }
+        if ct.lazy > 0 || ct.user_cuts > 0 {
+            writeln!(f, "  Lazy: {} | User cuts: {}", ct.lazy, ct.user_cuts)?;
         }
         if ct.sos1 > 0 || ct.sos2 > 0 {
             writeln!(f, "  SOS1: {} | SOS2: {}", ct.sos1, ct.sos2)?;
@@ -499,6 +537,11 @@ fn collect_coefficient_stats(
 
     for coeff in coefficients {
         let abs_value = coeff.value.abs();
+        if abs_value == 0.0 {
+            // An explicit zero carries no scale; letting it into the range
+            // would make the minimum 0 and drop this whole range from the ratio.
+            continue;
+        }
         range.update(abs_value);
 
         if abs_value > config.large_coefficient_threshold {
@@ -508,7 +551,7 @@ fn collect_coefficient_stats(
                 variable: interner.resolve(coeff.name).to_string(),
                 value: coeff.value,
             });
-        } else if abs_value > 0.0 && abs_value < config.small_coefficient_threshold {
+        } else if abs_value < config.small_coefficient_threshold {
             small.push(CoefficientLocation {
                 location: location_name.to_string(),
                 is_objective,
@@ -536,8 +579,8 @@ fn compute_coefficient_ratio(constraint_range: &RangeStats, objective_range: &Ra
     for range in [constraint_range, objective_range] {
         if range.count > 0 && range.max > 0.0 {
             has_positive = true;
-            // range.min could be 0.0 (abs of a zero coeff); skip zeros for ratio.
-            if range.min > 0.0 && range.min < global_min {
+            debug_assert!(range.min > 0.0, "ranges hold non-zero magnitudes only");
+            if range.min < global_min {
                 global_min = range.min;
             }
             if range.max > global_max {
@@ -597,6 +640,12 @@ impl LpProblem {
             variable_count,
             total_nonzeros,
             density,
+            quadratic_objective_terms: self.objectives.values().map(|o| o.quadratic.len()).sum(),
+            quadratic_constraint_terms: self
+                .constraints
+                .values()
+                .map(|c| if let Constraint::Quadratic { quadratic, .. } = c { quadratic.len() } else { 0 })
+                .sum(),
         }
     }
 
@@ -605,8 +654,12 @@ impl LpProblem {
         self.constraints
             .values()
             .map(|c| match c {
-                Constraint::Standard { coefficients, .. } => coefficients.len(),
+                // Linear nonzeros only; quadratic terms are counted in the summary.
+                Constraint::Standard { coefficients, .. }
+                | Constraint::Indicator { coefficients, .. }
+                | Constraint::Quadratic { coefficients, .. } => coefficients.len(),
                 Constraint::SOS { weights, .. } => weights.len(),
+                Constraint::General { .. } => 0,
             })
             .sum()
     }
@@ -615,8 +668,11 @@ impl LpProblem {
     fn compute_sparsity_metrics(&self) -> SparsityMetrics {
         let (min_v, max_v) = self.constraints.values().fold((usize::MAX, 0usize), |(min_v, max_v), c| {
             let n = match c {
-                Constraint::Standard { coefficients, .. } => coefficients.len(),
+                Constraint::Standard { coefficients, .. }
+                | Constraint::Indicator { coefficients, .. }
+                | Constraint::Quadratic { coefficients, .. } => coefficients.len(),
                 Constraint::SOS { weights, .. } => weights.len(),
+                Constraint::General { function, .. } => 1 + function.variables().len(),
             };
             (min_v.min(n), max_v.max(n))
         });
@@ -646,6 +702,7 @@ impl LpProblem {
                 VariableKind::Integer => type_distribution.integer += 1,
                 VariableKind::General => type_distribution.general += 1,
                 VariableKind::SemiContinuous => type_distribution.semi_continuous += 1,
+                VariableKind::SemiInteger => type_distribution.semi_integer += 1,
                 VariableKind::Sos => type_distribution.sos += 1,
                 // Declared-free is checked before the per-side shapes: it is
                 // stored as an explicit [-inf, +inf], which would otherwise read
@@ -681,7 +738,8 @@ impl LpProblem {
         }
 
         let unused_variables = self.find_unused_variables();
-        let discrete_variable_count = type_distribution.binary + type_distribution.integer;
+        let discrete_variable_count =
+            type_distribution.binary + type_distribution.integer + type_distribution.general + type_distribution.semi_integer;
 
         debug_assert_eq!(
             type_distribution.free
@@ -693,6 +751,7 @@ impl LpProblem {
                 + type_distribution.binary
                 + type_distribution.integer
                 + type_distribution.semi_continuous
+                + type_distribution.semi_integer
                 + type_distribution.sos,
             self.variables.len(),
             "postcondition: type distribution must sum to total variable count"
@@ -712,18 +771,9 @@ impl LpProblem {
         }
 
         for constraint in self.constraints.values() {
-            match constraint {
-                Constraint::Standard { coefficients, .. } => {
-                    for coeff in coefficients {
-                        used_variables.insert(coeff.name);
-                    }
-                }
-                Constraint::SOS { weights, .. } => {
-                    for weight in weights {
-                        used_variables.insert(weight.name);
-                    }
-                }
-            }
+            constraint.for_each_variable(|id| {
+                used_variables.insert(id);
+            });
         }
 
         let unused: Vec<String> = self
@@ -776,6 +826,15 @@ impl LpProblem {
                         });
                     }
                 }
+                Constraint::Indicator { rhs, .. } => {
+                    type_distribution.indicator += 1;
+                    rhs_range.update(*rhs);
+                }
+                Constraint::Quadratic { rhs, .. } => {
+                    type_distribution.quadratic += 1;
+                    rhs_range.update(*rhs);
+                }
+                Constraint::General { .. } => type_distribution.general += 1,
                 Constraint::SOS { sos_type, weights, .. } => {
                     match sos_type {
                         SOSType::S1 => {
@@ -799,10 +858,21 @@ impl LpProblem {
                 + type_distribution.less_than
                 + type_distribution.greater_than
                 + type_distribution.sos1
-                + type_distribution.sos2,
+                + type_distribution.sos2
+                + type_distribution.indicator
+                + type_distribution.quadratic
+                + type_distribution.general,
             self.constraints.len(),
             "postcondition: constraint type distribution must sum to total constraint count"
         );
+
+        for class in self.constraint_classes.values() {
+            match class {
+                ConstraintClass::Lazy => type_distribution.lazy += 1,
+                ConstraintClass::UserCut => type_distribution.user_cuts += 1,
+                ConstraintClass::Normal => debug_assert!(false, "constraint_classes must not store the default class"),
+            }
+        }
 
         ConstraintAnalysis { type_distribution, empty_constraints, singleton_constraints, rhs_range: rhs_range.finalise(), sos_summary }
     }
@@ -895,14 +965,18 @@ impl LpProblem {
             });
         }
 
-        // Large RHS warning
-        if constraints.rhs_range.count > 0 && constraints.rhs_range.max > config.large_rhs_threshold {
-            issues.push(AnalysisIssue {
-                severity: IssueSeverity::Warning,
-                category: IssueCategory::NumericalScaling,
-                message: format!("Large RHS value ({:.2e}) may cause numerical issues", constraints.rhs_range.max),
-                details: None,
-            });
+        // Large RHS warning: by magnitude, so a hugely negative RHS counts too.
+        if constraints.rhs_range.count > 0 {
+            let (min, max) = (constraints.rhs_range.min, constraints.rhs_range.max);
+            let extreme = if min.abs() > max.abs() { min } else { max };
+            if extreme.abs() > config.large_rhs_threshold {
+                issues.push(AnalysisIssue {
+                    severity: IssueSeverity::Warning,
+                    category: IssueCategory::NumericalScaling,
+                    message: format!("Large RHS value ({extreme:.2e}) may cause numerical issues"),
+                    details: None,
+                });
+            }
         }
 
         // Large coefficient ratio (WARNING)
@@ -915,19 +989,21 @@ impl LpProblem {
             });
         }
 
-        // Large coefficients
-        for loc in &coefficients.large_coefficients {
-            issues.push(AnalysisIssue {
-                severity: IssueSeverity::Warning,
-                category: IssueCategory::NumericalScaling,
-                message: format!(
-                    "Large coefficient ({:.2e}) for variable '{}' in {}",
-                    loc.value,
-                    loc.variable,
-                    if loc.is_objective { "objective" } else { "constraint" }
-                ),
-                details: Some(loc.location.clone()),
-            });
+        // Large and small (non-zero) coefficients
+        for (size, locations) in [("Large", &coefficients.large_coefficients), ("Small", &coefficients.small_coefficients)] {
+            for loc in locations {
+                issues.push(AnalysisIssue {
+                    severity: IssueSeverity::Warning,
+                    category: IssueCategory::NumericalScaling,
+                    message: format!(
+                        "{size} coefficient ({:.2e}) for variable '{}' in {}",
+                        loc.value,
+                        loc.variable,
+                        if loc.is_objective { "objective" } else { "constraint" }
+                    ),
+                    details: Some(loc.location.clone()),
+                });
+            }
         }
 
         // Fixed variables (INFO)
@@ -1130,6 +1206,49 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::float_cmp)]
+    fn test_zero_coefficient_does_not_hide_the_coefficient_ratio() {
+        let problem = LpProblem::parse("min\n obj: x\nst\n c1: 0 x + 0.001 y + 1000 z >= 1\nend").unwrap();
+        let analysis = problem.analyze();
+        assert_eq!(analysis.summary.total_nonzeros, 3, "the explicit zero must be kept for this test to mean anything");
+        assert_eq!(analysis.coefficients.constraint_coeff_range.min, 0.001);
+        assert!((analysis.coefficients.coefficient_ratio - 1e6).abs() < 1.0, "ratio: {}", analysis.coefficients.coefficient_ratio);
+    }
+
+    #[test]
+    fn test_large_negative_rhs_is_flagged() {
+        let problem = LpProblem::parse("min\n obj: x\nst\n c1: x >= -1e12\n c2: x <= 5\nend").unwrap();
+        let analysis = problem.analyze();
+        assert!(
+            analysis.issues.iter().any(|i| i.message.contains("Large RHS value (-1.00e12)")),
+            "a -1e12 RHS must be flagged: {:?}",
+            analysis.issues
+        );
+    }
+
+    #[test]
+    fn test_small_coefficient_is_reported_as_an_issue() {
+        let problem = LpProblem::parse("min\n obj: x\nst\n c1: 1e-12 x + y >= 1\nend").unwrap();
+        let analysis = problem.analyze();
+        assert!(
+            analysis.issues.iter().any(|i| i.message.contains("Small coefficient (1.00e-12) for variable 'x'")),
+            "a coefficient below the small threshold must be reported: {:?}",
+            analysis.issues
+        );
+        let lenient = AnalysisConfig { small_coefficient_threshold: 1e-15, ..AnalysisConfig::default() };
+        assert!(!problem.analyze_with_config(&lenient).issues.iter().any(|i| i.message.starts_with("Small coefficient")));
+    }
+
+    #[test]
+    fn test_general_variables_count_as_integer() {
+        let problem = LpProblem::parse("min\n obj: x + y + z\nst\n c1: x + y + z >= 1\ngenerals\n x\nintegers\n y\nend").unwrap();
+        let analysis = problem.analyze();
+        assert_eq!(analysis.variables.discrete_variable_count, 2, "general x and integer y are discrete");
+        let text = analysis.to_string();
+        assert!(text.contains("Continuous: 1 | Binary: 0 | Integer: 2"), "{text}");
+    }
+
+    #[test]
     fn test_unused_variable_reports_info_issue() {
         let mut problem = LpProblem::new();
         let obj_id = problem.intern("obj");
@@ -1138,6 +1257,8 @@ mod tests {
             name: obj_id,
             coefficients: vec![Coefficient { name: x_id, value: 1.0 }],
             constant: 0.0,
+            quadratic: Vec::new(),
+            attributes: crate::model::ObjectiveAttributes::default(),
             byte_offset: None,
         });
         add_standard_constraint(&mut problem, "c1", &["x"], ComparisonOp::GTE, 1.0);

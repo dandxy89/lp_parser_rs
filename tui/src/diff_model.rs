@@ -182,13 +182,32 @@ fn resolve_coefficients(
 /// into the report's shared interner.
 fn resolve_constraint(problem: &LpProblem, constraint: &Constraint, interner: &mut NameInterner, opts: &DiffOptions) -> ResolvedConstraint {
     match constraint {
-        Constraint::Standard { coefficients, operator, rhs, .. } => ResolvedConstraint::Standard {
+        // An indicator constraint is shown by its linear part; a change to its
+        // condition is reported as a type change (see `diff_constraint_pair`).
+        // Likewise a quadratic constraint by its linear part; a change to its
+        // quadratic terms is reported as a type change.
+        Constraint::Standard { coefficients, operator, rhs, .. }
+        | Constraint::Indicator { coefficients, operator, rhs, .. }
+        | Constraint::Quadratic { coefficients, operator, rhs, .. } => ResolvedConstraint::Standard {
             coefficients: resolve_coefficients(problem, coefficients, interner, opts),
             operator: *operator,
             rhs: *rhs,
         },
         Constraint::SOS { sos_type, weights, .. } => {
             ResolvedConstraint::Sos { sos_type: *sos_type, weights: resolve_coefficients(problem, weights, interner, opts) }
+        }
+        // A general constraint is shown by the variables it relates (resultant
+        // first); its function appears in type-change summaries.
+        Constraint::General { resultant, function, .. } => {
+            let coefficients: Vec<lp_parser_rs::model::Coefficient> = std::iter::once(resultant)
+                .chain(function.variables())
+                .map(|v| lp_parser_rs::model::Coefficient { name: *v, value: 1.0 })
+                .collect();
+            ResolvedConstraint::Standard {
+                coefficients: resolve_coefficients(problem, &coefficients, interner, opts),
+                operator: ComparisonOp::EQ,
+                rhs: function.constant().unwrap_or(0.0),
+            }
         }
     }
 }
@@ -723,7 +742,44 @@ fn constraint_summary(problem: &LpProblem, constraint: &Constraint) -> String {
             let _ = problem; // used for consistency; SOS summary doesn't need name resolution
             format!("SOS({sos_type}, {} weights)", weights.len())
         }
+        Constraint::General { resultant, function, .. } => {
+            let mut arguments: Vec<String> = function.variables().iter().map(|v| problem.resolve(*v).to_string()).collect();
+            arguments.extend(function.constant().map(|c| c.to_string()));
+            format!("General({} = {}({}))", problem.resolve(*resultant), function.keyword(), arguments.join(", "))
+        }
+        Constraint::Quadratic { coefficients, quadratic, operator, rhs, .. } => {
+            let mut terms: Vec<String> =
+                quadratic.iter().map(|t| format!("{} {}*{}", t.coefficient, problem.resolve(t.var1), problem.resolve(t.var2))).collect();
+            terms.sort_unstable();
+            format!("Quadratic({} coeffs + [{}], {operator}, {rhs})", coefficients.len(), terms.join(" + "))
+        }
+        Constraint::Indicator { variable, active_value, coefficients, operator, rhs, .. } => {
+            format!(
+                "Indicator({} = {} -> {} coeffs, {operator}, {rhs})",
+                problem.resolve(*variable),
+                u8::from(*active_value),
+                coefficients.len()
+            )
+        }
     }
+}
+
+/// A quadratic constraint's terms as sorted `(var, var, coefficient)` triples
+/// with canonical (rewritten, ordered) names, for comparing two constraints.
+fn constraint_summary_terms(
+    problem: &LpProblem,
+    terms: &[lp_parser_rs::model::QuadraticTerm],
+    opts: &DiffOptions,
+) -> Vec<(String, String, f64)> {
+    let mut out: Vec<(String, String, f64)> = terms
+        .iter()
+        .map(|t| {
+            let (a, b) = (opts.rewrite(problem.resolve(t.var1)).into_owned(), opts.rewrite(problem.resolve(t.var2)).into_owned());
+            if a <= b { (a, b, t.coefficient) } else { (b, a, t.coefficient) }
+        })
+        .collect();
+    out.sort_by(|x, y| (&x.0, &x.1).cmp(&(&y.0, &y.1)));
+    out
 }
 
 /// Build a sorted vec of (`canonical_name`, &Variable) pairs.
@@ -890,40 +946,32 @@ fn diff_constraint_pair(
     interner: &mut NameInterner,
     opts: &DiffOptions,
 ) -> Option<ConstraintDiffDetail> {
+    if let Some((old, new)) = comparable_linear_parts(p1, c1, p2, c2, opts) {
+        let ((old_coefficients, old_operator, old_rhs), (new_coefficients, new_operator, new_rhs)) = (old, new);
+        // Fast path: skip resolution if the raw data is identical under the configured tolerances.
+        if old_operator == new_operator
+            && !opts.numeric_differs(old_rhs, new_rhs)
+            && coefficients_equal(p1, old_coefficients, p2, new_coefficients, opts)
+        {
+            return None;
+        }
+        let reordered = coefficients_reordered(p1, old_coefficients, p2, new_coefficients, opts);
+        let old_resolved = resolve_coefficients(p1, old_coefficients, interner, opts);
+        let new_resolved = resolve_coefficients(p2, new_coefficients, interner, opts);
+        return diff_standard_constraints(
+            &old_resolved,
+            old_operator,
+            old_rhs,
+            &new_resolved,
+            new_operator,
+            new_rhs,
+            interner,
+            reordered,
+            opts,
+        );
+    }
+
     match (c1, c2) {
-        // Standard vs SOS: structurally incompatible.
-        (Constraint::Standard { .. }, Constraint::SOS { .. }) | (Constraint::SOS { .. }, Constraint::Standard { .. }) => {
-            Some(ConstraintDiffDetail::TypeChanged { old_summary: constraint_summary(p1, c1), new_summary: constraint_summary(p2, c2) })
-        }
-
-        // Both standard: diff coefficients, operator, rhs.
-        (
-            Constraint::Standard { coefficients: old_coefficients, operator: old_operator, rhs: old_rhs, .. },
-            Constraint::Standard { coefficients: new_coefficients, operator: new_operator, rhs: new_rhs, .. },
-        ) => {
-            // Fast path: skip resolution if the raw data is identical under the configured tolerances.
-            if old_operator == new_operator
-                && !opts.numeric_differs(*old_rhs, *new_rhs)
-                && coefficients_equal(p1, old_coefficients, p2, new_coefficients, opts)
-            {
-                return None;
-            }
-            let reordered = coefficients_reordered(p1, old_coefficients, p2, new_coefficients, opts);
-            let old_resolved = resolve_coefficients(p1, old_coefficients, interner, opts);
-            let new_resolved = resolve_coefficients(p2, new_coefficients, interner, opts);
-            diff_standard_constraints(
-                &old_resolved,
-                *old_operator,
-                *old_rhs,
-                &new_resolved,
-                *new_operator,
-                *new_rhs,
-                interner,
-                reordered,
-                opts,
-            )
-        }
-
         // Both SOS: diff weights and sos_type.
         (
             Constraint::SOS { sos_type: old_type, weights: old_weights, .. },
@@ -938,6 +986,61 @@ fn diff_constraint_pair(
             let new_resolved = resolve_coefficients(p2, new_weights, interner, opts);
             diff_sos_constraints(*old_type, &old_resolved, *new_type, &new_resolved, interner, reordered, opts)
         }
+
+        // General constraints: unchanged, or changed as a whole.
+        (Constraint::General { resultant: old_r, function: old_f, .. }, Constraint::General { resultant: new_r, function: new_f, .. })
+            if old_f.keyword() == new_f.keyword()
+                && old_f.constant().map(f64::to_bits) == new_f.constant().map(f64::to_bits)
+                && std::iter::once(old_r)
+                    .chain(old_f.variables())
+                    .map(|v| opts.rewrite(p1.resolve(*v)))
+                    .eq(std::iter::once(new_r).chain(new_f.variables()).map(|v| opts.rewrite(p2.resolve(*v)))) =>
+        {
+            None
+        }
+
+        // Different kinds, indicators with different conditions, quadratic
+        // constraints with different quadratic terms, or changed general
+        // constraints: structurally incompatible.
+        _ => Some(ConstraintDiffDetail::TypeChanged { old_summary: constraint_summary(p1, c1), new_summary: constraint_summary(p2, c2) }),
+    }
+}
+
+/// A linear row as `(coefficients, operator, rhs)`.
+type LinearParts<'a> = (&'a [lp_parser_rs::model::Coefficient], ComparisonOp, f64);
+
+/// The linear parts to diff when two constraints share their non-linear
+/// structure: both standard, indicators with the same condition, or quadratic
+/// constraints with the same quadratic terms. `None` otherwise.
+fn comparable_linear_parts<'a>(
+    p1: &LpProblem,
+    c1: &'a Constraint,
+    p2: &LpProblem,
+    c2: &'a Constraint,
+    opts: &DiffOptions,
+) -> Option<(LinearParts<'a>, LinearParts<'a>)> {
+    match (c1, c2) {
+        (
+            Constraint::Standard { coefficients: old_c, operator: old_op, rhs: old_rhs, .. },
+            Constraint::Standard { coefficients: new_c, operator: new_op, rhs: new_rhs, .. },
+        ) => Some(((old_c, *old_op, *old_rhs), (new_c, *new_op, *new_rhs))),
+        (
+            Constraint::Indicator {
+                variable: old_var, active_value: old_value, coefficients: old_c, operator: old_op, rhs: old_rhs, ..
+            },
+            Constraint::Indicator {
+                variable: new_var, active_value: new_value, coefficients: new_c, operator: new_op, rhs: new_rhs, ..
+            },
+        ) if old_value == new_value && opts.rewrite(p1.resolve(*old_var)) == opts.rewrite(p2.resolve(*new_var)) => {
+            Some(((old_c, *old_op, *old_rhs), (new_c, *new_op, *new_rhs)))
+        }
+        (
+            Constraint::Quadratic { coefficients: old_c, quadratic: old_q, operator: old_op, rhs: old_rhs, .. },
+            Constraint::Quadratic { coefficients: new_c, quadratic: new_q, operator: new_op, rhs: new_rhs, .. },
+        ) if constraint_summary_terms(p1, old_q, opts) == constraint_summary_terms(p2, new_q, opts) => {
+            Some(((old_c, *old_op, *old_rhs), (new_c, *new_op, *new_rhs)))
+        }
+        _ => None,
     }
 }
 
@@ -1413,7 +1516,7 @@ mod tests {
             VariableType::LowerBound(lb) => format!("bounds\n {lb} <= {name}\n"),
             VariableType::UpperBound(ub) => format!("bounds\n {name} <= {ub}\n"),
             VariableType::DoubleBound(lb, ub) => format!("bounds\n {lb} <= {name} <= {ub}\n"),
-            VariableType::SemiContinuous | VariableType::SOS | VariableType::General => {
+            VariableType::SemiContinuous | VariableType::SemiInteger | VariableType::SOS | VariableType::General => {
                 format!("bounds\n {name} free\n")
             }
         };

@@ -6,3 +6,6 @@ python/.venv/
 **.so
 
 .env
+
+# copied in from tui/assets/ by the pages workflow
+docs/assets/demo.gif

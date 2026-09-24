@@ -1,15 +1,16 @@
+use std::collections::HashSet;
 use std::fmt::{Display, Formatter, Result as FmtResult, Write as _};
 
 use indexmap::IndexMap;
 use indexmap::map::Entry;
 
-use crate::NUMERIC_EPSILON;
 use crate::error::{EntityKind, LpParseError, LpResult};
 use crate::interner::{NameId, NameInterner};
-use crate::lexer::{Lexer, ParseResult, RawCoefficient, RawConstraint, RawObjective};
+use crate::lexer::{Lexer, ParseResult, RawCoefficient, RawConstraint, RawObjective, RawQuadraticTerm};
 use crate::lp::LpProblemParser;
-use crate::model::{Coefficient, Constraint, Objective, Sense, Variable, VariableKind, VariableType};
+use crate::model::{Coefficient, Constraint, ConstraintClass, Objective, QuadraticTerm, Sense, Variable, VariableKind, VariableType};
 use crate::mps::{extract_mps_name, parse_mps};
+use crate::{INFINITE_BOUND_THRESHOLD, NUMERIC_EPSILON};
 
 /// Check if a floating-point value is effectively zero using both absolute
 /// and relative epsilon comparisons.
@@ -39,9 +40,12 @@ fn apply_variable_kind(interner: &mut NameInterner, variables: &mut IndexMap<Nam
         let id = interner.intern(name);
         match variables.entry(id) {
             Entry::Occupied(mut entry) => {
+                let existing = entry.get().kind;
                 // Only override continuous (default) kind so explicit SOS/binary from bounds wins.
-                if entry.get().kind == VariableKind::Continuous {
+                if existing == VariableKind::Continuous {
                     entry.get_mut().set_kind(kind);
+                } else if is_semi_integer(existing, kind) {
+                    entry.get_mut().set_kind(VariableKind::SemiInteger);
                 }
             }
             Entry::Vacant(entry) => {
@@ -49,6 +53,18 @@ fn apply_variable_kind(interner: &mut NameInterner, variables: &mut IndexMap<Nam
             }
         }
     }
+}
+
+/// Whether declaring `new` on a variable already of kind `existing` makes it
+/// semi-integer (CPLEX: listed in both `generals` and `semi-continuous`).
+///
+/// A binary variable is excluded: semi-continuity adds nothing to `{0, 1}`.
+const fn is_semi_integer(existing: VariableKind, new: VariableKind) -> bool {
+    matches!(
+        (existing, new),
+        (VariableKind::General | VariableKind::Integer, VariableKind::SemiContinuous)
+            | (VariableKind::SemiContinuous, VariableKind::General | VariableKind::Integer)
+    )
 }
 
 /// Update a coefficient in a vector using index-based `swap_remove`.
@@ -135,6 +151,26 @@ fn intern_coefficients(interner: &mut NameInterner, raw: &[RawCoefficient<'_>]) 
     merged.into_iter().map(|(name, value)| Coefficient { name, value }).collect()
 }
 
+/// Intern raw quadratic terms. Repeated products of the same pair (`x * y`
+/// and `y * x` included) are summed into the first occurrence, keeping its
+/// orientation, so a written model reads back identically.
+fn intern_quadratic(interner: &mut NameInterner, raw: &[RawQuadraticTerm<'_>]) -> Vec<QuadraticTerm> {
+    let mut merged: Vec<QuadraticTerm> = Vec::with_capacity(raw.len());
+    let mut index: rustc_hash::FxHashMap<(NameId, NameId), usize> = rustc_hash::FxHashMap::default();
+    for term in raw {
+        let (var1, var2) = (interner.intern(term.var1), interner.intern(term.var2));
+        let key = if var1 <= var2 { (var1, var2) } else { (var2, var1) };
+        if let Some(&at) = index.get(&key) {
+            merged[at].coefficient += term.coefficient;
+        } else {
+            index.insert(key, merged.len());
+            merged.push(QuadraticTerm { var1, var2, coefficient: term.coefficient });
+        }
+    }
+    debug_assert!(merged.len() <= raw.len(), "merging never adds terms");
+    merged
+}
+
 /// Intern a raw constraint into a model constraint.
 #[inline]
 fn intern_constraint(interner: &mut NameInterner, raw: &RawConstraint<'_>) -> Constraint {
@@ -152,6 +188,29 @@ fn intern_constraint(interner: &mut NameInterner, raw: &RawConstraint<'_>) -> Co
             weights: intern_coefficients(interner, weights),
             byte_offset: *byte_offset,
         },
+        RawConstraint::General { name, resultant, function, byte_offset } => Constraint::General {
+            name: interner.intern(name),
+            resultant: interner.intern(resultant),
+            function: function.map_variables(|v| interner.intern(v)),
+            byte_offset: *byte_offset,
+        },
+        RawConstraint::Quadratic { name, coefficients, quadratic, operator, rhs, byte_offset } => Constraint::Quadratic {
+            name: interner.intern(name),
+            coefficients: intern_coefficients(interner, coefficients),
+            quadratic: intern_quadratic(interner, quadratic),
+            operator: *operator,
+            rhs: *rhs,
+            byte_offset: *byte_offset,
+        },
+        RawConstraint::Indicator { name, variable, active_value, coefficients, operator, rhs, byte_offset } => Constraint::Indicator {
+            name: interner.intern(name),
+            variable: interner.intern(variable),
+            active_value: *active_value,
+            coefficients: intern_coefficients(interner, coefficients),
+            operator: *operator,
+            rhs: *rhs,
+            byte_offset: *byte_offset,
+        },
     }
 }
 
@@ -162,6 +221,8 @@ fn intern_objective(interner: &mut NameInterner, raw: &RawObjective<'_>) -> Obje
         name: interner.intern(&raw.name),
         coefficients: intern_coefficients(interner, &raw.coefficients),
         constant: raw.constant,
+        quadratic: intern_quadratic(interner, &raw.quadratic),
+        attributes: raw.attributes,
         byte_offset: raw.byte_offset,
     }
 }
@@ -183,6 +244,13 @@ pub struct LpProblem {
     pub constraints: IndexMap<NameId, Constraint>,
     /// Variables keyed by interned name.
     pub variables: IndexMap<NameId, Variable>,
+    /// Class of each constraint that is not an ordinary one (lazy constraints
+    /// and user cuts), keyed by constraint name. A constraint with no entry is
+    /// [`ConstraintClass::Normal`]; use [`Self::constraint_class`] to read it.
+    ///
+    /// Invariant: every key names a constraint in [`Self::constraints`] and no
+    /// value is [`ConstraintClass::Normal`].
+    pub constraint_classes: IndexMap<NameId, ConstraintClass>,
     /// The name interner holding all interned strings.
     pub interner: NameInterner,
 }
@@ -335,28 +403,62 @@ impl LpProblem {
         self.variables.insert(variable.name, variable);
     }
 
+    /// The class of the constraint named by `id`: [`ConstraintClass::Normal`]
+    /// unless it was declared lazy or a user cut.
+    #[inline]
+    #[must_use]
+    pub fn constraint_class(&self, id: NameId) -> ConstraintClass {
+        self.constraint_classes.get(&id).copied().unwrap_or_default()
+    }
+
+    /// Set the class of a constraint (ordinary, lazy or user cut).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the constraint does not exist, or if it is an SOS
+    /// or general constraint and `class` is not [`ConstraintClass::Normal`]
+    /// (those have their own sections and cannot be lazy or a cut).
+    pub fn set_constraint_class(&mut self, constraint_name: &str, class: ConstraintClass) -> LpResult<()> {
+        Self::check_name(constraint_name, "constraint_name")?;
+        let con_id = self
+            .interner
+            .get(constraint_name)
+            .filter(|id| self.constraints.contains_key(id))
+            .ok_or_else(|| LpParseError::not_found(EntityKind::Constraint, constraint_name))?;
+        if class.is_normal() {
+            self.constraint_classes.shift_remove(&con_id);
+            return Ok(());
+        }
+        if matches!(self.constraints[&con_id], Constraint::SOS { .. } | Constraint::General { .. }) {
+            return Err(LpParseError::invalid_operation("SOS and general constraints cannot be lazy constraints or user cuts"));
+        }
+        self.constraint_classes.insert(con_id, class);
+        Ok(())
+    }
+
     #[inline]
     /// Add a new constraint to the problem.
     ///
-    /// If a constraint with the same name already exists, it will be replaced.
+    /// If a constraint with the same name already exists, it will be replaced,
+    /// and the replacement is an ordinary constraint (see
+    /// [`Self::set_constraint_class`]).
     pub fn add_constraint(&mut self, constraint: Constraint) {
         debug_assert!(!self.interner.resolve(constraint.name()).is_empty(), "constraint name must not be empty");
         let name_id = constraint.name();
 
         match &constraint {
-            Constraint::Standard { coefficients, .. } => {
-                for coeff in coefficients {
-                    self.ensure_variable_exists(coeff.name, None);
-                }
-            }
             Constraint::SOS { weights, .. } => {
                 for coeff in weights {
                     self.ensure_variable_exists(coeff.name, Some(VariableType::SOS));
                     // SOS membership sets kind without wiping bounds.
                 }
             }
+            Constraint::Standard { .. } | Constraint::Indicator { .. } | Constraint::Quadratic { .. } | Constraint::General { .. } => {
+                constraint.for_each_variable(|id| self.ensure_variable_exists(id, None));
+            }
         }
 
+        self.constraint_classes.shift_remove(&name_id);
         self.constraints.insert(name_id, constraint);
     }
 
@@ -368,6 +470,10 @@ impl LpProblem {
         debug_assert!(!self.interner.resolve(objective.name).is_empty(), "objective name must not be empty");
         for coeff in &objective.coefficients {
             self.ensure_variable_exists(coeff.name, None);
+        }
+        for term in &objective.quadratic {
+            self.ensure_variable_exists(term.var1, None);
+            self.ensure_variable_exists(term.var2, None);
         }
 
         let name_id = objective.name;
@@ -432,7 +538,10 @@ impl LpProblem {
             self.constraints.get_mut(&con_id).ok_or_else(|| LpParseError::not_found(EntityKind::Constraint, constraint_name))?;
 
         match constraint {
-            Constraint::Standard { coefficients, .. } => {
+            // The linear coefficients of an indicator's constraint or a quadratic constraint.
+            Constraint::Standard { coefficients, .. }
+            | Constraint::Indicator { coefficients, .. }
+            | Constraint::Quadratic { coefficients, .. } => {
                 update_coefficient_vec(coefficients, var_id, new_coefficient);
 
                 if !is_effectively_zero(new_coefficient, 1.0) {
@@ -441,6 +550,9 @@ impl LpProblem {
             }
             Constraint::SOS { .. } => {
                 return Err(LpParseError::invalid_operation("Cannot update coefficients in SOS constraints using this method"));
+            }
+            Constraint::General { .. } => {
+                return Err(LpParseError::invalid_operation("general constraints have no coefficients to update"));
             }
         }
 
@@ -460,7 +572,7 @@ impl LpProblem {
     ///
     /// let mut problem = LpProblem::parse("Minimize\n obj: x\nSubject To\n c1: x >= 1\nEnd")?;
     /// problem.update_constraint_rhs("c1", 5.0)?;
-    /// assert!(write_lp_string(&problem).contains("c1: x >= 5"));
+    /// assert!(write_lp_string(&problem)?.contains("c1: x >= 5"));
     /// # Ok::<(), lp_parser_rs::LpParseError>(())
     /// ```
     ///
@@ -477,11 +589,12 @@ impl LpProblem {
             self.constraints.get_mut(&con_id).ok_or_else(|| LpParseError::not_found(EntityKind::Constraint, constraint_name))?;
 
         match constraint {
-            Constraint::Standard { rhs, .. } => {
+            Constraint::Standard { rhs, .. } | Constraint::Indicator { rhs, .. } | Constraint::Quadratic { rhs, .. } => {
                 *rhs = new_rhs;
                 Ok(())
             }
             Constraint::SOS { .. } => Err(LpParseError::invalid_operation("SOS constraints do not have right-hand side values")),
+            Constraint::General { .. } => Err(LpParseError::invalid_operation("general constraints do not have right-hand side values")),
         }
     }
 
@@ -517,12 +630,23 @@ impl LpProblem {
         // PERF: O(n*m) scan over all objectives and constraints to rename the variable.
         // Acceptable because rename is infrequent in typical LP workflows. For mutation-heavy
         // workloads, prefer batch operations or maintain a reverse index.
+        let rename_terms = |terms: &mut [QuadraticTerm]| {
+            for term in terms {
+                if term.var1 == old_id {
+                    term.var1 = new_id;
+                }
+                if term.var2 == old_id {
+                    term.var2 = new_id;
+                }
+            }
+        };
         for objective in self.objectives.values_mut() {
             for coeff in &mut objective.coefficients {
                 if coeff.name == old_id {
                     coeff.name = new_id;
                 }
             }
+            rename_terms(&mut objective.quadratic);
         }
 
         for constraint in self.constraints.values_mut() {
@@ -531,6 +655,31 @@ impl LpProblem {
                     for coeff in coefficients {
                         if coeff.name == old_id {
                             coeff.name = new_id;
+                        }
+                    }
+                }
+                Constraint::Indicator { variable, coefficients, .. } => {
+                    if *variable == old_id {
+                        *variable = new_id;
+                    }
+                    for coeff in coefficients {
+                        if coeff.name == old_id {
+                            coeff.name = new_id;
+                        }
+                    }
+                }
+                Constraint::Quadratic { coefficients, quadratic, .. } => {
+                    for coeff in coefficients {
+                        if coeff.name == old_id {
+                            coeff.name = new_id;
+                        }
+                    }
+                    rename_terms(quadratic);
+                }
+                Constraint::General { resultant, function, .. } => {
+                    for variable in std::iter::once(resultant).chain(function.variables_mut()) {
+                        if *variable == old_id {
+                            *variable = new_id;
                         }
                     }
                 }
@@ -576,13 +725,12 @@ impl LpProblem {
 
         let mut constraint = self.constraints.shift_remove(&old_id).expect("constraint must exist: filter check passed");
 
-        match &mut constraint {
-            Constraint::Standard { name, .. } | Constraint::SOS { name, .. } => {
-                *name = new_id;
-            }
-        }
+        *constraint.name_mut() = new_id;
 
         self.constraints.insert(new_id, constraint);
+        if let Some(class) = self.constraint_classes.shift_remove(&old_id) {
+            self.constraint_classes.insert(new_id, class);
+        }
 
         debug_assert!(!self.constraints.contains_key(&old_id), "postcondition: old_id must be gone from constraints");
         debug_assert!(self.constraints.contains_key(&new_id), "postcondition: new_id must be present in constraints");
@@ -627,7 +775,10 @@ impl LpProblem {
     ///
     /// # Errors
     ///
-    /// Returns an error if the variable does not exist.
+    /// Returns an error if the variable does not exist, or if it is the
+    /// indicator variable of an indicator constraint or appears in a general
+    /// constraint (remove the constraint first: dropping only part of it would
+    /// change what it means).
     pub fn remove_variable(&mut self, variable_name: &str) -> LpResult<()> {
         debug_assert!(!variable_name.is_empty(), "variable_name must not be empty");
         let var_id = self
@@ -636,6 +787,23 @@ impl LpProblem {
             .filter(|id| self.variables.contains_key(id))
             .ok_or_else(|| LpParseError::not_found(EntityKind::Variable, variable_name))?;
 
+        if let Some(constraint) =
+            self.constraints.values().find(|c| matches!(c, Constraint::Indicator { variable, .. } if *variable == var_id))
+        {
+            return Err(LpParseError::invalid_operation(format!(
+                "variable '{variable_name}' is the indicator of constraint '{}'; remove that constraint first",
+                self.interner.resolve(constraint.name())
+            )));
+        }
+        if let Some(constraint) = self.constraints.values().find(|c| {
+            matches!(c, Constraint::General { resultant, function, .. } if *resultant == var_id || function.variables().contains(&var_id))
+        }) {
+            return Err(LpParseError::invalid_operation(format!(
+                "variable '{variable_name}' appears in general constraint '{}'; remove that constraint first",
+                self.interner.resolve(constraint.name())
+            )));
+        }
+
         self.variables.shift_remove(&var_id);
 
         // PERF: O(n*m) scan over all objectives and constraints to remove the variable.
@@ -643,16 +811,33 @@ impl LpProblem {
         // workloads, prefer batch operations or maintain a reverse index.
         for objective in self.objectives.values_mut() {
             objective.coefficients.retain(|c| c.name != var_id);
+            objective.quadratic.retain(|t| t.var1 != var_id && t.var2 != var_id);
         }
 
         for constraint in self.constraints.values_mut() {
             match constraint {
-                Constraint::Standard { coefficients, .. } => {
+                Constraint::Standard { coefficients, .. } | Constraint::Indicator { coefficients, .. } => {
                     coefficients.retain(|c| c.name != var_id);
+                }
+                Constraint::Quadratic { name, coefficients, quadratic, operator, rhs, byte_offset } => {
+                    coefficients.retain(|c| c.name != var_id);
+                    quadratic.retain(|t| t.var1 != var_id && t.var2 != var_id);
+                    if quadratic.is_empty() {
+                        // No quadratic term left: it is an ordinary linear constraint now.
+                        *constraint = Constraint::Standard {
+                            name: *name,
+                            coefficients: std::mem::take(coefficients),
+                            operator: *operator,
+                            rhs: *rhs,
+                            byte_offset: *byte_offset,
+                        };
+                    }
                 }
                 Constraint::SOS { weights, .. } => {
                     weights.retain(|w| w.name != var_id);
                 }
+                // Refused above when it references the variable.
+                Constraint::General { .. } => {}
             }
         }
 
@@ -672,6 +857,7 @@ impl LpProblem {
         if self.constraints.shift_remove(&con_id).is_none() {
             return Err(LpParseError::not_found(EntityKind::Constraint, constraint_name));
         }
+        self.constraint_classes.shift_remove(&con_id);
         Ok(())
     }
 
@@ -726,7 +912,10 @@ mod serde_support {
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
     use crate::interner::{NameId, NameInterner};
-    use crate::model::{Coefficient, ComparisonOp, Constraint, Objective, SOSType, Sense, Variable, VariableType};
+    use crate::model::{
+        Coefficient, ComparisonOp, Constraint, ConstraintClass, GeneralFunction, Objective, ObjectiveAttributes, QuadraticTerm, SOSType,
+        Sense, Variable, VariableType,
+    };
     use crate::problem::LpProblem;
 
     #[derive(Serialize, Deserialize)]
@@ -738,8 +927,44 @@ mod serde_support {
     #[derive(Serialize, Deserialize)]
     #[serde(tag = "type")]
     enum SerdeConstraint {
-        Standard { name: String, coefficients: Vec<SerdeCoefficient>, operator: ComparisonOp, rhs: f64 },
-        Sos { name: String, sos_type: SOSType, weights: Vec<SerdeCoefficient> },
+        Standard {
+            name: String,
+            coefficients: Vec<SerdeCoefficient>,
+            operator: ComparisonOp,
+            rhs: f64,
+            /// Omitted for ordinary constraints, so older snapshots still load.
+            #[serde(default, skip_serializing_if = "is_normal")]
+            class: ConstraintClass,
+        },
+        Sos {
+            name: String,
+            sos_type: SOSType,
+            weights: Vec<SerdeCoefficient>,
+        },
+        General {
+            name: String,
+            resultant: String,
+            function: GeneralFunction<String>,
+        },
+        Quadratic {
+            name: String,
+            coefficients: Vec<SerdeCoefficient>,
+            quadratic: Vec<SerdeQuadraticTerm>,
+            operator: ComparisonOp,
+            rhs: f64,
+            #[serde(default, skip_serializing_if = "is_normal")]
+            class: ConstraintClass,
+        },
+        Indicator {
+            name: String,
+            variable: String,
+            active_value: bool,
+            coefficients: Vec<SerdeCoefficient>,
+            operator: ComparisonOp,
+            rhs: f64,
+            #[serde(default, skip_serializing_if = "is_normal")]
+            class: ConstraintClass,
+        },
     }
 
     #[derive(Serialize, Deserialize)]
@@ -749,6 +974,37 @@ mod serde_support {
         // Default keeps pre-constant serialised problems deserialisable.
         #[serde(default)]
         constant: f64,
+        /// Omitted for a linear objective, so older snapshots still load.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        quadratic: Vec<SerdeQuadraticTerm>,
+        /// Omitted when no multi-objective attribute is set.
+        #[serde(default, skip_serializing_if = "ObjectiveAttributes::is_empty")]
+        attributes: ObjectiveAttributes,
+    }
+
+    #[derive(Serialize, Deserialize)]
+    struct SerdeQuadraticTerm {
+        var1: String,
+        var2: String,
+        coefficient: f64,
+    }
+
+    fn quadratic_to_serde(terms: &[QuadraticTerm], interner: &NameInterner) -> Vec<SerdeQuadraticTerm> {
+        terms
+            .iter()
+            .map(|t| SerdeQuadraticTerm {
+                var1: interner.resolve(t.var1).to_string(),
+                var2: interner.resolve(t.var2).to_string(),
+                coefficient: t.coefficient,
+            })
+            .collect()
+    }
+
+    fn quadratic_from_serde(terms: &[SerdeQuadraticTerm], interner: &mut NameInterner) -> Vec<QuadraticTerm> {
+        terms
+            .iter()
+            .map(|t| QuadraticTerm { var1: interner.intern(&t.var1), var2: interner.intern(&t.var2), coefficient: t.coefficient })
+            .collect()
     }
 
     #[derive(Serialize, Deserialize)]
@@ -771,6 +1027,12 @@ mod serde_support {
         objectives: Vec<SerdeObjective>,
         constraints: Vec<SerdeConstraint>,
         variables: Vec<SerdeVariable>,
+    }
+
+    // Serde's `skip_serializing_if` passes the field by reference.
+    #[allow(clippy::trivially_copy_pass_by_ref)]
+    const fn is_normal(class: &ConstraintClass) -> bool {
+        class.is_normal()
     }
 
     fn coeff_to_serde(c: &Coefficient, interner: &NameInterner) -> SerdeCoefficient {
@@ -801,6 +1063,8 @@ mod serde_support {
                         name: self.interner.resolve(obj.name).to_string(),
                         coefficients: coeffs_to_serde(&obj.coefficients, &self.interner),
                         constant: obj.constant,
+                        quadratic: quadratic_to_serde(&obj.quadratic, &self.interner),
+                        attributes: obj.attributes,
                     })
                     .collect(),
                 constraints: self
@@ -812,12 +1076,37 @@ mod serde_support {
                             coefficients: coeffs_to_serde(coefficients, &self.interner),
                             operator: *operator,
                             rhs: *rhs,
+                            class: self.constraint_class(*name),
                         },
                         Constraint::SOS { name, sos_type, weights, .. } => SerdeConstraint::Sos {
                             name: self.interner.resolve(*name).to_string(),
                             sos_type: *sos_type,
                             weights: coeffs_to_serde(weights, &self.interner),
                         },
+                        Constraint::General { name, resultant, function, .. } => SerdeConstraint::General {
+                            name: self.interner.resolve(*name).to_string(),
+                            resultant: self.interner.resolve(*resultant).to_string(),
+                            function: function.map_variables(|v| self.interner.resolve(*v).to_string()),
+                        },
+                        Constraint::Quadratic { name, coefficients, quadratic, operator, rhs, .. } => SerdeConstraint::Quadratic {
+                            name: self.interner.resolve(*name).to_string(),
+                            coefficients: coeffs_to_serde(coefficients, &self.interner),
+                            quadratic: quadratic_to_serde(quadratic, &self.interner),
+                            operator: *operator,
+                            rhs: *rhs,
+                            class: self.constraint_class(*name),
+                        },
+                        Constraint::Indicator { name, variable, active_value, coefficients, operator, rhs, .. } => {
+                            SerdeConstraint::Indicator {
+                                name: self.interner.resolve(*name).to_string(),
+                                variable: self.interner.resolve(*variable).to_string(),
+                                active_value: *active_value,
+                                coefficients: coeffs_to_serde(coefficients, &self.interner),
+                                operator: *operator,
+                                rhs: *rhs,
+                                class: self.constraint_class(*name),
+                            }
+                        }
                     })
                     .collect(),
                 variables: self
@@ -835,6 +1124,80 @@ mod serde_support {
         }
     }
 
+    /// Rebuild one constraint (recording a non-default class in `constraint_classes`).
+    fn constraint_from_serde(
+        sc: &SerdeConstraint,
+        interner: &mut NameInterner,
+        constraint_classes: &mut IndexMap<NameId, ConstraintClass>,
+    ) -> (NameId, Constraint) {
+        match sc {
+            SerdeConstraint::Standard { name, coefficients, operator, rhs, class } => {
+                let name_id = interner.intern(name);
+                if !class.is_normal() {
+                    constraint_classes.insert(name_id, *class);
+                }
+                let con = Constraint::Standard {
+                    name: name_id,
+                    coefficients: coeffs_from_serde(coefficients, interner),
+                    operator: *operator,
+                    rhs: *rhs,
+                    byte_offset: None,
+                };
+                (name_id, con)
+            }
+            SerdeConstraint::General { name, resultant, function } => {
+                let name_id = interner.intern(name);
+                let con = Constraint::General {
+                    name: name_id,
+                    resultant: interner.intern(resultant),
+                    function: function.map_variables(|v| interner.intern(v)),
+                    byte_offset: None,
+                };
+                (name_id, con)
+            }
+            SerdeConstraint::Quadratic { name, coefficients, quadratic, operator, rhs, class } => {
+                let name_id = interner.intern(name);
+                if !class.is_normal() {
+                    constraint_classes.insert(name_id, *class);
+                }
+                let con = Constraint::Quadratic {
+                    name: name_id,
+                    coefficients: coeffs_from_serde(coefficients, interner),
+                    quadratic: quadratic_from_serde(quadratic, interner),
+                    operator: *operator,
+                    rhs: *rhs,
+                    byte_offset: None,
+                };
+                (name_id, con)
+            }
+            SerdeConstraint::Indicator { name, variable, active_value, coefficients, operator, rhs, class } => {
+                let name_id = interner.intern(name);
+                if !class.is_normal() {
+                    constraint_classes.insert(name_id, *class);
+                }
+                let con = Constraint::Indicator {
+                    name: name_id,
+                    variable: interner.intern(variable),
+                    active_value: *active_value,
+                    coefficients: coeffs_from_serde(coefficients, interner),
+                    operator: *operator,
+                    rhs: *rhs,
+                    byte_offset: None,
+                };
+                (name_id, con)
+            }
+            SerdeConstraint::Sos { name, sos_type, weights } => {
+                let name_id = interner.intern(name);
+                let con = Constraint::SOS {
+                    name: name_id,
+                    sos_type: *sos_type,
+                    weights: coeffs_from_serde(weights, interner),
+                    byte_offset: None,
+                };
+                (name_id, con)
+            }
+        }
+    }
     impl<'de> Deserialize<'de> for LpProblem {
         fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
             let proxy = SerdeLpProblem::deserialize(deserializer)?;
@@ -849,39 +1212,17 @@ mod serde_support {
                         name: name_id,
                         coefficients: coeffs_from_serde(&so.coefficients, &mut interner),
                         constant: so.constant,
+                        quadratic: quadratic_from_serde(&so.quadratic, &mut interner),
+                        attributes: so.attributes,
                         byte_offset: None,
                     };
                     (name_id, obj)
                 })
                 .collect();
 
-            let constraints: IndexMap<NameId, Constraint> = proxy
-                .constraints
-                .iter()
-                .map(|sc| match sc {
-                    SerdeConstraint::Standard { name, coefficients, operator, rhs } => {
-                        let name_id = interner.intern(name);
-                        let con = Constraint::Standard {
-                            name: name_id,
-                            coefficients: coeffs_from_serde(coefficients, &mut interner),
-                            operator: *operator,
-                            rhs: *rhs,
-                            byte_offset: None,
-                        };
-                        (name_id, con)
-                    }
-                    SerdeConstraint::Sos { name, sos_type, weights } => {
-                        let name_id = interner.intern(name);
-                        let con = Constraint::SOS {
-                            name: name_id,
-                            sos_type: *sos_type,
-                            weights: coeffs_from_serde(weights, &mut interner),
-                            byte_offset: None,
-                        };
-                        (name_id, con)
-                    }
-                })
-                .collect();
+            let mut constraint_classes: IndexMap<NameId, ConstraintClass> = IndexMap::new();
+            let constraints: IndexMap<NameId, Constraint> =
+                proxy.constraints.iter().map(|sc| constraint_from_serde(sc, &mut interner, &mut constraint_classes)).collect();
 
             let variables: IndexMap<NameId, Variable> = proxy
                 .variables
@@ -897,7 +1238,7 @@ mod serde_support {
                 })
                 .collect();
 
-            Ok(Self { name: proxy.name, sense: proxy.sense, objectives, constraints, variables, interner })
+            Ok(Self { name: proxy.name, sense: proxy.sense, objectives, constraints, variables, constraint_classes, interner })
         }
     }
 }
@@ -935,14 +1276,42 @@ fn from_parse_result(parsed: ParseResult<'_>, problem_name: Option<String>) -> L
     let mut variables: IndexMap<NameId, Variable> = IndexMap::with_capacity(estimated_variables);
     let mut constraint_counter: u32 = 0;
 
+    // Auto-generated names (`C<n>`, `SOS<n>`) must not collide with a name the
+    // file declares explicitly, even one that appears later in the file.
+    let reserved: HashSet<&str> = parsed
+        .constraints
+        .iter()
+        .chain(&parsed.lazy_constraints)
+        .chain(&parsed.user_cuts)
+        .chain(&parsed.sos)
+        .filter_map(|c| (c.name() != "__c__").then_some(c.name()))
+        .collect();
+
     let objectives = intern_objectives(&mut interner, &parsed.objectives, &mut variables);
-    let mut constraints = intern_constraints(&mut interner, &parsed.constraints, &mut variables, &mut constraint_counter);
+    let mut constraints = IndexMap::with_capacity(parsed.constraints.len() + parsed.lazy_constraints.len() + parsed.user_cuts.len());
+    let mut constraint_classes = IndexMap::new();
+    for (raw, class) in [
+        (&parsed.constraints, ConstraintClass::Normal),
+        (&parsed.lazy_constraints, ConstraintClass::Lazy),
+        (&parsed.user_cuts, ConstraintClass::UserCut),
+    ] {
+        let mut names = NameAllocation { counter: &mut constraint_counter, reserved: &reserved };
+        for id in intern_constraints(&mut interner, raw, &mut variables, &mut constraints, &mut names) {
+            if class.is_normal() {
+                // A later ordinary definition replaces a lazy one of the same name.
+                constraint_classes.shift_remove(&id);
+            } else {
+                constraint_classes.insert(id, class);
+            }
+        }
+    }
 
     process_bounds(&mut interner, &parsed.bounds, &mut variables);
     process_variable_types(&mut interner, &parsed, &mut variables);
-    intern_sos_constraints(&mut interner, &parsed.sos, &mut variables, &mut constraints, &mut constraint_counter);
+    intern_sos_constraints(&mut interner, &parsed.sos, &mut variables, &mut constraints, &mut constraint_counter, &reserved);
 
-    LpProblem { name: problem_name, sense: parsed.sense, objectives, constraints, variables, interner }
+    debug_assert!(constraint_classes.keys().all(|id| constraints.contains_key(id)), "every classed constraint must exist");
+    LpProblem { name: problem_name, sense: parsed.sense, objectives, constraints, variables, constraint_classes, interner }
 }
 
 impl TryFrom<&str> for LpProblem {
@@ -968,18 +1337,30 @@ fn intern_objectives(
     let mut objectives = IndexMap::with_capacity(raw_objectives.len());
     let mut obj_counter: u32 = 0;
     let mut name_buf = String::with_capacity(16);
+    // `OBJ<n>` must skip names declared explicitly anywhere in the section.
+    let reserved: HashSet<&str> = raw_objectives.iter().map(|o| o.name.as_ref()).filter(|n| *n != "__obj__").collect();
 
     for raw_obj in raw_objectives {
         let mut obj = intern_objective(interner, raw_obj);
 
         if raw_obj.name == "__obj__" {
-            obj_counter += 1;
-            name_buf.clear();
-            write!(name_buf, "OBJ{obj_counter}").expect("writing to String cannot fail");
+            loop {
+                obj_counter += 1;
+                name_buf.clear();
+                write!(name_buf, "OBJ{obj_counter}").expect("writing to String cannot fail");
+                if !reserved.contains(name_buf.as_str()) {
+                    break;
+                }
+            }
             obj.name = interner.intern(&name_buf);
+            debug_assert!(!objectives.contains_key(&obj.name), "auto-generated objective name must be unused");
         }
 
         register_variables_from_coefficients(variables, &obj.coefficients, None);
+        for term in &obj.quadratic {
+            variables.entry(term.var1).or_insert_with(|| Variable::new(term.var1));
+            variables.entry(term.var2).or_insert_with(|| Variable::new(term.var2));
+        }
         let name = obj.name;
         if objectives.insert(name, obj).is_some() {
             eprintln!("duplicate objective name '{}': the later definition replaces the earlier one", interner.resolve(name));
@@ -989,26 +1370,48 @@ fn intern_objectives(
     objectives
 }
 
-/// Intern raw constraints, assigning auto-names to unnamed ones.
+/// State for generating constraint names: the running `C<n>` counter and
+/// the names the file declares explicitly.
+struct NameAllocation<'a, 'r> {
+    counter: &'a mut u32,
+    reserved: &'a HashSet<&'r str>,
+}
+
+/// Intern raw constraints into `constraints`, assigning auto-names to unnamed
+/// ones. Returns the final name of each constraint, in order.
 fn intern_constraints(
     interner: &mut NameInterner,
     raw_constraints: &[RawConstraint<'_>],
     variables: &mut IndexMap<NameId, Variable>,
-    constraint_counter: &mut u32,
-) -> IndexMap<NameId, Constraint> {
-    let mut constraints = IndexMap::with_capacity(raw_constraints.len());
+    constraints: &mut IndexMap<NameId, Constraint>,
+    names: &mut NameAllocation<'_, '_>,
+) -> Vec<NameId> {
     let mut name_buf = String::with_capacity(16);
+    let mut ids = Vec::with_capacity(raw_constraints.len());
 
     for raw_con in raw_constraints {
         let mut con = intern_constraint(interner, raw_con);
-        let final_id = assign_constraint_name(interner, &constraints, &mut con, constraint_counter, "C", &mut name_buf);
+        let final_id = assign_constraint_name(interner, constraints, names.reserved, &mut con, names.counter, "C", &mut name_buf);
         register_constraint_variables(variables, &con);
         if constraints.insert(final_id, con).is_some() {
             eprintln!("duplicate constraint name '{}': the later definition replaces the earlier one", interner.resolve(final_id));
         }
+        ids.push(final_id);
     }
 
-    constraints
+    ids
+}
+
+/// Map a bound value of magnitude `>= 1e30` to the matching infinity (the
+/// CPLEX convention for "unbounded" in both LP and MPS files).
+fn saturate_infinite_bound(value: f64) -> f64 {
+    if value >= INFINITE_BOUND_THRESHOLD {
+        f64::INFINITY
+    } else if value <= -INFINITE_BOUND_THRESHOLD {
+        f64::NEG_INFINITY
+    } else {
+        value
+    }
 }
 
 /// Process bounds declarations into the variables map.
@@ -1022,7 +1425,9 @@ fn process_bounds(interner: &mut NameInterner, bounds: &[(&str, VariableType)], 
             decl,
             VariableType::Free | VariableType::LowerBound(_) | VariableType::UpperBound(_) | VariableType::DoubleBound(_, _)
         );
-        let (kind, bounds_decl) = decl.clone().into_kind_and_bounds();
+        let (kind, mut bounds_decl) = decl.clone().into_kind_and_bounds();
+        bounds_decl.lower = bounds_decl.lower.map(saturate_infinite_bound);
+        bounds_decl.upper = bounds_decl.upper.map(saturate_infinite_bound);
         match variables.entry(var_id) {
             Entry::Occupied(mut entry) => {
                 let var = entry.get_mut();
@@ -1055,6 +1460,7 @@ fn intern_sos_constraints(
     variables: &mut IndexMap<NameId, Variable>,
     constraints: &mut IndexMap<NameId, Constraint>,
     constraint_counter: &mut u32,
+    reserved: &HashSet<&str>,
 ) {
     let mut name_buf = String::with_capacity(16);
     for raw_sos_con in raw_sos {
@@ -1062,12 +1468,12 @@ fn intern_sos_constraints(
             continue;
         }
         let mut sos = intern_constraint(interner, raw_sos_con);
-        let mut final_id = assign_constraint_name(interner, constraints, &mut sos, constraint_counter, "SOS", &mut name_buf);
+        let mut final_id = assign_constraint_name(interner, constraints, reserved, &mut sos, constraint_counter, "SOS", &mut name_buf);
         if constraints.contains_key(&final_id) {
             // An SOS entry sharing a name with an existing constraint would
             // delete that constraint outright; rename the SOS entry instead.
             eprintln!("SOS constraint name '{}' is already in use: the SOS entry has been renamed", interner.resolve(final_id));
-            final_id = generate_constraint_name(interner, constraints, constraint_counter, "SOS", &mut name_buf);
+            final_id = generate_constraint_name(interner, constraints, reserved, constraint_counter, "SOS", &mut name_buf);
             set_constraint_name(&mut sos, final_id);
         }
         register_constraint_variables(variables, &sos);
@@ -1082,6 +1488,7 @@ fn intern_sos_constraints(
 fn assign_constraint_name(
     interner: &mut NameInterner,
     existing: &IndexMap<NameId, Constraint>,
+    reserved: &HashSet<&str>,
     constraint: &mut Constraint,
     counter: &mut u32,
     prefix: &str,
@@ -1090,18 +1497,21 @@ fn assign_constraint_name(
     let current_name = interner.resolve(constraint.name());
     let is_unnamed = current_name == "__c__" || current_name.is_empty();
 
-    let final_id = if is_unnamed { generate_constraint_name(interner, existing, counter, prefix, name_buf) } else { constraint.name() };
+    let final_id =
+        if is_unnamed { generate_constraint_name(interner, existing, reserved, counter, prefix, name_buf) } else { constraint.name() };
 
     set_constraint_name(constraint, final_id);
 
     final_id
 }
 
-/// Generate `{prefix}{n}` for the first `n` that no existing constraint claims,
-/// so an auto-generated name can never displace one already in the map.
+/// Generate `{prefix}{n}` for the first `n` that no existing constraint claims
+/// and no explicit name in the file reserves, so an auto-generated name can
+/// never displace one already in the map or be displaced by a later one.
 fn generate_constraint_name(
     interner: &mut NameInterner,
     existing: &IndexMap<NameId, Constraint>,
+    reserved: &HashSet<&str>,
     counter: &mut u32,
     prefix: &str,
     name_buf: &mut String,
@@ -1110,6 +1520,9 @@ fn generate_constraint_name(
         *counter += 1;
         name_buf.clear();
         write!(name_buf, "{prefix}{}", *counter).expect("writing to String cannot fail");
+        if reserved.contains(name_buf.as_str()) {
+            continue;
+        }
         let candidate = interner.intern(name_buf);
         if !existing.contains_key(&candidate) {
             return candidate;
@@ -1119,11 +1532,7 @@ fn generate_constraint_name(
 
 /// Overwrite a constraint's name, whichever variant it is.
 const fn set_constraint_name(constraint: &mut Constraint, name_id: NameId) {
-    match constraint {
-        Constraint::Standard { name, .. } | Constraint::SOS { name, .. } => {
-            *name = name_id;
-        }
-    }
+    *constraint.name_mut() = name_id;
 }
 
 /// Register variables referenced by a constraint into the variables map.
@@ -1135,6 +1544,11 @@ fn register_constraint_variables(variables: &mut IndexMap<NameId, Variable>, con
         }
         Constraint::SOS { weights, .. } => {
             register_variables_from_coefficients(variables, weights, Some(&VariableType::SOS));
+        }
+        Constraint::Indicator { .. } | Constraint::Quadratic { .. } | Constraint::General { .. } => {
+            constraint.for_each_variable(|id| {
+                variables.entry(id).or_insert_with(|| Variable::new(id));
+            });
         }
     }
 }
@@ -1257,6 +1671,8 @@ End";
             name: obj1,
             coefficients: vec![Coefficient { name: x3, value: 1.0 }],
             constant: 0.0,
+            quadratic: Vec::new(),
+            attributes: crate::model::ObjectiveAttributes::default(),
             byte_offset: None,
         });
         assert_eq!(problem.objective_count(), 1);
@@ -1317,6 +1733,14 @@ End";
         assert!(LpProblem::parse("minimize\nx1\nsubject to\nend").is_ok());
     }
 
+    #[test]
+    fn test_gt_glued_to_variable_is_comparison() {
+        let p = LpProblem::parse("minimize\nx + y\nsubject to\nc: x + y>=3\nend").unwrap();
+        assert!(p.name_id("y>").is_none());
+        let Constraint::Standard { operator, rhs, .. } = &p.constraints[&p.name_id("c").unwrap()] else { panic!("expected standard") };
+        assert_eq!((*operator, *rhs), (ComparisonOp::GTE, 3.0));
+    }
+
     // Parsed coefficients round-trip bit-exactly from source text.
     #[allow(clippy::float_cmp)]
     #[test]
@@ -1355,10 +1779,24 @@ End";
     }
 
     #[test]
-    fn test_keyword_as_constraint_label_is_rejected() {
-        // `end` lexes as the End keyword, so it cannot silently become a
-        // constraint name; the parse must fail rather than misparse.
-        assert!(LpProblem::parse("minimize\nx1\nsubject to\nend: x1 <= 1\nend").is_err());
+    fn test_keyword_as_constraint_label() {
+        // A keyword followed by `:` is a label, not a section header.
+        let p = LpProblem::parse("minimize\nx1\nsubject to\nend: x1 <= 1\nend").unwrap();
+        assert!(p.constraints.contains_key(&p.name_id("end").unwrap()));
+    }
+
+    #[test]
+    fn test_keywords_as_variable_and_sos_names() {
+        let input =
+            "minimize\nobj: min + s1 + S2 + bin\nsubject to\nc1: gen + free + st >= 1\nbounds\nfree free\nsos\ns1: S1:: s1:1 S2:2\nend";
+        let p = LpProblem::parse(input).unwrap();
+        for name in ["min", "s1", "S2", "bin", "gen", "free", "st"] {
+            assert!(p.name_id(name).is_some_and(|id| p.variables.contains_key(&id)), "variable {name} missing");
+        }
+        let free = &p.variables[&p.name_id("free").unwrap()];
+        assert_eq!(free.bounds, VariableBounds::free());
+        let Constraint::SOS { sos_type, weights, .. } = &p.constraints[&p.name_id("s1").unwrap()] else { panic!("expected SOS") };
+        assert_eq!((*sos_type, weights.len()), (SOSType::S1, 2));
     }
 
     #[test]
@@ -1477,7 +1915,7 @@ End";
 
     #[test]
     fn test_special_values() {
-        assert!(LpProblem::parse("minimize\n-inf x1\nsubject to\nx1 >= -infinity\nend").is_ok());
+        assert!(LpProblem::parse("minimize\nx1\nsubject to\nx1 >= -infinity\nend").is_ok());
         assert!(LpProblem::parse("minimize\n0x1 + 0x2\nsubject to\n0x1 + 0x2 = 0\nend").is_ok());
         let input = format!("minimize\n{}x1\nsubject to\nx1 <= {}\nend", f64::MAX, f64::MAX);
         assert!(LpProblem::parse(&input).is_ok());
@@ -1729,6 +2167,59 @@ End";
     }
 
     #[test]
+    fn test_huge_bounds_are_infinite() {
+        let p =
+            LpProblem::parse("minimize\nx + y + z\nsubject to\nc: x + y + z >= 1\nbounds\nx <= 1e30\n-1e30 <= y <= 1e31\nz >= -2e30\nend")
+                .unwrap();
+        let var = |name: &str| p.variables[&p.name_id(name).unwrap()].bounds;
+        assert_eq!(var("x"), VariableBounds::upper(f64::INFINITY));
+        assert_eq!(var("y"), VariableBounds::free());
+        assert_eq!(var("z"), VariableBounds::lower(f64::NEG_INFINITY));
+
+        let mps = "NAME t\nROWS\n N  obj\nCOLUMNS\n    x  obj  1\n    y  obj  1\nBOUNDS\n UP BND  x  1e30\n LO BND  y  -1e30\n UP BND  y  9.99e29\nENDATA\n";
+        let p = LpProblem::parse_mps(mps).unwrap();
+        let var = |name: &str| p.variables[&p.name_id(name).unwrap()].bounds;
+        assert_eq!(var("x").upper, Some(f64::INFINITY));
+        assert_eq!(var("y"), VariableBounds::range(f64::NEG_INFINITY, 9.99e29));
+    }
+
+    #[test]
+    fn test_semi_integer_declaration_is_detected() {
+        assert!(super::is_semi_integer(VariableKind::General, VariableKind::SemiContinuous));
+        assert!(super::is_semi_integer(VariableKind::Integer, VariableKind::SemiContinuous));
+        assert!(super::is_semi_integer(VariableKind::SemiContinuous, VariableKind::General));
+        assert!(!super::is_semi_integer(VariableKind::Binary, VariableKind::SemiContinuous));
+        assert!(!super::is_semi_integer(VariableKind::Continuous, VariableKind::SemiContinuous));
+
+        // The combination becomes semi-integer and the bounds survive.
+        let p = LpProblem::parse("minimize\nx\nsubject to\nc: x >= 1\nbounds\nx <= 10\ngenerals\nx\nsemi-continuous\nx\nend").unwrap();
+        let x = &p.variables[&p.name_id("x").unwrap()];
+        assert_eq!(x.kind, VariableKind::SemiInteger);
+        assert_eq!(x.bounds, VariableBounds::upper(10.0));
+
+        // Section order does not matter, nor does `integers` versus `generals`.
+        let p = LpProblem::parse("minimize\nx\nsubject to\nc: x >= 1\nsemi\nx\nintegers\nx\nend").unwrap();
+        assert_eq!(p.variables[&p.name_id("x").unwrap()].kind, VariableKind::SemiInteger);
+
+        // A binary stays binary: semi-continuity adds nothing to {0, 1}.
+        let p = LpProblem::parse("minimize\nx\nsubject to\nc: x >= 1\nbinary\nx\nsemi\nx\nend").unwrap();
+        assert_eq!(p.variables[&p.name_id("x").unwrap()].kind, VariableKind::Binary);
+    }
+
+    #[test]
+    fn test_auto_generated_names_skip_later_explicit_names() {
+        let p = LpProblem::parse("minimize\nx\nsubject to\nx >= 1\nC1: x <= 5\nend").unwrap();
+        assert_eq!(p.constraint_count(), 2);
+        assert!(p.constraints.contains_key(&p.name_id("C1").unwrap()));
+        assert!(p.constraints.contains_key(&p.name_id("C2").unwrap()));
+
+        let p = LpProblem::parse("minimize\nx\nOBJ1: y\nsubject to\nc: x + y >= 1\nend").unwrap();
+        assert_eq!(p.objective_count(), 2);
+        assert!(p.objectives.contains_key(&p.name_id("OBJ1").unwrap()));
+        assert!(p.objectives.contains_key(&p.name_id("OBJ2").unwrap()));
+    }
+
+    #[test]
     fn test_auto_generated_names() {
         // An unnamed objective resolves to OBJ1; unnamed constraints to C1, C2, ...
         let p = LpProblem::parse("minimize\nx1\nsubject to\nx1 <= 1\nx1 >= 0\nend").unwrap();
@@ -1740,15 +2231,27 @@ End";
         assert!(p.constraints.contains_key(&c2));
     }
 
-    // Infinity comparisons are exact by definition.
+    #[test]
+    fn test_infinite_coefficients_are_rejected() {
+        // 1e400 overflows f64 to infinity: an infinite coefficient is not a valid model.
+        let err = LpProblem::parse("minimize\n1e400 x1\nsubject to\nc1: x1 <= 1\nend").unwrap_err();
+        assert!(err.to_string().contains("infinite coefficient"), "{err}");
+        assert!(LpProblem::parse("minimize\nobj: inf x\nsubject to\nc1: x <= 1\nend").is_err());
+        assert!(LpProblem::parse("minimize\nobj: x\nsubject to\nc1: -inf x <= 1\nend").is_err());
+        assert!(LpProblem::parse("minimize\nobj: x + inf\nsubject to\nc1: x <= 1\nend").is_err());
+        assert!(LpProblem::parse("minimize\nobj: x\nsubject to\nc1: x + inf <= inf\nend").is_err());
+        // Infinity stays valid where it means an absent bound.
+        assert!(LpProblem::parse("minimize\nobj: x\nsubject to\nc1: -inf <= x <= 1\nbounds\n-inf <= x <= +inf\nend").is_ok());
+    }
+
     #[allow(clippy::float_cmp)]
     #[test]
-    fn test_overflowing_literal_becomes_infinite_coefficient() {
-        // 1e400 overflows f64 and saturates to positive infinity rather than erroring.
-        let p = LpProblem::parse("minimize\n1e400 x1\nsubject to\nc1: x1 <= 1\nend").unwrap();
-        let obj = p.objectives.values().next().unwrap();
-        assert_eq!(obj.coefficients.len(), 1);
-        assert_eq!(obj.coefficients[0].value, f64::INFINITY);
+    fn test_infinity_prefixed_variable_name() {
+        let p = LpProblem::parse("minimize\nobj: x\nsubject to\nc: -inflow + x >= 0\nend").unwrap();
+        let Constraint::Standard { coefficients, .. } = &p.constraints[&p.name_id("c").unwrap()] else { panic!("expected standard") };
+        let inflow = p.name_id("inflow").unwrap();
+        assert!(coefficients.iter().any(|c| c.name == inflow && c.value == -1.0), "{coefficients:?}");
+        assert!(p.name_id("low").is_none());
     }
 
     #[test]
@@ -1782,6 +2285,13 @@ End";
         // propagate out of `parse` rather than panic or be swallowed.
         assert!(LpProblem::parse("minimize\nx1\nsubject to\nc1: x1 <= | 1\nend").is_err());
         assert!(LpProblem::parse("minimize\n| x1\nsubject to\nc1: x1 <= 1\nend").is_err());
+
+        // The error points at the offending line, not the start of the input.
+        let err = LpProblem::parse("minimize\nx\nsubject to\nc1: x >= 1\nc2: x ^ 3\nend").unwrap_err();
+        let crate::LpParseError::ParseError { context: Some(context), .. } = &err else {
+            panic!("expected a parse error with context: {err:?}")
+        };
+        assert_eq!((context.line, context.column), (5, 7));
     }
 }
 
@@ -1801,6 +2311,8 @@ mod modification_tests {
             name: obj1,
             coefficients: vec![Coefficient { name: x1, value: 2.0 }, Coefficient { name: x2, value: 3.0 }],
             constant: 0.0,
+            quadratic: Vec::new(),
+            attributes: crate::model::ObjectiveAttributes::default(),
             byte_offset: None,
         });
         problem.add_constraint(Constraint::Standard {
@@ -1936,7 +2448,7 @@ mod modification_tests {
         assert!(p.rename_objective("obj", "").is_err(), "empty new objective name must be rejected");
 
         // The model is untouched, so it still round-trips.
-        let written = crate::writer::write_lp_string(&p);
+        let written = crate::writer::write_lp_string(&p).expect("valid names must write");
         assert!(!written.contains("NaN"), "a rejected NaN must never reach the output: {written}");
         LpProblem::parse(&written).expect("the model must still round-trip after the rejected mutations");
     }

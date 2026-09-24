@@ -68,7 +68,7 @@ pub fn render_detail_plain(app: &App) -> Option<String> {
             let entry = app.report.constraints.entries.get(app.selected_entry_index()?)?;
             let mut lines = yank_header("Constraint", &entry.name, entry.kind, inspect);
             lines.extend(if inspect {
-                build_inspect_constraint(entry, interner)
+                build_inspect_constraint(entry, interner, None)
             } else {
                 build_constraint_detail(entry, app.cached_coeff_rows(), interner)
             });
@@ -78,7 +78,7 @@ pub fn render_detail_plain(app: &App) -> Option<String> {
             let entry = app.report.objectives.entries.get(app.selected_entry_index()?)?;
             let mut lines = yank_header("Objective", &entry.name, entry.kind, inspect);
             lines.extend(if inspect {
-                build_inspect_objective(entry, interner)
+                build_inspect_objective(entry, interner, None)
             } else {
                 build_objective_detail(entry, app.cached_coeff_rows(), interner, None)
             });

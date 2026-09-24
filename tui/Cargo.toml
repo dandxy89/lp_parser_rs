@@ -26,6 +26,8 @@ highs-sys = "1.15.0"
 ratatui = { version = "0.30.2", default-features = false, features = ["crossterm", "layout-cache"] }
 regex = "1.13.1"
 tui-input = "0.15.3"
+# Already in the tree through ratatui; used directly for width-aware truncation.
+unicode-width = "0.2.2"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2.189"

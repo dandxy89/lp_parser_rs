@@ -71,7 +71,7 @@ pub fn draw_presolve(frame: &mut Frame, area: Rect, app: &App) {
     frame.render_widget(Paragraph::new(lines).block(block), popup);
 
     // The hint sits on the bottom border so the rule list keeps the full body.
-    let hint = " j/k \u{b7} space toggle \u{b7} a all/none \u{b7} Enter solve \u{b7} l log \u{b7} H HiGHS's own \u{b7} w .lp \u{b7} Esc ";
+    let hint = "space:toggle  a:all/none  Enter:solve  l:log  H:HiGHS's own  w:.lp  Esc:close";
     crate::widgets::draw_footer_hint(frame, popup, hint);
 }
 
@@ -87,7 +87,7 @@ pub fn log_lines(stats: &PresolveStats) -> Vec<Line<'static>> {
 
     lines.push(Line::from(""));
     lines.push(Line::from(Span::styled(
-        format!("  {} action(s), oldest first", stats.log.len()),
+        format!("  {}, oldest first", crate::format::plural(stats.log.len(), "action", "actions")),
         Style::default().fg(t.accent).add_modifier(Modifier::BOLD),
     )));
     lines.push(Line::from(""));
@@ -129,7 +129,7 @@ pub fn highs_log_lines(report: &HighsPresolveReport) -> Vec<Line<'static>> {
     ];
     if report.skipped_sos > 0 {
         lines.push(Line::from(Span::styled(
-            format!("  {} SOS set(s) are not part of the model HiGHS sees", report.skipped_sos),
+            format!("  {} are not part of the model HiGHS sees", crate::format::plural(report.skipped_sos, "SOS set", "SOS sets")),
             Style::default().fg(t.muted),
         )));
     }
@@ -142,8 +142,8 @@ pub fn highs_log_lines(report: &HighsPresolveReport) -> Vec<Line<'static>> {
             lines.push(Line::from(Span::styled(format!("  {name}"), Style::default().fg(t.removed))));
         }
     };
-    section(format!("{} row(s) removed", report.removed_rows.len()), &report.removed_rows);
-    section(format!("{} column(s) removed", report.removed_cols.len()), &report.removed_cols);
+    section(format!("{} removed", crate::format::plural(report.removed_rows.len(), "row", "rows")), &report.removed_rows);
+    section(format!("{} removed", crate::format::plural(report.removed_cols.len(), "column", "columns")), &report.removed_cols);
 
     if report.infeasible {
         lines.push(Line::from(""));
@@ -170,18 +170,20 @@ pub fn draw_presolve_log(frame: &mut Frame, area: Rect, app: &mut App) {
 
     // Near-full-screen: the log lines are wide, and a rewrite worth inspecting
     // has more of them than a popup could hold.
-    let popup = crate::widgets::report_rect(area);
+    let popup = crate::widgets::report_rect(area, pane.lines.len());
 
     let inner_height = popup.height.saturating_sub(2) as usize;
     let max_scroll = u16::try_from(pane.lines.len().saturating_sub(inner_height)).unwrap_or(u16::MAX);
     pane.scroll = pane.scroll.min(max_scroll);
 
     let border_style = Style::default().fg(t.accent).add_modifier(Modifier::BOLD);
-    let title = " Presolve log  (j/k scroll \u{b7} w write .txt \u{b7} Esc close) ";
-    let block = panel_block(border_style).title(Span::styled(title, border_style));
+    let block = panel_block(border_style).title(crate::widgets::title_with_hints(
+        "Presolve log",
+        "j/k:scroll  w:write .txt  Esc:close",
+        border_style,
+    ));
 
-    frame.render_widget(Clear, popup);
-    frame.render_widget(Paragraph::new(pane.lines.clone()).block(block).scroll((pane.scroll, 0)), popup);
+    crate::widgets::draw_scroll_pane(frame, popup, &pane.lines, pane.scroll, block);
 }
 
 /// Summary of the previous run: the headline plus a per-pass breakdown, so the
