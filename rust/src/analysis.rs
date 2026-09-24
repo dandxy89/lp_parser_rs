@@ -900,14 +900,18 @@ impl LpProblem {
             });
         }
 
-        // Large RHS warning
-        if constraints.rhs_range.count > 0 && constraints.rhs_range.max > config.large_rhs_threshold {
-            issues.push(AnalysisIssue {
-                severity: IssueSeverity::Warning,
-                category: IssueCategory::NumericalScaling,
-                message: format!("Large RHS value ({:.2e}) may cause numerical issues", constraints.rhs_range.max),
-                details: None,
-            });
+        // Large RHS warning: by magnitude, so a hugely negative RHS counts too.
+        if constraints.rhs_range.count > 0 {
+            let (min, max) = (constraints.rhs_range.min, constraints.rhs_range.max);
+            let extreme = if min.abs() > max.abs() { min } else { max };
+            if extreme.abs() > config.large_rhs_threshold {
+                issues.push(AnalysisIssue {
+                    severity: IssueSeverity::Warning,
+                    category: IssueCategory::NumericalScaling,
+                    message: format!("Large RHS value ({extreme:.2e}) may cause numerical issues"),
+                    details: None,
+                });
+            }
         }
 
         // Large coefficient ratio (WARNING)
@@ -1142,6 +1146,17 @@ mod tests {
         assert_eq!(analysis.summary.total_nonzeros, 3, "the explicit zero must be kept for this test to mean anything");
         assert_eq!(analysis.coefficients.constraint_coeff_range.min, 0.001);
         assert!((analysis.coefficients.coefficient_ratio - 1e6).abs() < 1.0, "ratio: {}", analysis.coefficients.coefficient_ratio);
+    }
+
+    #[test]
+    fn test_large_negative_rhs_is_flagged() {
+        let problem = LpProblem::parse("min\n obj: x\nst\n c1: x >= -1e12\n c2: x <= 5\nend").unwrap();
+        let analysis = problem.analyze();
+        assert!(
+            analysis.issues.iter().any(|i| i.message.contains("Large RHS value (-1.00e12)")),
+            "a -1e12 RHS must be flagged: {:?}",
+            analysis.issues
+        );
     }
 
     #[test]
