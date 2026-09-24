@@ -29,8 +29,11 @@ class Objective(TypedDict):
 class VariableInfo(TypedDict):
     name: str
     kind: str  # Continuous | General | Integer | Binary | SemiContinuous | Sos
-    lower: float | None  # None when unbounded below
-    upper: float | None  # None when unbounded above
+    # None means no bound was declared on that side, so the format default
+    # applies (in LP: lower 0, upper +inf). An explicit `free` bound is
+    # reported as -inf / +inf, not None.
+    lower: float | None
+    upper: float | None
 
 class LpDiffResult(TypedDict):
     vars_added: list[str]

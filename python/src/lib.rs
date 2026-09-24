@@ -188,7 +188,8 @@ impl LpParser {
             let var_dict = PyDict::new(py);
             var_dict.set_item("name", resolved_name)?;
             // Structured kind + bounds rather than a Debug string: `lower`/`upper`
-            // are `None` when unbounded on that side.
+            // are `None` when undeclared on that side (the format default
+            // applies), and -inf/+inf when explicitly free.
             var_dict.set_item("kind", var.kind.to_string())?;
             var_dict.set_item("lower", var.bounds.lower)?;
             var_dict.set_item("upper", var.bounds.upper)?;

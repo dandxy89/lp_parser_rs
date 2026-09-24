@@ -99,6 +99,13 @@ class TestLpParserComponents:
         assert x1["kind"] == "Continuous"
         assert x1["lower"] is not None
 
+    def test_undeclared_bounds_are_none_and_free_is_infinite(self) -> None:
+        """None means "not declared" (format default applies), not "unbounded"."""
+        parser = LpParser.from_string("Minimize\n obj: x + y\nSubject To\n c1: x + y >= 1\nBounds\n y free\nEnd\n")
+        variables = parser.variables
+        assert (variables["x"]["lower"], variables["x"]["upper"]) == (None, None)
+        assert (variables["y"]["lower"], variables["y"]["upper"]) == (float("-inf"), float("inf"))
+
 
 class TestLpParserCSV:
     def test_to_csv_creates_files(self, simple_lp_file: Path, tmp_path: Path) -> None:

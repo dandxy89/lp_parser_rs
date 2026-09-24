@@ -240,7 +240,9 @@ print(f"Successfully modified and re-parsed: {new_parser.name}")
         # Discrete kind, independent of the bounds below:
         #   "Continuous", "General", "Integer", "Binary", "SemiContinuous", "Sos"
         "kind": "Integer",
-        # None on a side means unbounded in that direction.
+        # None on a side means no bound was declared there, so the format
+        # default applies (LP: lower 0, upper +inf). A variable declared
+        # `free` reports -inf / inf instead.
         "lower": 0.0,
         "upper": 100.0
     }
