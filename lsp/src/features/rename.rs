@@ -102,10 +102,10 @@ pub fn rename(doc: &Document, workspace: &[Arc<Document>], position: Position, n
     let mut changes = HashMap::new();
     match target {
         Target::Variable => {
-            if doc.index.variable(new_name).is_some() {
+            if doc.index().variable(new_name).is_some() {
                 return Err(format!("A variable named `{new_name}` already exists"));
             }
-            let Some(variable) = doc.index.variable(old_name) else {
+            let Some(variable) = doc.index().variable(old_name) else {
                 return Err(format!("Variable `{old_name}` is not indexed; try again once the document is parsed"));
             };
             let ranges: Vec<Range<usize>> = variable.occurrences.iter().map(|o| o.range.clone()).collect();
@@ -115,11 +115,11 @@ pub fn rename(doc: &Document, workspace: &[Arc<Document>], position: Position, n
             let others = workspace.iter().map(AsRef::as_ref).filter(|d: &&Document| d.uri != doc.uri);
             for d in std::iter::once(doc).chain(others) {
                 let ranges: Vec<Range<usize>> =
-                    d.index.entities_named(old_name, namespace).filter_map(|(_, e)| e.name_range.clone()).collect();
+                    d.index().entities_named(old_name, namespace).filter_map(|(_, e)| e.name_range.clone()).collect();
                 if ranges.is_empty() {
                     continue;
                 }
-                if let Some((_, existing)) = d.index.entities_named(new_name, namespace).next() {
+                if let Some((_, existing)) = d.index().entities_named(new_name, namespace).next() {
                     return Err(format!("A {} named `{new_name}` already exists in {}", existing.kind.label(), d.uri.as_str()));
                 }
                 changes.insert(d.uri.clone(), document_edits(d, &ranges, old_name, new_name, target)?);
@@ -132,9 +132,9 @@ pub fn rename(doc: &Document, workspace: &[Arc<Document>], position: Position, n
 
 /// The renameable name site at `offset`, or why there is none.
 fn renameable_at(doc: &Document, offset: usize) -> Result<(Range<usize>, Target), String> {
-    match doc.index.symbol_at(offset) {
+    match doc.index().symbol_at(offset) {
         Some((range, Symbol::Variable(..))) => Ok((range, Target::Variable)),
-        Some((range, Symbol::Entity(entity))) => Ok((range, Target::Entity(doc.index.entities[entity].kind.namespace()))),
+        Some((range, Symbol::Entity(entity))) => Ok((range, Target::Entity(doc.index().entities[entity].kind.namespace()))),
         Some((_, Symbol::Attribute(_))) => Err("Objective attribute names (such as `Priority`) cannot be renamed".to_owned()),
         None => Err(not_renameable(doc, offset)),
     }
@@ -367,18 +367,18 @@ fn check_reparse(doc: &Document, ranges: &[Range<usize>], old_name: &str, new_na
             let roles = |index: &SymbolIndex, name: &str| -> Option<Vec<Role>> {
                 index.variable(name).map(|v| v.occurrences.iter().map(|o| o.role).collect())
             };
-            roles(&doc.index, old_name) == roles(&index, new_name) && index.variable(old_name).is_none()
+            roles(doc.index(), old_name) == roles(&index, new_name) && index.variable(old_name).is_none()
         }
         Target::Entity(namespace) => {
             let kinds = |index: &SymbolIndex, name: &str| -> Vec<(EntityKind, Section)> {
                 index.entities_named(name, namespace).map(|(_, e)| (e.kind, e.section)).collect()
             };
-            kinds(&doc.index, old_name) == kinds(&index, new_name) && index.entities_named(old_name, namespace).next().is_none()
+            kinds(doc.index(), old_name) == kinds(&index, new_name) && index.entities_named(old_name, namespace).next().is_none()
         }
     };
-    let same_shape = index.variables.len() == doc.index.variables.len()
-        && index.entities.len() == doc.index.entities.len()
-        && index.sections.len() == doc.index.sections.len();
+    let same_shape = index.variables.len() == doc.index().variables.len()
+        && index.entities.len() == doc.index().entities.len()
+        && index.sections.len() == doc.index().sections.len();
     if !(same_symbol && same_shape) {
         return Err(format!("Renaming to `{new_name}` would change how {} is parsed; choose another name", doc.uri.as_str()));
     }

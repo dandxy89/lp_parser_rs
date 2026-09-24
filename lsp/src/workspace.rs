@@ -63,7 +63,11 @@ pub fn is_lp_path(path: &Path) -> bool {
 pub fn load(path: &Path, encoding: Encoding) -> Result<Document, String> {
     let text = std::fs::read_to_string(path).map_err(|e| format!("cannot read {}: {e}", path.display()))?;
     let uri = Uri::from_file_path(path).ok_or_else(|| format!("cannot build a URI for {}", path.display()))?;
-    Ok(Document::new(uri, text, 0, encoding))
+    let doc = Document::new(uri, text, 0, encoding);
+    // Workspace files are loaded in the background; build the index now so
+    // workspace symbols and cross-file rename never wait for it.
+    doc.build_index();
+    Ok(doc)
 }
 
 #[cfg(test)]

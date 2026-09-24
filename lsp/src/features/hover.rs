@@ -26,11 +26,11 @@ const LISTED_CONSTRAINTS: usize = 5;
 #[must_use]
 pub fn hover(doc: &Document, position: Position) -> Option<Hover> {
     let offset = doc.offset(position);
-    let (range, value) = match doc.index.symbol_at(offset) {
-        Some((range, Symbol::Variable(var, _))) => (range, variable(doc, &doc.index.variables[var])),
+    let (range, value) = match doc.index().symbol_at(offset) {
+        Some((range, Symbol::Variable(var, _))) => (range, variable(doc, &doc.index().variables[var])),
         Some((range, Symbol::Entity(entity))) => (range, entity_hover(doc, entity)?),
         Some((range, Symbol::Attribute(attr))) => {
-            let (name, summary) = docs::attribute(&doc.index.attributes[attr].name)?;
+            let (name, summary) = docs::attribute(&doc.index().attributes[attr].name)?;
             (range, format!("**{name}** (objective attribute)\n\n{summary}"))
         }
         None => token_hover(doc, offset)?,
@@ -51,7 +51,7 @@ fn token_hover(doc: &Document, offset: usize) -> Option<(Range<usize>, String)> 
 }
 
 fn variable(doc: &Document, var: &Variable) -> String {
-    let index = &doc.index;
+    let index = doc.index();
     let has = |role: Role| var.occurrences.iter().any(|o| o.role == role);
     let bounds: Vec<String> = var
         .occurrences
@@ -143,12 +143,12 @@ fn variable(doc: &Document, var: &Variable) -> String {
 
 /// Name of an entity, or its line for an unnamed one.
 fn entity_label(doc: &Document, entity: usize) -> String {
-    let e = &doc.index.entities[entity];
+    let e = &doc.index().entities[entity];
     e.name.clone().unwrap_or_else(|| format!("line {}", doc.position(e.range.start).line + 1))
 }
 
 fn entity_hover(doc: &Document, id: usize) -> Option<String> {
-    let entity = &doc.index.entities[id];
+    let entity = &doc.index().entities[id];
     let node = doc.node(entity.range.clone(), entity.node_kind);
     let name = entity.name.as_deref().unwrap_or("(unnamed)");
     let mut out = format!("**{name}** ({})\n\n", entity.kind.label());
@@ -157,7 +157,7 @@ fn entity_hover(doc: &Document, id: usize) -> Option<String> {
             let sense = doc.tree.root_node().child(0).filter(|n| n.kind() == kind::SENSE);
             let sense = sense.and_then(|n| docs::keyword_for_token(kind::SENSE, doc.node_text(n))).map_or("unknown", |k| k.label);
             push_line!(out, "- **Sense:** {sense}");
-            for attr in doc.index.attributes.iter().filter(|a| a.objective == id) {
+            for attr in doc.index().attributes.iter().filter(|a| a.objective == id) {
                 let text = doc.node(attr.range.clone(), kind::OBJECTIVE_ATTRIBUTE).map(|n| normalise(n, &doc.text));
                 push_line!(out, "- **{}:** `{}`", attr.name, text.as_deref().unwrap_or(doc.slice(attr.range.clone())));
             }
@@ -198,7 +198,7 @@ fn entity_hover(doc: &Document, id: usize) -> Option<String> {
 /// avoiding every constraint name written in the file.
 fn range_upper_name(doc: &Document, base: &str) -> String {
     let taken: HashSet<&str> = doc
-        .index
+        .index()
         .entities
         .iter()
         .filter(|e| e.kind.namespace() == Namespace::Constraint)

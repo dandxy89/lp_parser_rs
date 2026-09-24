@@ -12,7 +12,7 @@ use crate::index::{Role, Symbol, Variable};
 #[must_use]
 pub fn definition(doc: &Document, position: Position) -> Option<Location> {
     match symbol(doc, position)? {
-        Symbol::Variable(var, _) => Some(doc.location(doc.index.variables[var].definition().range.clone())),
+        Symbol::Variable(var, _) => Some(doc.location(doc.index().variables[var].definition().range.clone())),
         Symbol::Entity(entity) => first_label(doc, entity).map(|range| doc.location(range)),
         Symbol::Attribute(_) => None,
     }
@@ -23,7 +23,7 @@ pub fn definition(doc: &Document, position: Position) -> Option<Location> {
 pub fn declaration(doc: &Document, position: Position) -> Option<Location> {
     match symbol(doc, position)? {
         Symbol::Variable(var, _) => {
-            let variable = &doc.index.variables[var];
+            let variable = &doc.index().variables[var];
             let site = variable.declaration().unwrap_or_else(|| variable.definition());
             Some(doc.location(site.range.clone()))
         }
@@ -36,7 +36,7 @@ pub fn declaration(doc: &Document, position: Position) -> Option<Location> {
 #[must_use]
 pub fn type_definition(doc: &Document, position: Position) -> Option<Location> {
     let Symbol::Variable(var, _) = symbol(doc, position)? else { return None };
-    let variable = &doc.index.variables[var];
+    let variable = &doc.index().variables[var];
     let site = variable.declaration().or_else(|| variable.occurrences.iter().find(|o| o.role == Role::Bound))?;
     Some(doc.location(site.range.clone()))
 }
@@ -57,7 +57,7 @@ pub fn references(doc: &Document, position: Position, include_declaration: bool)
 pub fn highlights(doc: &Document, position: Position) -> Vec<DocumentHighlight> {
     let Some(symbol) = symbol(doc, position) else { return Vec::new() };
     let definition = match symbol {
-        Symbol::Variable(var, _) => Some(doc.index.variables[var].definition().range.clone()),
+        Symbol::Variable(var, _) => Some(doc.index().variables[var].definition().range.clone()),
         Symbol::Entity(entity) => first_label(doc, entity),
         Symbol::Attribute(_) => None,
     };
@@ -76,14 +76,14 @@ pub(crate) fn usages(doc: &Document, variable: &Variable) -> Vec<Location> {
 }
 
 fn symbol(doc: &Document, position: Position) -> Option<Symbol> {
-    doc.index.symbol_at(doc.offset(position)).map(|(_, symbol)| symbol)
+    doc.index().symbol_at(doc.offset(position)).map(|(_, symbol)| symbol)
 }
 
 /// Label of the first entity sharing `entity`'s name and namespace.
 fn first_label(doc: &Document, entity: usize) -> Option<Range<usize>> {
-    let target = &doc.index.entities[entity];
+    let target = &doc.index().entities[entity];
     let name = target.name.as_deref()?;
-    doc.index.entities_named(name, target.kind.namespace()).find_map(|(_, e)| e.name_range.clone())
+    doc.index().entities_named(name, target.kind.namespace()).find_map(|(_, e)| e.name_range.clone())
 }
 
 /// Every site of `symbol`, flagged when it is a declaration: bound and
@@ -91,12 +91,12 @@ fn first_label(doc: &Document, entity: usize) -> Option<Range<usize>> {
 fn sites(doc: &Document, symbol: Symbol) -> Vec<(Range<usize>, bool)> {
     match symbol {
         Symbol::Variable(var, _) => {
-            doc.index.variables[var].occurrences.iter().map(|o| (o.range.clone(), o.role.is_declaration())).collect()
+            doc.index().variables[var].occurrences.iter().map(|o| (o.range.clone(), o.role.is_declaration())).collect()
         }
         Symbol::Entity(entity) => {
-            let target = &doc.index.entities[entity];
+            let target = &doc.index().entities[entity];
             let Some(name) = target.name.as_deref() else { return Vec::new() };
-            doc.index
+            doc.index()
                 .entities_named(name, target.kind.namespace())
                 .filter_map(|(_, e)| e.name_range.clone())
                 .enumerate()

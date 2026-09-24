@@ -47,7 +47,7 @@ pub fn hints(doc: &Document, range: LspRange, settings: &InlayHintSettings) -> V
 /// Indices of entities overlapping `bytes`. Entities are disjoint and sorted
 /// by start, so their ends are sorted too.
 fn overlapping_entities(doc: &Document, bytes: &Range<usize>) -> Range<usize> {
-    let entities = &doc.index.entities;
+    let entities = &doc.index().entities;
     let first = entities.partition_point(|e| e.range.end < bytes.start);
     let last = entities.partition_point(|e| e.range.start <= bytes.end);
     first..last.max(first)
@@ -86,7 +86,7 @@ fn model_name_hints(doc: &Document, entities: Range<usize>, settings: &InlayHint
     }
     let Some(model) = doc.semantic().and_then(|s| s.model()) else { return };
     let problem = &model.problem;
-    let window = doc.index.entities[entities.start].range.start..=doc.index.entities[entities.end - 1].range.end;
+    let window = doc.index().entities[entities.start].range.start..=doc.index().entities[entities.end - 1].range.end;
 
     // (entity, model name) in model order: a ranged constraint's lower half
     // (the written name) precedes its `_rng` partner.
@@ -96,14 +96,14 @@ fn model_name_hints(doc: &Document, entities: Range<usize>, settings: &InlayHint
         .chain(constraints)
         .filter_map(|(offset, name)| {
             let offset = offset.filter(|o| window.contains(o))?;
-            let entity = doc.index.entity_at(offset).filter(|e| entities.contains(e))?;
+            let entity = doc.index().entity_at(offset).filter(|e| entities.contains(e))?;
             Some((entity, problem.resolve(name)))
         })
         .collect();
     names.sort_by_key(|(entity, _)| *entity);
 
     for group in names.chunk_by(|a, b| a.0 == b.0) {
-        let entity = &doc.index.entities[group[0].0];
+        let entity = &doc.index().entities[group[0].0];
         let generated = group[0].1;
         if settings.generated_names && entity.name.as_deref() != Some(generated) {
             match &entity.name_range {
@@ -222,7 +222,7 @@ fn format_value(value: f64) -> String {
 /// `= 7` after a constraint whose expression carries constants, folded into
 /// the right-hand side as upstream does (`assemble.rs`).
 fn normalised_rhs_hint(doc: &Document, entity_id: usize, out: &mut Vec<(usize, InlayHint)>) {
-    let entity = &doc.index.entities[entity_id];
+    let entity = &doc.index().entities[entity_id];
     if entity.kind != EntityKind::Constraint {
         return;
     }
@@ -271,11 +271,11 @@ const fn flip(op: &str) -> &'static str {
 
 /// `: int`, `: bin`, `: semi`, `: free` after each variable's first use.
 fn variable_type_hints(doc: &Document, bytes: &Range<usize>, out: &mut Vec<(usize, InlayHint)>) {
-    let sites = doc.index.sites();
+    let sites = doc.index().sites();
     let start = sites.partition_point(|(range, _)| range.end < bytes.start);
     for (range, symbol) in sites[start..].iter().take_while(|(range, _)| range.start <= bytes.end) {
         let Symbol::Variable(var, occurrence) = *symbol else { continue };
-        let variable = &doc.index.variables[var];
+        let variable = &doc.index().variables[var];
         let first_use = variable.occurrences.iter().position(|o| !o.role.is_declaration());
         if first_use != Some(occurrence) {
             continue;

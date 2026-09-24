@@ -2,7 +2,7 @@
 //! kept in sync under incremental edits.
 
 use std::ops::Range;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use tower_lsp_server::ls_types::{self as lsp, TextDocumentContentChangeEvent, Uri};
 use tree_sitter::{InputEdit, Node, Tree};
@@ -25,8 +25,8 @@ pub struct Document {
     pub tree: Tree,
     /// Line starts for `text`.
     pub lines: LineIndex,
-    /// Symbol index for `tree`.
-    pub index: SymbolIndex,
+    /// Symbol index for `tree`, built on first use per version (see [`Document::index`]).
+    index: OnceLock<Arc<SymbolIndex>>,
     /// Position encoding of the session.
     pub encoding: Encoding,
     /// Latest semantic pass result, if any. May be for an older version;
@@ -40,8 +40,7 @@ impl Document {
     pub fn new(uri: Uri, text: String, version: i32, encoding: Encoding) -> Self {
         let tree = syntax::parse(&text, None);
         let lines = LineIndex::new(&text);
-        let index = SymbolIndex::build(&tree, &text);
-        Self { uri, text, version, tree, lines, index, encoding, semantic_result: None }
+        Self { uri, text, version, tree, lines, index: OnceLock::new(), encoding, semantic_result: None }
     }
 
     /// Apply LSP content changes in order, incrementally reparse and reindex.
@@ -58,7 +57,8 @@ impl Document {
             }
         }
         self.tree = syntax::parse(&self.text, incremental.then_some(&self.tree));
-        self.index = SymbolIndex::build(&self.tree, &self.text);
+        // Typing only pays for the reparse; the index is rebuilt when a feature needs it.
+        self.index = OnceLock::new();
         self.version = version;
     }
 
@@ -80,6 +80,18 @@ impl Document {
             old_end_position,
             new_end_position: self.lines.point(new_end_byte),
         });
+    }
+
+    /// Symbol index for the current tree, built on first use. Clones of the
+    /// document share it.
+    #[must_use]
+    pub fn index(&self) -> &SymbolIndex {
+        self.index.get_or_init(|| Arc::new(SymbolIndex::build(&self.tree, &self.text)))
+    }
+
+    /// Build the index now rather than on first use (for background loading).
+    pub fn build_index(&self) {
+        self.index.get_or_init(|| Arc::new(SymbolIndex::build(&self.tree, &self.text)));
     }
 
     /// Semantic result for the current version only.
@@ -188,7 +200,7 @@ mod tests {
         doc.apply_changes(&[edit], 2);
         assert_eq!(doc.version, 2);
         assert!(doc.text.contains("limit: x - y"));
-        assert!(doc.index.entities.iter().any(|e| e.name.as_deref() == Some("limit")));
+        assert!(doc.index().entities.iter().any(|e| e.name.as_deref() == Some("limit")));
         assert_eq!(doc.tree.root_node().to_sexp(), syntax::parse(&doc.text, None).root_node().to_sexp());
     }
 
@@ -199,8 +211,8 @@ mod tests {
             &[TextDocumentContentChangeEvent { range: None, range_length: None, text: "min\n z\nst\n z >= 1\nend\n".into() }],
             2,
         );
-        assert!(doc.index.variable("x").is_none());
-        assert!(doc.index.variable("z").is_some());
+        assert!(doc.index().variable("x").is_none());
+        assert!(doc.index().variable("z").is_some());
     }
 
     fn edit_strategy() -> impl Strategy<Value = Vec<(usize, usize, String)>> {

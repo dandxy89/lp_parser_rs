@@ -284,20 +284,86 @@ impl SymbolIndex {
     /// Build the index from a parsed tree. `ERROR` subtrees are skipped.
     #[must_use]
     pub fn build(tree: &Tree, text: &str) -> Self {
-        let mut index = Self::default();
-        // Rough capacities from the text size avoid repeated regrowth on large files.
-        index.sites.reserve(text.len() / 16);
-        index.entities.reserve(text.len() / 64);
-        let mut builder = Builder { text, ids: Ids::get(), index };
-        let mut cursor = tree.root_node().walk();
-        builder.children(&mut cursor, |b, c| {
-            if c.node().is_named() {
-                b.section(c);
-            }
-        });
-        builder.index.find_duplicates();
-        debug_assert!(builder.index.sites.windows(2).all(|w| w[0].0.start <= w[1].0.start), "sites must be in document order");
-        builder.index
+        let threads = if text.len() < PARALLEL_BYTES { 1 } else { std::thread::available_parallelism().map_or(1, |n| n.get().min(8)) };
+        Self::build_with(tree, text, threads)
+    }
+
+    /// Build with `threads` workers, each indexing the entries that start in
+    /// its slice of the text; the partial indexes are merged in order, so the
+    /// result is identical to a single-threaded build.
+    fn build_with(tree: &Tree, text: &str, threads: usize) -> Self {
+        debug_assert!(threads >= 1, "at least one worker");
+        let mut index = if threads == 1 {
+            Builder::window(tree, text, 0..usize::MAX)
+        } else {
+            let bounds: Vec<usize> = (0..=threads).map(|i| if i == threads { usize::MAX } else { text.len() * i / threads }).collect();
+            let parts: Vec<Self> = std::thread::scope(|scope| {
+                let workers: Vec<_> = bounds
+                    .windows(2)
+                    .map(|w| {
+                        let window = w[0]..w[1];
+                        scope.spawn(move || Builder::window(tree, text, window))
+                    })
+                    .collect();
+                // A worker panic is a bug in the builder; surface it unchanged.
+                workers.into_iter().map(|w| w.join().unwrap_or_else(|e| std::panic::resume_unwind(e))).collect()
+            });
+            Self::merge(parts)
+        };
+        index.find_duplicates();
+        debug_assert!(index.sites.windows(2).all(|w| w[0].0.start <= w[1].0.start), "sites must be in document order");
+        index
+    }
+
+    /// Concatenate partial indexes built over consecutive windows.
+    fn merge(parts: Vec<Self>) -> Self {
+        let mut out = Self::default();
+        out.sites.reserve(parts.iter().map(|p| p.sites.len()).sum());
+        out.entities.reserve(parts.iter().map(|p| p.entities.len()).sum());
+        for part in parts {
+            let entity_offset = out.entities.len();
+            let attribute_offset = out.attributes.len();
+            // Per partial variable: its global id and how many occurrences precede this part's.
+            let remap: Vec<(usize, usize)> = part
+                .variables
+                .into_iter()
+                .map(|variable| {
+                    let global = if let Some(&global) = out.variable_ids.get(&variable.name) {
+                        global
+                    } else {
+                        let global = out.variables.len();
+                        out.variable_ids.insert(variable.name.clone(), global);
+                        out.variables.push(Variable { name: variable.name, occurrences: Vec::new() });
+                        global
+                    };
+                    let occurrences = &mut out.variables[global].occurrences;
+                    let offset = occurrences.len();
+                    occurrences.extend(variable.occurrences.into_iter().map(|mut o| {
+                        o.entity = o.entity.map(|e| e + entity_offset);
+                        o
+                    }));
+                    (global, offset)
+                })
+                .collect();
+            out.entities.extend(part.entities);
+            out.attributes.extend(part.attributes.into_iter().map(|mut a| {
+                a.objective += entity_offset;
+                a
+            }));
+            out.sections.extend(part.sections);
+            out.sites.extend(part.sites.into_iter().map(|(range, symbol)| {
+                let symbol = match symbol {
+                    Symbol::Variable(var, occurrence) => {
+                        let (global, offset) = remap[var];
+                        Symbol::Variable(global, occurrence + offset)
+                    }
+                    Symbol::Entity(e) => Symbol::Entity(e + entity_offset),
+                    Symbol::Attribute(a) => Symbol::Attribute(a + attribute_offset),
+                };
+                (range, symbol)
+            }));
+        }
+        out
     }
 
     /// Look up a variable by exact name.
@@ -444,15 +510,67 @@ impl Ids {
     }
 }
 
+/// Files below this size are indexed on one thread.
+const PARALLEL_BYTES: usize = 4 * 1024 * 1024;
+
 /// Single-cursor tree walk. Every visit takes the cursor on a node and leaves
 /// it on that same node.
 struct Builder<'a> {
     text: &'a str,
     ids: &'static Ids,
     index: SymbolIndex,
+    /// Only section entries starting in this byte window are indexed (and
+    /// only sections starting in it are recorded).
+    window: Range<usize>,
+}
+
+impl Builder<'_> {
+    /// Index the entries starting in `window` (without duplicate detection).
+    fn window(tree: &Tree, text: &str, window: Range<usize>) -> SymbolIndex {
+        let mut index = SymbolIndex::default();
+        // Rough capacities from the text size avoid repeated regrowth on large files.
+        let share = text.len().min(window.end - window.start);
+        index.sites.reserve(share / 16);
+        index.entities.reserve(share / 64);
+        let mut builder = Builder { text, ids: Ids::get(), index, window };
+        let mut cursor = tree.root_node().walk();
+        builder.children(&mut cursor, |b, c| {
+            let node = c.node();
+            if node.is_named() && node.end_byte() > b.window.start && node.start_byte() < b.window.end {
+                b.section(c);
+            }
+        });
+        builder.index
+    }
 }
 
 impl<'t> Builder<'_> {
+    /// Like [`Builder::children`], but only children starting in the window.
+    fn entries(&mut self, cursor: &mut TreeCursor<'t>, mut f: impl FnMut(&mut Self, &mut TreeCursor<'t>)) {
+        let entered = if self.window.start > cursor.node().start_byte() {
+            // Jump over earlier entries (sections can have millions).
+            cursor.goto_first_child_for_byte(self.window.start).is_some()
+        } else {
+            cursor.goto_first_child()
+        };
+        if !entered {
+            return;
+        }
+        loop {
+            let start = cursor.node().start_byte();
+            if start >= self.window.end {
+                break;
+            }
+            if start >= self.window.start {
+                f(self, cursor);
+            }
+            if !cursor.goto_next_sibling() {
+                break;
+            }
+        }
+        cursor.goto_parent();
+    }
+
     /// Call `f` with the cursor on each child of the current node.
     fn children(&mut self, cursor: &mut TreeCursor<'t>, mut f: impl FnMut(&mut Self, &mut TreeCursor<'t>)) {
         if cursor.goto_first_child() {
@@ -471,13 +589,16 @@ impl<'t> Builder<'_> {
         if !syntax::is_section(node) {
             return;
         }
-        let header = node.child(0).filter(|c| c.kind().ends_with("_keyword")).map(|c| c.byte_range());
-        self.index.sections.push(SectionSpan { kind: static_kind(node.kind()), range: node.byte_range(), header });
+        let owned = self.window.contains(&node.start_byte());
+        if owned {
+            let header = node.child(0).filter(|c| c.kind().ends_with("_keyword")).map(|c| c.byte_range());
+            self.index.sections.push(SectionSpan { kind: static_kind(node.kind()), range: node.byte_range(), header });
+        }
 
         let ids = self.ids;
         let id = node.kind_id();
         if id == ids.objectives_section {
-            self.children(cursor, |b, c| {
+            self.entries(cursor, |b, c| {
                 let child = c.node().kind_id();
                 if child == ids.linear_expression {
                     let entity = b.entity(EntityKind::Objective, Section::Objectives, None, c.node());
@@ -494,25 +615,28 @@ impl<'t> Builder<'_> {
             } else {
                 Section::UserCuts
             };
-            self.children(cursor, |b, c| {
+            self.entries(cursor, |b, c| {
                 if c.node().kind_id() == ids.constraint {
                     b.constraint(c, section);
                 }
             });
         } else if id == ids.general_constraints_section {
-            self.children(cursor, |b, c| {
+            self.entries(cursor, |b, c| {
                 if c.node().kind_id() == ids.general_constraint {
                     b.general_constraint(c);
                 }
             });
         } else if id == ids.bounds_section {
-            self.children(cursor, |b, c| {
+            self.entries(cursor, |b, c| {
                 if c.node().kind_id() == ids.bound_declaration {
                     b.identifiers(c, Role::Bound, None);
                 }
             });
         } else if id == ids.sos_section {
-            self.sos_section(cursor);
+            // SOS entries belong to the header before them: never split the section.
+            if owned {
+                self.sos_section(cursor);
+            }
         } else {
             let role = if id == ids.generals_section {
                 Role::Generals
@@ -524,7 +648,12 @@ impl<'t> Builder<'_> {
                 debug_assert_eq!(id, ids.semi_continuous_section);
                 Role::SemiContinuous
             };
-            self.identifiers(cursor, role, None);
+            let identifier = ids.identifier;
+            self.entries(cursor, |b, c| {
+                if c.node().kind_id() == identifier {
+                    b.occurrence(c.node(), role, None, None);
+                }
+            });
         }
     }
 
@@ -814,6 +943,27 @@ End
         // SOS set spans its entries.
         let sos = &idx.entities[10];
         assert!(ALL[sos.range.clone()].ends_with("y : -2"));
+    }
+
+    #[test]
+    fn parallel_build_matches_sequential() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+        let mut texts = vec![ALL.to_owned()];
+        for dir in ["rust/resources", "rust/tests"] {
+            for entry in std::fs::read_dir(root.join(dir)).unwrap() {
+                let path = entry.unwrap().path();
+                if path.extension().is_some_and(|e| e == "lp") {
+                    texts.push(std::fs::read_to_string(path).unwrap());
+                }
+            }
+        }
+        for text in &texts {
+            let tree = syntax::parse(text, None);
+            let sequential = SymbolIndex::build_with(&tree, text, 1);
+            for threads in [2, 3, 7] {
+                assert_eq!(SymbolIndex::build_with(&tree, text, threads), sequential, "{threads} threads");
+            }
+        }
     }
 
     #[test]

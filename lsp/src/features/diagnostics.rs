@@ -166,8 +166,8 @@ fn semantic_error(doc: &Document, out: &mut Vec<Diagnostic>) {
 }
 
 fn duplicate_names(doc: &Document, out: &mut Vec<Diagnostic>) {
-    let entities = &doc.index.entities;
-    for duplicate in &doc.index.duplicates {
+    let entities = &doc.index().entities;
+    for duplicate in &doc.index().duplicates {
         let (first, entity) = (&entities[duplicate.first], &entities[duplicate.duplicate]);
         debug_assert_eq!(first.name, entity.name, "duplicates share a name");
         debug_assert!(entity.name.is_some(), "only named entities can be duplicates");
@@ -197,7 +197,7 @@ const fn type_section(role: Role) -> &'static str {
 }
 
 fn conflicting_types(doc: &Document, out: &mut Vec<Diagnostic>) {
-    for variable in &doc.index.variables {
+    for variable in &doc.index().variables {
         let declarations: Vec<&Occurrence> = variable.occurrences.iter().filter(|o| o.role.is_type_declaration()).collect();
         let Some(first) = declarations.first() else { continue };
         if declarations.iter().all(|o| o.role == first.role) {
@@ -222,7 +222,7 @@ fn conflicting_types(doc: &Document, out: &mut Vec<Diagnostic>) {
 /// Returns the names reported.
 fn unused_declarations<'d>(doc: &'d Document, out: &mut Vec<Diagnostic>) -> HashSet<&'d str> {
     let mut reported = HashSet::new();
-    for variable in doc.index.variables.iter().filter(|v| !v.is_used()) {
+    for variable in doc.index().variables.iter().filter(|v| !v.is_used()) {
         let message = format!("`{}` is declared but not used in any objective or constraint", variable.name);
         for occurrence in &variable.occurrences {
             debug_assert!(occurrence.role.is_declaration(), "unused variables only have declarations");
@@ -239,7 +239,7 @@ fn unused_declarations<'d>(doc: &'d Document, out: &mut Vec<Diagnostic>) -> Hash
 /// Returns the names reported.
 fn conflicting_bounds<'d>(doc: &'d Document, out: &mut Vec<Diagnostic>) -> HashSet<&'d str> {
     let mut reported = HashSet::new();
-    for variable in &doc.index.variables {
+    for variable in &doc.index().variables {
         let declarations: Vec<(Range<usize>, VariableBounds)> = variable
             .occurrences
             .iter()
@@ -349,7 +349,7 @@ fn analysis_issue(issue: &AnalysisIssue, doc: &Document, model: &Model, out: &mu
 /// entity's label (whole entity if unnamed), narrowed to `variable` inside it.
 fn subject_range(doc: &Document, model: &Model, subject: &IssueSubject) -> Option<Range<usize>> {
     let (namespace, offset) = match subject.kind {
-        UpstreamKind::Variable => return doc.index.variable(&subject.name).map(|v| v.definition().range.clone()),
+        UpstreamKind::Variable => return doc.index().variable(&subject.name).map(|v| v.definition().range.clone()),
         UpstreamKind::Constraint => {
             let constraint = model.problem.name_id(&subject.name).and_then(|id| model.problem.constraints.get(&id));
             (Namespace::Constraint, constraint.and_then(lp_parser_rs::model::Constraint::byte_offset))
@@ -359,7 +359,7 @@ fn subject_range(doc: &Document, model: &Model, subject: &IssueSubject) -> Optio
             (Namespace::Objective, objective.and_then(|o| o.byte_offset))
         }
     };
-    let index = &doc.index;
+    let index = doc.index();
     let entity = offset
         .and_then(|o| index.entity_at(o))
         .filter(|&e| index.entities[e].kind.namespace() == namespace)

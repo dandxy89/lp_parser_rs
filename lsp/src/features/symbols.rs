@@ -18,7 +18,7 @@ const UNNAMED_PREVIEW_CHARS: usize = 40;
 /// Sections → objectives / constraints / general constraints / SOS sets.
 #[must_use]
 pub fn document_symbols(doc: &Document) -> Vec<DocumentSymbol> {
-    let index = &doc.index;
+    let index = doc.index();
     let mut entities = index.entities.iter().peekable();
     let mut out = Vec::with_capacity(index.sections.len());
     for section in &index.sections {
@@ -53,12 +53,12 @@ pub fn workspace_symbols(docs: &[Arc<Document>], query: &str) -> Vec<WorkspaceSy
     // Score cheaply first; build LSP values only for the survivors.
     let mut candidates: Vec<(u8, usize, Candidate)> = Vec::new();
     for (d, doc) in docs.iter().enumerate() {
-        for (e, entity) in doc.index.entities.iter().enumerate() {
+        for (e, entity) in doc.index().entities.iter().enumerate() {
             if let Some(score) = entity.name.as_deref().and_then(|name| score(name, &query)) {
                 candidates.push((score, d, Candidate::Entity(e)));
             }
         }
-        for (v, variable) in doc.index.variables.iter().enumerate() {
+        for (v, variable) in doc.index().variables.iter().enumerate() {
             if let Some(score) = score(&variable.name, &query) {
                 candidates.push((score, d, Candidate::Variable(v)));
             }
@@ -77,12 +77,12 @@ pub fn workspace_symbols(docs: &[Arc<Document>], query: &str) -> Vec<WorkspaceSy
             let doc = &docs[d];
             let (name, kind, container, range) = match candidate {
                 Candidate::Entity(e) => {
-                    let entity = &doc.index.entities[e];
+                    let entity = &doc.index().entities[e];
                     let name_range = entity.name_range.clone().unwrap_or_else(|| entity.range.clone());
                     (entity.name.clone().unwrap_or_default(), entity_kind(entity.kind), entity.section.label(), name_range)
                 }
                 Candidate::Variable(v) => {
-                    let variable = &doc.index.variables[v];
+                    let variable = &doc.index().variables[v];
                     (variable.name.clone(), SymbolKind::VARIABLE, "variable", variable.definition().range.clone())
                 }
             };

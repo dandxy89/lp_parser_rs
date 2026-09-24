@@ -17,7 +17,7 @@ pub const SHOW_REFERENCES: &str = "lp.showReferences";
 /// Never in practice: serialising `Position` and `Location` to JSON cannot fail.
 #[must_use]
 pub fn lenses(doc: &Document) -> Vec<CodeLens> {
-    let index = &doc.index;
+    let index = doc.index();
 
     // Distinct variables per entity, in one pass over the occurrences.
     // `Variable::entities` is deduplicated: an entity's occurrences of one

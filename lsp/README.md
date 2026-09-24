@@ -156,16 +156,23 @@ a TextMate grammar so files are highlighted before the server starts.
 
 ## Performance
 
-`cargo bench -p lp-lsp --bench lsp` on a generated 52 MB LP file (Apple silicon, 14 cores, machine under load):
+`cargo bench -p lp-lsp --bench lsp` on a generated 52 MB LP file (Apple silicon, 14 cores):
 
-| Operation | Median |
-| --- | --- |
-| Single-character edit, end to end (`apply_changes`: text, line index, incremental reparse, index rebuild) | 1.44 s |
-| Incremental reparse only | 224 ms |
-| `SymbolIndex::build` | 1.17 s |
-| Semantic tokens, full document | 2.57 s |
+| Operation | Median | Before optimisation |
+| --- | --- | --- |
+| Single-character edit (`apply_changes`: text, line index, incremental reparse) | 246 ms | 1.44 s |
+| Incremental reparse only | 228 ms | 224 ms |
+| Symbol index build (8 threads above 4 MB) | 377 ms | 1.17 s |
+| Semantic tokens, full document (8 threads above 4 MB) | 113 ms | 2.57 s |
 
-The symbol index is rebuilt in full after each edit, and at this size that dominates. Typical models (a few MB) take tens of milliseconds. Above `lp.semantic.maxFileSizeMb` the full semantic parse only runs on open and save.
+How it stays responsive:
+
+- **Keystrokes only reparse.** The symbol index is built lazily, once per version, by the first request that needs it. Documents share it when cloned.
+- **Heavy work stays off the async runtime.** Requests run on the blocking pool against a snapshot of the document. Edits are applied in order, under `block_in_place`.
+- **Large files (> 1 MB) debounce diagnostics.** Syntax diagnostics wait for typing to pause rather than running per keystroke. Above `lp.semantic.maxFileSizeMb`, the full semantic parse runs only on open and save.
+- **Index and tokens are single walks.** Each is one tree-sitter cursor walk dispatching on symbol ids. On large files they are split into byte windows across threads and merged in order; tests check the result is identical to a single-threaded run. Semantic tokens follow `highlights.scm` (a test compares them with the query on every fixture) without the query engine.
+
+What remains in an edit is tree-sitter's own incremental reparse: rebalancing the repetition that holds a section's entries, which grows with the section's size. Typical models (a few MB) take a few milliseconds per edit.
 
 ## Development
 

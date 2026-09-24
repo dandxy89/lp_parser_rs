@@ -68,6 +68,10 @@ pub struct Backend {
     state: Arc<State>,
 }
 
+/// Documents up to this size get syntax diagnostics on every keystroke; larger
+/// ones only once the edit debounce settles.
+const QUICK_DIAGNOSTICS_BYTES: usize = 1024 * 1024;
+
 /// Why a semantic pass was requested.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Trigger {
@@ -111,6 +115,16 @@ impl Backend {
         docs
     }
 
+    /// Run feature code on the blocking pool so large documents never stall
+    /// the async workers (the first request after an edit may build the index).
+    async fn run<T: Send + 'static>(&self, f: impl FnOnce() -> T + Send + 'static) -> Result<T> {
+        tokio::task::spawn_blocking(f).await.map_err(|e| Error {
+            code: tower_lsp_server::jsonrpc::ErrorCode::InternalError,
+            message: format!("request worker failed: {e}").into(),
+            data: None,
+        })
+    }
+
     async fn log(&self, typ: MessageType, message: impl std::fmt::Display + Send) {
         self.client.log_message(typ, message).await;
     }
@@ -127,8 +141,12 @@ impl Backend {
             return;
         }
         let Some(doc) = read(&self.state.open).get(uri).cloned() else { return };
-        let diagnostics = diagnostics::compute(&doc, &self.config());
-        self.client.publish_diagnostics(uri.clone(), diagnostics, Some(doc.version)).await;
+        let config = self.config();
+        let version = doc.version;
+        match self.run(move || diagnostics::compute(&doc, &config)).await {
+            Ok(diagnostics) => self.client.publish_diagnostics(uri.clone(), diagnostics, Some(version)).await,
+            Err(e) => self.log(MessageType::ERROR, format!("diagnostics failed for {}: {}", uri.as_str(), e.message)).await,
+        }
     }
 
     /// Schedule the semantic pass for `uri`: debounced after edits, immediate
@@ -146,6 +164,10 @@ impl Backend {
                 return;
             }
             let Some(doc) = read(&this.state.open).get(&uri).cloned() else { return };
+            if trigger == Trigger::Edit && doc.text.len() > QUICK_DIAGNOSTICS_BYTES {
+                // Large files skip per-keystroke diagnostics; publish once typing pauses.
+                this.publish(&uri).await;
+            }
             if trigger == Trigger::Edit && doc.text.len() > config.max_semantic_bytes() {
                 return;
             }
@@ -412,7 +434,10 @@ impl LanguageServer for Backend {
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
         let item = params.text_document;
         let uri = item.uri.clone();
-        let doc = Document::new(item.uri, item.text, item.version, self.encoding());
+        let encoding = self.encoding();
+        // A full parse of a large file takes a while: let the runtime move other
+        // tasks off this worker (no `.await`, so messages stay ordered).
+        let doc = tokio::task::block_in_place(|| Document::new(item.uri, item.text, item.version, encoding));
         write(&self.state.open).insert(uri.clone(), Arc::new(doc));
         self.publish(&uri).await;
         self.schedule_semantic(uri, Trigger::Save);
@@ -420,15 +445,24 @@ impl LanguageServer for Backend {
 
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
         let uri = params.text_document.uri;
-        let known = {
+        // Handlers run concurrently, so the edit must be applied before the first
+        // `.await` to keep changes in order. `block_in_place` keeps the reparse
+        // from stalling other tasks on this worker.
+        let size = tokio::task::block_in_place(|| {
             let mut open = write(&self.state.open);
-            open.get_mut(&uri).map(|doc| Arc::make_mut(doc).apply_changes(&params.content_changes, params.text_document.version)).is_some()
-        };
-        if !known {
+            open.get_mut(&uri).map(|doc| {
+                let doc = Arc::make_mut(doc);
+                doc.apply_changes(&params.content_changes, params.text_document.version);
+                doc.text.len()
+            })
+        });
+        let Some(size) = size else {
             self.log(MessageType::WARNING, format!("didChange for unopened document {}", uri.as_str())).await;
             return;
+        };
+        if size <= QUICK_DIAGNOSTICS_BYTES {
+            self.publish(&uri).await;
         }
-        self.publish(&uri).await;
         self.schedule_semantic(uri, Trigger::Edit);
     }
 
@@ -502,7 +536,8 @@ impl LanguageServer for Backend {
 
     async fn diagnostic(&self, params: DocumentDiagnosticParams) -> Result<DocumentDiagnosticReportResult> {
         let doc = self.document_or_error(&params.text_document.uri)?;
-        let items = diagnostics::compute(&doc, &self.config());
+        let config = self.config();
+        let items = self.run(move || diagnostics::compute(&doc, &config)).await?;
         Ok(DocumentDiagnosticReportResult::Report(DocumentDiagnosticReport::Full(RelatedFullDocumentDiagnosticReport {
             related_documents: None,
             full_document_diagnostic_report: FullDocumentDiagnosticReport { result_id: None, items },
@@ -511,58 +546,59 @@ impl LanguageServer for Backend {
 
     async fn document_symbol(&self, params: DocumentSymbolParams) -> Result<Option<DocumentSymbolResponse>> {
         let doc = self.document_or_error(&params.text_document.uri)?;
-        Ok(Some(DocumentSymbolResponse::Nested(symbols::document_symbols(&doc))))
+        self.run(move || Some(DocumentSymbolResponse::Nested(symbols::document_symbols(&doc)))).await
     }
 
     async fn symbol(&self, params: WorkspaceSymbolParams) -> Result<Option<WorkspaceSymbolResponse>> {
         let docs = self.all_documents();
-        Ok(Some(WorkspaceSymbolResponse::Nested(symbols::workspace_symbols(&docs, &params.query))))
+        self.run(move || Some(WorkspaceSymbolResponse::Nested(symbols::workspace_symbols(&docs, &params.query)))).await
     }
 
     async fn goto_definition(&self, params: GotoDefinitionParams) -> Result<Option<GotoDefinitionResponse>> {
         let (doc, position) = self.position_params(&params.text_document_position_params)?;
-        Ok(navigation::definition(&doc, position).map(GotoDefinitionResponse::Scalar))
+        self.run(move || navigation::definition(&doc, position).map(GotoDefinitionResponse::Scalar)).await
     }
 
     async fn goto_declaration(&self, params: request::GotoDeclarationParams) -> Result<Option<request::GotoDeclarationResponse>> {
         let (doc, position) = self.position_params(&params.text_document_position_params)?;
-        Ok(navigation::declaration(&doc, position).map(GotoDefinitionResponse::Scalar))
+        self.run(move || navigation::declaration(&doc, position).map(GotoDefinitionResponse::Scalar)).await
     }
 
     async fn goto_type_definition(&self, params: request::GotoTypeDefinitionParams) -> Result<Option<request::GotoTypeDefinitionResponse>> {
         let (doc, position) = self.position_params(&params.text_document_position_params)?;
-        Ok(navigation::type_definition(&doc, position).map(GotoDefinitionResponse::Scalar))
+        self.run(move || navigation::type_definition(&doc, position).map(GotoDefinitionResponse::Scalar)).await
     }
 
     async fn references(&self, params: ReferenceParams) -> Result<Option<Vec<Location>>> {
         let (doc, position) = self.position_params(&params.text_document_position)?;
-        Ok(Some(navigation::references(&doc, position, params.context.include_declaration)))
+        let include_declaration = params.context.include_declaration;
+        self.run(move || Some(navigation::references(&doc, position, include_declaration))).await
     }
 
     async fn document_highlight(&self, params: DocumentHighlightParams) -> Result<Option<Vec<DocumentHighlight>>> {
         let (doc, position) = self.position_params(&params.text_document_position_params)?;
-        Ok(Some(navigation::highlights(&doc, position)))
+        self.run(move || Some(navigation::highlights(&doc, position))).await
     }
 
     async fn prepare_rename(&self, params: TextDocumentPositionParams) -> Result<Option<PrepareRenameResponse>> {
         let (doc, position) = self.position_params(&params)?;
-        rename::prepare(&doc, position).map_err(Error::invalid_params)
+        self.run(move || rename::prepare(&doc, position)).await?.map_err(Error::invalid_params)
     }
 
     async fn rename(&self, params: RenameParams) -> Result<Option<WorkspaceEdit>> {
         let (doc, position) = self.position_params(&params.text_document_position)?;
         let others: Vec<Arc<Document>> = self.all_documents().into_iter().filter(|d| d.uri != doc.uri).collect();
-        rename::rename(&doc, &others, position, &params.new_name).map_err(Error::invalid_params)
+        self.run(move || rename::rename(&doc, &others, position, &params.new_name)).await?.map_err(Error::invalid_params)
     }
 
     async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {
         let (doc, position) = self.position_params(&params.text_document_position_params)?;
-        Ok(hover::hover(&doc, position))
+        self.run(move || hover::hover(&doc, position)).await
     }
 
     async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
         let (doc, position) = self.position_params(&params.text_document_position)?;
-        Ok(Some(CompletionResponse::Array(completion::complete(&doc, position))))
+        self.run(move || Some(CompletionResponse::Array(completion::complete(&doc, position)))).await
     }
 
     async fn completion_resolve(&self, item: CompletionItem) -> Result<CompletionItem> {
@@ -571,53 +607,58 @@ impl LanguageServer for Backend {
 
     async fn signature_help(&self, params: SignatureHelpParams) -> Result<Option<SignatureHelp>> {
         let (doc, position) = self.position_params(&params.text_document_position_params)?;
-        Ok(signature::help(&doc, position))
+        self.run(move || signature::help(&doc, position)).await
     }
 
     async fn inlay_hint(&self, params: InlayHintParams) -> Result<Option<Vec<InlayHint>>> {
         let doc = self.document_or_error(&params.text_document.uri)?;
-        Ok(Some(inlay::hints(&doc, params.range, &self.config().inlay_hints)))
+        let settings = self.config().inlay_hints;
+        self.run(move || Some(inlay::hints(&doc, params.range, &settings))).await
     }
 
     async fn code_action(&self, params: CodeActionParams) -> Result<Option<CodeActionResponse>> {
         let doc = self.document_or_error(&params.text_document.uri)?;
-        Ok(Some(code_action::actions(&doc, params.range, &params.context, &self.config())))
+        let config = self.config();
+        self.run(move || Some(code_action::actions(&doc, params.range, &params.context, &config))).await
     }
 
     async fn code_lens(&self, params: CodeLensParams) -> Result<Option<Vec<CodeLens>>> {
         let doc = self.document_or_error(&params.text_document.uri)?;
-        Ok(Some(code_lens::lenses(&doc)))
+        self.run(move || Some(code_lens::lenses(&doc))).await
     }
 
     async fn formatting(&self, params: DocumentFormattingParams) -> Result<Option<Vec<TextEdit>>> {
         let doc = self.document_or_error(&params.text_document.uri)?;
-        Ok(format::format_document(&doc, &self.config().format))
+        let settings = self.config().format;
+        self.run(move || format::format_document(&doc, &settings)).await
     }
 
     async fn range_formatting(&self, params: DocumentRangeFormattingParams) -> Result<Option<Vec<TextEdit>>> {
         let doc = self.document_or_error(&params.text_document.uri)?;
-        Ok(format::format_range(&doc, params.range, &self.config().format))
+        let settings = self.config().format;
+        self.run(move || format::format_range(&doc, params.range, &settings)).await
     }
 
     async fn on_type_formatting(&self, params: DocumentOnTypeFormattingParams) -> Result<Option<Vec<TextEdit>>> {
         let (doc, position) = self.position_params(&params.text_document_position)?;
-        Ok(format::format_on_type(&doc, position, &params.ch, &self.config().format))
+        let settings = self.config().format;
+        self.run(move || format::format_on_type(&doc, position, &params.ch, &settings)).await
     }
 
     async fn folding_range(&self, params: FoldingRangeParams) -> Result<Option<Vec<FoldingRange>>> {
         let doc = self.document_or_error(&params.text_document.uri)?;
-        Ok(Some(folding::ranges(&doc)))
+        self.run(move || Some(folding::ranges(&doc))).await
     }
 
     async fn selection_range(&self, params: SelectionRangeParams) -> Result<Option<Vec<SelectionRange>>> {
         let doc = self.document_or_error(&params.text_document.uri)?;
-        Ok(Some(selection::ranges(&doc, &params.positions)))
+        self.run(move || Some(selection::ranges(&doc, &params.positions))).await
     }
 
     async fn semantic_tokens_full(&self, params: SemanticTokensParams) -> Result<Option<SemanticTokensResult>> {
         let uri = params.text_document.uri;
         let doc = self.document_or_error(&uri)?;
-        let data = semantic_tokens::tokens(&doc, None);
+        let data = self.run(move || semantic_tokens::tokens(&doc, None)).await?;
         let result_id = self.cache_tokens(&uri, data.clone());
         Ok(Some(SemanticTokensResult::Tokens(SemanticTokens { result_id: Some(result_id), data })))
     }
@@ -625,23 +666,31 @@ impl LanguageServer for Backend {
     async fn semantic_tokens_full_delta(&self, params: SemanticTokensDeltaParams) -> Result<Option<SemanticTokensFullDeltaResult>> {
         let uri = params.text_document.uri;
         let doc = self.document_or_error(&uri)?;
-        let data = semantic_tokens::tokens(&doc, None);
         let previous =
             read(&self.state.tokens).get(&uri).filter(|(id, _)| *id == params.previous_result_id).map(|(_, tokens)| tokens.clone());
+        let (data, edits) = self
+            .run(move || {
+                let data = semantic_tokens::tokens(&doc, None);
+                let edits = previous.map(|old| semantic_tokens::delta(&old, &data));
+                (data, edits)
+            })
+            .await?;
         let result_id = self.cache_tokens(&uri, data.clone());
-        Ok(Some(match previous {
-            Some(old) => SemanticTokensFullDeltaResult::TokensDelta(SemanticTokensDelta {
-                result_id: Some(result_id),
-                edits: semantic_tokens::delta(&old, &data),
-            }),
+        Ok(Some(match edits {
+            Some(edits) => SemanticTokensFullDeltaResult::TokensDelta(SemanticTokensDelta { result_id: Some(result_id), edits }),
             None => SemanticTokensFullDeltaResult::Tokens(SemanticTokens { result_id: Some(result_id), data }),
         }))
     }
 
     async fn semantic_tokens_range(&self, params: SemanticTokensRangeParams) -> Result<Option<SemanticTokensRangeResult>> {
         let doc = self.document_or_error(&params.text_document.uri)?;
-        let range = doc.byte_range(params.range);
-        Ok(Some(SemanticTokensRangeResult::Tokens(SemanticTokens { result_id: None, data: semantic_tokens::tokens(&doc, Some(range)) })))
+        let data = self
+            .run(move || {
+                let range = doc.byte_range(params.range);
+                semantic_tokens::tokens(&doc, Some(range))
+            })
+            .await?;
+        Ok(Some(SemanticTokensRangeResult::Tokens(SemanticTokens { result_id: None, data })))
     }
 
     async fn execute_command(&self, params: ExecuteCommandParams) -> Result<Option<LSPAny>> {

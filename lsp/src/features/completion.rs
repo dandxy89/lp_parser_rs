@@ -182,7 +182,7 @@ impl Completions<'_> {
 
     fn variables(&mut self) {
         let doc = self.doc;
-        for var in &doc.index.variables {
+        for var in &doc.index().variables {
             // Skip the name being typed, which the index already holds.
             if var.occurrences.iter().all(|o| o.range == self.replace) {
                 continue;

@@ -79,7 +79,7 @@ fn codes(diagnostics: &[Value]) -> Vec<String> {
     diagnostics.iter().filter_map(|d| d["code"].as_str().map(str::to_owned)).collect()
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn full_session() {
     let mut h = Harness::start();
 

@@ -143,7 +143,7 @@ impl Actions<'_> {
 
     /// Name sites overlapping the request.
     fn sites(&self) -> &[(Range<usize>, Symbol)] {
-        let sites = self.doc.index.sites();
+        let sites = self.doc.index().sites();
         let lo = sites.partition_point(|(range, _)| range.end < self.request.start);
         let hi = sites.partition_point(|(range, _)| range.start <= self.request.end);
         &sites[lo..hi.max(lo)]
@@ -217,7 +217,7 @@ impl Actions<'_> {
 
     /// Rename a later entity reusing a name to the first free `name_N`.
     fn duplicate_names(&mut self) {
-        let index = &self.doc.index;
+        let index = self.doc.index();
         for duplicate in &index.duplicates {
             let entity = &index.entities[duplicate.duplicate];
             let (Some(name), Some(range)) = (entity.name.as_deref(), entity.name_range.clone()) else { continue };
@@ -265,7 +265,7 @@ impl Actions<'_> {
         let sites: Vec<(usize, usize)> =
             self.sites().iter().filter_map(|(_, s)| if let Symbol::Variable(v, o) = *s { Some((v, o)) } else { None }).collect();
         for (v, o) in sites {
-            let variable = &doc.index.variables[v];
+            let variable = &doc.index().variables[v];
             let occurrence = &variable.occurrences[o];
             let name = &variable.name;
             if !occurrence.role.is_declaration() {
@@ -312,7 +312,7 @@ impl Actions<'_> {
 
     /// Variable under the cursor: `(variable, occurrence)`.
     fn variable_at_cursor(&self) -> Option<(usize, usize)> {
-        match self.doc.index.symbol_at(self.request.start)? {
+        match self.doc.index().symbol_at(self.request.start)? {
             (_, Symbol::Variable(v, o)) => Some((v, o)),
             _ => None,
         }
@@ -322,7 +322,7 @@ impl Actions<'_> {
     /// reads `1e30` as infinity) for a variable without one.
     fn add_bound(&mut self) {
         let Some((v, _)) = self.variable_at_cursor() else { return };
-        let variable = &self.doc.index.variables[v];
+        let variable = &self.doc.index().variables[v];
         if variable.occurrences.iter().any(|o| o.role == Role::Bound) {
             return;
         }
@@ -335,7 +335,7 @@ impl Actions<'_> {
     fn move_type(&mut self) {
         let Some((v, o)) = self.variable_at_cursor() else { return };
         let doc = self.doc;
-        let variable = &doc.index.variables[v];
+        let variable = &doc.index().variables[v];
         let occurrence = &variable.occurrences[o];
         if !occurrence.role.is_type_declaration() {
             return;
@@ -357,7 +357,7 @@ impl Actions<'_> {
     /// Name every unnamed constraint with the name upstream would generate.
     fn name_constraints(&mut self) {
         let doc = self.doc;
-        let index = &doc.index;
+        let index = doc.index();
         let constraint_sections =
             [kind::CONSTRAINTS_SECTION, kind::LAZY_CONSTRAINTS_SECTION, kind::USER_CUTS_SECTION, kind::GENERAL_CONSTRAINTS_SECTION];
         let in_section = index.sections.iter().any(|s| constraint_sections.contains(&s.kind) && self.touches(&s.range));
@@ -375,7 +375,7 @@ impl Actions<'_> {
     fn sort_type_section(&mut self) {
         let doc = self.doc;
         let spans: Vec<Range<usize>> = doc
-            .index
+            .index()
             .sections
             .iter()
             .filter(|s| TYPE_SECTIONS.iter().any(|(_, k, _)| *k == s.kind) && self.touches(&s.range))
@@ -610,7 +610,7 @@ fn attached_start(doc: &Document, offset: usize) -> Option<usize> {
 fn insert_entry(doc: &Document, section_kind: &str, header: &str, entry: &str) -> Option<Edit> {
     let eol = eol(&doc.text);
     let own_rank = rank(section_kind)?;
-    if let Some(span) = doc.index.sections.iter().find(|s| s.kind == section_kind) {
+    if let Some(span) = doc.index().sections.iter().find(|s| s.kind == section_kind) {
         let section = doc.node(span.range.clone(), section_kind)?;
         let last = children(section).into_iter().rfind(|c| !c.is_extra())?;
         let line_end = doc.lines.line_range(&doc.text, doc.lines.line_of(last.end_byte())).end;
@@ -654,7 +654,7 @@ fn insert_entry(doc: &Document, section_kind: &str, header: &str, entry: &str) -
 /// two constraints and so consumes two numbers; once named it becomes
 /// `C<n>` plus `C<n>_rng`.
 fn generated_names(doc: &Document) -> Vec<(usize, String)> {
-    let index = &doc.index;
+    let index = doc.index();
     let reserved: HashSet<&str> =
         index.entities.iter().filter(|e| e.kind.namespace() == Namespace::Constraint).filter_map(|e| e.name.as_deref()).collect();
     let order = |section: Section| match section {
