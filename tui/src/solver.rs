@@ -489,6 +489,30 @@ pub(crate) fn build_highs_model(problem: &LpProblem) -> BuiltModel {
     BuiltModel { row_problem, variable_names, sorted_var_ids, objective_coefficients, row_constraint_names, skipped_sos, sense }
 }
 
+/// Hand a built problem to `HiGHS`, reporting a rejected model as an error.
+///
+/// The crate's `optimise` panics when `HiGHS` refuses the model, which it does
+/// for an infinite right-hand side, bound or coefficient — all of which the
+/// parser accepts — so every caller goes through the fallible variant.
+///
+/// # Errors
+///
+/// Returns an error when `HiGHS` rejects the model.
+pub(crate) fn pass_model(row_problem: highs::RowProblem, sense: highs::Sense) -> Result<highs::Model, String> {
+    row_problem
+        .try_optimise(sense)
+        .map_err(|status| format!("HiGHS rejected the model ({status:?}): check for an infinite right-hand side, bound or coefficient"))
+}
+
+/// Run `HiGHS` on `model`, reporting a solver error instead of panicking.
+///
+/// # Errors
+///
+/// Returns an error when `HiGHS` reports an error while solving.
+pub(crate) fn run_model(model: highs::Model) -> Result<highs::SolvedModel, String> {
+    model.try_solve().map_err(|status| format!("HiGHS failed to solve the model ({status:?})"))
+}
+
 /// Extract the solution from a solved `HiGHS` model into a `SolveResult`.
 fn extract_solution(
     metadata: &SolveMetadata,
@@ -674,7 +698,7 @@ pub fn solve_problem_with(problem: &LpProblem, extra: &[(&str, &str)]) -> Result
 
     let metadata = SolveMetadata { variable_names, sorted_var_ids, objective_coefficients, row_constraint_names, skipped_sos };
 
-    let mut highs_model = row_problem.optimise(sense);
+    let mut highs_model = pass_model(row_problem, sense)?;
     highs_model.set_option("output_flag", true);
     highs_model.set_option("log_file", log_path.to_str().ok_or_else(|| "temp file path is not valid UTF-8".to_owned())?);
     // After `log_file`, so anything `HiGHS` rejects is written to the log the pane
@@ -690,7 +714,10 @@ pub fn solve_problem_with(problem: &LpProblem, extra: &[(&str, &str)]) -> Result
     }
 
     let solve_start = Instant::now();
-    let solved = highs_model.solve();
+    let solved = run_model(highs_model).map_err(|error| match std::fs::remove_file(&log_path) {
+        Ok(()) => error,
+        Err(e) => format!("{error} (and failed to remove solver log {}: {e})", log_path.display()),
+    })?;
     let solve_time = solve_start.elapsed();
 
     let mut solver_log = std::fs::read_to_string(&log_path).map_err(|e| format!("failed to read solver log: {e}"))?;
@@ -873,11 +900,11 @@ pub fn diagnose_infeasibility(problem: &LpProblem) -> Result<InfeasibilityDiagno
 
     debug_assert_eq!(slack_names.len(), slack_cols.len(), "slack names and columns must be in sync");
 
-    let mut highs_model = row_problem.optimise(highs::Sense::Minimise);
+    let mut highs_model = pass_model(row_problem, highs::Sense::Minimise)?;
     // Suppress solver output: the diagnosis runs while the TUI owns the terminal.
     highs_model.set_option("output_flag", false);
 
-    let solved = highs_model.solve();
+    let solved = run_model(highs_model)?;
     let status = solved.status();
     debug_assert!(
         matches!(status, highs::HighsModelStatus::Optimal),
@@ -1160,6 +1187,28 @@ empty =\n";
         // Any `highs.opt` containing `simplex_strategy = 4` took the TUI down.
         let result = solve_problem_with(&tiny_lp(), &[("simplex_strategy", "1")]).expect("an int-typed option must apply");
         assert_eq!(result.status, "Optimal");
+    }
+
+    #[test]
+    fn test_infinite_model_data_is_an_error_not_a_panic() {
+        // Regression: the crate's `optimise` panics when HiGHS rejects the model,
+        // and the parser accepts infinite right-hand sides, bounds and
+        // coefficients. Presolve ran on the UI thread, so it took the TUI down.
+        let sources = [
+            "Minimize\n obj: x + y\nSubject To\n c1: x + y >= inf\nEnd",
+            "Minimize\n obj: x\nSubject To\n c1: x >= 1\nBounds\n x >= inf\nEnd",
+            "Minimize\n obj: x\nSubject To\n c1: 1e400 x >= 1\nEnd",
+        ];
+        for source in sources {
+            let problem = LpProblem::parse(source).expect("fixture must parse");
+            let error = solve_problem(&problem).expect_err("solve must refuse the model");
+            assert!(error.contains("HiGHS rejected"), "unexpected error for {source:?}: {error}");
+            assert!(diagnose_infeasibility(&problem).is_err(), "diagnosis must refuse {source:?}");
+            assert!(crate::highs_query::iis(&problem).is_err(), "IIS must refuse {source:?}");
+            assert!(crate::highs_query::ranging(&problem).is_err(), "ranging must refuse {source:?}");
+            assert!(crate::highs_query::unbounded_ray(&problem).is_err(), "ray must refuse {source:?}");
+            assert!(crate::highs_presolve::highs_presolve(&problem).is_err(), "presolve must refuse {source:?}");
+        }
     }
 
     #[test]

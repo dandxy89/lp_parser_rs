@@ -138,7 +138,7 @@ pub fn highs_presolve(problem: &LpProblem) -> Result<HighsPresolveReport, String
     let skipped_sos = built.skipped_sos;
     let (variable_names, row_names) = (built.variable_names, built.row_constraint_names);
 
-    let mut model = built.row_problem.optimise(built.sense);
+    let mut model = crate::solver::pass_model(built.row_problem, built.sense)?;
     // The presolve log would otherwise land in the terminal underneath the TUI.
     model.make_quiet();
     let highs = model.as_mut_ptr();
