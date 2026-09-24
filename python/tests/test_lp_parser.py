@@ -236,3 +236,26 @@ class TestMutationErrors:
         with pytest.raises(LpInvalidValueError):
             parser.update_constraint_rhs("c1", float("nan"))
         assert "NaN" not in parser.to_lp_string()
+
+
+class TestReparse:
+    """parse() must re-read the source with the parser it was built with."""
+
+    def test_reparse_mps_file(self, simple_lp_file: Path, tmp_path: Path) -> None:
+        mps_path = tmp_path / "simple.mps"
+        LpParser(str(simple_lp_file)).save_to_mps(str(mps_path))
+        parser = LpParser(str(mps_path))
+        parser.parse()
+        assert len(parser.variables) == 2
+
+    def test_reparse_explicit_format(self, simple_lp_file: Path, tmp_path: Path) -> None:
+        mps_path = tmp_path / "simple.txt"
+        LpParser(str(simple_lp_file)).save_to_mps(str(mps_path))
+        parser = LpParser.from_file(str(mps_path), "mps")
+        parser.parse()
+        assert len(parser.variables) == 2
+
+    def test_reparse_string_backed_parser_raises(self) -> None:
+        parser = LpParser.from_string("Minimize\n obj: x\nSubject To\n c1: x >= 1\nEnd\n")
+        with pytest.raises(LpInvalidValueError, match="built from a string"):
+            parser.parse()

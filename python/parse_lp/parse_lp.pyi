@@ -106,7 +106,10 @@ class LpParser:
         """Mapping of variable name to variable information."""
 
     def parse(self) -> None:
-        """Re-read and re-parse the LP file, picking up changes made since construction."""
+        """Re-read and re-parse the source file in its original format (LP or MPS), picking up changes made since construction.
+
+        Raises LpInvalidValueError for a parser built with `from_string`, which has no file to re-read.
+        """
 
     def to_csv(self, base_directory: str) -> None:
         """Export the problem to CSV files in the given directory."""

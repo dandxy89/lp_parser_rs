@@ -28,6 +28,11 @@ create_exception!(parse_lp, LpInvalidValueError, PyRuntimeError, "Raised when an
 #[pyclass]
 pub struct LpParser {
     lp_file: String,
+    /// The file the problem was read from; `None` when built from a string.
+    source_path: Option<PathBuf>,
+    /// Source format, normalised to `"lp"` or `"mps"`, so `parse()` re-reads
+    /// the file with the same parser.
+    format: &'static str,
     problem: LpProblem,
 }
 
@@ -49,8 +54,9 @@ impl LpParser {
     #[staticmethod]
     #[pyo3(signature = (text, format="lp"))]
     fn from_string(py: Python, text: String, format: &str) -> PyResult<Self> {
+        let format = normalise_format(format)?;
         let problem = py.detach(|| parse_source(&text, format))?;
-        Ok(Self { lp_file: "<string>".to_string(), problem })
+        Ok(Self { lp_file: "<string>".to_string(), source_path: None, format, problem })
     }
 
     /// Construct a parser from a file, parsing it immediately.
@@ -63,16 +69,17 @@ impl LpParser {
         if !Path::new(&path).is_file() {
             return Err(PyFileNotFoundError::new_err(format!("File '{path}' does not exist or is not a file")));
         }
-        let inferred = format.map_or_else(
-            || if Path::new(&path).extension().is_some_and(|ext| ext.eq_ignore_ascii_case("mps")) { "mps" } else { "lp" },
-            |fmt| fmt,
-        );
+        let inferred = match format {
+            Some(fmt) => normalise_format(fmt)?,
+            None if Path::new(&path).extension().is_some_and(|ext| ext.eq_ignore_ascii_case("mps")) => "mps",
+            None => "lp",
+        };
         let file_path = PathBuf::from(&path);
-        let problem = py.detach(move || {
+        let problem = py.detach(|| {
             let input = parse_file(&file_path).map_err(|err| LpParseError::new_err(format!("Unable to read file: {err}")))?;
             parse_source(&input, inferred)
         })?;
-        Ok(Self { lp_file: path, problem })
+        Ok(Self { lp_file: path, source_path: Some(file_path), format: inferred, problem })
     }
 
     #[getter]
@@ -80,15 +87,21 @@ impl LpParser {
         self.lp_file.clone()
     }
 
-    /// Re-read and re-parse the source file. Construction already parses, so this
-    /// is only needed to pick up changes made to the file since.
+    /// Re-read and re-parse the source file, in the format it was first parsed
+    /// as. Construction already parses, so this is only needed to pick up
+    /// changes made to the file since.
     fn parse(&mut self, py: Python) -> PyResult<()> {
-        let path = PathBuf::from(&self.lp_file);
+        let Some(path) = self.source_path.as_deref() else {
+            return Err(LpInvalidValueError::new_err(
+                "parse() re-reads the source file, but this parser was built from a string and has none",
+            ));
+        };
+        let format = self.format;
         // Release the GIL while reading and parsing so other Python threads
         // are not blocked by the heavy pure-Rust work.
-        self.problem = py.detach(move || {
-            let input = parse_file(&path).map_err(|err| LpParseError::new_err(format!("Unable to read LP file: {err}")))?;
-            LpProblem::parse(&input).map_err(|err| LpParseError::new_err(format!("Unable to parse LpProblem: {err}")))
+        self.problem = py.detach(|| {
+            let input = parse_file(path).map_err(|err| LpParseError::new_err(format!("Unable to read file: {err}")))?;
+            parse_source(&input, format)
         })?;
         Ok(())
     }
@@ -417,13 +430,23 @@ fn to_py_err(context: &str, err: CoreError) -> PyErr {
     }
 }
 
-/// Parse LP or MPS source text into an [`LpProblem`], selecting the parser by
-/// `format` (`"lp"` or `"mps"`, case-insensitive).
-fn parse_source(text: &str, format: &str) -> PyResult<LpProblem> {
+/// Normalise a user-supplied format name (`"lp"` or `"mps"`, case-insensitive).
+fn normalise_format(format: &str) -> PyResult<&'static str> {
     match format.to_lowercase().as_str() {
-        "lp" => LpProblem::parse(text).map_err(|err| LpParseError::new_err(format!("Unable to parse LpProblem: {err}"))),
-        "mps" => LpProblem::parse_mps(text).map_err(|err| LpParseError::new_err(format!("Unable to parse MPS: {err}"))),
+        "lp" => Ok("lp"),
+        "mps" => Ok("mps"),
         other => Err(LpInvalidValueError::new_err(format!("Unknown format: {other}. Use 'lp' or 'mps'"))),
+    }
+}
+
+/// Parse LP or MPS source text into an [`LpProblem`], selecting the parser by
+/// a format already passed through [`normalise_format`].
+fn parse_source(text: &str, format: &'static str) -> PyResult<LpProblem> {
+    debug_assert!(format == "lp" || format == "mps", "format must be normalised");
+    if format == "mps" {
+        LpProblem::parse_mps(text).map_err(|err| LpParseError::new_err(format!("Unable to parse MPS: {err}")))
+    } else {
+        LpProblem::parse(text).map_err(|err| LpParseError::new_err(format!("Unable to parse LpProblem: {err}")))
     }
 }
 
