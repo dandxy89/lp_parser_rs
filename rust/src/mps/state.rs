@@ -276,17 +276,38 @@ pub fn parse_mps(input: &str) -> LpResult<ParseResult<'_>> {
         let first_char = line.as_bytes().first().copied();
         let is_section_header = first_char.is_some_and(|c| !c.is_ascii_whitespace());
 
-        if is_section_header {
-            if state.process_section_header(line, line_num)? {
-                break;
-            }
-            continue;
+        let reached_end = if is_section_header {
+            state.process_section_header(line, line_num)
+        } else {
+            state.dispatch_data_line(line, line_num).map(|()| false)
+        };
+        if reached_end.map_err(|err| locate_error(err, input, line))? {
+            break;
         }
-
-        state.dispatch_data_line(line, line_num)?;
     }
 
     state.build_result()
+}
+
+/// Re-anchor an error raised while parsing `line` at a byte offset in `input`.
+///
+/// The section parsers only know the 1-based line number and report it in the
+/// `position` field; the public contract of that field is a byte offset (as
+/// for LP input), and a parse error gains line/column source context from it.
+fn locate_error(err: LpParseError, input: &str, line: &str) -> LpParseError {
+    // `line` is a subslice of `input` (from `str::lines`), so the pointer
+    // difference is its byte offset.
+    let line_start = (line.as_ptr() as usize).wrapping_sub(input.as_ptr() as usize);
+    debug_assert!(line_start + line.len() <= input.len(), "line must be a subslice of input");
+
+    match err {
+        LpParseError::ParseError { message, .. } => LpParseError::parse_error(line_start, message).with_source(input),
+        LpParseError::InvalidNumber { value, .. } => {
+            let offset = line.find(value.as_str()).unwrap_or(0);
+            LpParseError::invalid_number(value, line_start + offset)
+        }
+        other => other,
+    }
 }
 
 /// Extract the problem name from MPS input (the NAME section line).

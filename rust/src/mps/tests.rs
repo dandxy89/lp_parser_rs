@@ -1075,6 +1075,22 @@ fn test_degenerate_input_does_not_panic() {
 }
 
 #[test]
+fn test_errors_report_byte_position_and_line() {
+    let input = "NAME t\nROWS\n N  obj\nCOLUMNS\n    x1        obj       1\n    x1        nosuch    1\nENDATA\n";
+    let err = parse_mps(input).unwrap_err();
+    let crate::LpParseError::ParseError { position, context: Some(context), .. } = &err else {
+        panic!("expected parse error with context: {err:?}")
+    };
+    assert_eq!(*position, input.find("    x1        nosuch").unwrap());
+    assert_eq!(context.line, 6);
+    assert!(err.to_string().contains("line 6"), "{err}");
+
+    let input = "NAME t\nROWS\n N  obj\nCOLUMNS\n    x1        obj       abc\nENDATA\n";
+    let err = parse_mps(input).unwrap_err();
+    assert_eq!(err, crate::LpParseError::invalid_number("abc", input.find("abc").unwrap()));
+}
+
+#[test]
 fn test_rows_section_errors() {
     assert_all_err(&[
         // Unknown row type
