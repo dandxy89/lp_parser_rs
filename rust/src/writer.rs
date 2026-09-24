@@ -86,13 +86,51 @@ pub fn write_lp_string(problem: &LpProblem) -> LpResult<String> {
 /// starting with a digit, or one containing `:`, `<`, `=`, `+` or whitespace --
 /// or if the problem name (when written) contains a line break. Writing such a
 /// name would produce a file that fails to parse or means something else.
+///
+/// Objectives and constraints with no terms cannot be expressed in LP syntax
+/// and are omitted; use [`write_lp_string_with_warnings`] to be told which.
+pub fn write_lp_string_with_options(problem: &LpProblem, options: &LpWriterOptions) -> LpResult<String> {
+    write_lp_string_with_warnings(problem, options).map(|(output, _omitted)| output)
+}
+
+/// Write an `LpProblem` to a string with custom formatting options, also
+/// returning a warning for each objective or constraint that was omitted
+/// because it has no terms (LP syntax has no way to write an empty expression).
+///
+/// The library never prints these itself, so the caller decides whether and
+/// where to report them.
+///
+/// # Errors
+///
+/// See [`write_lp_string_with_options`].
 // The only panic is the expect on fmt::Write to String, which is infallible.
 #[allow(clippy::missing_panics_doc)]
-pub fn write_lp_string_with_options(problem: &LpProblem, options: &LpWriterOptions) -> LpResult<String> {
+pub fn write_lp_string_with_warnings(problem: &LpProblem, options: &LpWriterOptions) -> LpResult<(String, Vec<String>)> {
     validate_lp_names(problem, options)?;
     let mut output = String::new();
     build_lp(&mut output, problem, options).expect("fmt::Write to String is infallible");
-    Ok(output)
+    Ok((output, omitted_expressions(problem)))
+}
+
+/// Describe each objective or constraint the writer skips (see
+/// [`write_objective`] and [`write_constraint`]).
+fn omitted_expressions(problem: &LpProblem) -> Vec<String> {
+    let objectives = problem
+        .objectives
+        .values()
+        .filter(|o| is_empty_objective(o))
+        .map(|o| format!("objective '{}' has no coefficients and was omitted from the LP output", problem.resolve(o.name)));
+    let constraints = problem
+        .constraints
+        .values()
+        .filter(|c| matches!(c, Constraint::Standard { coefficients, .. } if coefficients.is_empty()))
+        .map(|c| format!("constraint '{}' has no coefficients and was omitted from the LP output", problem.resolve(c.name())));
+    objectives.chain(constraints).collect()
+}
+
+/// An objective with neither terms nor a constant, which the writer omits.
+fn is_empty_objective(objective: &Objective) -> bool {
+    objective.coefficients.is_empty() && objective.constant == 0.0
 }
 
 /// Check that `name` lexes back as exactly one LP identifier equal to itself.
@@ -199,10 +237,9 @@ fn write_objectives_section(output: &mut String, problem: &LpProblem, options: &
 /// Write a single objective
 fn write_objective(output: &mut String, objective: &Objective, interner: &NameInterner, options: &LpWriterOptions) -> std::fmt::Result {
     let name = interner.resolve(objective.name);
-    if objective.coefficients.is_empty() && objective.constant == 0.0 {
+    if is_empty_objective(objective) {
         // CPLEX accepts an empty objective, but a bare ` name: ` line adds
-        // nothing; skip it and keep the historical warning.
-        eprintln!("objective '{name}' has no coefficients and will be omitted from the LP output");
+        // nothing; skip it (reported by `omitted_expressions`).
         return Ok(());
     }
     write!(output, " {name}: ")?;
@@ -260,8 +297,8 @@ fn write_constraint(output: &mut String, constraint: &Constraint, interner: &Nam
         Constraint::Standard { name, coefficients, operator, rhs, .. } => {
             let resolved_name = interner.resolve(*name);
             if coefficients.is_empty() {
-                // A dangling ` name:  <= rhs` line is not valid LP syntax.
-                eprintln!("constraint '{resolved_name}' has no coefficients and will be omitted from the LP output");
+                // A dangling ` name:  <= rhs` line is not valid LP syntax; the
+                // omission is reported by `omitted_expressions`.
                 return Ok(());
             }
             write!(output, " {resolved_name}: ")?;
@@ -704,6 +741,11 @@ mod tests {
         let reparsed = LpProblem::parse(&result).unwrap();
         assert_eq!(reparsed.objective_count(), 1);
         assert_eq!(reparsed.constraint_count(), 1);
+
+        // The omissions are reported to the caller rather than printed.
+        let (_, warnings) = write_lp_string_with_warnings(&problem, &LpWriterOptions::default()).unwrap();
+        assert_eq!(warnings.len(), 2, "{warnings:?}");
+        assert!(warnings[0].contains("empty_obj") && warnings[1].contains("empty_c"), "{warnings:?}");
     }
 
     #[test]
