@@ -127,6 +127,10 @@ pub struct CachedSolve {
     /// Modified problem behind side 2 of a comparison solve — a what-if RHS
     /// edit or a presolve rewrite.
     pub what_if_problem: Option<Arc<LpProblem>>,
+    /// The overlay's view when it was closed. A comparison's rows were diffed
+    /// at this view's threshold, so the two must be restored together or the
+    /// threshold label would describe a different diff.
+    pub view: SolveViewState,
 }
 
 /// Cache capacity: file 1, file 2, both, and one what-if edit.
@@ -207,6 +211,7 @@ impl SolverSession {
                 state,
                 solved_problem: self.solved_problem.clone(),
                 what_if_problem: self.what_if_problem.clone(),
+                view: std::mem::take(&mut self.view),
             });
         }
         self.reset_diagnosis();

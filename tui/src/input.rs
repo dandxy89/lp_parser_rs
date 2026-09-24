@@ -829,8 +829,10 @@ impl App {
     /// the overlay was restored and no solve is needed.
     ///
     /// The formatted lines are rebuilt rather than cached: the terminal may
-    /// have been resized since the solve ran. `view` is deliberately left
-    /// alone so the user lands back on the tab and scroll offset they closed.
+    /// have been resized since the solve ran. The view comes back with the
+    /// result: the user lands on the tab and scroll offset they closed, and a
+    /// comparison's threshold label matches the threshold its rows were
+    /// diffed at.
     fn restore_cached_solve(&mut self, key: &str) -> bool {
         let Some(cached) = self.solver.take_cached(key) else {
             return false;
@@ -844,6 +846,7 @@ impl App {
         self.solver.state = cached.state;
         self.solver.solved_problem = cached.solved_problem;
         self.solver.what_if_problem = cached.what_if_problem;
+        self.solver.view = cached.view;
         key.clone_into(&mut self.solver.key);
         self.solver.reset_diagnosis();
         self.flash_status("Restored cached solve (unchanged input)");
@@ -1644,6 +1647,25 @@ mod tests {
         app.solver.solved_problem = Some(Arc::clone(&app.problem2));
         let problem = app.solve_view_problem().expect("a completed solve names its model");
         assert!(Arc::ptr_eq(&problem, &app.problem2), "a single solve of file 2 must analyse file 2");
+    }
+
+    /// Regression: a restored comparison kept whatever view was current, so
+    /// its threshold label no longer matched the threshold its rows used.
+    #[test]
+    fn a_restored_comparison_brings_back_its_threshold() {
+        let mut app = app_with_side2_infeasible();
+        app.solver.view.cycle_threshold_forward();
+        app.recompute_solve_diff();
+        let threshold_index = app.solver.view.threshold_index;
+        app.solver.key = "pair".to_owned();
+        app.solver.close_overlay();
+
+        // Another solve in between starts from the default view.
+        app.solver.view = SolveViewState::default();
+        assert_ne!(app.solver.view.threshold_index, threshold_index, "fixture: the thresholds must differ");
+
+        assert!(app.restore_cached_solve("pair"), "the comparison must be cached");
+        assert_eq!(app.solver.view.threshold_index, threshold_index, "the view must come back with its result");
     }
 
     /// Regression: `D` joined the newest solve onto file 1's structure even
