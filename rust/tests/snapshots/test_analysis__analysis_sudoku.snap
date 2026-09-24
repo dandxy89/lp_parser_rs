@@ -221,6 +221,10 @@ issues:
     category: FixedVariable
     message: "Variable '__dummy' is fixed at value 0"
     details: ~
+    subject:
+      kind: Variable
+      name: __dummy
+      variable: ~
   - severity: Info
     category: SingletonConstraint
     message: 29 singleton constraint(s) detected (may represent simple bounds)

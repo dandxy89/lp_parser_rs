@@ -4,6 +4,7 @@ use crate::lexer::{LexerError, Token};
 use crate::line_index::LineIndex;
 
 /// Kind of named entity referenced by mutation / lookup APIs.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EntityKind {
     /// An objective function.

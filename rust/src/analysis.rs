@@ -26,6 +26,7 @@ use std::fmt::{Display, Formatter, Result as FmtResult};
 
 use rustc_hash::FxHashSet;
 
+use crate::error::EntityKind;
 use crate::interner::NameId;
 use crate::model::{ComparisonOp, Constraint, ConstraintClass, SOSType, VariableKind};
 use crate::problem::LpProblem;
@@ -331,6 +332,14 @@ pub struct CoefficientLocation {
     pub value: f64,
 }
 
+impl CoefficientLocation {
+    /// The constraint or objective holding this coefficient, narrowed to its variable.
+    fn subject(&self) -> IssueSubject {
+        let kind = if self.is_objective { EntityKind::Objective } else { EntityKind::Constraint };
+        IssueSubject { kind, name: self.location.clone(), variable: Some(self.variable.clone()) }
+    }
+}
+
 /// Severity level for detected issues.
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -399,6 +408,37 @@ pub struct AnalysisIssue {
     pub message: String,
     /// Additional details if available
     pub details: Option<String>,
+    /// The entity the issue is about, for locating it in the source; `None`
+    /// for problem-wide issues.
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
+    pub subject: Option<IssueSubject>,
+}
+
+/// The entity an [`AnalysisIssue`] refers to.
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IssueSubject {
+    /// Kind of entity.
+    pub kind: EntityKind,
+    /// Name of the variable, constraint or objective (possibly generated,
+    /// e.g. `C1` or `c1_rng`, for unnamed or ranged constraints).
+    pub name: String,
+    /// For coefficient issues, the variable within the constraint or objective.
+    pub variable: Option<String>,
+}
+
+impl IssueSubject {
+    /// Subject naming a variable.
+    #[must_use]
+    pub fn variable(name: impl Into<String>) -> Self {
+        Self { kind: EntityKind::Variable, name: name.into(), variable: None }
+    }
+
+    /// Subject naming a constraint.
+    #[must_use]
+    pub fn constraint(name: impl Into<String>) -> Self {
+        Self { kind: EntityKind::Constraint, name: name.into(), variable: None }
+    }
 }
 
 impl Display for AnalysisIssue {
@@ -939,6 +979,7 @@ impl LpProblem {
                 category: IssueCategory::InvalidBounds,
                 message: format!("Variable '{}' has invalid bounds: lower ({}) > upper ({})", invalid.name, invalid.lower, invalid.upper),
                 details: None,
+                subject: Some(IssueSubject::variable(&invalid.name)),
             });
         }
 
@@ -949,6 +990,7 @@ impl LpProblem {
                 category: IssueCategory::EmptyConstraint,
                 message: format!("Constraint '{name}' has no variables"),
                 details: None,
+                subject: Some(IssueSubject::constraint(name)),
             });
         }
 
@@ -962,6 +1004,7 @@ impl LpProblem {
                     summary.constraint_count, summary.variable_count
                 ),
                 details: Some("Over-constrained problems often have degenerate or infeasible solutions".to_string()),
+                subject: None,
             });
         }
 
@@ -975,6 +1018,7 @@ impl LpProblem {
                     category: IssueCategory::NumericalScaling,
                     message: format!("Large RHS value ({extreme:.2e}) may cause numerical issues"),
                     details: None,
+                    subject: None,
                 });
             }
         }
@@ -986,6 +1030,7 @@ impl LpProblem {
                 category: IssueCategory::NumericalScaling,
                 message: format!("Large coefficient ratio ({:.2e}) may cause numerical instability", coefficients.coefficient_ratio),
                 details: Some("Consider rescaling the problem".to_string()),
+                subject: None,
             });
         }
 
@@ -1002,6 +1047,7 @@ impl LpProblem {
                         if loc.is_objective { "objective" } else { "constraint" }
                     ),
                     details: Some(loc.location.clone()),
+                    subject: Some(loc.subject()),
                 });
             }
         }
@@ -1013,6 +1059,7 @@ impl LpProblem {
                 category: IssueCategory::FixedVariable,
                 message: format!("Variable '{}' is fixed at value {}", fixed.name, fixed.value),
                 details: None,
+                subject: Some(IssueSubject::variable(&fixed.name)),
             });
         }
 
@@ -1026,6 +1073,7 @@ impl LpProblem {
                     constraints.singleton_constraints.len()
                 ),
                 details: None,
+                subject: None,
             });
         }
 
@@ -1036,6 +1084,7 @@ impl LpProblem {
                 category: IssueCategory::UnusedVariable,
                 message: format!("Variable '{name}' is not used in any constraint or objective"),
                 details: None,
+                subject: Some(IssueSubject::variable(name)),
             });
         }
 
@@ -1092,6 +1141,7 @@ mod tests {
             category: IssueCategory::NumericalScaling,
             message: "Test message".to_string(),
             details: Some("Details here".to_string()),
+            subject: None,
         };
         let display = issue.to_string();
         assert!(display.contains("WARNING"));
@@ -1276,5 +1326,41 @@ mod tests {
             "expected an UnusedVariable Info issue: {:?}",
             analysis.issues
         );
+    }
+
+    #[test]
+    fn test_issue_subjects_locate_entities() {
+        let text =
+            "min\n obj: 1e12 x + y\nst\n c1: 0 x >= 1\n c2: y + 1e-12 z >= 1\n 2 <= x + y <= 8\nbounds\n 5 <= y <= 1\n z = 3\n w >= 0\nend";
+        let mut problem = LpProblem::parse(text).unwrap();
+        add_standard_constraint(&mut problem, "e1", &[], ComparisonOp::LTE, 5.0);
+        let analysis = problem.analyze();
+        let subject = |category: IssueCategory| -> Vec<Option<IssueSubject>> {
+            analysis.issues.iter().filter(|i| i.category == category).map(|i| i.subject.clone()).collect()
+        };
+
+        assert_eq!(subject(IssueCategory::InvalidBounds), [Some(IssueSubject::variable("y"))]);
+        assert_eq!(subject(IssueCategory::FixedVariable), [Some(IssueSubject::variable("z"))]);
+        assert_eq!(subject(IssueCategory::UnusedVariable), [Some(IssueSubject::variable("w"))]);
+        assert_eq!(subject(IssueCategory::SingletonConstraint), [None]);
+        let empty = analysis.issues.iter().find(|i| i.category == IssueCategory::EmptyConstraint).unwrap();
+        assert_eq!(empty.subject, Some(IssueSubject::constraint("e1")));
+        let coefficients: Vec<IssueSubject> = analysis
+            .issues
+            .iter()
+            .filter(|i| i.category == IssueCategory::NumericalScaling && i.message.contains("coefficient ("))
+            .filter_map(|i| i.subject.clone())
+            .collect();
+        assert_eq!(
+            coefficients,
+            [
+                IssueSubject { kind: EntityKind::Objective, name: "obj".to_owned(), variable: Some("x".to_owned()) },
+                IssueSubject { kind: EntityKind::Constraint, name: "c2".to_owned(), variable: Some("z".to_owned()) },
+            ]
+        );
+        // Problem-wide issues carry no subject, and the subject leaves the text unchanged.
+        let ratio = analysis.issues.iter().find(|i| i.message.contains("coefficient ratio")).unwrap();
+        assert_eq!(ratio.subject, None);
+        assert_eq!(empty.to_string(), "[WARNING] Constraint 'e1' has no variables");
     }
 }

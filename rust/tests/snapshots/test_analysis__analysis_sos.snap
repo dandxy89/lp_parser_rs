@@ -90,6 +90,10 @@ issues:
     category: UnusedVariable
     message: "Variable 'V8' is not used in any constraint or objective"
     details: ~
+    subject:
+      kind: Variable
+      name: V8
+      variable: ~
   - severity: Info
     category: SingletonConstraint
     message: 3 singleton constraint(s) detected (may represent simple bounds)

@@ -405,7 +405,7 @@ mod tests {
     use super::*;
 
     fn issue(severity: IssueSeverity, category: IssueCategory, message: &str) -> AnalysisIssue {
-        AnalysisIssue { severity, category, message: message.to_owned(), details: None }
+        AnalysisIssue { severity, category, message: message.to_owned(), details: None, subject: None }
     }
 
     #[test]
