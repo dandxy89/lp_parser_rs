@@ -83,20 +83,17 @@ pub fn draw_name_list(frame: &mut Frame, area: Rect, app: &mut App) {
             // Static sections (Summary, Numerics) have no entry list — show a
             // quick-nav overview of the list sections with their change counts.
             let counts = app.cached_summary;
-            let items: Vec<ListItem> = vec![
-                ListItem::new(Line::from(Span::styled(
-                    format!("  Variables    ({})", counts.variables.changed()),
-                    Style::default().fg(t.muted),
-                ))),
-                ListItem::new(Line::from(Span::styled(
-                    format!("  Constraints  ({})", counts.constraints.changed()),
-                    Style::default().fg(t.muted),
-                ))),
-                ListItem::new(Line::from(Span::styled(
-                    format!("  Objectives   ({})", counts.objectives.changed()),
-                    Style::default().fg(t.muted),
-                ))),
-            ];
+            let inner_width = area.width.saturating_sub(2) as usize;
+            let items: Vec<ListItem> = [
+                ("Variables", "Vars", counts.variables.changed()),
+                ("Constraints", "Cons", counts.constraints.changed()),
+                ("Objectives", "Objs", counts.objectives.changed()),
+            ]
+            .into_iter()
+            .map(|(label, short, count)| {
+                ListItem::new(Line::from(Span::styled(overview_row(label, short, count, inner_width), Style::default().fg(t.muted))))
+            })
+            .collect();
 
             let block = panel_block(Style::default().fg(t.border)).title(" Overview ");
 
@@ -107,6 +104,17 @@ pub fn draw_name_list(frame: &mut Frame, area: Rect, app: &mut App) {
             draw_section_entry_list(frame, area, app, section, border_style);
         }
     }
+}
+
+/// One Overview row: the section label on the left and its count
+/// right-aligned to `width`, so a large count is never clipped. The label
+/// falls back to `short` when the full one would not leave a gap.
+fn overview_row(label: &str, short: &str, count: usize, width: usize) -> String {
+    const INDENT: usize = 2;
+    let count = count.to_string();
+    let label = if INDENT + label.chars().count() + 1 + count.len() <= width { label } else { short };
+    let pad = width.saturating_sub(INDENT + count.len()).max(label.chars().count() + 1);
+    format!("{:INDENT$}{label:<pad$}{count}", "")
 }
 
 /// Resolve the per-section label and total count, then render the entry name list.
@@ -302,4 +310,16 @@ pub fn draw_empty_detail_cheatsheet(frame: &mut Frame, area: Rect, message: &str
 
     let block = panel_block(border_style).title(" Detail ");
     frame.render_widget(Paragraph::new(lines).block(block), area);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn overview_counts_are_right_aligned_and_never_clipped() {
+        assert_eq!(overview_row("Variables", "Vars", 590, 18), "  Variables    590");
+        assert_eq!(overview_row("Constraints", "Cons", 12_345, 18), "  Cons       12345", "a label that leaves no gap is shortened");
+        assert_eq!(overview_row("Variables", "Vars", 7, 18).chars().count(), 18);
+    }
 }
