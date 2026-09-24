@@ -1413,21 +1413,27 @@ impl App {
         });
     }
 
-    /// The most recent single-file solve result, if one is still to hand.
+    /// The most recent solve result of the baseline model (`problem1`), if one
+    /// is still to hand.
     ///
-    /// Prefers the live overlay state, then the newest cached solve. A "both"
-    /// comparison contributes its first side, which is the one that pairs with
-    /// `problem1`.
+    /// Prefers the live overlay state, then the newest cached solve. A single
+    /// solve counts only when it solved `problem1` — a solve of file 2 joined
+    /// onto file 1's rows would pair values with the wrong constraints. A
+    /// "both" comparison contributes its first side, which is always
+    /// `problem1` (every comparison is spawned with the baseline as side 1).
     fn latest_solve_result(&self) -> Option<&crate::solver::SolveResult> {
-        match &self.solver.state {
-            SolveState::Done(result) => return Some(result),
-            SolveState::DoneBoth(diff) => return Some(&diff.result1),
-            _ => {}
-        }
-        self.solver.cache.iter().rev().find_map(|cached| match &cached.state {
-            SolveState::Done(result) => Some(&**result),
+        let is_baseline = |solved: Option<&Arc<LpProblem>>| solved.is_some_and(|problem| Arc::ptr_eq(problem, &self.problem1));
+        let live = match &self.solver.state {
+            SolveState::Done(result) if is_baseline(self.solver.solved_problem.as_ref()) => Some(&**result),
             SolveState::DoneBoth(diff) => Some(&diff.result1),
             _ => None,
+        };
+        live.or_else(|| {
+            self.solver.cache.iter().rev().find_map(|cached| match &cached.state {
+                SolveState::Done(result) if is_baseline(cached.solved_problem.as_ref()) => Some(&**result),
+                SolveState::DoneBoth(diff) => Some(&diff.result1),
+                _ => None,
+            })
         })
     }
 
@@ -1637,6 +1643,33 @@ mod tests {
         app.solver.solved_problem = Some(Arc::clone(&app.problem2));
         let problem = app.solve_view_problem().expect("a completed solve names its model");
         assert!(Arc::ptr_eq(&problem, &app.problem2), "a single solve of file 2 must analyse file 2");
+    }
+
+    /// Regression: `D` joined the newest solve onto file 1's structure even
+    /// when that solve was of file 2.
+    #[test]
+    fn diagnostics_only_use_a_solve_of_the_baseline_model() {
+        let mut app = crate::snapshot_tests::diff_app_from(crate::snapshot_tests::BASE_LP, crate::snapshot_tests::INFEASIBLE_LP);
+        let result2 = crate::solver::solve_problem(&app.problem2).expect("solves");
+        app.solver.state = SolveState::Done(Box::new(result2));
+        app.solver.solved_problem = Some(Arc::clone(&app.problem2));
+        assert!(app.latest_solve_result().is_none(), "a solve of file 2 must not pair with file 1");
+
+        let result1 = crate::solver::solve_problem(&app.problem1).expect("solves");
+        app.solver.state = SolveState::Done(Box::new(result1));
+        app.solver.solved_problem = Some(Arc::clone(&app.problem1));
+        assert!(app.latest_solve_result().is_some(), "a solve of file 1 pairs with file 1");
+
+        // Filed in the cache, the file 1 solve is still found behind a newer file 2 one.
+        app.solver.key = "a.lp".to_owned();
+        app.solver.close_overlay();
+        let result2 = crate::solver::solve_problem(&app.problem2).expect("solves");
+        app.solver.state = SolveState::Done(Box::new(result2));
+        app.solver.solved_problem = Some(Arc::clone(&app.problem2));
+        app.solver.key = "b.lp".to_owned();
+        app.solver.close_overlay();
+        let found = app.latest_solve_result().expect("the cached file 1 solve must be found");
+        assert_eq!(found.status, "Optimal", "the found solve is file 1's, not infeasible file 2's");
     }
 
     /// A finished analysis pane must scroll and close like the other read-only
