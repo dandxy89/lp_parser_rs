@@ -7,5 +7,5 @@ expression: text
   RHS:      2  →  3
 
   Coefficients:
-    x                              1 (unchanged)
-    y                              1 (unchanged)
+    x            1 (unchanged)
+    y            1 (unchanged)

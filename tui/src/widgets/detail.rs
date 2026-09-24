@@ -28,17 +28,61 @@ use crate::widgets::{ARROW, bold_text, fit_number, kind_colour, muted, panel_blo
 /// matching header *line* for the plain-text yank, which has no border to carry
 /// it; on screen that line would only say the same thing twice, so the render
 /// paths leave it out.
-fn detail_title(entity_label: &str, name: &str, kind: Option<DiffKind>, raw_hint: bool) -> Line<'static> {
-    let name = truncate_with_ellipsis(name, 32);
-    let mut spans = vec![Span::styled(format!(" {entity_label}: "), muted()), Span::styled(name.into_owned(), bold_text())];
+///
+/// The name is sized to the panel's `width` rather than a fixed cap: it takes
+/// whatever the label, badge and a stub of border rule leave, and the raw-view
+/// hint is the first thing dropped when that is not enough.
+fn detail_title(entity_label: &str, name: &str, kind: Option<DiffKind>, raw_hint: bool, width: u16) -> Line<'static> {
+    /// Corners plus at least one column of rule after the title.
+    const BORDER: usize = 3;
+    /// Below this the name is unreadable, so the hint gives way first.
+    const MIN_NAME: usize = 12;
+    const RAW_HINT: &str = " \u{b7} r:raw";
+
+    let label = format!(" {entity_label}: ");
+    let badge = kind.map(|kind| format!(" [{kind}]")).unwrap_or_default();
+    let fixed = BORDER + label.chars().count() + badge.chars().count() + 1;
+    let room = (width as usize).saturating_sub(fixed);
+    let hint_width = RAW_HINT.chars().count();
+    let raw_hint = raw_hint && room >= hint_width + MIN_NAME.min(name.chars().count());
+    let room = if raw_hint { room - hint_width } else { room };
+
+    let name = truncate_with_ellipsis(name, room.max(2));
+    let mut spans = vec![Span::styled(label, muted()), Span::styled(name.into_owned(), bold_text())];
     if let Some(kind) = kind {
-        spans.push(Span::styled(format!(" [{kind}]"), Style::default().fg(kind_colour(kind))));
+        spans.push(Span::styled(badge, Style::default().fg(kind_colour(kind))));
     }
     if raw_hint {
-        spans.push(Span::styled(" \u{b7} r:raw", muted()));
+        spans.push(Span::styled(RAW_HINT, muted()));
     }
     spans.push(Span::raw(" "));
     Line::from(spans)
+}
+
+/// Width of a coefficient table's name column: the longest name, capped to
+/// what `pane_width` leaves after the indent, a one-column gap and the
+/// `reserved` value columns. `None` (the plain-text yank) keeps names whole.
+fn name_column_width(longest: usize, pane_width: Option<u16>, reserved: usize) -> usize {
+    /// Borders, the four-column indent, and the gap before the value.
+    const CHROME: usize = 2 + 4 + 1;
+    /// Narrower than this the name column is useless; the row overflows instead.
+    const MIN_NAME: usize = 8;
+    match pane_width {
+        None => longest,
+        Some(width) => longest.min((width as usize).saturating_sub(CHROME + reserved)).max(MIN_NAME.min(longest)),
+    }
+}
+
+/// A `    name ` cell padded to `width`, keeping at least one space before the
+/// value that follows.
+fn name_cell(name: &str, width: usize) -> String {
+    let name = truncate_with_ellipsis(name, width.max(2));
+    format!("    {name:<width$} ")
+}
+
+/// Longest name among `coefficients`, for [`name_column_width`].
+fn longest_coefficient_name(coefficients: &[ResolvedCoefficient], interner: &NameInterner) -> usize {
+    coefficients.iter().map(|coeff| interner.resolve(coeff.name).chars().count()).max().unwrap_or(0)
 }
 
 /// Build the header line for a yanked detail panel: entity label, name, kind
@@ -56,6 +100,10 @@ pub fn detail_header(entity_label: &str, name: &str, kind: DiffKind) -> Vec<Line
         Span::styled(crate::widgets::rule_str(HEADER_RULE_END.saturating_sub(used)), muted()),
     ])]
 }
+
+/// Room the single value after a coefficient name is given when sizing the
+/// name column.
+const VALUE_COLUMN: usize = 12;
 
 /// Column at which the detail header's trailing rule stops.
 const HEADER_RULE_END: usize = 70;
@@ -169,7 +217,7 @@ pub fn render_variable_detail(frame: &mut Frame, area: Rect, entry: &VariableDif
         return 0;
     }
     let lines = build_variable_detail(entry);
-    render_panel(frame, area, detail_title("Variable", &entry.name, Some(entry.kind), false), lines, border_style, scroll)
+    render_panel(frame, area, detail_title("Variable", &entry.name, Some(entry.kind), false, area.width), lines, border_style, scroll)
 }
 
 /// How a constraint detail continues after its header block.
@@ -187,7 +235,11 @@ enum ConstraintBody<'a> {
 /// viewport, or splits them into two columns) and by the plain-text builder
 /// (which appends all of them unified).
 #[allow(clippy::too_many_lines)]
-fn constraint_detail_parts<'a>(entry: &'a ConstraintDiffEntry, interner: &NameInterner) -> (Vec<Line<'static>>, ConstraintBody<'a>) {
+fn constraint_detail_parts<'a>(
+    entry: &'a ConstraintDiffEntry,
+    interner: &NameInterner,
+    pane_width: Option<u16>,
+) -> (Vec<Line<'static>>, ConstraintBody<'a>) {
     let mut lines: Vec<Line<'static>> = Vec::new();
 
     let t = theme();
@@ -333,10 +385,11 @@ fn constraint_detail_parts<'a>(entry: &'a ConstraintDiffEntry, interner: &NameIn
                     ]));
                     lines.push(Line::from(""));
                     lines.push(Line::from(Span::styled("  Coefficients:", muted().add_modifier(Modifier::BOLD))));
+                    let name_w = name_column_width(longest_coefficient_name(coefficients, interner), pane_width, VALUE_COLUMN);
                     for coeff in coefficients {
                         let name = interner.resolve(coeff.name);
                         lines.push(Line::from(vec![
-                            Span::styled(format!("    {:<20}", truncate_with_ellipsis(name, 20)), Style::default().fg(entry_colour)),
+                            Span::styled(name_cell(name, name_w), Style::default().fg(entry_colour)),
                             Span::styled(format!("{}", coeff.value), Style::default().fg(entry_colour)),
                         ]));
                     }
@@ -348,10 +401,11 @@ fn constraint_detail_parts<'a>(entry: &'a ConstraintDiffEntry, interner: &NameIn
                     ]));
                     lines.push(Line::from(""));
                     lines.push(Line::from(Span::styled("  Weights:", muted().add_modifier(Modifier::BOLD))));
+                    let name_w = name_column_width(longest_coefficient_name(weights, interner), pane_width, VALUE_COLUMN);
                     for w in weights {
                         let name = interner.resolve(w.name);
                         lines.push(Line::from(vec![
-                            Span::styled(format!("    {:<20}", truncate_with_ellipsis(name, 20)), Style::default().fg(entry_colour)),
+                            Span::styled(name_cell(name, name_w), Style::default().fg(entry_colour)),
                             Span::styled(format!("{}", w.value), Style::default().fg(entry_colour)),
                         ]));
                     }
@@ -370,9 +424,9 @@ pub fn build_constraint_detail(
     cached_rows: Option<&[crate::detail_model::CoefficientRow]>,
     interner: &NameInterner,
 ) -> Vec<Line<'static>> {
-    let (mut lines, body) = constraint_detail_parts(entry, interner);
+    let (mut lines, body) = constraint_detail_parts(entry, interner, None);
     if let ConstraintBody::Rows { changes, old, new, .. } = body {
-        render_coeff_changes(&mut lines, changes, old, new, cached_rows, None, interner);
+        render_coeff_changes(&mut lines, changes, old, new, cached_rows, None, None, interner);
     }
     lines
 }
@@ -395,13 +449,13 @@ pub fn render_constraint_detail(
     if area.width == 0 || area.height == 0 {
         return 0;
     }
-    let (mut lines, body) = constraint_detail_parts(entry, interner);
+    let (mut lines, body) = constraint_detail_parts(entry, interner, Some(area.width));
     if let ConstraintBody::Rows { changes, old, new, side_by_side } = body {
         if side_by_side {
             return render_constraint_side_by_side(
                 frame,
                 area,
-                detail_title("Constraint", &entry.name, Some(entry.kind), true),
+                detail_title("Constraint", &entry.name, Some(entry.kind), true, area.width),
                 lines,
                 changes,
                 old,
@@ -413,9 +467,9 @@ pub fn render_constraint_detail(
             );
         }
         let visible = coeff_visible_range(scroll, area, lines.len());
-        render_coeff_changes(&mut lines, changes, old, new, cached_rows, Some(visible), interner);
+        render_coeff_changes(&mut lines, changes, old, new, cached_rows, Some(visible), Some(area.width), interner);
     }
-    render_panel(frame, area, detail_title("Constraint", &entry.name, Some(entry.kind), true), lines, border_style, scroll)
+    render_panel(frame, area, detail_title("Constraint", &entry.name, Some(entry.kind), true, area.width), lines, border_style, scroll)
 }
 
 /// Build the content lines of an objective detail panel.
@@ -452,15 +506,17 @@ pub fn build_objective_detail(
             &entry.new_coefficients,
             cached_rows,
             window,
+            viewport.map(|(_, area)| area.width),
             interner,
         );
     } else {
         let coeffs = if entry.kind == DiffKind::Added { &entry.new_coefficients } else { &entry.old_coefficients };
         let colour = kind_colour(entry.kind);
+        let name_w = name_column_width(longest_coefficient_name(coeffs, interner), viewport.map(|(_, area)| area.width), VALUE_COLUMN);
         for c in coeffs {
             let name = interner.resolve(c.name);
             lines.push(Line::from(vec![
-                Span::styled(format!("    {:<20}", truncate_with_ellipsis(name, 20)), Style::default().fg(colour)),
+                Span::styled(name_cell(name, name_w), Style::default().fg(colour)),
                 Span::styled(format!("{}", c.value), Style::default().fg(colour)),
             ]));
         }
@@ -488,7 +544,7 @@ pub fn render_objective_detail(
         return 0;
     }
     let lines = build_objective_detail(entry, cached_rows, interner, Some((scroll, area)));
-    render_panel(frame, area, detail_title("Objective", &entry.name, Some(entry.kind), true), lines, border_style, scroll)
+    render_panel(frame, area, detail_title("Objective", &entry.name, Some(entry.kind), true, area.width), lines, border_style, scroll)
 }
 
 /// Build the neutral header line for a yanked inspect detail panel: entity
@@ -521,12 +577,12 @@ pub fn render_inspect_variable(frame: &mut Frame, area: Rect, entry: &VariableDi
         return 0;
     }
     let lines = build_inspect_variable(entry);
-    render_panel(frame, area, detail_title("Variable", &entry.name, None, false), lines, border_style, scroll)
+    render_panel(frame, area, detail_title("Variable", &entry.name, None, false, area.width), lines, border_style, scroll)
 }
 
 /// Build the content lines of an inspect (single-file) constraint detail panel:
 /// operator, RHS, and coefficients (or SOS type and weights), neutrally coloured.
-pub fn build_inspect_constraint(entry: &ConstraintDiffEntry, interner: &NameInterner) -> Vec<Line<'static>> {
+pub fn build_inspect_constraint(entry: &ConstraintDiffEntry, interner: &NameInterner, pane_width: Option<u16>) -> Vec<Line<'static>> {
     let t = theme();
     let mut lines: Vec<Line<'static>> = Vec::new();
 
@@ -542,13 +598,13 @@ pub fn build_inspect_constraint(entry: &ConstraintDiffEntry, interner: &NameInte
             lines.push(Line::from(vec![Span::styled("  RHS:      ", muted()), Span::styled(format!("{rhs}"), text())]));
             lines.push(Line::from(""));
             lines.push(Line::from(Span::styled("  Coefficients:", muted().add_modifier(Modifier::BOLD))));
-            render_inspect_coefficients(&mut lines, coefficients, interner);
+            render_inspect_coefficients(&mut lines, coefficients, interner, pane_width);
         }
         ConstraintDiffDetail::AddedOrRemoved(ResolvedConstraint::Sos { sos_type, weights }) => {
             lines.push(Line::from(vec![Span::styled("  SOS Type: ", muted()), Span::styled(format!("{sos_type}"), text())]));
             lines.push(Line::from(""));
             lines.push(Line::from(Span::styled("  Weights:", muted().add_modifier(Modifier::BOLD))));
-            render_inspect_coefficients(&mut lines, weights, interner);
+            render_inspect_coefficients(&mut lines, weights, interner, pane_width);
         }
         // Inspect always diffs against an empty base, so every constraint is an
         // AddedOrRemoved single-side entry; other variants cannot occur.
@@ -573,16 +629,16 @@ pub fn render_inspect_constraint(
     if area.width == 0 || area.height == 0 {
         return 0;
     }
-    let lines = build_inspect_constraint(entry, interner);
-    render_panel(frame, area, detail_title("Constraint", &entry.name, None, false), lines, border_style, scroll)
+    let lines = build_inspect_constraint(entry, interner, Some(area.width));
+    render_panel(frame, area, detail_title("Constraint", &entry.name, None, false, area.width), lines, border_style, scroll)
 }
 
 /// Build the content lines of an inspect (single-file) objective detail panel:
 /// coefficients, neutral.
-pub fn build_inspect_objective(entry: &ObjectiveDiffEntry, interner: &NameInterner) -> Vec<Line<'static>> {
+pub fn build_inspect_objective(entry: &ObjectiveDiffEntry, interner: &NameInterner, pane_width: Option<u16>) -> Vec<Line<'static>> {
     let mut lines: Vec<Line<'static>> = Vec::new();
     lines.push(Line::from(Span::styled("  Coefficients:", muted().add_modifier(Modifier::BOLD))));
-    render_inspect_coefficients(&mut lines, &entry.new_coefficients, interner);
+    render_inspect_coefficients(&mut lines, &entry.new_coefficients, interner, pane_width);
     lines
 }
 
@@ -598,18 +654,21 @@ pub fn render_inspect_objective(
     if area.width == 0 || area.height == 0 {
         return 0;
     }
-    let lines = build_inspect_objective(entry, interner);
-    render_panel(frame, area, detail_title("Objective", &entry.name, None, false), lines, border_style, scroll)
+    let lines = build_inspect_objective(entry, interner, Some(area.width));
+    render_panel(frame, area, detail_title("Objective", &entry.name, None, false, area.width), lines, border_style, scroll)
 }
 
 /// Append neutral `name  value` rows for a resolved coefficient/weight list.
-fn render_inspect_coefficients(lines: &mut Vec<Line<'static>>, coefficients: &[ResolvedCoefficient], interner: &NameInterner) {
+fn render_inspect_coefficients(
+    lines: &mut Vec<Line<'static>>,
+    coefficients: &[ResolvedCoefficient],
+    interner: &NameInterner,
+    pane_width: Option<u16>,
+) {
+    let name_w = name_column_width(longest_coefficient_name(coefficients, interner), pane_width, VALUE_COLUMN);
     for coeff in coefficients {
         let name = interner.resolve(coeff.name);
-        lines.push(Line::from(vec![
-            Span::styled(format!("    {:<20}", truncate_with_ellipsis(name, 20)), text()),
-            Span::styled(format!("{}", coeff.value), text()),
-        ]));
+        lines.push(Line::from(vec![Span::styled(name_cell(name, name_w), text()), Span::styled(format!("{}", coeff.value), text())]));
     }
 }
 
@@ -779,6 +838,7 @@ const fn coeff_visible_range(scroll: u16, area: Rect, header_line_count: usize) 
 /// When `visible_range` is `Some((first, count))`, only builds `Line` objects
 /// for the visible window, inserting cheap placeholder lines for rows above and
 /// below the viewport. This avoids `O(total_rows)` `format!` allocations per frame.
+#[allow(clippy::too_many_arguments)] // the row source, window and pane width are all independent
 fn render_coeff_changes(
     lines: &mut Vec<Line<'static>>,
     changes: &[CoefficientChange],
@@ -786,6 +846,7 @@ fn render_coeff_changes(
     new_coefficients: &[ResolvedCoefficient],
     cached_rows: Option<&[crate::detail_model::CoefficientRow]>,
     visible_range: Option<(usize, usize)>,
+    pane_width: Option<u16>,
     interner: &NameInterner,
 ) {
     // Column width for value formatting — wide enough for typical LP coefficients.
@@ -802,6 +863,9 @@ fn render_coeff_changes(
     };
 
     let (skip, take) = visible_range.unwrap_or((0, rows.len()));
+    // Old value, arrow, new value and the widest ` [modified]` badge.
+    let reserved = VAL_WIDTH + ARROW.chars().count() + VAL_WIDTH + " [modified]".len();
+    let name_w = name_column_width(rows.iter().map(|row| row.variable.chars().count()).max().unwrap_or(0), pane_width, reserved);
 
     // Placeholder lines for coefficient rows scrolled above the viewport.
     let placeholder_before = skip.min(rows.len());
@@ -825,7 +889,7 @@ fn render_coeff_changes(
             write!(new_buf, "{v}").expect("writing f64 to String is infallible");
         }
         name_buf.clear();
-        write!(name_buf, "    {:<20}", truncate_with_ellipsis(&row.variable, 20)).expect("writing to String is infallible");
+        name_buf.push_str(&name_cell(&row.variable, name_w));
 
         match row.change_kind {
             Some(DiffKind::Added) => {
