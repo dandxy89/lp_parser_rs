@@ -202,8 +202,11 @@ fn diff_modified_constraints(
                     changes.push(format!("{coef_diffs} coefficient change(s)"));
                 }
             }
-            (Constraint::SOS { .. }, Constraint::SOS { .. }) => {
-                if c1 != c2 {
+            (Constraint::SOS { sos_type: t1, weights: w1, .. }, Constraint::SOS { sos_type: t2, weights: w2, .. }) => {
+                // Compare by resolved (normalised) member name: the two problems'
+                // NameIds come from different interners, and an SOS set's order is
+                // given by its weights, not by the order the members are listed in.
+                if t1 != t2 || count_coeff_diffs(&coeff_map(p1, w1, normalise), &coeff_map(p2, w2, normalise), tol) > 0 {
                     changes.push("SOS definition changed".to_string());
                 }
             }
@@ -485,6 +488,19 @@ mod tests {
         let (name, changes) = &diff.cons_modified[0];
         assert_eq!(name, "sos_a");
         assert_eq!(changes, &vec!["SOS definition changed".to_string()]);
+    }
+
+    #[test]
+    fn identical_sos_sets_listed_in_a_different_order_do_not_differ() {
+        // `y` is interned before `x` in p2, so the NameIds differ as well.
+        let p1 = parse("Minimize\n obj: x + y\nSubject To\n c1: x + y >= 1\nSOS\n s: S1:: x:1 y:2\nEnd");
+        let p2 = parse("Minimize\n obj: y + x\nSubject To\n c1: y + x >= 1\nSOS\n s: S1:: y:2 x:1\nEnd");
+        let diff = p1.diff(&p2, &opts(DiffTol::default()));
+        assert!(diff.cons_modified.is_empty(), "expected no change, got {:?}", diff.cons_modified);
+
+        let p3 = parse("Minimize\n obj: x + y\nSubject To\n c1: x + y >= 1\nSOS\n s: S2:: x:1 y:2\nEnd");
+        let diff = p1.diff(&p3, &opts(DiffTol::default()));
+        assert_eq!(diff.cons_modified, vec![("s".to_string(), vec!["SOS definition changed".to_string()])]);
     }
 
     #[test]
