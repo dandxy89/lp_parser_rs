@@ -20,12 +20,13 @@
 
 use std::fmt::Write;
 
+use logos::Logos;
 use rustc_hash::FxHashSet;
 
 use crate::NUMERIC_EPSILON;
 use crate::error::{LpParseError, LpResult};
 use crate::interner::{NameId, NameInterner};
-use crate::lexer::{Lexer, Token};
+use crate::lexer::Token;
 use crate::model::{Coefficient, Constraint, Objective, Variable};
 use crate::problem::LpProblem;
 
@@ -139,8 +140,11 @@ fn is_empty_objective(objective: &Objective) -> bool {
 ///
 /// Returns a validation error naming the offending `kind` and `name`.
 pub(crate) fn check_lp_name(name: &str, kind: &str) -> LpResult<()> {
-    let mut tokens = Lexer::new(name);
-    let is_identifier = matches!(tokens.next(), Some(Ok((0, Token::Identifier(ident), end))) if end == name.len() && ident == name);
+    // Lex without the context-sensitive keyword adapter: a keyword can read
+    // back as a name in one position but not another (e.g. `bin` alone on a
+    // line in a generals section), so reject every keyword outright.
+    let mut tokens = Token::lexer(name);
+    let is_identifier = matches!(tokens.next(), Some(Ok(Token::Identifier(ident))) if ident == name);
     if is_identifier && tokens.next().is_none() {
         Ok(())
     } else {
