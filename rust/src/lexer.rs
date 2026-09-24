@@ -263,8 +263,8 @@ pub enum Token<'input> {
     #[token("\n")]
     Newline,
 
-    /// Block comment: \* ... *\
-    #[regex(r"\\\*[^*]*\*\\")]
+    /// Block comment: \* ... *\ (may contain `*` and `\` that do not close it)
+    #[regex(r"\\\*([^*]|\*+[^*\\])*\*+\\")]
     BlockComment,
 
     /// Line comment: \ ... (a lone `\` before a newline is an empty comment)
@@ -822,6 +822,13 @@ mod tests {
         // Mixed with tokens
         let tokens = tokenize(r"\* comment *\ minimize");
         assert_eq!(tokens, vec![Token::SenseKw(Sense::Minimize)]);
+
+        // `*` and `\` inside a block comment do not end it
+        assert_eq!(tokenize(r"\* 2*3 *\ minimize"), vec![Token::SenseKw(Sense::Minimize)]);
+        assert_eq!(tokenize(r"\** a \ b **\ minimize"), vec![Token::SenseKw(Sense::Minimize)]);
+        assert_eq!(tokenize("\\* line one *\n * line two *\\ minimize"), vec![Token::SenseKw(Sense::Minimize)]);
+        // ... and the comment ends at the first `*\`
+        assert_eq!(tokenize(r"\* a *\ x \* b *\"), vec![Token::Identifier("x")]);
     }
 
     #[test]
