@@ -173,6 +173,12 @@ impl<'input> ColumnsState<'input> {
         }
 
         let value: f64 = value_str.parse().map_err(|_| LpParseError::invalid_number(value_str, line_num))?;
+        if !value.is_finite() {
+            return Err(LpParseError::parse_error(
+                line_num,
+                format!("non-finite coefficient '{value_str}' for column '{var_name}' in row '{row_name}'"),
+            ));
+        }
 
         // Accumulate coefficient (additive -- MPS allows split entries)
         match self.coefficients.entry((var_name, row_name)) {

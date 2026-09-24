@@ -996,6 +996,10 @@ fn test_columns_section_errors() {
         "ROWS\n N  obj\nCOLUMNS\n    x1        nosuchrow 1\nENDATA\n",
         // Invalid number
         "ROWS\n N  obj\nCOLUMNS\n    x1        obj       abc\nENDATA\n",
+        // Non-finite coefficients
+        "ROWS\n N  obj\nCOLUMNS\n    x1        obj       inf\nENDATA\n",
+        "ROWS\n N  obj\nCOLUMNS\n    x1        obj       1e400\nENDATA\n",
+        "ROWS\n N  obj\nCOLUMNS\n    x1        obj       NaN\nENDATA\n",
     ]);
 }
 

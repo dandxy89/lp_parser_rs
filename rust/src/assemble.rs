@@ -82,8 +82,11 @@ fn parse_segment<'input>(elems: &[SpannedElem<'input>], mut i: usize) -> Result<
                 segment.coefficients.push(RawCoefficient { name, value: sign });
                 i += 1;
             }
-            Some(&(_, Elem::Num(value))) => match elems.get(i + 1) {
+            Some(&(loc, Elem::Num(value))) => match elems.get(i + 1) {
                 Some(&(_, Elem::Var(name))) => {
+                    if !value.is_finite() {
+                        return Err(err(loc, format!("infinite coefficient for variable '{name}'")));
+                    }
                     segment.coefficients.push(RawCoefficient { name, value: sign * value });
                     i += 2;
                 }
@@ -156,6 +159,9 @@ pub fn assemble_objectives<'input>(elems: &[SpannedElem<'input>]) -> Result<Vec<
             debug_assert!(next > i, "parse_segment must consume at least one element here");
             obj.coefficients.extend(segment.coefficients);
             obj.constant += segment.constant;
+            if !obj.constant.is_finite() {
+                return Err(err(loc, "objective constant must be finite"));
+            }
             if next < elems.len() && !matches!(elems[next].1, Elem::Name(_)) {
                 return Err(err(pos_at(elems, next), "expected '+', '-', or a new objective in the objective section"));
             }
@@ -182,6 +188,15 @@ fn range_upper_name<'input>(base: &'input str, taken: &HashSet<&'input str>) -> 
         candidate = format!("{base}_rng{suffix}");
     }
     Cow::Owned(candidate)
+}
+
+/// Reject a right-hand side that folding constants turned into NaN
+/// (`inf - inf`); an infinite RHS on its own is a valid (if vacuous) bound.
+fn checked_rhs(rhs: f64, position: usize) -> Result<f64, LexerError> {
+    if rhs.is_nan() {
+        return Err(err(position, "constraint right-hand side is undefined (infinite constants on both sides)"));
+    }
+    Ok(rhs)
 }
 
 /// Flip a comparison operator for moving it to the other side of a relation.
@@ -258,14 +273,14 @@ pub fn assemble_constraints<'input>(elems: &[SpannedElem<'input>]) -> Result<Vec
                     name: lower_name,
                     coefficients: mid.coefficients.clone(),
                     operator: flip(op1),
-                    rhs: lhs.constant - mid.constant,
+                    rhs: checked_rhs(lhs.constant - mid.constant, entry_loc)?,
                     byte_offset: Some(entry_loc),
                 });
                 constraints.push(RawConstraint::Standard {
                     name: upper_name,
                     coefficients: mid.coefficients,
                     operator: op2,
-                    rhs: rhs - mid.constant,
+                    rhs: checked_rhs(rhs - mid.constant, entry_loc)?,
                     byte_offset: Some(entry_loc),
                 });
             } else {
@@ -274,7 +289,7 @@ pub fn assemble_constraints<'input>(elems: &[SpannedElem<'input>]) -> Result<Vec
                     name: name.map_or(Cow::Borrowed("__c__"), Cow::Borrowed),
                     coefficients: mid.coefficients,
                     operator: flip(op1),
-                    rhs: lhs.constant - mid.constant,
+                    rhs: checked_rhs(lhs.constant - mid.constant, entry_loc)?,
                     byte_offset: Some(entry_loc),
                 });
             }
@@ -286,7 +301,7 @@ pub fn assemble_constraints<'input>(elems: &[SpannedElem<'input>]) -> Result<Vec
                 name: name.map_or(Cow::Borrowed("__c__"), Cow::Borrowed),
                 coefficients: lhs.coefficients,
                 operator: op1,
-                rhs: rhs - lhs.constant,
+                rhs: checked_rhs(rhs - lhs.constant, entry_loc)?,
                 byte_offset: Some(entry_loc),
             });
         }

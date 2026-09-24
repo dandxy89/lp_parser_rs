@@ -1485,7 +1485,7 @@ End";
 
     #[test]
     fn test_special_values() {
-        assert!(LpProblem::parse("minimize\n-inf x1\nsubject to\nx1 >= -infinity\nend").is_ok());
+        assert!(LpProblem::parse("minimize\nx1\nsubject to\nx1 >= -infinity\nend").is_ok());
         assert!(LpProblem::parse("minimize\n0x1 + 0x2\nsubject to\n0x1 + 0x2 = 0\nend").is_ok());
         let input = format!("minimize\n{}x1\nsubject to\nx1 <= {}\nend", f64::MAX, f64::MAX);
         assert!(LpProblem::parse(&input).is_ok());
@@ -1748,15 +1748,27 @@ End";
         assert!(p.constraints.contains_key(&c2));
     }
 
-    // Infinity comparisons are exact by definition.
+    #[test]
+    fn test_infinite_coefficients_are_rejected() {
+        // 1e400 overflows f64 to infinity: an infinite coefficient is not a valid model.
+        let err = LpProblem::parse("minimize\n1e400 x1\nsubject to\nc1: x1 <= 1\nend").unwrap_err();
+        assert!(err.to_string().contains("infinite coefficient"), "{err}");
+        assert!(LpProblem::parse("minimize\nobj: inf x\nsubject to\nc1: x <= 1\nend").is_err());
+        assert!(LpProblem::parse("minimize\nobj: x\nsubject to\nc1: -inf x <= 1\nend").is_err());
+        assert!(LpProblem::parse("minimize\nobj: x + inf\nsubject to\nc1: x <= 1\nend").is_err());
+        assert!(LpProblem::parse("minimize\nobj: x\nsubject to\nc1: x + inf <= inf\nend").is_err());
+        // Infinity stays valid where it means an absent bound.
+        assert!(LpProblem::parse("minimize\nobj: x\nsubject to\nc1: -inf <= x <= 1\nbounds\n-inf <= x <= +inf\nend").is_ok());
+    }
+
     #[allow(clippy::float_cmp)]
     #[test]
-    fn test_overflowing_literal_becomes_infinite_coefficient() {
-        // 1e400 overflows f64 and saturates to positive infinity rather than erroring.
-        let p = LpProblem::parse("minimize\n1e400 x1\nsubject to\nc1: x1 <= 1\nend").unwrap();
-        let obj = p.objectives.values().next().unwrap();
-        assert_eq!(obj.coefficients.len(), 1);
-        assert_eq!(obj.coefficients[0].value, f64::INFINITY);
+    fn test_infinity_prefixed_variable_name() {
+        let p = LpProblem::parse("minimize\nobj: x\nsubject to\nc: -inflow + x >= 0\nend").unwrap();
+        let Constraint::Standard { coefficients, .. } = &p.constraints[&p.name_id("c").unwrap()] else { panic!("expected standard") };
+        let inflow = p.name_id("inflow").unwrap();
+        assert!(coefficients.iter().any(|c| c.name == inflow && c.value == -1.0), "{coefficients:?}");
+        assert!(p.name_id("low").is_none());
     }
 
     #[test]

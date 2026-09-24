@@ -187,10 +187,9 @@ pub enum Token<'input> {
     SosType(SOSType),
 
     // === Numbers and Infinity ===
-    /// Positive infinity
-    #[regex(r"(?i)\+?inf(inity)?", |_| f64::INFINITY, priority = 9)]
-    /// Negative infinity
-    #[regex(r"(?i)-inf(inity)?", |_| f64::NEG_INFINITY, priority = 9)]
+    /// Infinity. Signs are separate tokens (like numbers) so that `-inflow`
+    /// lexes as `-` and the identifier `inflow`, not `-inf` followed by `low`.
+    #[regex(r"(?i)inf(inity)?", |_| f64::INFINITY, priority = 9)]
     Infinity(f64),
 
     /// Numeric value (integer, float, scientific notation)
@@ -434,11 +433,18 @@ mod tests {
         assert_eq!(tokenize("Inf"), vec![Token::Infinity(f64::INFINITY)]);
         assert_eq!(tokenize("infinity"), vec![Token::Infinity(f64::INFINITY)]);
         assert_eq!(tokenize("INFINITY"), vec![Token::Infinity(f64::INFINITY)]);
-        assert_eq!(tokenize("+inf"), vec![Token::Infinity(f64::INFINITY)]);
-        assert_eq!(tokenize("+infinity"), vec![Token::Infinity(f64::INFINITY)]);
-        assert_eq!(tokenize("-inf"), vec![Token::Infinity(f64::NEG_INFINITY)]);
-        assert_eq!(tokenize("-INF"), vec![Token::Infinity(f64::NEG_INFINITY)]);
-        assert_eq!(tokenize("-infinity"), vec![Token::Infinity(f64::NEG_INFINITY)]);
+        assert_eq!(tokenize("+inf"), vec![Token::Plus, Token::Infinity(f64::INFINITY)]);
+        assert_eq!(tokenize("+infinity"), vec![Token::Plus, Token::Infinity(f64::INFINITY)]);
+        assert_eq!(tokenize("-inf"), vec![Token::Minus, Token::Infinity(f64::INFINITY)]);
+        assert_eq!(tokenize("-INF"), vec![Token::Minus, Token::Infinity(f64::INFINITY)]);
+        assert_eq!(tokenize("-infinity"), vec![Token::Minus, Token::Infinity(f64::INFINITY)]);
+    }
+
+    #[test]
+    fn test_infinity_prefix_is_identifier() {
+        assert_eq!(tokenize("-inflow"), vec![Token::Minus, Token::Identifier("inflow")]);
+        assert_eq!(tokenize("+infeasible"), vec![Token::Plus, Token::Identifier("infeasible")]);
+        assert_eq!(tokenize("inflow"), vec![Token::Identifier("inflow")]);
     }
 
     #[test]
@@ -753,7 +759,15 @@ mod tests {
         let tokens = tokenize("-inf <= x2 <= +inf");
         assert_eq!(
             tokens,
-            vec![Token::Infinity(f64::NEG_INFINITY), Token::Lte, Token::Identifier("x2"), Token::Lte, Token::Infinity(f64::INFINITY),]
+            vec![
+                Token::Minus,
+                Token::Infinity(f64::INFINITY),
+                Token::Lte,
+                Token::Identifier("x2"),
+                Token::Lte,
+                Token::Plus,
+                Token::Infinity(f64::INFINITY),
+            ]
         );
 
         let tokens = tokenize("x1 free");
