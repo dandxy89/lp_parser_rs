@@ -188,12 +188,11 @@ ENDATA
     assert!(reparsed.name_id("obj2").is_none(), "second objective must be dropped entirely");
 }
 
-/// An external `SC` bound with a meaningful finite upper bound has that value
-/// dropped on parse (the model's `SemiContinuous` carries no bound value);
-/// the writer then emits the `1e30` sentinel, so the semi-continuity itself
-/// survives the round trip but the original `50` does not.
+/// An external `SC` bound's value is the variable's upper bound; it must
+/// survive parsing and a write/re-parse round trip alongside the
+/// semi-continuity itself.
 #[test]
-fn external_sc_bound_value_dropped_on_round_trip() {
+fn external_sc_bound_value_survives_round_trip() {
     let input = "\
 NAME        sctest
 ROWS
@@ -210,15 +209,17 @@ ENDATA
 ";
     let problem = LpProblem::parse_mps(input).unwrap();
     let x1 = &problem.variables[&problem.name_id("x1").unwrap()];
-    assert_eq!(x1.kind, VariableKind::SemiContinuous, "SC bound must resolve to SemiContinuous, dropping the 50");
+    assert_eq!(x1.kind, VariableKind::SemiContinuous);
+    assert_eq!(x1.bounds.upper, Some(50.0));
 
     let output = write_mps_string_with_options(&problem, &lossless_options()).unwrap();
     let sc_line = output.lines().find(|line| line.trim_start().starts_with("SC ")).expect("written MPS must contain an SC bound line");
-    assert!(!sc_line.contains("50"), "documented value-drop behaviour: the original upper bound must not reappear: {sc_line}");
+    assert!(sc_line.contains("50"), "the SC upper bound must be written: {sc_line}");
 
     let reparsed = LpProblem::parse_mps(&output).unwrap();
     let x1 = &reparsed.variables[&reparsed.name_id("x1").unwrap()];
     assert_eq!(x1.kind, VariableKind::SemiContinuous);
+    assert_eq!(x1.bounds.upper, Some(50.0));
 }
 
 /// `test.lp` contains a strict inequality (`c3:: x2 > 1`), which MPS has no

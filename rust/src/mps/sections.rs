@@ -469,15 +469,19 @@ impl<'input> BoundsState<'input> {
                 self.binary_vars.push(var_name);
             }
             "SC" => {
-                let value = parse_bound_value(value_field, line_num, bound_type)?;
-                // Semi-continuity is represented by `VariableType::SemiContinuous`,
-                // which carries no bound value: recording the SC upper bound in the
-                // accumulator would resolve the variable to `UpperBound` instead and
-                // lose the semi-continuity (it also broke the MPS round trip). The
-                // bound value is dropped; warn when it is a meaningful finite bound
-                // rather than the conventional 1e30/infinity sentinel.
-                if value.is_finite() && value < crate::mps::writer::SEMI_CONTINUOUS_SENTINEL_UPPER {
-                    eprintln!("line {line_num}: SC upper bound {value} on '{var_name}' cannot be represented and is dropped");
+                // Per the MPS spec the SC value is the upper bound of the
+                // semi-continuous variable; a missing, zero or `>= 1e30` value
+                // means it is unbounded above. Semi-continuity itself is applied
+                // later from `ParseResult::semi_continuous`.
+                let value = match value_field {
+                    Some(_) => parse_bound_value(value_field, line_num, bound_type)?,
+                    None => f64::INFINITY,
+                };
+                if value != 0.0 && value < crate::mps::writer::SEMI_CONTINUOUS_SENTINEL_UPPER {
+                    if accumulator.upper.is_some() {
+                        return Err(LpParseError::invalid_bounds(var_name, format!("duplicate upper bound (SC) at line {line_num}")));
+                    }
+                    accumulator.upper = Some(value);
                 }
                 self.semi_continuous_vars.push(var_name);
             }

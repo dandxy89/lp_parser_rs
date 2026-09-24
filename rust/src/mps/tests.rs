@@ -395,15 +395,42 @@ BOUNDS
 ENDATA
 ";
     let result = parse_mps(input).unwrap();
-    // SC: semi-continuity is preserved; the (unrepresentable) upper bound is dropped.
+    // SC: semi-continuity is preserved and the value is the upper bound.
     assert!(result.semi_continuous.contains(&"x1"));
     assert!(!result.integers.contains(&"x1"));
-    assert!(result.bounds.iter().all(|(name, _)| *name != "x1"), "SC-only variable must not resolve to a plain bound");
+    assert!(result.bounds.contains(&("x1", VariableType::UpperBound(100.0))));
     // SI: the model has no semi-integer type; the closest representation is
     // an integer variable with the given upper bound.
     assert!(!result.semi_continuous.contains(&"x2"));
     assert!(result.integers.contains(&"x2"));
     assert!(result.bounds.contains(&("x2", VariableType::UpperBound(200.0))));
+}
+
+#[test]
+fn test_semi_continuous_bound_value_round_trips_to_model() {
+    let input = "\
+NAME        test
+ROWS
+ N  obj
+COLUMNS
+    x1        obj       1
+    x2        obj       1
+    x3        obj       1
+BOUNDS
+ SC BOUND     x1        10
+ SC BOUND     x2        0
+ SC BOUND     x3        1e30
+ENDATA
+";
+    let problem = crate::LpProblem::parse_mps(input).unwrap();
+    let var = |name: &str| &problem.variables[&problem.name_id(name).unwrap()];
+    for name in ["x1", "x2", "x3"] {
+        assert_eq!(var(name).kind, crate::model::VariableKind::SemiContinuous, "{name}");
+    }
+    assert_eq!(var("x1").bounds, crate::model::VariableBounds::upper(10.0));
+    // Zero and the 1e30 sentinel both mean "no upper bound".
+    assert_eq!(var("x2").bounds.upper, None);
+    assert_eq!(var("x3").bounds.upper, None);
 }
 
 #[test]
