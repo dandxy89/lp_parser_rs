@@ -25,18 +25,6 @@ const NAME_SPECIALS: &str = "!#$%&(),.;?@{}~'[]";
 /// Objective sense words: keywords only as the first token of the file.
 const SENSE_WORDS: &[&str] = &["minimize", "minimise", "minimum", "min", "maximize", "maximise", "maximum", "max"];
 
-/// Multi-word keywords as `(first word, second word prefixes)`. The upstream
-/// lexer takes the longest match, so `gen consumption` lexes as `gen cons`
-/// followed by `umption`: the second word only has to start with the prefix.
-const MULTI_WORD: &[(&str, &[&str])] = &[
-    ("subject", &["to"]),
-    ("such", &["that"]),
-    ("lazy", &["constraints"]),
-    ("user", &["cuts"]),
-    ("general", &["constr"]),
-    ("gen", &["cons"]),
-];
-
 /// Tokens after which the upstream lexer expects an operand, so a following
 /// word is never a section keyword.
 const CONTINUES_EXPRESSION: &[&str] = &["+", "-", ":", "::", "<=", "=<", ">=", "=>", "<", ">", "=", "->", "[", "^", "*", "/"];
@@ -286,7 +274,7 @@ fn check_keyword_sites(doc: &Document, ranges: &[Range<usize>], new_name: &str) 
         };
         let multi_word = || {
             let joins = |gap: Range<usize>, first: &str, second: &str| {
-                !gap.is_empty() && doc.text[gap].bytes().all(|b| b == b' ' || b == b'\t') && forms_multi_word(first, second)
+                !gap.is_empty() && doc.text[gap].bytes().all(|b| b == b' ' || b == b'\t') && syntax::forms_multi_word(first, second)
             };
             prev.is_some_and(|(_, r)| joins(r.end..range.start, &doc.text[r.clone()], new_name))
                 || next.is_some_and(|(_, r)| joins(range.end..r.start, new_name, &doc.text[r.clone()]))
@@ -301,12 +289,6 @@ fn check_keyword_sites(doc: &Document, ranges: &[Range<usize>], new_name: &str) 
 }
 
 /// Whether `first second` lexes as a multi-word keyword upstream.
-fn forms_multi_word(first: &str, second: &str) -> bool {
-    MULTI_WORD.iter().any(|(word, prefixes)| {
-        first.eq_ignore_ascii_case(word) && prefixes.iter().any(|p| second.get(..p.len()).is_some_and(|head| head.eq_ignore_ascii_case(p)))
-    })
-}
-
 /// Number of `ERROR` and `MISSING` nodes in `tree`.
 fn error_count(tree: &Tree) -> usize {
     let mut count = 0;

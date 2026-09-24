@@ -507,7 +507,7 @@ impl Ids {
 const PARALLEL_BYTES: usize = 4 * 1024 * 1024;
 
 /// Worker threads for a whole-document pass over `len` bytes: one below
-/// [`PARALLEL_BYTES`], else up to eight.
+/// 4 MiB, else up to eight.
 #[must_use]
 pub fn workers(len: usize) -> usize {
     if len < PARALLEL_BYTES { 1 } else { std::thread::available_parallelism().map_or(1, |n| n.get().min(8)) }

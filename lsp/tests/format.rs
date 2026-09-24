@@ -126,6 +126,15 @@ fn split_ranged_constraint_stays_on_one_line() {
 }
 
 #[test]
+fn general_before_a_non_constr_word_keeps_its_meaning() {
+    // `general cons` is a Generals section holding `cons` (upstream and, since
+    // treesitter-lp#5, the grammar agree); formatting must not change that.
+    let text = "min\n obj: x + cons + general\nst\n c: x + cons + general >= 1\nBinaries\n x\ngeneral cons\nEnd\n";
+    let out = fmt(text, &settings());
+    assert_semantics(text, &out);
+}
+
+#[test]
 fn syntax_errors_are_never_formatted() {
     let broken = "min\n obj: x +\nst\n c1: x >= \nend\n";
     assert_eq!(format_text(broken, &settings()), None);

@@ -461,6 +461,51 @@ pub fn is_section_word(word: &str) -> bool {
     SECTION_WORDS.iter().any(|k| k.eq_ignore_ascii_case(word))
 }
 
+/// Multi-word keywords as `(first word, second word prefixes)`. The upstream
+/// lexer takes the longest match, so `gen consumption` lexes as `gen cons`
+/// followed by `umption`: the second word only has to start with the prefix.
+pub const MULTI_WORD: &[(&str, &[&str])] = &[
+    ("subject", &["to"]),
+    ("such", &["that"]),
+    ("lazy", &["constraints"]),
+    ("user", &["cuts"]),
+    ("general", &["constr"]),
+    ("gen", &["cons"]),
+];
+
+/// Whether `first` followed by `second` lexes as a multi-word keyword
+/// (`such that`, `gen cons...`).
+#[must_use]
+pub fn forms_multi_word(first: &str, second: &str) -> bool {
+    MULTI_WORD.iter().any(|(word, prefixes)| {
+        first.eq_ignore_ascii_case(word) && prefixes.iter().any(|p| second.get(..p.len()).is_some_and(|head| head.eq_ignore_ascii_case(p)))
+    })
+}
+
+/// `text` without leading whitespace and `\* ... *\` block comments.
+#[must_use]
+pub fn skip_block_comments(mut text: &str) -> &str {
+    loop {
+        text = text.trim_start();
+        match text.strip_prefix("\\*").and_then(|rest| rest.find("*\\").map(|end| &rest[end + 2..])) {
+            Some(rest) => text = rest,
+            None => return text,
+        }
+    }
+}
+
+/// `text` without trailing whitespace and block comments.
+#[must_use]
+pub fn skip_block_comments_back(mut text: &str) -> &str {
+    loop {
+        text = text.trim_end();
+        match text.strip_suffix("*\\").and_then(|rest| rest.rfind("\\*").map(|start| &rest[..start])) {
+            Some(rest) => text = rest,
+            None => return text,
+        }
+    }
+}
+
 /// Whether `word` may be read as a keyword when it starts a line: a section
 /// word, or `st`/`s.t.` (`Subject To`).
 #[must_use]

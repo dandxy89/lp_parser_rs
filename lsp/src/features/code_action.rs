@@ -434,12 +434,18 @@ impl Actions<'_> {
             let names: Vec<&str> = entries.iter().map(|&n| doc.node_text(n)).collect();
             let separators: Vec<&str> = entries.windows(2).map(|w| &doc.text[w[0].end_byte()..w[1].start_byte()]).collect();
             let interleaved = separators.iter().any(|s| !s.trim().is_empty());
-            let keyword = names.iter().any(|n| syntax::is_section_word(n));
+            // Names the lexer would read as keywords once moved: section words
+            // at line start, `free` after a name, multi-word keywords.
+            let keyword = names.iter().any(|n| syntax::is_line_start_keyword(n) || n.eq_ignore_ascii_case("free"));
             if names.is_sorted() || interleaved || keyword {
                 continue;
             }
             let mut sorted = names.clone();
             sorted.sort_unstable();
+            let joins = separators.iter().enumerate().any(|(i, s)| !s.contains('\n') && syntax::forms_multi_word(sorted[i], sorted[i + 1]));
+            if joins {
+                continue;
+            }
             let mut text = String::with_capacity(last.end_byte() - first.start_byte());
             for (i, name) in sorted.iter().enumerate() {
                 text.push_str(name);
@@ -477,8 +483,23 @@ impl Actions<'_> {
             if has_comment {
                 continue;
             }
+            // Upstream reads a following line that starts with a sign as part of
+            // this constraint (tree-sitter splits it); flipping would change it.
+            let continued = constraint.next_named_sibling().is_some_and(|next| {
+                next.kind() == kind::CONSTRAINT
+                    && next.descendant_for_byte_range(next.start_byte(), next.start_byte()).is_some_and(|t| matches!(t.kind(), "+" | "-"))
+            });
+            if continued {
+                continue;
+            }
             let value: String = doc.text[start.start_byte()..op.start_byte()].chars().filter(|c| !c.is_whitespace()).collect();
             let rewritten = format!("{} {} {value}", doc.node_text(expression), syntax::flip_operator(doc.node_text(op)));
+            // An unnamed rewrite starts its line with the expression's first word.
+            let line_start = doc.text[..replaced.start].rfind('\n').map_or(0, |i| i + 1);
+            let opens_line = syntax::skip_block_comments_back(&doc.text[line_start..replaced.start]).is_empty();
+            if opens_line && rewritten.split_whitespace().next().is_some_and(syntax::is_line_start_keyword) {
+                continue;
+            }
             let title = format!("Rewrite as `{rewritten}`");
             self.push(title, CodeActionKind::REFACTOR_REWRITE, vec![(replaced, rewritten)], None, false);
         }
@@ -568,7 +589,17 @@ fn deletion(text: &str, item: &Range<usize>) -> Option<Edit> {
     if before.trim().is_empty() && after.trim().is_empty() {
         return Some((line_start..line_end, String::new()));
     }
-    if before.trim().is_empty() && after.split_whitespace().next().is_some_and(syntax::is_line_start_keyword) {
+    // What would meet across the gap: a keyword-like word starting the line
+    // (block comments do not count as starting it), or two words forming a
+    // multi-word keyword (`such` + `that`).
+    let prev_word = syntax::skip_block_comments_back(before).split_whitespace().next_back();
+    let next_word = syntax::skip_block_comments(after).split_whitespace().next();
+    if prev_word.is_none() && next_word.is_some_and(syntax::is_line_start_keyword) {
+        return None;
+    }
+    if let (Some(prev), Some(next)) = (prev_word, next_word)
+        && syntax::forms_multi_word(prev, next)
+    {
         return None;
     }
     let trailing = after.len() - after.trim_start_matches([' ', '\t']).len();
@@ -937,6 +968,37 @@ mod tests {
         let mut newer = doc(text);
         newer.version = 2;
         assert!(resolve(&newer, stale).is_err());
+    }
+
+    /// Whether an action whose title starts with `prefix` is offered with the
+    /// cursor at `needle`.
+    fn offered(text: &str, needle: &str, prefix: &str) -> bool {
+        let d = doc(text);
+        titles(&at(&d, needle)).iter().any(|t| t.starts_with(prefix))
+    }
+
+    #[test]
+    fn edits_never_let_the_lexer_read_a_keyword() {
+        // A block comment does not start the line: `semi` would open a section.
+        assert!(!offered("min\n obj: x + semi\nst\n c: x + semi >= 1\nBinaries\n z \\* note *\\ semi\nend\n", "z \\*", "Remove"));
+        assert!(!offered("min\n obj: x + y\nst\n c: x + y >= 1\nBounds\n z <= 4 \\* note *\\ bin <= 5\nend\n", "z <=", "Remove"));
+        // Removing `z` would join `such` and `that` into `Subject To`.
+        assert!(!offered("min\n obj: such + that\nst\n c: such + that >= 1\nGenerals\n such z that\nend\n", "z that", "Remove"));
+        // `bin <= 10` at line start opens a Binaries section.
+        assert!(!offered("min\n obj: x + bin\nst\n c: x >= 1\n 10 >= bin\nend\n", "10 >=", "Rewrite"));
+        // Sorting would put `free` after a name, or form `such that`.
+        assert!(!offered("min\n obj: free + a\nst\n c: free + a >= 1\nsemi-continuous\n free a\nend\n", "free a", "Sort"));
+        assert!(!offered("min\n obj: that + such\nst\n c: that + such >= 1\nGenerals\n that such\nend\n", "that such", "Sort"));
+        // Plain cases are still offered.
+        assert!(offered("min\n obj: x\nst\n c: x >= 1\n 10 >= x\nend\n", "10 >=", "Rewrite"));
+        assert!(offered("min\n obj: b + a\nst\n c: b + a >= 1\nGenerals\n b a\nend\n", "b a", "Sort"));
+    }
+
+    #[test]
+    fn split_constraints_are_not_flipped() {
+        // Upstream reads `+ z = 0` as the rest of `10 >= x + y`.
+        assert!(!offered("min\n obj: x + y + z\nst\n 10 >= x + y\n + z = 0\nend\n", "10 >=", "Rewrite"));
+        assert!(!offered("min\n obj: x + y\nst\n c: x >= 1\n -3 <= x\n - y <= 8\nend\n", "-3 <=", "Rewrite"));
     }
 
     #[test]
