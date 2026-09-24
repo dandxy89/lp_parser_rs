@@ -80,7 +80,7 @@ The interface is a three-panel layout:
 | Panel            | Description                                                                             |
 | ---------------- | --------------------------------------------------------------------------------------- |
 | Section tabs     | Tab bar across the top — Summary, Variables, Constraints, Objectives, and Numerics      |
-| Name List        | Left sidebar — filterable list of changed entries for the selected section              |
+| Name List        | Left sidebar — filterable list of changed entries for the selected section (on Summary and Numerics, an overview whose rows open their section when clicked) |
 | Detail           | Right panel — full diff detail for the selected entry                                   |
 
 The status bar at the bottom shows total changes, per-section diff statistics (`+N -N ~N`), the active filter, and scroll position.

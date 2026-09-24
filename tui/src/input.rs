@@ -1650,6 +1650,12 @@ impl App {
                     self.set_section(new_section);
                 }
             }
+        } else if over_name_list && self.active_section.list_index().is_none() {
+            // The Overview shown for Summary and Numerics: each row opens its section.
+            let relative_row = row.saturating_sub(self.layout.name_list.y + 1) as usize;
+            if let Some(&section) = crate::widgets::sidebar::OVERVIEW_SECTIONS.get(relative_row) {
+                self.set_section(section);
+            }
         } else if over_name_list {
             self.focus = Focus::NameList;
             let len = self.name_list_len();
@@ -1702,6 +1708,18 @@ mod tests {
         modified.update_constraint_rhs("c1", 5.0).expect("rhs update must succeed");
         assert_eq!(baseline_constraint_rhs(&modified, "c1"), Some(5.0), "modified copy must carry the new rhs");
         assert_eq!(baseline_constraint_rhs(&baseline, "c1"), Some(2.0), "baseline must be untouched by the what-if edit");
+    }
+
+    /// A click on an Overview row (Summary and Numerics) opens that section.
+    #[test]
+    fn clicking_an_overview_row_opens_its_section() {
+        let mut app = crate::snapshot_tests::inspect_app_from(crate::snapshot_tests::BASE_LP);
+        assert_eq!(app.active_section, Section::Summary, "fixture: starts on Summary");
+        app.layout.name_list = ratatui::layout::Rect::new(0, 1, 20, 20);
+        let click = |row| MouseEvent { kind: MouseEventKind::Down(MouseButton::Left), column: 4, row, modifiers: KeyModifiers::NONE };
+        app.handle_mouse(click(3));
+        assert_eq!(app.active_section, Section::Constraints, "the second row is Constraints");
+        assert!(app.selected_entry_index().is_some(), "and lands on its first entry");
     }
 
     /// `Esc` interrupts a running solve; `q` asks first; and no new solve can
