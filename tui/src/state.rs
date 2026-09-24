@@ -297,6 +297,17 @@ impl Section {
         }
     }
 
+    /// Abbreviated label for a tab bar too narrow for [`label`](Self::label).
+    pub const fn short_label(self) -> &'static str {
+        match self {
+            Self::Summary => "Sum",
+            Self::Variables => "Vars",
+            Self::Constraints => "Cons",
+            Self::Objectives => "Objs",
+            Self::Numerics => "Num",
+        }
+    }
+
     /// Index into the `section_states` array (0-based, static sections excluded).
     /// Returns `None` for Summary and Numerics, which have no entry list.
     pub(crate) const fn list_index(self) -> Option<usize> {

@@ -20,22 +20,18 @@ pub fn draw_tab_bar(frame: &mut Frame, area: Rect, app: &mut App) {
     }
     let t = theme();
     let focused = app.focus == Focus::SectionSelector;
-
-    let mut spans: Vec<Span<'_>> = Vec::with_capacity(11);
-    let mut bounds = [(0_u16, 0_u16); 5];
-    spans.push(Span::raw(" "));
-    let mut x = area.x.saturating_add(1);
+    let active_index = app.active_section.index();
 
     // Five short labels: cheap enough to build per draw, and a draw only
     // happens on input, resize, or an animation tick.
     let labels = crate::app::build_section_labels(&app.cached_summary, app.mode, app.filter);
 
-    for (i, label) in labels.iter().enumerate() {
-        if i > 0 {
-            spans.push(Span::styled(" \u{2502} ", Style::default().fg(t.border)));
-            x = x.saturating_add(3);
-        }
-        let active = Section::from_index(i) == app.active_section;
+    // Each tab's spans at the chosen density. The coloured per-kind change
+    // counts keep their own colours regardless of tab state — they are
+    // information, not chrome.
+    let tab_spans = |index: usize, density: TabDensity| -> Vec<Span<'_>> {
+        let label = &labels[index];
+        let active = index == active_index;
         let style = if active {
             let base = Style::default().fg(t.accent).add_modifier(Modifier::BOLD | Modifier::UNDERLINED);
             if focused { base.bg(t.selection_bg) } else { base }
@@ -44,28 +40,108 @@ pub fn draw_tab_bar(frame: &mut Frame, area: Rect, app: &mut App) {
         } else {
             Style::default().fg(t.muted)
         };
-        spans.push(Span::styled(label.name.as_ref(), style));
-        #[allow(clippy::cast_possible_truncation)] // labels are short, far below u16::MAX
-        let mut width = label.name.chars().count() as u16;
-        // Coloured per-kind change counts keep their own colours regardless of
-        // tab state — they are information, not chrome.
-        if !label.counts.is_empty() {
+        let name = if density == TabDensity::Full { label.name.as_ref() } else { label.short.as_ref() };
+        let mut spans = vec![Span::styled(name, style)];
+        let show_counts = density != TabDensity::ActiveCounts || active;
+        if show_counts && !label.counts.is_empty() {
             spans.push(Span::raw(" "));
-            width = width.saturating_add(1);
-            for count in &label.counts {
-                #[allow(clippy::cast_possible_truncation)] // counts are short, far below u16::MAX
-                let count_width = count.content.chars().count() as u16;
-                width = width.saturating_add(count_width);
-                // Borrow the cached span's content rather than cloning its String.
-                spans.push(Span::styled(count.content.as_ref(), count.style));
-            }
+            // Borrow the cached span's content rather than cloning its String.
+            spans.extend(label.counts.iter().map(|count| Span::styled(count.content.as_ref(), count.style)));
         }
-        bounds[i] = (x, x.saturating_add(width));
+        spans
+    };
+
+    let available = area.width as usize;
+    let mut chosen: Option<Vec<Vec<Span<'_>>>> = None;
+    for density in [TabDensity::Full, TabDensity::Short, TabDensity::ActiveCounts] {
+        let tabs: Vec<Vec<Span<'_>>> = (0..labels.len()).map(|index| tab_spans(index, density)).collect();
+        if tab_bar_width(tabs.iter().map(|tab| spans_width(tab))) <= available {
+            chosen = Some(tabs);
+            break;
+        }
+    }
+    // Still too wide: show a run of tabs around the active one, marking the
+    // hidden ends with an ellipsis, so the active tab is never the one lost.
+    let (tabs, visible) = if let Some(tabs) = chosen {
+        let count = tabs.len();
+        (tabs, 0..count)
+    } else {
+        let tabs: Vec<Vec<Span<'_>>> = (0..labels.len()).map(|index| tab_spans(index, TabDensity::ActiveCounts)).collect();
+        let widths: Vec<usize> = tabs.iter().map(|tab| spans_width(tab)).collect();
+        let visible = visible_tab_window(&widths, active_index, available);
+        (tabs, visible)
+    };
+
+    let mut spans: Vec<Span<'_>> = Vec::with_capacity(16);
+    let mut bounds = [(0_u16, 0_u16); 5];
+    spans.push(Span::raw(if visible.start > 0 { "\u{2026}" } else { " " }));
+    let mut x = area.x.saturating_add(1);
+    let last = visible.end;
+    for (index, tab) in tabs.into_iter().enumerate() {
+        if !visible.contains(&index) {
+            continue;
+        }
+        if x > area.x.saturating_add(1) {
+            spans.push(Span::styled(" \u{2502} ", Style::default().fg(t.border)));
+            x = x.saturating_add(3);
+        }
+        #[allow(clippy::cast_possible_truncation)] // labels are short, far below u16::MAX
+        let width = spans_width(&tab) as u16;
+        bounds[index] = (x, x.saturating_add(width));
         x = x.saturating_add(width);
+        spans.extend(tab);
+    }
+    if last < labels.len() {
+        spans.push(Span::styled(" \u{2026}", Style::default().fg(t.muted)));
     }
 
     app.layout.tab_bounds = bounds;
     frame.render_widget(Paragraph::new(Line::from(spans)), area);
+}
+
+/// How much of each tab label the tab bar draws, from most to least.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TabDensity {
+    /// Full section names and every tab's change counts.
+    Full,
+    /// Abbreviated names, every tab's change counts.
+    Short,
+    /// Abbreviated names, change counts on the active tab only.
+    ActiveCounts,
+}
+
+/// Display width of a run of spans.
+fn spans_width(spans: &[Span<'_>]) -> usize {
+    spans.iter().map(|span| span.content.chars().count()).sum()
+}
+
+/// Width of the whole tab bar for tabs of the given widths: a leading space,
+/// then the tabs separated by ` │ `.
+fn tab_bar_width(widths: impl Iterator<Item = usize>) -> usize {
+    let (count, sum) = widths.fold((0_usize, 0_usize), |(count, sum), width| (count + 1, sum + width));
+    1 + sum + 3 * count.saturating_sub(1)
+}
+
+/// The run of tabs to draw when not all of them fit in `available` columns:
+/// the active tab, grown one neighbour at a time (right first) while the run
+/// still fits with room for the ellipsis markers at either end.
+fn visible_tab_window(widths: &[usize], active: usize, available: usize) -> std::ops::Range<usize> {
+    /// The ` …` marker after the run; the one before it replaces the leading space.
+    const MARKER: usize = 2;
+    debug_assert!(active < widths.len(), "active tab {active} out of range");
+    let fits = |range: &std::ops::Range<usize>| tab_bar_width(widths[range.clone()].iter().copied()) + MARKER <= available;
+    let mut range = active..active + 1;
+    loop {
+        let right = range.start..range.end + 1;
+        let left = range.start.saturating_sub(1)..range.end;
+        if range.end < widths.len() && fits(&right) {
+            range = right;
+        } else if range.start > 0 && fits(&left) {
+            range = left;
+        } else {
+            return range;
+        }
+    }
 }
 
 /// Draw the name list filling the sidebar.
@@ -315,6 +391,16 @@ pub fn draw_empty_detail_cheatsheet(frame: &mut Frame, area: Rect, message: &str
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_tab_window_always_holds_the_active_tab() {
+        let widths = [10, 10, 10, 10, 10];
+        // Everything fits: 1 + 50 + 12 separators.
+        assert_eq!(visible_tab_window(&widths, 2, 80), 0..5);
+        assert_eq!(visible_tab_window(&widths, 4, 30), 3..5, "grows left when the right is exhausted");
+        assert_eq!(visible_tab_window(&widths, 0, 30), 0..2);
+        assert_eq!(visible_tab_window(&widths, 3, 5), 3..4, "the active tab stays even when nothing else fits");
+    }
 
     #[test]
     fn overview_counts_are_right_aligned_and_never_clipped() {

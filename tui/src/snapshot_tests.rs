@@ -337,6 +337,18 @@ fn frame_contains(terminal: &Terminal<TestBackend>, needle: &str) -> bool {
     text.contains(needle)
 }
 
+/// The narrowest supported width: the tab bar compacts rather than pushing
+/// the active tab off the end.
+#[test]
+fn snapshot_diff_objectives_64x20() {
+    let mut app = diff_app();
+    app.set_section(Section::Objectives);
+    let terminal = render(&mut app, 64, 20);
+    let tab_bar: String = (0..64).map(|x| terminal.backend().buffer()[(x, 0)].symbol().to_owned()).collect();
+    assert!(tab_bar.contains("Objs"), "the active tab must be visible: {tab_bar:?}");
+    insta::assert_snapshot!(terminal.backend());
+}
+
 /// Regression: at narrow widths the side-by-side coefficient values were
 /// clipped (`41.19926` drawn as `41.19`) and the change badge fell off the end.
 #[test]

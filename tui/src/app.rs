@@ -432,6 +432,8 @@ fn build_mode_numerics_lines(mode: AppMode, report: &LpDiffReport, _problem: &Lp
 pub(crate) struct TabLabel {
     /// Section name; inspect mode appends its entry count (e.g. "Variables (8)").
     pub name: Cow<'static, str>,
+    /// The compact form drawn when the full labels do not fit (e.g. "Vars (8)").
+    pub short: Cow<'static, str>,
     /// Coloured count spans (e.g. `+2 -1 ~5`, or `~5/12` under a kind filter).
     /// Empty for static sections, inspect mode, and sections with no changes.
     pub counts: Vec<ratatui::text::Span<'static>>,
@@ -492,11 +494,17 @@ pub(crate) fn build_section_labels(summary: &DiffSummary, mode: AppMode, filter:
             Section::Objectives => Some(&summary.objectives),
         };
         match (mode, counts) {
-            (_, None) => TabLabel { name: Cow::Borrowed(section.label()), counts: Vec::new() },
-            (AppMode::Inspect, Some(counts)) => {
-                TabLabel { name: Cow::Owned(format!("{} ({})", section.label(), counts.changed())), counts: Vec::new() }
-            }
-            (AppMode::Diff, Some(counts)) => TabLabel { name: Cow::Borrowed(section.label()), counts: tab_count_spans(counts, filter) },
+            (_, None) => TabLabel { name: Cow::Borrowed(section.label()), short: Cow::Borrowed(section.short_label()), counts: Vec::new() },
+            (AppMode::Inspect, Some(counts)) => TabLabel {
+                name: Cow::Owned(format!("{} ({})", section.label(), counts.changed())),
+                short: Cow::Owned(format!("{} ({})", section.short_label(), counts.changed())),
+                counts: Vec::new(),
+            },
+            (AppMode::Diff, Some(counts)) => TabLabel {
+                name: Cow::Borrowed(section.label()),
+                short: Cow::Borrowed(section.short_label()),
+                counts: tab_count_spans(counts, filter),
+            },
         }
     })
 }
