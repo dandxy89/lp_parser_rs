@@ -23,39 +23,14 @@ pub struct Config {
 pub struct AnalysisSettings {
     /// Publish analysis issues as diagnostics.
     pub enabled: bool,
-    /// Coefficients above this magnitude are flagged.
-    pub large_coefficient_threshold: f64,
-    /// Non-zero coefficients below this magnitude are flagged.
-    pub small_coefficient_threshold: f64,
-    /// RHS values above this magnitude are flagged.
-    pub large_rhs_threshold: f64,
-    /// Max/min coefficient ratio above which scaling is flagged.
-    pub coefficient_ratio_threshold: f64,
+    /// Upstream thresholds (`largeCoefficientThreshold`, ...).
+    #[serde(flatten)]
+    pub thresholds: AnalysisConfig,
 }
 
 impl Default for AnalysisSettings {
     fn default() -> Self {
-        let upstream = AnalysisConfig::default();
-        Self {
-            enabled: true,
-            large_coefficient_threshold: upstream.large_coefficient_threshold,
-            small_coefficient_threshold: upstream.small_coefficient_threshold,
-            large_rhs_threshold: upstream.large_rhs_threshold,
-            coefficient_ratio_threshold: upstream.coefficient_ratio_threshold,
-        }
-    }
-}
-
-impl AnalysisSettings {
-    /// The upstream analysis configuration.
-    #[must_use]
-    pub const fn to_upstream(&self) -> AnalysisConfig {
-        AnalysisConfig {
-            large_coefficient_threshold: self.large_coefficient_threshold,
-            small_coefficient_threshold: self.small_coefficient_threshold,
-            large_rhs_threshold: self.large_rhs_threshold,
-            coefficient_ratio_threshold: self.coefficient_ratio_threshold,
-        }
+        Self { enabled: true, thresholds: AnalysisConfig::default() }
     }
 }
 
@@ -172,6 +147,14 @@ mod tests {
         assert_eq!(config.format.keyword_case, KeywordCase::Upper);
         assert_eq!(config.format.line_width, 100);
         assert_eq!(config.semantic.debounce_ms, 300);
+    }
+
+    #[test]
+    fn analysis_thresholds_use_camel_case_and_keep_defaults() {
+        let config = Config::from_value(serde_json::json!({ "analysis": { "enabled": false, "largeRhsThreshold": 5.0 } })).unwrap();
+        assert!(!config.analysis.enabled);
+        assert_eq!(config.analysis.thresholds.large_rhs_threshold, 5.0);
+        assert_eq!(config.analysis.thresholds.coefficient_ratio_threshold, AnalysisConfig::default().coefficient_ratio_threshold);
     }
 
     #[test]

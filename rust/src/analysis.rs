@@ -32,16 +32,24 @@ use crate::model::{ComparisonOp, Constraint, ConstraintClass, SOSType, VariableK
 use crate::problem::LpProblem;
 
 /// Configuration for analysis behaviour and thresholds.
+///
+/// Deserialising fills missing fields from [`Default`] and also accepts
+/// camelCase field names (as editor settings use).
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", serde(default))]
+#[derive(Debug, Clone, PartialEq)]
 pub struct AnalysisConfig {
     /// Coefficient magnitude threshold for "large" warnings (default: 1e9)
+    #[cfg_attr(feature = "serde", serde(alias = "largeCoefficientThreshold"))]
     pub large_coefficient_threshold: f64,
     /// Small coefficient threshold for warnings (default: 1e-9)
+    #[cfg_attr(feature = "serde", serde(alias = "smallCoefficientThreshold"))]
     pub small_coefficient_threshold: f64,
     /// RHS magnitude threshold for warnings (default: 1e9)
+    #[cfg_attr(feature = "serde", serde(alias = "largeRhsThreshold"))]
     pub large_rhs_threshold: f64,
     /// Coefficient ratio threshold for scaling warnings (default: 1e6)
+    #[cfg_attr(feature = "serde", serde(alias = "coefficientRatioThreshold"))]
     pub coefficient_ratio_threshold: f64,
 }
 

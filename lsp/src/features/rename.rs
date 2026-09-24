@@ -22,28 +22,6 @@ use crate::syntax::{self, kind};
 /// Special characters allowed anywhere in a name (upstream identifier regex).
 const NAME_SPECIALS: &str = "!#$%&(),.;?@{}~'[]";
 
-/// Single-word section keywords: keywords only as the first token of a line
-/// that does not continue an expression and is not followed by `:` / `::`.
-const SECTION_WORDS: &[&str] = &[
-    "bound",
-    "bounds",
-    "gen",
-    "general",
-    "generals",
-    "integer",
-    "integers",
-    "bin",
-    "binary",
-    "binaries",
-    "semi",
-    "semis",
-    "semi-continuous",
-    "sos",
-    "end",
-    "genconstr",
-    "genconstrs",
-];
-
 /// Objective sense words: keywords only as the first token of the file.
 const SENSE_WORDS: &[&str] = &["minimize", "minimise", "minimum", "min", "maximize", "maximise", "maximum", "max"];
 
@@ -298,7 +276,7 @@ fn check_keyword_sites(doc: &Document, ranges: &[Range<usize>], new_name: &str) 
         let line_keyword = at_line_start && !prev_kind.is_some_and(|k| CONTINUES_EXPRESSION.contains(&k));
 
         let reading = match lower.as_str() {
-            w if SECTION_WORDS.contains(&w) && line_keyword && !matches!(next_kind, Some(":" | "::")) => Some("a section header"),
+            w if syntax::SECTION_WORDS.contains(&w) && line_keyword && !matches!(next_kind, Some(":" | "::")) => Some("a section header"),
             w if SENSE_WORDS.contains(&w) && prev.is_none() => Some("the objective sense"),
             "multi-objective" | "multi-objectives" if prev_kind == Some(kind::SENSE) => Some("the multi-objectives marker"),
             "st" | "s.t." if line_keyword && range.start < first_header => Some("the `Subject To` header"),

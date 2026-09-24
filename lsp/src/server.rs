@@ -172,7 +172,7 @@ impl Backend {
                 return;
             }
             let version = doc.version;
-            let analysis = config.analysis.to_upstream();
+            let analysis = config.analysis.thresholds.clone();
             let result = tokio::task::spawn_blocking(move || semantic::run(&doc.text, version, &analysis)).await;
             let result = match result {
                 Ok(result) => Arc::new(result),
@@ -225,13 +225,24 @@ impl Backend {
         }
     }
 
+    /// Load `path` from disk into the workspace index, logging failures.
+    async fn index_file(&self, path: PathBuf) {
+        let encoding = self.encoding();
+        match tokio::task::spawn_blocking(move || workspace::load(&path, encoding)).await {
+            Ok(Ok(doc)) => {
+                write(&self.state.indexed).insert(doc.uri.clone(), Arc::new(doc));
+            }
+            Ok(Err(message)) => self.log(MessageType::WARNING, message).await,
+            Err(e) => self.log(MessageType::ERROR, format!("indexing task failed: {e}")).await,
+        }
+    }
+
     /// Index every `*.lp` file under the workspace roots, reporting progress.
     async fn index_workspace(&self) {
         let roots = read(&self.state.roots).clone();
         if roots.is_empty() {
             return;
         }
-        let encoding = self.encoding();
         let (files, errors) = match tokio::task::spawn_blocking(move || workspace::find_lp_files(&roots)).await {
             Ok(found) => found,
             Err(e) => {
@@ -250,14 +261,7 @@ impl Backend {
         };
         let total = files.len().max(1);
         for (i, path) in files.into_iter().enumerate() {
-            let loaded = tokio::task::spawn_blocking(move || workspace::load(&path, encoding)).await;
-            match loaded {
-                Ok(Ok(doc)) => {
-                    write(&self.state.indexed).insert(doc.uri.clone(), Arc::new(doc));
-                }
-                Ok(Err(message)) => self.log(MessageType::WARNING, message).await,
-                Err(e) => self.log(MessageType::ERROR, format!("indexing task failed: {e}")).await,
-            }
+            self.index_file(path).await;
             if let Some(progress) = &progress {
                 let percentage = u32::try_from((i + 1) * 100 / total).unwrap_or(100);
                 progress.report(percentage).await;
@@ -500,23 +504,22 @@ impl LanguageServer for Backend {
     }
 
     async fn did_change_watched_files(&self, params: DidChangeWatchedFilesParams) {
-        let encoding = self.encoding();
         for change in params.changes {
             if read(&self.state.open).contains_key(&change.uri) {
                 continue;
             }
             let Some(path) = change.uri.to_file_path().map(std::borrow::Cow::into_owned) else { continue };
             if change.typ == FileChangeType::DELETED {
-                write(&self.state.indexed).remove(&change.uri);
+                // Indexed files are keyed by the URI built from their path, which
+                // may be spelt differently from the client's.
+                let mut indexed = write(&self.state.indexed);
+                indexed.remove(&change.uri);
+                if let Some(uri) = Uri::from_file_path(&path) {
+                    indexed.remove(&uri);
+                }
                 continue;
             }
-            match tokio::task::spawn_blocking(move || workspace::load(&path, encoding)).await {
-                Ok(Ok(doc)) => {
-                    write(&self.state.indexed).insert(change.uri, Arc::new(doc));
-                }
-                Ok(Err(message)) => self.log(MessageType::WARNING, message).await,
-                Err(e) => self.log(MessageType::ERROR, format!("indexing task failed: {e}")).await,
-            }
+            self.index_file(path).await;
         }
     }
 
@@ -618,8 +621,7 @@ impl LanguageServer for Backend {
 
     async fn code_action(&self, params: CodeActionParams) -> Result<Option<CodeActionResponse>> {
         let doc = self.document_or_error(&params.text_document.uri)?;
-        let config = self.config();
-        self.run(move || Some(code_action::actions(&doc, params.range, &params.context, &config))).await
+        self.run(move || Some(code_action::actions(&doc, params.range, &params.context))).await
     }
 
     async fn code_lens(&self, params: CodeLensParams) -> Result<Option<Vec<CodeLens>>> {
@@ -703,12 +705,8 @@ impl LanguageServer for Backend {
             .map_err(|e| Error::invalid_params(format!("invalid document URI: {e}")))?;
         let doc = self.document_or_error(&uri)?;
         let config = self.config();
-        let command = params.command.clone();
         // Commands parse the whole model; keep them off the async workers.
-        let output = tokio::task::spawn_blocking(move || commands::execute(&command, &doc, &config))
-            .await
-            .map_err(|e| Error::invalid_params(format!("{} failed: {e}", params.command)))?;
-        match output {
+        match self.run(move || commands::execute(&params.command, &doc, &config)).await? {
             Ok(output) => {
                 self.client.show_message(MessageType::INFO, &output.message).await;
                 Ok(Some(output.value))

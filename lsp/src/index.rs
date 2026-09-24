@@ -53,6 +53,18 @@ impl Role {
         matches!(self, Self::Bound) || self.is_type_declaration()
     }
 
+    /// Type section named by a type-declaration role.
+    #[must_use]
+    pub const fn section_name(self) -> &'static str {
+        debug_assert!(self.is_type_declaration());
+        match self {
+            Self::Generals => "generals",
+            Self::Integers => "integers",
+            Self::Binaries => "binaries",
+            _ => "semi-continuous",
+        }
+    }
+
     /// Human-readable label.
     #[must_use]
     pub const fn label(self) -> &'static str {
@@ -284,8 +296,7 @@ impl SymbolIndex {
     /// Build the index from a parsed tree. `ERROR` subtrees are skipped.
     #[must_use]
     pub fn build(tree: &Tree, text: &str) -> Self {
-        let threads = if text.len() < PARALLEL_BYTES { 1 } else { std::thread::available_parallelism().map_or(1, |n| n.get().min(8)) };
-        Self::build_with(tree, text, threads)
+        Self::build_with(tree, text, workers(text.len()))
     }
 
     /// Build with `threads` workers, each indexing the entries that start in
@@ -372,12 +383,6 @@ impl SymbolIndex {
         self.variable_ids.get(name).map(|&i| &self.variables[i])
     }
 
-    /// Index of a variable by exact name.
-    #[must_use]
-    pub fn variable_id(&self, name: &str) -> Option<usize> {
-        self.variable_ids.get(name).copied()
-    }
-
     /// Entities with this exact name in `namespace`.
     pub fn entities_named<'a>(&'a self, name: &'a str, namespace: Namespace) -> impl Iterator<Item = (usize, &'a Entity)> + 'a {
         self.entities.iter().enumerate().filter(move |(_, e)| e.kind.namespace() == namespace && e.name.as_deref() == Some(name))
@@ -402,18 +407,6 @@ impl SymbolIndex {
     pub fn entity_at(&self, offset: usize) -> Option<usize> {
         let after = self.entities.partition_point(|e| e.range.start <= offset);
         (after > 0 && offset <= self.entities[after - 1].range.end).then(|| after - 1)
-    }
-
-    /// Variables occurring in an entity, with their occurrences there.
-    #[must_use]
-    pub fn entity_variables(&self, entity: usize) -> Vec<(&Variable, Vec<&Occurrence>)> {
-        self.variables
-            .iter()
-            .filter_map(|v| {
-                let occurrences: Vec<&Occurrence> = v.occurrences.iter().filter(|o| o.entity == Some(entity)).collect();
-                (!occurrences.is_empty()).then_some((v, occurrences))
-            })
-            .collect()
     }
 
     fn find_duplicates(&mut self) {
@@ -510,8 +503,15 @@ impl Ids {
     }
 }
 
-/// Files below this size are indexed on one thread.
+/// Texts below this size are processed on one thread.
 const PARALLEL_BYTES: usize = 4 * 1024 * 1024;
+
+/// Worker threads for a whole-document pass over `len` bytes: one below
+/// [`PARALLEL_BYTES`], else up to eight.
+#[must_use]
+pub fn workers(len: usize) -> usize {
+    if len < PARALLEL_BYTES { 1 } else { std::thread::available_parallelism().map_or(1, |n| n.get().min(8)) }
+}
 
 /// Single-cursor tree walk. Every visit takes the cursor on a node and leaves
 /// it on that same node.
@@ -592,7 +592,7 @@ impl<'t> Builder<'_> {
         let owned = self.window.contains(&node.start_byte());
         if owned {
             let header = node.child(0).filter(|c| c.kind().ends_with("_keyword")).map(|c| c.byte_range());
-            self.index.sections.push(SectionSpan { kind: static_kind(node.kind()), range: node.byte_range(), header });
+            self.index.sections.push(SectionSpan { kind: syntax::static_kind(node), range: node.byte_range(), header });
         }
 
         let ids = self.ids;
@@ -815,7 +815,7 @@ impl<'t> Builder<'_> {
             name: name.map(|n| syntax::text(n, self.text).to_owned()),
             name_range: name.map(|n| n.byte_range()),
             range: node.byte_range(),
-            node_kind: static_kind(node.kind()),
+            node_kind: syntax::static_kind(node),
         });
         if let Some(n) = name {
             self.index.sites.push((n.byte_range(), Symbol::Entity(id)));
@@ -840,12 +840,6 @@ impl<'t> Builder<'_> {
         self.index.sites.push((node.byte_range(), Symbol::Variable(var, occurrences.len())));
         occurrences.push(Occurrence { range: node.byte_range(), role, entity, coefficient });
     }
-}
-
-fn static_kind(kind: &str) -> &'static str {
-    const EXTRA: &[&str] =
-        &[kind::CONSTRAINT, kind::GENERAL_CONSTRAINT, kind::NAMED_OBJECTIVE, kind::LINEAR_EXPRESSION, kind::SOS_CONSTRAINT_HEADER];
-    syntax::SECTION_KINDS.iter().chain(EXTRA).find(|k| **k == kind).copied().unwrap_or("unknown")
 }
 
 #[cfg(test)]

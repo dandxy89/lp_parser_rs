@@ -1,8 +1,8 @@
 //! Tree-sitter plumbing: parsing, node-kind names and small node helpers.
 
 use std::cell::RefCell;
-use std::ops::Range;
 
+use lp_parser_rs::VariableBounds;
 use tree_sitter::{Language, Node, Parser, Tree};
 
 /// Node kind names from the tree-sitter-lp grammar (`src/node-types.json`).
@@ -137,12 +137,6 @@ pub fn is_section(node: Node<'_>) -> bool {
     SECTION_KINDS.contains(&node.kind())
 }
 
-/// Smallest named node spanning `range`.
-#[must_use]
-pub fn named_node_at(tree: &Tree, range: Range<usize>) -> Option<Node<'_>> {
-    tree.root_node().named_descendant_for_byte_range(range.start, range.end)
-}
-
 /// Leaf token touching `offset`: the token containing it, else the one ending
 /// right before it (so a cursor just after a name still finds the name).
 #[must_use]
@@ -162,42 +156,144 @@ pub fn token_at(tree: &Tree, offset: usize) -> Option<Node<'_>> {
 /// Nearest ancestor (inclusive) of `node` with kind `kind`.
 #[must_use]
 pub fn ancestor<'t>(node: Node<'t>, kind: &str) -> Option<Node<'t>> {
-    let mut current = Some(node);
-    while let Some(n) = current {
-        if n.kind() == kind {
-            return Some(n);
-        }
-        current = n.parent();
-    }
-    None
+    std::iter::successors(Some(node), Node::parent).find(|n| n.kind() == kind)
 }
 
 /// Nearest section ancestor (inclusive) of `node`.
 #[must_use]
 pub fn section_of(node: Node<'_>) -> Option<Node<'_>> {
-    let mut current = Some(node);
-    while let Some(n) = current {
-        if is_section(n) {
-            return Some(n);
-        }
-        current = n.parent();
-    }
-    None
+    std::iter::successors(Some(node), Node::parent).find(|n| is_section(*n))
 }
 
-/// Parse a (possibly signed) numeric literal as the upstream lexer does.
+/// Parse a (possibly signed) numeric literal as the upstream lexer does:
+/// whitespace between sign and digits is allowed, `inf`/`infinity` in any case.
 #[must_use]
 pub fn parse_number(text: &str) -> Option<f64> {
-    let trimmed: String = text.chars().filter(|c| !c.is_whitespace()).collect();
-    let (sign, body) = match trimmed.as_bytes().first() {
-        Some(b'-') => (-1.0, &trimmed[1..]),
-        Some(b'+') => (1.0, &trimmed[1..]),
-        _ => (1.0, trimmed.as_str()),
-    };
-    if body.eq_ignore_ascii_case("inf") || body.eq_ignore_ascii_case("infinity") {
-        return Some(sign * f64::INFINITY);
+    // `f64::from_str` handles signs and `inf`/`infinity`; it also accepts
+    // `nan`, which the lexer does not.
+    let value: f64 =
+        if text.contains(char::is_whitespace) { text.split_whitespace().collect::<String>().parse().ok()? } else { text.parse().ok()? };
+    (!value.is_nan()).then_some(value)
+}
+
+/// Comparison operator with aliases canonicalised (`=<` → `<=`, `=>` → `>=`).
+#[must_use]
+pub fn canonical_operator(op: &str) -> &'static str {
+    match op {
+        "<=" | "=<" => "<=",
+        ">=" | "=>" => ">=",
+        "<" => "<",
+        ">" => ">",
+        _ => "=",
     }
-    body.parse::<f64>().ok().map(|v| sign * v)
+}
+
+/// The operator with its sides swapped (`>=` becomes `<=`); aliases accepted.
+#[must_use]
+pub fn flip_operator(op: &str) -> &'static str {
+    match canonical_operator(op) {
+        "<=" => ">=",
+        ">=" => "<=",
+        "<" => ">",
+        ">" => "<",
+        _ => "=",
+    }
+}
+
+/// Bound magnitude from which upstream treats a value as infinite.
+pub const INFINITE_BOUND: f64 = 1e30;
+
+/// Bounds set by one `bound_declaration`, as the upstream grammar reads it;
+/// `None` for shapes upstream rejects.
+#[must_use]
+pub fn declared_bounds(node: Node<'_>, text: &str) -> Option<VariableBounds> {
+    #[derive(Clone, Copy)]
+    enum Item {
+        Variable,
+        Free,
+        /// `Some(true)` for `<=`-like, `Some(false)` for `>=`-like, `None` for `=`.
+        Operator(Option<bool>),
+        Value(f64),
+    }
+    debug_assert_eq!(node.kind(), kind::BOUND_DECLARATION);
+    let mut items = Vec::new();
+    let mut negative = false;
+    let mut cursor = node.walk();
+    for child in node.children(&mut cursor) {
+        let source = self::text(child, text);
+        match child.kind() {
+            "-" => negative = true,
+            kind::IDENTIFIER => items.push(Item::Variable),
+            kind::FREE_KEYWORD => items.push(Item::Free),
+            kind::COMPARISON_OPERATOR => items.push(Item::Operator(match canonical_operator(source) {
+                "<=" | "<" => Some(true),
+                ">=" | ">" => Some(false),
+                _ => None,
+            })),
+            kind::NUMBER | kind::INFINITY => {
+                let value = parse_number(source)?;
+                let value = if negative { -value } else { value };
+                negative = false;
+                items.push(Item::Value(if value >= INFINITE_BOUND {
+                    f64::INFINITY
+                } else if value <= -INFINITE_BOUND {
+                    f64::NEG_INFINITY
+                } else {
+                    value
+                }));
+            }
+            _ => {}
+        }
+    }
+    let bounds = match items.as_slice() {
+        [Item::Variable, Item::Free] => VariableBounds::free(),
+        [Item::Variable, Item::Operator(le), Item::Value(v)] => match le {
+            Some(true) => VariableBounds::upper(*v),
+            Some(false) => VariableBounds::lower(*v),
+            None => VariableBounds::range(*v, *v),
+        },
+        [Item::Value(v), Item::Operator(le), Item::Variable] => match le {
+            Some(true) => VariableBounds::lower(*v),
+            Some(false) => VariableBounds::upper(*v),
+            None => VariableBounds::range(*v, *v),
+        },
+        [Item::Value(a), Item::Operator(Some(true)), Item::Variable, Item::Operator(Some(true)), Item::Value(b)] => {
+            VariableBounds::range(*a, *b)
+        }
+        [Item::Value(a), Item::Operator(Some(false)), Item::Variable, Item::Operator(Some(false)), Item::Value(b)] => {
+            VariableBounds::range(*b, *a)
+        }
+        _ => return None,
+    };
+    Some(bounds)
+}
+
+/// Single-word section keywords (`src/scanner.c`, upstream
+/// `Lexer::resolve_keyword`): keywords only as the first token of a line.
+pub const SECTION_WORDS: &[&str] = &[
+    "bound",
+    "bounds",
+    "gen",
+    "general",
+    "generals",
+    "integer",
+    "integers",
+    "bin",
+    "binary",
+    "binaries",
+    "semi",
+    "semis",
+    "semi-continuous",
+    "sos",
+    "end",
+    "genconstr",
+    "genconstrs",
+];
+
+/// Whether `word` is one of [`SECTION_WORDS`] (case-insensitive).
+#[must_use]
+pub fn is_section_word(word: &str) -> bool {
+    SECTION_WORDS.iter().any(|k| k.eq_ignore_ascii_case(word))
 }
 
 #[cfg(test)]

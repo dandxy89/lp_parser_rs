@@ -46,30 +46,6 @@ const HEADER_KINDS: &[&str] = &[
 /// Tokens whose casing follows `keyword_case`.
 const CASED_KINDS: &[&str] = &[kind::FREE_KEYWORD, kind::SOS_TYPE, kind::INFINITY];
 
-/// Words that become section keywords at the start of a line unless followed
-/// by `:` (upstream `Lexer::resolve_keyword` and the external scanner).
-const LINE_START_KEYWORDS: &[&str] = &[
-    "bound",
-    "bounds",
-    "gen",
-    "general",
-    "generals",
-    "integer",
-    "integers",
-    "bin",
-    "binary",
-    "binaries",
-    "semi",
-    "semis",
-    "semi-continuous",
-    "sos",
-    "end",
-    "genconstr",
-    "genconstrs",
-    "st",
-    "s.t.",
-];
-
 /// Sections of linear constraints.
 const CONSTRAINT_SECTIONS: &[&str] = &[kind::CONSTRAINTS_SECTION, kind::LAZY_CONSTRAINTS_SECTION, kind::USER_CUTS_SECTION];
 
@@ -571,7 +547,10 @@ fn starts_like_keyword(leaves: &[Leaf<'_>]) -> bool {
     let mut sig = leaves.iter().filter(|l| !l.is_comment());
     let Some(first) = sig.next() else { return false };
     let labelled = sig.next().is_some_and(|l| !l.named && matches!(l.text, ":" | "::"));
-    first.named && !labelled && LINE_START_KEYWORDS.iter().any(|k| first.text.eq_ignore_ascii_case(k))
+    // Section words plus `st`/`s.t.`, which the lexer also resolves at line start.
+    first.named
+        && !labelled
+        && (syntax::is_section_word(first.text) || first.text.eq_ignore_ascii_case("st") || first.text.eq_ignore_ascii_case("s.t."))
 }
 
 /// Whether `leaves` continue the previous constraint `prev`: tree-sitter may

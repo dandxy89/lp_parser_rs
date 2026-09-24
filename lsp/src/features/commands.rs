@@ -4,7 +4,6 @@ use std::fmt::Write as _;
 
 use lp_parser_rs::LpProblem;
 use lp_parser_rs::analysis::{AnalysisIssue, IssueSeverity, ProblemAnalysis};
-use lp_parser_rs::model::{ConstraintClass, VariableKind};
 use lp_parser_rs::mps::writer::write_mps_string;
 use serde_json::json;
 
@@ -38,7 +37,7 @@ pub fn execute(command: &str, doc: &Document, config: &Config) -> Result<Output,
     match command {
         ANALYZE => analyze(doc, config),
         CONVERT_TO_MPS => convert_to_mps(doc),
-        SHOW_MODEL_STATS => model_stats(doc),
+        SHOW_MODEL_STATS => model_stats(doc, config),
         _ => Err(format!("unknown command '{command}'")),
     }
 }
@@ -55,7 +54,7 @@ fn parse(doc: &Document) -> Result<LpProblem, String> {
 
 fn analyze(doc: &Document, config: &Config) -> Result<Output, String> {
     let problem = parse(doc)?;
-    let analysis = problem.analyze_with_config(&config.analysis.to_upstream());
+    let analysis = problem.analyze_with_config(&config.analysis.thresholds);
     let markdown = analysis_markdown(&display_name(doc), &analysis);
     let count = |severity: IssueSeverity| analysis.issues.iter().filter(|i| i.severity == severity).count();
     let message = if analysis.issues.is_empty() {
@@ -72,9 +71,40 @@ fn analyze(doc: &Document, config: &Config) -> Result<Output, String> {
     Ok(Output { value: json!({ "markdown": markdown }), message })
 }
 
-/// Render the analysis as markdown: headings, bullet lists and issues
-/// grouped by severity.
+/// Render the analysis as markdown: the overview, then issues grouped by
+/// severity.
 fn analysis_markdown(title: &str, analysis: &ProblemAnalysis) -> String {
+    let mut md = format!("# Analysis of `{title}`\n\n{}", overview_markdown(analysis));
+    // Writing to a `String` cannot fail; `line` keeps that in one place.
+    let mut line = |text: String| {
+        md.push_str(&text);
+        md.push('\n');
+    };
+    line("\n## Issues\n".to_owned());
+    if analysis.issues.is_empty() {
+        line("No issues detected.".to_owned());
+    }
+    for (heading, severity) in [("Errors", IssueSeverity::Error), ("Warnings", IssueSeverity::Warning), ("Info", IssueSeverity::Info)] {
+        let issues: Vec<&AnalysisIssue> = analysis.issues.iter().filter(|i| i.severity == severity).collect();
+        if issues.is_empty() {
+            continue;
+        }
+        line(format!("### {heading} ({})\n", issues.len()));
+        for issue in issues {
+            let mut item = format!("- **{}:** {}", issue.category, issue.message);
+            if let Some(details) = &issue.details {
+                // Infallible: writing to a String.
+                write!(item, " ({details})").expect("writing to a String cannot fail");
+            }
+            line(item);
+        }
+        line(String::new());
+    }
+    md
+}
+
+/// Summary, variable, constraint and coefficient sections of the analysis.
+fn overview_markdown(analysis: &ProblemAnalysis) -> String {
     let mut md = String::new();
     // Writing to a `String` cannot fail; `line` keeps that in one place.
     let mut line = |text: String| {
@@ -82,7 +112,6 @@ fn analysis_markdown(title: &str, analysis: &ProblemAnalysis) -> String {
         md.push('\n');
     };
     let summary = &analysis.summary;
-    line(format!("# Analysis of `{title}`\n"));
     line("## Summary\n".to_owned());
     if let Some(name) = &summary.name {
         line(format!("- **Name:** {name}"));
@@ -158,26 +187,6 @@ fn analysis_markdown(title: &str, analysis: &ProblemAnalysis) -> String {
         }
     }
 
-    line("\n## Issues\n".to_owned());
-    if analysis.issues.is_empty() {
-        line("No issues detected.".to_owned());
-    }
-    for (heading, severity) in [("Errors", IssueSeverity::Error), ("Warnings", IssueSeverity::Warning), ("Info", IssueSeverity::Info)] {
-        let issues: Vec<&AnalysisIssue> = analysis.issues.iter().filter(|i| i.severity == severity).collect();
-        if issues.is_empty() {
-            continue;
-        }
-        line(format!("### {heading} ({})\n", issues.len()));
-        for issue in issues {
-            let mut item = format!("- **{}:** {}", issue.category, issue.message);
-            if let Some(details) = &issue.details {
-                // Infallible: writing to a String.
-                write!(item, " ({details})").expect("writing to a String cannot fail");
-            }
-            line(item);
-        }
-        line(String::new());
-    }
     md
 }
 
@@ -198,96 +207,24 @@ fn convert_to_mps(doc: &Document) -> Result<Output, String> {
     Ok(Output { value: json!({ "path": path }), message: format!("Wrote {path}") })
 }
 
-fn model_stats(doc: &Document) -> Result<Output, String> {
-    let problem = parse(doc)?;
-
-    let mut kinds: Vec<(VariableKind, usize)> = Vec::new();
-    let mut free = 0;
-    for variable in problem.variables.values() {
-        match kinds.iter_mut().find(|(k, _)| *k == variable.kind) {
-            Some((_, count)) => *count += 1,
-            None => kinds.push((variable.kind, 1)),
-        }
-        free += usize::from(variable.bounds.is_free());
-    }
-
-    let mut classes = [(ConstraintClass::Normal, 0usize), (ConstraintClass::Lazy, 0), (ConstraintClass::UserCut, 0)];
-    let mut types: Vec<(&'static str, usize)> = Vec::new();
-    let mut nonzeros = 0usize;
-    let mut quadratic_terms = 0usize;
-    for (&id, constraint) in &problem.constraints {
-        let class = problem.constraint_class(id);
-        if let Some((_, count)) = classes.iter_mut().find(|(c, _)| *c == class) {
-            *count += 1;
-        }
-        let (kind, linear, quadratic) = match constraint {
-            lp_parser_rs::model::Constraint::Standard { coefficients, .. } => ("linear", coefficients.len(), 0),
-            lp_parser_rs::model::Constraint::Indicator { coefficients, .. } => ("indicator", coefficients.len(), 0),
-            lp_parser_rs::model::Constraint::Quadratic { coefficients, quadratic, .. } => {
-                ("quadratic", coefficients.len(), quadratic.len())
-            }
-            lp_parser_rs::model::Constraint::SOS { weights, .. } => ("sos", weights.len(), 0),
-            lp_parser_rs::model::Constraint::General { .. } => ("general", 0, 0),
-        };
-        nonzeros += linear;
-        quadratic_terms += quadratic;
-        match types.iter_mut().find(|(k, _)| *k == kind) {
-            Some((_, count)) => *count += 1,
-            None => types.push((kind, 1)),
-        }
-    }
-    let objective_nonzeros: usize = problem.objectives.values().map(|o| o.coefficients.len()).sum();
-    let objective_quadratic: usize = problem.objectives.values().map(|o| o.quadratic.len()).sum();
-
-    let variables_by_kind: serde_json::Map<String, serde_json::Value> = kinds.iter().map(|(k, n)| (k.to_string(), json!(n))).collect();
-    let constraints_by_class: serde_json::Map<String, serde_json::Value> =
-        classes.iter().filter(|(_, n)| *n > 0).map(|(c, n)| (c.to_string(), json!(n))).collect();
-    let constraints_by_type: serde_json::Map<String, serde_json::Value> = types.iter().map(|(t, n)| ((*t).to_owned(), json!(n))).collect();
+fn model_stats(doc: &Document, config: &Config) -> Result<Output, String> {
+    let analysis = parse(doc)?.analyze_with_config(&config.analysis.thresholds);
+    let summary = &analysis.summary;
+    let markdown = format!("# Model statistics for `{}`\n\n{}", display_name(doc), overview_markdown(&analysis));
     let stats = json!({
-        "variables": { "total": problem.variable_count(), "free": free, "byKind": variables_by_kind },
-        "constraints": { "total": problem.constraint_count(), "byClass": constraints_by_class, "byType": constraints_by_type },
-        "objectives": { "total": problem.objective_count(), "sense": problem.sense.to_string() },
-        "nonzeros": { "constraints": nonzeros, "objectives": objective_nonzeros, "quadratic": quadratic_terms + objective_quadratic },
+        "summary": summary,
+        "variables": analysis.variables.type_distribution,
+        "constraints": analysis.constraints.type_distribution,
     });
-
-    let mut md = format!("# Model statistics for `{}`\n\n", display_name(doc));
-    let mut section = |heading: &str, total: usize, rows: &[(String, usize)]| {
-        // Writing to a `String` cannot fail.
-        writeln!(md, "## {heading} ({total})\n").expect("writing to a String cannot fail");
-        for (label, count) in rows {
-            writeln!(md, "- **{label}:** {count}").expect("writing to a String cannot fail");
-        }
-        md.push('\n');
-    };
-    let mut variable_rows: Vec<(String, usize)> = kinds.iter().map(|(k, n)| (k.to_string(), *n)).collect();
-    if free > 0 {
-        variable_rows.push(("Free (unbounded)".to_owned(), free));
-    }
-    section("Variables", problem.variable_count(), &variable_rows);
-    let mut constraint_rows: Vec<(String, usize)> =
-        classes.iter().filter(|(_, n)| *n > 0).map(|(c, n)| (format!("{c} class"), *n)).collect();
-    constraint_rows.extend(types.iter().map(|(t, n)| ((*t).to_owned(), *n)));
-    section("Constraints", problem.constraint_count(), &constraint_rows);
-    section("Objectives", problem.objective_count(), &[(format!("Sense {}", problem.sense), problem.objective_count())]);
-    section(
-        "Non-zeros",
-        nonzeros + objective_nonzeros,
-        &[
-            ("In constraints".to_owned(), nonzeros),
-            ("In objectives".to_owned(), objective_nonzeros),
-            ("Quadratic terms".to_owned(), quadratic_terms + objective_quadratic),
-        ],
-    );
-
     let message = format!(
         "{}: {} variables, {} constraints, {} objective(s), {} non-zeros",
         display_name(doc),
-        problem.variable_count(),
-        problem.constraint_count(),
-        problem.objective_count(),
-        nonzeros + objective_nonzeros
+        summary.variable_count,
+        summary.constraint_count,
+        summary.objective_count,
+        summary.total_nonzeros
     );
-    Ok(Output { value: json!({ "markdown": md, "stats": stats }), message })
+    Ok(Output { value: json!({ "markdown": markdown, "stats": stats }), message })
 }
 
 #[cfg(test)]
@@ -324,8 +261,8 @@ mod tests {
     #[test]
     fn analyze_uses_configured_thresholds() {
         let mut config = Config::default();
-        config.analysis.large_rhs_threshold = 1e20;
-        config.analysis.large_coefficient_threshold = 1e20;
+        config.analysis.thresholds.large_rhs_threshold = 1e20;
+        config.analysis.thresholds.large_coefficient_threshold = 1e20;
         let out = execute(ANALYZE, &doc("min\n obj: x\nst\n c1: x >= 1e12\nend\n"), &config).unwrap();
         assert!(!out.value["markdown"].as_str().unwrap().contains("1e12"));
     }
@@ -343,20 +280,18 @@ mod tests {
     fn model_stats_summarise_the_model() {
         let out = execute(SHOW_MODEL_STATS, &doc(MODEL), &Config::default()).unwrap();
         let stats = &out.value["stats"];
-        assert_eq!(stats["variables"]["total"], 2);
+        assert_eq!(stats["summary"]["variable_count"], 2);
+        assert_eq!(stats["summary"]["constraint_count"], 4);
+        assert_eq!(stats["summary"]["objective_count"], 1);
+        assert_eq!(stats["summary"]["total_nonzeros"], 7);
         assert_eq!(stats["variables"]["free"], 1);
-        assert_eq!(stats["variables"]["byKind"]["General"], 1);
-        assert_eq!(stats["constraints"]["total"], 4);
-        assert_eq!(stats["constraints"]["byClass"]["Normal"], 3);
-        assert_eq!(stats["constraints"]["byClass"]["Lazy"], 1);
-        assert_eq!(stats["constraints"]["byType"]["linear"], 4);
-        assert_eq!(stats["objectives"]["total"], 1);
-        assert_eq!(stats["nonzeros"]["constraints"], 7);
-        assert_eq!(stats["nonzeros"]["objectives"], 2);
+        assert_eq!(stats["variables"]["general"], 1);
+        assert_eq!(stats["constraints"]["lazy"], 1);
         let markdown = out.value["markdown"].as_str().unwrap();
-        assert!(markdown.contains("## Variables (2)"));
-        assert!(markdown.contains("## Non-zeros (9)"));
-        assert_eq!(out.message, "model.lp: 2 variables, 4 constraints, 1 objective(s), 9 non-zeros");
+        assert!(markdown.starts_with("# Model statistics for `model.lp`"));
+        assert!(markdown.contains("- **Variables:** 2"));
+        assert!(!markdown.contains("## Issues"));
+        assert_eq!(out.message, "model.lp: 2 variables, 4 constraints, 1 objective(s), 7 non-zeros");
     }
 
     #[test]

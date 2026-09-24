@@ -8,6 +8,7 @@
 
 use std::ops::Range;
 
+use lp_parser_rs::VariableBounds;
 use tower_lsp_server::ls_types::{InlayHint, InlayHintKind, InlayHintLabel, InlayHintTooltip, Range as LspRange};
 use tree_sitter::Node;
 
@@ -15,9 +16,6 @@ use crate::config::InlayHintSettings;
 use crate::document::Document;
 use crate::index::{EntityKind, Role, Symbol, Variable};
 use crate::syntax::{self, kind};
-
-/// Bound magnitudes at or above this are infinite (CPLEX convention, as upstream).
-const INFINITE_BOUND: f64 = 1e30;
 
 /// Hints within `range`.
 #[must_use]
@@ -140,17 +138,15 @@ fn model_name_hints(doc: &Document, entities: Range<usize>, settings: &InlayHint
     }
 }
 
-/// One syntactic piece of a constraint body or bound declaration.
+/// One syntactic piece of a constraint body.
 #[derive(Debug, Clone, Copy)]
 enum Part<'t> {
     Expression(Node<'t>),
     Operator(&'static str),
     Number(f64),
-    Identifier,
-    Free,
 }
 
-/// The pieces of a `constraint` or `bound_declaration`, with signs applied to
+/// The pieces of a `constraint`, with signs applied to
 /// numbers and operator aliases normalised.
 fn parts<'t>(node: Node<'t>, text: &str) -> Vec<Part<'t>> {
     let mut out = Vec::new();
@@ -166,24 +162,12 @@ fn parts<'t>(node: Node<'t>, text: &str) -> Vec<Part<'t>> {
                 }
                 sign = 1.0;
             }
-            kind::COMPARISON_OPERATOR => out.push(Part::Operator(operator(syntax::text(child, text)))),
+            kind::COMPARISON_OPERATOR => out.push(Part::Operator(syntax::canonical_operator(syntax::text(child, text)))),
             kind::LINEAR_EXPRESSION => out.push(Part::Expression(child)),
-            kind::IDENTIFIER => out.push(Part::Identifier),
-            kind::FREE_KEYWORD => out.push(Part::Free),
             _ => {}
         }
     }
     out
-}
-
-fn operator(op: &str) -> &'static str {
-    match op {
-        "<=" | "=<" => "<=",
-        ">=" | "=>" => ">=",
-        "<" => "<",
-        ">" => ">",
-        _ => "=",
-    }
 }
 
 /// Sum of the signed constant terms of a `linear_expression`, or `None` when
@@ -235,12 +219,12 @@ fn normalised_rhs_hint(doc: &Document, entity_id: usize, out: &mut Vec<(usize, I
         }
         // `lhs op expr`: upstream flips the operator.
         [Part::Number(lhs), Part::Operator(op), Part::Expression(e)] => expression_constant(*e, &doc.text)
-            .map(|c| (format!("= {}", format_value(lhs - c)), format!("{} {}", flip(op), format_value(lhs - c)))),
+            .map(|c| (format!("= {}", format_value(lhs - c)), format!("{} {}", syntax::flip_operator(op), format_value(lhs - c)))),
         // `lo op expr op hi`
         [Part::Number(lo), Part::Operator(op1), Part::Expression(e), Part::Operator(op2), Part::Number(hi)] => {
             expression_constant(*e, &doc.text).map(|c| {
                 let (lo, hi) = (format_value(lo - c), format_value(hi - c));
-                (format!("= {lo} .. {hi}"), format!("{} {lo} and {op2} {hi}", flip(op1)))
+                (format!("= {lo} .. {hi}"), format!("{} {lo} and {op2} {hi}", syntax::flip_operator(op1)))
             })
         }
         _ => None,
@@ -257,16 +241,6 @@ fn normalised_rhs_hint(doc: &Document, entity_id: usize, out: &mut Vec<(usize, I
         true,
         false,
     ));
-}
-
-const fn flip(op: &str) -> &'static str {
-    match op.as_bytes() {
-        b"<=" => ">=",
-        b">=" => "<=",
-        b"<" => ">",
-        b">" => "<",
-        _ => "=",
-    }
 }
 
 /// `: int`, `: bin`, `: semi`, `: free` after each variable's first use.
@@ -317,50 +291,16 @@ fn variable_type(doc: &Document, variable: &Variable) -> Option<&'static str> {
     if integer {
         return Some("int");
     }
-    let (lower, upper) = variable
+    let bounds = variable
         .occurrences
         .iter()
         .filter(|o| o.role == Role::Bound)
-        .filter_map(|o| declared_bounds(doc, &o.range))
-        .fold((None, None), |(lower, upper), (l, u)| (l.or(lower), u.or(upper)));
-    let free = lower == Some(f64::NEG_INFINITY) && upper.is_none_or(|u| u == f64::INFINITY);
+        .filter_map(|o| doc.node(o.range.clone(), kind::IDENTIFIER)?.parent())
+        .filter(|n| n.kind() == kind::BOUND_DECLARATION)
+        .filter_map(|n| syntax::declared_bounds(n, &doc.text))
+        .fold(VariableBounds::unspecified(), VariableBounds::merge);
+    let free = bounds.lower == Some(f64::NEG_INFINITY) && bounds.upper.is_none_or(|u| u == f64::INFINITY);
     free.then_some("free")
-}
-
-/// `(lower, upper)` declared by the bound declaration containing the name at
-/// `name_range`, per side, with CPLEX infinity saturation.
-fn declared_bounds(doc: &Document, name_range: &Range<usize>) -> Option<(Option<f64>, Option<f64>)> {
-    let declaration = doc.node(name_range.clone(), kind::IDENTIFIER)?.parent().filter(|p| p.kind() == kind::BOUND_DECLARATION)?;
-    let saturate = |v: f64| {
-        if v >= INFINITE_BOUND {
-            f64::INFINITY
-        } else if v <= -INFINITE_BOUND {
-            f64::NEG_INFINITY
-        } else {
-            v
-        }
-    };
-    // Which side `op` bounds when the value is on its right (`x op v`).
-    let side = |op: &str, v: f64, value_on_right: bool| -> (Option<f64>, Option<f64>) {
-        let v = saturate(v);
-        match (op, value_on_right) {
-            ("=", _) => (Some(v), Some(v)),
-            ("<=" | "<", true) | (">=" | ">", false) => (None, Some(v)),
-            _ => (Some(v), None),
-        }
-    };
-    let bounds = match parts(declaration, &doc.text).as_slice() {
-        [Part::Identifier, Part::Free] => (Some(f64::NEG_INFINITY), Some(f64::INFINITY)),
-        [Part::Identifier, Part::Operator(op), Part::Number(v)] => side(op, *v, true),
-        [Part::Number(v), Part::Operator(op), Part::Identifier] => side(op, *v, false),
-        [Part::Number(lo), Part::Operator(op1), Part::Identifier, Part::Operator(op2), Part::Number(hi)] => {
-            let (l1, u1) = side(op1, *lo, false);
-            let (l2, u2) = side(op2, *hi, true);
-            (l2.or(l1), u2.or(u1))
-        }
-        _ => return None,
-    };
-    Some(bounds)
 }
 
 #[cfg(test)]

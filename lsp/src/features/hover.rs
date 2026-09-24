@@ -239,7 +239,7 @@ fn body_parts<'t>(node: Node<'t>, text: &str) -> Vec<Part<'t>> {
     for child in node.children(&mut cursor) {
         match child.kind() {
             kind::LINEAR_EXPRESSION => parts.push(Part::Expr(child)),
-            kind::COMPARISON_OPERATOR => parts.push(Part::Op(canonical_operator(syntax::text(child, text)))),
+            kind::COMPARISON_OPERATOR => parts.push(Part::Op(syntax::canonical_operator(syntax::text(child, text)))),
             kind::NUMBER | kind::INFINITY => {
                 let value = syntax::text(child, text);
                 parts.push(Part::Num(if negative { format!("-{value}") } else { value.to_owned() }));
@@ -262,12 +262,12 @@ fn is_ranged(node: Node<'_>) -> bool {
 fn constraint_form(node: Node<'_>, text: &str) -> Option<String> {
     match body_parts(node, text).as_slice() {
         [Part::Expr(e), Part::Op(op), Part::Num(rhs)] => Some(format!("{} {op} {rhs}", expression(*e, text))),
-        [Part::Num(lhs), Part::Op(op), Part::Expr(e)] => Some(format!("{} {} {lhs}", expression(*e, text), flip(op))),
+        [Part::Num(lhs), Part::Op(op), Part::Expr(e)] => Some(format!("{} {} {lhs}", expression(*e, text), syntax::flip_operator(op))),
         [Part::Num(lo), Part::Op(op1), Part::Expr(e), Part::Op(op2), Part::Num(hi)] => {
             let e = expression(*e, text);
             // `hi >= expr >= lo` reads better the other way round.
             Some(if op1.starts_with('>') && op2.starts_with('>') {
-                format!("{hi} {} {e} {} {lo}", flip(op2), flip(op1))
+                format!("{hi} {} {e} {} {lo}", syntax::flip_operator(op2), syntax::flip_operator(op1))
             } else {
                 format!("{lo} {op1} {e} {op2} {hi}")
             })
@@ -314,26 +314,6 @@ fn term(node: Node<'_>, text: &str) -> String {
     }
 }
 
-const fn flip(op: &str) -> &'static str {
-    match op.as_bytes() {
-        b"<=" => ">=",
-        b">=" => "<=",
-        b"<" => ">",
-        b">" => "<",
-        _ => "=",
-    }
-}
-
-fn canonical_operator(op: &str) -> &'static str {
-    match op {
-        "<=" | "=<" => "<=",
-        ">=" | "=>" => ">=",
-        "<" => "<",
-        ">" => ">",
-        _ => "=",
-    }
-}
-
 /// Source of `node` with single spaces between tokens, signs glued to the
 /// number they negate and operator aliases canonicalised.
 fn normalise(node: Node<'_>, text: &str) -> String {
@@ -355,7 +335,7 @@ fn normalise_tokens(tokens: Vec<Node<'_>>, text: &str) -> String {
         if !out.is_empty() && !glue {
             out.push(' ');
         }
-        out.push_str(if token.kind() == kind::COMPARISON_OPERATOR { canonical_operator(t) } else { t });
+        out.push_str(if token.kind() == kind::COMPARISON_OPERATOR { syntax::canonical_operator(t) } else { t });
         // A sign that does not follow a value negates the number after it.
         glue = t == "-" && !previous_is_value;
         previous_is_value = matches!(token.kind(), kind::IDENTIFIER | kind::NUMBER | kind::INFINITY | "]");

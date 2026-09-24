@@ -14,7 +14,6 @@ use tower_lsp_server::ls_types::{
 };
 use tree_sitter::Node;
 
-use crate::config::Config;
 use crate::document::Document;
 use crate::features::diagnostics::codes;
 use crate::index::{EntityKind, Namespace, Role, Section, Symbol};
@@ -22,28 +21,6 @@ use crate::syntax::{self, kind};
 
 /// Source action kind for reordering sections canonically.
 pub const ORGANIZE_SECTIONS: &str = "source.organizeSections";
-
-/// Single-word section keywords (`src/scanner.c`): read as keywords when they
-/// are the first token of a line.
-const LINE_START_KEYWORDS: &[&str] = &[
-    "bound",
-    "bounds",
-    "gen",
-    "general",
-    "generals",
-    "integer",
-    "integers",
-    "bin",
-    "binary",
-    "binaries",
-    "semi",
-    "semis",
-    "semi-continuous",
-    "sos",
-    "end",
-    "genconstr",
-    "genconstrs",
-];
 
 /// Type-section roles with their section kinds and the header written when
 /// the section has to be created.
@@ -59,8 +36,7 @@ type Edit = (Range<usize>, String);
 
 /// Code actions for `range`.
 #[must_use]
-pub fn actions(doc: &Document, range: LspRange, context: &CodeActionContext, _config: &Config) -> Vec<CodeActionOrCommand> {
-    // No setting affects code actions yet.
+pub fn actions(doc: &Document, range: LspRange, context: &CodeActionContext) -> Vec<CodeActionOrCommand> {
     let mut actions = Actions { doc, context, request: doc.byte_range(range), out: Vec::new() };
     debug_assert!(actions.request.start <= actions.request.end && actions.request.end <= doc.text.len());
 
@@ -243,7 +219,7 @@ impl Actions<'_> {
         if here.is_empty() {
             return;
         }
-        let fix = |n: Node<'_>| (n.byte_range(), mirror_spelling(doc.node_text(n)).to_owned());
+        let fix = |n: Node<'_>| (n.byte_range(), syntax::canonical_operator(doc.node_text(n)).to_owned());
         for &op in &here {
             let (range, text) = fix(op);
             let diagnostics = self.diagnostics(codes::OPERATOR_SPELLING, &range);
@@ -280,7 +256,7 @@ impl Actions<'_> {
                     };
                     (bound.byte_range(), "bound".to_owned())
                 } else {
-                    (occurrence.range.clone(), format!("`{}` entry", type_label(occurrence.role)))
+                    (occurrence.range.clone(), format!("`{}` entry", occurrence.role.section_name()))
                 };
                 let diagnostics = self.diagnostics(codes::UNUSED_DECLARATION, &item);
                 let edit = deletion(&doc.text, &item);
@@ -295,11 +271,11 @@ impl Actions<'_> {
                 .filter(|r| r.is_type_declaration())
                 .find(|&r| conflicts(r, occurrence.role));
             if let Some(first) = earlier {
-                let label = type_label(occurrence.role);
+                let label = occurrence.role.section_name();
                 let title = if first == occurrence.role {
                     format!("Remove duplicate `{label}` entry for `{name}`")
                 } else {
-                    format!("Remove conflicting `{label}` entry for `{name}` (keeps `{}`)", type_label(first))
+                    format!("Remove conflicting `{label}` entry for `{name}` (keeps `{}`)", first.section_name())
                 };
                 let diagnostics = self.diagnostics(codes::CONFLICTING_TYPE, &occurrence.range);
                 let edit = deletion(&doc.text, &occurrence.range);
@@ -349,7 +325,7 @@ impl Actions<'_> {
             if insert.0.start > delete.0.start && insert.0.start < delete.0.end {
                 continue;
             }
-            let title = format!("Move `{}` to `{}`", variable.name, type_label(role));
+            let title = format!("Move `{}` to `{}`", variable.name, role.section_name());
             self.push(title, CodeActionKind::REFACTOR, vec![delete, insert], None, false);
         }
     }
@@ -390,7 +366,7 @@ impl Actions<'_> {
             let names: Vec<&str> = entries.iter().map(|&n| doc.node_text(n)).collect();
             let separators: Vec<&str> = entries.windows(2).map(|w| &doc.text[w[0].end_byte()..w[1].start_byte()]).collect();
             let interleaved = separators.iter().any(|s| !s.trim().is_empty());
-            let keyword = names.iter().any(|n| is_line_start_keyword(n));
+            let keyword = names.iter().any(|n| syntax::is_section_word(n));
             if names.is_sorted() || interleaved || keyword {
                 continue;
             }
@@ -434,7 +410,7 @@ impl Actions<'_> {
                 continue;
             }
             let value: String = doc.text[start.start_byte()..op.start_byte()].chars().filter(|c| !c.is_whitespace()).collect();
-            let rewritten = format!("{} {} {value}", doc.node_text(expression), mirror_operator(doc.node_text(op)));
+            let rewritten = format!("{} {} {value}", doc.node_text(expression), syntax::flip_operator(doc.node_text(op)));
             let title = format!("Rewrite as `{rewritten}`");
             self.push(title, CodeActionKind::REFACTOR_REWRITE, vec![(replaced, rewritten)], None, false);
         }
@@ -497,33 +473,6 @@ fn format_number(value: f64) -> String {
     if magnitude != 0.0 && !(1e-6..1e16).contains(&magnitude) { format!("{value:e}") } else { format!("{value}") }
 }
 
-/// `=<` → `<=`, `=>` → `>=`.
-fn mirror_spelling(op: &str) -> &'static str {
-    debug_assert!(matches!(op, "=<" | "=>"));
-    if op == "=<" { "<=" } else { ">=" }
-}
-
-/// The operator with its sides swapped (`>=` becomes `<=`).
-fn mirror_operator(op: &str) -> &'static str {
-    match op {
-        "<=" | "=<" => ">=",
-        ">=" | "=>" => "<=",
-        "<" => ">",
-        ">" => "<",
-        _ => "=",
-    }
-}
-
-/// Section name for a type-declaration role.
-const fn type_label(role: Role) -> &'static str {
-    match role {
-        Role::Generals => "generals",
-        Role::Integers => "integers",
-        Role::Binaries => "binaries",
-        _ => "semi-continuous",
-    }
-}
-
 /// Whether a later type declaration `later` repeats or contradicts an
 /// earlier `first`. General/integer plus semi-continuous is legitimate
 /// (semi-integer).
@@ -531,10 +480,6 @@ fn conflicts(first: Role, later: Role) -> bool {
     debug_assert!(first.is_type_declaration() && later.is_type_declaration());
     let semi_integer = |a: Role, b: Role| matches!(a, Role::Generals | Role::Integers) && b == Role::SemiContinuous;
     !(semi_integer(first, later) || semi_integer(later, first))
-}
-
-fn is_line_start_keyword(name: &str) -> bool {
-    LINE_START_KEYWORDS.iter().any(|k| k.eq_ignore_ascii_case(name))
 }
 
 /// Line terminator used by the document.
@@ -620,7 +565,7 @@ fn insert_entry(doc: &Document, section_kind: &str, header: &str, entry: &str) -
             .descendant_for_byte_range(line_end.saturating_sub(1), line_end)
             .is_some_and(|n| n.kind() == kind::BLOCK_COMMENT && n.end_byte() > line_end);
         // A keyword-named entry must not start a line.
-        if in_comment || is_line_start_keyword(entry) {
+        if in_comment || syntax::is_section_word(entry) {
             let at = last.end_byte();
             return Some((at..at, format!(" {entry}")));
         }
@@ -636,7 +581,7 @@ fn insert_entry(doc: &Document, section_kind: &str, header: &str, entry: &str) -
     }
     let root = doc.tree.root_node();
     let later = children(root).into_iter().find(|c| c.kind() == kind::END_MARKER || rank(c.kind()).is_some_and(|r| r > own_rank && r > 1));
-    let body = if is_line_start_keyword(entry) { format!("{header} {entry}{eol}") } else { format!("{header}{eol} {entry}{eol}") };
+    let body = if syntax::is_section_word(entry) { format!("{header} {entry}{eol}") } else { format!("{header}{eol} {entry}{eol}") };
     if let Some(node) = later {
         let at = attached_start(doc, node.start_byte())?;
         return Some((at..at, body));
@@ -761,7 +706,7 @@ mod tests {
     }
 
     fn run_with(doc: &Document, at: Range<usize>, context: &CodeActionContext) -> Vec<CodeAction> {
-        actions(doc, doc.range(at), context, &Config::default())
+        actions(doc, doc.range(at), context)
             .into_iter()
             .map(|a| match a {
                 CodeActionOrCommand::CodeAction(action) => action,

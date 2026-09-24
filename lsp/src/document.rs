@@ -100,12 +100,6 @@ impl Document {
         self.semantic_result.as_deref().filter(|r| r.version == self.version)
     }
 
-    /// Latest semantic result, possibly for an older version.
-    #[must_use]
-    pub fn last_semantic(&self) -> Option<&SemanticResult> {
-        self.semantic_result.as_deref()
-    }
-
     /// Byte offset of an LSP position.
     #[must_use]
     pub fn offset(&self, position: lsp::Position) -> usize {

@@ -41,9 +41,6 @@ pub mod codes {
 /// Longest source excerpt quoted in a syntax-error message, in characters.
 const EXCERPT_CHARS: usize = 40;
 
-/// Bound magnitude from which upstream treats a value as infinite.
-const INFINITE_BOUND: f64 = 1e30;
-
 /// All diagnostics for `doc` under `config`.
 #[must_use]
 pub fn compute(doc: &Document, config: &Config) -> Vec<Diagnostic> {
@@ -186,16 +183,6 @@ fn duplicate_names(doc: &Document, out: &mut Vec<Diagnostic>) {
     }
 }
 
-/// Type section named by a type-declaration role.
-const fn type_section(role: Role) -> &'static str {
-    match role {
-        Role::Generals => "generals",
-        Role::Integers => "integers",
-        Role::Binaries => "binaries",
-        _ => "semi-continuous",
-    }
-}
-
 fn conflicting_types(doc: &Document, out: &mut Vec<Diagnostic>) {
     for variable in &doc.index().variables {
         let declarations: Vec<&Occurrence> = variable.occurrences.iter().filter(|o| o.role.is_type_declaration()).collect();
@@ -203,7 +190,7 @@ fn conflicting_types(doc: &Document, out: &mut Vec<Diagnostic>) {
         if declarations.iter().all(|o| o.role == first.role) {
             continue;
         }
-        let mut sections: Vec<&str> = declarations.iter().map(|o| type_section(o.role)).collect();
+        let mut sections: Vec<&str> = declarations.iter().map(|o| o.role.section_name()).collect();
         sections.dedup();
         let message = format!("`{}` is declared in more than one type section: {}", variable.name, sections.join(", "));
         for occurrence in &declarations {
@@ -211,7 +198,7 @@ fn conflicting_types(doc: &Document, out: &mut Vec<Diagnostic>) {
             let others = declarations
                 .iter()
                 .filter(|o| o.role != occurrence.role)
-                .map(|o| related(doc, o.range.clone(), format!("also declared in {}", type_section(o.role))));
+                .map(|o| related(doc, o.range.clone(), format!("also declared in {}", o.role.section_name())));
             d.related_information = Some(others.collect());
             out.push(d);
         }
@@ -247,7 +234,7 @@ fn conflicting_bounds<'d>(doc: &'d Document, out: &mut Vec<Diagnostic>) -> HashS
             .filter_map(|o| doc.node(o.range.clone(), kind::IDENTIFIER)?.parent())
             .filter(|n| n.kind() == kind::BOUND_DECLARATION)
             // Entries that do not parse as a bound are syntax errors, reported elsewhere.
-            .filter_map(|n| Some((n.byte_range(), declared_bounds(n, &doc.text)?)))
+            .filter_map(|n| Some((n.byte_range(), syntax::declared_bounds(n, &doc.text)?)))
             .collect();
         let merged = declarations.iter().fold(VariableBounds::unspecified(), |acc, (_, b)| acc.merge(*b));
         let (Some(lower), Some(upper)) = (merged.lower, merged.upper) else { continue };
@@ -259,70 +246,6 @@ fn conflicting_bounds<'d>(doc: &'d Document, out: &mut Vec<Diagnostic>) -> HashS
         reported.insert(variable.name.as_str());
     }
     reported
-}
-
-/// Bounds set by one `bound_declaration`, as the upstream grammar reads it;
-/// `None` for shapes upstream rejects.
-fn declared_bounds(node: Node<'_>, text: &str) -> Option<VariableBounds> {
-    #[derive(Clone, Copy)]
-    enum Item {
-        Variable,
-        Free,
-        /// `Some(true)` for `<=`-like, `Some(false)` for `>=`-like, `None` for `=`.
-        Operator(Option<bool>),
-        Value(f64),
-    }
-    debug_assert_eq!(node.kind(), kind::BOUND_DECLARATION);
-    let mut items = Vec::new();
-    let mut negative = false;
-    let mut cursor = node.walk();
-    for child in node.children(&mut cursor) {
-        let source = syntax::text(child, text);
-        match child.kind() {
-            "-" => negative = true,
-            kind::IDENTIFIER => items.push(Item::Variable),
-            kind::FREE_KEYWORD => items.push(Item::Free),
-            kind::COMPARISON_OPERATOR => items.push(Item::Operator(match source {
-                "<=" | "=<" | "<" => Some(true),
-                ">=" | "=>" | ">" => Some(false),
-                _ => None,
-            })),
-            kind::NUMBER | kind::INFINITY => {
-                let value = syntax::parse_number(source)?;
-                let value = if negative { -value } else { value };
-                negative = false;
-                items.push(Item::Value(if value >= INFINITE_BOUND {
-                    f64::INFINITY
-                } else if value <= -INFINITE_BOUND {
-                    f64::NEG_INFINITY
-                } else {
-                    value
-                }));
-            }
-            _ => {}
-        }
-    }
-    let bounds = match items.as_slice() {
-        [Item::Variable, Item::Free] => VariableBounds::free(),
-        [Item::Variable, Item::Operator(le), Item::Value(v)] => match le {
-            Some(true) => VariableBounds::upper(*v),
-            Some(false) => VariableBounds::lower(*v),
-            None => VariableBounds::range(*v, *v),
-        },
-        [Item::Value(v), Item::Operator(le), Item::Variable] => match le {
-            Some(true) => VariableBounds::lower(*v),
-            Some(false) => VariableBounds::upper(*v),
-            None => VariableBounds::range(*v, *v),
-        },
-        [Item::Value(a), Item::Operator(Some(true)), Item::Variable, Item::Operator(Some(true)), Item::Value(b)] => {
-            VariableBounds::range(*a, *b)
-        }
-        [Item::Value(a), Item::Operator(Some(false)), Item::Variable, Item::Operator(Some(false)), Item::Value(b)] => {
-            VariableBounds::range(*b, *a)
-        }
-        _ => return None,
-    };
-    Some(bounds)
 }
 
 fn analysis_issue(issue: &AnalysisIssue, doc: &Document, model: &Model, out: &mut Vec<Diagnostic>) {

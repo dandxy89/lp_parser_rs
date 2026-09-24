@@ -174,13 +174,12 @@ pub fn tokens(doc: &Document, range: Option<Range<usize>>) -> Vec<SemanticToken>
     debug_assert!(range.as_ref().is_none_or(|r| r.start <= r.end && r.end <= doc.text.len()), "token range out of bounds");
     match range {
         Some(range) => walk(doc, range, false).out,
-        None if doc.text.len() >= PARALLEL_BYTES => parallel(doc, std::thread::available_parallelism().map_or(1, |n| n.get().min(8))),
-        None => walk(doc, 0..doc.text.len(), false).out,
+        None => match crate::index::workers(doc.text.len()) {
+            1 => walk(doc, 0..doc.text.len(), false).out,
+            threads => parallel(doc, threads),
+        },
     }
 }
-
-/// Documents below this size are tokenised on one thread.
-const PARALLEL_BYTES: usize = 4 * 1024 * 1024;
 
 /// Tokenise with `threads` workers, each encoding the tokens that start in
 /// its slice of the text, then re-base each chunk's first token on the
