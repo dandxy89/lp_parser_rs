@@ -1192,12 +1192,11 @@ empty =\n";
     #[test]
     fn test_infinite_model_data_is_an_error_not_a_panic() {
         // Regression: the crate's `optimise` panics when HiGHS rejects the model,
-        // and the parser accepts infinite right-hand sides, bounds and
-        // coefficients. Presolve ran on the UI thread, so it took the TUI down.
+        // and the parser accepts infinite right-hand sides and bounds (infinite
+        // coefficients are now a parse error). Presolve ran on the UI thread, so it took the TUI down.
         let sources = [
             "Minimize\n obj: x + y\nSubject To\n c1: x + y >= inf\nEnd",
             "Minimize\n obj: x\nSubject To\n c1: x >= 1\nBounds\n x >= inf\nEnd",
-            "Minimize\n obj: x\nSubject To\n c1: 1e400 x >= 1\nEnd",
         ];
         for source in sources {
             let problem = LpProblem::parse(source).expect("fixture must parse");
