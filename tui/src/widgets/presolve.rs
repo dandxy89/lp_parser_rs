@@ -170,7 +170,7 @@ pub fn draw_presolve_log(frame: &mut Frame, area: Rect, app: &mut App) {
 
     // Near-full-screen: the log lines are wide, and a rewrite worth inspecting
     // has more of them than a popup could hold.
-    let popup = crate::widgets::report_rect(area);
+    let popup = crate::widgets::report_rect(area, pane.lines.len());
 
     let inner_height = popup.height.saturating_sub(2) as usize;
     let max_scroll = u16::try_from(pane.lines.len().saturating_sub(inner_height)).unwrap_or(u16::MAX);
@@ -183,8 +183,7 @@ pub fn draw_presolve_log(frame: &mut Frame, area: Rect, app: &mut App) {
         border_style,
     ));
 
-    frame.render_widget(Clear, popup);
-    frame.render_widget(Paragraph::new(pane.lines.clone()).block(block).scroll((pane.scroll, 0)), popup);
+    crate::widgets::draw_scroll_pane(frame, popup, &pane.lines, pane.scroll, block);
 }
 
 /// Summary of the previous run: the headline plus a per-pass breakdown, so the

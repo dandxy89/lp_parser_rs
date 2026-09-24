@@ -305,8 +305,6 @@ fn format_value(value: f64) -> String {
 /// Takes `&mut App` so the scroll offset can be clamped to the real content
 /// height once the visible window is known, matching the help overlay.
 pub fn draw_diagnostics(frame: &mut ratatui::Frame, area: ratatui::layout::Rect, app: &mut crate::app::App) {
-    use ratatui::widgets::{Clear, Paragraph};
-
     let Some(pane) = &mut app.diagnostics else {
         return;
     };
@@ -317,7 +315,7 @@ pub fn draw_diagnostics(frame: &mut ratatui::Frame, area: ratatui::layout::Rect,
 
     // Near-full-screen: the tables are wide, and the value is in reading
     // several of them against each other.
-    let popup = crate::widgets::report_rect(area);
+    let popup = crate::widgets::report_rect(area, pane.lines.len());
 
     let inner_height = popup.height.saturating_sub(2) as usize;
     let max_scroll = u16::try_from(pane.lines.len().saturating_sub(inner_height)).unwrap_or(u16::MAX);
@@ -327,8 +325,7 @@ pub fn draw_diagnostics(frame: &mut ratatui::Frame, area: ratatui::layout::Rect,
     let hints = if max_scroll > 0 { "j/k:scroll  Esc:close" } else { "Esc:close" };
     let block = crate::widgets::panel_block(border_style).title(crate::widgets::title_with_hints("Diagnostics", hints, border_style));
 
-    frame.render_widget(Clear, popup);
-    frame.render_widget(Paragraph::new(pane.lines.clone()).block(block).scroll((pane.scroll, 0)), popup);
+    crate::widgets::draw_scroll_pane(frame, popup, &pane.lines, pane.scroll, block);
 }
 
 #[cfg(test)]

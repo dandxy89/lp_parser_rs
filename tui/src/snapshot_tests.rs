@@ -359,6 +359,19 @@ fn the_divider_takes_the_focused_style_and_the_scrollbar_stays_inside() {
     assert!(thumb, "the sidebar scrollbar runs inside its border");
 }
 
+/// A report pane taller than the screen shows where in it the reader is.
+#[test]
+fn a_long_report_pane_has_a_scrollbar() {
+    let mut app = inspect_app();
+    let lines = (0..200).map(|i| ratatui::text::Line::from(format!("line {i}"))).collect();
+    app.diagnostics = Some(crate::state::ScrollPane { lines, scroll: 50, export: None });
+    let terminal = render(&mut app, 80, 24);
+    let buffer = terminal.backend().buffer();
+    let thumb = (0..24).any(|y| buffer[(79, y)].symbol() == "\u{2503}");
+    assert!(thumb, "the pane's right edge carries the scrollbar thumb");
+    assert!(frame_contains(&terminal, "line 50"), "the pane draws from its offset");
+}
+
 /// The narrowest supported width: the tab bar compacts rather than pushing
 /// the active tab off the end.
 #[test]

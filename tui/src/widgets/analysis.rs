@@ -7,7 +7,6 @@
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Clear, Paragraph};
 
 use crate::state::AnalysisState;
 use crate::theme::theme;
@@ -49,7 +48,7 @@ pub fn draw_analysis(frame: &mut ratatui::Frame, area: Rect, app: &mut crate::ap
             (centred_rect(area, 76.min(area.width), 5.min(area.height)), lines, Line::styled(format!(" {label} "), border_style))
         }
         AnalysisState::Done { label, pane } => {
-            let popup = crate::widgets::report_rect(area);
+            let popup = crate::widgets::report_rect(area, pane.lines.len());
             let inner_height = popup.height.saturating_sub(2) as usize;
             let max_scroll = u16::try_from(pane.lines.len().saturating_sub(inner_height)).unwrap_or(u16::MAX);
             pane.scroll = pane.scroll.min(max_scroll);
@@ -60,8 +59,7 @@ pub fn draw_analysis(frame: &mut ratatui::Frame, area: Rect, app: &mut crate::ap
 
     let scroll = app.analysis.pane().map_or(0, |pane| pane.scroll);
     let block = panel_block(border_style).title(title);
-    frame.render_widget(Clear, popup);
-    frame.render_widget(Paragraph::new(lines).block(block).scroll((scroll, 0)), popup);
+    crate::widgets::draw_scroll_pane(frame, popup, &lines, scroll, block);
 }
 
 /// Packed key hints as a body line, indented to the pane's text column.

@@ -383,15 +383,35 @@ pub fn push_heading(lines: &mut Vec<Line<'static>>, title: &str, note: &str) {
     }
 }
 
-/// The rectangle for a full-screen report overlay: the whole width, inset by
-/// one row top and bottom so the tab bar and status bar stay readable behind
-/// it. Insetting the sides as well left a two-column sliver of the panel
-/// underneath showing through, which read as a second, broken border.
-pub const fn report_rect(area: Rect) -> Rect {
+/// The rectangle for a report overlay holding `content_lines` lines: the
+/// whole width, and only as tall as the content (plus borders) needs, centred
+/// in the screen less a row top and bottom — so the tab bar and the status
+/// bar, which carries the pane's keys, stay readable behind it. A short report
+/// no longer sits in a screenful of empty box. Insetting the sides as well
+/// left a two-column sliver of the panel underneath showing through, which
+/// read as a second, broken border.
+pub fn report_rect(area: Rect, content_lines: usize) -> Rect {
     if area.height <= 2 {
         return area;
     }
-    Rect { x: area.x, y: area.y + 1, width: area.width, height: area.height - 2 }
+    let available = area.height - 2;
+    let wanted = u16::try_from(content_lines.saturating_add(2)).unwrap_or(u16::MAX);
+    let height = wanted.min(available);
+    Rect { x: area.x, y: area.y + 1 + (available - height) / 2, width: area.width, height }
+}
+
+/// Draw a scrollable report pane: `lines` inside `block` at `popup`, from
+/// `scroll`, with the shared scrollbar down the right edge when the content
+/// is taller than the pane.
+pub fn draw_scroll_pane(frame: &mut ratatui::Frame, popup: Rect, lines: &[Line<'static>], scroll: u16, block: Block<'static>) {
+    frame.render_widget(ratatui::widgets::Clear, popup);
+    frame.render_widget(ratatui::widgets::Paragraph::new(lines.to_vec()).block(block).scroll((scroll, 0)), popup);
+    let inner_height = popup.height.saturating_sub(2) as usize;
+    if lines.len() > inner_height {
+        let max_scroll = lines.len() - inner_height;
+        let mut state = ratatui::widgets::ScrollbarState::new(max_scroll + 1).position(scroll as usize);
+        render_panel_scrollbar(frame, popup, &mut state);
+    }
 }
 
 /// Build an inline gauge bar like `▐███░░░░░▌` for a fraction in `[0, 1]`.
@@ -582,6 +602,16 @@ mod tests {
         let wide = truncate_middle("\u{6f22}\u{5b57}\u{6f22}\u{5b57}", 5);
         assert_eq!(wide, "\u{6f22}\u{2026}\u{5b57}");
         assert!(unicode_width::UnicodeWidthStr::width(wide.as_ref()) <= 5);
+    }
+
+    #[test]
+    fn report_panes_are_as_tall_as_their_content() {
+        let area = Rect::new(0, 0, 120, 40);
+        let short = report_rect(area, 10);
+        assert_eq!(short.height, 12, "ten lines and two borders");
+        assert_eq!(short.width, 120, "always the full width");
+        assert_eq!(short.y, 1 + (38 - 12) / 2, "centred between the tab and status bars");
+        assert_eq!(report_rect(area, 500), Rect::new(0, 1, 120, 38), "a long report fills the screen and scrolls");
     }
 
     #[test]
