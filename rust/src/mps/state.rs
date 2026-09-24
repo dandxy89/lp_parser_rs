@@ -190,7 +190,6 @@ impl<'input> MpsParseState<'input> {
 
     /// Validate required sections and build the final [`ParseResult`].
     fn build_result(mut self) -> LpResult<ParseResult<'input>> {
-        debug_assert!(self.has_rows || !self.has_columns, "COLUMNS without ROWS is inconsistent state");
         if self.columns.in_integer_block {
             eprintln!("unclosed INTORG marker block at end of MPS input; trailing columns treated as integer");
         }
@@ -262,7 +261,6 @@ pub fn parse_mps(input: &str) -> LpResult<ParseResult<'_>> {
     if input.trim().is_empty() {
         return Err(LpParseError::parse_error(0, "MPS input is empty"));
     }
-    debug_assert!(input.contains('\n'), "parse_mps input must contain at least one newline (multi-line MPS expected)");
 
     let mut state = MpsParseState::new();
 
@@ -303,9 +301,6 @@ pub fn parse_mps(input: &str) -> LpResult<ParseResult<'_>> {
 /// ```
 #[must_use]
 pub fn extract_mps_name(input: &str) -> Option<String> {
-    debug_assert!(!input.is_empty(), "extract_mps_name called with empty input");
-    debug_assert!(input.is_ascii() || input.is_char_boundary(0), "input must be valid UTF-8");
-
     for line in input.lines() {
         if line.trim().is_empty() || line.starts_with('*') {
             continue;

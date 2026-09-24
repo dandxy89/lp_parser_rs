@@ -1059,6 +1059,21 @@ fn assert_all_err(inputs: &[&str]) {
     }
 }
 
+/// Degenerate external input must produce errors (or parse), never trip a
+/// debug assertion.
+#[test]
+fn test_degenerate_input_does_not_panic() {
+    for input in ["", "   \n", "ROWS", "ENDATA", "COLUMNS\nENDATA\n"] {
+        assert!(parse_mps(input).is_err(), "expected parse error for {input:?}");
+        assert!(crate::LpProblem::parse_mps(input).is_err(), "expected parse error for {input:?}");
+    }
+    assert_eq!(extract_mps_name(""), None);
+
+    // No trailing newline after ENDATA.
+    let problem = crate::LpProblem::parse_mps("NAME t\nROWS\n N  obj\nCOLUMNS\n    x1        obj       1\nENDATA").unwrap();
+    assert_eq!(problem.variable_count(), 1);
+}
+
 #[test]
 fn test_rows_section_errors() {
     assert_all_err(&[
