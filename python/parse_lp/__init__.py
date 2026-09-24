@@ -14,8 +14,10 @@ from .parse_lp import (
     LpParser,
 )
 
-# Type aliases are defined in parse_lp.pyi for static type checking.
-# Users can import them with: from parse_lp.parse_lp import Objective, Constraint, etc.
+# Type aliases (Objective, Constraint, VariableInfo, ...) exist only in the
+# parse_lp.pyi stub, not at runtime, so importing them from parse_lp.parse_lp
+# fails outside a type checker. Import them inside an `if TYPE_CHECKING:` block
+# and use them only in annotations.
 
 __version__ = _version("parse_lp")
 __all__ = [
