@@ -1249,7 +1249,7 @@ impl App {
                 Err(mpsc::TryRecvError::Empty) => {} // still parsing
                 Err(mpsc::TryRecvError::Disconnected) => {
                     self.watch.receive = None;
-                    "reload failed: parse thread disconnected".clone_into(&mut self.yank.message);
+                    self.yank.message = format!("reload failed: {}", crate::disconnected("parse"));
                     self.yank.flash = Some(Instant::now());
                 }
             }
@@ -1357,7 +1357,7 @@ impl App {
             }
             Err(mpsc::TryRecvError::Empty) => {} // still running
             Err(mpsc::TryRecvError::Disconnected) => {
-                self.analysis = AnalysisState::Failed { label, error: format!("{label} thread disconnected") };
+                self.analysis = AnalysisState::Failed { label, error: crate::disconnected(label) };
                 self.receive_analysis = None;
             }
         }
@@ -1382,7 +1382,7 @@ impl App {
             }
             Err(mpsc::TryRecvError::Empty) => {} // still running
             Err(mpsc::TryRecvError::Disconnected) => {
-                self.solver.diagnosis = DiagnosisState::Failed("Diagnosis thread disconnected".to_owned());
+                self.solver.diagnosis = DiagnosisState::Failed(crate::disconnected("Diagnosis"));
                 self.solver.receive_diagnosis = None;
             }
         }
@@ -1415,7 +1415,7 @@ impl App {
             }
             Err(mpsc::TryRecvError::Empty) => {} // still running
             Err(mpsc::TryRecvError::Disconnected) => {
-                self.solver.state = SolveState::Failed("Solver thread disconnected".to_owned());
+                self.solver.state = SolveState::Failed(crate::disconnected("Solver"));
                 self.solver.receive = None;
             }
         }
@@ -1427,14 +1427,14 @@ impl App {
         let got1 = self.solver.receive.as_ref().and_then(|rx| match rx.try_recv() {
             Ok(result) => Some(result),
             Err(mpsc::TryRecvError::Empty) => None,
-            Err(mpsc::TryRecvError::Disconnected) => Some(Err("Solver thread 1 disconnected".to_owned())),
+            Err(mpsc::TryRecvError::Disconnected) => Some(Err(crate::disconnected("Solver 1"))),
         });
 
         // Poll channel 2.
         let got2 = self.solver.receive2.as_ref().and_then(|rx| match rx.try_recv() {
             Ok(result) => Some(result),
             Err(mpsc::TryRecvError::Empty) => None,
-            Err(mpsc::TryRecvError::Disconnected) => Some(Err("Solver thread 2 disconnected".to_owned())),
+            Err(mpsc::TryRecvError::Disconnected) => Some(Err(crate::disconnected("Solver 2"))),
         });
 
         // Handle errors first.

@@ -40,8 +40,8 @@ mod widgets;
 
 use std::io::{self, Write as _, stderr};
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use clap::Parser;
@@ -153,6 +153,40 @@ fn build_rename_rules(raw: &[String]) -> Result<Vec<(regex::Regex, String)>, Box
 /// Needed by suspend/resume and the panic hook, both of which must mirror the
 /// push/pop; a global saves threading it through the event loop.
 static KEYBOARD_ENHANCED: AtomicBool = AtomicBool::new(false);
+
+/// The most recent panic on a background thread, recorded by the panic hook.
+///
+/// A worker's panic must not touch the terminal the main loop is still drawing
+/// on, so the hook parks the message here instead of printing it, and the
+/// channel-disconnect handlers fold it into the error they show.
+static WORKER_PANIC: Mutex<Option<String>> = Mutex::new(None);
+
+/// The error to show when `what`'s worker thread hung up without a result,
+/// naming the panic that killed it when the hook recorded one.
+pub(crate) fn disconnected(what: &str) -> String {
+    debug_assert!(!what.is_empty(), "a disconnected worker must be named");
+    // A poisoned lock only means another thread panicked while holding it; the
+    // message it guards is still a plain `Option<String>`.
+    let panic = WORKER_PANIC.lock().unwrap_or_else(std::sync::PoisonError::into_inner).take();
+    match panic {
+        Some(message) => format!("{what} thread panicked: {message}"),
+        None => format!("{what} thread disconnected"),
+    }
+}
+
+/// Describe a panic as `message (at file:line)` for [`WORKER_PANIC`].
+fn describe_panic(info: &std::panic::PanicHookInfo<'_>) -> String {
+    let payload = info.payload();
+    let message = payload
+        .downcast_ref::<&str>()
+        .copied()
+        .or_else(|| payload.downcast_ref::<String>().map(String::as_str))
+        .unwrap_or("non-string panic payload");
+    match info.location() {
+        Some(location) => format!("{message} (at {}:{})", location.file(), location.line()),
+        None => message.to_owned(),
+    }
+}
 
 /// Suspend the process (Ctrl+Z) and resume cleanly.
 ///
@@ -400,8 +434,18 @@ fn launch_tui(mut app: App, watch: bool) -> Result<(), Box<dyn std::error::Error
     // Errors are deliberately ignored here: we are already panicking and must not
     // double-panic, so each restoration step is attempted independently to ensure
     // one failure cannot skip the rest.
+    //
+    // The hook is process-global, but only the main thread owns the terminal: a
+    // background worker's panic is recorded for the UI to report (its channel
+    // disconnects) rather than tearing the screen down under a live main loop.
     let original_hook = std::panic::take_hook();
+    let main_thread = std::thread::current().id();
     std::panic::set_hook(Box::new(move |panic_info| {
+        if std::thread::current().id() != main_thread {
+            let message = describe_panic(panic_info);
+            *WORKER_PANIC.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = Some(message);
+            return;
+        }
         if KEYBOARD_ENHANCED.load(Ordering::Relaxed) {
             let _ = execute!(io::stderr(), PopKeyboardEnhancementFlags);
         }
@@ -437,4 +481,19 @@ fn launch_tui(mut app: App, watch: bool) -> Result<(), Box<dyn std::error::Error
     paste?;
     cursor?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_recorded_worker_panic_is_reported_once_by_the_disconnect_error() {
+        // Regression: a worker panic used to run the process-global hook, which
+        // restored the terminal while the main loop kept drawing. The hook now
+        // parks the message for the channel-disconnect error to report instead.
+        *WORKER_PANIC.lock().expect("test lock") = Some("boom (at x.rs:1)".to_owned());
+        assert_eq!(disconnected("Solver"), "Solver thread panicked: boom (at x.rs:1)");
+        assert_eq!(disconnected("Solver"), "Solver thread disconnected", "the message is consumed by the first report");
+    }
 }
