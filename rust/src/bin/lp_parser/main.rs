@@ -56,6 +56,7 @@ fn cmd_parse(args: ParseArgs, verbose: bool) -> Result<(), BoxError> {
         }
     }
 
+    writer.finish()?;
     Ok(())
 }
 
@@ -89,6 +90,7 @@ fn cmd_info(args: &InfoArgs, verbose: bool) -> Result<(), BoxError> {
         }
     }
 
+    writer.finish()?;
     Ok(())
 }
 
@@ -154,6 +156,7 @@ fn cmd_analyze(args: AnalyzeArgs, verbose: bool) -> Result<ExitCode, BoxError> {
         }
     }
 
+    writer.finish()?;
     let has_errors = analysis.issues.iter().any(|issue| issue.severity == IssueSeverity::Error);
     Ok(if has_errors { ExitCode::from(1) } else { ExitCode::SUCCESS })
 }
@@ -454,6 +457,7 @@ fn cmd_diff(args: &DiffArgs, verbose: bool) -> Result<ExitCode, BoxError> {
         }
     }
 
+    writer.finish()?;
     Ok(if diff.is_empty() { ExitCode::SUCCESS } else { ExitCode::from(1) })
 }
 
@@ -493,6 +497,7 @@ fn cmd_convert(args: ConvertArgs, verbose: bool, quiet: bool) -> Result<(), BoxE
 
             let mut writer = OutputWriter::new(args.output)?;
             write!(writer, "{output}")?;
+            writer.finish()?;
         }
         ConvertFormat::Mps => {
             let options = MpsWriterOptions { decimal_precision: args.precision, ..MpsWriterOptions::default() };
@@ -500,6 +505,7 @@ fn cmd_convert(args: ConvertArgs, verbose: bool, quiet: bool) -> Result<(), BoxE
 
             let mut writer = OutputWriter::new(args.output)?;
             write!(writer, "{output}")?;
+            writer.finish()?;
         }
         #[cfg(feature = "csv")]
         ConvertFormat::Csv => {
@@ -522,11 +528,13 @@ fn cmd_convert(args: ConvertArgs, verbose: bool, quiet: bool) -> Result<(), BoxE
                 serde_json::to_writer(&mut writer, &problem)?;
             }
             writeln!(writer)?;
+            writer.finish()?;
         }
         #[cfg(feature = "serde")]
         ConvertFormat::Yaml => {
             let mut writer = OutputWriter::new(args.output)?;
             serde_yaml::to_writer(&mut writer, &problem)?;
+            writer.finish()?;
         }
     }
 
@@ -623,20 +631,27 @@ fn cmd_solve(args: SolveArgs, verbose: bool, quiet: bool) -> Result<(), BoxError
         }
     }
 
+    writer.finish()?;
     Ok(())
 }
 
 enum OutputWriter {
     Stdout(Stdout),
-    File(fs::File),
+    File(io::BufWriter<fs::File>),
 }
 
 impl OutputWriter {
     fn new(path: Option<PathBuf>) -> io::Result<Self> {
         match path {
-            Some(p) => Ok(Self::File(fs::File::create(p)?)),
+            Some(p) => Ok(Self::File(io::BufWriter::new(fs::File::create(p)?))),
             None => Ok(Self::Stdout(io::stdout())),
         }
+    }
+
+    /// Flush buffered output. Call this once writing is done: dropping a
+    /// `BufWriter` flushes too, but silently discards any error.
+    fn finish(mut self) -> io::Result<()> {
+        self.flush()
     }
 }
 
