@@ -241,7 +241,7 @@ impl LpParser {
 
     /// Compare this problem against another parser's problem.
     ///
-    /// Returns a dict with `vars_added`, `vars_removed`, `vars_type_changed`,
+    /// Returns a dict with `sense_changed`, `vars_added`, `vars_removed`, `vars_type_changed`,
     /// `cons_added`, `cons_removed`, `cons_modified`, `objs_added`,
     /// `objs_removed`, `objs_modified`, and `is_empty`.
     fn diff(&self, py: Python, other: &Self) -> PyResult<Py<PyAny>> {
@@ -251,6 +251,7 @@ impl LpParser {
         let is_empty = result.is_empty();
 
         let dict = PyDict::new(py);
+        dict.set_item("sense_changed", result.sense_changed)?;
         dict.set_item("vars_added", result.vars_added)?;
         dict.set_item("vars_removed", result.vars_removed)?;
         dict.set_item("vars_type_changed", result.vars_type_changed)?;

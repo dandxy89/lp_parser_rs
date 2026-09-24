@@ -105,6 +105,8 @@ pub struct DiffOptions<'a> {
 /// of human-readable change descriptions.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct LpDiff {
+    /// The optimisation sense, `(old, new)`, when it differs between the problems.
+    pub sense_changed: Option<(String, String)>,
     /// Variables present only in the second problem.
     pub vars_added: Vec<String>,
     /// Variables present only in the first problem.
@@ -130,7 +132,8 @@ impl LpDiff {
     /// options used, i.e. no additions, removals, or modifications were found.
     #[must_use]
     pub const fn is_empty(&self) -> bool {
-        self.vars_added.is_empty()
+        self.sense_changed.is_none()
+            && self.vars_added.is_empty()
             && self.vars_removed.is_empty()
             && self.vars_type_changed.is_empty()
             && self.cons_added.is_empty()
@@ -294,7 +297,10 @@ pub fn compare(p1: &LpProblem, p2: &LpProblem, options: &DiffOptions) -> LpDiff 
         }
     }
 
+    let sense_changed = (p1.sense != p2.sense).then(|| (p1.sense.to_string(), p2.sense.to_string()));
+
     LpDiff {
+        sense_changed,
         vars_added: vars2.difference(&vars1).cloned().collect(),
         vars_removed: vars1.difference(&vars2).cloned().collect(),
         vars_type_changed,
@@ -501,6 +507,16 @@ mod tests {
         let p3 = parse("Minimize\n obj: x + y\nSubject To\n c1: x + y >= 1\nSOS\n s: S2:: x:1 y:2\nEnd");
         let diff = p1.diff(&p3, &opts(DiffTol::default()));
         assert_eq!(diff.cons_modified, vec![("s".to_string(), vec!["SOS definition changed".to_string()])]);
+    }
+
+    #[test]
+    fn detects_sense_change() {
+        let p1 = parse("Minimize\n obj: x\nSubject To\n c1: x >= 1\nEnd");
+        let p2 = parse("Maximize\n obj: x\nSubject To\n c1: x >= 1\nEnd");
+        let diff = p1.diff(&p2, &opts(DiffTol::default()));
+        assert_eq!(diff.sense_changed, Some(("Minimize".to_string(), "Maximize".to_string())));
+        assert!(!diff.is_empty(), "a sense change is a difference");
+        assert_eq!(p1.diff(&p1, &opts(DiffTol::default())).sense_changed, None);
     }
 
     #[test]

@@ -383,6 +383,7 @@ fn build_diff_json(args: &DiffArgs, p1: &LpProblem, p2: &LpProblem, diff: &LpDif
         "abs_tol": tol.abs,
         "rel_tol": tol.rel,
         "rename_rule_count": rule_count,
+        "sense_changed": diff.sense_changed,
         "counts": {
             "objectives": [p1.objective_count(), p2.objective_count()],
             "constraints": [p1.constraint_count(), p2.constraint_count()],

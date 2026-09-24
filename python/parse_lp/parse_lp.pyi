@@ -38,6 +38,7 @@ class VariableInfo(TypedDict):
     upper: float | None
 
 class LpDiffResult(TypedDict):
+    sense_changed: tuple[str, str] | None
     vars_added: list[str]
     vars_removed: list[str]
     vars_type_changed: list[tuple[str, str, str]]
