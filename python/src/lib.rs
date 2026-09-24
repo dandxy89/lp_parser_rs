@@ -1,7 +1,7 @@
 // Allow pedantic lints that are unavoidable due to PyO3 macro requirements
 #![allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap, clippy::needless_pass_by_value, clippy::unnecessary_wraps)]
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use lp_parser_rs::analysis::AnalysisConfig;
 use lp_parser_rs::diff::DiffOptions;
@@ -44,7 +44,7 @@ impl LpParser {
     /// -> LP); pass `format` to [`from_file`] to override it.
     #[new]
     #[pyo3(signature = (lp_file))]
-    fn new(py: Python, lp_file: String) -> PyResult<Self> {
+    fn new(py: Python, lp_file: PathBuf) -> PyResult<Self> {
         Self::from_file(py, lp_file, None)
     }
 
@@ -65,21 +65,21 @@ impl LpParser {
     /// extension (`.mps` -> MPS, everything else -> LP).
     #[staticmethod]
     #[pyo3(signature = (path, format=None))]
-    fn from_file(py: Python, path: String, format: Option<&str>) -> PyResult<Self> {
-        if !Path::new(&path).is_file() {
-            return Err(PyFileNotFoundError::new_err(format!("File '{path}' does not exist or is not a file")));
+    fn from_file(py: Python, path: PathBuf, format: Option<&str>) -> PyResult<Self> {
+        if !path.is_file() {
+            return Err(PyFileNotFoundError::new_err(format!("File '{}' does not exist or is not a file", path.display())));
         }
         let inferred = match format {
             Some(fmt) => normalise_format(fmt)?,
-            None if Path::new(&path).extension().is_some_and(|ext| ext.eq_ignore_ascii_case("mps")) => "mps",
+            None if path.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("mps")) => "mps",
             None => "lp",
         };
-        let file_path = PathBuf::from(&path);
+        let file_path = path;
         let problem = py.detach(|| {
             let input = parse_file(&file_path).map_err(|err| LpParseError::new_err(format!("Unable to read file: {err}")))?;
             parse_source(&input, inferred)
         })?;
-        Ok(Self { lp_file: path, source_path: Some(file_path), format: inferred, problem })
+        Ok(Self { lp_file: file_path.to_string_lossy().into_owned(), source_path: Some(file_path), format: inferred, problem })
     }
 
     #[getter]
@@ -106,14 +106,12 @@ impl LpParser {
         Ok(())
     }
 
-    fn to_csv(&self, base_directory: &str) -> PyResult<()> {
-        if !Path::new(&base_directory).is_dir() {
-            return Err(PyNotADirectoryError::new_err(format!("Path {base_directory} is not a directory.")));
+    fn to_csv(&self, base_directory: PathBuf) -> PyResult<()> {
+        if !base_directory.is_dir() {
+            return Err(PyNotADirectoryError::new_err(format!("Path {} is not a directory.", base_directory.display())));
         }
 
-        self.problem
-            .to_csv(Path::new(base_directory))
-            .map_err(|err| PyRuntimeError::new_err(format!("Unable to write to .csv files: {err}")))?;
+        self.problem.to_csv(&base_directory).map_err(|err| PyRuntimeError::new_err(format!("Unable to write to .csv files: {err}")))?;
 
         Ok(())
     }
@@ -217,7 +215,7 @@ impl LpParser {
     }
 
     /// Save the current problem to an LP file
-    fn save_to_file(&self, filepath: String) -> PyResult<()> {
+    fn save_to_file(&self, filepath: PathBuf) -> PyResult<()> {
         let problem = &self.problem;
         let lp_content = write_lp_string_with_options(problem, &LpWriterOptions::default());
         std::fs::write(&filepath, lp_content).map_err(|err| PyRuntimeError::new_err(format!("Failed to write file: {err}")))
@@ -233,7 +231,7 @@ impl LpParser {
 
     /// Save the current problem to an MPS file.
     #[pyo3(signature = (filepath, *, decimal_precision=6, allow_multiple_objectives=false))]
-    fn save_to_mps(&self, filepath: String, decimal_precision: usize, allow_multiple_objectives: bool) -> PyResult<()> {
+    fn save_to_mps(&self, filepath: PathBuf, decimal_precision: usize, allow_multiple_objectives: bool) -> PyResult<()> {
         let content = self.to_mps_string(decimal_precision, allow_multiple_objectives)?;
         std::fs::write(&filepath, content).map_err(|err| PyRuntimeError::new_err(format!("Failed to write file: {err}")))
     }

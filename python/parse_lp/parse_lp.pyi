@@ -1,3 +1,4 @@
+import os
 from typing import Any, Literal, TypedDict
 
 from typing_extensions import TypeAlias
@@ -17,6 +18,7 @@ Sense: TypeAlias = Literal["maximize", "minimize"]
 SenseInput: TypeAlias = Literal["maximize", "max", "minimize", "min"]
 VariableType: TypeAlias = Literal["continuous", "binary", "integer", "general", "free", "semicontinuous"]
 Format: TypeAlias = Literal["lp", "mps"]
+StrPath: TypeAlias = str | os.PathLike[str]
 
 class Coefficient(TypedDict):
     name: str
@@ -69,7 +71,7 @@ ProblemAnalysis: TypeAlias = dict[str, Any]
 class LpParser:
     """Parser, modifier and writer for LP format files, powered by Rust."""
 
-    def __init__(self, lp_file: str) -> None:
+    def __init__(self, lp_file: StrPath) -> None:
         """Create a parser for the given LP file path, parsing it immediately.
 
         Raises FileNotFoundError if the path is not a file. The format is inferred
@@ -81,7 +83,7 @@ class LpParser:
         """Construct a parser from in-memory LP or MPS text, parsing it immediately."""
 
     @staticmethod
-    def from_file(path: str, format: Format | None = None) -> LpParser:
+    def from_file(path: StrPath, format: Format | None = None) -> LpParser:
         """Construct a parser from a file, parsing immediately; format inferred from the extension when omitted (.mps -> MPS)."""
 
     @property
@@ -114,7 +116,7 @@ class LpParser:
         Raises LpInvalidValueError for a parser built with `from_string`, which has no file to re-read.
         """
 
-    def to_csv(self, base_directory: str) -> None:
+    def to_csv(self, base_directory: StrPath) -> None:
         """Export the problem to CSV files in the given directory."""
 
     def to_lp_string(
@@ -130,14 +132,14 @@ class LpParser:
         Raises LpInvalidValueError if max_line_length is 0.
         """
 
-    def save_to_file(self, filepath: str) -> None:
+    def save_to_file(self, filepath: StrPath) -> None:
         """Save the current problem to an LP file."""
 
     def to_mps_string(self, *, decimal_precision: int = 6, allow_multiple_objectives: bool = False) -> str:
         """Write the current problem to an MPS format string."""
 
     def save_to_mps(
-        self, filepath: str, *, decimal_precision: int = 6, allow_multiple_objectives: bool = False
+        self, filepath: StrPath, *, decimal_precision: int = 6, allow_multiple_objectives: bool = False
     ) -> None:
         """Save the current problem to an MPS file."""
 

@@ -268,6 +268,22 @@ class TestReparse:
             parser.parse()
 
 
+class TestPathLikeArguments:
+    """Every path argument accepts os.PathLike as well as str."""
+
+    def test_pathlib_paths_accepted(self, simple_lp_file: Path, tmp_path: Path) -> None:
+        parser = LpParser(simple_lp_file)
+        assert parser.lp_file == str(simple_lp_file)
+        assert len(LpParser.from_file(simple_lp_file).variables) == 2
+
+        parser.save_to_file(tmp_path / "out.lp")
+        parser.save_to_mps(tmp_path / "out.mps")
+        parser.to_csv(tmp_path)
+        assert (tmp_path / "out.lp").is_file()
+        assert (tmp_path / "out.mps").is_file()
+        assert (tmp_path / "variables.csv").is_file()
+
+
 class TestUpdateVariableType:
     LP = "Minimize\n obj: x + y\nSubject To\n c1: x + y >= 1\nBounds\n 2 <= x <= 5\nGenerals\n x\nEnd\n"
 
