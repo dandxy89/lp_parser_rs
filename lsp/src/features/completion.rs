@@ -111,7 +111,7 @@ fn constraint_context(out: &mut Completions<'_>, rest: &[Tok], ends_with_space: 
     }
 }
 
-fn strip_label(tokens: &[Tok]) -> &[Tok] {
+const fn strip_label(tokens: &[Tok]) -> &[Tok] {
     match tokens {
         [Tok::Name, Tok::Colon | Tok::DoubleColon, tail @ ..] => tail,
         _ => tokens,
