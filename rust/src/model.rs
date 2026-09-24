@@ -1003,6 +1003,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::float_cmp)]
     fn test_variable() {
         let mut interner = NameInterner::new();
         let x1 = interner.intern("x1");
