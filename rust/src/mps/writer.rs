@@ -60,14 +60,12 @@
 //!   bound, to avoid falling back to the MPS default integer bounds of
 //!   `[0, 1]`). Re-parsing always yields `Integer`; the `General` designation
 //!   is an LP-format-only distinction that has no MPS analogue.
-//! - [`SemiContinuous`](crate::model::VariableType::SemiContinuous) carries no
-//!   explicit upper bound in this model, but the MPS `SC` bound type requires
-//!   one. A sentinel value (`SEMI_CONTINUOUS_SENTINEL_UPPER`, `1e30`)
-//!   is written instead, and the reader resolves any `SC` bound back to
-//!   `SemiContinuous`, so the type round trips. The flip side: an `SC` bound
-//!   in an *external* MPS file with a meaningful finite upper bound has that
-//!   bound dropped on parse (with a warning on stderr), because the model cannot
-//!   carry both the semi-continuity flag and a bound value.
+//! - [`SemiContinuous`](crate::model::VariableKind::SemiContinuous): per the
+//!   MPS specification the `SC` record's value is the variable's upper bound,
+//!   so a finite upper bound is written there. A semi-continuous variable with
+//!   no upper bound (or `+inf`) gets the conventional "infinite" sentinel
+//!   (`SEMI_CONTINUOUS_SENTINEL_UPPER`, `1e30`), because the record requires a
+//!   value. A lower bound, if any, is written as its own `LO` record first.
 //! - Strict inequalities (`ComparisonOp::LT` / `ComparisonOp::GT`) have no MPS
 //!   representation (only `L`/`G`/`E` rows exist); writing a problem with such
 //!   a constraint returns an error.
@@ -103,9 +101,9 @@ use crate::writer::write_number;
 /// See the "Objectives" section of the module documentation.
 pub const EMPTY_OBJECTIVE_ROW_NAME: &str = "OBJ";
 
-/// Sentinel upper bound written for [`VariableType::SemiContinuous`] variables,
-/// which carry no explicit upper bound in this model. `1e30` is the
-/// conventional "infinity" sentinel used by CPLEX/Gurobi-style MPS files.
+/// Sentinel `SC` bound value written for a semi-continuous variable with no
+/// finite upper bound. `1e30` is the conventional "infinity" sentinel used by
+/// CPLEX/Gurobi-style MPS files.
 pub(crate) const SEMI_CONTINUOUS_SENTINEL_UPPER: f64 = 1e30;
 
 /// Fixed vector label written in the RHS section (the first field of each
@@ -533,7 +531,19 @@ fn write_variable_bound(
             if let Some(lb) = bounds.lower {
                 write_lower_bound(output, var_name, lb, precision)?;
             }
-            let upper = bounds.upper.unwrap_or(SEMI_CONTINUOUS_SENTINEL_UPPER);
+            // The SC value is the upper bound (MPS specification); `+inf` and
+            // "no upper bound" both map to the conventional infinite sentinel.
+            let upper = match bounds.upper {
+                None | Some(f64::INFINITY) => SEMI_CONTINUOUS_SENTINEL_UPPER,
+                Some(ub) if ub.is_nan() => {
+                    return Err(invalid_bound_error(var_name, "has a NaN semi-continuous upper bound, which MPS cannot represent"));
+                }
+                Some(f64::NEG_INFINITY) => {
+                    return Err(invalid_bound_error(var_name, "has a semi-continuous upper bound of -inf, which MPS cannot represent"));
+                }
+                Some(ub) => ub,
+            };
+            debug_assert!(upper.is_finite(), "SC bound value must be finite, got {upper}");
             write_bound_value(output, "SC", var_name, upper, precision).expect("fmt::Write to String is infallible");
             return Ok(());
         }
@@ -1073,6 +1083,29 @@ End
         let reparsed = LpProblem::parse_mps(&output).unwrap();
         let x1 = &reparsed.variables[&reparsed.name_id("x1").unwrap()];
         assert_eq!(x1.kind, VariableKind::SemiContinuous);
+    }
+
+    #[test]
+    fn semi_continuous_upper_bound_is_the_sc_value() {
+        // The BOUNDS lines written for a semi-continuous `x`, whitespace-normalised.
+        let sc_line = |bounds: VariableBounds| -> LpResult<Vec<String>> {
+            let mut problem = LpProblem::new();
+            let x_id = problem.intern("x");
+            problem.add_variable(crate::model::Variable::new(x_id).with_kind(VariableKind::SemiContinuous).with_bounds(bounds));
+            let output = write_mps_string(&problem)?;
+            let bounds_section = output.split("BOUNDS\n").nth(1).expect("BOUNDS section present");
+            Ok(bounds_section
+                .lines()
+                .take_while(|l| l.starts_with(' '))
+                .map(|l| l.split_whitespace().collect::<Vec<_>>().join(" "))
+                .collect())
+        };
+
+        assert_eq!(sc_line(VariableBounds::range(2.0, 50.0)).unwrap(), ["LO BOUND x 2", "SC BOUND x 50"]);
+        assert_eq!(sc_line(VariableBounds::upper(f64::INFINITY)).unwrap(), ["SC BOUND x 1e30"]);
+        assert_eq!(sc_line(VariableBounds::default()).unwrap(), ["SC BOUND x 1e30"]);
+        assert!(sc_line(VariableBounds::upper(f64::NAN)).is_err());
+        assert!(sc_line(VariableBounds::upper(f64::NEG_INFINITY)).is_err());
     }
 
     #[test]
