@@ -132,7 +132,7 @@ pub fn highs_presolve(problem: &LpProblem) -> Result<HighsPresolveReport, String
     }
 
     let started = Instant::now();
-    let built = build_highs_model(problem);
+    let built = build_highs_model(problem)?;
     let (cols_before, rows_before) = (built.variable_names.len(), built.row_constraint_names.len());
     let skipped_sos = built.skipped_sos;
     let (variable_names, row_names) = (built.variable_names, built.row_constraint_names);

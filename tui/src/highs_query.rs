@@ -252,7 +252,7 @@ pub fn iis(problem: &LpProblem) -> Result<Iis, String> {
 
     let started = Instant::now();
     let (relaxed, relaxed_integrality) = relax_integrality(problem);
-    let built = build_highs_model(&relaxed);
+    let built = build_highs_model(&relaxed)?;
     let (variable_names, row_names) = (built.variable_names, built.row_constraint_names);
     let skipped_sos = built.skipped_sos;
 
@@ -385,7 +385,7 @@ pub fn ranging(problem: &LpProblem) -> Result<Ranging, String> {
 
     let started = Instant::now();
     let (relaxed, relaxed_integrality) = relax_integrality(problem);
-    let built = build_highs_model(&relaxed);
+    let built = build_highs_model(&relaxed)?;
     let (variable_names, row_names) = (built.variable_names, built.row_constraint_names);
     let skipped_sos = built.skipped_sos;
     let costs_by_id = primary_objective_coefficients(&relaxed);
@@ -513,7 +513,7 @@ pub fn unbounded_ray(problem: &LpProblem) -> Result<UnboundedRay, String> {
 
     let started = Instant::now();
     let (relaxed, relaxed_integrality) = relax_integrality(problem);
-    let built = build_highs_model(&relaxed);
+    let built = build_highs_model(&relaxed)?;
     let variable_names = built.variable_names;
     let skipped_sos = built.skipped_sos;
     let costs = primary_objective_coefficients(&relaxed);

@@ -1682,7 +1682,7 @@ impl App {
 pub(crate) fn baseline_constraint_rhs(problem: &LpProblem, name: &str) -> Option<f64> {
     let id = problem.name_id(name)?;
     match problem.constraints.get(&id)? {
-        lp_parser_rs::model::Constraint::Standard { rhs, .. } => Some(*rhs),
+        lp_parser_rs::model::Constraint::Standard { rhs, .. } | lp_parser_rs::model::Constraint::Indicator { rhs, .. } => Some(*rhs),
         lp_parser_rs::model::Constraint::SOS { .. } => None,
     }
 }

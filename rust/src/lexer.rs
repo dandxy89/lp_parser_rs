@@ -84,6 +84,33 @@ pub enum RawConstraint<'input> {
         /// Byte offset of the constraint in the source text, if tracked.
         byte_offset: Option<usize>,
     },
+    /// An indicator constraint: `variable = value -> linear constraint`.
+    Indicator {
+        /// Constraint name (borrowed, or owned when auto-generated).
+        name: Cow<'input, str>,
+        /// The (binary) indicator variable.
+        variable: &'input str,
+        /// Whether the constraint is active when the variable is 1 (`true`) or 0.
+        active_value: bool,
+        /// Left-hand-side coefficients of the linear constraint.
+        coefficients: Vec<RawCoefficient<'input>>,
+        /// Comparison operator of the linear constraint.
+        operator: ComparisonOp,
+        /// Right-hand-side value of the linear constraint.
+        rhs: f64,
+        /// Byte offset of the constraint in the source text, if tracked.
+        byte_offset: Option<usize>,
+    },
+}
+
+impl RawConstraint<'_> {
+    /// The constraint's name (`"__c__"` when unnamed).
+    #[must_use]
+    pub fn name(&self) -> &str {
+        match self {
+            Self::Standard { name, .. } | Self::SOS { name, .. } | Self::Indicator { name, .. } => name,
+        }
+    }
 }
 
 /// Raw objective produced by the grammar (zero-copy).
@@ -277,6 +304,12 @@ pub enum Token<'input> {
     #[token("::")]
     DoubleColon,
 
+    /// Implication arrow of an indicator constraint (`b = 1 -> x <= 3`).
+    /// A `-` directly followed by `>` never occurs in a linear expression, so
+    /// this is unambiguous.
+    #[token("->")]
+    Implies,
+
     // === Structural ===
     /// Newline (significant for some parsing contexts)
     #[token("\n")]
@@ -389,6 +422,7 @@ impl<'input> Lexer<'input> {
                     | Token::Lt
                     | Token::Gt
                     | Token::Eq
+                    | Token::Implies
             )
         )
     }
@@ -795,7 +829,9 @@ mod tests {
     #[test]
     fn test_trailing_gt_is_comparison() {
         assert_eq!(tokenize("x>"), vec![Token::Identifier("x"), Token::Gt]);
-        assert_eq!(tokenize("x->"), vec![Token::Identifier("x"), Token::Minus, Token::Gt]);
+        // `->` is the indicator implication arrow, never a sign and a comparison.
+        assert_eq!(tokenize("x->"), vec![Token::Identifier("x"), Token::Implies]);
+        assert_eq!(tokenize("b=1->x"), vec![Token::Identifier("b"), Token::Eq, Token::Number(1.0), Token::Implies, Token::Identifier("x")]);
     }
 
     #[test]

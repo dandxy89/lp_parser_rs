@@ -1006,6 +1006,7 @@ fn empty_rows_cols(problem: &mut LpProblem, pass: &mut Pass<'_>, infeasible: &mu
         match constraint {
             Constraint::Standard { coefficients, .. } => used.extend(coefficients.iter().map(|c| c.name)),
             Constraint::SOS { weights, .. } => used.extend(weights.iter().map(|c| c.name)),
+            Constraint::Indicator { .. } => constraint.for_each_variable(|id| used.push(id)),
         }
     }
     used.sort_unstable();
@@ -1195,6 +1196,8 @@ fn column_scaling(problem: &mut LpProblem, pass: &mut Pass<'_>, factors: &mut Ha
                 }
             }
             Constraint::SOS { weights, .. } => in_sos.extend(weights.iter().map(|weight| weight.name)),
+            // Rows this pass does not rescale: keep their variables unscaled too.
+            Constraint::Indicator { .. } => constraint.for_each_variable(|id| in_sos.push(id)),
         }
     }
 
@@ -1414,7 +1417,7 @@ mod tests {
         let id = problem.name_id(name).expect("row must exist");
         match problem.constraints.get(&id).expect("row must exist") {
             Constraint::Standard { coefficients, rhs, .. } => (coefficients.iter().map(|c| c.value).collect(), *rhs),
-            Constraint::SOS { .. } => panic!("row {name} is an SOS set"),
+            _ => panic!("row {name} is not a standard row"),
         }
     }
 
@@ -1812,7 +1815,7 @@ mod tests {
             .constraints
             .values()
             .map(|c| match c {
-                Constraint::Standard { coefficients, .. } => coefficients.len(),
+                Constraint::Standard { coefficients, .. } | Constraint::Indicator { coefficients, .. } => coefficients.len(),
                 Constraint::SOS { weights, .. } => weights.len(),
             })
             .max()

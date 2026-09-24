@@ -167,6 +167,15 @@ impl LpParser {
                     dict.set_item("rhs", rhs)?;
                     dict.set_item("class", constraint_class_name(problem.constraint_class(*name_id)))?;
                 }
+                Constraint::Indicator { variable, active_value, coefficients, operator, rhs, .. } => {
+                    dict.set_item("type", "indicator")?;
+                    dict.set_item("indicator_variable", problem.resolve(*variable))?;
+                    dict.set_item("indicator_value", u8::from(*active_value))?;
+                    dict.set_item("coefficients", coefficients_to_list(py, problem, coefficients)?)?;
+                    dict.set_item("operator", format!("{operator:?}"))?;
+                    dict.set_item("rhs", rhs)?;
+                    dict.set_item("class", constraint_class_name(problem.constraint_class(*name_id)))?;
+                }
                 Constraint::SOS { weights, sos_type, .. } => {
                     dict.set_item("type", "sos")?;
                     dict.set_item("sos_type", format!("{sos_type:?}"))?;

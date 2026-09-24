@@ -690,13 +690,7 @@ RANGES
 ENDATA
 ";
     let result = parse_mps(input).unwrap();
-    let names: Vec<&str> = result
-        .constraints
-        .iter()
-        .map(|c| match c {
-            RawConstraint::Standard { name, .. } | RawConstraint::SOS { name, .. } => name.as_ref(),
-        })
-        .collect();
+    let names: Vec<&str> = result.constraints.iter().map(RawConstraint::name).collect();
     assert_eq!(names, ["c1", "c1_rng2", "c1_rng"]);
     let problem = crate::LpProblem::parse_mps(input).unwrap();
     assert_eq!(problem.constraint_count(), 3);

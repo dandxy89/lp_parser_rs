@@ -221,6 +221,11 @@ fn write_info_text<W: Write>(writer: &mut W, problem: &LpProblem, args: &InfoArg
                 Constraint::SOS { sos_type, weights, .. } => {
                     writeln!(writer, "  {name}: {sos_type} with {} variables", weights.len())?;
                 }
+                Constraint::Indicator { variable, active_value, coefficients, operator, rhs, .. } => {
+                    let indicator = problem.resolve(*variable);
+                    let value = u8::from(*active_value);
+                    writeln!(writer, "  {name}: {indicator} = {value} -> {} terms {operator} {rhs}", coefficients.len())?;
+                }
             }
         }
     }
@@ -269,6 +274,15 @@ fn build_info_value(problem: &LpProblem, args: &InfoArgs) -> serde_json::Value {
                         ("standard", format!("{} terms {operator} {rhs}", coefficients.len()))
                     }
                     Constraint::SOS { sos_type, weights, .. } => ("sos", format!("{sos_type} with {} variables", weights.len())),
+                    Constraint::Indicator { variable, active_value, coefficients, operator, rhs, .. } => (
+                        "indicator",
+                        format!(
+                            "{} = {} -> {} terms {operator} {rhs}",
+                            problem.resolve(*variable),
+                            u8::from(*active_value),
+                            coefficients.len()
+                        ),
+                    ),
                 };
                 serde_json::json!({ "name": problem.resolve(*name_id), "constraint_type": constraint_type, "details": details })
             })

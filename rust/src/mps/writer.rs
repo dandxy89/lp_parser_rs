@@ -23,7 +23,9 @@
 //! lazy constraints and user cuts, listed like `ROWS` and otherwise ordinary
 //! rows in `COLUMNS`, `RHS` and `RANGES`), `COLUMNS` (integer/general/binary
 //! variables wrapped in `'MARKER'` `INTORG`/`INTEND` blocks), `RHS`, `RANGES`
-//! (see below), `BOUNDS`, `SOS`, `ENDATA`.
+//! (see below), `BOUNDS`, `SOS`, `INDICATORS` (CPLEX: an indicator
+//! constraint is an ordinary row plus an `IF row variable value` line),
+//! `ENDATA`.
 //!
 //! # RANGES
 //!
@@ -200,6 +202,9 @@ fn validate_mps_names(problem: &LpProblem, obj_row_name: &str) -> LpResult<()> {
     }
     for constraint in problem.constraints.values() {
         check_mps_name(problem.resolve(constraint.name()), "constraint")?;
+        if let Constraint::Indicator { variable, .. } = constraint {
+            check_mps_name(problem.resolve(*variable), "variable")?;
+        }
         if let Constraint::SOS { weights, .. } = constraint {
             for weight in weights {
                 let member = problem.resolve(weight.name);
@@ -274,6 +279,7 @@ fn build_mps(output: &mut String, problem: &LpProblem, options: &MpsWriterOption
     write_ranges_section(output, problem, &labels.ranges, options, &range_pairs).expect("fmt::Write to String is infallible");
     write_bounds_section(output, problem, BoundStyle { label: &labels.bounds, precision: options.decimal_precision })?;
     write_sos_section(output, problem, options).expect("fmt::Write to String is infallible");
+    write_indicators_section(output, problem).expect("fmt::Write to String is infallible");
 
     writeln!(output, "ENDATA").expect("fmt::Write to String is infallible");
     Ok(())
@@ -405,15 +411,16 @@ fn write_rows_section(output: &mut String, problem: &LpProblem, obj_row_name: &s
             if range_pairs.skip.contains(name_id) || problem.constraint_class(*name_id) != class {
                 continue;
             }
-            if let Constraint::Standard { name, operator, .. } = constraint {
+            if let Some((_, operator, _)) = constraint.linear_row() {
+                let name = constraint.name();
                 if let Some(header) = header
                     && !wrote_header
                 {
                     writeln!(output, "{header}").expect("fmt::Write to String is infallible");
                     wrote_header = true;
                 }
-                let resolved_name = problem.resolve(*name);
-                let letter = row_type_letter(*operator, resolved_name)?;
+                let resolved_name = problem.resolve(name);
+                let letter = row_type_letter(operator, resolved_name)?;
                 writeln!(output, " {letter}  {resolved_name}").expect("fmt::Write to String is infallible");
             }
         }
@@ -468,8 +475,8 @@ fn build_columns<'p>(
         if range_pairs.skip.contains(constraint_id) {
             continue; // The base row already carries these coefficients.
         }
-        if let Constraint::Standard { name, coefficients, .. } = constraint {
-            let row_name = problem.resolve(*name);
+        if let Some((coefficients, _, _)) = constraint.linear_row() {
+            let row_name = problem.resolve(constraint.name());
             for coeff in coefficients {
                 debug_assert!(problem.variables.contains_key(&coeff.name), "constraint coefficient must reference a registered variable");
                 columns.entry(coeff.name).or_default().push((row_name, coeff.value));
@@ -477,8 +484,15 @@ fn build_columns<'p>(
         }
     }
 
+    // An indicator variable must be a column for the INDICATORS section to
+    // name it, even when it appears in no row.
+    let indicators: FxHashSet<NameId> = problem
+        .constraints
+        .values()
+        .filter_map(|c| if let Constraint::Indicator { variable, .. } = c { Some(*variable) } else { None })
+        .collect();
     for (name_id, variable) in &problem.variables {
-        if needs_marker(variable.kind) {
+        if needs_marker(variable.kind) || indicators.contains(name_id) {
             let entries = columns.entry(*name_id).or_default();
             if entries.is_empty() {
                 entries.push((obj_row_name, 0.0));
@@ -555,13 +569,13 @@ fn write_rhs_section(
         if range_pairs.skip.contains(constraint_id) {
             continue;
         }
-        if let Constraint::Standard { name, rhs, .. } = constraint {
-            if *rhs == 0.0 {
+        if let Some((_, _, rhs)) = constraint.linear_row() {
+            if rhs == 0.0 {
                 continue;
             }
-            let resolved_name = problem.resolve(*name);
+            let resolved_name = problem.resolve(constraint.name());
             write!(output, "    {label:<10} {resolved_name:<10} ")?;
-            write_number(output, *rhs, options.decimal_precision)?;
+            write_number(output, rhs, options.decimal_precision)?;
             writeln!(output)?;
         }
     }
@@ -847,6 +861,24 @@ fn write_sos_section(output: &mut String, problem: &LpProblem, options: &MpsWrit
         }
     }
 
+    Ok(())
+}
+
+/// Write the `INDICATORS` section (CPLEX): one `IF row variable value` line
+/// per indicator constraint, whose linear part is an ordinary row.
+fn write_indicators_section(output: &mut String, problem: &LpProblem) -> std::fmt::Result {
+    let mut wrote_header = false;
+    for constraint in problem.constraints.values() {
+        if let Constraint::Indicator { name, variable, active_value, .. } = constraint {
+            if !wrote_header {
+                writeln!(output, "INDICATORS")?;
+                wrote_header = true;
+            }
+            let row = problem.resolve(*name);
+            let column = problem.resolve(*variable);
+            writeln!(output, " IF {row:<10} {column:<10} {}", u8::from(*active_value))?;
+        }
+    }
     Ok(())
 }
 
@@ -1241,7 +1273,7 @@ End
         let reparsed = LpProblem::parse_mps(&output).unwrap_or_else(|e| panic!("written MPS must re-parse: {e}\n{output}"));
         let rhs_of = |name: &str| match &reparsed.constraints[&reparsed.name_id(name).unwrap()] {
             Constraint::Standard { rhs, .. } => *rhs,
-            Constraint::SOS { .. } => panic!("{name} must be a standard row"),
+            _ => panic!("{name} must be a standard row"),
         };
         assert_eq!(rhs_of("RHS"), 2.0);
         assert_eq!(rhs_of("RNG"), 1.0);

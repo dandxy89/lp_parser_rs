@@ -33,6 +33,8 @@ pub enum Elem<'input> {
     Minus,
     /// A comparison operator (constraint bodies only).
     Op(ComparisonOp),
+    /// `->`, the implication arrow of an indicator constraint.
+    Implies,
 }
 
 fn err(position: usize, message: impl Into<String>) -> LexerError {
@@ -264,6 +266,12 @@ fn assemble_body<'input>(
             None
         };
 
+        let indicator = parse_indicator_head(elems, i)?;
+        if let Some((_, _, next)) = indicator {
+            i = next;
+        }
+        let first_new = constraints.len();
+
         let (lhs, next) = parse_segment(elems, i)?;
         if next == i {
             // parse_segment consumed nothing: the entry starts with something
@@ -330,7 +338,47 @@ fn assemble_body<'input>(
                 byte_offset: Some(entry_loc),
             });
         }
+
+        if let Some((variable, active_value, _)) = indicator {
+            let linear = constraints.split_off(first_new);
+            let Ok([RawConstraint::Standard { name, coefficients, operator, rhs, byte_offset }]) =
+                <[RawConstraint<'input>; 1]>::try_from(linear)
+            else {
+                return Err(err(entry_loc, "the constraint of an indicator must be a single linear constraint, not a range"));
+            };
+            constraints.push(RawConstraint::Indicator { name, variable, active_value, coefficients, operator, rhs, byte_offset });
+        }
     }
 
     Ok(constraints)
+}
+
+/// Recognise the head of an indicator constraint, `var = 0 ->` or
+/// `var = 1 ->`, at `i`. Returns the variable, whether the constraint is
+/// active when the variable is 1, and the index after the arrow.
+///
+/// # Errors
+///
+/// Returns an error when the head is followed by `->` but the value is not
+/// 0 or 1.
+fn parse_indicator_head<'input>(elems: &[SpannedElem<'input>], i: usize) -> Result<Option<(&'input str, bool, usize)>, LexerError> {
+    let (
+        Some(&(_, Elem::Var(variable))),
+        Some((_, Elem::Op(ComparisonOp::EQ))),
+        Some(&(value_loc, Elem::Num(value))),
+        Some((_, Elem::Implies)),
+    ) = (elems.get(i), elems.get(i + 1), elems.get(i + 2), elems.get(i + 3))
+    else {
+        return Ok(None);
+    };
+    // The literals are compared exactly: only `0` and `1` are indicator values.
+    #[allow(clippy::float_cmp)]
+    let active_value = if value == 1.0 {
+        true
+    } else if value == 0.0 {
+        false
+    } else {
+        return Err(err(value_loc, format!("indicator variable '{variable}' must be compared with 0 or 1, not {value}")));
+    };
+    Ok(Some((variable, active_value, i + 4)))
 }

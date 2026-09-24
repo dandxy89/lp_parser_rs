@@ -41,6 +41,7 @@ extern {
         "-" => Token::Minus,
         ":" => Token::Colon,
         "::" => Token::DoubleColon,
+        "->" => Token::Implies,
     }
 }
 
@@ -133,6 +134,7 @@ ConElem: SpannedElem<'input> = {
     <loc:@L> "+" => (loc, Elem::Plus),
     <loc:@L> "-" => (loc, Elem::Minus),
     <loc:@L> <op:CompOp> => (loc, Elem::Op(op)),
+    <loc:@L> "->" => (loc, Elem::Implies),
 };
 
 BoundsSection: Vec<(&'input str, VariableType)> = {

@@ -415,9 +415,30 @@ fn sorted_variable_ids(problem: &LpProblem) -> Vec<NameId> {
     sorted_var_ids
 }
 
+/// Reject a model containing constraints `HiGHS` cannot express, rather than
+/// silently solving the model without them.
+///
+/// # Errors
+///
+/// Returns an error naming the first unsupported constraint.
+pub(crate) fn check_supported(problem: &LpProblem) -> Result<(), String> {
+    for (name_id, constraint) in &problem.constraints {
+        if matches!(constraint, Constraint::Indicator { .. }) {
+            return Err(format!("indicator constraint '{}' is not supported by the HiGHS solver", problem.resolve(*name_id)));
+        }
+    }
+    Ok(())
+}
+
 /// Build a `HiGHS` `RowProblem` from an `LpProblem`.
-pub(crate) fn build_highs_model(problem: &LpProblem) -> BuiltModel {
+///
+/// # Errors
+///
+/// Returns an error when the model has a constraint `HiGHS` cannot express
+/// (see [`check_supported`]).
+pub(crate) fn build_highs_model(problem: &LpProblem) -> Result<BuiltModel, String> {
     debug_assert!(!problem.variables.is_empty(), "cannot build a HiGHS model with no variables");
+    check_supported(problem)?;
 
     // Sort variable NameIds by resolved name for deterministic ordering.
     let sorted_var_ids = sorted_variable_ids(problem);
@@ -482,6 +503,7 @@ pub(crate) fn build_highs_model(problem: &LpProblem) -> BuiltModel {
             Constraint::SOS { .. } => {
                 skipped_sos += 1;
             }
+            Constraint::Indicator { .. } => unreachable!("rejected by check_supported"),
         }
     }
 
@@ -492,7 +514,7 @@ pub(crate) fn build_highs_model(problem: &LpProblem) -> BuiltModel {
 
     debug_assert_eq!(columns.len(), variable_names.len(), "column count must match variable count");
 
-    BuiltModel { row_problem, variable_names, sorted_var_ids, objective_coefficients, row_constraint_names, skipped_sos, sense }
+    Ok(BuiltModel { row_problem, variable_names, sorted_var_ids, objective_coefficients, row_constraint_names, skipped_sos, sense })
 }
 
 /// Hand a built problem to `HiGHS`, reporting a rejected model as an error.
@@ -757,7 +779,7 @@ fn solve(problem: &LpProblem, extra: &[(&str, &str)], cancel: Option<&AtomicBool
     );
 
     let build_start = Instant::now();
-    let model = build_highs_model(problem);
+    let model = build_highs_model(problem)?;
     let build_time = build_start.elapsed();
 
     // pid+sequence-named temp file + explicit cleanup instead of the
@@ -897,6 +919,7 @@ pub fn collect_violations(slack_names: &[String], slack_values: &[f64], toleranc
 pub fn diagnose_infeasibility(problem: &LpProblem) -> Result<InfeasibilityDiagnosis, String> {
     debug_assert!(!problem.variables.is_empty(), "cannot diagnose a problem with no variables");
 
+    check_supported(problem)?;
     let start = Instant::now();
     let sorted_var_ids = sorted_variable_ids(problem);
     let variable_index: HashMap<NameId, usize> = {
@@ -1324,7 +1347,7 @@ empty =\n";
     fn test_an_options_file_key_that_highs_refuses_is_noted_not_fatal() {
         // A user's `highs.opt` is not under our control, so a bad line is
         // reported into the log rather than losing them the solve.
-        let mut model = build_highs_model(&tiny_lp()).row_problem.optimise(highs::Sense::Minimise);
+        let mut model = build_highs_model(&tiny_lp()).expect("tiny LP is supported").row_problem.optimise(highs::Sense::Minimise);
         model.make_quiet();
         assert!(set_option_value(&mut model, "made_up_option", "7").is_err(), "an unknown option must be refused");
         assert!(set_option_value(&mut model, "presolve", "off").is_ok(), "a known option must still apply afterwards");
@@ -1366,6 +1389,15 @@ empty =\n";
         let result = solve_problem(&problem).expect("a bounded MIP must solve");
         let objective = result.objective_value.expect("an optimal solve has an objective");
         assert!((objective - 0.25).abs() < 1e-9, "x = 0, y = 0.5 is optimal, got {objective}");
+    }
+
+    #[test]
+    fn test_unsupported_constraints_are_refused_not_dropped() {
+        let problem =
+            LpProblem::parse("Minimize\n obj: x\nSubject To\n c1: x >= 1\n ind: b = 1 -> x <= 0\nBinaries\n b\nEnd").expect("must parse");
+        let error = solve_problem(&problem).expect_err("an indicator constraint must not be silently dropped");
+        assert!(error.contains("indicator constraint 'ind'"), "unexpected error: {error}");
+        assert!(diagnose_infeasibility(&problem).is_err(), "diagnosis must refuse too");
     }
 
     #[test]

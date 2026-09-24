@@ -72,7 +72,23 @@ class SOSConstraint(TypedDict):
     sos_type: str
     weights: list[Coefficient]
 
-Constraint: TypeAlias = StandardConstraint | SOSConstraint
+# `b = 1 -> x + y <= 3`: the linear part holds whenever the (binary)
+# indicator variable equals indicator_value.
+IndicatorConstraint = TypedDict(
+    "IndicatorConstraint",
+    {
+        "name": str,
+        "type": Literal["indicator"],
+        "indicator_variable": str,
+        "indicator_value": Literal[0, 1],
+        "coefficients": list[Coefficient],
+        "operator": str,
+        "rhs": float,
+        "class": ConstraintClass,
+    },
+)
+
+Constraint: TypeAlias = StandardConstraint | SOSConstraint | IndicatorConstraint
 
 # Analysis result dictionary as built in src/lib.rs; see analyze() docs for the
 # keys (summary, sparsity, variables, constraints, coefficients, issues).

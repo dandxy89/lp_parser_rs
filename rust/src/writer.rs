@@ -124,7 +124,9 @@ fn omitted_expressions(problem: &LpProblem) -> Vec<String> {
     let constraints = problem
         .constraints
         .values()
-        .filter(|c| matches!(c, Constraint::Standard { coefficients, .. } if coefficients.is_empty()))
+        .filter(|c| {
+            matches!(c, Constraint::Standard { coefficients, .. } | Constraint::Indicator { coefficients, .. } if coefficients.is_empty())
+        })
         .map(|c| format!("constraint '{}' has no coefficients and was omitted from the LP output", problem.resolve(c.name())));
     objectives.chain(constraints).collect()
 }
@@ -178,13 +180,13 @@ fn validate_lp_names(problem: &LpProblem, options: &LpWriterOptions) -> LpResult
     }
     for constraint in problem.constraints.values() {
         check(constraint.name(), "constraint")?;
-        let terms = match constraint {
-            Constraint::Standard { coefficients, .. } => coefficients,
-            Constraint::SOS { weights, .. } => weights,
-        };
-        for coeff in terms {
-            check(coeff.name, "variable")?;
-        }
+        let mut result = Ok(());
+        constraint.for_each_variable(|id| {
+            if result.is_ok() {
+                result = check(id, "variable");
+            }
+        });
+        result?;
     }
     Ok(())
 }
@@ -265,13 +267,13 @@ fn write_objective(output: &mut String, objective: &Objective, interner: &NameIn
     writeln!(output)
 }
 
-/// Write the constraints section (standard constraints only; SOS constraints
-/// belong in their own `SOS` section)
+/// Write the constraints section (standard and indicator constraints; SOS
+/// constraints belong in their own `SOS` section)
 fn write_constraints_section(output: &mut String, problem: &LpProblem, options: &LpWriterOptions) -> std::fmt::Result {
     writeln!(output, "Subject To")?;
 
     for (id, constraint) in &problem.constraints {
-        if matches!(constraint, Constraint::Standard { .. }) && problem.constraint_class(*id).is_normal() {
+        if !matches!(constraint, Constraint::SOS { .. }) && problem.constraint_class(*id).is_normal() {
             write_constraint(output, constraint, &problem.interner, options)?;
         }
     }
@@ -341,6 +343,21 @@ fn write_constraint(output: &mut String, constraint: &Constraint, interner: &Nam
                 return Ok(());
             }
             write!(output, " {resolved_name}: ")?;
+
+            write_coefficients_line(output, coefficients, interner, options)?;
+
+            write!(output, " {operator} ")?;
+            write_number(output, *rhs, options.decimal_precision)?;
+            writeln!(output)
+        }
+        Constraint::Indicator { name, variable, active_value, coefficients, operator, rhs, .. } => {
+            if coefficients.is_empty() {
+                // As for a standard constraint: reported by `omitted_expressions`.
+                return Ok(());
+            }
+            let resolved_name = interner.resolve(*name);
+            let indicator = interner.resolve(*variable);
+            write!(output, " {resolved_name}: {indicator} = {} -> ", u8::from(*active_value))?;
 
             write_coefficients_line(output, coefficients, interner, options)?;
 
@@ -690,7 +707,7 @@ mod tests {
         assert_eq!(values, vec![0.000_000_1, 1.234_567_89], "{written}");
         match reparsed.constraints.values().next().unwrap() {
             Constraint::Standard { rhs, .. } => assert_eq!(*rhs, 1e-12, "{written}"),
-            Constraint::SOS { .. } => panic!("c1 must be a standard constraint"),
+            _ => panic!("c1 must be a standard constraint"),
         }
     }
 
@@ -1323,7 +1340,7 @@ End
                 assert_eq!(*sos_type, crate::model::SOSType::S2);
                 assert_eq!(weights.len(), 2);
             }
-            Constraint::Standard { .. } => panic!("s2c must re-parse as an SOS constraint"),
+            _ => panic!("s2c must re-parse as an SOS constraint"),
         }
     }
 

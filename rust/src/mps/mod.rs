@@ -35,6 +35,8 @@ pub(super) enum MpsSection {
     Ranges,
     Bounds,
     Sos,
+    /// CPLEX `INDICATORS`: `IF row column value` lines.
+    Indicators,
     Unsupported,
 }
 

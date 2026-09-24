@@ -233,13 +233,41 @@ fn diff_modified_constraints(
                     changes.push("SOS definition changed".to_string());
                 }
             }
-            _ => changes.push("constraint kind changed (Standard <-> SOS)".to_string()),
+            (
+                Constraint::Indicator { variable: v1, active_value: a1, coefficients: cf1, operator: op1, rhs: r1, .. },
+                Constraint::Indicator { variable: v2, active_value: a2, coefficients: cf2, operator: op2, rhs: r2, .. },
+            ) => {
+                let (var1, var2) = (normalise(p1.resolve(*v1)), normalise(p2.resolve(*v2)));
+                if var1 != var2 || a1 != a2 {
+                    changes.push(format!("indicator {var1} = {} -> {var2} = {}", u8::from(*a1), u8::from(*a2)));
+                }
+                if op1 != op2 {
+                    changes.push(format!("operator {op1} -> {op2}"));
+                }
+                if tol.differ(*r1, *r2) {
+                    changes.push(format!("rhs {r1} -> {r2}"));
+                }
+                let coef_diffs = count_coeff_diffs(&coeff_map(p1, cf1, normalise), &coeff_map(p2, cf2, normalise), tol);
+                if coef_diffs > 0 {
+                    changes.push(format!("{coef_diffs} coefficient change(s)"));
+                }
+            }
+            _ => changes.push(format!("constraint kind changed ({} <-> {})", constraint_kind(c1), constraint_kind(c2))),
         }
         if !changes.is_empty() {
             modified.push((name.clone(), changes));
         }
     }
     modified
+}
+
+/// Short name of a constraint's kind, for "kind changed" descriptions.
+const fn constraint_kind(constraint: &Constraint) -> &'static str {
+    match constraint {
+        Constraint::Standard { .. } => "Standard",
+        Constraint::SOS { .. } => "SOS",
+        Constraint::Indicator { .. } => "Indicator",
+    }
 }
 
 /// Describe how each common objective's coefficients changed.

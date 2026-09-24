@@ -46,6 +46,9 @@ pub(super) struct MpsParseState<'input> {
     current_sos_type: Option<SOSType>,
     current_sos_weights: Vec<RawCoefficient<'input>>,
 
+    // INDICATORS section data: (row, indicator column, active value, line)
+    indicators: Vec<(&'input str, &'input str, bool, usize)>,
+
     has_rows: bool,
     has_columns: bool,
 }
@@ -70,6 +73,7 @@ impl<'input> MpsParseState<'input> {
             current_sos_name: None,
             current_sos_type: None,
             current_sos_weights: Vec::new(),
+            indicators: Vec::new(),
             has_rows: false,
             has_columns: false,
         }
@@ -128,6 +132,9 @@ impl<'input> MpsParseState<'input> {
             "SOS" => {
                 self.section = Some(MpsSection::Sos);
             }
+            "INDICATORS" => {
+                self.section = Some(MpsSection::Indicators);
+            }
             "ENDATA" => {
                 // Flush any pending SOS constraint
                 flush_sos_constraint(
@@ -138,7 +145,7 @@ impl<'input> MpsParseState<'input> {
                 );
                 return Ok(true);
             }
-            "QUADOBJ" | "QCMATRIX" | "QMATRIX" | "PWLOBJ" | "INDICATORS" | "GENCONS" | "SCENARIOS" => {
+            "QUADOBJ" | "QCMATRIX" | "QMATRIX" | "PWLOBJ" | "GENCONS" | "SCENARIOS" => {
                 eprintln!("Line {line_num}: unsupported section '{header}' will be skipped");
                 self.section = Some(MpsSection::Unsupported);
             }
@@ -197,6 +204,34 @@ impl<'input> MpsParseState<'input> {
             MpsSection::Name | MpsSection::Unsupported => {
                 // NAME is captured by extract_mps_name; unsupported sections are skipped.
             }
+            MpsSection::Indicators => {
+                let fields: Vec<&str> = line.split_whitespace().take_while(|f| !f.starts_with('$')).collect();
+                match fields.as_slice() {
+                    [] => {}
+                    [kind, row, column, value] if kind.eq_ignore_ascii_case("IF") => {
+                        let active_value = match *value {
+                            "1" => true,
+                            "0" => false,
+                            other => {
+                                return Err(LpParseError::parse_error(line_num, format!("indicator value must be 0 or 1, got '{other}'")));
+                            }
+                        };
+                        match self.row_types.get(row) {
+                            Some(RowType::N) | None => {
+                                return Err(LpParseError::parse_error(
+                                    line_num,
+                                    format!("INDICATORS references '{row}', which is not a constraint row"),
+                                ));
+                            }
+                            Some(_) => {}
+                        }
+                        self.indicators.push((row, column, active_value, line_num));
+                    }
+                    _ => {
+                        return Err(LpParseError::parse_error(line_num, "INDICATORS line must be 'IF row column value'"));
+                    }
+                }
+            }
             MpsSection::Sos => {
                 parse_sos_line(
                     line,
@@ -231,8 +266,9 @@ impl<'input> MpsParseState<'input> {
         }
 
         let objectives = build_objectives(&self.objective_rows, &self.columns, &self.rhs_values);
-        let constraints =
+        let mut constraints =
             build_constraints(&self.row_types, &self.row_order, &self.row_classes, &self.columns, &self.rhs_values, &self.range_values);
+        apply_indicators(&mut constraints, &self.indicators, &self.range_values)?;
         let bounds = build_bounds(
             &self.bounds_state.accumulators,
             &self.bounds_state.order,
@@ -264,6 +300,47 @@ impl<'input> MpsParseState<'input> {
             user_cuts: constraints.user_cuts,
         })
     }
+}
+
+/// Turn each row named in the `INDICATORS` section into an indicator
+/// constraint whose linear part is that row.
+///
+/// # Errors
+///
+/// Returns an error for a ranged indicator row (a range is two rows, and an
+/// indicator constrains exactly one) or a row given two indicators.
+fn apply_indicators<'input>(
+    constraints: &mut super::builders::ClassifiedConstraints<'input>,
+    indicators: &[(&'input str, &'input str, bool, usize)],
+    range_values: &FxHashMap<&'input str, f64>,
+) -> LpResult<()> {
+    let mut seen: FxHashSet<&str> = FxHashSet::default();
+    for &(row, column, active_value, line_num) in indicators {
+        if !seen.insert(row) {
+            return Err(LpParseError::parse_error(line_num, format!("row '{row}' has more than one indicator")));
+        }
+        if range_values.contains_key(row) {
+            return Err(LpParseError::parse_error(line_num, format!("indicator row '{row}' cannot have a RANGES entry")));
+        }
+        let slot = [&mut constraints.normal, &mut constraints.lazy, &mut constraints.user_cuts]
+            .into_iter()
+            .flat_map(|bucket| bucket.iter_mut())
+            .find(|c| c.name() == row)
+            .ok_or_else(|| LpParseError::parse_error(line_num, format!("INDICATORS references unknown row '{row}'")))?;
+        let RawConstraint::Standard { name, coefficients, operator, rhs, byte_offset } = slot else {
+            return Err(LpParseError::parse_error(line_num, format!("row '{row}' cannot take an indicator")));
+        };
+        *slot = RawConstraint::Indicator {
+            name: std::mem::take(name),
+            variable: column,
+            active_value,
+            coefficients: std::mem::take(coefficients),
+            operator: *operator,
+            rhs: *rhs,
+            byte_offset: *byte_offset,
+        };
+    }
+    Ok(())
 }
 
 /// Parse an OBJSENSE value (`MIN`/`MINIMIZE`/`MAX`/`MAXIMIZE`, case-insensitive).

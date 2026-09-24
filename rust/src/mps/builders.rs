@@ -59,7 +59,7 @@ pub(super) fn build_objectives<'input>(
 
 /// Constraints built from the MPS rows, split by [`ConstraintClass`].
 #[derive(Default)]
-pub(super) struct ClassifiedConstraints<'input> {
+pub(crate) struct ClassifiedConstraints<'input> {
     pub(super) normal: Vec<RawConstraint<'input>>,
     pub(super) lazy: Vec<RawConstraint<'input>>,
     pub(super) user_cuts: Vec<RawConstraint<'input>>,

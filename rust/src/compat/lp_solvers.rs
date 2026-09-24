@@ -90,6 +90,17 @@ pub enum LpSolversCompatError {
         /// The unsupported operator (< or >).
         operator: String,
     },
+
+    /// A constraint kind the lp-solvers LP format cannot express (an
+    /// indicator, quadratic or general constraint). Dropping it would solve a
+    /// different model, so conversion fails instead.
+    #[error("{kind} constraint '{constraint}' is not supported by lp-solvers")]
+    UnsupportedConstraint {
+        /// The name of the unsupported constraint.
+        constraint: String,
+        /// The kind of constraint (e.g. "indicator").
+        kind: &'static str,
+    },
 }
 
 /// Warnings about features that are not fully supported but can be approximated.
@@ -245,6 +256,7 @@ impl<'a> Iterator for ConstraintIterator<'a> {
                     });
                 }
                 Some(Constraint::SOS { .. }) => {} // Skip SOS constraints
+                Some(Constraint::Indicator { .. }) => unreachable!("indicator constraints are rejected during validation"),
                 None => return None,
             }
         }
@@ -268,6 +280,7 @@ impl<'a> LpSolversCompat<'a> {
     /// - The Problem has multiple objectives
     /// - The Problem has no objectives
     /// - Any constraint uses strict inequalities (`<` or `>`)
+    /// - Any constraint is an indicator constraint
     ///
     /// # Panics
     ///
@@ -297,6 +310,12 @@ impl<'a> LpSolversCompat<'a> {
                 }
                 Constraint::SOS { name, .. } => {
                     warnings.push(LpSolversCompatWarning::SosConstraintIgnored { name: problem.interner.resolve(*name).to_string() });
+                }
+                Constraint::Indicator { name, .. } => {
+                    return Err(LpSolversCompatError::UnsupportedConstraint {
+                        constraint: problem.interner.resolve(*name).to_string(),
+                        kind: "indicator",
+                    });
                 }
             }
         }

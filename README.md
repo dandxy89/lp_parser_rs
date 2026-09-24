@@ -28,6 +28,9 @@ Beyond linear objectives, constraints, bounds and variable-type sections, the pa
 | --- | --- | --- | --- |
 | Semi-integer variables | variable listed in both `Generals` (or `Integers`) and `Semi-Continuous` (CPLEX) | `VariableKind::SemiInteger` | `SI` bound (read and written) |
 | Lazy constraints / user cuts | `Lazy Constraints` and `User Cuts` sections after `Subject To` (CPLEX) | ordinary constraints tagged in `LpProblem::constraint_classes` (`ConstraintClass::Lazy` / `UserCut`) | `LAZYCONS` / `USERCUTS` sections (read and written) |
+| Indicator constraints | `name: b = 1 -> x + y <= 3` (or `b = 0`) in `Subject To` / lazy sections (CPLEX, Gurobi); `<->` and `<-` are not supported | `Constraint::Indicator` | `INDICATORS` section (`IF row column value`, read and written) |
+
+The `lp-solvers` adapter and the `lp_diff` HiGHS solver refuse models containing indicator constraints rather than silently dropping them.
 
 ## Library Usage
 

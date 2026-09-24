@@ -144,6 +144,26 @@ pub enum Constraint {
         /// Byte offset of this constraint in the source text (for line number mapping).
         byte_offset: Option<usize>,
     },
+    /// An indicator constraint (`name: b = 1 -> x + y <= 3`): the linear
+    /// constraint must hold whenever the binary `variable` equals
+    /// `active_value`, and is unconstrained otherwise.
+    Indicator {
+        /// Interned constraint name.
+        name: NameId,
+        /// Interned name of the (binary) indicator variable.
+        variable: NameId,
+        /// `true` when the constraint is active for `variable = 1`, `false`
+        /// for `variable = 0`.
+        active_value: bool,
+        /// Left-hand-side coefficients of the linear constraint.
+        coefficients: Vec<Coefficient>,
+        /// Comparison operator of the linear constraint.
+        operator: ComparisonOp,
+        /// Right-hand-side value of the linear constraint.
+        rhs: f64,
+        /// Byte offset of this constraint in the source text (for line number mapping).
+        byte_offset: Option<usize>,
+    },
 }
 
 impl PartialEq for Constraint {
@@ -156,6 +176,10 @@ impl PartialEq for Constraint {
             (Self::SOS { name: n1, sos_type: t1, weights: w1, .. }, Self::SOS { name: n2, sos_type: t2, weights: w2, .. }) => {
                 n1 == n2 && t1 == t2 && w1 == w2
             }
+            (
+                Self::Indicator { name: n1, variable: v1, active_value: a1, coefficients: c1, operator: o1, rhs: r1, .. },
+                Self::Indicator { name: n2, variable: v2, active_value: a2, coefficients: c2, operator: o2, rhs: r2, .. },
+            ) => n1 == n2 && v1 == v2 && a1 == a2 && c1 == c2 && o1 == o2 && r1 == r2,
             _ => false,
         }
     }
@@ -167,7 +191,7 @@ impl Constraint {
     /// Returns the interned name of the constraint.
     pub const fn name(&self) -> NameId {
         match self {
-            Self::Standard { name, .. } | Self::SOS { name, .. } => *name,
+            Self::Standard { name, .. } | Self::SOS { name, .. } | Self::Indicator { name, .. } => *name,
         }
     }
 
@@ -176,7 +200,49 @@ impl Constraint {
     /// Returns the byte offset of this constraint in the source text, if available.
     pub const fn byte_offset(&self) -> Option<usize> {
         match self {
-            Self::Standard { byte_offset, .. } | Self::SOS { byte_offset, .. } => *byte_offset,
+            Self::Standard { byte_offset, .. } | Self::SOS { byte_offset, .. } | Self::Indicator { byte_offset, .. } => *byte_offset,
+        }
+    }
+
+    #[must_use]
+    #[inline]
+    /// Returns a mutable reference to the interned name of the constraint.
+    pub const fn name_mut(&mut self) -> &mut NameId {
+        match self {
+            Self::Standard { name, .. } | Self::SOS { name, .. } | Self::Indicator { name, .. } => name,
+        }
+    }
+
+    /// The linear row of a standard or indicator constraint as
+    /// `(coefficients, operator, rhs)`; `None` for an SOS constraint. For an
+    /// indicator constraint this is the constraint that holds when the
+    /// indicator is active.
+    #[must_use]
+    pub fn linear_row(&self) -> Option<(&[Coefficient], ComparisonOp, f64)> {
+        match self {
+            Self::Standard { coefficients, operator, rhs, .. } | Self::Indicator { coefficients, operator, rhs, .. } => {
+                Some((coefficients, *operator, *rhs))
+            }
+            Self::SOS { .. } => None,
+        }
+    }
+
+    /// Calls `f` with every variable the constraint references: its
+    /// coefficients (or SOS members) and, for an indicator constraint, the
+    /// indicator variable first.
+    pub fn for_each_variable(&self, mut f: impl FnMut(NameId)) {
+        match self {
+            Self::Standard { coefficients: terms, .. } | Self::SOS { weights: terms, .. } => {
+                for term in terms {
+                    f(term.name);
+                }
+            }
+            Self::Indicator { variable, coefficients, .. } => {
+                f(*variable);
+                for term in coefficients {
+                    f(term.name);
+                }
+            }
         }
     }
 }

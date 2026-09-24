@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 
-use lp_parser_rs::model::{ConstraintClass, VariableBounds, VariableKind};
+use lp_parser_rs::model::{ComparisonOp, Constraint, ConstraintClass, VariableBounds, VariableKind};
 use lp_parser_rs::mps::writer::write_mps_string;
 use lp_parser_rs::problem::LpProblem;
 use lp_parser_rs::writer::write_lp_string;
@@ -188,4 +188,112 @@ fn constraint_class_survives_serde() {
     for name in ["c1", "l1", "l2_rng", "u1", "C1"] {
         assert_eq!(class_of(&back, name), class_of(&problem, name), "constraint {name}");
     }
+}
+
+// --- Indicator constraints ----------------------------------------------------
+
+/// `(indicator variable, active value, coefficient count, operator, rhs)`.
+fn indicator(problem: &LpProblem, name: &str) -> (String, bool, usize, ComparisonOp, f64) {
+    let id = problem.name_id(name).unwrap_or_else(|| panic!("constraint '{name}' must exist"));
+    match &problem.constraints[&id] {
+        Constraint::Indicator { variable, active_value, coefficients, operator, rhs, .. } => {
+            (problem.resolve(*variable).to_string(), *active_value, coefficients.len(), *operator, *rhs)
+        }
+        other => panic!("'{name}' must be an indicator constraint, got {other:?}"),
+    }
+}
+
+#[test]
+fn indicator_fixture_parses() {
+    let problem = parse_resource("indicator.lp");
+    assert_eq!(indicator(&problem, "cap_x"), ("b1".to_string(), true, 1, ComparisonOp::LTE, 3.0));
+    assert_eq!(indicator(&problem, "cap_y"), ("b2".to_string(), false, 1, ComparisonOp::LTE, 0.0));
+    // A flipped linear part is normalised like any other constraint.
+    assert_eq!(indicator(&problem, "C1"), ("b1".to_string(), true, 1, ComparisonOp::GTE, 2.0));
+    assert_eq!(indicator(&problem, "lazy_ind"), ("b2".to_string(), true, 2, ComparisonOp::LTE, 10.0));
+    assert_eq!(class_of(&problem, "lazy_ind"), ConstraintClass::Lazy);
+    assert_eq!(variable(&problem, "b1").0, VariableKind::Binary);
+}
+
+#[test]
+fn indicator_lp_round_trip() {
+    let problem = parse_resource("indicator.lp");
+    let written = write_lp_string(&problem).unwrap();
+    assert!(written.contains(" cap_x: b1 = 1 -> x <= 3"), "{written}");
+    assert!(written.contains(" cap_y: b2 = 0 -> y <= 0"), "{written}");
+    let reparsed = lp_round_trip(&problem);
+    for name in ["cap_x", "cap_y", "C1", "lazy_ind"] {
+        assert_eq!(indicator(&reparsed, name), indicator(&problem, name), "constraint {name}");
+    }
+    assert_eq!(class_of(&reparsed, "lazy_ind"), ConstraintClass::Lazy);
+}
+
+#[test]
+fn indicator_mps_round_trip() {
+    let problem = parse_resource("indicator.lp");
+    let mps = write_mps_string(&problem).expect("indicator constraints are representable in MPS");
+    assert!(mps.contains("INDICATORS\n IF cap_x"), "{mps}");
+    let reparsed = LpProblem::parse_mps(&mps).expect("written MPS must re-parse");
+    for name in ["cap_x", "cap_y", "C1", "lazy_ind"] {
+        assert_eq!(indicator(&reparsed, name), indicator(&problem, name), "constraint {name}");
+    }
+    assert_eq!(class_of(&reparsed, "lazy_ind"), ConstraintClass::Lazy);
+}
+
+#[test]
+fn indicator_errors() {
+    // The value must be 0 or 1.
+    assert!(LpProblem::parse("minimize\nobj: x\nsubject to\nc: b = 2 -> x <= 1\nend").is_err());
+    // The linear part cannot be ranged.
+    assert!(LpProblem::parse("minimize\nobj: x\nsubject to\nc: b = 1 -> 1 <= x <= 2\nend").is_err());
+    // Nothing after the arrow.
+    assert!(LpProblem::parse("minimize\nobj: x\nsubject to\nc: b = 1 ->\nend").is_err());
+    // An arrow in the objective is not an indicator.
+    assert!(LpProblem::parse("minimize\nobj: b = 1 -> x\nsubject to\nc: x <= 1\nend").is_err());
+
+    // MPS: an indicator on a ranged row, an unknown row, a bad value.
+    let base = "NAME t\nROWS\n N obj\n L c1\nCOLUMNS\n x obj 1 c1 1\n b obj 1\nRHS\n RHS c1 4\n";
+    assert!(LpProblem::parse_mps(&format!("{base}INDICATORS\n IF c1 b 1\nENDATA\n")).is_ok());
+    assert!(LpProblem::parse_mps(&format!("{base}RANGES\n RNG c1 2\nINDICATORS\n IF c1 b 1\nENDATA\n")).is_err());
+    assert!(LpProblem::parse_mps(&format!("{base}INDICATORS\n IF nope b 1\nENDATA\n")).is_err());
+    assert!(LpProblem::parse_mps(&format!("{base}INDICATORS\n IF c1 b 2\nENDATA\n")).is_err());
+}
+
+#[test]
+fn indicator_variable_rename_and_remove() {
+    let mut problem = parse_resource("indicator.lp");
+    problem.rename_variable("b1", "switch").unwrap();
+    assert_eq!(indicator(&problem, "cap_x").0, "switch");
+    assert!(problem.remove_variable("switch").is_err(), "removing an indicator variable must be refused");
+    problem.remove_variable("x").unwrap();
+    assert_eq!(indicator(&problem, "cap_x").2, 0, "x is gone from the linear part");
+}
+
+#[cfg(feature = "diff")]
+#[test]
+fn indicator_changes_are_detected_by_diff() {
+    let a = LpProblem::parse("minimize\nobj: x\nsubject to\nc: b = 1 -> x <= 3\nbinary\nb\nend").unwrap();
+    let b = LpProblem::parse("minimize\nobj: x\nsubject to\nc: b = 0 -> x <= 4\nbinary\nb\nend").unwrap();
+    let diff = a.diff(&b, &lp_parser_rs::diff::DiffOptions::default());
+    assert_eq!(diff.cons_modified, vec![("c".to_string(), vec!["indicator b = 1 -> b = 0".to_string(), "rhs 3 -> 4".to_string()])]);
+
+    let plain = LpProblem::parse("minimize\nobj: x\nsubject to\nc: x <= 3\nbinary\nb\nend").unwrap();
+    let diff = a.diff(&plain, &lp_parser_rs::diff::DiffOptions::default());
+    assert_eq!(diff.cons_modified, vec![("c".to_string(), vec!["constraint kind changed (Indicator <-> Standard)".to_string()])]);
+}
+
+#[test]
+fn indicators_are_counted_by_analysis() {
+    let analysis = parse_resource("indicator.lp").analyze();
+    assert_eq!(analysis.constraints.type_distribution.indicator, 4);
+    assert!(analysis.variables.unused_variables.is_empty(), "indicator variables count as used");
+}
+
+#[cfg(feature = "lp-solvers")]
+#[test]
+fn indicator_is_refused_by_lp_solvers_compat() {
+    use lp_parser_rs::compat::lp_solvers::{LpSolversCompat, LpSolversCompatError};
+    let problem = parse_resource("indicator.lp");
+    let error = LpSolversCompat::try_new(&problem).expect_err("an indicator constraint cannot be dropped");
+    assert!(matches!(error, LpSolversCompatError::UnsupportedConstraint { kind: "indicator", .. }), "{error:?}");
 }

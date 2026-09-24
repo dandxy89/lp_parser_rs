@@ -168,6 +168,15 @@ fn intern_constraint(interner: &mut NameInterner, raw: &RawConstraint<'_>) -> Co
             weights: intern_coefficients(interner, weights),
             byte_offset: *byte_offset,
         },
+        RawConstraint::Indicator { name, variable, active_value, coefficients, operator, rhs, byte_offset } => Constraint::Indicator {
+            name: interner.intern(name),
+            variable: interner.intern(variable),
+            active_value: *active_value,
+            coefficients: intern_coefficients(interner, coefficients),
+            operator: *operator,
+            rhs: *rhs,
+            byte_offset: *byte_offset,
+        },
     }
 }
 
@@ -402,16 +411,14 @@ impl LpProblem {
         let name_id = constraint.name();
 
         match &constraint {
-            Constraint::Standard { coefficients, .. } => {
-                for coeff in coefficients {
-                    self.ensure_variable_exists(coeff.name, None);
-                }
-            }
             Constraint::SOS { weights, .. } => {
                 for coeff in weights {
                     self.ensure_variable_exists(coeff.name, Some(VariableType::SOS));
                     // SOS membership sets kind without wiping bounds.
                 }
+            }
+            Constraint::Standard { .. } | Constraint::Indicator { .. } => {
+                constraint.for_each_variable(|id| self.ensure_variable_exists(id, None));
             }
         }
 
@@ -491,7 +498,8 @@ impl LpProblem {
             self.constraints.get_mut(&con_id).ok_or_else(|| LpParseError::not_found(EntityKind::Constraint, constraint_name))?;
 
         match constraint {
-            Constraint::Standard { coefficients, .. } => {
+            // An indicator constraint's coefficients are those of its linear constraint.
+            Constraint::Standard { coefficients, .. } | Constraint::Indicator { coefficients, .. } => {
                 update_coefficient_vec(coefficients, var_id, new_coefficient);
 
                 if !is_effectively_zero(new_coefficient, 1.0) {
@@ -536,7 +544,7 @@ impl LpProblem {
             self.constraints.get_mut(&con_id).ok_or_else(|| LpParseError::not_found(EntityKind::Constraint, constraint_name))?;
 
         match constraint {
-            Constraint::Standard { rhs, .. } => {
+            Constraint::Standard { rhs, .. } | Constraint::Indicator { rhs, .. } => {
                 *rhs = new_rhs;
                 Ok(())
             }
@@ -593,6 +601,16 @@ impl LpProblem {
                         }
                     }
                 }
+                Constraint::Indicator { variable, coefficients, .. } => {
+                    if *variable == old_id {
+                        *variable = new_id;
+                    }
+                    for coeff in coefficients {
+                        if coeff.name == old_id {
+                            coeff.name = new_id;
+                        }
+                    }
+                }
                 Constraint::SOS { weights, .. } => {
                     for weight in weights {
                         if weight.name == old_id {
@@ -635,11 +653,7 @@ impl LpProblem {
 
         let mut constraint = self.constraints.shift_remove(&old_id).expect("constraint must exist: filter check passed");
 
-        match &mut constraint {
-            Constraint::Standard { name, .. } | Constraint::SOS { name, .. } => {
-                *name = new_id;
-            }
-        }
+        *constraint.name_mut() = new_id;
 
         self.constraints.insert(new_id, constraint);
         if let Some(class) = self.constraint_classes.shift_remove(&old_id) {
@@ -689,7 +703,9 @@ impl LpProblem {
     ///
     /// # Errors
     ///
-    /// Returns an error if the variable does not exist.
+    /// Returns an error if the variable does not exist, or if it is the
+    /// indicator variable of an indicator constraint (remove the constraint
+    /// first: dropping only its condition would change what it means).
     pub fn remove_variable(&mut self, variable_name: &str) -> LpResult<()> {
         debug_assert!(!variable_name.is_empty(), "variable_name must not be empty");
         let var_id = self
@@ -697,6 +713,15 @@ impl LpProblem {
             .get(variable_name)
             .filter(|id| self.variables.contains_key(id))
             .ok_or_else(|| LpParseError::not_found(EntityKind::Variable, variable_name))?;
+
+        if let Some(constraint) =
+            self.constraints.values().find(|c| matches!(c, Constraint::Indicator { variable, .. } if *variable == var_id))
+        {
+            return Err(LpParseError::invalid_operation(format!(
+                "variable '{variable_name}' is the indicator of constraint '{}'; remove that constraint first",
+                self.interner.resolve(constraint.name())
+            )));
+        }
 
         self.variables.shift_remove(&var_id);
 
@@ -709,7 +734,7 @@ impl LpProblem {
 
         for constraint in self.constraints.values_mut() {
             match constraint {
-                Constraint::Standard { coefficients, .. } => {
+                Constraint::Standard { coefficients, .. } | Constraint::Indicator { coefficients, .. } => {
                     coefficients.retain(|c| c.name != var_id);
                 }
                 Constraint::SOS { weights, .. } => {
@@ -815,6 +840,16 @@ mod serde_support {
             sos_type: SOSType,
             weights: Vec<SerdeCoefficient>,
         },
+        Indicator {
+            name: String,
+            variable: String,
+            active_value: bool,
+            coefficients: Vec<SerdeCoefficient>,
+            operator: ComparisonOp,
+            rhs: f64,
+            #[serde(default, skip_serializing_if = "is_normal")]
+            class: ConstraintClass,
+        },
     }
 
     #[derive(Serialize, Deserialize)]
@@ -900,6 +935,17 @@ mod serde_support {
                             sos_type: *sos_type,
                             weights: coeffs_to_serde(weights, &self.interner),
                         },
+                        Constraint::Indicator { name, variable, active_value, coefficients, operator, rhs, .. } => {
+                            SerdeConstraint::Indicator {
+                                name: self.interner.resolve(*name).to_string(),
+                                variable: self.interner.resolve(*variable).to_string(),
+                                active_value: *active_value,
+                                coefficients: coeffs_to_serde(coefficients, &self.interner),
+                                operator: *operator,
+                                rhs: *rhs,
+                                class: self.constraint_class(*name),
+                            }
+                        }
                     })
                     .collect(),
                 variables: self
@@ -949,6 +995,22 @@ mod serde_support {
                         }
                         let con = Constraint::Standard {
                             name: name_id,
+                            coefficients: coeffs_from_serde(coefficients, &mut interner),
+                            operator: *operator,
+                            rhs: *rhs,
+                            byte_offset: None,
+                        };
+                        (name_id, con)
+                    }
+                    SerdeConstraint::Indicator { name, variable, active_value, coefficients, operator, rhs, class } => {
+                        let name_id = interner.intern(name);
+                        if !class.is_normal() {
+                            constraint_classes.insert(name_id, *class);
+                        }
+                        let con = Constraint::Indicator {
+                            name: name_id,
+                            variable: interner.intern(variable),
+                            active_value: *active_value,
                             coefficients: coeffs_from_serde(coefficients, &mut interner),
                             operator: *operator,
                             rhs: *rhs,
@@ -1030,7 +1092,9 @@ fn from_parse_result(parsed: ParseResult<'_>, problem_name: Option<String>) -> L
         .chain(&parsed.user_cuts)
         .chain(&parsed.sos)
         .filter_map(|c| match c {
-            RawConstraint::Standard { name, .. } | RawConstraint::SOS { name, .. } => (name != "__c__").then_some(name.as_ref()),
+            RawConstraint::Standard { name, .. } | RawConstraint::SOS { name, .. } | RawConstraint::Indicator { name, .. } => {
+                (name != "__c__").then_some(name.as_ref())
+            }
         })
         .collect();
 
@@ -1275,11 +1339,7 @@ fn generate_constraint_name(
 
 /// Overwrite a constraint's name, whichever variant it is.
 const fn set_constraint_name(constraint: &mut Constraint, name_id: NameId) {
-    match constraint {
-        Constraint::Standard { name, .. } | Constraint::SOS { name, .. } => {
-            *name = name_id;
-        }
-    }
+    *constraint.name_mut() = name_id;
 }
 
 /// Register variables referenced by a constraint into the variables map.
@@ -1291,6 +1351,10 @@ fn register_constraint_variables(variables: &mut IndexMap<NameId, Variable>, con
         }
         Constraint::SOS { weights, .. } => {
             register_variables_from_coefficients(variables, weights, Some(&VariableType::SOS));
+        }
+        Constraint::Indicator { variable, coefficients, .. } => {
+            variables.entry(*variable).or_insert_with(|| Variable::new(*variable));
+            register_variables_from_coefficients(variables, coefficients, None);
         }
     }
 }

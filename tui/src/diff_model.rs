@@ -182,11 +182,15 @@ fn resolve_coefficients(
 /// into the report's shared interner.
 fn resolve_constraint(problem: &LpProblem, constraint: &Constraint, interner: &mut NameInterner, opts: &DiffOptions) -> ResolvedConstraint {
     match constraint {
-        Constraint::Standard { coefficients, operator, rhs, .. } => ResolvedConstraint::Standard {
-            coefficients: resolve_coefficients(problem, coefficients, interner, opts),
-            operator: *operator,
-            rhs: *rhs,
-        },
+        // An indicator constraint is shown by its linear part; a change to its
+        // condition is reported as a type change (see `diff_constraint_pair`).
+        Constraint::Standard { coefficients, operator, rhs, .. } | Constraint::Indicator { coefficients, operator, rhs, .. } => {
+            ResolvedConstraint::Standard {
+                coefficients: resolve_coefficients(problem, coefficients, interner, opts),
+                operator: *operator,
+                rhs: *rhs,
+            }
+        }
         Constraint::SOS { sos_type, weights, .. } => {
             ResolvedConstraint::Sos { sos_type: *sos_type, weights: resolve_coefficients(problem, weights, interner, opts) }
         }
@@ -723,6 +727,14 @@ fn constraint_summary(problem: &LpProblem, constraint: &Constraint) -> String {
             let _ = problem; // used for consistency; SOS summary doesn't need name resolution
             format!("SOS({sos_type}, {} weights)", weights.len())
         }
+        Constraint::Indicator { variable, active_value, coefficients, operator, rhs, .. } => {
+            format!(
+                "Indicator({} = {} -> {} coeffs, {operator}, {rhs})",
+                problem.resolve(*variable),
+                u8::from(*active_value),
+                coefficients.len()
+            )
+        }
     }
 }
 
@@ -891,8 +903,52 @@ fn diff_constraint_pair(
     opts: &DiffOptions,
 ) -> Option<ConstraintDiffDetail> {
     match (c1, c2) {
-        // Standard vs SOS: structurally incompatible.
-        (Constraint::Standard { .. }, Constraint::SOS { .. }) | (Constraint::SOS { .. }, Constraint::Standard { .. }) => {
+        // Indicator constraints with the same condition: diff the linear parts.
+        (
+            Constraint::Indicator {
+                variable: old_var,
+                active_value: old_value,
+                coefficients: old_coefficients,
+                operator: old_operator,
+                rhs: old_rhs,
+                ..
+            },
+            Constraint::Indicator {
+                variable: new_var,
+                active_value: new_value,
+                coefficients: new_coefficients,
+                operator: new_operator,
+                rhs: new_rhs,
+                ..
+            },
+        ) if old_value == new_value && opts.rewrite(p1.resolve(*old_var)) == opts.rewrite(p2.resolve(*new_var)) => {
+            if old_operator == new_operator
+                && !opts.numeric_differs(*old_rhs, *new_rhs)
+                && coefficients_equal(p1, old_coefficients, p2, new_coefficients, opts)
+            {
+                return None;
+            }
+            let reordered = coefficients_reordered(p1, old_coefficients, p2, new_coefficients, opts);
+            let old_resolved = resolve_coefficients(p1, old_coefficients, interner, opts);
+            let new_resolved = resolve_coefficients(p2, new_coefficients, interner, opts);
+            diff_standard_constraints(
+                &old_resolved,
+                *old_operator,
+                *old_rhs,
+                &new_resolved,
+                *new_operator,
+                *new_rhs,
+                interner,
+                reordered,
+                opts,
+            )
+        }
+
+        // Different kinds, or indicators with different conditions:
+        // structurally incompatible.
+        (Constraint::Standard { .. }, Constraint::SOS { .. } | Constraint::Indicator { .. })
+        | (Constraint::SOS { .. }, Constraint::Standard { .. } | Constraint::Indicator { .. })
+        | (Constraint::Indicator { .. }, _) => {
             Some(ConstraintDiffDetail::TypeChanged { old_summary: constraint_summary(p1, c1), new_summary: constraint_summary(p2, c2) })
         }
 

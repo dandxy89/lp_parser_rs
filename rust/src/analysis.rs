@@ -209,6 +209,8 @@ pub struct ConstraintTypeDistribution {
     pub sos1: usize,
     /// SOS Type 2 constraints
     pub sos2: usize,
+    /// Indicator constraints (`b = 1 -> ...`), not counted under an operator
+    pub indicator: usize,
     /// Lazy constraints (also counted under their operator above)
     pub lazy: usize,
     /// User cuts (also counted under their operator above)
@@ -453,6 +455,9 @@ impl Display for ProblemAnalysis {
         if ct.less_than > 0 || ct.greater_than > 0 {
             writeln!(f, "  Strict: (<): {} | (>): {}", ct.less_than, ct.greater_than)?;
         }
+        if ct.indicator > 0 {
+            writeln!(f, "  Indicator: {}", ct.indicator)?;
+        }
         if ct.lazy > 0 || ct.user_cuts > 0 {
             writeln!(f, "  Lazy: {} | User cuts: {}", ct.lazy, ct.user_cuts)?;
         }
@@ -622,7 +627,7 @@ impl LpProblem {
         self.constraints
             .values()
             .map(|c| match c {
-                Constraint::Standard { coefficients, .. } => coefficients.len(),
+                Constraint::Standard { coefficients, .. } | Constraint::Indicator { coefficients, .. } => coefficients.len(),
                 Constraint::SOS { weights, .. } => weights.len(),
             })
             .sum()
@@ -632,7 +637,7 @@ impl LpProblem {
     fn compute_sparsity_metrics(&self) -> SparsityMetrics {
         let (min_v, max_v) = self.constraints.values().fold((usize::MAX, 0usize), |(min_v, max_v), c| {
             let n = match c {
-                Constraint::Standard { coefficients, .. } => coefficients.len(),
+                Constraint::Standard { coefficients, .. } | Constraint::Indicator { coefficients, .. } => coefficients.len(),
                 Constraint::SOS { weights, .. } => weights.len(),
             };
             (min_v.min(n), max_v.max(n))
@@ -732,18 +737,9 @@ impl LpProblem {
         }
 
         for constraint in self.constraints.values() {
-            match constraint {
-                Constraint::Standard { coefficients, .. } => {
-                    for coeff in coefficients {
-                        used_variables.insert(coeff.name);
-                    }
-                }
-                Constraint::SOS { weights, .. } => {
-                    for weight in weights {
-                        used_variables.insert(weight.name);
-                    }
-                }
-            }
+            constraint.for_each_variable(|id| {
+                used_variables.insert(id);
+            });
         }
 
         let unused: Vec<String> = self
@@ -796,6 +792,10 @@ impl LpProblem {
                         });
                     }
                 }
+                Constraint::Indicator { rhs, .. } => {
+                    type_distribution.indicator += 1;
+                    rhs_range.update(*rhs);
+                }
                 Constraint::SOS { sos_type, weights, .. } => {
                     match sos_type {
                         SOSType::S1 => {
@@ -819,7 +819,8 @@ impl LpProblem {
                 + type_distribution.less_than
                 + type_distribution.greater_than
                 + type_distribution.sos1
-                + type_distribution.sos2,
+                + type_distribution.sos2
+                + type_distribution.indicator,
             self.constraints.len(),
             "postcondition: constraint type distribution must sum to total constraint count"
         );

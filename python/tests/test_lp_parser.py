@@ -366,6 +366,19 @@ class TestConstraintClass:
         assert "User Cuts\n u1: x + y <= 9" in written
 
 
+class TestIndicatorConstraint:
+    LP = "Minimize\n obj: x + b\nSubject To\n ind: b = 0 -> x >= 2\nBinaries\n b\nEnd\n"
+
+    def test_indicator_is_exposed(self) -> None:
+        (constraint,) = LpParser.from_string(self.LP).constraints
+        assert constraint["type"] == "indicator"
+        assert (constraint["indicator_variable"], constraint["indicator_value"]) == ("b", 0)
+        assert (constraint["operator"], constraint["rhs"], constraint["class"]) == ("GTE", 2.0, "normal")
+
+    def test_indicator_round_trips(self) -> None:
+        assert " ind: b = 0 -> x >= 2" in LpParser.from_string(self.LP).to_lp_string()
+
+
 class TestThresholdValidation:
     LP = "Minimize\n obj: x\nSubject To\n c1: x >= 1000\nEnd\n"
 

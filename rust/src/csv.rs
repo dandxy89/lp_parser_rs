@@ -52,6 +52,18 @@ impl LpProblem {
                         const_writer.write_record(vals)?;
                     }
                 }
+                Constraint::Indicator { variable, active_value, coefficients, operator: op, rhs, .. } => {
+                    // The indicator condition travels in the constraint type.
+                    let kind = format!("Indicator({}={})", self.interner.resolve(*variable), u8::from(*active_value));
+                    let rhs_str = rhs.to_string();
+                    for c in coefficients {
+                        let var_name = self.interner.resolve(c.name);
+                        let coeff = c.value.to_string();
+                        let vals: [&[u8]; 7] =
+                            [name_bytes, kind.as_bytes(), var_name.as_bytes(), coeff.as_bytes(), op.as_ref(), rhs_str.as_bytes(), b""];
+                        const_writer.write_record(vals)?;
+                    }
+                }
                 Constraint::SOS { sos_type, weights, .. } => {
                     for c in weights {
                         let var_name = self.interner.resolve(c.name);
