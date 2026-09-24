@@ -74,8 +74,8 @@ print(f"Objectives: {len(parser.objectives)}")
 ```python
 # Access objectives
 for i, objective in enumerate(parser.objectives):
-    print(f"Objective {i+1}: {objective['name']}")
-    for coef in objective['coefficients']:
+    print(f"Objective {i + 1}: {objective['name']}")
+    for coef in objective["coefficients"]:
         print(f"  {coef['name']}: {coef['value']}")
 
 # Access variables
@@ -89,7 +89,7 @@ for var_name, var_info in parser.variables.items():
 for constraint in parser.constraints:
     print(f"Constraint {constraint['name']}:")
     print(f"  Type: {constraint['type']}")
-    if constraint['type'] == 'standard':
+    if constraint["type"] == "standard":
         print(f"  Operator: {constraint['operator']}")
         print(f"  RHS: {constraint['rhs']}")
         print(f"  Coefficients: {len(constraint['coefficients'])}")
@@ -125,7 +125,7 @@ parser = LpParser("problem.lp")
 analysis = parser.analyze()
 
 # Summary statistics
-summary = analysis['summary']
+summary = analysis["summary"]
 print(f"Problem: {summary['name']}")
 print(f"Sense: {summary['sense']}")
 print(f"Variables: {summary['variable_count']}")
@@ -134,21 +134,21 @@ print(f"Nonzeros: {summary['total_nonzeros']}")
 print(f"Matrix density: {summary['density']:.4f}")
 
 # Sparsity metrics
-sparsity = analysis['sparsity']
+sparsity = analysis["sparsity"]
 print(f"Variables per constraint: {sparsity['min_vars_per_constraint']} - {sparsity['max_vars_per_constraint']}")
 
 # Variable type distribution
-var_types = analysis['variables']['type_distribution']
+var_types = analysis["variables"]["type_distribution"]
 print(f"Variable types: {var_types}")
 
 # Coefficient ranges
-coeffs = analysis['coefficients']
+coeffs = analysis["coefficients"]
 print(f"Constraint coefficients: {coeffs['constraint_coeff_range']}")
 print(f"Objective coefficients: {coeffs['objective_coeff_range']}")
 print(f"Coefficient ratio: {coeffs['coefficient_ratio']:.2f}")
 
 # Check for issues (warnings and errors)
-for issue in analysis['issues']:
+for issue in analysis["issues"]:
     print(f"[{issue['severity']}] {issue['category']}: {issue['message']}")
 ```
 
@@ -157,10 +157,10 @@ for issue in analysis['issues']:
 ```python
 # Customize thresholds for issue detection
 analysis = parser.analyze(
-    large_coeff_threshold=1e8,      # Flag coefficients above this
-    small_coeff_threshold=1e-10,    # Flag coefficients below this
-    ratio_threshold=1e5,            # Flag if max/min ratio exceeds this
-    large_rhs_threshold=1e8,        # Flag right-hand sides above this
+    large_coeff_threshold=1e8,  # Flag coefficients above this
+    small_coeff_threshold=1e-10,  # Flag coefficients below this
+    ratio_threshold=1e5,  # Flag if max/min ratio exceeds this
+    large_rhs_threshold=1e8,  # Flag right-hand sides above this
 )
 ```
 
@@ -172,7 +172,7 @@ issues = parser.analyze()["issues"]
 
 for issue in issues:
     print(f"[{issue['severity']}] {issue['category']}: {issue['message']}")
-    if issue['details']:
+    if issue["details"]:
         print(f"  Details: {issue['details']}")
 ```
 
@@ -224,10 +224,7 @@ print(f"Successfully modified and re-parsed: {new_parser.name}")
 [
     {
         "name": "objective_name",
-        "coefficients": [
-            {"name": "variable_name", "value": 1.5},
-            {"name": "another_var", "value": -2.0}
-        ]
+        "coefficients": [{"name": "variable_name", "value": 1.5}, {"name": "another_var", "value": -2.0}],
     }
 ]
 ```
@@ -245,7 +242,7 @@ print(f"Successfully modified and re-parsed: {new_parser.name}")
         # default applies (LP: lower 0, upper +inf). A variable declared
         # `free` reports -inf / inf instead.
         "lower": 0.0,
-        "upper": 100.0
+        "upper": 100.0,
     }
 }
 ```
@@ -259,19 +256,14 @@ print(f"Successfully modified and re-parsed: {new_parser.name}")
         "type": "standard",  # or "sos"
         "operator": "LTE",  # "GT", "GTE", "EQ", "LT", "LTE"
         "rhs": 10.0,
-        "coefficients": [
-            {"name": "variable_name", "value": 2.0}
-        ]
+        "coefficients": [{"name": "variable_name", "value": 2.0}],
     },
     {
         "name": "sos_constraint",
         "type": "sos",
         "sos_type": "S1",  # or "S2"
-        "weights": [
-            {"name": "var1", "value": 1.0},
-            {"name": "var2", "value": 2.0}
-        ]
-    }
+        "weights": [{"name": "var1", "value": 1.0}, {"name": "var2", "value": 2.0}],
+    },
 ]
 ```
 
