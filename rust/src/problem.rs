@@ -1410,10 +1410,24 @@ End";
     }
 
     #[test]
-    fn test_keyword_as_constraint_label_is_rejected() {
-        // `end` lexes as the End keyword, so it cannot silently become a
-        // constraint name; the parse must fail rather than misparse.
-        assert!(LpProblem::parse("minimize\nx1\nsubject to\nend: x1 <= 1\nend").is_err());
+    fn test_keyword_as_constraint_label() {
+        // A keyword followed by `:` is a label, not a section header.
+        let p = LpProblem::parse("minimize\nx1\nsubject to\nend: x1 <= 1\nend").unwrap();
+        assert!(p.constraints.contains_key(&p.name_id("end").unwrap()));
+    }
+
+    #[test]
+    fn test_keywords_as_variable_and_sos_names() {
+        let input =
+            "minimize\nobj: min + s1 + S2 + bin\nsubject to\nc1: gen + free + st >= 1\nbounds\nfree free\nsos\ns1: S1:: s1:1 S2:2\nend";
+        let p = LpProblem::parse(input).unwrap();
+        for name in ["min", "s1", "S2", "bin", "gen", "free", "st"] {
+            assert!(p.name_id(name).is_some_and(|id| p.variables.contains_key(&id)), "variable {name} missing");
+        }
+        let free = &p.variables[&p.name_id("free").unwrap()];
+        assert_eq!(free.bounds, VariableBounds::free());
+        let Constraint::SOS { sos_type, weights, .. } = &p.constraints[&p.name_id("s1").unwrap()] else { panic!("expected SOS") };
+        assert_eq!((*sos_type, weights.len()), (SOSType::S1, 2));
     }
 
     #[test]

@@ -2,9 +2,30 @@
 //!
 //! This module provides a token-based lexer for Linear Programming files,
 //! handling case-insensitive keywords, numbers, identifiers, and operators.
+//!
+//! # Context-sensitive keywords
+//!
+//! Keywords are only recognised where they can start a section or play their
+//! grammatical role; elsewhere the same word lexes as an identifier, so
+//! variables and constraints may be called `min`, `bin`, `s1`, `free`, ...:
+//!
+//! - the sense keyword (`minimize`, `max`, ...) only as the first token;
+//! - `subject to` / `st` / `s.t.` only once, as the first token of a line;
+//! - other section keywords (`bounds`, `generals`, `binaries`, `sos`, `end`,
+//!   ...) only as the first token of a line that does not continue an
+//!   expression (the previous token is not a sign, colon or comparison) and
+//!   is not followed by `:` or `::` (which would make it a label);
+//! - `S1` / `S2` only in `name: S1::`;
+//! - `free` only directly after an identifier on the same line (`x free`).
+//!
+//! Remaining reserved words: `inf` / `infinity` always lex as infinity, and a
+//! section keyword alone at the start of a line (e.g. a variable named `bin`
+//! listed on its own line in a `generals` section) is read as a section
+//! header. The multi-word `subject to` / `such that` are always keywords.
 
 use std::borrow::Cow;
 use std::fmt::{Display, Formatter, Result as FmtResult};
+use std::ops::Range;
 
 use logos::Logos;
 
@@ -145,7 +166,7 @@ pub enum Token<'input> {
     SenseKw(Sense),
 
     /// Subject to / constraints header
-    #[regex(r"(?i)(subject[ \t]+to|such[ \t]+that|s\.t\.|st)[ \t]*:?", priority = 10)]
+    #[regex(r"(?i)subject[ \t]+to|such[ \t]+that|s\.t\.|st", priority = 10)]
     SubjectTo,
 
     /// Bounds section header
@@ -280,16 +301,113 @@ fn parse_number<'input>(lex: &logos::Lexer<'input, Token<'input>>) -> Option<f64
 /// A spanned token containing position information
 pub type Spanned<Tok, Loc, Error> = Result<(Loc, Tok, Loc), Error>;
 
-/// Lexer adapter for LALRPOP
+/// A raw token from the underlying Logos lexer with its span, and whether a
+/// line break separates it from the previous significant token.
+type RawItem<'input> = (Result<Token<'input>, LexerError>, Range<usize>, bool);
+
+/// Lexer adapter for LALRPOP.
+///
+/// Skips comments and newlines, and resolves keywords that are also valid
+/// names by context (see the module documentation).
 pub struct Lexer<'input> {
     inner: logos::Lexer<'input, Token<'input>>,
+    input: &'input str,
+    /// One significant token of lookahead (`None` also once input is
+    /// exhausted: the Logos lexer keeps returning `None` at the end).
+    peeked: Option<RawItem<'input>>,
+    /// The last token handed to the parser.
+    prev: Option<Token<'input>>,
+    /// Whether the `subject to` header has been emitted.
+    seen_subject_to: bool,
 }
 
 impl<'input> Lexer<'input> {
     /// Create a new lexer for the given input
     #[must_use]
     pub fn new(input: &'input str) -> Self {
-        Self { inner: Token::lexer(input) }
+        Self { inner: Token::lexer(input), input, peeked: None, prev: None, seen_subject_to: false }
+    }
+
+    /// Next significant raw token, skipping comments and newlines.
+    fn raw_next(&mut self) -> Option<RawItem<'input>> {
+        let mut newline_before = false;
+        loop {
+            let token = self.inner.next()?;
+            let span = self.inner.span();
+            match token {
+                Ok(Token::Newline) => newline_before = true,
+                Ok(Token::BlockComment) => newline_before |= self.inner.slice().contains('\n'),
+                Ok(Token::LineComment) => {}
+                other => return Some((other, span, newline_before)),
+            }
+        }
+    }
+
+    fn take_next(&mut self) -> Option<RawItem<'input>> {
+        self.peeked.take().or_else(|| self.raw_next())
+    }
+
+    /// Whether the next significant token is on the same line and satisfies `pred`.
+    fn peek_same_line(&mut self, pred: impl FnOnce(&Token<'input>) -> bool) -> bool {
+        if self.peeked.is_none() {
+            self.peeked = self.raw_next();
+        }
+        matches!(&self.peeked, Some((Ok(tok), _, false)) if pred(tok))
+    }
+
+    /// Whether the previous token leaves an expression or label unfinished,
+    /// so the next word must be an operand rather than a section keyword.
+    const fn prev_continues_expression(&self) -> bool {
+        matches!(
+            self.prev,
+            Some(
+                Token::Plus
+                    | Token::Minus
+                    | Token::Colon
+                    | Token::DoubleColon
+                    | Token::Lte
+                    | Token::Gte
+                    | Token::Lt
+                    | Token::Gt
+                    | Token::Eq
+            )
+        )
+    }
+
+    /// Resolve a keyword token by context: either keep it, or demote it to an
+    /// identifier spelled as in the source.
+    fn resolve_keyword(&mut self, tok: Token<'input>, span: &Range<usize>, at_line_start: bool) -> Token<'input> {
+        let keep = match tok {
+            Token::SenseKw(_) => self.prev.is_none(),
+            Token::SubjectTo => {
+                // Multi-word forms cannot be identifiers; leave them to the parser.
+                let multi_word = self.input[span.clone()].contains([' ', '\t']);
+                multi_word || (!self.seen_subject_to && at_line_start && !self.prev_continues_expression())
+            }
+            Token::Bounds | Token::Generals | Token::Integers | Token::Binaries | Token::SemiContinuous | Token::Sos | Token::End => {
+                at_line_start
+                    && !self.prev_continues_expression()
+                    && !self.peek_same_line(|t| matches!(t, Token::Colon | Token::DoubleColon))
+            }
+            Token::SosType(_) => matches!(self.prev, Some(Token::Colon)) && self.peek_same_line(|t| matches!(t, Token::DoubleColon)),
+            Token::Free => !at_line_start && matches!(self.prev, Some(Token::Identifier(_))),
+            _ => return tok,
+        };
+
+        if keep {
+            if matches!(tok, Token::SubjectTo) {
+                self.seen_subject_to = true;
+                // `Subject To:` -- the optional trailing colon belongs to the header.
+                if self.peek_same_line(|t| matches!(t, Token::Colon)) {
+                    self.peeked = None;
+                }
+            }
+            tok
+        } else {
+            let slice = &self.input[span.clone()];
+            debug_assert!(!slice.is_empty(), "keyword token must have a non-empty slice");
+            Token::Identifier(slice)
+        }
     }
 }
 
@@ -297,17 +415,15 @@ impl<'input> Iterator for Lexer<'input> {
     type Item = Spanned<Token<'input>, usize, LexerError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            let token = self.inner.next()?;
-            let span = self.inner.span();
-
-            match token {
-                Ok(Token::BlockComment | Token::LineComment | Token::Newline) => {
-                    // Skip comments and newlines in the token stream
-                }
-                Ok(tok) => return Some(Ok((span.start, tok, span.end))),
-                Err(e) => return Some(Err(e)),
+        let (token, span, newline_before) = self.take_next()?;
+        let at_line_start = newline_before || self.prev.is_none();
+        match token {
+            Ok(tok) => {
+                let tok = self.resolve_keyword(tok, &span, at_line_start);
+                self.prev = Some(tok.clone());
+                Some(Ok((span.start, tok, span.end)))
             }
+            Err(e) => Some(Err(e)),
         }
     }
 }
@@ -329,6 +445,12 @@ mod tests {
 
     fn tokenize_raw(input: &str) -> Vec<Option<Token<'_>>> {
         Token::lexer(input).map(Result::ok).collect()
+    }
+
+    /// Raw Logos tokens (no context-sensitive keyword resolution), for
+    /// testing the keyword regexes in isolation.
+    fn tokenize_keywords(input: &str) -> Vec<Token<'_>> {
+        Token::lexer(input).filter_map(Result::ok).collect()
     }
 
     #[test]
@@ -358,49 +480,50 @@ mod tests {
 
     #[test]
     fn test_section_keywords() {
-        assert_eq!(tokenize("subject to"), vec![Token::SubjectTo]);
-        assert_eq!(tokenize("SUBJECT TO"), vec![Token::SubjectTo]);
-        assert_eq!(tokenize("Subject To"), vec![Token::SubjectTo]);
-        assert_eq!(tokenize("such that"), vec![Token::SubjectTo]);
-        assert_eq!(tokenize("s.t."), vec![Token::SubjectTo]);
-        assert_eq!(tokenize("st"), vec![Token::SubjectTo]);
+        assert_eq!(tokenize_keywords("subject to"), vec![Token::SubjectTo]);
+        assert_eq!(tokenize_keywords("SUBJECT TO"), vec![Token::SubjectTo]);
+        assert_eq!(tokenize_keywords("Subject To"), vec![Token::SubjectTo]);
+        assert_eq!(tokenize_keywords("such that"), vec![Token::SubjectTo]);
+        assert_eq!(tokenize_keywords("s.t."), vec![Token::SubjectTo]);
+        assert_eq!(tokenize_keywords("st"), vec![Token::SubjectTo]);
         assert_eq!(tokenize("st:"), vec![Token::SubjectTo]);
+        assert_eq!(tokenize("Subject To:"), vec![Token::SubjectTo]);
 
-        assert_eq!(tokenize("bounds"), vec![Token::Bounds]);
-        assert_eq!(tokenize("bound"), vec![Token::Bounds]);
-        assert_eq!(tokenize("BOUNDS"), vec![Token::Bounds]);
+        assert_eq!(tokenize_keywords("bounds"), vec![Token::Bounds]);
+        assert_eq!(tokenize_keywords("bound"), vec![Token::Bounds]);
+        assert_eq!(tokenize_keywords("BOUNDS"), vec![Token::Bounds]);
 
-        assert_eq!(tokenize("generals"), vec![Token::Generals]);
-        assert_eq!(tokenize("general"), vec![Token::Generals]);
-        assert_eq!(tokenize("gen"), vec![Token::Generals]);
+        assert_eq!(tokenize_keywords("generals"), vec![Token::Generals]);
+        assert_eq!(tokenize_keywords("general"), vec![Token::Generals]);
+        assert_eq!(tokenize_keywords("gen"), vec![Token::Generals]);
 
-        assert_eq!(tokenize("integers"), vec![Token::Integers]);
-        assert_eq!(tokenize("integer"), vec![Token::Integers]);
+        assert_eq!(tokenize_keywords("integers"), vec![Token::Integers]);
+        assert_eq!(tokenize_keywords("integer"), vec![Token::Integers]);
 
-        assert_eq!(tokenize("binaries"), vec![Token::Binaries]);
-        assert_eq!(tokenize("binary"), vec![Token::Binaries]);
-        assert_eq!(tokenize("bin"), vec![Token::Binaries]);
+        assert_eq!(tokenize_keywords("binaries"), vec![Token::Binaries]);
+        assert_eq!(tokenize_keywords("binary"), vec![Token::Binaries]);
+        assert_eq!(tokenize_keywords("bin"), vec![Token::Binaries]);
 
-        assert_eq!(tokenize("semi-continuous"), vec![Token::SemiContinuous]);
-        assert_eq!(tokenize("semis"), vec![Token::SemiContinuous]);
-        assert_eq!(tokenize("semi"), vec![Token::SemiContinuous]);
+        assert_eq!(tokenize_keywords("semi-continuous"), vec![Token::SemiContinuous]);
+        assert_eq!(tokenize_keywords("semis"), vec![Token::SemiContinuous]);
+        assert_eq!(tokenize_keywords("semi"), vec![Token::SemiContinuous]);
 
-        assert_eq!(tokenize("sos"), vec![Token::Sos]);
-        assert_eq!(tokenize("SOS"), vec![Token::Sos]);
+        assert_eq!(tokenize_keywords("sos"), vec![Token::Sos]);
+        assert_eq!(tokenize_keywords("SOS"), vec![Token::Sos]);
 
-        assert_eq!(tokenize("end"), vec![Token::End]);
-        assert_eq!(tokenize("END"), vec![Token::End]);
+        assert_eq!(tokenize_keywords("end"), vec![Token::End]);
+        assert_eq!(tokenize_keywords("END"), vec![Token::End]);
 
-        assert_eq!(tokenize("free"), vec![Token::Free]);
-        assert_eq!(tokenize("FREE"), vec![Token::Free]);
+        assert_eq!(tokenize_keywords("free"), vec![Token::Free]);
+        assert_eq!(tokenize_keywords("FREE"), vec![Token::Free]);
     }
 
     #[test]
     fn test_sos_types() {
-        assert_eq!(tokenize("S1"), vec![Token::SosType(SOSType::S1)]);
-        assert_eq!(tokenize("s1"), vec![Token::SosType(SOSType::S1)]);
-        assert_eq!(tokenize("S2"), vec![Token::SosType(SOSType::S2)]);
-        assert_eq!(tokenize("s2"), vec![Token::SosType(SOSType::S2)]);
+        assert_eq!(tokenize_keywords("S1"), vec![Token::SosType(SOSType::S1)]);
+        assert_eq!(tokenize_keywords("s1"), vec![Token::SosType(SOSType::S1)]);
+        assert_eq!(tokenize_keywords("S2"), vec![Token::SosType(SOSType::S2)]);
+        assert_eq!(tokenize_keywords("s2"), vec![Token::SosType(SOSType::S2)]);
     }
 
     #[test]
@@ -772,6 +895,62 @@ mod tests {
 
         let tokens = tokenize("x1 free");
         assert_eq!(tokens, vec![Token::Identifier("x1"), Token::Free,]);
+    }
+
+    #[test]
+    fn test_keywords_resolved_by_context() {
+        use Token::{Colon, DoubleColon, Identifier, Number, Plus};
+
+        // S1/S2 are only SOS types in `name: S1::`; elsewhere they are names.
+        assert_eq!(
+            tokenize("sos\n s1: S1:: S1:1 s2:2"),
+            vec![
+                Token::Sos,
+                Identifier("s1"),
+                Colon,
+                Token::SosType(SOSType::S1),
+                DoubleColon,
+                Identifier("S1"),
+                Colon,
+                Number(1.0),
+                Identifier("s2"),
+                Colon,
+                Number(2.0),
+            ]
+        );
+        // `s1::` is a constraint label, not an SOS type.
+        assert_eq!(tokenize("st\ns1:: x >= 1")[1..3], [Identifier("s1"), DoubleColon]);
+
+        // Section keywords mid-expression or used as labels are names.
+        let tokens = tokenize("min\nobj: min + bin\nst\nbounds: gen + free\n + end >= 1\nbounds\nfree free\nend");
+        assert_eq!(
+            tokens,
+            vec![
+                Token::SenseKw(Sense::Minimize),
+                Identifier("obj"),
+                Colon,
+                Identifier("min"),
+                Plus,
+                Identifier("bin"),
+                Token::SubjectTo,
+                Identifier("bounds"),
+                Colon,
+                Identifier("gen"),
+                Plus,
+                Identifier("free"),
+                Plus,
+                Identifier("end"),
+                Token::Gte,
+                Number(1.0),
+                Token::Bounds,
+                Identifier("free"),
+                Token::Free,
+                Token::End,
+            ]
+        );
+
+        // `st` is only the header once.
+        assert_eq!(tokenize("st\nst: x <= 1")[..3], [Token::SubjectTo, Identifier("st"), Colon]);
     }
 
     #[test]
