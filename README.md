@@ -32,6 +32,7 @@ Beyond linear objectives, constraints, bounds and variable-type sections, the pa
 | Quadratic objectives | `obj: 2 x + [ x ^ 2 + 4 x * y ] / 2` (the `/ 2` is mandatory, as in CPLEX and Gurobi) | `Objective::quadratic` (`QuadraticTerm`, stored with the `/ 2` applied) | `QUADOBJ` / `QMATRIX` read, `QUADOBJ` written |
 | Quadratic constraints | `c: x + [ x ^ 2 + y ^ 2 ] <= 4` (no `/ 2`) | `Constraint::Quadratic` | `QCMATRIX` (read and written) |
 | General constraints | `General Constraints` section (Gurobi; also `General Constrs`, `Gen Cons`, `GenConstrs`): `g: r = MAX ( x1 , x2 , 3 )`, `MIN`, `ABS ( x )`, `AND ( b1 , b2 )`, `OR`; `PWL` is not supported | `Constraint::General` (`GeneralFunction`) | not supported: the writer returns an error, the reader skips `GENCONS` with a warning |
+| Multi-objective attributes | `Minimize multi-objectives`, then `OBJ0: Priority=2 Weight=1 AbsTol=0 RelTol=0` before each objective's expression (Gurobi; every attribute optional) | `Objective::attributes` (`ObjectiveAttributes`) | not supported: the writer returns an error unless `allow_multiple_objectives` is set (which already drops all but the first objective) |
 
 A lone `[` or `]` is always a quadratic bracket, so it must be separated from neighbouring names by whitespace (names such as `x[1]` are unaffected). Likewise the parentheses and commas of a general constraint must be separated by whitespace, as Gurobi writes them, since `(`, `)` and `,` are name characters.
 

@@ -72,7 +72,14 @@ impl ProblemBuilder {
     pub fn objective(mut self, name: &str, terms: &[(&str, f64)]) -> Self {
         let obj_id = self.problem.intern(name);
         let coefficients = self.coefficients(terms);
-        self.problem.add_objective(Objective { name: obj_id, coefficients, constant: 0.0, quadratic: Vec::new(), byte_offset: None });
+        self.problem.add_objective(Objective {
+            name: obj_id,
+            coefficients,
+            constant: 0.0,
+            quadratic: Vec::new(),
+            attributes: crate::model::ObjectiveAttributes::default(),
+            byte_offset: None,
+        });
         self
     }
 

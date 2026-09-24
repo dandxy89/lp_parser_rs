@@ -260,6 +260,16 @@ pub fn write_mps_string_with_options(problem: &LpProblem, options: &MpsWriterOpt
 /// Build the full MPS document into `output`.
 fn build_mps(output: &mut String, problem: &LpProblem, options: &MpsWriterOptions) -> LpResult<()> {
     let objective = select_objective(problem, options)?;
+    if let Some(obj) = objective
+        && !obj.attributes.is_empty()
+        && !options.allow_multiple_objectives
+    {
+        return Err(LpParseError::validation_error(format!(
+            "objective '{}' has multi-objective attributes (priority, weight, tolerances), which this MPS writer cannot represent; \
+             set MpsWriterOptions::allow_multiple_objectives to write the objective without them",
+            problem.resolve(obj.name)
+        )));
+    }
     if let Some(general) = problem.constraints.values().find(|c| matches!(c, Constraint::General { .. })) {
         return Err(LpParseError::validation_error(format!(
             "general constraint '{}' cannot be written to MPS: this writer has no GENCONS support",
@@ -994,6 +1004,7 @@ mod tests {
             ],
             constant: 0.0,
             quadratic: Vec::new(),
+            attributes: crate::model::ObjectiveAttributes::default(),
             byte_offset: None,
         });
 
@@ -1051,6 +1062,7 @@ mod tests {
             coefficients: vec![Coefficient { name: x1_id, value: 3.0 }, Coefficient { name: x2_id, value: 2.0 }],
             constant: 0.0,
             quadratic: Vec::new(),
+            attributes: crate::model::ObjectiveAttributes::default(),
             byte_offset: None,
         });
         problem.add_constraint(Constraint::Standard {
@@ -1125,6 +1137,7 @@ mod tests {
             coefficients: vec![Coefficient { name: x1_id, value: 1.0 }],
             constant: 0.0,
             quadratic: Vec::new(),
+            attributes: crate::model::ObjectiveAttributes::default(),
             byte_offset: None,
         });
         problem.update_variable_type("x1", VariableType::DoubleBound(5.5, f64::INFINITY)).unwrap();
@@ -1147,6 +1160,7 @@ mod tests {
             coefficients: vec![Coefficient { name: x1_id, value: 1.0 }],
             constant: 0.0,
             quadratic: Vec::new(),
+            attributes: crate::model::ObjectiveAttributes::default(),
             byte_offset: None,
         });
         problem.update_variable_type("x1", VariableType::UpperBound(-5.0)).unwrap();
@@ -1171,6 +1185,7 @@ mod tests {
             coefficients: vec![Coefficient { name: x1_id, value: 1.0 }],
             constant: 0.0,
             quadratic: Vec::new(),
+            attributes: crate::model::ObjectiveAttributes::default(),
             byte_offset: None,
         });
         problem.add_objective(Objective {
@@ -1178,6 +1193,7 @@ mod tests {
             coefficients: vec![Coefficient { name: x1_id, value: 2.0 }],
             constant: 0.0,
             quadratic: Vec::new(),
+            attributes: crate::model::ObjectiveAttributes::default(),
             byte_offset: None,
         });
 
@@ -1196,6 +1212,7 @@ mod tests {
             coefficients: vec![Coefficient { name: x1_id, value: 1.0 }],
             constant: 0.0,
             quadratic: Vec::new(),
+            attributes: crate::model::ObjectiveAttributes::default(),
             byte_offset: None,
         });
         problem.add_objective(Objective {
@@ -1203,6 +1220,7 @@ mod tests {
             coefficients: vec![Coefficient { name: x1_id, value: 2.0 }],
             constant: 0.0,
             quadratic: Vec::new(),
+            attributes: crate::model::ObjectiveAttributes::default(),
             byte_offset: None,
         });
 
@@ -1237,7 +1255,14 @@ mod tests {
         // round-trip as Integer, not fall back to the MPS [0, 1] default.
         let mut problem = LpProblem::new();
         let obj_id = problem.intern("obj");
-        problem.add_objective(Objective { name: obj_id, coefficients: vec![], constant: 0.0, quadratic: Vec::new(), byte_offset: None });
+        problem.add_objective(Objective {
+            name: obj_id,
+            coefficients: vec![],
+            constant: 0.0,
+            quadratic: Vec::new(),
+            attributes: crate::model::ObjectiveAttributes::default(),
+            byte_offset: None,
+        });
         let x1_id = problem.intern("x1");
         problem.add_variable(crate::model::Variable::new(x1_id).with_var_type(VariableType::General));
 
@@ -1317,7 +1342,14 @@ End
     fn test_semi_continuous_round_trips() {
         let mut problem = LpProblem::new();
         let obj_id = problem.intern("obj");
-        problem.add_objective(Objective { name: obj_id, coefficients: vec![], constant: 0.0, quadratic: Vec::new(), byte_offset: None });
+        problem.add_objective(Objective {
+            name: obj_id,
+            coefficients: vec![],
+            constant: 0.0,
+            quadratic: Vec::new(),
+            attributes: crate::model::ObjectiveAttributes::default(),
+            byte_offset: None,
+        });
         let x1_id = problem.intern("x1");
         problem.add_variable(crate::model::Variable::new(x1_id).with_var_type(VariableType::SemiContinuous));
 
@@ -1342,6 +1374,7 @@ End
             coefficients: vec![Coefficient { name: x_id, value: 1.0 }, Coefficient { name: y_id, value: 1.0 }],
             constant: 0.0,
             quadratic: Vec::new(),
+            attributes: crate::model::ObjectiveAttributes::default(),
             byte_offset: None,
         });
         // `RNG` / `RNG_rng` fold into a RANGES entry; `RHS` is an ordinary row.
@@ -1494,6 +1527,7 @@ ENDATA
             coefficients: vec![Coefficient { name: x1_id, value: 1.0 }],
             constant: 0.0,
             quadratic: Vec::new(),
+            attributes: crate::model::ObjectiveAttributes::default(),
             byte_offset: None,
         });
         problem.update_variable_type("x1", VariableType::UpperBound(f64::NAN)).unwrap();
@@ -1512,6 +1546,7 @@ ENDATA
             coefficients: vec![Coefficient { name: x1_id, value: 1.0 }],
             constant: 0.0,
             quadratic: Vec::new(),
+            attributes: crate::model::ObjectiveAttributes::default(),
             byte_offset: None,
         });
         problem.update_variable_type("x1", VariableType::LowerBound(f64::NAN)).unwrap();
@@ -1530,6 +1565,7 @@ ENDATA
             coefficients: vec![Coefficient { name: x1_id, value: 1.0 }],
             constant: 0.0,
             quadratic: Vec::new(),
+            attributes: crate::model::ObjectiveAttributes::default(),
             byte_offset: None,
         });
         problem.update_variable_type("x1", VariableType::UpperBound(f64::NEG_INFINITY)).unwrap();
@@ -1548,6 +1584,7 @@ ENDATA
             coefficients: vec![Coefficient { name: x1_id, value: 1.0 }],
             constant: 0.0,
             quadratic: Vec::new(),
+            attributes: crate::model::ObjectiveAttributes::default(),
             byte_offset: None,
         });
         problem.update_variable_type("x1", VariableType::LowerBound(f64::INFINITY)).unwrap();
@@ -1566,6 +1603,7 @@ ENDATA
             coefficients: vec![Coefficient { name: x1_id, value: 1.0 }],
             constant: 0.0,
             quadratic: Vec::new(),
+            attributes: crate::model::ObjectiveAttributes::default(),
             byte_offset: None,
         });
         problem.update_variable_type("x1", VariableType::DoubleBound(f64::NAN, 5.0)).unwrap();
@@ -1584,6 +1622,7 @@ ENDATA
             coefficients: vec![Coefficient { name: x1_id, value: 1.0 }],
             constant: 0.0,
             quadratic: Vec::new(),
+            attributes: crate::model::ObjectiveAttributes::default(),
             byte_offset: None,
         });
         // Lower bound of +inf paired with a finite upper bound is an empty,

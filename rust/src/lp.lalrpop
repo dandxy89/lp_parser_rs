@@ -13,6 +13,7 @@ extern {
     enum Token<'input> {
         // Keywords
         "sense" => Token::SenseKw(<Sense>),
+        "multi-objectives" => Token::MultiObjectives,
         "subject to" => Token::SubjectTo,
         "lazy constraints" => Token::LazyConstraints,
         "user cuts" => Token::UserCuts,
@@ -53,6 +54,7 @@ extern {
 
 pub LpProblem: ParseResult<'input> = {
     <sense:"sense">
+    <multi:"multi-objectives"?>
     <obj_elems:ObjElem*>
     "subject to"
     <con_elems:ConElem*>
@@ -63,7 +65,7 @@ pub LpProblem: ParseResult<'input> = {
         // lists and assembled in Rust: entry boundaries (e.g. a trailing
         // constant vs. a coefficient of the next objective's name) need more
         // than one token of lookahead. See `crate::assemble`.
-        let objectives = assemble_objectives(&obj_elems).map_err(|error| ParseError::User { error })?;
+        let objectives = assemble_objectives(&obj_elems, multi.is_some()).map_err(|error| ParseError::User { error })?;
 
         let mut bounds: Vec<(&'input str, VariableType)> = Vec::new();
         let mut generals: Vec<&'input str> = Vec::new();
@@ -135,6 +137,8 @@ ObjElem: SpannedElem<'input> = {
     <loc:@L> "+" => (loc, Elem::Plus),
     <loc:@L> "-" => (loc, Elem::Minus),
     <loc:@L> <q:QuadElem> => (loc, q),
+    // Only valid in a multi-objective attribute (`Priority=2`).
+    <loc:@L> "=" => (loc, Elem::Op(ComparisonOp::EQ)),
 };
 
 // Quadratic-block punctuation, shared by objectives and constraints.

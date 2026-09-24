@@ -27,7 +27,7 @@ use crate::NUMERIC_EPSILON;
 use crate::error::{LpParseError, LpResult};
 use crate::interner::{NameId, NameInterner};
 use crate::lexer::Token;
-use crate::model::{Coefficient, Constraint, ConstraintClass, Objective, QuadraticTerm, Variable};
+use crate::model::{Coefficient, Constraint, ConstraintClass, Objective, ObjectiveAttributes, QuadraticTerm, Variable};
 use crate::problem::LpProblem;
 
 /// Options for controlling LP file output format
@@ -242,7 +242,12 @@ fn build_lp(output: &mut String, problem: &LpProblem, options: &LpWriterOptions)
 
 /// Write the objectives section (sense + objectives)
 fn write_objectives_section(output: &mut String, problem: &LpProblem, options: &LpWriterOptions) -> std::fmt::Result {
-    writeln!(output, "{}", problem.sense)?;
+    // Gurobi's multi-objective attributes need the `multi-objectives` marker.
+    if problem.objectives.values().any(|o| !o.attributes.is_empty()) {
+        writeln!(output, "{} multi-objectives", problem.sense)?;
+    } else {
+        writeln!(output, "{}", problem.sense)?;
+    }
 
     for objective in problem.objectives.values() {
         write_objective(output, objective, &problem.interner, options)?;
@@ -260,6 +265,11 @@ fn write_objective(output: &mut String, objective: &Objective, interner: &NameIn
         return Ok(());
     }
     write!(output, " {name}: ")?;
+    if !objective.attributes.is_empty() {
+        write_objective_attributes(output, &objective.attributes, options)?;
+        // Gurobi puts the expression on the line after the attributes.
+        write!(output, "\n  ")?;
+    }
 
     // Objective quadratics are written `[ ... ] / 2` (CPLEX, Gurobi), so the
     // stored coefficients are doubled inside the brackets.
@@ -274,6 +284,25 @@ fn write_objective(output: &mut String, objective: &Objective, interner: &NameIn
         }
     }
     writeln!(output)
+}
+
+/// Write Gurobi multi-objective attributes (`Priority=2 Weight=1 AbsTol=0
+/// RelTol=0`), skipping unset ones.
+fn write_objective_attributes(output: &mut String, attributes: &ObjectiveAttributes, options: &LpWriterOptions) -> std::fmt::Result {
+    debug_assert!(!attributes.is_empty(), "only called for an objective with attributes");
+    let mut separator = "";
+    if let Some(priority) = attributes.priority {
+        write!(output, "Priority={priority}")?;
+        separator = " ";
+    }
+    for (label, value) in [("Weight", attributes.weight), ("AbsTol", attributes.abs_tol), ("RelTol", attributes.rel_tol)] {
+        if let Some(value) = value {
+            write!(output, "{separator}{label}=")?;
+            write_number(output, value, options.decimal_precision)?;
+            separator = " ";
+        }
+    }
+    Ok(())
 }
 
 /// Write the constraints section (standard and indicator constraints; SOS
@@ -833,6 +862,7 @@ mod tests {
             coefficients: vec![Coefficient { name: x1, value: 1.0 }],
             constant: 0.0,
             quadratic: Vec::new(),
+            attributes: crate::model::ObjectiveAttributes::default(),
             byte_offset: None,
         });
         let c1 = problem.intern("c1");
@@ -875,6 +905,7 @@ mod tests {
             coefficients: vec![Coefficient { name: x1, value: 1.0 }],
             constant: 0.0,
             quadratic: Vec::new(),
+            attributes: crate::model::ObjectiveAttributes::default(),
             byte_offset: None,
         });
         problem.add_objective(Objective {
@@ -882,6 +913,7 @@ mod tests {
             coefficients: vec![],
             constant: 0.0,
             quadratic: Vec::new(),
+            attributes: crate::model::ObjectiveAttributes::default(),
             byte_offset: None,
         });
         problem.add_constraint(Constraint::Standard {
@@ -989,6 +1021,7 @@ mod tests {
             coefficients: vec![Coefficient { name: x1_id, value: 3.0 }, Coefficient { name: x2_id, value: 2.0 }],
             constant: 0.0,
             quadratic: Vec::new(),
+            attributes: crate::model::ObjectiveAttributes::default(),
             byte_offset: None,
         };
         problem.add_objective(objective);
@@ -1104,6 +1137,7 @@ End";
             ],
             constant: 0.0,
             quadratic: Vec::new(),
+            attributes: crate::model::ObjectiveAttributes::default(),
             byte_offset: None,
         };
         problem.add_objective(objective);
@@ -1322,7 +1356,14 @@ End
                 Coefficient { name: id, value: f64::from(i + 1) * 1.5 }
             })
             .collect();
-        problem.add_objective(Objective { name: obj_id, coefficients, constant: 0.0, quadratic: Vec::new(), byte_offset: None });
+        problem.add_objective(Objective {
+            name: obj_id,
+            coefficients,
+            constant: 0.0,
+            quadratic: Vec::new(),
+            attributes: crate::model::ObjectiveAttributes::default(),
+            byte_offset: None,
+        });
         let c1 = problem.intern("c1");
         let x0 = problem.name_id("very_long_variable_name_00").unwrap();
         problem.add_constraint(Constraint::Standard {
@@ -1355,6 +1396,7 @@ End
             coefficients: vec![Coefficient { name: x_id, value: 1.0 }],
             constant: 0.0,
             quadratic: Vec::new(),
+            attributes: crate::model::ObjectiveAttributes::default(),
             byte_offset: None,
         });
         let c1 = problem.intern("c1");

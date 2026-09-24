@@ -30,10 +30,18 @@ class QuadraticTerm(TypedDict):
     # The term's actual coefficient: an objective's LP `[ ... ] / 2` is applied.
     coefficient: float
 
+class ObjectiveAttributes(TypedDict):
+    # Gurobi multi-objective attributes (`Minimize multi-objectives`); None when unset.
+    priority: int | None
+    weight: float | None
+    abs_tol: float | None
+    rel_tol: float | None
+
 class Objective(TypedDict):
     name: str
     coefficients: list[Coefficient]
     quadratic: list[QuadraticTerm]
+    attributes: ObjectiveAttributes
 
 class VariableInfo(TypedDict):
     name: str

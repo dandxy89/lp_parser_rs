@@ -243,6 +243,7 @@ End
             coefficients: vec![Coefficient { name: var_id, value: 1.0 }],
             constant: 0.0,
             quadratic: Vec::new(),
+            attributes: crate::model::ObjectiveAttributes::default(),
             byte_offset: None,
         });
 

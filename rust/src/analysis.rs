@@ -1258,6 +1258,7 @@ mod tests {
             coefficients: vec![Coefficient { name: x_id, value: 1.0 }],
             constant: 0.0,
             quadratic: Vec::new(),
+            attributes: crate::model::ObjectiveAttributes::default(),
             byte_offset: None,
         });
         add_standard_constraint(&mut problem, "c1", &["x"], ComparisonOp::GTE, 1.0);

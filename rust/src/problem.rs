@@ -222,6 +222,7 @@ fn intern_objective(interner: &mut NameInterner, raw: &RawObjective<'_>) -> Obje
         coefficients: intern_coefficients(interner, &raw.coefficients),
         constant: raw.constant,
         quadratic: intern_quadratic(interner, &raw.quadratic),
+        attributes: raw.attributes,
         byte_offset: raw.byte_offset,
     }
 }
@@ -912,8 +913,8 @@ mod serde_support {
 
     use crate::interner::{NameId, NameInterner};
     use crate::model::{
-        Coefficient, ComparisonOp, Constraint, ConstraintClass, GeneralFunction, Objective, QuadraticTerm, SOSType, Sense, Variable,
-        VariableType,
+        Coefficient, ComparisonOp, Constraint, ConstraintClass, GeneralFunction, Objective, ObjectiveAttributes, QuadraticTerm, SOSType,
+        Sense, Variable, VariableType,
     };
     use crate::problem::LpProblem;
 
@@ -976,6 +977,9 @@ mod serde_support {
         /// Omitted for a linear objective, so older snapshots still load.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         quadratic: Vec<SerdeQuadraticTerm>,
+        /// Omitted when no multi-objective attribute is set.
+        #[serde(default, skip_serializing_if = "ObjectiveAttributes::is_empty")]
+        attributes: ObjectiveAttributes,
     }
 
     #[derive(Serialize, Deserialize)]
@@ -1060,6 +1064,7 @@ mod serde_support {
                         coefficients: coeffs_to_serde(&obj.coefficients, &self.interner),
                         constant: obj.constant,
                         quadratic: quadratic_to_serde(&obj.quadratic, &self.interner),
+                        attributes: obj.attributes,
                     })
                     .collect(),
                 constraints: self
@@ -1208,6 +1213,7 @@ mod serde_support {
                         coefficients: coeffs_from_serde(&so.coefficients, &mut interner),
                         constant: so.constant,
                         quadratic: quadratic_from_serde(&so.quadratic, &mut interner),
+                        attributes: so.attributes,
                         byte_offset: None,
                     };
                     (name_id, obj)
@@ -1666,6 +1672,7 @@ End";
             coefficients: vec![Coefficient { name: x3, value: 1.0 }],
             constant: 0.0,
             quadratic: Vec::new(),
+            attributes: crate::model::ObjectiveAttributes::default(),
             byte_offset: None,
         });
         assert_eq!(problem.objective_count(), 1);
@@ -2305,6 +2312,7 @@ mod modification_tests {
             coefficients: vec![Coefficient { name: x1, value: 2.0 }, Coefficient { name: x2, value: 3.0 }],
             constant: 0.0,
             quadratic: Vec::new(),
+            attributes: crate::model::ObjectiveAttributes::default(),
             byte_offset: None,
         });
         problem.add_constraint(Constraint::Standard {

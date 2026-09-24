@@ -77,7 +77,7 @@ pub use interner::{NameId, NameInterner};
 use lalrpop_util::lalrpop_mod;
 pub use lexer::ParseResult;
 pub use line_index::{LineIndex, SourceLocation};
-pub use model::{ConstraintClass, VariableBounds, VariableKind};
+pub use model::{ConstraintClass, GeneralFunction, ObjectiveAttributes, QuadraticTerm, VariableBounds, VariableKind};
 pub use mps::{extract_mps_name, parse_mps};
 pub use problem::LpProblem;
 

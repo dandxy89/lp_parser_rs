@@ -145,6 +145,13 @@ impl LpParser {
             dict.set_item("name", problem.resolve(*name_id))?;
             dict.set_item("coefficients", coefficients_to_list(py, problem, &obj.coefficients)?)?;
             dict.set_item("quadratic", quadratic_to_list(py, problem, &obj.quadratic)?)?;
+            // Gurobi multi-objective attributes; each is None when unset.
+            let attributes = PyDict::new(py);
+            attributes.set_item("priority", obj.attributes.priority)?;
+            attributes.set_item("weight", obj.attributes.weight)?;
+            attributes.set_item("abs_tol", obj.attributes.abs_tol)?;
+            attributes.set_item("rel_tol", obj.attributes.rel_tol)?;
+            dict.set_item("attributes", attributes)?;
             list.append(dict)?;
         }
 

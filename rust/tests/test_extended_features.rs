@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 
-use lp_parser_rs::model::{ComparisonOp, Constraint, ConstraintClass, QuadraticTerm, VariableBounds, VariableKind};
+use lp_parser_rs::model::{ComparisonOp, Constraint, ConstraintClass, ObjectiveAttributes, QuadraticTerm, VariableBounds, VariableKind};
 use lp_parser_rs::mps::writer::write_mps_string;
 use lp_parser_rs::problem::LpProblem;
 use lp_parser_rs::writer::write_lp_string;
@@ -559,4 +559,90 @@ fn general_constraint_is_refused_by_lp_solvers_compat() {
     let problem = parse_resource("general_constraints.lp");
     let error = LpSolversCompat::try_new(&problem).expect_err("a general constraint cannot be dropped");
     assert!(matches!(error, LpSolversCompatError::UnsupportedConstraint { kind: "general", .. }), "{error:?}");
+}
+
+// --- Multi-objective attributes -----------------------------------------------
+
+fn attributes(problem: &LpProblem, name: &str) -> ObjectiveAttributes {
+    let id = problem.name_id(name).unwrap_or_else(|| panic!("objective '{name}' must exist"));
+    problem.objectives[&id].attributes
+}
+
+#[test]
+fn multi_objective_fixture_parses() {
+    let problem = parse_resource("multi_objective.lp");
+    assert_eq!(problem.objective_count(), 3);
+    assert_eq!(
+        attributes(&problem, "Cost"),
+        ObjectiveAttributes { priority: Some(2), weight: Some(1.0), abs_tol: Some(0.5), rel_tol: Some(0.01) }
+    );
+    assert_eq!(attributes(&problem, "Time"), ObjectiveAttributes { priority: Some(1), weight: Some(-0.5), abs_tol: None, rel_tol: None });
+    assert!(attributes(&problem, "Plain").is_empty());
+    let cost = &problem.objectives[&problem.name_id("Cost").unwrap()];
+    assert_eq!(cost.coefficients.len(), 2, "the expression follows the attributes");
+}
+
+#[test]
+fn multi_objective_lp_round_trip() {
+    let problem = parse_resource("multi_objective.lp");
+    let written = write_lp_string(&problem).unwrap();
+    assert!(written.starts_with("Minimize multi-objectives\n"), "{written}");
+    assert!(written.contains(" Cost: Priority=2 Weight=1 AbsTol=0.5 RelTol=0.01\n  3 x + 2 y"), "{written}");
+    assert!(written.contains(" Time: Priority=1 Weight=-0.5\n"), "{written}");
+    let reparsed = lp_round_trip(&problem);
+    for name in ["Cost", "Time", "Plain"] {
+        assert_eq!(attributes(&reparsed, name), attributes(&problem, name), "objective {name}");
+    }
+
+    // Without attributes the plain sense line is kept.
+    let plain = LpProblem::parse("maximize\nobj: x\nsubject to\nc: x <= 1\nend").unwrap();
+    assert!(write_lp_string(&plain).unwrap().contains("Maximize\n obj: x"));
+}
+
+#[test]
+fn multi_objective_errors() {
+    let parse = |objectives: &str| LpProblem::parse(&format!("minimize multi-objectives\n{objectives}\nsubject to\nc: x >= 1\nend"));
+    assert!(parse("o: Priority=1.5\n x").is_err(), "priority must be an integer");
+    assert!(parse("o: Colour=1\n x").is_err(), "unknown attribute");
+    assert!(parse("o: Weight=1 Weight=2\n x").is_err(), "repeated attribute");
+    assert!(parse("o: AbsTol=-1\n x").is_err(), "negative tolerance");
+    assert!(parse("o: Priority=\n x").is_err(), "missing value");
+    // Attributes need the `multi-objectives` marker.
+    assert!(LpProblem::parse("minimize\no: Priority=1\n x\nsubject to\nc: x >= 1\nend").is_err());
+
+    // MPS cannot carry the attributes, so the writer refuses unless told to
+    // write the first objective alone.
+    let single = LpProblem::parse("minimize multi-objectives\no: Priority=1\n x\nsubject to\nc: x >= 1\nend").unwrap();
+    assert!(write_mps_string(&single).is_err());
+    let options = lp_parser_rs::mps::writer::MpsWriterOptions { allow_multiple_objectives: true, ..Default::default() };
+    assert!(lp_parser_rs::mps::writer::write_mps_string_with_options(&single, &options).is_ok());
+}
+
+#[cfg(feature = "diff")]
+#[test]
+fn multi_objective_attribute_changes_are_detected_by_diff() {
+    let a = LpProblem::parse("minimize multi-objectives\no: Priority=2 Weight=1\n x\nsubject to\nc: x >= 1\nend").unwrap();
+    let b = LpProblem::parse("minimize multi-objectives\no: Priority=1 RelTol=0.1\n x\nsubject to\nc: x >= 1\nend").unwrap();
+    let diff = a.diff(&b, &lp_parser_rs::diff::DiffOptions::default());
+    assert_eq!(
+        diff.objs_modified,
+        vec![(
+            "o".to_string(),
+            vec![
+                "priority: Some(2) -> Some(1)".to_string(),
+                "weight: Some(1.0) -> None".to_string(),
+                "rel_tol: None -> Some(0.1)".to_string()
+            ]
+        )]
+    );
+}
+
+#[cfg(feature = "serde")]
+#[test]
+fn multi_objective_attributes_survive_serde() {
+    let problem = parse_resource("multi_objective.lp");
+    let back: LpProblem = serde_json::from_str(&serde_json::to_string(&problem).unwrap()).unwrap();
+    for name in ["Cost", "Time", "Plain"] {
+        assert_eq!(attributes(&back, name), attributes(&problem, name), "objective {name}");
+    }
 }

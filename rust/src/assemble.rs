@@ -17,7 +17,7 @@ use std::borrow::Cow;
 use std::collections::HashSet;
 
 use crate::lexer::{LexerError, RawCoefficient, RawConstraint, RawObjective, RawQuadraticTerm};
-use crate::model::{ComparisonOp, GeneralFunction};
+use crate::model::{ComparisonOp, GeneralFunction, ObjectiveAttributes};
 
 /// One element of an objective or constraint body, with its byte offset.
 pub type SpannedElem<'input> = (usize, Elem<'input>);
@@ -280,7 +280,11 @@ fn parse_signed_number(elems: &[SpannedElem<'_>], mut i: usize, context: &str) -
 ///
 /// Returns an error for malformed term sequences (consecutive signs, adjacent
 /// numeric literals, a dangling sign, or unsigned adjacent terms).
-pub fn assemble_objectives<'input>(elems: &[SpannedElem<'input>]) -> Result<Vec<RawObjective<'input>>, LexerError> {
+///
+/// With `multi_objective` (Gurobi's `Minimize multi-objectives`), a name may be
+/// followed by attributes, `OBJ0: Priority=2 Weight=1 AbsTol=0 RelTol=0`,
+/// before its expression.
+pub fn assemble_objectives<'input>(elems: &[SpannedElem<'input>], multi_objective: bool) -> Result<Vec<RawObjective<'input>>, LexerError> {
     let mut objectives: Vec<RawObjective<'input>> = Vec::new();
     let mut current: Option<RawObjective<'input>> = None;
     let mut i = 0;
@@ -291,19 +295,23 @@ pub fn assemble_objectives<'input>(elems: &[SpannedElem<'input>]) -> Result<Vec<
             if let Some(obj) = current.take() {
                 objectives.push(obj);
             }
+            i += 1;
+            let (attributes, next) = parse_objective_attributes(elems, i, multi_objective)?;
+            i = next;
             current = Some(RawObjective {
                 name: Cow::Borrowed(name),
                 coefficients: Vec::new(),
                 quadratic: Vec::new(),
+                attributes,
                 constant: 0.0,
                 byte_offset: Some(loc),
             });
-            i += 1;
         } else {
             let obj = current.get_or_insert_with(|| RawObjective {
                 name: Cow::Borrowed("__obj__"),
                 coefficients: Vec::new(),
                 quadratic: Vec::new(),
+                attributes: ObjectiveAttributes::default(),
                 constant: 0.0,
                 byte_offset: Some(loc),
             });
@@ -329,6 +337,59 @@ pub fn assemble_objectives<'input>(elems: &[SpannedElem<'input>]) -> Result<Vec<
         objectives.push(obj);
     }
     Ok(objectives)
+}
+
+/// Parse Gurobi multi-objective attributes (`Priority=2 Weight=1 AbsTol=0
+/// RelTol=0`) starting at `i`, stopping at the first element that does not
+/// start one. Returns the attributes and the index after them.
+///
+/// # Errors
+///
+/// Returns an error for an attribute outside a `multi-objectives` section, an
+/// unknown or repeated attribute, a non-numeric or non-finite value, a
+/// non-integral priority, or a negative tolerance.
+fn parse_objective_attributes(
+    elems: &[SpannedElem<'_>],
+    mut i: usize,
+    multi_objective: bool,
+) -> Result<(ObjectiveAttributes, usize), LexerError> {
+    let mut attributes = ObjectiveAttributes::default();
+    while let (Some(&(loc, Elem::Var(attribute))), Some((_, Elem::Op(ComparisonOp::EQ)))) = (elems.get(i), elems.get(i + 1)) {
+        if !multi_objective {
+            return Err(err(loc, format!("objective attribute '{attribute}' requires 'multi-objectives' after the sense")));
+        }
+        let (value, next) = parse_signed_number(elems, i + 2, "an objective attribute")?;
+        if !value.is_finite() {
+            return Err(err(loc, format!("objective attribute '{attribute}' must be finite")));
+        }
+        let repeated = |set: bool| if set { Err(err(loc, format!("objective attribute '{attribute}' is given twice"))) } else { Ok(()) };
+        let tolerance =
+            |value: f64| if value < 0.0 { Err(err(loc, format!("tolerance '{attribute}' must not be negative"))) } else { Ok(value) };
+        match attribute.to_ascii_lowercase().as_str() {
+            "priority" => {
+                repeated(attributes.priority.is_some())?;
+                // Priorities are integers; 2^53 bounds the exactly representable ones.
+                #[allow(clippy::cast_possible_truncation)]
+                let priority = (value.fract() == 0.0 && value.abs() < 9_007_199_254_740_992.0).then_some(value as i64);
+                attributes.priority = Some(priority.ok_or_else(|| err(loc, format!("priority must be an integer, got {value}")))?);
+            }
+            "weight" => {
+                repeated(attributes.weight.is_some())?;
+                attributes.weight = Some(value);
+            }
+            "abstol" => {
+                repeated(attributes.abs_tol.is_some())?;
+                attributes.abs_tol = Some(tolerance(value)?);
+            }
+            "reltol" => {
+                repeated(attributes.rel_tol.is_some())?;
+                attributes.rel_tol = Some(tolerance(value)?);
+            }
+            _ => return Err(err(loc, format!("unknown objective attribute '{attribute}' (expected Priority, Weight, AbsTol or RelTol)"))),
+        }
+        i = next;
+    }
+    Ok((attributes, i))
 }
 
 /// Name the generated upper half of a ranged constraint, avoiding any name the

@@ -43,6 +43,7 @@ pub(super) fn build_objectives<'input>(
             name: Cow::Borrowed("__obj__"),
             coefficients: Vec::new(),
             quadratic: Vec::new(),
+            attributes: crate::model::ObjectiveAttributes::default(),
             constant: 0.0,
             byte_offset: None,
         }];
@@ -56,6 +57,7 @@ pub(super) fn build_objectives<'input>(
             coefficients: row_coefficients(columns, obj_row),
             // QUADOBJ / QMATRIX terms are attached once the file is read.
             quadratic: Vec::new(),
+            attributes: crate::model::ObjectiveAttributes::default(),
             constant,
             byte_offset: None,
         });

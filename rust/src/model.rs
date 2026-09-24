@@ -474,6 +474,31 @@ impl Display for ConstraintClass {
     }
 }
 
+/// Gurobi multi-objective attributes of an objective (`Minimize
+/// multi-objectives` followed by `OBJ0: Priority=2 Weight=1 AbsTol=0
+/// RelTol=0`). Every attribute is optional; an objective of an ordinary
+/// (single- or plain multi-objective) file has none.
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct ObjectiveAttributes {
+    /// Priority in hierarchical (lexicographic) optimisation; higher first.
+    pub priority: Option<i64>,
+    /// Weight when objectives of the same priority are blended.
+    pub weight: Option<f64>,
+    /// Absolute degradation allowed when optimising lower-priority objectives.
+    pub abs_tol: Option<f64>,
+    /// Relative degradation allowed when optimising lower-priority objectives.
+    pub rel_tol: Option<f64>,
+}
+
+impl ObjectiveAttributes {
+    /// Whether no attribute is set.
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        self.priority.is_none() && self.weight.is_none() && self.abs_tol.is_none() && self.rel_tol.is_none()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 /// Represents an optimisation objective with a name and a list of coefficients.
 pub struct Objective {
@@ -487,6 +512,8 @@ pub struct Objective {
     /// coefficient is the term's actual coefficient: the `/ 2` of the LP
     /// syntax is already applied (see [`QuadraticTerm`]).
     pub quadratic: Vec<QuadraticTerm>,
+    /// Gurobi multi-objective attributes (all unset for an ordinary objective).
+    pub attributes: ObjectiveAttributes,
     /// Byte offset of this objective in the source text (for line number mapping).
     pub byte_offset: Option<usize>,
 }
@@ -929,13 +956,21 @@ mod tests {
             coefficients: vec![Coefficient { name: x1, value: 5.0 }],
             constant: 0.0,
             quadratic: Vec::new(),
+            attributes: crate::model::ObjectiveAttributes::default(),
             byte_offset: None,
         };
         assert_eq!(interner.resolve(obj.name), "profit");
         assert_eq!(obj.coefficients.len(), 1);
 
         let dynamic = interner.intern("dynamic");
-        let obj_empty = Objective { name: dynamic, coefficients: vec![], constant: 0.0, quadratic: Vec::new(), byte_offset: None };
+        let obj_empty = Objective {
+            name: dynamic,
+            coefficients: vec![],
+            constant: 0.0,
+            quadratic: Vec::new(),
+            attributes: crate::model::ObjectiveAttributes::default(),
+            byte_offset: None,
+        };
         assert_eq!(interner.resolve(obj_empty.name), "dynamic");
         assert!(obj_empty.coefficients.is_empty(), "expected empty, got {:?}", obj_empty.coefficients);
     }

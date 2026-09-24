@@ -10,6 +10,7 @@
 //! variables and constraints may be called `min`, `bin`, `s1`, `free`, ...:
 //!
 //! - the sense keyword (`minimize`, `max`, ...) only as the first token;
+//! - `multi-objectives` only directly after the sense keyword (Gurobi);
 //! - `subject to` / `st` / `s.t.` only once, as the first token of a line;
 //! - other section keywords (`bounds`, `generals`, `binaries`, `sos`, `end`,
 //!   ...) only as the first token of a line that does not continue an
@@ -34,7 +35,7 @@ use std::ops::Range;
 
 use logos::Logos;
 
-use crate::model::{ComparisonOp, GeneralFunction, SOSType, Sense, VariableType};
+use crate::model::{ComparisonOp, GeneralFunction, ObjectiveAttributes, SOSType, Sense, VariableType};
 
 /// Lexer error type, also used for semantic errors raised while assembling
 /// objective/constraint bodies (see [`crate::assemble`]).
@@ -168,6 +169,8 @@ pub struct RawObjective<'input> {
     pub coefficients: Vec<RawCoefficient<'input>>,
     /// Quadratic terms of the objective function.
     pub quadratic: Vec<RawQuadraticTerm<'input>>,
+    /// Gurobi multi-objective attributes.
+    pub attributes: ObjectiveAttributes,
     /// Constant term of the objective function.
     pub constant: f64,
     /// Byte offset of this objective in the source text (for line number mapping).
@@ -252,6 +255,10 @@ pub enum Token<'input> {
     /// Optimisation sense: maximize
     #[regex(r"(?i)maximize|maximise|maximum|max", |_| Sense::Maximize, priority = 10)]
     SenseKw(Sense),
+
+    /// Gurobi multi-objective marker after the sense (`Minimize multi-objectives`)
+    #[regex(r"(?i)multi-objectives?", priority = 10)]
+    MultiObjectives,
 
     /// Subject to / constraints header
     #[regex(r"(?i)subject[ \t]+to|such[ \t]+that|s\.t\.|st", priority = 10)]
@@ -510,6 +517,7 @@ impl<'input> Lexer<'input> {
     fn resolve_keyword(&mut self, tok: Token<'input>, span: &Range<usize>, at_line_start: bool) -> Token<'input> {
         let keep = match tok {
             Token::SenseKw(_) => self.prev.is_none(),
+            Token::MultiObjectives => matches!(self.prev, Some(Token::SenseKw(_))) && !at_line_start,
             Token::SubjectTo => {
                 // Multi-word forms cannot be identifiers; leave them to the parser.
                 let multi_word = self.input[span.clone()].contains([' ', '\t']);
@@ -622,6 +630,14 @@ mod tests {
             let tokens = tokenize(input);
             assert_eq!(tokens, vec![Token::SenseKw(expected)], "Failed for input: {input}");
         }
+    }
+
+    #[test]
+    fn test_multi_objectives_keyword() {
+        assert_eq!(tokenize("Minimize multi-objectives"), vec![Token::SenseKw(Sense::Minimize), Token::MultiObjectives]);
+        // Anywhere else it is a name.
+        assert_eq!(tokenize("min\nobj: multi-objectives")[3], Token::Identifier("multi-objectives"));
+        assert_eq!(tokenize("min\nmulti-objectives")[1], Token::Identifier("multi-objectives"));
     }
 
     #[test]

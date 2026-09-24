@@ -353,6 +353,22 @@ fn diff_modified_objectives(
         if quad_diffs > 0 {
             changes.push(format!("{quad_diffs} quadratic term change(s)"));
         }
+        if o1.attributes.priority != o2.attributes.priority {
+            changes.push(format!("priority: {:?} -> {:?}", o1.attributes.priority, o2.attributes.priority));
+        }
+        for (label, a, b) in [
+            ("weight", o1.attributes.weight, o2.attributes.weight),
+            ("abs_tol", o1.attributes.abs_tol, o2.attributes.abs_tol),
+            ("rel_tol", o1.attributes.rel_tol, o2.attributes.rel_tol),
+        ] {
+            let differs = match (a, b) {
+                (Some(a), Some(b)) => tol.differ(a, b),
+                _ => a.is_some() != b.is_some(),
+            };
+            if differs {
+                changes.push(format!("{label}: {a:?} -> {b:?}"));
+            }
+        }
         if !changes.is_empty() {
             modified.push((name.clone(), changes));
         }

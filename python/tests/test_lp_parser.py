@@ -416,6 +416,22 @@ class TestGeneralConstraint:
         assert "General Constraints\n g: r = MIN ( x , y , 2 )" in LpParser.from_string(self.LP).to_lp_string()
 
 
+class TestMultiObjective:
+    LP = (
+        "Minimize multi-objectives\n Cost: Priority=2 Weight=1 AbsTol=0 RelTol=0.1\n  x + y\n"
+        " Time:\n  x\nSubject To\n c1: x + y >= 1\nEnd\n"
+    )
+
+    def test_attributes_are_exposed(self) -> None:
+        cost, time = LpParser.from_string(self.LP).objectives
+        assert cost["attributes"] == {"priority": 2, "weight": 1.0, "abs_tol": 0.0, "rel_tol": 0.1}
+        assert time["attributes"] == {"priority": None, "weight": None, "abs_tol": None, "rel_tol": None}
+
+    def test_round_trip(self) -> None:
+        written = LpParser.from_string(self.LP).to_lp_string()
+        assert written.startswith("Minimize multi-objectives\n Cost: Priority=2 Weight=1 AbsTol=0 RelTol=0.1\n")
+
+
 class TestThresholdValidation:
     LP = "Minimize\n obj: x\nSubject To\n c1: x >= 1000\nEnd\n"
 
