@@ -256,7 +256,11 @@ pub enum Token<'input> {
     /// Variable/constraint name identifier
     /// Allowed characters: alphanumeric and !#$%&()_,.;?@{}~'[]
     /// (`\` is excluded: per the CPLEX spec it starts a comment anywhere on a line)
-    #[regex(r"[a-zA-Z_!#$%&(),.;?@{}~'\[\]]([a-zA-Z0-9_!#$%&(),.;?@{}~'|>\[\]]|-[a-zA-Z0-9_!#$%&(),.;?@{}~'|>\[\]])*", |lex| lex.slice(), priority = 5)]
+    ///
+    /// `>` is only accepted mid-name when followed by a non-numeric name
+    /// character (Gurobi writes names like `ArcFlow%>%[0]`), so `y>=3` and
+    /// `y>3` still lex as a comparison rather than as a variable `y>`.
+    #[regex(r"[a-zA-Z_!#$%&(),.;?@{}~'\[\]]([a-zA-Z0-9_!#$%&(),.;?@{}~'|\[\]]|-[a-zA-Z0-9_!#$%&(),.;?@{}~'|\[\]]|>[a-zA-Z_!#$%&(),;?@{}~'|\[\]])*", |lex| lex.slice(), priority = 5)]
     Identifier(&'input str),
 }
 
@@ -493,7 +497,7 @@ mod tests {
     #[test_case("x0" => vec![Token::Identifier("x0")] ; "digit_0")]
     #[test_case("x9" => vec![Token::Identifier("x9")] ; "digit_9")]
     #[test_case("x|" => vec![Token::Identifier("x|")] ; "pipe")]
-    #[test_case("x>" => vec![Token::Identifier("x>")] ; "gt_continuation")]
+    #[test_case("x>%" => vec![Token::Identifier("x>%")] ; "gt_continuation")]
     #[test_case("x!" => vec![Token::Identifier("x!")] ; "excl_cont")]
     #[test_case("x#" => vec![Token::Identifier("x#")] ; "hash_cont")]
     #[test_case("x$" => vec![Token::Identifier("x$")] ; "dollar_cont")]
@@ -544,7 +548,6 @@ mod tests {
     #[test_case("x-y", &[Token::Identifier("x-y")] ; "simple_hyphen")]
     #[test_case("a-b-c", &[Token::Identifier("a-b-c")] ; "double_hyphen_chain")]
     #[test_case("x-1", &[Token::Identifier("x-1")] ; "hyphen_digit")]
-    #[test_case("x->", &[Token::Identifier("x->")] ; "hyphen_gt")]
     #[test_case("x-|", &[Token::Identifier("x-|")] ; "hyphen_pipe")]
     fn test_hyphen_valid(input: &str, expected: &[Token<'_>]) {
         assert_eq!(tokenize(input), expected);
@@ -593,7 +596,7 @@ mod tests {
     #[test_case("x!#$%&" => vec![Token::Identifier("x!#$%&")] ; "mixed_specials_1")]
     #[test_case("_(),.;?" => vec![Token::Identifier("_(),.;?")] ; "mixed_specials_2")]
     #[test_case("a@{}~'" => vec![Token::Identifier("a@{}~'")] ; "mixed_specials_3")]
-    #[test_case("var|>" => vec![Token::Identifier("var|>")] ; "pipe_gt_continuation")]
+    #[test_case("var|>a" => vec![Token::Identifier("var|>a")] ; "pipe_gt_continuation")]
     fn test_multi_char_mixed_specials(input: &str) -> Vec<Token<'_>> {
         tokenize(input)
     }
@@ -629,8 +632,17 @@ mod tests {
     }
 
     #[test]
-    fn test_x_gt_is_single_identifier() {
-        assert_eq!(tokenize("x>"), vec![Token::Identifier("x>")]);
+    fn test_trailing_gt_is_comparison() {
+        assert_eq!(tokenize("x>"), vec![Token::Identifier("x"), Token::Gt]);
+        assert_eq!(tokenize("x->"), vec![Token::Identifier("x"), Token::Minus, Token::Gt]);
+    }
+
+    #[test]
+    fn test_gt_operators_not_absorbed_into_identifier() {
+        assert_eq!(tokenize("y>=3"), vec![Token::Identifier("y"), Token::Gte, Token::Number(3.0)]);
+        assert_eq!(tokenize("y>3"), vec![Token::Identifier("y"), Token::Gt, Token::Number(3.0)]);
+        assert_eq!(tokenize("y>.5"), vec![Token::Identifier("y"), Token::Gt, Token::Number(0.5)]);
+        assert_eq!(tokenize("y>-3"), vec![Token::Identifier("y"), Token::Gt, Token::Minus, Token::Number(3.0)]);
     }
 
     #[test]

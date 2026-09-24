@@ -1317,6 +1317,14 @@ End";
         assert!(LpProblem::parse("minimize\nx1\nsubject to\nend").is_ok());
     }
 
+    #[test]
+    fn test_gt_glued_to_variable_is_comparison() {
+        let p = LpProblem::parse("minimize\nx + y\nsubject to\nc: x + y>=3\nend").unwrap();
+        assert!(p.name_id("y>").is_none());
+        let Constraint::Standard { operator, rhs, .. } = &p.constraints[&p.name_id("c").unwrap()] else { panic!("expected standard") };
+        assert_eq!((*operator, *rhs), (ComparisonOp::GTE, 3.0));
+    }
+
     // Parsed coefficients round-trip bit-exactly from source text.
     #[allow(clippy::float_cmp)]
     #[test]
