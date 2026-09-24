@@ -40,9 +40,15 @@ fn apply_variable_kind(interner: &mut NameInterner, variables: &mut IndexMap<Nam
         let id = interner.intern(name);
         match variables.entry(id) {
             Entry::Occupied(mut entry) => {
+                let existing = entry.get().kind;
                 // Only override continuous (default) kind so explicit SOS/binary from bounds wins.
-                if entry.get().kind == VariableKind::Continuous {
+                if existing == VariableKind::Continuous {
                     entry.get_mut().set_kind(kind);
+                } else if is_semi_integer(existing, kind) {
+                    eprintln!(
+                        "variable '{name}' is both integer and semi-continuous (semi-integer), which the model cannot \
+                         represent: it is kept as {existing} and its semi-continuity is dropped"
+                    );
                 }
             }
             Entry::Vacant(entry) => {
@@ -50,6 +56,18 @@ fn apply_variable_kind(interner: &mut NameInterner, variables: &mut IndexMap<Nam
             }
         }
     }
+}
+
+/// Whether declaring `new` on a variable already of kind `existing` makes it
+/// semi-integer (CPLEX: listed in both `generals` and `semi-continuous`).
+///
+/// A binary variable is excluded: semi-continuity adds nothing to `{0, 1}`.
+const fn is_semi_integer(existing: VariableKind, new: VariableKind) -> bool {
+    matches!(
+        (existing, new),
+        (VariableKind::General | VariableKind::Integer, VariableKind::SemiContinuous)
+            | (VariableKind::SemiContinuous, VariableKind::General | VariableKind::Integer)
+    )
 }
 
 /// Update a coefficient in a vector using index-based `swap_remove`.
@@ -1763,6 +1781,21 @@ End";
         // `such that` is a multi-word alias for `subject to`.
         let p = LpProblem::parse("minimize\nx1\nsuch that\nc1: x1 <= 1\nend").unwrap();
         assert_eq!(p.constraint_count(), 1);
+    }
+
+    #[test]
+    fn test_semi_integer_declaration_is_detected() {
+        assert!(super::is_semi_integer(VariableKind::General, VariableKind::SemiContinuous));
+        assert!(super::is_semi_integer(VariableKind::Integer, VariableKind::SemiContinuous));
+        assert!(super::is_semi_integer(VariableKind::SemiContinuous, VariableKind::General));
+        assert!(!super::is_semi_integer(VariableKind::Binary, VariableKind::SemiContinuous));
+        assert!(!super::is_semi_integer(VariableKind::Continuous, VariableKind::SemiContinuous));
+
+        // Integrality is kept (with a warning on stderr) and bounds survive.
+        let p = LpProblem::parse("minimize\nx\nsubject to\nc: x >= 1\nbounds\nx <= 10\ngenerals\nx\nsemi-continuous\nx\nend").unwrap();
+        let x = &p.variables[&p.name_id("x").unwrap()];
+        assert_eq!(x.kind, VariableKind::General);
+        assert_eq!(x.bounds, VariableBounds::upper(10.0));
     }
 
     #[test]

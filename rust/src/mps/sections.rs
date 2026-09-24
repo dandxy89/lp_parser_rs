@@ -494,6 +494,7 @@ impl<'input> BoundsState<'input> {
                 // Semi-integer: the model has no semi-integer type, so the closest
                 // representation is an integer variable with the given upper bound.
                 let value = parse_bound_value(value_field, line_num, bound_type)?;
+                eprintln!("line {line_num}: semi-integer (SI) column '{var_name}' is read as integer; its semi-continuity is dropped");
                 accumulator.set_upper(value);
                 if integer_vars_set.insert(var_name) {
                     integer_vars.push(var_name);
