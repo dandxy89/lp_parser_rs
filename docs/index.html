@@ -176,7 +176,7 @@ problem.update_constraint_rhs(<span class="g">"capacity"</span>, <span class="v"
 problem.rename_variable(<span class="g">"x1"</span>, <span class="g">"production_a"</span>)?;
 problem.update_variable_type(<span class="g">"production_a"</span>, VariableType::Integer)?;
 
-std::fs::write(<span class="g">"modified.lp"</span>, write_lp_string(&amp;problem)?)?;</code></pre>
+std::fs::write(<span class="g">"modified.lp"</span>, write_lp_string(&amp;problem))?;</code></pre>
     <p>The full modification surface on <code>LpProblem</code>: <code>update_objective_coefficient</code>, <code>rename_objective</code>, <code>remove_objective</code>, <code>update_constraint_coefficient</code>, <code>update_constraint_rhs</code>, <code>rename_constraint</code>, <code>remove_constraint</code>, <code>rename_variable</code>, <code>update_variable_type</code>, <code>remove_variable</code>.
     Writer knobs live on <code>LpWriterOptions</code>: <code>include_problem_name</code>, <code>max_line_length</code>, <code>decimal_precision</code>, <code>include_section_spacing</code>.</p>
 
