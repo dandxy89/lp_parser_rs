@@ -81,11 +81,6 @@ const SEPARATOR: &str = "  \u{2502}  ";
 /// Separator between key hints in the right-hand segment.
 const HINT_SEPARATOR: &str = " \u{b7} ";
 
-/// Fraction of the status bar the key hints may occupy before pairs are
-/// dropped: two thirds, leaving a third for the counts on the left.
-const HINT_WIDTH_NUMERATOR: u16 = 2;
-const HINT_WIDTH_DENOMINATOR: u16 = 3;
-
 /// Split the packed hint string (`"S:solve  w:csv"`) into styled spans, and
 /// return their total display width.
 ///
@@ -150,7 +145,7 @@ fn hint_spans(hints: &str, max_width: usize) -> (Vec<Span<'_>>, usize) {
 /// Segments are dropped whole from the end rather than clipped: half a label
 /// (`filter:` with its value cut off) reads as a bug, where a missing segment
 /// just reads as a narrow terminal.
-fn fit_segments<'a>(segments: Vec<Vec<Span<'a>>>, separator: &Span<'a>, available: usize) -> Vec<Span<'a>> {
+fn fit_segments<'a>(segments: Vec<Vec<Span<'a>>>, separator: &Span<'a>, available: usize) -> (Vec<Span<'a>>, usize) {
     let separator_width = separator.content.chars().count();
     let mut spans: Vec<Span<'a>> = Vec::with_capacity(segments.len() * 3);
     let mut width = 0;
@@ -166,7 +161,7 @@ fn fit_segments<'a>(segments: Vec<Vec<Span<'a>>>, separator: &Span<'a>, availabl
         spans.extend(segment);
         width += gap + segment_width;
     }
-    spans
+    (spans, width)
 }
 
 /// Draw the status bar across the given area.
@@ -179,19 +174,6 @@ pub fn draw_status_bar(frame: &mut Frame, area: Rect, params: &StatusBarParams<'
 
     let t = theme();
     let separator = Span::styled(SEPARATOR, Style::default().fg(t.border));
-
-    // Right: yank flash or key hints, right-aligned in its own chunk so the
-    // left segments can flow (and drop) independently.
-    let (mut right_spans, right_width) = params.yank_flash.map_or_else(
-        || hint_spans(params.hints, (area.width * HINT_WIDTH_NUMERATOR / HINT_WIDTH_DENOMINATOR) as usize),
-        |flash| (vec![Span::styled(flash.message, flash_style(flash.level))], flash.message.chars().count()),
-    );
-    // A leading space keeps a visible gap between the two halves.
-    right_spans.insert(0, Span::raw(" "));
-
-    #[allow(clippy::cast_possible_truncation)] // hint strings are far below u16::MAX
-    let right_len = (right_width as u16).saturating_add(2).min(area.width);
-    let chunks = Layout::horizontal([Constraint::Min(0), Constraint::Length(right_len)]).split(area);
 
     // Left: one group per fact. Inspect mode shows the filename and section
     // count; diff mode shows total/per-kind change counts and the active filter.
@@ -241,7 +223,45 @@ pub fn draw_status_bar(frame: &mut Frame, area: Rect, params: &StatusBarParams<'
         segments.push(vec![Span::styled(format!("L{top_line}/{}", position.content_lines), Style::default().fg(t.accent))]);
     }
 
-    let left_spans = fit_segments(segments, &separator, chunks[0].width as usize);
+    // The state on the left outranks the hints on the right: the left
+    // segments take what they need, less the room for the one hint that is
+    // never dropped (`?:help`), and the hints fill whatever is left over.
+    // A flash is transient and is the thing the user is waiting to read, so
+    // it keeps its full width instead.
+    let available = area.width as usize;
+    let right_floor = params.yank_flash.map_or_else(|| last_hint_width(params.hints), |flash| flash.message.chars().count()) + 2;
+    let (left_spans, left_width) = fit_segments(segments, &separator, available.saturating_sub(right_floor));
+
+    let (mut right_spans, right_width) = params.yank_flash.map_or_else(
+        || hint_spans(params.hints, available.saturating_sub(left_width + 2)),
+        |flash| (vec![Span::styled(flash.message, flash_style(flash.level))], flash.message.chars().count()),
+    );
+    // A leading space keeps a visible gap between the two halves.
+    right_spans.insert(0, Span::raw(" "));
+
+    #[allow(clippy::cast_possible_truncation)] // hint strings are far below u16::MAX
+    let right_len = (right_width as u16).saturating_add(2).min(area.width);
+    let chunks = Layout::horizontal([Constraint::Min(0), Constraint::Length(right_len)]).split(area);
     frame.render_widget(Paragraph::new(Line::from(left_spans)), chunks[0]);
     frame.render_widget(Paragraph::new(Line::from(right_spans)), chunks[1]);
+}
+
+/// Width of the last hint pair — `?:help`, which is always kept.
+fn last_hint_width(hints: &str) -> usize {
+    hints.split("  ").filter(|pair| !pair.is_empty()).last().map_or(0, |pair| pair.chars().count())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn hints_shrink_to_help_before_the_state_is_dropped() {
+        let hints = "E:what-if  r:raw  s:sort  ?:help";
+        assert_eq!(last_hint_width(hints), "?:help".len());
+        let (_, width) = hint_spans(hints, 6);
+        assert_eq!(width, 6, "only ?:help survives a tight budget");
+        let (_, width) = hint_spans(hints, 18);
+        assert_eq!(width, "E:what-if · ?:help".chars().count(), "the leading pairs come back as room allows");
+    }
 }
