@@ -73,6 +73,8 @@ git clone https://github.com/dandxy89/lp_parser_rs.git
 cd lp_parser_rs/rust && cargo build --release --all-features
 ```
 
+Every subcommand reads LP or MPS input, choosing the parser by file extension (`.mps`, case-insensitive, reads MPS; anything else reads LP).
+
 ### Global options
 
 | Flag                               | Description                            |
@@ -85,7 +87,7 @@ cd lp_parser_rs/rust && cargo build --release --all-features
 
 | Option                | Default | Description                            |
 | --------------------- | ------- | -------------------------------------- |
-| `<FILE>`              | —       | Path to the LP file (required)         |
+| `<FILE>`              | —       | Path to the LP or MPS file (required)  |
 | `-o, --output <PATH>` | stdout  | Write output to file                   |
 | `-f, --format <FMT>`  | `text`  | `text`, `json` (serde), `yaml` (serde) |
 | `--pretty`            | off     | Pretty-print JSON/YAML                 |
@@ -144,11 +146,11 @@ issues: []
 ```
 </details>
 
-### `diff` — compare two LP files (requires `diff` feature)
+### `diff` — compare two LP or MPS files (requires `diff` feature)
 
 | Option                      | Default | Description                                                              |
 | --------------------------- | ------- | ------------------------------------------------------------------------ |
-| `<FILE1> <FILE2>`           | —       | Base and comparison files                                                |
+| `<FILE1> <FILE2>`           | —       | Base and comparison files (LP or MPS)                                    |
 | `-o, --output <PATH>`       | stdout  | Write output to file                                                     |
 | `-f, --format <FMT>`        | `text`  | `text`, `json`, `yaml`                                                   |
 | `--pretty`                  | off     | Pretty-print structured output                                           |
@@ -207,7 +209,7 @@ lp_parser convert problem.mps --format mps -o rewritten.mps  # MPS -> MPS
 
 | Option                | Default | Description                      |
 | --------------------- | ------- | -------------------------------- |
-| `<FILE>`              | —       | Path to the LP file              |
+| `<FILE>`              | —       | Path to the LP or MPS file       |
 | `-s, --solver <NAME>` | `cbc`   | `cbc`, `glpk`                    |
 | `-o, --output <PATH>` | stdout  | Write solution to file           |
 | `-f, --format <FMT>`  | `text`  | `text`, `json`, `yaml`           |

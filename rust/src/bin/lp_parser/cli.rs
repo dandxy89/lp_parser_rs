@@ -22,7 +22,7 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Commands {
-    /// Parse an LP file and display its structure
+    /// Parse an LP or MPS file and display its structure
     Parse(ParseArgs),
 
     /// Show detailed statistics about an LP problem
@@ -32,12 +32,12 @@ pub enum Commands {
     /// Exits 1 when any error-severity issue is found, 2 on failure.
     Analyze(AnalyzeArgs),
 
-    /// Compare two LP files.
+    /// Compare two LP or MPS files.
     /// Exits 0 when the problems match, 1 when they differ, 2 on failure.
     #[cfg(feature = "diff")]
     Diff(DiffArgs),
 
-    /// Convert LP file to another format
+    /// Convert an LP or MPS file to another format
     Convert(ConvertArgs),
 
     /// Solve an LP problem using external solvers
@@ -60,7 +60,7 @@ pub enum OutputFormat {
 
 #[derive(clap::Args)]
 pub struct ParseArgs {
-    /// Path to the LP file
+    /// Path to the LP or MPS file (`.mps` extension reads MPS)
     pub file: PathBuf,
 
     /// Write output to file instead of stdout
@@ -79,7 +79,7 @@ pub struct ParseArgs {
 #[derive(clap::Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct AnalyzeArgs {
-    /// Path to the LP file
+    /// Path to the LP or MPS file (`.mps` extension reads MPS)
     pub file: PathBuf,
 
     /// Write output to file instead of stdout
@@ -124,7 +124,7 @@ fn positive_finite(value: &str) -> Result<f64, String> {
 #[derive(clap::Args)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct InfoArgs {
-    /// Path to the LP file
+    /// Path to the LP or MPS file (`.mps` extension reads MPS)
     pub file: PathBuf,
 
     /// Write output to file instead of stdout
@@ -155,10 +155,10 @@ pub struct InfoArgs {
 #[cfg(feature = "diff")]
 #[derive(clap::Args)]
 pub struct DiffArgs {
-    /// First LP file (base)
+    /// First LP or MPS file (base)
     pub file1: PathBuf,
 
-    /// Second LP file (to compare against)
+    /// Second LP or MPS file (to compare against)
     pub file2: PathBuf,
 
     /// Write output to file instead of stdout
@@ -208,7 +208,7 @@ pub enum ConvertFormat {
 
 #[derive(clap::Args)]
 pub struct ConvertArgs {
-    /// Path to the LP file
+    /// Path to the LP or MPS file (`.mps` extension reads MPS)
     pub file: PathBuf,
 
     /// Output file or directory (required for CSV)
@@ -253,7 +253,7 @@ pub enum Solver {
 #[cfg(feature = "lp-solvers")]
 #[derive(clap::Args)]
 pub struct SolveArgs {
-    /// Path to the LP file
+    /// Path to the LP or MPS file (`.mps` extension reads MPS)
     pub file: PathBuf,
 
     /// Solver to use

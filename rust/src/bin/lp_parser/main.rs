@@ -23,8 +23,7 @@ use lp_parser_rs::problem::LpProblem;
 type BoxError = Box<dyn std::error::Error>;
 
 fn cmd_parse(args: ParseArgs, verbose: bool) -> Result<(), BoxError> {
-    let content = parse_file(&args.file)?;
-    let problem = LpProblem::parse(&content)?;
+    let problem = read_problem(&args.file)?;
 
     if verbose {
         eprintln!("Parsed file: {}", args.file.display());
@@ -61,8 +60,7 @@ fn cmd_parse(args: ParseArgs, verbose: bool) -> Result<(), BoxError> {
 }
 
 fn cmd_info(args: &InfoArgs, verbose: bool) -> Result<(), BoxError> {
-    let content = parse_file(&args.file)?;
-    let problem = LpProblem::parse(&content)?;
+    let problem = read_problem(&args.file)?;
 
     if verbose {
         eprintln!("Analyzing file: {}", args.file.display());
@@ -96,8 +94,7 @@ fn cmd_info(args: &InfoArgs, verbose: bool) -> Result<(), BoxError> {
 
 /// Returns `ExitCode` 1 when any error-severity issue is found (CI gating), 0 otherwise.
 fn cmd_analyze(args: AnalyzeArgs, verbose: bool) -> Result<ExitCode, BoxError> {
-    let content = parse_file(&args.file)?;
-    let problem = LpProblem::parse(&content)?;
+    let problem = read_problem(&args.file)?;
 
     if verbose {
         eprintln!("Analyzing file: {}", args.file.display());
@@ -427,10 +424,8 @@ fn cmd_diff(args: &DiffArgs, verbose: bool) -> Result<ExitCode, BoxError> {
         eprintln!("abs_tol={} rel_tol={} rename_rules={}", tol.abs, tol.rel, rules.len());
     }
 
-    let content1 = parse_file(&args.file1)?;
-    let content2 = parse_file(&args.file2)?;
-    let p1 = LpProblem::parse(&content1)?;
-    let p2 = LpProblem::parse(&content2)?;
+    let p1 = read_problem(&args.file1)?;
+    let p2 = read_problem(&args.file2)?;
 
     // Hand the CLI's regex rename rules to the library engine as a normaliser
     // closure, keeping `regex` out of the core crate.
@@ -462,20 +457,20 @@ fn cmd_diff(args: &DiffArgs, verbose: bool) -> Result<ExitCode, BoxError> {
     Ok(if diff.is_empty() { ExitCode::SUCCESS } else { ExitCode::from(1) })
 }
 
-/// Parse `content` as MPS if `path` has a `.mps` extension (case-insensitive),
-/// otherwise as LP. Scoped to `convert` so that `MPS -> MPS` round trips work;
-/// other subcommands are unaffected and remain LP-only.
-fn parse_convert_input(path: &std::path::Path, content: &str) -> Result<LpProblem, BoxError> {
+/// Read and parse `path`: as MPS if it has a `.mps` extension
+/// (case-insensitive), otherwise as LP. Every subcommand reads its input
+/// through this, so each accepts either format.
+fn read_problem(path: &std::path::Path) -> Result<LpProblem, BoxError> {
+    let content = parse_file(path)?;
     let is_mps = path.extension().and_then(|ext| ext.to_str()).is_some_and(|ext| ext.eq_ignore_ascii_case("mps"));
-    if is_mps { Ok(LpProblem::parse_mps(content)?) } else { Ok(LpProblem::parse(content)?) }
+    if is_mps { Ok(LpProblem::parse_mps(&content)?) } else { Ok(LpProblem::parse(&content)?) }
 }
 
 fn cmd_convert(args: ConvertArgs, verbose: bool, quiet: bool) -> Result<(), BoxError> {
     use lp_parser_rs::mps::writer::{MpsWriterOptions, write_mps_string_with_options};
     use lp_parser_rs::writer::{LpWriterOptions, write_lp_string_with_warnings};
 
-    let content = parse_file(&args.file)?;
-    let problem = parse_convert_input(&args.file, &content)?;
+    let problem = read_problem(&args.file)?;
 
     if verbose {
         eprintln!("Converting file: {}", args.file.display());
@@ -558,8 +553,7 @@ fn cmd_solve(args: SolveArgs, verbose: bool, quiet: bool) -> Result<(), BoxError
     use lp_parser_rs::compat::lp_solvers::LpSolversCompat;
     use lp_solvers::solvers::{CbcSolver, GlpkSolver, SolverTrait, Status};
 
-    let content = parse_file(&args.file)?;
-    let problem = LpProblem::parse(&content)?;
+    let problem = read_problem(&args.file)?;
 
     if verbose {
         eprintln!("Loading problem: {}", args.file.display());
@@ -682,4 +676,20 @@ fn main() -> ExitCode {
         eprintln!("Error: {error}");
         ExitCode::from(2)
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use super::read_problem;
+
+    #[test]
+    fn read_problem_picks_the_parser_by_extension() {
+        let resources = Path::new(env!("CARGO_MANIFEST_DIR")).join("resources");
+        let mps = read_problem(&resources.join("enlight4.mps")).expect("an .mps file must be read as MPS");
+        assert_eq!(mps.name(), Some("enlight4"));
+        let lp = read_problem(&resources.join("afiro.lp")).expect("an .lp file must be read as LP");
+        assert!(lp.constraint_count() > 0);
+    }
 }
