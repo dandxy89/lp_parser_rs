@@ -570,11 +570,16 @@ impl Builder<'_> {
     fn occurrence(&mut self, node: Node<'_>, role: Role, entity: Option<usize>, coefficient: Option<f64>) {
         debug_assert_eq!(node.kind(), kind::IDENTIFIER);
         let name = syntax::text(node, self.text);
-        let next = self.index.variables.len();
-        let var = *self.index.variable_ids.entry(name.to_owned()).or_insert(next);
-        if var == next {
+        // Look up before inserting: most occurrences repeat a known name, and
+        // `entry` would allocate the key every time.
+        let var = if let Some(&var) = self.index.variable_ids.get(name) {
+            var
+        } else {
+            let var = self.index.variables.len();
+            self.index.variable_ids.insert(name.to_owned(), var);
             self.index.variables.push(Variable { name: name.to_owned(), occurrences: Vec::new() });
-        }
+            var
+        };
         let occurrences = &mut self.index.variables[var].occurrences;
         self.index.sites.push((node.byte_range(), Symbol::Variable(var, occurrences.len())));
         occurrences.push(Occurrence { range: node.byte_range(), role, entity, coefficient });

@@ -1,0 +1,113 @@
+//! Large-file benchmarks: incremental reparse, symbol index rebuild and full
+//! semantic tokens on a generated ~50 MB LP file.
+
+use std::fmt::{self, Write as _};
+use std::hint::black_box;
+use std::time::Duration;
+
+use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
+use lp_lsp::features::semantic_tokens;
+use lp_lsp::{Document, Encoding, SymbolIndex, syntax};
+use tower_lsp_server::ls_types::{TextDocumentContentChangeEvent, Uri};
+use tree_sitter::InputEdit;
+
+const TARGET_BYTES: usize = 50 * 1024 * 1024;
+const VARIABLES: usize = 200_000;
+
+fn put(text: &mut String, args: fmt::Arguments<'_>) {
+    text.write_fmt(args).expect("writing to a String cannot fail");
+}
+
+/// Deterministic LP model of roughly `TARGET_BYTES`: constraints fill most of
+/// it, then bounds, generals and a few SOS sets.
+fn generate() -> String {
+    let mut text = String::with_capacity(TARGET_BYTES + 1024 * 1024);
+    text.push_str("Minimize\n obj: ");
+    for v in 0..1000 {
+        put(&mut text, format_args!("{} x{v} + ", v % 7 + 1));
+    }
+    text.push_str("x0\nSubject To\n");
+    let body = TARGET_BYTES - TARGET_BYTES / 10;
+    let mut i = 0usize;
+    while text.len() < body {
+        let (a, b, c) = (i % VARIABLES, (i * 7 + 3) % VARIABLES, (i * 13 + 11) % VARIABLES);
+        put(&mut text, format_args!(" c{i}: {}.5 x{a} + {} x{b} - x{c} >= {}\n", i % 9 + 1, i % 5 + 2, i % 100));
+        i += 1;
+    }
+    text.push_str("Bounds\n");
+    for v in 0..VARIABLES {
+        put(&mut text, format_args!(" 0 <= x{v} <= {}\n", v % 1000 + 1));
+    }
+    text.push_str("Generals\n");
+    for v in (0..VARIABLES).step_by(2) {
+        put(&mut text, format_args!(" x{v}\n"));
+    }
+    text.push_str("SOS\n");
+    for s in 0..10 {
+        put(&mut text, format_args!(" s{s}: S{} ::\n", s % 2 + 1));
+        for k in 0..5 {
+            put(&mut text, format_args!("  x{}: {}\n", s * 5 + k, k + 1));
+        }
+    }
+    text.push_str("End\n");
+    text
+}
+
+fn benches(c: &mut Criterion) {
+    let text = generate();
+    eprintln!("generated LP file: {} bytes (~{} MiB)", text.len(), text.len() / (1024 * 1024));
+    let uri: Uri = "file:///bench.lp".parse().expect("valid URI");
+    let doc = Document::new(uri, text, 1, Encoding::Utf16);
+    assert!(!doc.has_syntax_errors(), "generated file must parse cleanly");
+
+    // Insert a digit in front of a constraint coefficient near the middle.
+    let middle = doc.text.len() / 2;
+    let at = doc.text[middle..].find(": ").expect("a constraint after the middle") + middle + 2;
+    let change = TextDocumentContentChangeEvent { range: Some(doc.range(at..at)), range_length: None, text: "1".to_owned() };
+
+    let mut group = c.benchmark_group("lsp_50mb");
+    group.sample_size(10).warm_up_time(Duration::from_secs(1)).measurement_time(Duration::from_secs(10));
+
+    group.bench_function("apply_changes_single_char", |b| {
+        b.iter_batched(
+            || doc.clone(),
+            |mut doc| {
+                doc.apply_changes(std::slice::from_ref(&change), 2);
+                doc
+            },
+            BatchSize::PerIteration,
+        );
+    });
+
+    group.bench_function("incremental_reparse_only", |b| {
+        let mut edited = doc.text.clone();
+        edited.insert(at, '1');
+        let point = doc.lines.point(at);
+        let edit = InputEdit {
+            start_byte: at,
+            old_end_byte: at,
+            new_end_byte: at + 1,
+            start_position: point,
+            old_end_position: point,
+            new_end_position: tree_sitter::Point { row: point.row, column: point.column + 1 },
+        };
+        b.iter_batched(
+            || {
+                let mut tree = doc.tree.clone();
+                tree.edit(&edit);
+                tree
+            },
+            |tree| syntax::parse(&edited, Some(&tree)),
+            BatchSize::PerIteration,
+        );
+    });
+
+    group.bench_function("symbol_index_build", |b| b.iter(|| SymbolIndex::build(black_box(&doc.tree), black_box(&doc.text))));
+
+    group.bench_function("semantic_tokens_full", |b| b.iter(|| semantic_tokens::tokens(black_box(&doc), None)));
+
+    group.finish();
+}
+
+criterion_group!(lsp, benches);
+criterion_main!(lsp);
