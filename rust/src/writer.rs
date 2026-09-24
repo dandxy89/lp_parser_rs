@@ -247,28 +247,21 @@ fn write_bounds_section(output: &mut String, problem: &LpProblem, options: &LpWr
 /// declared" shared a representation — silently widened every undeclared
 /// variable's feasible region to include negatives on the way out.
 ///
-/// Continuous free variables are emitted as `x free` so round-trips preserve
-/// the explicit declaration. Discrete kinds rely on their type sections.
+/// A declared-free variable is emitted as `x free` whatever its kind: an
+/// integer or general variable's default lower bound is still 0, so dropping
+/// the declaration would narrow its range on the way through.
 fn needs_bounds_declaration(variable: &Variable) -> bool {
-    use crate::model::VariableKind;
-    if variable.bounds.is_unspecified() {
-        return false;
-    }
-    if !variable.bounds.is_free() {
-        return true;
-    }
-    variable.kind == VariableKind::Continuous
+    !variable.bounds.is_unspecified()
 }
 
 /// Write bounds for a single variable
 fn write_variable_bounds(output: &mut String, variable: &Variable, interner: &NameInterner, options: &LpWriterOptions) -> std::fmt::Result {
-    use crate::model::VariableKind;
     if !needs_bounds_declaration(variable) {
         return Ok(());
     }
 
     let var_name = interner.resolve(variable.name);
-    if variable.bounds.is_free() && variable.kind == VariableKind::Continuous {
+    if variable.bounds.is_free() {
         writeln!(output, "{var_name} free")?;
         return Ok(());
     }
@@ -929,6 +922,18 @@ End";
         let y = reparsed.name_id("y").expect("y present");
         assert!(reparsed.variables[&x].bounds.is_unspecified(), "x must stay undeclared");
         assert!(reparsed.variables[&y].bounds.is_free(), "y must stay free");
+    }
+
+    #[test]
+    fn a_free_integer_variable_keeps_its_free_bound() {
+        let source = "minimize\nobj: x + y\nsubject to\nc1: x + y >= -5\nbounds\nx free\ny free\ngenerals\nx\nintegers\ny\nend\n";
+        let problem = LpProblem::parse(source).expect("fixture must parse");
+        let written = write_lp_string(&problem);
+
+        assert!(written.contains("x free"), "general x was declared free:\n{written}");
+        assert!(written.contains("y free"), "integer y was declared free:\n{written}");
+        let reparsed = LpProblem::parse(&written).expect("output must re-parse");
+        assert_problems_structurally_equal(&problem, &reparsed);
     }
 
     #[test]
