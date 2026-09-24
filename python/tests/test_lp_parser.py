@@ -266,3 +266,24 @@ class TestReparse:
         parser = LpParser.from_string("Minimize\n obj: x\nSubject To\n c1: x >= 1\nEnd\n")
         with pytest.raises(LpInvalidValueError, match="built from a string"):
             parser.parse()
+
+
+class TestUpdateVariableType:
+    LP = "Minimize\n obj: x + y\nSubject To\n c1: x + y >= 1\nBounds\n 2 <= x <= 5\nGenerals\n x\nEnd\n"
+
+    def test_continuous_changes_kind_and_keeps_bounds(self) -> None:
+        parser = LpParser.from_string(self.LP)
+        parser.update_variable_type("x", "continuous")
+        x = parser.variables["x"]
+        assert (x["kind"], x["lower"], x["upper"]) == ("Continuous", 2.0, 5.0)
+
+    def test_free_sets_continuous_with_infinite_bounds(self) -> None:
+        parser = LpParser.from_string(self.LP)
+        parser.update_variable_type("x", "free")
+        x = parser.variables["x"]
+        assert (x["kind"], x["lower"], x["upper"]) == ("Continuous", float("-inf"), float("inf"))
+
+    def test_continuous_on_missing_variable_raises_not_found(self) -> None:
+        parser = LpParser.from_string(self.LP)
+        with pytest.raises(LpObjectNotFoundError):
+            parser.update_variable_type("missing", "continuous")

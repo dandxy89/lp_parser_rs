@@ -3,7 +3,6 @@
 
 use std::path::{Path, PathBuf};
 
-use lp_parser_rs::LpParseError as CoreError;
 use lp_parser_rs::analysis::AnalysisConfig;
 use lp_parser_rs::diff::DiffOptions;
 use lp_parser_rs::model::{Constraint, Sense, VariableType};
@@ -11,6 +10,7 @@ use lp_parser_rs::mps::writer::{MpsWriterOptions, write_mps_string_with_options}
 use lp_parser_rs::parser::parse_file;
 use lp_parser_rs::problem::LpProblem;
 use lp_parser_rs::writer::{LpWriterOptions, write_lp_string_with_options};
+use lp_parser_rs::{EntityKind, LpParseError as CoreError, VariableKind};
 use pyo3::create_exception;
 use pyo3::exceptions::{PyFileNotFoundError, PyNotADirectoryError, PyRuntimeError};
 use pyo3::prelude::*;
@@ -328,11 +328,26 @@ impl LpParser {
     }
 
     /// Update variable type (e.g., Binary, Integer, etc.)
+    ///
+    /// `continuous` changes only the kind and keeps any declared bounds. The
+    /// discrete kinds (`binary`, `integer`, `general`, `semicontinuous`) set
+    /// the kind and clear declared bounds, so the format default applies.
+    /// `free` is a bound, not a kind: it makes the variable continuous with
+    /// bounds `(-inf, +inf)`.
     fn update_variable_type(&mut self, variable_name: String, var_type: String) -> PyResult<()> {
         let problem = &mut self.problem;
 
         // Parse the variable type string
         let variable_type = match var_type.to_lowercase().as_str() {
+            "continuous" => {
+                let variable = problem
+                    .name_id(&variable_name)
+                    .and_then(|id| problem.variables.get_mut(&id))
+                    .ok_or_else(|| CoreError::not_found(EntityKind::Variable, variable_name.as_str()))
+                    .map_err(|err| to_py_err("Failed to update variable type", err))?;
+                variable.set_kind(VariableKind::Continuous);
+                return Ok(());
+            }
             "binary" => VariableType::Binary,
             "integer" => VariableType::Integer,
             "general" => VariableType::General,
@@ -340,7 +355,7 @@ impl LpParser {
             "semicontinuous" => VariableType::SemiContinuous,
             _ => {
                 return Err(LpInvalidValueError::new_err(format!(
-                    "Unknown variable type: {var_type}. Supported types: binary, integer, general, free, semicontinuous",
+                    "Unknown variable type: {var_type}. Supported types: continuous, binary, integer, general, free, semicontinuous",
                 )));
             }
         };

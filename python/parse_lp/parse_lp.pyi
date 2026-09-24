@@ -15,7 +15,7 @@ class LpInvalidValueError(RuntimeError):
 # Type definitions for structured data
 Sense: TypeAlias = Literal["maximize", "minimize"]
 SenseInput: TypeAlias = Literal["maximize", "max", "minimize", "min"]
-VariableType: TypeAlias = Literal["binary", "integer", "general", "free", "semicontinuous"]
+VariableType: TypeAlias = Literal["continuous", "binary", "integer", "general", "free", "semicontinuous"]
 Format: TypeAlias = Literal["lp", "mps"]
 
 class Coefficient(TypedDict):
@@ -176,7 +176,14 @@ class LpParser:
         """Rename a variable across all objectives and constraints."""
 
     def update_variable_type(self, variable_name: str, var_type: VariableType) -> None:
-        """Change a variable's type (binary, integer, general, free, semicontinuous)."""
+        """Change a variable's type (case-insensitive).
+
+        - "continuous" changes only the kind; declared bounds are kept.
+        - "binary", "integer", "general", "semicontinuous" set the kind and clear
+          declared bounds, so the format default applies (LP: lower 0).
+        - "free" is a bound, not a kind: the variable becomes continuous with
+          bounds (-inf, +inf).
+        """
 
     def remove_variable(self, variable_name: str) -> None:
         """Remove a variable from all objectives and constraints."""

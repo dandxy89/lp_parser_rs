@@ -313,11 +313,14 @@ print(f"Successfully modified and re-parsed: {new_parser.name}")
 
 Supported variable types for `update_variable_type()`:
 
+- `"continuous"` - Continuous variables; changes only the kind and keeps declared bounds
 - `"binary"` - Binary variables (0 or 1)
 - `"integer"` - General integer variables
 - `"general"` - General integer variables
-- `"free"` - Free variables (no bounds)
 - `"semicontinuous"` - Semi-continuous variables
+- `"free"` - A bound rather than a kind: makes the variable continuous with bounds `(-inf, +inf)`
+
+The discrete kinds (`binary`, `integer`, `general`, `semicontinuous`) clear any declared bounds, so the format default applies (LP: lower bound 0).
 
 ## Supported LP Format Features
 
