@@ -261,6 +261,11 @@ fn parse_rhs_entry<'input>(
     }
 
     let value: f64 = value_str.parse().map_err(|_| LpParseError::invalid_number(value_str, line_num))?;
+    // `f64::from_str` accepts `nan` / `inf`; neither is a meaningful
+    // right-hand side, and a NaN would poison every downstream writer.
+    if !value.is_finite() {
+        return Err(LpParseError::parse_error(line_num, format!("non-finite RHS value '{value_str}' for row '{row_name}'")));
+    }
 
     rhs_values.insert(row_name, value);
 
@@ -334,6 +339,11 @@ fn parse_range_entry<'input>(
     }
 
     let value: f64 = value_str.parse().map_err(|_| LpParseError::invalid_number(value_str, line_num))?;
+    // A range is a finite width; `nan` / `inf` (accepted by `f64::from_str`)
+    // would expand into NaN or infinite row bounds.
+    if !value.is_finite() {
+        return Err(LpParseError::parse_error(line_num, format!("non-finite RANGES value '{value_str}' for row '{row_name}'")));
+    }
 
     range_values.insert(row_name, value);
 
@@ -515,7 +525,23 @@ fn parse_bound_value(field: Option<&str>, line_num: usize, bound_type: &str) -> 
 
     let value_str = field.ok_or_else(|| LpParseError::parse_error(line_num, format!("Bound type '{bound_type}' requires a value")))?;
 
-    value_str.parse().map_err(|_| LpParseError::invalid_number(value_str, line_num))
+    let value: f64 = value_str.parse().map_err(|_| LpParseError::invalid_number(value_str, line_num))?;
+    // `f64::from_str` accepts `nan`, which is never a bound. An infinite
+    // value is only meaningful on the side it opens up (`LO -inf`,
+    // `UP +inf`, like `MI` / `PL` or the `1e30` sentinel); `LO +inf`,
+    // `UP -inf` and `FX ±inf` describe an empty or nonsensical domain.
+    let upper = bound_type.to_ascii_uppercase();
+    let valid = match upper.as_str() {
+        _ if value.is_nan() => false,
+        "LO" | "LI" => value != f64::INFINITY,
+        "FX" => value.is_finite(),
+        // UP / UI, and SC / SI whose value is an upper bound too.
+        _ => value != f64::NEG_INFINITY,
+    };
+    if !valid {
+        return Err(LpParseError::parse_error(line_num, format!("invalid value '{value_str}' for bound type '{bound_type}'")));
+    }
+    Ok(value)
 }
 
 /// Parse a single SOS data line.
@@ -559,6 +585,9 @@ pub(super) fn parse_sos_line<'input>(
     let mut fields = line.split_whitespace();
     if let (Some(var_name), Some(weight_field)) = (fields.next(), fields.next()) {
         let weight: f64 = weight_field.parse().map_err(|_| LpParseError::invalid_number(weight_field, line_num))?;
+        if !weight.is_finite() {
+            return Err(LpParseError::parse_error(line_num, format!("non-finite SOS weight '{weight_field}' for '{var_name}'")));
+        }
         current_weights.push(RawCoefficient { name: var_name, value: weight });
     } else if !trimmed.is_empty() {
         return Err(LpParseError::parse_error(line_num, format!("SOS entry requires variable name and weight, got: '{trimmed}'")));

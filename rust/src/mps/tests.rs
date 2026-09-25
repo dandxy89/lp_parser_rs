@@ -195,6 +195,12 @@ ENDATA
 }
 
 #[test]
+fn test_sos_non_finite_weight_is_error() {
+    let skeleton = "ROWS\n N  obj\nCOLUMNS\n    x1        obj       1\nSOS\n S1 set1\n";
+    assert_all_err(&[&format!("{skeleton}    x1        nan\nENDATA\n"), &format!("{skeleton}    x1        inf\nENDATA\n")]);
+}
+
+#[test]
 fn test_integer_markers() {
     let input = "\
 NAME        test
@@ -1149,6 +1155,12 @@ fn test_rhs_section_errors() {
         &format!("{skeleton}    RHS_V     c1\nENDATA\n"),
         // Invalid number
         &format!("{skeleton}    RHS_V     c1        abc\nENDATA\n"),
+        // Non-finite values (`f64::from_str` accepts these spellings)
+        &format!("{skeleton}    RHS_V     c1        nan\nENDATA\n"),
+        &format!("{skeleton}    RHS_V     c1        NaN\nENDATA\n"),
+        &format!("{skeleton}    RHS_V     c1        inf\nENDATA\n"),
+        &format!("{skeleton}    RHS_V     c1        -infinity\nENDATA\n"),
+        &format!("{skeleton}    RHS_V     obj       nan\nENDATA\n"),
     ]);
 }
 
@@ -1162,6 +1174,10 @@ fn test_ranges_section_errors() {
         &format!("{skeleton}    RNG_V     c1\nENDATA\n"),
         // Invalid number
         &format!("{skeleton}    RNG_V     c1        abc\nENDATA\n"),
+        // Non-finite values
+        &format!("{skeleton}    RNG_V     c1        nan\nENDATA\n"),
+        &format!("{skeleton}    RNG_V     c1        inf\nENDATA\n"),
+        &format!("{skeleton}    RNG_V     c1        -inf\nENDATA\n"),
     ]);
 }
 
@@ -1177,6 +1193,15 @@ fn test_bounds_section_errors() {
         &format!("{skeleton} LO BOUND     x1\nENDATA\n"),
         // Invalid number
         &format!("{skeleton} LO BOUND     x1        abc\nENDATA\n"),
+        // NaN is never a bound
+        &format!("{skeleton} LO BOUND     x1        nan\nENDATA\n"),
+        &format!("{skeleton} UP BOUND     x1        nan\nENDATA\n"),
+        &format!("{skeleton} FX BOUND     x1        nan\nENDATA\n"),
+        &format!("{skeleton} SC BOUND     x1        nan\nENDATA\n"),
+        // Infinity on the side that closes the domain
+        &format!("{skeleton} LO BOUND     x1        inf\nENDATA\n"),
+        &format!("{skeleton} UP BOUND     x1        -inf\nENDATA\n"),
+        &format!("{skeleton} FX BOUND     x1        inf\nENDATA\n"),
     ]);
 }
 
@@ -1546,4 +1571,11 @@ fn test_objective_constant_from_rhs() {
     let input = "NAME t\nROWS\n N obj\n L r1\nCOLUMNS\n    x obj 1 r1 1\nRHS\n    rhs r1 10 obj -2.5\nENDATA\n";
     let result = parse_mps(input).unwrap();
     assert_eq!(result.objectives[0].constant, 2.5);
+}
+
+#[test]
+fn test_infinite_bound_on_open_side_is_accepted() {
+    let input =
+        "ROWS\n N  obj\nCOLUMNS\n    x1        obj       1\nBOUNDS\n LO BOUND     x1        -inf\n UP BOUND     x1        inf\nENDATA\n";
+    assert!(parse_mps(input).is_ok(), "`LO -inf` / `UP inf` open the domain and must stay accepted");
 }
