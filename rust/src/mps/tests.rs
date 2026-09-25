@@ -195,6 +195,23 @@ ENDATA
 }
 
 #[test]
+fn test_sos_last_set_kept_without_endata() {
+    // Input without ENDATA is read leniently; the pending SOS set must not be lost.
+    let input =
+        "ROWS\n N  obj\nCOLUMNS\n    x1        obj       1\n    x2        obj       1\nSOS\n S1 a\n    x1 1\n S2 b\n    x1 1\n    x2 2\n";
+    let result = parse_mps(input).unwrap();
+    let names: Vec<&str> = result
+        .sos
+        .iter()
+        .map(|c| {
+            let RawConstraint::SOS { name, .. } = c else { panic!("expected SOS constraint") };
+            name.as_ref()
+        })
+        .collect();
+    assert_eq!(names, ["a", "b"]);
+}
+
+#[test]
 fn test_sos_non_finite_weight_is_error() {
     let skeleton = "ROWS\n N  obj\nCOLUMNS\n    x1        obj       1\nSOS\n S1 set1\n";
     assert_all_err(&[&format!("{skeleton}    x1        nan\nENDATA\n"), &format!("{skeleton}    x1        inf\nENDATA\n")]);
