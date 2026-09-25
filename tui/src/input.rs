@@ -1298,7 +1298,9 @@ impl App {
         };
 
         let label1 = format!("original: {}", self.file1_path.display());
-        let label2 = stats.headline();
+        // Not `headline`: this is the solve cache key, and a run time would
+        // make every run a miss.
+        let label2 = stats.comparison_label();
         // The scaling rules leave the rewritten model in different units; the
         // pair undoes them on the way back so both sides diff like for like.
         let scaling = stats.scaling.clone();

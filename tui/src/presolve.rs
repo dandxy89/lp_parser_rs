@@ -383,9 +383,23 @@ impl PresolveStats {
         self.per_pass.is_empty()
     }
 
-    /// One-line summary, used as the comparison label for the rewritten side.
+    /// One-line summary, with the run time.
     #[must_use]
     pub fn headline(&self) -> String {
+        self.summary(true)
+    }
+
+    /// The headline without the run time: the comparison label for the
+    /// rewritten side. It is also the solve cache key, so it must depend only
+    /// on what the rewrite did — a run time differs every run and would make
+    /// the cache never hit.
+    #[must_use]
+    pub fn comparison_label(&self) -> String {
+        self.summary(false)
+    }
+
+    /// One-line summary, optionally ending with the run time.
+    fn summary(&self, with_time: bool) -> String {
         if let Some(reason) = &self.infeasible {
             return format!("presolve: infeasible \u{2014} {reason}");
         }
@@ -403,13 +417,13 @@ impl PresolveStats {
         let split = if self.parts_added() > 0 { format!(", +{} split parts", self.parts_added()) } else { String::new() };
         let relaxed =
             if self.cols_relaxed() > 0 { format!(", {} relaxed", plural(self.cols_relaxed(), "col", "cols")) } else { String::new() };
+        let time = if with_time { format!(", {}", crate::format::fmt_duration(self.duration)) } else { String::new() };
         format!(
-            "presolve: -{}, {} fixed, {}{nnz}{scaled}{split}{relaxed}, {}, {}",
+            "presolve: -{}, {} fixed, {}{nnz}{scaled}{split}{relaxed}, {}{time}",
             plural(self.rows_removed(), "row", "rows"),
             plural(self.cols_fixed(), "col", "cols"),
             plural(self.bounds_tightened(), "bound", "bounds"),
             plural(self.per_pass.len(), "pass", "passes"),
-            crate::format::fmt_duration(self.duration),
         )
     }
 
@@ -1547,6 +1561,20 @@ mod tests {
 
         assert_bound(bounds_of(&out, "x").1, f64::INFINITY, "an unbounded partner term yields no implied bound");
         assert_eq!(stats.bounds_tightened(), 0);
+    }
+
+    /// Regression: the comparison label (and so the solve cache key) carried
+    /// the presolve run time, which differs every run, so the cache never hit.
+    #[test]
+    fn the_comparison_label_is_stable_across_runs() {
+        let problem = parse("Minimize\n obj: x + y\nSubject To\n c1: 3 x <= 12\n c2: x + y >= 2\nEnd");
+        let (_, first) = presolve(&problem, DEFAULT_RULES);
+        let mut second = first.clone();
+        second.duration += Duration::from_millis(7);
+
+        assert_ne!(first.headline(), second.headline(), "fixture: the headlines differ by run time");
+        assert_eq!(first.comparison_label(), second.comparison_label(), "the label must not depend on the run time");
+        assert!(first.headline().starts_with(&first.comparison_label()), "the label is the headline less its time");
     }
 
     #[test]
