@@ -1630,3 +1630,9 @@ fn test_infinite_bound_on_open_side_is_accepted() {
         "ROWS\n N  obj\nCOLUMNS\n    x1        obj       1\nBOUNDS\n LO BOUND     x1        -inf\n UP BOUND     x1        inf\nENDATA\n";
     assert!(parse_mps(input).is_ok(), "`LO -inf` / `UP inf` open the domain and must stay accepted");
 }
+
+#[test]
+fn test_leading_byte_order_mark_is_accepted() {
+    let input = "\u{FEFF}NAME bom\nROWS\n N  obj\nCOLUMNS\n    x1        obj       1\nENDATA\n";
+    assert!(parse_mps(input).is_ok(), "a leading UTF-8 byte order mark must not be treated as a section header");
+}
