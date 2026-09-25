@@ -1,5 +1,47 @@
 # Changelog
 
+## [4.1.1](https://github.com/dandxy89/lp_parser_rs/compare/lp_diff-v4.1.0...lp_diff-v4.1.1) (2026-09-25)
+
+
+### Documentation
+
+* correct and rewrite documentation across the library, bindings, TUI, LSP and site ([471b7ff](https://github.com/dandxy89/lp_parser_rs/commit/471b7ff37fd5918eca0e286537dc22431f5cb104))
+
+
+### Bug Fixes
+
+* General improvements ([#212](https://github.com/dandxy89/lp_parser_rs/issues/212)) ([9449d5d](https://github.com/dandxy89/lp_parser_rs/commit/9449d5de2c71601b27cfe3a6a99c906ae4c3f7a2))
+* **lsp:** adding a LSP ([#213](https://github.com/dandxy89/lp_parser_rs/issues/213)) ([f2d2609](https://github.com/dandxy89/lp_parser_rs/commit/f2d2609bdb482723b1e8fb5d4a239c03f6284d95))
+* **tui:** cancel a running solve on reload and keep its in-flight guard ([da6dc32](https://github.com/dandxy89/lp_parser_rs/commit/da6dc32986a251f3d8193b115e5a08f00303890c))
+* **tui:** cancel discarded diagnoses and refuse new solves until they stop ([14a82ba](https://github.com/dandxy89/lp_parser_rs/commit/14a82bae5ab54286ad20fdf3d40ed55e6d8ac88f))
+* **tui:** compare objective constants and quadratic terms in the diff ([39a7e5c](https://github.com/dandxy89/lp_parser_rs/commit/39a7e5c8c0a65bf6b2b9874751ec05dda04fd0e4))
+* **tui:** ignore clicks on the name list's borders ([b7509d5](https://github.com/dandxy89/lp_parser_rs/commit/b7509d5929fd19374651bffff53dfd6313b4f6b0))
+* **tui:** include the objective constant in solved and ranged objective values ([7938a11](https://github.com/dandxy89/lp_parser_rs/commit/7938a1132747061f38fcb98bbc62bf22f7b58cdb))
+* **tui:** keep semi-continuous columns' zero branch through presolve ([5a49c3e](https://github.com/dandxy89/lp_parser_rs/commit/5a49c3e95c7dc84fc1a63e6823c15d754cc572e1))
+* **tui:** keep the selected entry, not its row, across a report rebuild ([2451037](https://github.com/dandxy89/lp_parser_rs/commit/24510372abe07d65613d72d0a0c8635d451ffda9))
+* **tui:** key the presolve comparison solve on a label without the run time ([07e80cb](https://github.com/dandxy89/lp_parser_rs/commit/07e80cb14d0c26d4605f5be0d9e1c532b158b6dd))
+* **tui:** look up added and removed constraint lines only in their own file ([803bb20](https://github.com/dandxy89/lp_parser_rs/commit/803bb20d0a730fb41a46b47a5c7a02bd35c915d8))
+* **tui:** only pair plain standard constraints as renames ([3c8e13f](https://github.com/dandxy89/lp_parser_rs/commit/3c8e13f40a283aa78ee8b2d8c04b3f0e4cd1d7a4))
+* **tui:** pass semi-continuous variables to HiGHS as semi-continuous ([18e7a41](https://github.com/dandxy89/lp_parser_rs/commit/18e7a41ef40b40b2b80bfd89141c588306f64712))
+* **tui:** pass synthetic names to HiGHS presolve to avoid name buffer overflow ([9f306ea](https://github.com/dandxy89/lp_parser_rs/commit/9f306ea19e46fd26d2455d2e61fb7a9fe922679a))
+* **tui:** record the current position on jump-back so jump-forward can return to it ([89c4a13](https://github.com/dandxy89/lp_parser_rs/commit/89c4a139791f28c720111c266c7f447c8b292029))
+* **tui:** remove the solver log file on every failed solve ([13fc308](https://github.com/dandxy89/lp_parser_rs/commit/13fc308e63ca7509378f5ef9e3218313cf44069d))
+* **tui:** scroll the detail pane past line 65,535 ([db17580](https://github.com/dandxy89/lp_parser_rs/commit/db17580b11e2d8448c7618e6d3cf64b29b01db6e))
+* **tui:** scroll the what-if input so the cursor stays visible ([70949b0](https://github.com/dandxy89/lp_parser_rs/commit/70949b0ee6c336d26538d0087f808c43c51d6bab))
+* **tui:** shrink the side-by-side header as it scrolls so the last rows are reachable ([64fdc89](https://github.com/dandxy89/lp_parser_rs/commit/64fdc8900f1aa99356e01b6fff1fb288b0cf6c3b))
+* **tui:** snap integer bounds within tolerance of an integer before rounding ([0976a0e](https://github.com/dandxy89/lp_parser_rs/commit/0976a0e9bbfa62cb8f81de6b1e41238ea4e8f3e6))
+
+
+### Performance Improvements
+
+* **tui:** add a benchmark for sorting diff entries by delta ([318aaef](https://github.com/dandxy89/lp_parser_rs/commit/318aaef27fa87c0f761654eb8067f245799a886c))
+* **tui:** add criterion render-path benchmarks for the detail pane ([0cd66b1](https://github.com/dandxy89/lp_parser_rs/commit/0cd66b1c3649ca72d13e5be9b5e31a66d5ae90dd))
+* **tui:** add overlay render benchmarks for the search pop-up and report panes ([f70479b](https://github.com/dandxy89/lp_parser_rs/commit/f70479b1c93cc73b933d4dfd166e441ebd0a7826))
+* **tui:** build only the visible coefficient rows of inspect and one-sided objective panels ([5f6727c](https://github.com/dandxy89/lp_parser_rs/commit/5f6727ca5e4bb4cb3a0bf771cacd37711b16d8d7))
+* **tui:** clone only the visible rows of the search results and report panes ([4fdc6c8](https://github.com/dandxy89/lp_parser_rs/commit/4fdc6c83a34d610c1532b87f5999256e4a909cb2))
+* **tui:** compute each entry's sort delta once when sorting by delta ([1c9c3fd](https://github.com/dandxy89/lp_parser_rs/commit/1c9c3fd50307add898b9103dc4dcee59c9e1232f))
+* **tui:** skip the repaint for mouse events nothing reacts to ([83064c2](https://github.com/dandxy89/lp_parser_rs/commit/83064c2dc7ef5ef0282832e22d33be767d7936b2))
+
 ## [4.1.0](https://github.com/dandxy89/lp_parser_rs/compare/lp_diff-v4.0.0...lp_diff-v4.1.0) (2026-09-10)
 
 
