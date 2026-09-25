@@ -704,9 +704,16 @@ impl App {
     /// Refuse to start a solve while a cancelled one is still winding down:
     /// the two would compete for the machine, and the old one cannot be
     /// interrupted before `HiGHS` has the model. Returns `true` when refused.
+    ///
+    /// An infeasibility diagnosis is a solve too, so one still running (or
+    /// discarded and still stopping) refuses in the same way.
     fn refuse_while_solving(&mut self) -> bool {
         if self.solver.solve_in_flight() {
             self.flash_warn("The last solve is still stopping \u{2014} try again in a moment");
+            return true;
+        }
+        if self.solver.diagnosis_in_flight() {
+            self.flash_warn("The last diagnosis is still stopping \u{2014} try again in a moment");
             return true;
         }
         false
@@ -850,13 +857,19 @@ impl App {
             !matches!(self.solver.diagnosis, DiagnosisState::Running { .. }),
             "spawn_diagnosis called while a diagnosis is already running"
         );
+        // A discarded diagnosis may still be winding down; two at once would
+        // compete for the machine.
+        if self.refuse_while_solving() {
+            return;
+        }
+        let cancel = self.solver.arm_diagnosis();
         self.solver.diagnosis = DiagnosisState::Running { file: file_label, started: Instant::now() };
 
         let (sender, receiver) = mpsc::channel();
         self.solver.receive_diagnosis = Some(receiver);
 
         std::thread::spawn(move || {
-            let result = crate::solver::diagnose_infeasibility(&problem);
+            let result = crate::solver::diagnose_infeasibility_cancellable(&problem, &cancel);
             // The receiver is dropped if the user dismissed the overlay, so a
             // failed send is expected and deliberately silent: stderr is the
             // alternate screen ratatui is drawing into.
@@ -1786,6 +1799,28 @@ mod tests {
         app.handle_key(KeyEvent::from(KeyCode::Char('q')));
         app.handle_key(KeyEvent::from(KeyCode::Char('y')));
         assert!(app.should_quit, "y confirms the quit");
+    }
+
+    /// Regression: a diagnosis was invisible to the in-flight check, so a
+    /// discarded one kept running uncancelled while a new solve or a second
+    /// diagnosis started alongside it.
+    #[test]
+    fn a_discarded_diagnosis_is_cancelled_and_blocks_new_solves_until_it_stops() {
+        let mut app = crate::snapshot_tests::inspect_app_from(crate::snapshot_tests::BASE_LP);
+        let worker = app.solver.arm_diagnosis();
+        app.solver.diagnosis = DiagnosisState::Running { file: "model.lp".to_owned(), started: Instant::now() };
+
+        app.solver.reset_diagnosis();
+        assert!(worker.load(std::sync::atomic::Ordering::Relaxed), "discarding the diagnosis interrupts HiGHS");
+        assert!(app.solver.diagnosis_in_flight(), "its worker is still winding down");
+
+        app.handle_key(KeyEvent::from(KeyCode::Char('S')));
+        assert!(matches!(app.solver.state, SolveState::Idle), "no solve starts while the diagnosis is stopping");
+        assert!(app.refuse_while_solving(), "and no second diagnosis either");
+
+        drop(worker);
+        assert!(!app.solver.diagnosis_in_flight(), "the worker's exit frees the solver");
+        assert!(!app.refuse_while_solving());
     }
 
     /// A comparison whose second side is infeasible, as the solve overlay holds it.

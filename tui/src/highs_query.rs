@@ -235,7 +235,7 @@ impl Iis {
 /// Find an irreducible infeasible subsystem: the smallest set of constraints
 /// and variable bounds that are mutually unsatisfiable.
 ///
-/// This complements [`crate::solver::diagnose_infeasibility`] rather than
+/// This complements [`crate::solver::diagnose_infeasibility_cancellable`] rather than
 /// replacing it. That reports the *cheapest* set of constraints to relax, by
 /// total violation; this reports a *minimal conflicting* set, no proper subset
 /// of which is infeasible. They are different questions, and when hunting a

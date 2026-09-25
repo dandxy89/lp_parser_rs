@@ -205,6 +205,9 @@ pub struct SolverSession {
     /// it interrupts `HiGHS`; the worker's clone is dropped when the thread
     /// ends, which is how a solve still winding down is detected.
     pub cancel: Option<Arc<AtomicBool>>,
+    /// Cancel flag shared with the most recent diagnosis's worker thread, on
+    /// the same terms as `cancel`.
+    pub diagnosis_cancel: Option<Arc<AtomicBool>>,
     /// `q` was pressed while a solve runs: the running pop-up asks to confirm.
     pub confirm_quit: bool,
 }
@@ -224,8 +227,24 @@ impl SolverSession {
             key: String::new(),
             cache: Vec::new(),
             cancel: None,
+            diagnosis_cancel: None,
             confirm_quit: false,
         }
+    }
+
+    /// Whether a diagnosis's worker thread is still running — including one
+    /// that was discarded and has not yet stopped.
+    pub(crate) fn diagnosis_in_flight(&self) -> bool {
+        self.diagnosis_cancel.as_ref().is_some_and(|flag| Arc::strong_count(flag) > 1)
+    }
+
+    /// A fresh cancel flag for a diagnosis about to start, kept here and
+    /// returned for the worker thread.
+    pub(crate) fn arm_diagnosis(&mut self) -> Arc<AtomicBool> {
+        debug_assert!(!self.diagnosis_in_flight(), "a diagnosis must not start while another is still running");
+        let flag = Arc::new(AtomicBool::new(false));
+        self.diagnosis_cancel = Some(Arc::clone(&flag));
+        flag
     }
 
     /// Whether a solve's worker thread is still running — including one that
@@ -255,8 +274,13 @@ impl SolverSession {
         flag
     }
 
-    /// Discard any in-flight or completed diagnosis (new solve or overlay closed).
+    /// Discard any in-flight or completed diagnosis (new solve or overlay
+    /// closed), interrupting a running one. Its flag is kept, so the worker
+    /// still counts as in flight until it has stopped.
     pub(crate) fn reset_diagnosis(&mut self) {
+        if let Some(flag) = &self.diagnosis_cancel {
+            flag.store(true, Ordering::Relaxed);
+        }
         self.diagnosis = DiagnosisState::Idle;
         self.receive_diagnosis = None;
     }
@@ -1528,9 +1552,11 @@ impl App {
         // cancel flag over: the worker still holds a clone until it exits, and
         // that is what keeps a new solve from starting alongside it.
         self.solver.cancel_running();
-        let in_flight = self.solver.cancel.take();
+        self.solver.reset_diagnosis();
+        let (in_flight, diagnosis_in_flight) = (self.solver.cancel.take(), self.solver.diagnosis_cancel.take());
         self.solver = SolverSession::new();
         self.solver.cancel = in_flight;
+        self.solver.diagnosis_cancel = diagnosis_in_flight;
         self.discard_model_derived_state();
 
         self.flash_ok("reloaded");
