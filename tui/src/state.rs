@@ -418,7 +418,8 @@ pub struct JumpEntry {
 #[derive(Debug)]
 pub struct JumpList {
     entries: Vec<JumpEntry>,
-    /// Points to the current position in the jumplist.
+    /// Index of the current position in `entries`, or `entries.len()` when the
+    /// current position has not been recorded (the usual state after a jump).
     /// When navigating back, cursor decreases; forward, it increases.
     cursor: usize,
 }
@@ -434,38 +435,45 @@ impl JumpList {
         // Truncate forward history.
         self.entries.truncate(self.cursor);
         self.entries.push(entry);
-
-        // Drop oldest if over capacity.
-        if self.entries.len() > JUMPLIST_CAPACITY {
-            let excess = self.entries.len() - JUMPLIST_CAPACITY;
-            self.entries.drain(..excess);
-        }
-
+        self.drop_oldest_over_capacity();
         self.cursor = self.entries.len();
     }
 
-    /// Move cursor back and return the entry to restore, if any.
-    pub fn go_back(&mut self) -> Option<&JumpEntry> {
-        if self.cursor > 0 {
-            self.cursor -= 1;
-            self.entries.get(self.cursor)
-        } else {
-            None
+    /// Trim the oldest entries past [`JUMPLIST_CAPACITY`], keeping the cursor on
+    /// the same entry.
+    fn drop_oldest_over_capacity(&mut self) {
+        if self.entries.len() > JUMPLIST_CAPACITY {
+            let excess = self.entries.len() - JUMPLIST_CAPACITY;
+            self.entries.drain(..excess);
+            self.cursor = self.cursor.saturating_sub(excess);
         }
+    }
+
+    /// Move cursor back and return the entry to restore, if any.
+    ///
+    /// `current` is where the user is now. Leaving the unrecorded newest
+    /// position records it first (as vim does), so `go_forward` can return to
+    /// it; without that, forward could only ever reach the entry just left.
+    pub fn go_back(&mut self, current: JumpEntry) -> Option<&JumpEntry> {
+        debug_assert!(self.cursor <= self.entries.len(), "jumplist cursor {} exceeds entries len {}", self.cursor, self.entries.len());
+        if self.cursor == 0 {
+            return None;
+        }
+        if self.cursor == self.entries.len() {
+            self.entries.push(current);
+            self.drop_oldest_over_capacity();
+            // The cursor now sits on the position just recorded.
+            debug_assert_eq!(self.cursor, self.entries.len() - 1, "cursor must index the recorded current position");
+        }
+        self.cursor -= 1;
+        self.entries.get(self.cursor)
     }
 
     /// Move cursor forward and return the entry to restore, if any.
     pub fn go_forward(&mut self) -> Option<&JumpEntry> {
-        if self.cursor < self.entries.len() {
-            let entry = self.entries.get(self.cursor);
+        if self.cursor + 1 < self.entries.len() {
             self.cursor += 1;
-            debug_assert!(
-                self.cursor <= self.entries.len(),
-                "jumplist cursor {} exceeds entries len {} after go_forward",
-                self.cursor,
-                self.entries.len(),
-            );
-            entry
+            self.entries.get(self.cursor)
         } else {
             None
         }
