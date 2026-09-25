@@ -208,14 +208,21 @@ pub fn build_variable_detail(entry: &VariableDiffEntry) -> Vec<Line<'static>> {
 }
 
 /// Render a variable detail panel. Returns the total content line count.
-pub fn render_variable_detail(frame: &mut Frame, area: Rect, entry: &VariableDiffEntry, border_style: Style, scroll: u16) -> usize {
+pub fn render_variable_detail(frame: &mut Frame, area: Rect, entry: &VariableDiffEntry, border_style: Style, scroll: usize) -> usize {
     // A zero-sized area is an environmental condition (shrunken terminal), not a
     // programming error: drawing into it is a no-op.
     if area.width == 0 || area.height == 0 {
         return 0;
     }
-    let lines = build_variable_detail(entry);
-    render_panel(frame, area, detail_title("Variable", &entry.name, Some(entry.kind), false, area.width), lines, border_style, scroll)
+    let content = PanelLines::whole(build_variable_detail(entry));
+    render_windowed_panel(
+        frame,
+        area,
+        detail_title("Variable", &entry.name, Some(entry.kind), false, area.width),
+        content,
+        border_style,
+        scroll,
+    )
 }
 
 /// How a constraint detail continues after its header block.
@@ -424,7 +431,8 @@ pub fn build_constraint_detail(
 ) -> Vec<Line<'static>> {
     let (mut lines, body) = constraint_detail_parts(entry, interner, None);
     if let ConstraintBody::Rows { changes, old, new, .. } = body {
-        render_coeff_changes(&mut lines, changes, old, new, cached_rows, None, None, interner);
+        let (skipped, _) = render_coeff_changes(&mut lines, changes, old, new, cached_rows, None, None, interner);
+        debug_assert_eq!(skipped, 0, "an unwindowed render leaves nothing out");
     }
     lines
 }
@@ -438,7 +446,7 @@ pub fn render_constraint_detail(
     area: Rect,
     entry: &ConstraintDiffEntry,
     border_style: Style,
-    scroll: u16,
+    scroll: usize,
     cached_rows: Option<&[crate::detail_model::CoefficientRow]>,
     interner: &NameInterner,
 ) -> usize {
@@ -465,9 +473,27 @@ pub fn render_constraint_detail(
             );
         }
         let visible = coeff_visible_range(scroll, area, lines.len());
-        render_coeff_changes(&mut lines, changes, old, new, cached_rows, Some(visible), Some(area.width), interner);
+        let header = lines.len();
+        let (skipped, rows) = render_coeff_changes(&mut lines, changes, old, new, cached_rows, Some(visible), Some(area.width), interner);
+        let content = PanelLines { lines, skipped, total: header + rows };
+        return render_windowed_panel(
+            frame,
+            area,
+            detail_title("Constraint", &entry.name, Some(entry.kind), true, area.width),
+            content,
+            border_style,
+            scroll,
+        );
     }
-    render_panel(frame, area, detail_title("Constraint", &entry.name, Some(entry.kind), true, area.width), lines, border_style, scroll)
+    let content = PanelLines::whole(lines);
+    render_windowed_panel(
+        frame,
+        area,
+        detail_title("Constraint", &entry.name, Some(entry.kind), true, area.width),
+        content,
+        border_style,
+        scroll,
+    )
 }
 
 /// Build the content lines of an objective detail panel, with every
@@ -489,7 +515,7 @@ fn objective_detail_lines(
     entry: &ObjectiveDiffEntry,
     cached_rows: Option<&[crate::detail_model::CoefficientRow]>,
     interner: &NameInterner,
-    viewport: Option<(u16, Rect)>,
+    viewport: Option<(usize, Rect)>,
 ) -> PanelLines {
     let t = theme();
     let mut lines: Vec<Line<'static>> = Vec::new();
@@ -509,7 +535,8 @@ fn objective_detail_lines(
 
     let window = viewport.map(|(scroll, area)| coeff_visible_range(scroll, area, lines.len()));
     if entry.kind == DiffKind::Modified {
-        render_coeff_changes(
+        let header = lines.len();
+        let (skipped, rows) = render_coeff_changes(
             &mut lines,
             &entry.coeff_changes,
             &entry.old_coefficients,
@@ -519,10 +546,7 @@ fn objective_detail_lines(
             viewport.map(|(_, area)| area.width),
             interner,
         );
-        // `render_coeff_changes` pads the rows outside the window with
-        // placeholders, so nothing is left out.
-        let total = lines.len();
-        PanelLines { lines, skipped: 0, total }
+        PanelLines { lines, skipped, total: header + rows }
     } else {
         let coeffs = if entry.kind == DiffKind::Added { &entry.new_coefficients } else { &entry.old_coefficients };
         let style = Style::default().fg(kind_colour(entry.kind));
@@ -587,7 +611,7 @@ pub fn render_objective_detail(
     area: Rect,
     entry: &ObjectiveDiffEntry,
     border_style: Style,
-    scroll: u16,
+    scroll: usize,
     cached_rows: Option<&[crate::detail_model::CoefficientRow]>,
     interner: &NameInterner,
 ) -> usize {
@@ -632,12 +656,12 @@ pub fn build_inspect_variable(entry: &VariableDiffEntry) -> Vec<Line<'static>> {
 }
 
 /// Render an inspect (single-file) variable detail panel. Returns the total content line count.
-pub fn render_inspect_variable(frame: &mut Frame, area: Rect, entry: &VariableDiffEntry, border_style: Style, scroll: u16) -> usize {
+pub fn render_inspect_variable(frame: &mut Frame, area: Rect, entry: &VariableDiffEntry, border_style: Style, scroll: usize) -> usize {
     if area.width == 0 || area.height == 0 {
         return 0;
     }
-    let lines = build_inspect_variable(entry);
-    render_panel(frame, area, detail_title("Variable", &entry.name, None, false, area.width), lines, border_style, scroll)
+    let content = PanelLines::whole(build_inspect_variable(entry));
+    render_windowed_panel(frame, area, detail_title("Variable", &entry.name, None, false, area.width), content, border_style, scroll)
 }
 
 /// Build the content lines of an inspect (single-file) constraint detail panel:
@@ -652,7 +676,7 @@ fn inspect_constraint_lines(
     entry: &ConstraintDiffEntry,
     interner: &NameInterner,
     pane_width: Option<u16>,
-    viewport: Option<(u16, Rect)>,
+    viewport: Option<(usize, Rect)>,
 ) -> PanelLines {
     let t = theme();
     let mut lines: Vec<Line<'static>> = Vec::new();
@@ -702,7 +726,7 @@ pub fn render_inspect_constraint(
     area: Rect,
     entry: &ConstraintDiffEntry,
     border_style: Style,
-    scroll: u16,
+    scroll: usize,
     interner: &NameInterner,
 ) -> usize {
     if area.width == 0 || area.height == 0 {
@@ -724,7 +748,7 @@ fn inspect_objective_lines(
     entry: &ObjectiveDiffEntry,
     interner: &NameInterner,
     pane_width: Option<u16>,
-    viewport: Option<(u16, Rect)>,
+    viewport: Option<(usize, Rect)>,
 ) -> PanelLines {
     let mut lines: Vec<Line<'static>> = Vec::new();
     lines.push(Line::from(Span::styled("  Coefficients:", muted().add_modifier(Modifier::BOLD))));
@@ -740,7 +764,7 @@ pub fn render_inspect_objective(
     area: Rect,
     entry: &ObjectiveDiffEntry,
     border_style: Style,
-    scroll: u16,
+    scroll: usize,
     interner: &NameInterner,
 ) -> usize {
     if area.width == 0 || area.height == 0 {
@@ -782,21 +806,31 @@ struct PanelLines {
     total: usize,
 }
 
-/// [`render_panel`] for windowed content: the rows left out above the window
-/// stand in for that much of the scroll. Returns the total content line count.
+impl PanelLines {
+    /// Content with nothing left out.
+    fn whole(lines: Vec<Line<'static>>) -> Self {
+        let total = lines.len();
+        Self { lines, skipped: 0, total }
+    }
+}
+
+/// Render windowed content in a bordered panel, scrolled to `scroll`. The rows
+/// left out above the window stand in for that much of the scroll, and the
+/// rest is dropped from the front here, so the offset is never narrowed to the
+/// `u16` a `Paragraph` scrolls by. Returns the total content line count.
 fn render_windowed_panel(
     frame: &mut Frame,
     area: Rect,
     title: Line<'static>,
-    content: PanelLines,
+    mut content: PanelLines,
     border_style: Style,
-    scroll: u16,
+    scroll: usize,
 ) -> usize {
-    debug_assert!(content.skipped <= usize::from(scroll), "only rows scrolled past are left out");
+    debug_assert!(content.skipped <= scroll, "only rows scrolled past are left out");
     debug_assert!(content.lines.len() + content.skipped <= content.total, "the window cannot hold more than the content");
-    #[allow(clippy::cast_possible_truncation)] // skipped <= scroll, a u16
-    let local_scroll = scroll - content.skipped as u16;
-    render_panel(frame, area, title, content.lines, border_style, local_scroll);
+    let local_scroll = (scroll - content.skipped).min(content.lines.len());
+    content.lines.drain(..local_scroll);
+    render_panel(frame, area, title, content.lines, border_style, 0);
     content.total
 }
 
@@ -822,7 +856,7 @@ fn render_constraint_side_by_side(
     old_coefficients: &[ResolvedCoefficient],
     new_coefficients: &[ResolvedCoefficient],
     border_style: Style,
-    scroll: u16,
+    scroll: usize,
     cached_rows: Option<&[crate::detail_model::CoefficientRow]>,
     interner: &NameInterner,
 ) -> usize {
@@ -837,10 +871,12 @@ fn render_constraint_side_by_side(
     // The header shrinks as it scrolls away, handing its rows to the
     // coefficients: a fixed-height header chunk would hide the last
     // `header_height` rows at maximum scroll.
-    let header_visible = header_height.saturating_sub(scroll);
+    // Below the header height, so it fits the header's own `u16`.
+    let header_scroll = u16::try_from(scroll.min(header_line_count)).unwrap_or(header_height);
+    let header_visible = header_height - header_scroll;
     let v_chunks = Layout::vertical([Constraint::Length(header_visible), Constraint::Min(0)]).split(inner);
 
-    let header_paragraph = Paragraph::new(header_lines).scroll((scroll, 0));
+    let header_paragraph = Paragraph::new(header_lines).scroll((header_scroll, 0));
     frame.render_widget(header_paragraph, v_chunks[0]);
 
     let owned_rows;
@@ -851,13 +887,13 @@ fn render_constraint_side_by_side(
         &owned_rows
     };
 
-    let coefficient_scroll = scroll.saturating_sub(header_height);
+    let coefficient_scroll = scroll.saturating_sub(header_line_count);
     let visible_height = v_chunks[1].height as usize;
 
     // Windowed rendering: only build Lines for visible coefficient rows.
     // The column header occupies the first line of the coefficient area.
     let column_header_lines: usize = 1;
-    let data_skip = (coefficient_scroll as usize).saturating_sub(column_header_lines);
+    let data_skip = coefficient_scroll.saturating_sub(column_header_lines);
     let data_take = if coefficient_scroll == 0 { visible_height.saturating_sub(column_header_lines) } else { visible_height };
     let window = &rows[data_skip.min(rows.len())..(data_skip + data_take).min(rows.len())];
 
@@ -883,12 +919,8 @@ fn render_constraint_side_by_side(
     if columns.percent {
         header.push(Span::styled(format!("{GAP}{:>percent_w$}", "%\u{394}"), heading));
     }
-    let mut lines: Vec<Line<'_>> = vec![Line::from(header)];
-
-    // Placeholder lines for data rows scrolled above the viewport.
-    for _ in 0..data_skip.min(rows.len()) {
-        lines.push(Line::default());
-    }
+    // The column header scrolls away with the first data row.
+    let mut lines: Vec<Line<'_>> = if coefficient_scroll == 0 { vec![Line::from(header)] } else { Vec::new() };
 
     let dim = Style::default().fg(t.border);
     let change = Style::default().fg(t.accent);
@@ -921,12 +953,7 @@ fn render_constraint_side_by_side(
         lines.push(Line::from(spans));
     }
 
-    // Placeholder lines for data rows below the viewport.
-    for _ in data_skip.min(rows.len()) + window.len()..rows.len() {
-        lines.push(Line::default());
-    }
-
-    frame.render_widget(Paragraph::new(lines).scroll((coefficient_scroll, 0)), v_chunks[1]);
+    frame.render_widget(Paragraph::new(lines), v_chunks[1]);
 
     header_line_count + 1 + rows.len()
 }
@@ -1110,9 +1137,9 @@ impl UnifiedColumns {
 /// Returns `(first_visible_row, max_visible_rows)`. When the scroll position
 /// is within the header area, `first_visible_row` is 0 and `max_visible_rows`
 /// accounts for header lines still occupying the viewport.
-const fn coeff_visible_range(scroll: u16, area: Rect, header_line_count: usize) -> (usize, usize) {
+const fn coeff_visible_range(scroll: usize, area: Rect, header_line_count: usize) -> (usize, usize) {
     let inner_height = area.height.saturating_sub(2) as usize; // subtract borders
-    let scroll_usize = scroll as usize;
+    let scroll_usize = scroll;
     let first_visible = scroll_usize.saturating_sub(header_line_count);
     let visible_space = inner_height.saturating_sub(header_line_count.saturating_sub(scroll_usize));
     // +1 for partially visible lines at the bottom edge.
@@ -1123,8 +1150,9 @@ const fn coeff_visible_range(scroll: u16, area: Rect, header_line_count: usize) 
 /// variable with its change status.
 ///
 /// When `visible_range` is `Some((first, count))`, only builds `Line` objects
-/// for the visible window, inserting cheap placeholder lines for rows above and
-/// below the viewport. This avoids `O(total_rows)` `format!` allocations per frame.
+/// for the visible window, avoiding `O(total_rows)` work per frame. Returns
+/// `(skipped, rows)`: how many rows ahead of the window were left out, and how
+/// many rows there are in all.
 #[allow(clippy::too_many_arguments)] // the row source, window and pane width are all independent
 fn render_coeff_changes(
     lines: &mut Vec<Line<'static>>,
@@ -1135,7 +1163,7 @@ fn render_coeff_changes(
     visible_range: Option<(usize, usize)>,
     pane_width: Option<u16>,
     interner: &NameInterner,
-) {
+) -> (usize, usize) {
     let t = theme();
 
     let owned_rows;
@@ -1151,15 +1179,10 @@ fn render_coeff_changes(
     let (val_w, badges) = (layout.value, layout.badges);
     let name_w = name_column_width(rows.iter().map(|row| row.variable.chars().count()).max().unwrap_or(0), pane_width, layout.reserved());
 
-    // Placeholder lines for coefficient rows scrolled above the viewport.
-    let placeholder_before = skip.min(rows.len());
-    for _ in 0..placeholder_before {
-        lines.push(Line::default());
-    }
+    let skipped = skip.min(rows.len());
 
     // Build styled Lines only for the visible window.
     // Reuse string buffers across rows to avoid per-row heap allocations.
-    let visible_count = rows.len().saturating_sub(skip).min(take);
     let mut name_buf = String::with_capacity(24);
     let mut old_buf = String::with_capacity(16);
     let mut new_buf = String::with_capacity(16);
@@ -1215,11 +1238,7 @@ fn render_coeff_changes(
         }
     }
 
-    // Placeholder lines for coefficient rows below the viewport.
-    let after_count = rows.len().saturating_sub(placeholder_before + visible_count);
-    for _ in 0..after_count {
-        lines.push(Line::default());
-    }
+    (skipped, rows.len())
 }
 
 /// Wrap `lines` in a bordered block with the given `title` and render it,
@@ -1259,7 +1278,7 @@ mod tests {
 
         for scroll in [0_u16, 1, 2, 3, 4, 5, 17, 150, 290, 300] {
             let windowed = draw(&|frame| {
-                render_inspect_objective(frame, area, objective, style, scroll, interner);
+                render_inspect_objective(frame, area, objective, style, usize::from(scroll), interner);
             });
             let full = draw(&|frame| {
                 let title = detail_title("Objective", &objective.name, None, false, area.width);
@@ -1268,7 +1287,7 @@ mod tests {
             assert_eq!(windowed, full, "inspect objective differs at scroll {scroll}");
 
             let windowed = draw(&|frame| {
-                render_inspect_constraint(frame, area, constraint, style, scroll, interner);
+                render_inspect_constraint(frame, area, constraint, style, usize::from(scroll), interner);
             });
             let full = draw(&|frame| {
                 let title = detail_title("Constraint", &constraint.name, None, false, area.width);
@@ -1283,7 +1302,7 @@ mod tests {
         let removed = diff.report.objectives.entries.iter().find(|e| e.kind == DiffKind::Removed).expect("obj is removed");
         for scroll in [0_u16, 1, 2, 150, 300] {
             let windowed = draw(&|frame| {
-                render_objective_detail(frame, area, removed, style, scroll, None, interner);
+                render_objective_detail(frame, area, removed, style, usize::from(scroll), None, interner);
             });
             let full = draw(&|frame| {
                 // A viewport tall enough to hold every row: the same pane width, no window.
@@ -1294,6 +1313,24 @@ mod tests {
                 render_panel(frame, area, title, content.lines, style, scroll);
             });
             assert_eq!(windowed, full, "removed objective differs at scroll {scroll}");
+        }
+
+        // A modified objective, through the unified change rows.
+        let diff = crate::snapshot_tests::diff_app_from(&source, &source.replace("obj: 1 x000", "obj: 5 x000 + 7 extra"));
+        let interner = &diff.report.interner;
+        let modified = diff.report.objectives.entries.iter().find(|e| e.kind == DiffKind::Modified).expect("obj is modified");
+        for scroll in [0_usize, 1, 2, 3, 150, 301] {
+            let windowed = draw(&|frame| {
+                render_objective_detail(frame, area, modified, style, scroll, None, interner);
+            });
+            let full = draw(&|frame| {
+                let everything = Rect::new(0, 0, area.width, u16::MAX);
+                let content = objective_detail_lines(modified, None, interner, Some((0, everything)));
+                assert_eq!(content.lines.len(), content.total, "every row is built");
+                let title = detail_title("Objective", &modified.name, Some(modified.kind), true, area.width);
+                render_panel(frame, area, title, content.lines, style, u16::try_from(scroll).expect("small scroll"));
+            });
+            assert_eq!(windowed, full, "modified objective differs at scroll {scroll}");
         }
     }
 

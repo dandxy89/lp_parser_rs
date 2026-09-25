@@ -152,7 +152,7 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     // same position feedback without needing focus.
     let detail_inner_height = detail_area.height.saturating_sub(2) as usize;
     if app.layout.detail_content_lines > detail_inner_height {
-        let mut scrollbar_state = ScrollbarState::new(app.layout.detail_content_lines).position(app.detail_scroll as usize);
+        let mut scrollbar_state = ScrollbarState::new(app.layout.detail_content_lines).position(app.detail_scroll);
         crate::widgets::render_panel_scrollbar(frame, detail_area, &mut scrollbar_state);
     }
 

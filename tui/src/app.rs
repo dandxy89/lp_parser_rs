@@ -362,7 +362,7 @@ pub struct App {
     pub presolve_log: Option<ScrollPane>,
 
     /// Scroll offset for the detail panel when it has focus.
-    pub detail_scroll: u16,
+    pub detail_scroll: usize,
 
     /// Section selector list state (tracks which of the 5 sections is highlighted).
     pub section_selector_state: ListState,
@@ -1224,10 +1224,7 @@ impl App {
                 self.detail_scroll = 0;
             }
             Focus::Detail => {
-                debug_assert!(u16::try_from(n).is_ok(), "page scroll step {n} exceeds u16::MAX");
-                #[allow(clippy::cast_possible_truncation)]
-                let step = n as u16;
-                self.detail_scroll = self.detail_scroll.saturating_add(step).min(self.max_detail_scroll());
+                self.detail_scroll = self.detail_scroll.saturating_add(n).min(self.max_detail_scroll());
             }
         }
     }
@@ -1251,10 +1248,7 @@ impl App {
                 self.detail_scroll = 0;
             }
             Focus::Detail => {
-                debug_assert!(u16::try_from(n).is_ok(), "page scroll step {n} exceeds u16::MAX");
-                #[allow(clippy::cast_possible_truncation)]
-                let step = n as u16;
-                self.detail_scroll = self.detail_scroll.saturating_sub(step);
+                self.detail_scroll = self.detail_scroll.saturating_sub(n);
             }
         }
     }
@@ -2040,10 +2034,9 @@ impl App {
     /// visible window, from the layout recorded on the previous frame. Content
     /// height is stable for a given entry (and scroll resets on entry change),
     /// so last frame's value is the right bound for this frame's input.
-    pub(crate) fn max_detail_scroll(&self) -> u16 {
+    pub(crate) fn max_detail_scroll(&self) -> usize {
         let visible = self.layout.detail_height.saturating_sub(2) as usize; // borders
-        let max = self.layout.detail_content_lines.saturating_sub(visible);
-        u16::try_from(max).unwrap_or(u16::MAX)
+        self.layout.detail_content_lines.saturating_sub(visible)
     }
 }
 
