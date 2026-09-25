@@ -1341,10 +1341,16 @@ impl App {
         self.entry_name(self.active_section, entry_index)
     }
 
+    /// The current navigation position, as a jumplist entry.
+    fn current_jump(&self) -> JumpEntry {
+        let entry_name = self.selected_entry_name().map(str::to_owned);
+        JumpEntry { section: self.active_section, entry_name, detail_scroll: self.detail_scroll, filter: self.filter }
+    }
+
     /// Record the current navigation position in the jumplist.
     pub(crate) fn record_jump(&mut self) {
-        let entry_name = self.selected_entry_name().map(str::to_owned);
-        self.jumplist.push(JumpEntry { section: self.active_section, entry_name, detail_scroll: self.detail_scroll, filter: self.filter });
+        let current = self.current_jump();
+        self.jumplist.push(current);
     }
 
     /// Report index of the entry named `name` in `section`, if it still exists.
@@ -1366,7 +1372,8 @@ impl App {
 
     /// Step back in the jumplist and restore that position (`Ctrl+o` / palette).
     pub(crate) fn jump_back(&mut self) {
-        if let Some(entry) = self.jumplist.go_back() {
+        let current = self.current_jump();
+        if let Some(entry) = self.jumplist.go_back(current) {
             let entry = entry.clone();
             self.restore_jump(&entry);
         }
@@ -2064,6 +2071,32 @@ mod tests {
         app.jump_back();
 
         assert_eq!(app.selected_entry_name(), Some("c2"), "the jump must land on the recorded entry");
+    }
+
+    /// Regression: `Ctrl+i` after `Ctrl+o` returned to the entry just jumped
+    /// to rather than the newer position left behind, so it never went forward.
+    #[test]
+    fn jumping_back_then_forward_returns_to_the_newer_position() {
+        let mut app = crate::snapshot_tests::diff_app_from(
+            "min\nobj: x\nst\nc1: x + y >= 2\nc2: x <= 8\nc3: y <= 4\nend\n",
+            "min\nobj: x\nst\nc1: x + y >= 3\nc2: x <= 9\nc3: y <= 5\nend\n",
+        );
+        app.set_section(Section::Constraints);
+        app.active_name_list_state_mut().select(Some(0));
+        app.set_section(Section::Variables);
+        assert_eq!(app.active_section, Section::Variables, "fixture: the newest position is Variables");
+
+        app.jump_back();
+        assert_eq!(app.active_section, Section::Constraints, "Ctrl+o returns to Constraints");
+        assert_eq!(app.selected_entry_name(), Some("c1"));
+
+        app.jump_forward();
+        assert_eq!(app.active_section, Section::Variables, "Ctrl+i returns to the newer position");
+
+        app.jump_forward();
+        assert_eq!(app.active_section, Section::Variables, "there is nothing newer to go forward to");
+        app.jump_back();
+        assert_eq!(app.active_section, Section::Constraints, "and Ctrl+o still goes back");
     }
 
     /// `M` hands the mouse to the terminal and back.
