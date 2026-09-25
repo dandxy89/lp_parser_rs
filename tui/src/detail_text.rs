@@ -80,7 +80,7 @@ pub fn render_detail_plain(app: &App) -> Option<String> {
             lines.extend(if inspect {
                 build_inspect_objective(entry, interner, None)
             } else {
-                build_objective_detail(entry, app.cached_coeff_rows(), interner, None)
+                build_objective_detail(entry, app.cached_coeff_rows(), interner)
             });
             Some(plain(&lines))
         }
