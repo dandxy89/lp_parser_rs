@@ -1856,6 +1856,31 @@ End";
         assert!(p.constraints.values().any(|c| matches!(c, Constraint::SOS { .. })), "the SOS constraint was lost");
     }
 
+    /// Weights with no set to belong to, and a set with no weights, used to
+    /// vanish without a trace; both are errors now.
+    #[test]
+    fn test_sos_section_rejects_orphan_weights_and_empty_sets() {
+        for sos in ["sos\nx:1 y:2", "sos\ns1: S1::", "sos\ns1: S1::\ns2: S2:: x:1 y:2", "sos\nx:1\ns1: S1:: y:2"] {
+            let input = format!("minimize\nobj: x + y\nsubject to\nc1: x + y <= 10\n{sos}\nend");
+            assert!(LpProblem::parse(&input).is_err(), "'{sos}' must be rejected");
+        }
+    }
+
+    /// CPLEX allows an SOS set without a name (`S1:: x:1 y:2`); it is named
+    /// `SOS<n>` like any other unnamed set.
+    #[test]
+    fn test_sos_unnamed_set_is_auto_named() {
+        let p =
+            LpProblem::parse("minimize\nobj: x + y + z\nsubject to\nc1: x + y <= 10\nsos\nS1:: x:1 y:2\ns2: S2:: y:1 z:2\nend").unwrap();
+        let sos1 = p.name_id("SOS1").expect("the unnamed set must be named SOS1");
+        let Constraint::SOS { sos_type, weights, .. } = &p.constraints[&sos1] else { panic!("SOS1 must be an SOS constraint") };
+        assert_eq!((*sos_type, weights.len()), (SOSType::S1, 2));
+        assert!(matches!(p.constraints[&p.name_id("s2").unwrap()], Constraint::SOS { sos_type: SOSType::S2, .. }));
+
+        // A name other than S1/S2 before '::' is not a set type.
+        assert!(LpProblem::parse("minimize\nobj: x\nsubject to\nc1: x <= 1\nsos\nS3:: x:1\nend").is_err());
+    }
+
     #[test]
     fn test_parse_errors() {
         let invalid = [

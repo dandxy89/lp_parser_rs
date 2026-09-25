@@ -16,8 +16,8 @@
 use std::borrow::Cow;
 use std::collections::HashSet;
 
-use crate::lexer::{LexerError, RawCoefficient, RawConstraint, RawObjective, RawQuadraticTerm};
-use crate::model::{ComparisonOp, GeneralFunction, ObjectiveAttributes};
+use crate::lexer::{LexerError, RawCoefficient, RawConstraint, RawObjective, RawQuadraticTerm, SosEntryKind};
+use crate::model::{ComparisonOp, GeneralFunction, ObjectiveAttributes, SOSType};
 
 /// One element of an objective or constraint body, with its byte offset.
 pub type SpannedElem<'input> = (usize, Elem<'input>);
@@ -667,6 +667,69 @@ pub fn assemble_general_constraints<'input>(elems: &[SpannedElem<'input>]) -> Re
         constraints.push(RawConstraint::General { name, resultant, function, byte_offset: Some(entry_loc) });
     }
     Ok(constraints)
+}
+
+/// Group the entries of an `SOS` section into sets: each header owns the
+/// weights that follow it. `section_start` is the position of the `SOS`
+/// keyword.
+///
+/// # Errors
+///
+/// Returns an error for a weight before any header, or a header with no
+/// weights: either would otherwise vanish from the model without a trace.
+pub(crate) fn assemble_sos<'input>(
+    entries: Vec<(usize, SosEntryKind<'input>)>,
+    section_start: usize,
+) -> Result<Vec<RawConstraint<'input>>, LexerError> {
+    let mut sets: Vec<RawConstraint<'input>> = Vec::new();
+    for (position, entry) in entries {
+        match entry {
+            SosEntryKind::Header(name, sos_type, offset) => {
+                reject_empty_sos_set(sets.last(), section_start)?;
+                sets.push(RawConstraint::SOS { name: Cow::Borrowed(name), sos_type, weights: Vec::new(), byte_offset: Some(offset) });
+            }
+            SosEntryKind::Weight(coefficient) => {
+                let Some(RawConstraint::SOS { weights, .. }) = sets.last_mut() else {
+                    return Err(err(
+                        position,
+                        format!("SOS weight '{}' does not follow a set header ('name: S1::' or 'S1::')", coefficient.name),
+                    ));
+                };
+                weights.push(coefficient);
+            }
+        }
+    }
+    reject_empty_sos_set(sets.last(), section_start)?;
+    debug_assert!(sets.iter().all(|set| matches!(set, RawConstraint::SOS { weights, .. } if !weights.is_empty())));
+    Ok(sets)
+}
+
+/// Reject an SOS set that ended without any weights.
+fn reject_empty_sos_set(last: Option<&RawConstraint<'_>>, fallback_position: usize) -> Result<(), LexerError> {
+    match last {
+        Some(RawConstraint::SOS { name, weights, byte_offset, .. }) if weights.is_empty() => {
+            let shown = if name == "__c__" { "(unnamed)" } else { name.as_ref() };
+            Err(err(byte_offset.unwrap_or(fallback_position), format!("SOS set '{shown}' has no weights")))
+        }
+        _ => Ok(()),
+    }
+}
+
+/// The header of an unnamed SOS set, `S1::` or `S2::` (CPLEX). The set is
+/// named `SOS<n>` when the problem is built.
+///
+/// # Errors
+///
+/// Returns an error when `keyword` is not an SOS type.
+pub(crate) fn unnamed_sos_header(keyword: &str, position: usize) -> Result<SosEntryKind<'static>, LexerError> {
+    let sos_type = if keyword.eq_ignore_ascii_case("S1") {
+        SOSType::S1
+    } else if keyword.eq_ignore_ascii_case("S2") {
+        SOSType::S2
+    } else {
+        return Err(err(position, format!("expected an SOS type 'S1' or 'S2' before '::', found '{keyword}'")));
+    };
+    Ok(SosEntryKind::Header("__c__", sos_type, position))
 }
 
 /// Build a [`GeneralFunction`] from its keyword and parsed arguments.

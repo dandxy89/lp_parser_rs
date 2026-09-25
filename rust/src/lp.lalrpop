@@ -1,6 +1,9 @@
 use lalrpop_util::ParseError;
 
-use crate::assemble::{Elem, SpannedElem, assemble_constraint_sections, assemble_general_constraints, assemble_objectives};
+use crate::assemble::{
+    Elem, SpannedElem, assemble_constraint_sections, assemble_general_constraints, assemble_objectives, assemble_sos,
+    unnamed_sos_header,
+};
 use crate::lexer::{Token, LexerError, RawCoefficient, RawConstraint, OptionalSection, ParseResult, SosEntryKind};
 use crate::model::{ComparisonOp, SOSType, Sense, VariableType};
 
@@ -224,60 +227,17 @@ SemiSection: Vec<&'input str> = {
 };
 
 SosSection: Vec<RawConstraint<'input>> = {
-    "sos" <entries:SosEntry*> => {
-        // Group entries into constraints
-        let mut constraints = Vec::new();
-        let mut current_name: Option<&'input str> = None;
-        let mut current_type: Option<SOSType> = None;
-        let mut current_offset: Option<usize> = None;
-        let mut current_weights: Vec<RawCoefficient<'input>> = Vec::new();
-
-        for entry in entries {
-            match entry {
-                SosEntryKind::Header(name, sos_type, offset) => {
-                    // Save previous constraint if exists
-                    if let (Some(n), Some(t)) = (current_name.take(), current_type.take())
-                        && !current_weights.is_empty()
-                    {
-                        constraints.push(RawConstraint::SOS {
-                            name: std::borrow::Cow::Borrowed(n),
-                            sos_type: t,
-                            weights: std::mem::take(&mut current_weights),
-                            byte_offset: current_offset,
-                        });
-                    }
-                    current_name = Some(name);
-                    current_type = Some(sos_type);
-                    current_offset = Some(offset);
-                }
-                SosEntryKind::Weight(coeff) => {
-                    current_weights.push(coeff);
-                }
-            }
-        }
-
-        // Save last constraint
-        if let (Some(n), Some(t)) = (current_name, current_type)
-            && !current_weights.is_empty()
-        {
-            constraints.push(RawConstraint::SOS {
-                name: std::borrow::Cow::Borrowed(n),
-                sos_type: t,
-                weights: current_weights,
-                byte_offset: current_offset,
-            });
-        }
-
-        constraints
-    },
+    <loc:@L> "sos" <entries:SosEntry*> =>? assemble_sos(entries, loc).map_err(|error| ParseError::User { error }),
 };
 
-// Entry in SOS section - either a constraint header or a weight
-SosEntry: SosEntryKind<'input> = {
+// Entry in SOS section - either a set header or a weight, with its position.
+SosEntry: (usize, SosEntryKind<'input>) = {
     // Header: "name: S1::" or "name: S2::"
-    <loc:@L> <name:"identifier"> ":" <sos_type:"sos_type"> "::" => SosEntryKind::Header(name, sos_type, loc),
+    <loc:@L> <name:"identifier"> ":" <sos_type:"sos_type"> "::" => (loc, SosEntryKind::Header(name, sos_type, loc)),
+    // Unnamed header (CPLEX): "S1::" or "S2::"; named `SOS<n>` later.
+    <loc:@L> <keyword:"identifier"> "::" =>? unnamed_sos_header(keyword, loc).map(|header| (loc, header)).map_err(|error| ParseError::User { error }),
     // Weight: "var:value"
-    <var:"identifier"> ":" <weight:NumericValue> => SosEntryKind::Weight(RawCoefficient { name: var, value: weight }),
+    <loc:@L> <var:"identifier"> ":" <weight:NumericValue> => (loc, SosEntryKind::Weight(RawCoefficient { name: var, value: weight })),
 };
 
 CompOp: ComparisonOp = {
