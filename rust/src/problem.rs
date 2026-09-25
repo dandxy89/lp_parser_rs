@@ -824,12 +824,12 @@ impl LpProblem {
     ///
     /// # Errors
     ///
-    /// Returns an error if the variable does not exist, or if it is the
-    /// indicator variable of an indicator constraint or appears in a general
-    /// constraint (remove the constraint first: dropping only part of it would
-    /// change what it means).
+    /// Returns an error if `variable_name` is empty, the variable does not
+    /// exist, or it is the indicator variable of an indicator constraint or
+    /// appears in a general constraint (remove the constraint first: dropping
+    /// only part of it would change what it means).
     pub fn remove_variable(&mut self, variable_name: &str) -> LpResult<()> {
-        debug_assert!(!variable_name.is_empty(), "variable_name must not be empty");
+        Self::check_name(variable_name, "variable_name")?;
         let var_id = self
             .interner
             .get(variable_name)
@@ -898,9 +898,10 @@ impl LpProblem {
     ///
     /// # Errors
     ///
-    /// Returns an error if the constraint does not exist.
+    /// Returns an error if `constraint_name` is empty or the constraint does
+    /// not exist.
     pub fn remove_constraint(&mut self, constraint_name: &str) -> LpResult<()> {
-        debug_assert!(!constraint_name.is_empty(), "constraint_name must not be empty");
+        Self::check_name(constraint_name, "constraint_name")?;
         let con_id = self.interner.get(constraint_name).ok_or_else(|| LpParseError::not_found(EntityKind::Constraint, constraint_name))?;
 
         if self.constraints.shift_remove(&con_id).is_none() {
@@ -914,9 +915,10 @@ impl LpProblem {
     ///
     /// # Errors
     ///
-    /// Returns an error if the objective does not exist.
+    /// Returns an error if `objective_name` is empty or the objective does not
+    /// exist.
     pub fn remove_objective(&mut self, objective_name: &str) -> LpResult<()> {
-        debug_assert!(!objective_name.is_empty(), "objective_name must not be empty");
+        Self::check_name(objective_name, "objective_name")?;
         let obj_id = self.interner.get(objective_name).ok_or_else(|| LpParseError::not_found(EntityKind::Objective, objective_name))?;
 
         if self.objectives.shift_remove(&obj_id).is_none() {
@@ -935,9 +937,10 @@ impl LpProblem {
     ///
     /// # Errors
     ///
-    /// Returns an error if the variable does not exist.
+    /// Returns an error if `variable_name` is empty or the variable does not
+    /// exist.
     pub fn update_variable_type(&mut self, variable_name: &str, new_type: VariableType) -> LpResult<()> {
-        debug_assert!(!variable_name.is_empty(), "variable_name must not be empty");
+        Self::check_name(variable_name, "variable_name")?;
         let var_id = self.interner.get(variable_name).ok_or_else(|| LpParseError::not_found(EntityKind::Variable, variable_name))?;
 
         let variable = self.variables.get_mut(&var_id).ok_or_else(|| LpParseError::not_found(EntityKind::Variable, variable_name))?;
@@ -2663,6 +2666,10 @@ mod modification_tests {
         assert!(p.rename_variable("x", "").is_err(), "empty new variable name must be rejected");
         assert!(p.rename_constraint("c1", "").is_err(), "empty new constraint name must be rejected");
         assert!(p.rename_objective("obj", "").is_err(), "empty new objective name must be rejected");
+        assert!(p.remove_variable("").is_err(), "empty variable name must be rejected");
+        assert!(p.remove_constraint("").is_err(), "empty constraint name must be rejected");
+        assert!(p.remove_objective("").is_err(), "empty objective name must be rejected");
+        assert!(p.update_variable_type("", VariableType::Binary).is_err(), "empty variable name must be rejected");
 
         // The model is untouched, so it still round-trips.
         let written = crate::writer::write_lp_string(&p).expect("valid names must write");
