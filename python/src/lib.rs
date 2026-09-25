@@ -258,7 +258,7 @@ impl LpParser {
     fn to_mps_string(&self, decimal_precision: Option<usize>, allow_multiple_objectives: bool) -> PyResult<String> {
         let problem = &self.problem;
         let options = MpsWriterOptions { decimal_precision, allow_multiple_objectives };
-        write_mps_string_with_options(problem, &options).map_err(|err| PyRuntimeError::new_err(format!("Unable to write MPS: {err}")))
+        write_mps_string_with_options(problem, &options).map_err(|err| to_py_err("Unable to write MPS", err))
     }
 
     /// Save the current problem to an MPS file.

@@ -431,6 +431,15 @@ class TestGeneralConstraint:
     def test_round_trip(self) -> None:
         assert "General Constraints\n g: r = MIN ( x , y , 2 )" in LpParser.from_string(self.LP).to_lp_string()
 
+    def test_mps_writer_rejection_raises_invalid_value(self, tmp_path: Path) -> None:
+        # MPS has no general-constraint section: the writer's validation error
+        # must surface as LpInvalidValueError, not a bare RuntimeError.
+        parser = LpParser.from_string(self.LP)
+        with pytest.raises(LpInvalidValueError, match="cannot be written to MPS"):
+            parser.to_mps_string()
+        with pytest.raises(LpInvalidValueError, match="cannot be written to MPS"):
+            parser.save_to_mps(tmp_path / "out.mps")
+
 
 class TestMultiObjective:
     LP = (
