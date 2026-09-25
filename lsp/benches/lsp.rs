@@ -13,7 +13,7 @@ use std::time::Duration;
 
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
 use lp_lsp::config::{Config, FormatSettings, InlayHintSettings};
-use lp_lsp::features::{code_action, code_lens, completion, diagnostics, folding, format, inlay, semantic_tokens};
+use lp_lsp::features::{code_action, code_lens, completion, diagnostics, folding, format, inlay, semantic_tokens, symbols};
 use lp_lsp::{Document, Encoding, SymbolIndex, semantic, syntax};
 use lp_parser_rs::analysis::AnalysisConfig;
 use tower_lsp_server::ls_types::{CodeActionContext, TextDocumentContentChangeEvent, Uri};
@@ -277,6 +277,13 @@ fn many(c: &mut Criterion) {
         doc.build_index();
         let config = Config::default();
         b.iter(|| diagnostics::compute(black_box(doc), &config));
+    });
+
+    group.bench_function("document_symbols_serialised", |b| {
+        // What `textDocument/documentSymbol` costs the server: compute and encode.
+        let doc = constraints_200k();
+        doc.build_index();
+        b.iter(|| serde_json::to_vec(&symbols::document_symbols(black_box(doc))).expect("symbols serialise"));
     });
 
     group.bench_function("folding_ranges", |b| {
