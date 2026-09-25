@@ -88,17 +88,16 @@ fn model_name_hints(doc: &Document, entities: Range<usize>, settings: &InlayHint
 
     // (entity, model name) in model order: a ranged constraint's lower half
     // (the written name) precedes its `_rng` partner.
-    let objectives = problem.objectives.values().map(|o| (o.byte_offset, o.name));
-    let constraints = problem.constraints.values().map(|c| (c.byte_offset(), c.name()));
-    let mut names: Vec<(usize, &str)> = objectives
-        .chain(constraints)
-        .filter_map(|(offset, name)| {
-            let offset = offset.filter(|o| window.contains(o))?;
-            let entity = doc.index().entity_at(offset).filter(|e| entities.contains(e))?;
-            Some((entity, problem.resolve(name)))
+    let mut names: Vec<(usize, usize, &str)> = model
+        .name_sites_in(window)
+        .iter()
+        .filter_map(|site| {
+            let entity = doc.index().entity_at(site.offset).filter(|e| entities.contains(e))?;
+            Some((entity, site.order, problem.resolve(site.name)))
         })
         .collect();
-    names.sort_by_key(|(entity, _)| *entity);
+    names.sort_by_key(|&(entity, order, _)| (entity, order));
+    let names: Vec<(usize, &str)> = names.into_iter().map(|(entity, _, name)| (entity, name)).collect();
 
     for group in names.chunk_by(|a, b| a.0 == b.0) {
         let entity = &doc.index().entities[group[0].0];
