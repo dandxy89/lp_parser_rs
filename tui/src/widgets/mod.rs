@@ -351,9 +351,9 @@ const HEADING_WIDTH: usize = 54;
 
 /// A section heading: the title in the accent colour, run out to a common
 /// column with a hairline rule, so every heading in every pane shares one
-/// spine. This replaces the older two-line treatment (title, then an underline
-/// matched to the title's width) — same structure, half the vertical cost, and
-/// headings no longer step in and out with the length of their own text.
+/// spine. One line rather than a title plus an underline matched to its
+/// width: half the vertical space, and headings do not step in and out with
+/// the length of their own text.
 pub fn heading_line(title: &str) -> Line<'static> {
     let t = theme();
     let used = title.chars().count() + 3;
@@ -386,10 +386,10 @@ pub fn push_heading(lines: &mut Vec<Line<'static>>, title: &str, note: &str) {
 /// The rectangle for a report overlay holding `content_lines` lines: the
 /// whole width, and only as tall as the content (plus borders) needs, centred
 /// in the screen less a row top and bottom — so the tab bar and the status
-/// bar, which carries the pane's keys, stay readable behind it. A short report
-/// no longer sits in a screenful of empty box. Insetting the sides as well
-/// left a two-column sliver of the panel underneath showing through, which
-/// read as a second, broken border.
+/// bar, which carries the pane's keys, stay readable behind it, and a short
+/// report does not sit in a screenful of empty box. The sides are not inset:
+/// that left a two-column sliver of the panel underneath showing through,
+/// which read as a second, broken border.
 pub fn report_rect(area: Rect, content_lines: usize) -> Rect {
     if area.height <= 2 {
         return area;

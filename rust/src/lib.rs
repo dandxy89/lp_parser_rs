@@ -1,20 +1,30 @@
 #![allow(clippy::multiple_crate_versions)]
 #![warn(missing_docs)]
 
-//! LP Parser - A Linear Programming File Parser
+//! Parser, writer and analysis tools for Linear Programming (LP) and MPS files.
 //!
-//! This crate provides robust parsing capabilities for Linear Programming (LP)
-//! files using LALRPOP parser generator. It supports multiple industry-standard
-//! LP file formats and offers comprehensive features for optimisation problems.
+//! The LP reader accepts the CPLEX, Gurobi, FICO Xpress and Mosek dialects of
+//! the format, including quadratic objectives and constraints, indicator,
+//! lazy and general constraints, SOS sets, semi-continuous and semi-integer
+//! variables. Parsing goes through three stages:
 //!
-//! # Features
+//! 1. [`lexer::Lexer`] (Logos) tokenises the input. It is separate from the
+//!    grammar because LP keywords are context-sensitive: `min`, `bin` or
+//!    `free` are valid variable names in most positions. The lexer decides
+//!    from the surrounding tokens, so the grammar only sees a keyword where
+//!    one can appear.
+//! 2. The LALRPOP grammar ([`lp`]) builds a [`ParseResult`] that borrows names
+//!    from the input. Objective and constraint bodies are collected as flat
+//!    element lists and split into entries by [`assemble`], since finding
+//!    where one entry ends needs more than one token of lookahead.
+//! 3. [`LpProblem`] interns every name into a [`NameInterner`] and stores
+//!    [`NameId`]s. The resulting model owns its data, has no lifetime tied to
+//!    the input, and compares or hashes names as `u32`s.
 //!
-//! - Owned, interned problem model (no lifetimes) built from a zero-copy grammar
-//! - Support for multiple LP file format specifications
-//! - Comprehensive parsing of all standard LP file components
-//! - Writers for both LP ([`writer`]) and MPS ([`mps::writer`]) output
-//! - Optional serialisation (`serde`) and a structural/numeric diff engine
-//!   ([`diff`], behind the `diff` feature)
+//! MPS input ([`mps`]) produces the same [`ParseResult`] and so the same
+//! model. [`writer`] and [`mps::writer`] write either format back out,
+//! [`analysis`] reports statistics and numerical issues, and the `diff`
+//! feature adds a structural and numeric diff engine (`diff`).
 //!
 //! # Quick Start
 //!
@@ -36,9 +46,18 @@
 //! # Ok::<(), lp_parser_rs::LpParseError>(())
 //! ```
 //!
-//! To read from disk, use [`parser::parse_file`] to load the file contents
-//! (memory-mapped with the `mmap` feature) and pass them to
+//! To read from disk, load the file with [`parser::parse_file`] (or map it
+//! with `parser::MappedFile` under the `mmap` feature) and pass the text to
 //! [`LpProblem::parse`] or [`LpProblem::parse_mps`].
+//!
+//! # Feature flags
+//!
+//! - `serde`: `Serialize`/`Deserialize` for [`LpProblem`] and the model types.
+//! - `diff`: the `diff` module and `LpProblem::diff` (enables `serde`).
+//! - `csv`: `LpProblem::to_csv`, which writes one CSV file per section.
+//! - `mmap`: `parser::MappedFile` for memory-mapped input.
+//! - `lp-solvers`: an adapter to the `lp-solvers` crate (`compat::lp_solvers`).
+//! - `cli`: builds the `lp_parser` binary.
 
 pub mod analysis;
 /// Assembly of flat LP section bodies into raw objectives/constraints.
@@ -114,7 +133,7 @@ mod lp_grammar {
 /// The grammar's start symbol yields a boxed [`ParseResult`]: LALRPOP keeps
 /// every value on its parse stack in one enum as large as the largest
 /// value, so an unboxed `ParseResult` would make each token move several
-/// hundred bytes. [`LpProblemParser`] unboxes the result,
+/// hundred bytes. [`LpProblemParser`](lp::LpProblemParser) unboxes the result,
 /// keeping the interface the generated parser has always had.
 pub mod lp {
     use lalrpop_util::ParseError;

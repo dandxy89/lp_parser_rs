@@ -1,7 +1,8 @@
 //! Detail panel widget.
 //!
-//! Renders the full before/after breakdown for a single selected diff entry
-//! (variables, constraints, objectives) in the detail pane.
+//! Renders the full breakdown of the selected variable, constraint or
+//! objective: before and after in diff mode, the entry as written in inspect
+//! mode.
 
 use lp_parser_rs::interner::NameInterner;
 use ratatui::Frame;

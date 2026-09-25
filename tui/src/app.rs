@@ -1,3 +1,11 @@
+//! Application state and the operations on it.
+//!
+//! [`App`] owns everything the UI shows: the diff report, per-section view
+//! state and caches, the overlays, and the channels to background work
+//! (solves, analyses, watch reloads). Key and mouse dispatch live in
+//! [`crate::input`]; drawing lives in [`crate::ui`] and [`crate::widgets`],
+//! which only read from `App` apart from recording layout for hit-testing.
+
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::path::PathBuf;

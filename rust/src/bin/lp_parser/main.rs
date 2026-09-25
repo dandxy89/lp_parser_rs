@@ -1,4 +1,5 @@
-//! LP Parser CLI - Parse, analyze, convert, and solve Linear Programming files.
+//! `lp_parser` command-line tool: parse, analyse, compare, convert and solve
+//! LP and MPS files. Input ending in `.mps` is read as MPS, anything else as LP.
 
 mod cli;
 

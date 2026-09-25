@@ -288,8 +288,15 @@ fn intern_objective(interner: &mut NameInterner, raw: &RawObjective<'_>) -> LpRe
 /// Represents a Linear Programming (LP) problem.
 ///
 /// All name strings are stored in the embedded [`NameInterner`] and referenced
-/// by [`NameId`] throughout. This eliminates lifetime constraints and avoids
-/// string duplication.
+/// by [`NameId`] throughout, so the problem does not borrow from the input
+/// and each name is stored once. The maps are [`IndexMap`]s, which keep
+/// declaration order, so a parsed problem is written back out in the order it
+/// was read.
+///
+/// The fields are public for reading and for direct edits; the mutation
+/// methods keep the maps consistent with each other (for example
+/// [`Self::rename_variable`] updates every constraint), which direct edits do
+/// not.
 #[derive(Clone, Debug, Default)]
 pub struct LpProblem {
     /// The problem name (from comments), not interned.
@@ -556,6 +563,10 @@ impl LpProblem {
 
     /// Update a variable coefficient in an objective.
     ///
+    /// Adds the term if the variable is not in the objective yet (creating the
+    /// variable if needed); a coefficient whose magnitude is below `1e-10`
+    /// removes the term instead.
+    ///
     /// # Errors
     ///
     /// Returns an error if the specified objective does not exist, `variable_name`
@@ -581,10 +592,14 @@ impl LpProblem {
 
     /// Update a variable coefficient in a constraint.
     ///
+    /// Works on the linear part of standard, indicator and quadratic
+    /// constraints. As with [`Self::update_objective_coefficient`], a missing
+    /// term is added and a coefficient below `1e-10` in magnitude removes it.
+    ///
     /// # Errors
     ///
-    /// Returns an error if the constraint does not exist, is an SOS constraint,
-    /// `variable_name` is empty, or `new_coefficient` is not finite.
+    /// Returns an error if the constraint does not exist, is an SOS or general
+    /// constraint, `variable_name` is empty, or `new_coefficient` is not finite.
     pub fn update_constraint_coefficient(&mut self, constraint_name: &str, variable_name: &str, new_coefficient: f64) -> LpResult<()> {
         Self::check_name(variable_name, "variable_name")?;
         Self::check_finite(new_coefficient, "coefficient")?;
@@ -622,8 +637,8 @@ impl LpProblem {
     ///
     /// # Example
     ///
-    /// Parse, mutate, and write back — the pattern shared by the whole
-    /// mutation API (`rename_*`, `update_*`, `remove_*`):
+    /// Parse, mutate, and write back. The rest of the mutation API
+    /// (`rename_*`, `update_*`, `remove_*`) follows the same pattern:
     ///
     /// ```rust
     /// use lp_parser_rs::LpProblem;
@@ -637,8 +652,8 @@ impl LpProblem {
     ///
     /// # Errors
     ///
-    /// Returns an error if the constraint does not exist, is an SOS constraint,
-    /// `constraint_name` is empty, or `new_rhs` is not finite.
+    /// Returns an error if the constraint does not exist, is an SOS or general
+    /// constraint, `constraint_name` is empty, or `new_rhs` is not finite.
     pub fn update_constraint_rhs(&mut self, constraint_name: &str, new_rhs: f64) -> LpResult<()> {
         Self::check_name(constraint_name, "constraint_name")?;
         Self::check_finite(new_rhs, "right-hand side")?;

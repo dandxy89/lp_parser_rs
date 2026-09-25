@@ -10,6 +10,12 @@ impl LpProblem {
     /// Writes the problem data to three CSV files under `base_path`:
     /// `objectives.csv`, `constraints.csv`, and `variables.csv`.
     ///
+    /// The directory must already exist; existing files of those names are
+    /// overwritten. Objectives and constraints get one row per term, with a
+    /// quadratic term's variable written as `x*y`. An empty bound cell in
+    /// `variables.csv` means no bound was declared. Objective constants are
+    /// not exported.
+    ///
     /// # Example
     ///
     /// ```rust,no_run
@@ -25,7 +31,7 @@ impl LpProblem {
     ///
     /// # Errors
     ///
-    /// Returns an error if any of the CSV files cannot be created or written to
+    /// Returns an error if any of the CSV files cannot be created or written to.
     pub fn to_csv(&self, base_path: &Path) -> Result<(), Box<dyn Error>> {
         self.write_objectives(base_path)?;
         self.write_constraints(base_path)?;

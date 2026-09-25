@@ -1,7 +1,10 @@
-//! CSV export of the full diff report.
+//! CSV export for `w`.
 //!
-//! Writes a single `lp_diff_report.csv` summarising all variable, constraint,
-//! and objective changes.
+//! Diff mode writes one `lp_diff_report_<stamp>.csv` listing every variable,
+//! constraint and objective change. Inspect mode has no changes to list, so it
+//! writes the model itself through the core library's `to_csv`, into a folder
+//! of its own. Both names carry a stamp so an export never overwrites an
+//! earlier one.
 
 use std::error::Error;
 use std::path::{Path, PathBuf};

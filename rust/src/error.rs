@@ -31,8 +31,11 @@ impl std::fmt::Display for EntityKind {
     }
 }
 
-/// This error type provides detailed context about parsing failures,
-/// including location information and specific error conditions.
+/// Error returned by the LP and MPS parsers and by the [`LpProblem`](crate::LpProblem)
+/// mutation API.
+///
+/// Where a variant carries a `position`, it is a byte offset into the input
+/// for LP files and a 1-based line number for MPS files.
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
 pub enum LpParseError {
     /// Invalid numerical value or format
@@ -40,7 +43,7 @@ pub enum LpParseError {
     InvalidNumber {
         /// The text that failed to parse as a number.
         value: String,
-        /// Byte or line position of the value in the input.
+        /// Byte offset (LP) or 1-based line number (MPS) of the value.
         position: usize,
     },
 
@@ -95,11 +98,12 @@ pub enum LpParseError {
     /// Generic parsing error with context
     #[error("{}", format_parse_error(.position, .message, .context.as_deref()))]
     ParseError {
-        /// Byte or line position where parsing failed.
+        /// Byte offset (LP) or 1-based line number (MPS) where parsing failed.
         position: usize,
         /// Description of the failure.
         message: String,
-        /// Optional human-readable source snippet (line/column + caret).
+        /// Source snippet (line/column and caret), attached by
+        /// [`LpParseError::with_source`]; `None` for MPS input.
         context: Option<Box<ParseContext>>,
     },
 
@@ -180,6 +184,10 @@ impl LpParseError {
     }
 
     /// Attach source context to a parse error if it does not already have one.
+    ///
+    /// `source` must be the text the error's byte offset refers to. Errors
+    /// other than [`LpParseError::ParseError`], and offsets past the end of
+    /// `source`, are returned unchanged.
     #[must_use]
     pub fn with_source(mut self, source: &str) -> Self {
         if let Self::ParseError { position, context, .. } = &mut self
@@ -195,7 +203,8 @@ impl LpParseError {
         Self::IoError { message: message.into() }
     }
 
-    /// Byte position associated with this error, when available.
+    /// Position associated with this error, when available: a byte offset for
+    /// LP input, a 1-based line number for MPS input.
     #[must_use]
     pub const fn position(&self) -> Option<usize> {
         match self {
@@ -204,7 +213,8 @@ impl LpParseError {
         }
     }
 
-    /// Formatted diagnostic string including source snippet when available.
+    /// The error message, followed by the source snippet when one was attached
+    /// with [`Self::with_source`].
     #[must_use]
     pub fn diagnostic(&self) -> String {
         match self {

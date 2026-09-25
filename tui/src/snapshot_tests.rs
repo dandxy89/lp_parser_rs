@@ -310,7 +310,7 @@ fn snapshot_ranging_pane_120x40() {
     insta::assert_snapshot!(render(&mut app, 120, 40).backend());
 }
 
-/// The clipboard yank is now derived from the same lines the widgets draw, by
+/// The clipboard yank is derived from the same lines the widgets draw, by
 /// stripping their styles. Snapshot the plain text so a change to either the
 /// panel layout or the flattening shows up here.
 #[test]

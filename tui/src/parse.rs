@@ -1,3 +1,7 @@
+//! Loading an input file: parse it, run the structural analysis, and keep what
+//! the viewer needs alongside the problem (constraint line numbers for the raw
+//! view, and the source text itself).
+
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -40,8 +44,8 @@ pub fn parse_text(content: &str, is_mps: bool, label: &str) -> Result<ParsedFile
 /// Parse an LP or MPS file, returning the problem, analysis, and a constraint→line-number map.
 ///
 /// Format is detected by file extension: `.mps` (case-insensitive) uses the MPS parser,
-/// everything else uses the LP parser. Uses memory-mapped I/O to avoid copying the file
-/// into a heap-allocated `String`.
+/// everything else uses the LP parser. The file is memory-mapped for parsing; the text
+/// is copied once, into the returned `String`, because the raw view outlives the map.
 pub fn parse_file(path: &Path) -> Result<ParsedFile, Box<dyn std::error::Error + Send + Sync>> {
     debug_assert!(path.exists(), "parse_file called with non-existent path: {}", path.display());
 

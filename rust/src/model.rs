@@ -239,8 +239,11 @@ impl<V> GeneralFunction<V> {
 }
 
 #[derive(Debug, Clone)]
-/// Represents a constraint in an optimisation problem, which can be either a
-/// standard linear constraint or a special ordered set (SOS) constraint.
+/// A constraint of an optimisation problem: linear, SOS, quadratic, general
+/// (Gurobi) or indicator.
+///
+/// Equality ignores `byte_offset`: where a constraint was written is not part
+/// of the model.
 pub enum Constraint {
     /// A linear constraint defined by a name, coefficients, comparison operator, and RHS value.
     Standard {
@@ -383,7 +386,7 @@ impl Constraint {
     }
 
     /// The linear row of a standard or indicator constraint as
-    /// `(coefficients, operator, rhs)`; `None` for an SOS or quadratic
+    /// `(coefficients, operator, rhs)`; `None` for an SOS, quadratic or general
     /// constraint (a quadratic constraint has no purely linear row). For an
     /// indicator constraint this is the constraint that holds when the
     /// indicator is active.
@@ -397,9 +400,11 @@ impl Constraint {
         }
     }
 
-    /// Calls `f` with every variable the constraint references: its
-    /// coefficients (or SOS members) and, for an indicator constraint, the
-    /// indicator variable first.
+    /// Calls `f` with every variable the constraint references: its linear
+    /// coefficients or SOS members, both variables of each quadratic term, the
+    /// resultant and arguments of a general constraint, and, for an indicator
+    /// constraint, the indicator variable first. A variable may be reported
+    /// more than once.
     pub fn for_each_variable(&self, mut f: impl FnMut(NameId)) {
         match self {
             Self::Standard { coefficients: terms, .. } | Self::SOS { weights: terms, .. } => {
@@ -797,7 +802,8 @@ pub struct Variable {
     pub name: NameId,
     /// Discrete / structural kind.
     pub kind: VariableKind,
-    /// Finite bounds (independent of kind).
+    /// Declared bounds (independent of kind). A `free` variable stores
+    /// infinite bounds; see [`VariableBounds`].
     pub bounds: VariableBounds,
 }
 

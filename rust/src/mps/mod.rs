@@ -1,8 +1,17 @@
-//! MPS file format parser.
+//! MPS (Mathematical Programming System) reading and writing.
 //!
-//! Parses MPS (Mathematical Programming System) files into the same
-//! [`ParseResult`](crate::lexer::ParseResult) used by the LP grammar,
-//! enabling seamless integration with `LpProblem::parse_mps`.
+//! [`parse_mps`] produces the same [`ParseResult`](crate::lexer::ParseResult)
+//! as the LP grammar, so [`LpProblem::parse_mps`](crate::LpProblem::parse_mps)
+//! builds a problem through the same code path as LP input, and an MPS file
+//! can be diffed against, or converted to, an LP file.
+//!
+//! Lines are split on whitespace (free format), so names may not contain
+//! spaces; fixed-format files whose names have no spaces read the same way.
+//! Supported sections are `NAME`, `OBJSENSE`, `ROWS`, `COLUMNS` (with
+//! `INTORG`/`INTEND` markers), `RHS`, `RANGES`, `BOUNDS`, `SOS` and `ENDATA`,
+//! plus the CPLEX/Gurobi extensions `LAZYCONS`, `USERCUTS`, `INDICATORS`,
+//! `QUADOBJ`, `QMATRIX` and `QCMATRIX`. `PWLOBJ`, `GENCONS` and `SCENARIOS`
+//! are skipped with a warning on stderr; any other section is an error.
 //!
 
 mod builders;
@@ -10,9 +19,6 @@ mod sections;
 mod state;
 #[cfg(test)]
 mod tests;
-/// MPS file writing ([`write_mps_string`](writer::write_mps_string) /
-/// [`write_mps_string_with_options`](writer::write_mps_string_with_options)),
-/// mirroring [`crate::writer`] for the LP format.
 pub mod writer;
 
 pub use state::{extract_mps_name, parse_mps};
@@ -105,11 +111,11 @@ pub(super) const MAX_FIELDS: usize = 6;
 /// allocation, honouring `$` inline comments.
 ///
 /// Per the CPLEX MPS spec, if Field 3 or Field 5 starts with `$`, the
-/// remainder of the line is a comment. We check all fields from index 0
-/// onward for simplicity -- a `$`-prefixed field truncates everything after.
+/// remainder of the line is a comment. For simplicity every field is checked:
+/// a `$`-prefixed field truncates everything after it.
 ///
 /// Returns the field buffer and the number of fields written. Fields beyond
-/// [`MAX_FIELDS`] are ignored -- they exceed what the MPS format defines.
+/// [`MAX_FIELDS`] are ignored, as they exceed what the MPS format defines.
 pub(super) fn split_fields(line: &str) -> ([&str; MAX_FIELDS], usize) {
     debug_assert!(!line.is_empty(), "split_fields called with empty line");
 

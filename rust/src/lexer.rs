@@ -209,7 +209,10 @@ pub enum OptionalSection<'input> {
     GeneralConstraints(Vec<crate::assemble::SpannedElem<'input>>),
 }
 
-/// Structured result from the LALRPOP parser, replacing the previous 9-tuple.
+/// Output of the LP grammar and the MPS reader, before names are interned.
+///
+/// Names borrow from the input text; [`LpProblem`](crate::LpProblem) converts
+/// this into the owned, interned model.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ParseResult<'input> {
     /// Optimisation sense (minimise/maximise).
@@ -406,9 +409,13 @@ pub enum Token<'input> {
     LineComment,
 
     // === Identifiers ===
-    /// Variable/constraint name identifier
-    /// Allowed characters: alphanumeric and !#$%&()_,.;?@{}~'[]
-    /// (`\` is excluded: per the CPLEX spec it starts a comment anywhere on a line)
+    /// Variable/constraint name identifier.
+    ///
+    /// A name starts with a letter or one of `_!#$%&(),.;?@{}~'[]` and
+    /// continues with those characters, digits, or `|`. A `-` is accepted
+    /// mid-name when a name character or digit follows it (`x-y`, `x-1`).
+    /// `\` is excluded: per the CPLEX spec it starts a comment anywhere on a
+    /// line.
     ///
     /// `>` is only accepted mid-name when followed by a non-numeric name
     /// character (Gurobi writes names like `ArcFlow%>%[0]`), so `y>=3` and

@@ -1,99 +1,94 @@
-//! MPS file writing and formatting utilities.
+//! Writes an [`LpProblem`] out in MPS format.
 //!
-//! This module writes an [`LpProblem`](crate::problem::LpProblem) back out in
-//! MPS (Mathematical Programming System) format, mirroring the conventions of
-//! the LP writer ([`crate::writer`]): a small options struct,
-//! [`write_mps_string`](crate::mps::writer::write_mps_string) /
-//! [`write_mps_string_with_options`](crate::mps::writer::write_mps_string_with_options)
-//! entry points, and
-//! a private tree of per-section builder functions. Output produced here is
-//! designed to be read back by [`crate::mps::parse_mps`].
+//! This mirrors the LP writer ([`crate::writer`]): an options struct and the
+//! [`write_mps_string`] / [`write_mps_string_with_options`] entry points.
+//! Output is meant to be read back by [`crate::mps::parse_mps`] into the same
+//! problem; the exceptions are listed under "Known round-trip limitations".
 //!
 //! # Formatting
 //!
-//! Output is **free-format** MPS: fields are whitespace-separated and padded
-//! for readability rather than aligned to the strict fixed-column positions
-//! of historical MPS. The reader (like most modern MPS parsers) only ever
-//! splits on whitespace, so this is a purely cosmetic choice.
+//! Output is free-format MPS: fields are separated by whitespace and padded
+//! for readability, not aligned to the fixed column positions of historical
+//! MPS. The reader, like most current MPS readers, splits on whitespace, so
+//! the padding is cosmetic. It does mean names cannot contain spaces, so the
+//! writer rejects them.
 //!
 //! # Sections emitted
 //!
-//! `NAME`, `OBJSENSE` (only when the sense is `Maximize` -- `Minimize` is the
-//! MPS default and is left implicit), `ROWS`, `LAZYCONS` / `USERCUTS` (CPLEX:
-//! lazy constraints and user cuts, listed like `ROWS` and otherwise ordinary
-//! rows in `COLUMNS`, `RHS` and `RANGES`), `COLUMNS` (integer/general/binary
-//! variables wrapped in `'MARKER'` `INTORG`/`INTEND` blocks), `RHS`, `RANGES`
-//! (see below), `BOUNDS`, `SOS`, `QUADOBJ` (the written objective's
-//! quadratic terms, upper triangle of `Q` in `c'x + 1/2 x'Qx`), `QCMATRIX`
-//! (one per quadratic constraint: the full symmetric `Q` of `a'x + x'Qx`),
-//! `INDICATORS` (CPLEX: an indicator
-//! constraint is an ordinary row plus an `IF row variable value` line),
-//! `ENDATA`.
+//! - `NAME`.
+//! - `OBJSENSE`, only for `Maximize`: `Minimize` is the MPS default.
+//! - `ROWS`, then `LAZYCONS` and `USERCUTS` (CPLEX) for lazy constraints and
+//!   user cuts. These list rows in `ROWS` format; the rows are otherwise
+//!   ordinary in `COLUMNS`, `RHS` and `RANGES`.
+//! - `COLUMNS`, with integer, general and binary variables wrapped in
+//!   `'MARKER'` `INTORG`/`INTEND` blocks.
+//! - `RHS`, and `RANGES` (see below).
+//! - `BOUNDS`.
+//! - `SOS`.
+//! - `QUADOBJ`: the written objective's quadratic terms, as the upper triangle
+//!   of `Q` in `c'x + 1/2 x'Qx`.
+//! - `QCMATRIX`, one per quadratic constraint: the full symmetric `Q` of
+//!   `a'x + x'Qx`.
+//! - `INDICATORS` (CPLEX): an indicator constraint is written as an ordinary
+//!   row plus an `IF row variable value` line.
+//! - `ENDATA`.
 //!
 //! # RANGES
 //!
-//! [`LpProblem`](crate::problem::LpProblem) has no first-class notion of a
-//! ranged constraint: the MPS reader flattens each `RANGES` row `X` into two
-//! ordinary constraints -- `X` (`>=` lower) and `X_rng` (`<=` upper) with
-//! identical coefficients. This writer reverses that flattening: when a
-//! constraint pair matches the reader's exact pattern (`X` is `>=`, `X_rng`
-//! is `<=`, identical coefficient vectors, upper >= lower, both RHS finite,
-//! and `lower + (upper - lower)` reproduces `upper` exactly in `f64`),
-//! it is re-emitted as a single `G` row with a `RANGES` entry of
-//! `upper - lower`, so `MPS -> LpProblem -> MPS` preserves the section. An
-//! LP-authored pair that happens to match the pattern is merged the same way;
-//! that is semantically lossless (the feasible region and the re-parsed
-//! constraint pair are identical), it only changes the MPS text shape.
+//! [`LpProblem`] has no ranged constraint type. The
+//! MPS reader (and the LP parser, for `c: lo <= expr <= hi`) splits a ranged
+//! row `X` into two constraints with the same coefficients: `X` (`>=` lower)
+//! and `X_rng` (`<=` upper). This writer reverses that split so that
+//! `MPS -> LpProblem -> MPS` keeps the `RANGES` section. A pair is folded
+//! into one `G` row with a `RANGES` entry of `upper - lower` only when it
+//! matches the reader's pattern exactly: `X` is `>=`, `X_rng` is `<=`, both
+//! are in the same constraint class, the coefficients are identical, both
+//! right-hand sides are finite with upper >= lower, and
+//! `lower + (upper - lower)` gives back `upper` exactly in `f64`. Any other
+//! pair is written as two ordinary rows. A pair written by hand that happens
+//! to match is folded too; the feasible region is unchanged, only the text
+//! differs.
 //!
 //! # Objectives
 //!
-//! MPS represents exactly one objective (a single `N` row). If the problem
-//! has more than one objective, [`write_mps_string`](crate::mps::writer::write_mps_string)
-//! returns an error unless
-//! [`allow_multiple_objectives`](crate::mps::writer::MpsWriterOptions::allow_multiple_objectives)
-//! opts in to writing only the first objective (in insertion order). If the
-//! problem has **no** objectives, a single empty `N` row is written under the
-//! name [`EMPTY_OBJECTIVE_ROW_NAME`](crate::mps::writer::EMPTY_OBJECTIVE_ROW_NAME)
-//! -- this is what [`parse_mps`](crate::mps::parse_mps) itself falls back to
-//! when a file has no `N` rows, so the round trip is stable, but note that
-//! re-parsing such a file yields a problem with **one** empty objective
-//! rather than zero: an unavoidable asymmetry given MPS always has an
-//! objective row.
+//! MPS has exactly one objective (a single `N` row). If the problem has more
+//! than one, or its objective carries Gurobi multi-objective attributes,
+//! [`write_mps_string`] returns an error unless
+//! [`allow_multiple_objectives`](MpsWriterOptions::allow_multiple_objectives)
+//! is set, in which case only the first objective (in insertion order) is
+//! written, without attributes. If the problem has no objectives, an empty
+//! `N` row named [`EMPTY_OBJECTIVE_ROW_NAME`] is written, because MPS always
+//! has an objective row. Re-parsing that file gives a problem with one empty
+//! objective rather than none.
 //!
 //! # Known round-trip limitations
 //!
-//! - [`General`](crate::model::VariableType::General) and
-//!   [`Integer`](crate::model::VariableType::Integer) are both written
-//!   identically (an `INTORG`/`INTEND` marker block plus an explicit `LO 0`
-//!   bound, to avoid falling back to the MPS default integer bounds of
-//!   `[0, 1]`). Re-parsing always yields `Integer`; the `General` designation
-//!   is an LP-format-only distinction that has no MPS analogue.
+//! - [`General`](crate::model::VariableKind::General) and
+//!   [`Integer`](crate::model::VariableKind::Integer) are written the same
+//!   way: an `INTORG`/`INTEND` block, plus an explicit `LO 0` when no bounds
+//!   are declared so the column does not pick up the MPS integer default of
+//!   `[0, 1]`. Re-parsing always gives `Integer`; `General` is an LP-only
+//!   distinction.
+//! - An integer variable bounded to `[0, 1]` (or with upper bound 1 and no
+//!   lower bound) is read back as binary.
 //! - [`SemiContinuous`](crate::model::VariableKind::SemiContinuous): per the
-//!   MPS specification the `SC` record's value is the variable's upper bound,
-//!   so a finite upper bound is written there. A semi-continuous variable with
-//!   no upper bound (or `+inf`) gets the conventional "infinite" sentinel
-//!   (`SEMI_CONTINUOUS_SENTINEL_UPPER`, `1e30`), because the record requires a
-//!   value. A lower bound, if any, is written as its own `LO` record first.
-//!   [`SemiInteger`](crate::model::VariableKind::SemiInteger) is written the
-//!   same way with an `SI` record.
-//! - Strict inequalities (`ComparisonOp::LT` / `ComparisonOp::GT`) have no MPS
-//!   representation (only `L`/`G`/`E` rows exist); writing a problem with such
-//!   a constraint returns an error.
-//! - [`UpperBound`](crate::model::VariableType::UpperBound) with a negative
-//!   value is written as an explicit `LO 0` followed by `UP`, rather than a
-//!   bare `UP`. Per the MPS (CPLEX) convention the reader implements, a bare
-//!   negative `UP` with no preceding `LO` implies a lower bound of `-inf`,
-//!   which would silently change the feasible region; the explicit `LO 0`
-//!   keeps it correct at the cost of re-parsing as `DoubleBound(0, ub)`
-//!   rather than `UpperBound(ub)` (the same feasible region, a different
-//!   variant).
-//! - **Undeclared variables take the MPS default**: a variable that only ever
-//!   appears in the objective or a constraint gets no `BOUNDS` entry, which
-//!   MPS reads as `[0, +inf)` — the same default LP gives it. A variable
-//!   actually declared `x free` carries an explicit `[-inf, +inf]` and is
-//!   written as `FR`. The two used to share a representation, and this writer
-//!   emitted `FR` for both, widening every undeclared variable's feasible
-//!   region to include negatives on the way through.
+//!   MPS specification the `SC` record's value is the upper bound, so a finite
+//!   upper bound is written there. With no upper bound (or `+inf`) the
+//!   conventional infinity sentinel `1e30` is written instead, because the
+//!   record needs a value. A lower bound, if any, is written first as its own
+//!   `LO` record. [`SemiInteger`](crate::model::VariableKind::SemiInteger) is
+//!   written the same way with an `SI` record.
+//! - Strict inequalities (`<`, `>`) and Gurobi general constraints have no MPS
+//!   form here; writing a problem that has them returns an error.
+//! - A variable with only a negative upper bound is written as `LO 0` then
+//!   `UP`. In the CPLEX convention the reader follows, a bare negative `UP`
+//!   implies a lower bound of `-inf`, which would change the feasible region.
+//!   The explicit `LO 0` keeps the region but reads back as a double bound
+//!   rather than an upper bound only.
+//!
+//! A variable with no declared bounds gets no `BOUNDS` entry, so it keeps the
+//! `[0, +inf)` default that LP and MPS share. A variable declared free is
+//! written as `FR`.
 
 use std::fmt::Write;
 
@@ -117,7 +112,7 @@ pub(crate) const SEMI_CONTINUOUS_SENTINEL_UPPER: f64 = 1e30;
 
 /// Preferred vector label written in the RHS section (the first field of each
 /// RHS data line). The MPS reader accepts any label and honours only the
-/// first vector it sees, so one label is enough -- but a label equal to a row
+/// first vector it sees, so one label is enough, but a label equal to a row
 /// name would be misread as a label-less line, so [`VectorLabels`] falls back
 /// to a suffixed variant when this one is taken.
 const RHS_VECTOR_LABEL: &str = "RHS";
@@ -230,7 +225,8 @@ pub struct MpsWriterOptions {
     /// to the exact same `f64`; `Some(n)` rounds to `n` places, which is lossy.
     pub decimal_precision: Option<usize>,
     /// If the problem has more than one objective, write only the first
-    /// (in insertion order) instead of returning an error.
+    /// (in insertion order) instead of returning an error. This also allows
+    /// an objective with multi-objective attributes, which are dropped.
     pub allow_multiple_objectives: bool,
 }
 
@@ -238,10 +234,18 @@ pub struct MpsWriterOptions {
 ///
 /// # Errors
 ///
-/// Returns an error if the problem has more than one objective (see
-/// [`MpsWriterOptions::allow_multiple_objectives`]), contains a constraint
-/// with a strict inequality operator (`<` or `>`), or contains a Gurobi
-/// general constraint, none of which this writer can represent.
+/// Returns a validation error if the problem:
+///
+/// - has more than one objective, or an objective with multi-objective
+///   attributes (see [`MpsWriterOptions::allow_multiple_objectives`]);
+/// - has a constraint with a strict inequality (`<` or `>`), or a Gurobi
+///   general constraint;
+/// - has a name the reader would split or misread: empty, containing
+///   whitespace, starting with `$`, equal to `'MARKER'`, or an SOS member
+///   named `S1`/`S2`; or a problem name with a line break;
+/// - holds a value no file can express: `NaN` anywhere, an infinite
+///   coefficient or objective constant, or an infinite bound on the side
+///   that makes the domain empty (lower `+inf`, upper `-inf`).
 pub fn write_mps_string(problem: &LpProblem) -> LpResult<String> {
     write_mps_string_with_options(problem, &MpsWriterOptions::default())
 }
@@ -529,7 +533,7 @@ fn for_each_column_entry<'p>(
 /// Variables that require a marker block ([`needs_marker`]) but have no
 /// coefficients anywhere (isolated integer/general/binary variables) still
 /// need at least one COLUMNS entry to be registered as a column and picked
-/// up by the reader's `INTORG`/`INTEND` tracking -- a zero-valued entry
+/// up by the reader's `INTORG`/`INTEND` tracking, so a zero-valued entry
 /// against the objective row is synthesised for them.
 fn build_columns<'p>(
     problem: &'p LpProblem,
@@ -646,7 +650,7 @@ fn write_columns_section(
     Ok(())
 }
 
-/// Write the `RHS` section. Zero-valued RHS entries are omitted -- the reader
+/// Write the `RHS` section. Zero-valued RHS entries are omitted: the reader
 /// already defaults missing rows to an RHS of zero. Ranged companion rows are
 /// omitted (their upper RHS is carried by the `RANGES` section). An objective
 /// constant is written as a negated RHS entry on the objective row, per the
@@ -766,12 +770,12 @@ fn invalid_bound_error(var_name: &str, message: &str) -> LpParseError {
 /// Write the bound line(s) for a single variable's [`VariableType`].
 ///
 /// See the module documentation for the `Integer`/`General`/`SemiContinuous`
-/// mapping caveats, and for the `Free`-default conversion caveat.
+/// mapping caveats, and for how undeclared and free variables are written.
 ///
 /// # Errors
 ///
 /// Returns an error if a bound value is `NaN`, or is an infinite value MPS
-/// has no flag for (e.g. `UpperBound(-inf)`, `LowerBound(+inf)`) -- see
+/// has no flag for (e.g. `UpperBound(-inf)`, `LowerBound(+inf)`); see
 /// [`write_upper_bound`], [`write_lower_bound`] and [`write_double_bound`].
 fn write_variable_bound(
     output: &mut String,
@@ -814,7 +818,7 @@ fn write_variable_bound(
             return Ok(());
         }
         // SOS membership is not itself a bound, but such a variable may still
-        // carry ordinary bounds — fall through and write them.
+        // carry ordinary bounds, so fall through and write them.
         VariableKind::Sos | VariableKind::Continuous | VariableKind::Integer | VariableKind::General => {}
     }
 
@@ -835,7 +839,7 @@ fn write_variable_bound(
                 // a column with no BOUNDS entry is [0, +inf), which is exactly
                 // what the source meant. Writing `FR` here would state a bound
                 // the input never had. An explicit `x free` does not reach this
-                // arm — it carries [-inf, +inf] and is written as `FR` by
+                // arm: it carries [-inf, +inf] and is written as `FR` by
                 // `write_double_bound`.
                 VariableKind::Continuous | VariableKind::Sos => {}
                 VariableKind::Binary | VariableKind::SemiContinuous | VariableKind::SemiInteger => unreachable!("handled above"),
@@ -854,7 +858,7 @@ fn write_variable_bound(
 /// # Errors
 ///
 /// Returns an error if `lb` is `NaN`, or `+inf` (a lower bound of `+inf` is
-/// nonsensical -- it would leave the variable with an empty feasible region
+/// nonsensical: it would leave the variable with an empty feasible region
 /// unless the upper bound is also `+inf`, which is not representable as a
 /// plain `LowerBound`).
 fn write_lower_bound(output: &mut String, var_name: &str, lb: f64, style: BoundStyle<'_>) -> LpResult<()> {
@@ -877,7 +881,7 @@ fn write_lower_bound(output: &mut String, var_name: &str, lb: f64, style: BoundS
 /// When `ub` is negative, an explicit `LO 0` is written first. Per the MPS
 /// (CPLEX) convention implemented by the reader, a bare `UP` with a negative
 /// value and no preceding `LO` implies a lower bound of `-inf`, not the `0`
-/// that `UpperBound` means in this model -- without the explicit `LO 0` the
+/// that `UpperBound` means in this model; without the explicit `LO 0` the
 /// round trip would silently widen the feasible region.
 ///
 /// The MPS reader maps a bare `PL`-only bound to `UpperBound(+inf)`, so that
@@ -887,7 +891,7 @@ fn write_lower_bound(output: &mut String, var_name: &str, lb: f64, style: BoundS
 /// # Errors
 ///
 /// Returns an error if `ub` is `NaN`, or `-inf` (an upper bound of `-inf` is
-/// nonsensical -- it would leave the variable with an empty feasible region
+/// nonsensical: it would leave the variable with an empty feasible region
 /// unless the lower bound is also `-inf`, which is not representable as a
 /// plain `UpperBound`).
 fn write_upper_bound(output: &mut String, var_name: &str, ub: f64, style: BoundStyle<'_>) -> LpResult<()> {
@@ -917,7 +921,7 @@ fn write_upper_bound(output: &mut String, var_name: &str, ub: f64, style: BoundS
 /// accumulated upper bound to `+inf` on read-back, so the pair round-trips
 /// as `DoubleBound(lb, +inf)` again. Omitting `PL` would leave the upper
 /// bound unset, and the reader would collapse the result to a plain
-/// `LowerBound(lb)` -- semantically identical, but a different variant.
+/// `LowerBound(lb)`: semantically identical, but a different variant.
 ///
 /// # Errors
 ///

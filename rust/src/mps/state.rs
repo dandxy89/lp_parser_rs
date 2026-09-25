@@ -526,11 +526,18 @@ fn parse_objsense_value(value: &str, line_num: usize) -> LpResult<Sense> {
 
 /// Parse an MPS-format string into a [`ParseResult`].
 ///
+/// See the [module docs](crate::mps) for the sections understood. Parsing
+/// stops at `ENDATA`; a file without one is read to the end. Only the first
+/// vector of `RHS`, `RANGES` and `BOUNDS` is used, and later vectors with a
+/// different label are ignored, as in CPLEX. An `RHS` entry on the objective
+/// row sets the objective constant to its negation.
+///
 /// # Errors
 ///
-/// Returns an error for malformed MPS content including missing required
-/// sections, invalid row/bound types, number parse failures, and references
-/// to undefined rows.
+/// Returns an error for malformed MPS content, including missing `ROWS` or
+/// `COLUMNS` sections, unknown sections, row or bound types, duplicate row
+/// names or bounds, unparsable or non-finite numbers, and references to
+/// undefined rows.
 pub fn parse_mps(input: &str) -> LpResult<ParseResult<'_>> {
     // Some Windows editors write a leading UTF-8 byte order mark.
     let input = input.strip_prefix('\u{FEFF}').unwrap_or(input);
@@ -587,7 +594,9 @@ fn locate_error(err: LpParseError, input: &str, line: &str) -> LpParseError {
     }
 }
 
-/// Extract the problem name from MPS input (the NAME section line).
+/// Extract the problem name from MPS input: the rest of the first `NAME`
+/// header line, trimmed. Returns `None` if there is no `NAME` line or it is
+/// empty.
 ///
 /// # Example
 ///

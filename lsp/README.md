@@ -5,20 +5,28 @@ extensions that [`lp_parser_rs`](../rust) supports, and it keeps working while a
 
 ## What it does
 
-- **Diagnostics**: syntax errors as you type, plus model checks such as duplicate names, conflicting bounds,
-  unused declarations and badly scaled coefficients.
-- **Navigation**: go to definition, find references, highlights, and document and workspace symbols.
-- **Rename**: variables and constraint names across the workspace. It refuses names that would change how
-  the file parses.
+- **Diagnostics**: as you type, syntax errors and structural checks (duplicate names, a variable in more than
+  one type section, conflicting bounds, unused declarations, `=<`/`=>` spellings); after a short pause, errors
+  from the full parse and analysis warnings such as badly scaled coefficients. Both push and pull diagnostics
+  are supported, including workspace diagnostics for `*.lp` files that are not open.
+- **Navigation**: go to definition, declaration (a variable's type-section entry) and type definition, find
+  references, highlights, linked editing of a name, call hierarchy (which constraints use a variable, and which
+  variables a constraint uses), and document and workspace symbols.
+- **Rename**: a variable within its file, or a constraint, objective or SOS name across every `*.lp` file in the
+  workspace. It refuses names that would change how the file parses.
 - **Hover and completion**: details on variables, constraints and keywords, and suggestions that fit where
   the cursor is.
 - **Formatting**: whole document, a selection, or on Enter. It never touches a file with syntax errors.
 - **Code actions**: quick fixes for the problems it reports, plus refactors such as adding a bound, moving a
   variable between type sections and reordering sections.
-- **Extras**: inlay hints, semantic highlighting, folding, code lens and signature help for `MAX`, `MIN`,
-  `ABS`, `AND` and `OR`.
-- **Commands**: `lp.analyze` (analysis report), `lp.convertToMps` (writes `<name>.mps` next to the file) and
-  `lp.showModelStats`.
+- **Extras**: inlay hints, semantic highlighting, folding, selection ranges, code lens (variable counts on
+  constraints and objectives, usage counts on variables) and signature help for `MAX`, `MIN`, `ABS`, `AND` and `OR`.
+- **Commands**: `lp.analyze` (analysis report), `lp.convertToMps` (writes `<name>.mps` next to the file,
+  replacing any existing one) and `lp.showModelStats`.
+
+The server indexes every `*.lp` file under the workspace folders at start-up, skipping `.git`, `target`,
+`node_modules`, `.venv`, `venv` and `__pycache__`, and stopping once the indexed text reaches 256 MB. It keeps the
+index current through file watching or, for clients without it, file-operation notifications.
 
 ## Install
 
@@ -27,7 +35,7 @@ cargo install --path lsp
 lp-lsp --version
 ```
 
-The server talks LSP over stdio and takes no arguments.
+The server talks LSP over stdio. It takes no arguments other than `--version`.
 
 ## Settings
 
@@ -41,15 +49,15 @@ Everything lives under `lp` and is optional.
 | `analysis.largeRhsThreshold` | `1e9` | Flag larger right-hand sides. |
 | `analysis.coefficientRatioThreshold` | `1e6` | Flag a larger max/min coefficient ratio. |
 | `semantic.debounceMs` | `300` | Wait this long after typing before the full check. |
-| `semantic.maxFileSizeMb` | `20` | Above this, run the full check on save only. |
+| `semantic.maxFileSizeMb` | `20` | Above this size, run the full check on save only. |
 | `format.indent` | `2` | Indent in spaces (0–16). |
 | `format.lineWidth` | `100` | Wrap long lines (at least 20). |
 | `format.alignOperators` | `false` | Line up comparison operators. |
 | `format.keywordCase` | `"preserve"` | `preserve`, `lower`, `upper` or `title`. |
-| `inlayHints.generatedNames` | `true` | Names for unnamed constraints. |
+| `inlayHints.generatedNames` | `true` | Names for unnamed constraints and objectives. |
 | `inlayHints.rangePartners` | `true` | The `_rng` partner of ranged constraints. |
 | `inlayHints.variableTypes` | `true` | A variable's type after its first use. |
-| `inlayHints.normalisedRhs` | `true` | The right-hand side with constants folded in. |
+| `inlayHints.normalisedRhs` | `true` | The right-hand side with left-hand-side constants folded in. |
 
 ## Editor setup
 

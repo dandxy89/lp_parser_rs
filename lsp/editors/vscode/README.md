@@ -14,9 +14,10 @@ cargo install --path lsp   # from a checkout of lp_parser_rs
 
 - Syntax highlighting, comment toggling and bracket matching
 - Diagnostics (syntax errors and model analysis), hover, completion, signature help
-- Go to definition, references, rename, document and workspace symbols
+- Go to definition, declaration and type definition, references, highlights, rename, linked editing, call hierarchy, document and workspace symbols
 - Formatting, folding, selection ranges, semantic tokens, inlay hints, code lenses and quick fixes
-- Commands (palette category **LP**): *Analyse Model*, *Convert to MPS*, *Show Model Statistics*, *Restart Language Server*
+- Commands (palette category LP): *Analyse Model*, *Convert to MPS*, *Show Model Statistics*, *Restart Language Server*
+- The "used in N constraints" code lens opens the references peek view
 
 ## Settings
 

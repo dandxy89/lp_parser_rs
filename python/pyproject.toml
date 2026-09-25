@@ -1,7 +1,7 @@
 [project]
 name = "parse_lp"
 readme = "README.md"
-description = "A LP file format parser for Python, powered by Rust"
+description = "Read, edit and write LP and MPS optimisation models; the parser is written in Rust"
 license = { text = "MIT OR Apache-2.0" }
 requires-python = ">=3.9"
 keywords = [

@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use clap::{Parser, Subcommand, ValueEnum};
 
-/// LP Parser - Parse, analyze, convert, and solve Linear Programming files
+/// Parse, analyse, compare, convert and solve LP and MPS optimisation models
 #[derive(Parser)]
 #[command(name = "lp_parser")]
 #[command(author, version, about, long_about = None)]
@@ -11,11 +11,11 @@ pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,
 
-    /// Increase output verbosity
+    /// Print progress details to stderr
     #[arg(short, long, global = true)]
     pub verbose: bool,
 
-    /// Suppress non-essential output
+    /// Suppress warnings and status messages on stderr
     #[arg(short, long, global = true, conflicts_with = "verbose")]
     pub quiet: bool,
 }
@@ -25,10 +25,11 @@ pub enum Commands {
     /// Parse an LP or MPS file and display its structure
     Parse(ParseArgs),
 
-    /// Show detailed statistics about an LP problem
+    /// Show counts of objectives, constraints and variables by type
     Info(InfoArgs),
 
-    /// Perform comprehensive analysis on an LP problem.
+    /// Report problem statistics and likely modelling issues (invalid bounds,
+    /// poor numerical scaling, empty or singleton constraints, unused variables).
     /// Exits 1 when any error-severity issue is found, 2 on failure.
     Analyze(AnalyzeArgs),
 
@@ -40,7 +41,7 @@ pub enum Commands {
     /// Convert an LP or MPS file to another format
     Convert(ConvertArgs),
 
-    /// Solve an LP problem using external solvers
+    /// Solve a problem with an external solver (CBC or GLPK) via lp-solvers
     #[cfg(feature = "lp-solvers")]
     Solve(SolveArgs),
 }
@@ -50,10 +51,10 @@ pub enum OutputFormat {
     /// Plain text output
     #[default]
     Text,
-    /// JSON output (requires 'serde' feature)
+    /// JSON output
     #[cfg(feature = "serde")]
     Json,
-    /// YAML output (requires 'serde' feature)
+    /// YAML output
     #[cfg(feature = "serde")]
     Yaml,
 }
@@ -98,19 +99,19 @@ pub struct AnalyzeArgs {
     #[arg(long)]
     pub issues_only: bool,
 
-    /// Large coefficient warning threshold
+    /// Warn about coefficients whose magnitude exceeds this
     #[arg(long, default_value = "1000000000", value_parser = positive_finite)]
     pub large_coeff_threshold: f64,
 
-    /// Small coefficient warning threshold
+    /// Warn about non-zero coefficients whose magnitude is below this
     #[arg(long, default_value = "0.000000001", value_parser = positive_finite)]
     pub small_coeff_threshold: f64,
 
-    /// Large RHS warning threshold (applied to the RHS magnitude)
+    /// Warn when a right-hand side's magnitude exceeds this
     #[arg(long, default_value = "1000000000", value_parser = positive_finite)]
     pub large_rhs_threshold: f64,
 
-    /// Coefficient ratio warning threshold
+    /// Warn when the largest over the smallest non-zero coefficient magnitude exceeds this
     #[arg(long, default_value = "1000000", value_parser = positive_finite)]
     pub ratio_threshold: f64,
 }
@@ -173,11 +174,12 @@ pub struct DiffArgs {
     #[arg(long)]
     pub pretty: bool,
 
-    /// Absolute tolerance for numeric comparisons (RHS & coefficients)
+    /// Absolute tolerance: numeric differences no larger than this are ignored.
+    /// A change is reported only when it exceeds both tolerances
     #[arg(long, default_value_t = 0.0)]
     pub abs_tol: f64,
 
-    /// Relative tolerance for numeric comparisons (`|a-b| <= rel_tol * max(|a|,|b|)`)
+    /// Relative tolerance: differences no larger than this times max(|a|, |b|) are ignored
     #[arg(long, default_value_t = 0.0)]
     pub rel_tol: f64,
 
@@ -211,7 +213,7 @@ pub struct ConvertArgs {
     /// Path to the LP or MPS file (`.mps` extension reads MPS)
     pub file: PathBuf,
 
-    /// Output file or directory (required for CSV)
+    /// Output file, or directory for CSV (required for CSV, created if missing)
     #[arg(short, long)]
     pub output: Option<PathBuf>,
 
@@ -223,19 +225,19 @@ pub struct ConvertArgs {
     #[arg(long)]
     pub pretty: bool,
 
-    /// Round numbers to this many decimal places (default: exact, shortest round-trip form)
+    /// Round numbers to this many decimal places in LP and MPS output (default: exact, shortest round-trip form)
     #[arg(long)]
     pub precision: Option<usize>,
 
-    /// Maximum line length before wrapping
+    /// Line length at which LP expressions wrap (LP output only)
     #[arg(long, default_value = "80")]
     pub max_line_length: usize,
 
-    /// Omit problem name comment in LP output
+    /// Omit the problem name comment (LP output only)
     #[arg(long)]
     pub no_problem_name: bool,
 
-    /// Compact output (no spacing between sections)
+    /// No blank lines between sections (LP output only)
     #[arg(long)]
     pub compact: bool,
 }

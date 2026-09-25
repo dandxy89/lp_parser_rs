@@ -1,3 +1,10 @@
+//! Terminal event source.
+//!
+//! A dedicated thread polls crossterm and forwards input over a channel. When
+//! no input arrives within the tick interval it sends a `Tick` instead, which
+//! drives the parts of the UI that change without input: status-flash expiry,
+//! solver and analysis polling, and `--watch` mtime checks.
+
 use std::sync::mpsc;
 use std::time::Duration;
 use std::{io, thread};
@@ -14,6 +21,7 @@ pub enum Event {
     /// Terminal resize event. Ratatui re-queries the terminal size automatically,
     /// so no data is needed — this variant just triggers a redraw.
     Resize,
+    /// No input arrived within the tick interval.
     Tick,
     /// An I/O error from the event polling thread.
     Error(io::Error),

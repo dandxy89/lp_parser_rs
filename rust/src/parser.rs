@@ -30,11 +30,10 @@ pub struct MappedFile {
 impl MappedFile {
     /// Memory-map a file and validate its contents as UTF-8.
     ///
-    /// # Safety
-    ///
-    /// Uses `unsafe` for `Mmap::map`: behaviour is undefined if the file is
-    /// modified externally while mapped. This is the standard trade-off for
-    /// memory-mapped I/O and matches the documented contract of `memmap2::Mmap`.
+    /// The file must not be modified by another process while it is mapped:
+    /// the mapping would change underneath the `&str` handed out by
+    /// [`Self::as_str`], which is undefined behaviour. This is the usual
+    /// caveat of `memmap2::Mmap`.
     ///
     /// # Errors
     ///

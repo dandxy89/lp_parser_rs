@@ -1,3 +1,6 @@
+//! The section tab bar, the name list, and the placeholders the detail panel
+//! shows when nothing is selected.
+
 use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};

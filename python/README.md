@@ -2,17 +2,18 @@
 
 [![PyPI version](https://badge.fury.io/py/parse-lp.svg)](https://badge.fury.io/py/parse-lp)
 
-A LP file format parser, writer, and modifier for Python, powered by Rust.
+Read, inspect, edit and write LP and MPS optimisation models from Python. The
+parsing and writing are done by the Rust crate
+[`lp_parser_rs`](https://github.com/dandxy89/lp_parser_rs).
 
-## Features
+- Parse LP files (including CPLEX and Gurobi extensions) and MPS files, from disk or from a string.
+- Read objectives, constraints and variables as plain dicts and lists.
+- Edit coefficients, right-hand sides, names, variable types and the sense, then write the result as LP or MPS.
+- Compare two models with `diff`.
+- Check a model for numerical and structural problems with `analyze`.
+- Export to CSV.
 
-- **Complete LP Support**: Handles all standard LP file format features
-- **Problem Modification**: Programmatically modify objectives, constraints, and variables
-- **LP File Writing**: Generate LP files from modified problems with round-trip compatibility
-- **Problem Analysis**: Comprehensive statistics, structure analysis, and issue detection with configurable thresholds
-- **Easy Data Access**: Direct access to problem components (variables, constraints, objectives)
-- **CSV Export**: Export parsed data to CSV files for further analysis
-- **Type Safety**: Full type hints for better IDE support and development experience
+Type stubs are included, so editors and type checkers know the shape of every returned dict.
 
 ## Installation
 
@@ -20,320 +21,291 @@ A LP file format parser, writer, and modifier for Python, powered by Rust.
 pip install parse_lp
 ```
 
-## Quick Start
+Requires Python 3.9 or later.
+
+## Quick start
 
 ```python
 from parse_lp import LpParser
 
-# Parse an LP file
-parser = LpParser("path/to/problem.lp")
+parser = LpParser("problem.lp")  # parsed straight away
 
-# Access problem information
-print(f"Problem: {parser.name}")
-print(f"Sense: {parser.sense}")
-print(f"Variables: {parser.num_variables}")
-print(f"Constraints: {parser.num_constraints}")
+print(parser.name, parser.sense)  # e.g. None maximize
+print(parser.num_variables, parser.num_constraints)
 
-# Modify the problem
 parser.update_objective_coefficient("OBJ", "x1", 5.0)
 parser.rename_variable("x2", "production")
 parser.update_constraint_rhs("C1", 100.0)
 
-# Write back to LP format
-modified_lp = parser.to_lp_string()
-parser.save_to_file("modified_problem.lp")
-
-# Analyze problem structure and detect issues
-analysis = parser.analyze()
-print(f"Matrix density: {analysis['summary']['density']:.4f}")
-print(f"Issues found: {len(analysis['issues'])}")
-
-# Export to CSV files
-parser.to_csv("output_directory/")
+parser.save_to_file("modified.lp")
+parser.save_to_mps("modified.mps")
 ```
 
-## Usage Examples
-
-### Basic Parsing and Information
+## Loading a model
 
 ```python
 from parse_lp import LpParser
 
-parser = LpParser("optimization_problem.lp")
-
-# Get problem overview
-print(f"Problem Name: {parser.name}")
-print(f"Optimization Sense: {parser.sense}")
-print(f"Variables: {parser.num_variables}")
-print(f"Constraints: {parser.num_constraints}")
-print(f"Objectives: {parser.num_objectives}")
+parser = LpParser("problem.lp")  # format from the extension: .mps is MPS, anything else LP
+parser = LpParser.from_file("model.txt", format="mps")  # force the format
+parser = LpParser.from_string("""
+Minimize
+ obj: x + 2 y
+Subject To
+ c1: x + y >= 1
+End
+""")
 ```
 
-### Accessing Problem Data
+`from_string` takes `format="mps"` for MPS text. `parser.parse()` re-reads the
+source file if it has changed on disk; it is not needed after construction and
+raises `LpInvalidValueError` for a parser built from a string.
 
-`objectives`, `constraints` and `variables` return snapshots: every access
-rebuilds the whole collection, so bind the result once rather than re-reading
-the property in a loop. For a single item use `get_constraint(name)` or
-`get_variable(name)`, and for sizes `num_objectives`, `num_constraints` and
-`num_variables`.
+## Reading the model
+
+`objectives`, `constraints` and `variables` build a fresh copy of the whole
+collection on every access, and that copy does not follow later edits. Bind the
+result once rather than reading the property in a loop. For a single item use
+`get_constraint(name)` or `get_variable(name)`, and for sizes use
+`num_objectives`, `num_constraints` and `num_variables`.
 
 ```python
-# Single lookups without building the whole collection
 c1 = parser.get_constraint("C1")
 x1 = parser.get_variable("x1")
 
-# Access objectives
-for i, objective in enumerate(parser.objectives):
-    print(f"Objective {i + 1}: {objective['name']}")
+for objective in parser.objectives:
+    print(objective["name"])
     for coef in objective["coefficients"]:
         print(f"  {coef['name']}: {coef['value']}")
 
-# Access variables
-for var_name, var_info in parser.variables.items():
-    print(f"Variable {var_name}:")
-    # Kind and bounds are independent: a variable can be Integer *and* bounded.
-    print(f"  Kind:   {var_info['kind']}")
-    print(f"  Bounds: {var_info['lower']} .. {var_info['upper']}")
+for name, var in parser.variables.items():
+    # Kind and bounds are independent: a variable can be Integer and bounded.
+    print(name, var["kind"], var["lower"], var["upper"])
 
-# Access constraints
 for constraint in parser.constraints:
-    print(f"Constraint {constraint['name']}:")
-    print(f"  Type: {constraint['type']}")
     if constraint["type"] == "standard":
-        print(f"  Operator: {constraint['operator']}")
-        print(f"  RHS: {constraint['rhs']}")
-        print(f"  Coefficients: {len(constraint['coefficients'])}")
+        print(constraint["name"], constraint["operator"], constraint["rhs"])
 ```
 
-### CSV Export
+### Returned shapes
+
+An objective:
 
 ```python
-import os
-
-# Create output directory
-os.makedirs("output", exist_ok=True)
-
-# Export to CSV files
-parser.to_csv("output/")
-
-# Files created:
-# - output/variables.csv
-# - output/constraints.csv
-# - output/objectives.csv
+{
+    "name": "OBJ",
+    "coefficients": [{"name": "x1", "value": 1.0}, {"name": "x2", "value": 2.0}],
+    "quadratic": [],  # [{"var1": "x", "var2": "y", "coefficient": 1.0}, ...]
+    "attributes": {"priority": None, "weight": None, "abs_tol": None, "rel_tol": None},
+}
 ```
 
-### Problem Analysis
-
-Analyze problem structure, detect potential issues, and get comprehensive statistics.
+A variable (values of the `variables` dict):
 
 ```python
-from parse_lp import LpParser
-
-parser = LpParser("problem.lp")
-
-# Get complete analysis
-analysis = parser.analyze()
-
-# Summary statistics
-summary = analysis["summary"]
-print(f"Problem: {summary['name']}")
-print(f"Sense: {summary['sense']}")
-print(f"Variables: {summary['variable_count']}")
-print(f"Constraints: {summary['constraint_count']}")
-print(f"Nonzeros: {summary['total_nonzeros']}")
-print(f"Matrix density: {summary['density']:.4f}")
-
-# Sparsity metrics
-sparsity = analysis["sparsity"]
-print(f"Variables per constraint: {sparsity['min_vars_per_constraint']} - {sparsity['max_vars_per_constraint']}")
-
-# Variable type distribution
-var_types = analysis["variables"]["type_distribution"]
-print(f"Variable types: {var_types}")
-
-# Coefficient ranges
-coeffs = analysis["coefficients"]
-print(f"Constraint coefficients: {coeffs['constraint_coeff_range']}")
-print(f"Objective coefficients: {coeffs['objective_coeff_range']}")
-print(f"Coefficient ratio: {coeffs['coefficient_ratio']:.2f}")
-
-# Check for issues (warnings and errors)
-for issue in analysis["issues"]:
-    print(f"[{issue['severity']}] {issue['category']}: {issue['message']}")
+{
+    "name": "x2",
+    # "Continuous", "General", "Integer", "Binary", "SemiContinuous", "SemiInteger" or "Sos"
+    "kind": "Continuous",
+    # None means no bound was declared on that side, so the format default
+    # applies (LP: lower 0, upper +inf). A `free` variable reports -inf / inf.
+    "lower": 0.0,
+    "upper": 2.0,
+}
 ```
 
-**Analysis with custom thresholds:**
+Constraints. The `type` key tells you which shape you have:
 
 ```python
-# Customize thresholds for issue detection
-analysis = parser.analyze(
-    large_coeff_threshold=1e8,  # Flag coefficients above this
-    small_coeff_threshold=1e-10,  # Flag coefficients below this
-    ratio_threshold=1e5,  # Flag if max/min ratio exceeds this
-    large_rhs_threshold=1e8,  # Flag right-hand sides above this
-)
+{
+    "name": "C1",
+    "type": "standard",
+    "coefficients": [{"name": "x1", "value": 1.0}, {"name": "x2", "value": 1.0}],
+    "operator": "LTE",  # "GT", "GTE", "EQ", "LT" or "LTE"
+    "rhs": 3.0,
+    "class": "normal",  # "lazy" or "user_cut" for those CPLEX sections
+}
+{
+    "name": "s1",
+    "type": "sos",
+    "sos_type": "S1",  # or "S2"
+    "weights": [{"name": "x1", "value": 1.0}, {"name": "x2", "value": 2.0}],
+}
 ```
 
-**Get issues only:**
+Indicator (`"indicator"`), quadratic (`"quadratic"`) and Gurobi general
+(`"general"`) constraints have their own keys; see the `IndicatorConstraint`,
+`QuadraticConstraint` and `GeneralConstraint` types in `parse_lp.pyi`.
+
+## Editing the model
 
 ```python
-# Get just the detected issues
-issues = parser.analyze()["issues"]
-
-for issue in issues:
-    print(f"[{issue['severity']}] {issue['category']}: {issue['message']}")
-    if issue["details"]:
-        print(f"  Details: {issue['details']}")
-```
-
-**Issue types detected:**
-- Invalid variable bounds (lower > upper)
-- Numerical scaling warnings (large coefficients, high ratios)
-- Empty constraints (no variables)
-- Unused variables (not in any constraint or objective)
-- Fixed variables (lower bound = upper bound)
-- Singleton constraints (only one variable)
-
-### Problem Modification
-
-```python
-from parse_lp import LpParser
-
-# Parse an existing LP file
-parser = LpParser("optimization_problem.lp")
-
-# Modify objectives
 parser.update_objective_coefficient("profit", "x1", 5.0)
 parser.rename_objective("profit", "total_profit")
 
-# Modify constraints
 parser.update_constraint_coefficient("capacity", "x1", 2.0)
 parser.update_constraint_rhs("capacity", 200.0)
 parser.rename_constraint("capacity", "production_limit")
 
-# Modify variables
 parser.rename_variable("x1", "production_a")
 parser.update_variable_type("production_a", "integer")
 
-# Set problem properties
-parser.set_problem_name("Modified Optimization Problem")
+parser.set_problem_name("modified")
 parser.set_sense("minimize")
-
-# Write back to LP format
-modified_lp_content = parser.to_lp_string()
-parser.save_to_file("modified_problem.lp")
-
-# Verify round-trip compatibility
-new_parser = LpParser("modified_problem.lp")
-print(f"Successfully modified and re-parsed: {new_parser.name}")
 ```
 
-### Objectives Structure
+| Method | Notes |
+| --- | --- |
+| `update_objective_coefficient(objective_name, variable_name, coefficient)` | Adds the term if missing; 0 removes it |
+| `rename_objective(old_name, new_name)` | |
+| `remove_objective(objective_name)` | |
+| `update_constraint_coefficient(constraint_name, variable_name, coefficient)` | Adds the term if missing; 0 removes it. Not for SOS or general constraints |
+| `update_constraint_rhs(constraint_name, new_rhs)` | Not for SOS or general constraints |
+| `rename_constraint(old_name, new_name)` | |
+| `remove_constraint(constraint_name)` | |
+| `rename_variable(old_name, new_name)` | Renames it everywhere |
+| `update_variable_type(variable_name, var_type)` | See below |
+| `remove_variable(variable_name)` | Removes every term that uses it |
+| `set_problem_name(name)` | |
+| `set_sense(sense)` | `"maximize"`/`"max"` or `"minimize"`/`"min"` |
+
+`update_variable_type` accepts, in any case:
+
+- `"continuous"`: changes only the kind and keeps declared bounds.
+- `"binary"`, `"integer"`, `"general"`, `"semicontinuous"`, `"semiinteger"`:
+  set the kind and clear declared bounds, so the format default applies (LP:
+  lower bound 0). `"integer"` and `"general"` are the same.
+- `"free"`: a bound rather than a kind. The variable becomes continuous with
+  bounds `(-inf, +inf)`.
+
+## Errors
+
+A missing name raises `LpObjectNotFoundError`. An invalid argument, or an
+edit the model cannot take (renaming onto an existing name, setting the
+right-hand side of an SOS constraint, a non-finite coefficient), raises
+`LpInvalidValueError`. Input that does not parse raises `LpParseError`. All
+three subclass `RuntimeError`. File-system failures raise the usual `OSError`
+subclasses, such as `FileNotFoundError` and `PermissionError`.
 
 ```python
-[
-    {
-        "name": "objective_name",
-        "coefficients": [{"name": "variable_name", "value": 1.5}, {"name": "another_var", "value": -2.0}],
-    }
-]
+from parse_lp import LpObjectNotFoundError
+
+try:
+    parser.update_constraint_rhs("no_such_constraint", 1.0)
+except LpObjectNotFoundError as err:
+    print(err)
 ```
 
-### Variables Structure
+## Writing
 
 ```python
-{
-    "variable_name": {
-        "name": "variable_name",
-        # Discrete kind, independent of the bounds below:
-        #   "Continuous", "General", "Integer", "Binary", "SemiContinuous", "Sos"
-        "kind": "Integer",
-        # None on a side means no bound was declared there, so the format
-        # default applies (LP: lower 0, upper +inf). A variable declared
-        # `free` reports -inf / inf instead.
-        "lower": 0.0,
-        "upper": 100.0,
-    }
-}
+text = parser.to_lp_string()
+text = parser.to_lp_string(
+    include_problem_name=False,
+    max_line_length=120,
+    decimal_precision=4,  # rounds, so the output is no longer exact
+    include_section_spacing=False,
+)
+parser.save_to_file("out.lp")  # default formatting
+
+mps = parser.to_mps_string()
+parser.save_to_mps("out.mps")
 ```
 
-### Constraints Structure
+MPS holds one objective. For a model with several, `to_mps_string` and
+`save_to_mps` raise `LpInvalidValueError` unless you pass
+`allow_multiple_objectives=True`, which writes only the first. Strict
+inequalities (`<`, `>`) and Gurobi general constraints cannot be written to
+MPS.
+
+## Comparing two models
 
 ```python
-[
-    {
-        "name": "constraint_name",
-        "type": "standard",  # or "sos"
-        "operator": "LTE",  # "GT", "GTE", "EQ", "LT", "LTE"
-        "rhs": 10.0,
-        "coefficients": [{"name": "variable_name", "value": 2.0}],
-    },
-    {
-        "name": "sos_constraint",
-        "type": "sos",
-        "sos_type": "S1",  # or "S2"
-        "weights": [{"name": "var1", "value": 1.0}, {"name": "var2", "value": 2.0}],
-    },
-]
+before = LpParser("v1.lp")
+after = LpParser("v2.lp")
+
+changes = before.diff(after)
+if not changes["is_empty"]:
+    print("added:", changes["cons_added"])
+    print("removed:", changes["cons_removed"])
+    for name, details in changes["cons_modified"]:
+        print(name, details)
 ```
 
-## Modification Methods
+The result also has `sense_changed`, `vars_added`, `vars_removed`,
+`vars_type_changed`, `objs_added`, `objs_removed` and `objs_modified`. "Added"
+means present only in the argument, "removed" only in the parser `diff` is
+called on.
 
-### Objective Methods
+## Analysis
 
-- `update_objective_coefficient(obj_name, var_name, coefficient)` - Update or add coefficient
-- `rename_objective(old_name, new_name)` - Rename an objective
-- `remove_objective(obj_name)` - Remove an objective
+`analyze()` reports statistics and likely problems in a model before you send
+it to a solver.
 
-### Constraint Methods
+```python
+analysis = parser.analyze()
 
-- `update_constraint_coefficient(const_name, var_name, coefficient)` - Update or add coefficient
-- `update_constraint_rhs(const_name, new_rhs)` - Update right-hand side value
-- `rename_constraint(old_name, new_name)` - Rename a constraint
-- `remove_constraint(const_name)` - Remove a constraint
+summary = analysis["summary"]
+print(summary["variable_count"], summary["constraint_count"], summary["total_nonzeros"])
+print(f"density: {summary['density']:.4f}")
 
-### Variable Methods
+sparsity = analysis["sparsity"]
+print(sparsity["min_vars_per_constraint"], sparsity["max_vars_per_constraint"])
 
-- `rename_variable(old_name, new_name)` - Rename variable across problem
-- `update_variable_type(var_name, var_type)` - Change variable type
-- `remove_variable(var_name)` - Remove variable from problem
+print(analysis["variables"]["type_distribution"])
 
-### Problem Methods
+coeffs = analysis["coefficients"]
+print(coeffs["constraint_coeff_range"])  # {"min": ..., "max": ..., "count": ...}
+print(f"ratio: {coeffs['coefficient_ratio']:.2f}")
 
-- `set_problem_name(name)` - Set problem name
-- `set_sense(sense)` - Set optimization sense ("maximize" or "minimize")
+for issue in analysis["issues"]:
+    # severity is "ERROR", "WARNING" or "INFO"
+    print(f"[{issue['severity']}] {issue['category']}: {issue['message']}")
+    if issue["details"]:
+        print(f"  {issue['details']}")
+```
 
-### Writing Methods
+The thresholds are keyword-only and must be finite and positive:
 
-- `to_lp_string(**options)` - Generate LP format string, optionally with custom formatting
-- `save_to_file(filepath)` - Save to LP file
+```python
+analysis = parser.analyze(
+    large_coeff_threshold=1e8,  # flag |coefficient| above this
+    small_coeff_threshold=1e-10,  # flag |coefficient| below this
+    ratio_threshold=1e5,  # flag if max/min |coefficient| exceeds this
+    large_rhs_threshold=1e8,  # flag |right-hand side| above this
+)
+```
 
-### Analysis Methods
+Issue categories: invalid bounds (lower > upper), numerical scaling (large or
+small coefficients, large right-hand sides, a high coefficient ratio), empty
+constraints, unused variables, fixed variables (lower = upper), singleton
+constraints, and other warnings such as a model that looks over-constrained.
 
-- `analyze(large_coeff_threshold, small_coeff_threshold, ratio_threshold, large_rhs_threshold)` - Get complete problem analysis including statistics and issues, with optional custom thresholds
+## CSV export
 
-### Variable Types
+```python
+import os
 
-Supported variable types for `update_variable_type()`:
+os.makedirs("output", exist_ok=True)  # the directory must exist
+parser.to_csv("output")
+# output/objectives.csv, output/constraints.csv, output/variables.csv
+```
 
-- `"continuous"` - Continuous variables; changes only the kind and keeps declared bounds
-- `"binary"` - Binary variables (0 or 1)
-- `"integer"` - General integer variables
-- `"general"` - General integer variables
-- `"semicontinuous"` - Semi-continuous variables
-- `"free"` - A bound rather than a kind: makes the variable continuous with bounds `(-inf, +inf)`
+## Supported format features
 
-The discrete kinds (`binary`, `integer`, `general`, `semicontinuous`) clear any declared bounds, so the format default applies (LP: lower bound 0).
+LP:
 
-## Supported LP Format Features
+- Minimise and maximise, including multiple objectives and Gurobi multi-objective attributes
+- Constraints with `<=`, `>=`, `=`, `<`, `>`
+- Bounds, including `free` and infinite bounds
+- Integer, general, binary, semi-continuous and semi-integer variables
+- SOS1 and SOS2 constraints
+- Indicator constraints, quadratic objectives and constraints, Gurobi general constraints
+- CPLEX lazy constraints and user cuts
+- Problem names and comments, scientific notation
 
-- Multiple objective functions
-- Standard constraints (≤, =, ≥)
-- Variable bounds
-- Variable types (continuous, binary, integer)
-- SOS (Special Ordered Sets) constraints
-- Problem names and comments
-- Scientific notation in coefficients
+MPS: read as free format (whitespace-separated fields), so fixed-format files
+work as long as names contain no spaces. Written through the same API.
 
 ## License
 
@@ -341,10 +313,10 @@ Licensed under either of Apache License, Version 2.0 or MIT license at your opti
 
 ## Contributing
 
-Issues and pull requests are welcome at: <https://github.com/dandxy89/lp_parser_rs>
+Issues and pull requests are welcome at <https://github.com/dandxy89/lp_parser_rs>.
 
 ```bash
-make build
-make install
-make unit-test
+make develop       # build the extension into the local virtualenv
+make unit-test     # run pytest
+make check-python  # ruff and ty
 ```

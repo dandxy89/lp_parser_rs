@@ -6,7 +6,7 @@ authors = ["Dan Dixey", "Dan Dixey <dan@functorml.co.uk>"]
 rust-version = "1.88.0"
 license = "MIT OR Apache-2.0"
 readme = "../README.md"
-description = "A Rust parser for the LP file format."
+description = "Parser and writer for LP and MPS linear programming files, with analysis and diff tools."
 keywords = [
     "linear-programming",
     "optimisation",

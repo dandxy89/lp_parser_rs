@@ -1,9 +1,9 @@
 //! Bottom status bar widget.
 //!
 //! Displays total change count, per-section diff statistics, active filter, and key hints.
-//! Layout is responsive: the left segment flows to fit its content and the
-//! key hints stay right-aligned, so long filter/tolerance labels no longer
-//! overflow a fixed-width column silently.
+//! The left segment is sized to its content and the key hints stay
+//! right-aligned, so a long filter or tolerance label pushes the hints over
+//! rather than being cut off by a fixed-width column.
 
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};

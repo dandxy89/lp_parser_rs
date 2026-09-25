@@ -1,7 +1,24 @@
-//! Analysis and statistics for Linear Programming problems.
+//! Summary statistics and modelling checks for a parsed problem.
 //!
-//! This module provides comprehensive analysis capabilities for LP problems,
-//! including summary statistics, issue detection, and structural metrics.
+//! [`LpProblem::analyze`] counts variables and constraints by kind, measures
+//! sparsity and coefficient ranges, and reports [`AnalysisIssue`]s. The checks
+//! are heuristics aimed at the mistakes that make a model fail or solve badly,
+//! not proofs of infeasibility:
+//!
+//! - Invalid bounds (error): a variable whose lower bound exceeds its
+//!   upper bound, which makes the problem infeasible outright.
+//! - Numerical scaling (warning): coefficients or right-hand sides whose
+//!   magnitude falls outside the [`AnalysisConfig`] thresholds, or a large
+//!   ratio between the biggest and smallest non-zero coefficient. Solvers work
+//!   in floating point, so badly scaled rows lose precision and can produce
+//!   wrong or unstable answers.
+//! - Empty constraints (warning): a row with no variables, usually a
+//!   generation bug; it is either always satisfied or always violated.
+//! - Over-constrained (warning): at least as many constraints as variables,
+//!   which often signals degeneracy.
+//! - Fixed variables, singleton constraints, unused variables (info): often
+//!   intentional, but a singleton constraint is really a bound and an unused
+//!   variable can point to a misspelt name.
 //!
 //! # Example
 //!
@@ -37,16 +54,21 @@ use crate::problem::LpProblem;
 #[cfg_attr(feature = "serde", serde(default))]
 #[derive(Debug, Clone, PartialEq)]
 pub struct AnalysisConfig {
-    /// Coefficient magnitude threshold for "large" warnings (default: 1e9)
+    /// Absolute coefficient value above which a coefficient is reported as
+    /// large (default: 1e9).
     #[cfg_attr(feature = "serde", serde(alias = "largeCoefficientThreshold"))]
     pub large_coefficient_threshold: f64,
-    /// Small coefficient threshold for warnings (default: 1e-9)
+    /// Absolute value below which a non-zero coefficient is reported as small
+    /// (default: 1e-9). Values this close to zero are often rounding noise
+    /// and may fall under a solver's own zero tolerance.
     #[cfg_attr(feature = "serde", serde(alias = "smallCoefficientThreshold"))]
     pub small_coefficient_threshold: f64,
-    /// RHS magnitude threshold for warnings (default: 1e9)
+    /// Absolute right-hand side value above which a warning is raised
+    /// (default: 1e9).
     #[cfg_attr(feature = "serde", serde(alias = "largeRhsThreshold"))]
     pub large_rhs_threshold: f64,
-    /// Coefficient ratio threshold for scaling warnings (default: 1e6)
+    /// Ratio of largest to smallest non-zero coefficient magnitude above
+    /// which a scaling warning is raised (default: 1e6).
     #[cfg_attr(feature = "serde", serde(alias = "coefficientRatioThreshold"))]
     pub coefficient_ratio_threshold: f64,
 }
@@ -94,9 +116,11 @@ pub struct ProblemSummary {
     pub constraint_count: usize,
     /// Number of variables
     pub variable_count: usize,
-    /// Total non-zero coefficients across all constraints
+    /// Linear coefficient entries across all constraints, plus SOS weights.
+    /// Quadratic terms are counted separately below.
     pub total_nonzeros: usize,
-    /// Matrix density (nonzeros / (constraints * variables))
+    /// Matrix density, `total_nonzeros / (constraints * variables)`, or 0 when
+    /// either count is zero.
     pub density: f64,
     /// Quadratic terms across all objectives
     pub quadratic_objective_terms: usize,
@@ -120,11 +144,11 @@ pub struct SparsityMetrics {
 pub struct VariableAnalysis {
     /// Distribution of variable types
     pub type_distribution: VariableTypeDistribution,
-    /// Variables declared free (`x free`), and so unbounded in both directions.
-    /// A variable that simply never had bounds declared is not listed here —
-    /// it takes the format default of `[0, +inf)`.
+    /// Continuous variables declared free (`x free`), and so unbounded in both
+    /// directions. A variable that never had bounds declared is not listed
+    /// here: it takes the format default of `[0, +inf)`.
     pub free_variables: Vec<String>,
-    /// Variables where lower bound equals upper bound
+    /// Variables whose lower and upper bounds are equal
     pub fixed_variables: Vec<FixedVariable>,
     /// Variables with inconsistent bounds (lower > upper)
     pub invalid_bounds: Vec<InvalidBound>,
@@ -146,11 +170,11 @@ pub struct VariableTypeDistribution {
     pub unspecified: usize,
     /// General integer variables (LP `Generals` section)
     pub general: usize,
-    /// Lower-bounded only
+    /// Continuous variables with only a lower bound
     pub lower_bounded: usize,
-    /// Upper-bounded only
+    /// Continuous variables with only an upper bound
     pub upper_bounded: usize,
-    /// Double-bounded (both lower and upper)
+    /// Continuous variables with both a lower and an upper bound
     pub double_bounded: usize,
     /// Binary variables
     pub binary: usize,
@@ -192,11 +216,12 @@ pub struct InvalidBound {
 pub struct ConstraintAnalysis {
     /// Distribution of constraint types
     pub type_distribution: ConstraintTypeDistribution,
-    /// Constraints with no variables
+    /// Standard (linear) constraints with no variables
     pub empty_constraints: Vec<String>,
-    /// Constraints with only one variable
+    /// Standard (linear) constraints with exactly one variable
     pub singleton_constraints: Vec<SingletonConstraint>,
-    /// RHS value range statistics
+    /// Range of right-hand side values over standard, indicator and quadratic
+    /// constraints (signed, not absolute)
     pub rhs_range: RangeStats,
     /// SOS constraint summary
     pub sos_summary: SOSSummary,
@@ -268,15 +293,18 @@ pub struct CoefficientAnalysis {
     pub constraint_coeff_range: RangeStats,
     /// Range of the absolute values of the non-zero objective coefficients
     pub objective_coeff_range: RangeStats,
-    /// Locations of very large coefficients
+    /// Coefficients above [`AnalysisConfig::large_coefficient_threshold`]
     pub large_coefficients: Vec<CoefficientLocation>,
-    /// Locations of very small (non-zero) coefficients
+    /// Non-zero coefficients below [`AnalysisConfig::small_coefficient_threshold`]
     pub small_coefficients: Vec<CoefficientLocation>,
-    /// Ratio of max to min absolute coefficient (scaling indicator)
+    /// Largest over smallest non-zero absolute coefficient, across constraints
+    /// and objectives; 1.0 when there are none. A high ratio means the problem
+    /// is badly scaled.
     pub coefficient_ratio: f64,
 }
 
-/// Statistical range information.
+/// Minimum, maximum and count of a set of values. All three are zero when
+/// the set is empty.
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[derive(Debug, Clone, Default)]
 pub struct RangeStats {
@@ -644,13 +672,13 @@ fn compute_coefficient_ratio(constraint_range: &RangeStats, objective_range: &Ra
 }
 
 impl LpProblem {
-    /// Perform comprehensive analysis on the LP problem with default configuration.
+    /// Analyse the problem using the default [`AnalysisConfig`] thresholds.
     #[must_use]
     pub fn analyze(&self) -> ProblemAnalysis {
         self.analyze_with_config(&AnalysisConfig::default())
     }
 
-    /// Perform comprehensive analysis with custom configuration.
+    /// Analyse the problem using custom thresholds.
     #[must_use]
     pub fn analyze_with_config(&self, config: &AnalysisConfig) -> ProblemAnalysis {
         let summary = self.compute_summary();

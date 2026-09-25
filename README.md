@@ -6,19 +6,21 @@
 [![PyPI version](https://badge.fury.io/py/parse-lp.svg)](https://badge.fury.io/py/parse-lp)
 [![PyPI Downloads](https://static.pepy.tech/personalized-badge/parse-lp?period=total&units=NONE&left_color=BLACK&right_color=GREEN&left_text=downloads)](https://pepy.tech/projects/parse-lp)
 
-A Rust library and CLI for parsing, analysing, modifying, and writing Linear Programming (LP) files. Built on [LALRPOP](https://github.com/lalrpop/lalrpop); grammar lives in [`lp.lalrpop`](https://github.com/dandxy89/lp_parser_rs/blob/main/rust/src/lp.lalrpop).
+A Rust library and CLI for parsing, analysing, modifying and writing Linear Programming (LP) and MPS files. The LP reader uses a [Logos](https://github.com/maciejhirsz/logos) lexer and a [LALRPOP](https://github.com/lalrpop/lalrpop) grammar ([`lp.lalrpop`](https://github.com/dandxy89/lp_parser_rs/blob/main/rust/src/lp.lalrpop)).
 
 Supported specifications: [IBM CPLEX v22.1.1](https://www.ibm.com/docs/en/icos/22.1.1?topic=cplex-lp-file-format-algebraic-representation), [FICO Xpress](https://www.fico.com/fico-xpress-optimization/docs/dms2020-03/solver/optimizer/HTML/chapter10_sec_section102.html), [Gurobi](https://www.gurobi.com/documentation/current/refman/lp_format.html), Mosek.
 
 ## Features
 
-- **Parsing & writing** — round-trip LP files (parse → modify → write → parse) with configurable formatting; MPS files can also be written via [`mps::writer`](https://docs.rs/lp_parser_rs) (`write_mps_string`), letting LP and MPS problems convert to either format
-- **Problem modification** — rename / update / remove objectives, constraints, variables, coefficients, and RHS values
-- **Variable types** — integer, general, bounded, free, semi-continuous, semi-integer
-- **Analysis** — statistics, matrix density, sparsity, coefficient ranges, issue detection with configurable thresholds
-- **Diff** (`diff` feature) — structural and numeric comparison between two LP problems, callable from the library via [`LpProblem::diff`](https://docs.rs/lp_parser_rs) or `diff::compare`
-- **Serialisation** (`serde` feature) — JSON / YAML support
-- **External solvers** (`lp-solvers` feature) — CBC, Gurobi, CPLEX, GLPK via the [lp-solvers](https://crates.io/crates/lp-solvers) crate
+- Parsing and writing: read LP or MPS, write LP ([`writer`](https://docs.rs/lp_parser_rs/latest/lp_parser_rs/writer/index.html)) or MPS ([`mps::writer`](https://docs.rs/lp_parser_rs/latest/lp_parser_rs/mps/writer/index.html)), so a problem read in one format can be written in either. Parse, modify, write and parse again gives back the modified model.
+- Modification: rename, update or remove objectives, constraints, variables, coefficients and RHS values. `ProblemBuilder` builds a problem in code.
+- Variable types: continuous, integer, general, binary, semi-continuous and semi-integer, with lower, upper, double or free bounds.
+- Analysis: statistics, density, sparsity, coefficient ranges, and issue detection with configurable thresholds.
+- Diff (`diff` feature): structural and numeric comparison of two problems, via `LpProblem::diff` or `diff::compare`.
+- Serialisation (`serde` feature): serde support for the model; the CLI uses it for JSON and YAML output.
+- CSV export (`csv` feature): `LpProblem::to_csv` writes one file per section.
+- Memory-mapped input (`mmap` feature): `parser::MappedFile` maps a file instead of reading it into a `String`.
+- External solvers (`lp-solvers` feature): an adapter to the [lp-solvers](https://crates.io/crates/lp-solvers) crate (CBC, Gurobi, CPLEX, GLPK).
 
 ### Extended LP syntax
 
@@ -76,7 +78,7 @@ problem.update_variable_type("production_a", VariableType::Integer)?;
 std::fs::write("modified.lp", write_lp_string(&problem)?)?; // errors on names LP cannot represent
 ```
 
-Available modification methods on `LpProblem`: `update_objective_coefficient`, `rename_objective`, `remove_objective`, `update_constraint_coefficient`, `update_constraint_rhs`, `rename_constraint`, `remove_constraint`, `rename_variable`, `update_variable_type`, `remove_variable`.
+Available modification methods on `LpProblem`: `update_objective_coefficient`, `rename_objective`, `remove_objective`, `update_constraint_coefficient`, `update_constraint_rhs`, `rename_constraint`, `remove_constraint`, `set_constraint_class`, `rename_variable`, `update_variable_type`, `remove_variable`. Setting a coefficient to zero removes the term.
 
 Writer options: `write_lp_string_with_options(&problem, &LpWriterOptions { include_problem_name, max_line_length, decimal_precision, include_section_spacing })`. `decimal_precision` defaults to `None`, which writes every number in its shortest exact (round-trip) form; `Some(n)` rounds to `n` decimal places.
 
@@ -101,21 +103,21 @@ Every subcommand reads LP or MPS input, choosing the parser by file extension (`
 | `-q`, `--quiet`                    | Suppress non-essential output          |
 | `-h`, `--help` / `-V`, `--version` | Print help / version                   |
 
-### `parse` — display file structure
+### `parse`: display file structure
 
 | Option                | Default | Description                            |
 | --------------------- | ------- | -------------------------------------- |
 | `<FILE>`              | —       | Path to the LP or MPS file (required)  |
 | `-o, --output <PATH>` | stdout  | Write output to file                   |
 | `-f, --format <FMT>`  | `text`  | `text`, `json` (serde), `yaml` (serde) |
-| `--pretty`            | off     | Pretty-print JSON/YAML                 |
+| `--pretty`            | off     | Pretty-print JSON (YAML is unaffected) |
 
 ```bash
 lp_parser parse problem.lp
 lp_parser parse problem.lp --format yaml -o problem.yaml
 ```
 
-### `info` — summary statistics
+### `info`: summary statistics
 
 Adds to the `parse` options:
 
@@ -131,7 +133,7 @@ lp_parser info problem.lp --variables --constraints --objectives
 lp_parser info problem.lp --format json --pretty
 ```
 
-### `analyze` — structural analysis & issue detection
+### `analyze`: structural analysis and issue detection
 
 Adds to the `parse` options:
 
@@ -153,7 +155,7 @@ lp_parser analyze problem.lp --format yaml -o analysis.yaml
 ```
 
 <details>
-<summary>Example output</summary>
+<summary>Example output (abridged)</summary>
 
 ```yaml
 summary: { name: diet, sense: Minimize, objective_count: 1, constraint_count: 7, variable_count: 16, density: 0.571 }
@@ -164,16 +166,16 @@ issues: []
 ```
 </details>
 
-### `diff` — compare two LP or MPS files (requires `diff` feature)
+### `diff`: compare two LP or MPS files (requires `diff` feature)
 
 | Option                      | Default | Description                                                              |
 | --------------------------- | ------- | ------------------------------------------------------------------------ |
 | `<FILE1> <FILE2>`           | —       | Base and comparison files (LP or MPS)                                    |
 | `-o, --output <PATH>`       | stdout  | Write output to file                                                     |
 | `-f, --format <FMT>`        | `text`  | `text`, `json`, `yaml`                                                   |
-| `--pretty`                  | off     | Pretty-print structured output                                           |
+| `--pretty`                  | off     | Pretty-print JSON (YAML is unaffected)                                   |
 | `--abs-tol <F>`             | `0.0`   | Absolute tolerance for numeric comparisons                               |
-| `--rel-tol <F>`             | `0.0`   | Relative tolerance: `                                                    | a-b | ≤ rel_tol · max( | a | , | b | )` |
+| `--rel-tol <F>`             | `0.0`   | Relative tolerance: `\|a-b\| ≤ rel_tol · max(\|a\|, \|b\|)`                  |
 | `--rename <PATTERN> <REPL>` | —       | Regex rewrite applied to names in both files before matching; repeatable |
 
 ```bash
@@ -195,14 +197,14 @@ lp_parser diff baseline.lp candidate.lp --format json > model_diff.json || echo 
 lp_parser analyze candidate.lp --issues-only || exit 1
 ```
 
-### `convert` — translate to another format
+### `convert`: translate to another format
 
 | Option                  | Default | Description                                 |
 | ----------------------- | ------- | ------------------------------------------- |
 | `<FILE>`                | —       | Path to the LP or MPS file (`.mps` extension reads MPS) |
 | `-o, --output <PATH>`   | stdout  | Output file or directory (required for CSV) |
 | `-f, --format <FMT>`    | `lp`    | `lp`, `mps`, `csv`, `json`, `yaml`          |
-| `--pretty`              | off     | Pretty-print JSON/YAML                      |
+| `--pretty`              | off     | Pretty-print JSON (YAML is unaffected)      |
 | `--precision <N>`       | exact   | Round numbers to N decimal places (default: shortest exact form) |
 | `--max-line-length <N>` | `80`    | Line-wrap threshold for LP output            |
 | `--no-problem-name`     | off     | Omit problem-name comment in LP output      |
@@ -223,7 +225,7 @@ lp_parser convert problem.mps --format mps -o rewritten.mps  # MPS -> MPS
 > in different readers. Declare bounds explicitly if the wider range is
 > intended.
 
-### `solve` — run an external solver (requires `lp-solvers` feature)
+### `solve`: run an external solver (requires `lp-solvers` feature)
 
 | Option                | Default | Description                      |
 | --------------------- | ------- | -------------------------------- |
@@ -231,7 +233,7 @@ lp_parser convert problem.mps --format mps -o rewritten.mps  # MPS -> MPS
 | `-s, --solver <NAME>` | `cbc`   | `cbc`, `glpk`                    |
 | `-o, --output <PATH>` | stdout  | Write solution to file           |
 | `-f, --format <FMT>`  | `text`  | `text`, `json`, `yaml`           |
-| `--pretty`            | off     | Pretty-print structured output   |
+| `--pretty`            | off     | Pretty-print JSON                |
 
 ```bash
 lp_parser solve problem.lp
@@ -239,7 +241,7 @@ lp_parser solve problem.lp --solver glpk
 lp_parser solve problem.lp --format json --pretty
 ```
 
-The selected solver binary must be installed on your `PATH`. The compatibility layer does **not** support multiple objectives (errors), strict inequalities (`<`, `>`), or SOS constraints (ignored with a warning).
+The selected solver binary must be on your `PATH`. The compatibility layer rejects problems with more than one objective or with strict inequalities (`<`, `>`), ignores SOS constraints with a warning, and treats semi-continuous and semi-integer variables as continuous and integer respectively, also with a warning.
 
 ## LP Model Explorer and Diff Viewer (`lp_diff`)
 
@@ -247,7 +249,7 @@ A terminal UI for exploring a single LP/MPS model or comparing two, with coeffic
 
 ![lp_diff demo](https://raw.githubusercontent.com/dandxy89/lp_parser_rs/main/tui/assets/demo.gif)
 
-*The demo diffs an MPS file against an LP file: side-by-side constraint diffs, filters, sort and live tolerance cycling, fuzzy search, Numerics, the keybindings pop-up, and a parallel HiGHS solve with solution diff.*
+*The demo diffs an MPS file against an LP file: side-by-side constraint diffs, filters, sort and live tolerance cycling, fuzzy search, Numerics, the keybindings pop-up, and a HiGHS solve of both files with a solution diff.*
 
 ```bash
 cargo install --path tui
@@ -257,14 +259,14 @@ lp_diff model.lp --summary             # non-interactive single-model summary
 lp_diff base.lp modified.lp --summary  # non-interactive diff summary
 ```
 
-#### Tolerance & rename (parity with `lp_parser diff`)
+#### Tolerance and rename (parity with `lp_parser diff`)
 
 `lp_diff` accepts the same name-rewrite and numeric-tolerance flags as the CLI `diff` command. Active options are shown on the Summary panel (and in `--summary` output) so results are reproducible.
 
 | Option | Default | Description |
 |--------|---------|-------------|
 | `--abs-tol <F>` | `0.0` | Absolute tolerance for RHS & coefficient comparisons |
-| `--rel-tol <F>` | `0.0` | Relative tolerance: `|a-b| ≤ rel_tol · max(|a|,|b|)` |
+| `--rel-tol <F>` | `0.0` | Relative tolerance: `\|a-b\| ≤ rel_tol · max(\|a\|,\|b\|)` |
 | `--rename <PATTERN> <REPL>` | — | Regex rewrite applied to names in both files before matching; repeatable |
 
 ```bash
@@ -290,7 +292,7 @@ A Language Server Protocol implementation for `.lp` files: diagnostics, navigati
 cargo install --path lsp
 ```
 
-See [`lsp/README.md`](lsp/README.md) for the feature list, configuration reference and editor setup.
+See [`lsp/README.md`](https://github.com/dandxy89/lp_parser_rs/blob/main/lsp/README.md) for the feature list, configuration reference and editor setup.
 
 ## Development
 
@@ -303,4 +305,4 @@ Test data sources: [Jplex](https://github.com/asbestian/jplex/blob/main/instance
 
 ## Contributing
 
-Contributions are welcome — please open a Pull Request.
+Contributions are welcome: please open a pull request.

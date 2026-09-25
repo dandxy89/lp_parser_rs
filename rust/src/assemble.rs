@@ -4,10 +4,10 @@
 //! `... + 10 obj2: y` ends an objective with the constant `10` or scales a
 //! variable named `obj2`, so the grammar collects each section body as a flat
 //! list of [`Elem`](crate::assemble::Elem)s and the functions here assemble entries with unbounded
-//! lookahead. This is also what enables spec features the old grammar
-//! rejected: constant terms (`obj: x + 10`, `c1: x + 2 <= 10`), empty
-//! objectives, flipped constraints (`10 >= x`), and ranged constraints
-//! (`2 <= x + y <= 10`, expanded into two constraints like MPS RANGES).
+//! lookahead. The same approach handles constant terms (`obj: x + 10`,
+//! `c1: x + 2 <= 10`), empty objectives, flipped constraints (`10 >= x`),
+//! ranged constraints (`2 <= x + y <= 10`, expanded into two constraints like
+//! MPS RANGES) and indicator constraints (`b = 1 -> x <= 3`).
 //!
 //! Quadratic terms are written in a bracketed block, `[ x ^ 2 + 4 x * y ]`.
 //! In an objective the block must be followed by `/ 2` (CPLEX, Gurobi) and its
@@ -279,14 +279,15 @@ fn parse_signed_number(elems: &[SpannedElem<'_>], mut i: usize, context: &str) -
 /// function). A `Name` element starts a new objective; terms before the first
 /// name form an unnamed objective.
 ///
-/// # Errors
-///
-/// Returns an error for malformed term sequences (consecutive signs, adjacent
-/// numeric literals, a dangling sign, or unsigned adjacent terms).
-///
 /// With `multi_objective` (Gurobi's `Minimize multi-objectives`), a name may be
 /// followed by attributes, `OBJ0: Priority=2 Weight=1 AbsTol=0 RelTol=0`,
 /// before its expression.
+///
+/// # Errors
+///
+/// Returns an error for malformed term sequences (consecutive signs, adjacent
+/// numeric literals, a dangling sign, or unsigned adjacent terms), and for
+/// invalid multi-objective attributes.
 pub fn assemble_objectives<'input>(elems: &[SpannedElem<'input>], multi_objective: bool) -> Result<Vec<RawObjective<'input>>, LexerError> {
     let mut objectives: Vec<RawObjective<'input>> = Vec::new();
     let mut current: Option<RawObjective<'input>> = None;
@@ -448,15 +449,20 @@ const fn flip(op: ComparisonOp) -> ComparisonOp {
 /// Assemble the constraint section body into raw constraints.
 ///
 /// Supported entry shapes (each optionally preceded by `name:`):
-/// - `expr op number` — standard; constants in `expr` fold into the RHS
-/// - `number op expr` — flipped; normalised by reversing the operator
-/// - `number op expr op number` — ranged; expanded into two constraints
+/// - `expr op number`: standard; constants in `expr` fold into the RHS
+/// - `number op expr`: flipped; normalised by reversing the operator
+/// - `number op expr op number`: ranged; expanded into two constraints
 ///   (`name` and `name_rng`), matching the MPS RANGES expansion
+///
+/// An `expr` containing a quadratic block `[ ... ]` yields a quadratic
+/// constraint. An entry prefixed with `var = 0 ->` or `var = 1 ->` yields an
+/// indicator constraint, whose constraint must be linear and not ranged.
 ///
 /// # Errors
 ///
 /// Returns an error for malformed term sequences, a missing comparison
-/// operator, or a non-numeric right-hand side / range bound.
+/// operator, a non-numeric right-hand side / range bound, a quadratic ranged
+/// constraint, or a quadratic or ranged indicator constraint.
 pub fn assemble_constraints<'input>(elems: &[SpannedElem<'input>]) -> Result<Vec<RawConstraint<'input>>, LexerError> {
     let mut sections = assemble_constraint_sections(&[elems])?;
     debug_assert_eq!(sections.len(), 1, "one body in, one constraint list out");

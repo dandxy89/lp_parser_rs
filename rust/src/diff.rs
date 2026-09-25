@@ -1,9 +1,9 @@
 //! Structural and numeric diff engine for two parsed [`LpProblem`]s.
 //!
-//! This module is gated behind the `diff` feature. It is the single, shared
-//! definition of "how two LP problems differ" used by both the `lp_parser diff`
-//! CLI subcommand and the `lp_diff` TUI: keeping the comparison logic here
-//! prevents the two front-ends from drifting apart.
+//! This module is gated behind the `diff` feature. It backs the `lp_parser diff`
+//! CLI subcommand and is available to library users. The `lp_diff` TUI builds
+//! its own, more detailed per-coefficient diff, but uses [`DiffTol`] from here
+//! so that both front-ends agree on when two numbers differ.
 //!
 //! # Overview
 //!
@@ -53,6 +53,8 @@ pub type Normaliser<'a> = &'a dyn Fn(&str) -> String;
 /// Two values `a` and `b` differ when their absolute difference exceeds **both**
 /// the absolute tolerance and the relative tolerance scaled by
 /// `max(|a|, |b|)`. Equal values (or a zero difference) never differ.
+/// Infinities match only an equal infinity, and `NaN` differs from any
+/// non-`NaN` value but not from another `NaN`.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct DiffTol {
     /// Absolute tolerance: differences no larger than this are ignored.
@@ -118,7 +120,8 @@ pub struct DiffOptions<'a> {
     /// Numeric tolerances for RHS and coefficient comparisons.
     pub tol: DiffTol,
     /// Name rewrite applied to every variable, constraint, and objective name;
-    /// `None` compares names as-is.
+    /// `None` compares names as-is. If two names in one problem rewrite to the
+    /// same name, the later entry is the one compared.
     pub normalise: Option<Normaliser<'a>>,
 }
 
@@ -136,7 +139,8 @@ pub struct LpDiff {
     pub vars_added: Vec<String>,
     /// Variables present only in the first problem.
     pub vars_removed: Vec<String>,
-    /// Variables whose type changed: `(name, old_type, new_type)`.
+    /// Variables whose kind or effective bounds changed:
+    /// `(name, old, new)`, each side formatted as `Kind/bounds`.
     pub vars_type_changed: Vec<(String, String, String)>,
     /// Constraints present only in the second problem.
     pub cons_added: Vec<String>,

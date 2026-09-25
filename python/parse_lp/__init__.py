@@ -1,8 +1,10 @@
-"""parse_lp - A fast LP file format parser, writer, and modifier for Python, powered by Rust.
+"""Read, inspect, edit and write LP and MPS optimisation models.
 
-Parse, inspect, modify, and write Linear Programming (LP) files with full
-round-trip compatibility. The public API is the ``LpParser`` class; see the
-README and ``parse_lp.pyi`` stubs for the full method reference.
+The parsing and writing are done by the Rust crate ``lp_parser_rs``. Everything
+goes through ``LpParser``; its methods raise ``LpParseError``,
+``LpObjectNotFoundError`` or ``LpInvalidValueError`` (all ``RuntimeError``
+subclasses), or ``OSError`` for file-system failures. The ``parse_lp.pyi``
+stub documents the shape of every returned dict.
 """
 
 from importlib.metadata import version as _version

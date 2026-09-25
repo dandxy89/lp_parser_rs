@@ -105,12 +105,13 @@ impl<'input> ClassifiedConstraints<'input> {
 /// Rows declared in `LAZYCONS` / `USERCUTS` (`row_classes`) land in the
 /// matching bucket; both halves of a ranged row share its class.
 ///
-/// For rows with a RANGES entry, the single constraint is expanded into two
-/// constraints to represent both bounds:
-/// - **G row**: original `>= rhs`, plus `<= rhs + |range|`
-/// - **L row**: original `<= rhs`, plus `>= rhs - |range|`
-/// - **E row, positive range**: `>= rhs` and `<= rhs + range`
-/// - **E row, negative range**: `<= rhs` and `>= rhs + range`
+/// A row with a RANGES entry `R` becomes two constraints with the same
+/// coefficients: the row's own name with `>= lower`, and `<row>_rng` (see
+/// `range_upper_name`) with `<= upper`, where `[lower, upper]` is:
+/// - G row: `[rhs, rhs + |R|]`
+/// - L row: `[rhs - |R|, rhs]`
+/// - E row, `R >= 0`: `[rhs, rhs + R]`
+/// - E row, `R < 0`: `[rhs + R, rhs]`
 pub(super) fn build_constraints<'input>(
     row_types: &FxHashMap<&'input str, RowType>,
     row_order: &[&'input str],
@@ -193,11 +194,11 @@ pub(super) fn build_constraints<'input>(
 /// Build bounds from accumulated bound data.
 ///
 /// Applies MPS default bounds: continuous variables without explicit BOUNDS
-/// entries are left unspecified (the shared `[0, +inf)` default). Integer variables (INTORG/INTEND) without explicit bounds get
-/// `[0, 1]` per the CPLEX MPS spec (note: Gurobi defaults these to
-/// `[0, +inf)` instead -- a documented dialect divergence). When an UP bound
-/// is negative with no explicit LO, the lower bound is set to `-inf` per
-/// CPLEX spec.
+/// entries are left unspecified (the shared `[0, +inf)` default). Integer
+/// variables (INTORG/INTEND) without explicit bounds get `[0, 1]` per the
+/// CPLEX MPS spec; Gurobi defaults these to `[0, +inf)` instead, a known
+/// dialect difference. When an UP bound is negative with no explicit LO, the
+/// lower bound is set to `-inf`, also per the CPLEX spec.
 // Binary detection compares bounds strictly against the sentinel values 0/1
 // written in the MPS text; an epsilon comparison would misclassify variables.
 #[allow(clippy::float_cmp)]
@@ -259,7 +260,7 @@ pub(super) fn build_bounds<'input>(
     // Apply MPS default bounds for integer variables without explicit BOUNDS
     // entries: `[0, 1]`, which differs from the LP default and so must be
     // recorded. A continuous column's MPS default `[0, +inf)` is the LP
-    // default too, so it is left unspecified -- exactly like an LP variable
+    // default too, so it is left unspecified, exactly like an LP variable
     // that was never bounded. Recording an explicit `>= 0` would make
     // `diff a.lp a.mps` flag every column and MPS -> LP write `x >= 0` for each.
     for &var_name in column_order {
@@ -268,7 +269,7 @@ pub(super) fn build_bounds<'input>(
         }
     }
 
-    // Note: `bounds` can legitimately be empty even when `bound_order` is not --
+    // Note: `bounds` can legitimately be empty even when `bound_order` is not:
     // an `SC`-only variable records no lower/upper value (its semi-continuity is
     // applied later from `ParseResult::semi_continuous`).
     bounds

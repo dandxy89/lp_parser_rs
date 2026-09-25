@@ -6,11 +6,11 @@
 //! handful of configurations and puts the times side by side, which turns
 //! "elevated iteration count" into "the dual simplex finishes in half the time".
 //!
-//! The last preset is the one that justifies the module. The crate already owns
-//! a rewrite pass ([`crate::presolve`]) whose whole purpose is to hand `HiGHS` an
-//! easier model, and until now there was no way to tell whether it helped.
-//! Rewriting and solving the result — paying the rewrite in the reported time —
-//! answers that directly.
+//! The last preset is the one that justifies the module. The crate has its own
+//! rewrite pass ([`crate::presolve`]) whose purpose is to hand `HiGHS` an
+//! easier model, and the only way to tell whether it helped is to time it.
+//! That preset rewrites and then solves the result, and the rewrite is charged
+//! to its reported time.
 //!
 //! # Why this runs sequentially
 //!

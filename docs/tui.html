@@ -4,18 +4,18 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>lp_diff — the terminal LP/MPS model explorer · lp_parser_rs</title>
-<meta name="description" content="Deep dive into lp_diff: an interactive terminal explorer and diff viewer for LP and MPS models, with a HiGHS solver, what-if analysis, solution-preserving rewrites, and conditioning diagnostics.">
+<meta name="description" content="lp_diff is a terminal explorer and diff viewer for LP and MPS models. It solves with HiGHS, re-solves after RHS edits, applies presolve rewrites and ranks badly conditioned rows.">
 <link rel="canonical" href="https://dandxy89.github.io/lp_parser_rs/tui.html">
 <meta property="og:type" content="article">
 <meta property="og:site_name" content="lp_parser_rs">
 <meta property="og:url" content="https://dandxy89.github.io/lp_parser_rs/tui.html">
 <meta property="og:title" content="lp_diff — the terminal LP/MPS model explorer">
-<meta property="og:description" content="An interactive terminal explorer and diff viewer for LP and MPS models, with a HiGHS solver, what-if analysis, solution-preserving rewrites, and conditioning diagnostics.">
+<meta property="og:description" content="A terminal explorer and diff viewer for LP and MPS models, with a built-in HiGHS solver, RHS what-ifs, presolve rewrites and conditioning diagnostics.">
 <meta property="og:image" content="https://dandxy89.github.io/lp_parser_rs/assets/demo-poster.jpg">
 <meta property="og:image:alt" content="The lp_diff terminal UI diffing two models: section tabs for Summary, Variables, Constraints, Objectives and Numerics, with counts of removed and changed entries.">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="lp_diff — the terminal LP/MPS model explorer">
-<meta name="twitter:description" content="An interactive terminal explorer and diff viewer for LP and MPS models, with a HiGHS solver, what-if analysis, solution-preserving rewrites, and conditioning diagnostics.">
+<meta name="twitter:description" content="A terminal explorer and diff viewer for LP and MPS models, with a built-in HiGHS solver, RHS what-ifs, presolve rewrites and conditioning diagnostics.">
 <meta name="twitter:image" content="https://dandxy89.github.io/lp_parser_rs/assets/demo-poster.jpg">
 <meta name="twitter:image:alt" content="The lp_diff terminal UI diffing two models: section tabs for Summary, Variables, Constraints, Objectives and Numerics, with counts of removed and changed entries.">
 <script type="application/ld+json">
@@ -29,7 +29,7 @@
       "applicationCategory": "DeveloperApplication",
       "operatingSystem": "Linux, macOS, Windows",
       "url": "https://dandxy89.github.io/lp_parser_rs/tui.html",
-      "description": "An interactive terminal explorer and diff viewer for LP and MPS models, with coefficient-level diffs, fuzzy search, a background HiGHS solver, what-if edits, solution-preserving rewrites and conditioning diagnostics.",
+      "description": "A terminal explorer and diff viewer for LP and MPS models, with coefficient-level diffs, fuzzy search, a background HiGHS solver, RHS what-ifs, presolve rewrites and conditioning diagnostics.",
       "screenshot": "https://dandxy89.github.io/lp_parser_rs/assets/demo-poster.jpg",
       "isPartOf": {"@id": "https://dandxy89.github.io/lp_parser_rs/#website"},
       "author": {"@type": "Person", "name": "Dan Dixey", "url": "https://github.com/dandxy89"},
@@ -83,10 +83,10 @@
     <div>
       <a class="backlink" href="index.html">← back to overview</a>
       <p class="eyebrow">\* the terminal model explorer *\</p>
-      <h1>It started as a diff viewer.<span class="line2">Now it solves, rewrites and diagnoses.</span></h1>
-      <p class="sub"><code>lp_diff</code> opens an LP or MPS file (or two, in any combination) and gives you a
-        navigable model: coefficient-level diffs, fuzzy search, a background <a href="https://highs.dev">HiGHS</a> solver,
-        what-if edits, solution-preserving rewrites, and a diagnostics pane that names the constraints slowing your solve down.</p>
+      <h1>A terminal viewer for LP and MPS models,<span class="line2">with HiGHS built in.</span></h1>
+      <p class="sub"><code>lp_diff</code> opens one LP or MPS file to explore, or two (in any combination) to diff down to the
+        coefficient. It can solve either with <a href="https://highs.dev">HiGHS</a> on a background thread, re-solve after an
+        RHS edit, apply presolve-style rewrites and compare the result, and point at the rows that make a solve slow.</p>
       <div class="badges">
         <span><b>binary</b> lp_diff</span>
         <span><b>built on</b> ratatui</span>
@@ -98,10 +98,10 @@
       </div>
     </div>
     <video class="demo" width="1280" height="800" loop muted playsinline controls
-           poster="assets/demo-poster.jpg" aria-label="Diffing an MPS file against an LP file: a coefficient-level constraint diff, raw text view, fuzzy search and a parallel HiGHS solve, then a single model with presolve rewrites and the diagnostics pane.">
+           poster="assets/demo-poster.jpg" aria-label="Diffing an MPS file against an LP file: a coefficient-level constraint diff, raw text view, fuzzy search and a HiGHS solve of both files, then a single model with presolve rewrites and the diagnostics pane.">
       <source src="assets/demo.webm" type="video/webm">
       <source src="assets/demo.mp4" type="video/mp4">
-      <img src="assets/demo.gif" width="1280" height="800" alt="Diffing an MPS file against an LP file: a coefficient-level constraint diff, raw text view, fuzzy search and a parallel HiGHS solve, then a single model with presolve rewrites and the diagnostics pane.">
+      <img src="assets/demo.gif" width="1280" height="800" alt="Diffing an MPS file against an LP file: a coefficient-level constraint diff, raw text view, fuzzy search and a HiGHS solve of both files, then a single model with presolve rewrites and the diagnostics pane.">
     </video>
   </div>
 </header>
@@ -140,15 +140,15 @@ lp_diff base.lp modified.lp --summary</code></pre>
     <p>With one file the five sections describe the model rather than a comparison. Every variable, constraint and
       objective is listed plainly, and the detail panel carries the full entry: coefficients with names, operator and
       RHS, bounds and variable type, or SOS weights.</p>
-    <p>Everything that still makes sense for a single model keeps working: search, the command palette, sorting, the
-      solver, CSV export, rewrites, diagnostics and <code>--watch</code>. The diff-only actions (kind filters,
-      ignore-order, tolerance cycling, delta sorts and the raw side-by-side view) are hidden from the help and the
-      palette, and no-op with a brief status-bar hint if their key is pressed.</p>
+    <p>Everything that makes sense for a single model still works: search, the command palette, the solver, CSV export,
+      rewrites, diagnostics and <code>--watch</code>. The diff-only actions (kind filters, ignore-order, tolerance cycling,
+      sort cycling and the raw side-by-side view) are hidden from the help and the palette, and pressing their key shows a
+      short status-bar hint instead.</p>
 
     <h3>Flags</h3>
     <div class="tablewrap"><table>
       <tr><th>Flag</th><th>Effect</th></tr>
-      <tr><td>--summary</td><td>Print a structured report to stdout and exit without launching the TUI.</td></tr>
+      <tr><td>--summary</td><td>Print a text report to stdout and exit without launching the TUI: change counts for a diff, or counts and the top analysis issues for one model.</td></tr>
       <tr><td>--watch</td><td>Reload automatically when an input file changes on disk.</td></tr>
       <tr><td>--abs-tol</td><td>Absolute tolerance: equal when <code>|a - b| &lt;= abs_tol</code>. An epsilon floor always applies, so ordinary float noise never registers as a change.</td></tr>
       <tr><td>--rel-tol</td><td>Relative tolerance, scaled by magnitude: equal when <code>|a - b| &lt;= rel_tol * max(|a|, |b|)</code>.</td></tr>
@@ -156,9 +156,9 @@ lp_diff base.lp modified.lp --summary</code></pre>
       <tr><td>--theme</td><td><code>auto</code> (detects from <code>COLORFGBG</code>, then by asking the terminal for its background colour), <code>dark</code>, or <code>light</code>.</td></tr>
     </table></div>
 
-    <div class="note"><b>Why <code>--rename</code> exists.</b> Renumbering a model, whether inserting a time period or reindexing a
-      set, changes every generated name and turns a small structural change into a diff where nothing matches. Collapsing
-      the indices first lets the real change surface:
+    <div class="note"><b>Why <code>--rename</code> exists.</b> Renumbering a model, for example by inserting a time period or
+      reindexing a set, changes every generated name, so a small structural change becomes a diff where nothing matches.
+      Collapsing the indices first leaves only the real change:
       <code>--rename '\[\d+,\d+,[^]]*\]$' '[idx]'</code>.</div>
   </div>
 </section>
@@ -191,9 +191,9 @@ lp_diff base.lp modified.lp --summary</code></pre>
       beside each other, so you can see which term moved and by how much.</p>
 
     <h3>Side-by-side and raw text</h3>
-    <p>Added coefficients render green, removed red, modified yellow, unchanged grey. Press <kbd>r</kbd> to swap the
-      parsed view for the actual LP source lines of both files, side by side, useful when the parse is not what you
-      expected, or when formatting matters.</p>
+    <p>Added coefficients render green, removed red, modified yellow, unchanged grey. Modified coefficients also show the
+      change and the relative change. Press <kbd>r</kbd> to swap the parsed view for the source lines of both files, side
+      by side, which helps when the parse is not what you expected.</p>
 
     <h3>Filters and sort</h3>
     <div class="tablewrap"><table class="keys">
@@ -205,8 +205,8 @@ lp_diff base.lp modified.lp --summary</code></pre>
 
     <h3>Live tolerance</h3>
     <p><kbd>t</kbd> and <kbd>T</kbd> cycle the relative and absolute tolerances and rebuild the diff in place, so you can
-      dial numeric noise out interactively rather than restarting with different flags. The active values appear on the
-      Summary panel, so a screenshot of the diff records the settings that produced it.</p>
+      tune out numeric noise without restarting. The active values are shown on the Summary panel, so a screenshot of the
+      diff records the settings that produced it.</p>
   </div>
 </section>
 
@@ -221,17 +221,17 @@ lp_diff base.lp modified.lp --summary</code></pre>
       <tr><td><em>(none)</em></td><td>Fuzzy match, ranked by score. The default.</td></tr>
       <tr><td>r:</td><td>Regex, case-insensitive.</td></tr>
       <tr><td>s:</td><td>Substring, case-insensitive.</td></tr>
-      <tr><td>c:</td><td>Content: searches variable names, coefficients and RHS values inside entries, not just entry names.</td></tr>
+      <tr><td>c:</td><td>Content, case-insensitive substring: matches the variables, coefficients and RHS values inside entries rather than their names.</td></tr>
     </table></div>
 
-    <p><kbd>Tab</kbd> completes the query with the highlighted result, <kbd>Enter</kbd> jumps to it, and once a search is
-      committed <kbd>n</kbd>/<kbd>N</kbd> step through matches from the main view.</p>
+    <p>In the pop-up, <kbd>↓</kbd>/<kbd>↑</kbd> (or <kbd>Ctrl+n</kbd>/<kbd>Ctrl+p</kbd>) move through results,
+      <kbd>Tab</kbd> completes the query with the highlighted result and <kbd>Enter</kbd> jumps to it. Once a search is
+      committed, <kbd>n</kbd>/<kbd>N</kbd> step through matches from the main view.</p>
 
     <h3>Jumplist and palette</h3>
     <p>Positions are recorded automatically when you change section, apply a filter, or jump to a search result.
-      <kbd>Ctrl+o</kbd> goes back and <kbd>Ctrl+i</kbd> forward through up to 100 positions, the same muscle memory as
-      a vim jumplist. <kbd>Ctrl+p</kbd> opens a fuzzy command palette listing every action with its direct key, so
-      nothing is discoverable only by reading the manual.</p>
+      <kbd>Ctrl+o</kbd> goes back and <kbd>Ctrl+i</kbd> forward through up to 100 positions, as in vim.
+      <kbd>Ctrl+p</kbd> opens a fuzzy command palette listing every action with its key.</p>
   </div>
 </section>
 
@@ -240,11 +240,11 @@ lp_diff base.lp modified.lp --summary</code></pre>
     <p class="sec-label">Running the model</p>
     <h2>Solving in the background</h2>
     <p class="lead"><kbd>S</kbd> solves with <a href="https://highs.dev">HiGHS</a> on a background thread. The interface
-      stays responsive, and the elapsed time ticks while a long solve runs.</p>
+      stays responsive and shows the elapsed time while a long solve runs; <kbd>Esc</kbd> interrupts it.</p>
 
-    <p>In diff mode a picker offers file 1, file 2, or <em>both</em>. "Both" runs the two solves in parallel and lands in
-      a comparison view. Results are organised into five tabs (Summary, Variables, Constraints, Log, and Duals),
-      switchable with <kbd>1</kbd>–<kbd>5</kbd> or <kbd>Tab</kbd>.</p>
+    <p>In diff mode a picker offers file 1, file 2 or <em>both</em>. "Both" solves the two files one after the other, so
+      they do not compete for the machine, and opens a comparison view. Results are split into five tabs (Summary,
+      Variables, Constraints, Log and Duals), switchable with <kbd>1</kbd>–<kbd>5</kbd> or <kbd>Tab</kbd>.</p>
 
     <ul class="constraints">
       <li><span class="cname">Solution diffing</span><span class="cbody">Variables and constraints are matched by name
@@ -253,10 +253,12 @@ lp_diff base.lp modified.lp --summary</code></pre>
       <li><span class="cname">Ranked duals</span><span class="cbody">The Duals tab ranks constraints by |shadow price|
         and variables by |reduced cost|, or, in comparison mode, by the <em>change</em> in each.</span></li>
       <li><span class="cname">Infeasibility</span><span class="cbody"><kbd>e</kbd> runs an elastic relaxation to find
-        which constraints have to give, so an infeasible model gives you a named culprit.</span></li>
-      <li><span class="cname">Caching</span><span class="cbody">Closing the overlay files the result away; reopening the
-        same target restores it instead of re-solving. Editing an input invalidates the cache by reloading the
-        files.</span></li>
+        which constraints have to give, and names them.</span></li>
+      <li><span class="cname">Caching</span><span class="cbody">Closing the overlay keeps the result; reopening the same
+        target restores it instead of re-solving. Reloading the files clears the cache.</span></li>
+      <li><span class="cname">Limits</span><span class="cbody">Indicator, quadratic and general constraints are refused. A
+        quadratic objective is passed to HiGHS as a Hessian, which covers continuous QPs only; the IIS, ranging and
+        rewrite panes refuse QPs.</span></li>
     </ul>
 
     <p style="margin-top:1.5rem;"><kbd>y</kbd> yanks the results to the clipboard and <kbd>w</kbd> writes them to CSV:
@@ -270,12 +272,12 @@ solver = ipm
 run_crossover = off
 user_objective_scale = -8
 time_limit = 300</code></pre>
-    <p>This is where a model that solves slowly gets interrogated: switch to the interior point solver, scale a wide
-      objective, cap a run that would otherwise outlast your patience. Values are typed by parse, so integers, floats,
-      booleans and strings all pass through without a per-option table.</p>
-    <div class="note"><b>Applied options are never silent.</b> The first line of the Log tab records what was read
-      (<code>[lp_diff] highs.opt: solver = ipm, run_crossover = off</code>), so a stray file in the directory cannot go unnoticed. Anything HiGHS rejects is written to the same log. <code>log_file</code> and
-      <code>output_flag</code> are ignored from the file; the Log tab needs both.</div>
+    <p>Use it to try the interior point solver, scale a wide objective or cap a long run. Each value is tried as a
+      boolean, then an integer, a float and finally a string until HiGHS accepts it, so no per-option table is needed.</p>
+    <div class="note"><b>Applied options are logged.</b> The first line of the Log tab lists what was applied
+      (<code>[lp_diff] options: solver = ipm, run_crossover = off</code>), so a stray file in the directory is visible.
+      An option HiGHS rejects is listed there as ignored rather than failing the solve. <code>log_file</code> and
+      <code>output_flag</code> are ignored from the file, because the Log tab depends on them.</div>
   </div>
 </section>
 
@@ -283,12 +285,13 @@ time_limit = 300</code></pre>
   <div class="wrap">
     <p class="sec-label">Asking questions</p>
     <h2>Moving a bound to see what happens</h2>
-    <p class="lead">Select a constraint, press <kbd>E</kbd>, type a new right-hand side. The baseline problem is cloned
-      in memory, the RHS is changed, and both versions are solved in parallel into the standard comparison view.</p>
-    <p>Nothing is written to disk and the file on disk is untouched. The edit lives only in the clone. The comparison
-      label records the change (<code>capacity rhs 200 → 260</code>).</p>
-    <div class="note"><b>The point is the duals.</b> A shadow price tells you the marginal value of a constraint at the
-      current solution; it does not tell you how far that stays true. Actually moving the bound and re-solving does.</div>
+    <p class="lead">Select a constraint, press <kbd>E</kbd> and type a new right-hand side. The baseline problem (file 1 in
+      diff mode) is cloned in memory, the RHS is changed, and both versions are solved one after the other into the
+      standard comparison view.</p>
+    <p>Nothing is written to disk; the edit lives only in the clone. The comparison label records the change
+      (<code>what-if: capacity rhs 200 → 260</code>).</p>
+    <div class="note"><b>Why re-solve.</b> A shadow price gives the marginal value of a constraint at the current
+      solution, but not how far that holds. Moving the bound and re-solving does.</div>
   </div>
 </section>
 
@@ -297,9 +300,9 @@ time_limit = 300</code></pre>
     <p class="sec-label">Making it smaller</p>
     <h2>Presolve rules you can measure</h2>
     <p class="lead"><kbd>P</kbd> opens a rule picker. Each rule is a <em>solution-preserving</em> rewrite: it removes
-      work from the model without changing the set of optimal solutions. Pick a set, press <kbd>Enter</kbd>, and the
-      original and the rewritten model are solved one after the other. The two runs are never in flight at once, so they cannot compete for the
-      machine and the timings mean something.</p>
+      work from the model without changing the set of optimal solutions. <kbd>Space</kbd> toggles a rule, <kbd>a</kbd>
+      toggles all, and <kbd>Enter</kbd> solves the original and the rewritten model one after the other, so the two runs
+      do not compete for the machine and the timings are comparable.</p>
 
     <div class="tablewrap"><table>
       <tr><th>Rule</th><th>What it does</th></tr>
@@ -329,11 +332,11 @@ time_limit = 300</code></pre>
       cumulative quantity is itself wanted. Only rows of at least 64 non-zeros qualify; below that the aggregate row is
       no sparser than the chunks it aggregates.</p>
 
-    <p>None of which makes it faster. The simplex factorises the basis and updates it, so a dense row costs it almost
-      nothing and the extra rows and columns are pure overhead — against HiGHS's default expect neutral to slightly
-      worse. The density collapse pays off for interior-point methods, where row density lands in the normal equations
-      and squares. Enable the rule, press Enter, and read the comparison. The partial sums are genuinely new columns, so
-      they appear as added rows in the comparison view; every original variable still lines up.</p>
+    <p>That does not make it faster by itself. The simplex factorises the basis and updates it, so a dense row costs it
+      almost nothing and the extra rows and columns are overhead: against HiGHS's default, expect neutral to slightly
+      worse. The lower density pays off for interior-point methods, where row density lands in the normal equations and
+      squares. Enable the rule, press Enter, and read the comparison. The partial sums are new columns, so they appear as
+      added rows in the comparison view; every original variable still lines up.</p>
 
     <p><strong>Relaxing integrality</strong> deletes the integrality constraints, so the relaxed objective is a bound on
       the original rather than equal to it. On a pure LP it does nothing. The point is the pair of numbers the
@@ -353,7 +356,7 @@ time_limit = 300</code></pre>
       column already within a factor of two of 1, which is what makes the fixpoint terminate, and both skip anything that
       would sink a coefficient into the zero tolerance. On <code>boeing2.lp</code> the worst column ratio drops from
       3.5e4 to 3.9e3, at the cost of the worst row ratio moving from 3.0e3 to 3.9e3: equilibration redistributes
-      conditioning, it does not conjure it away.</p>
+      conditioning rather than removing it.</p>
 
     <div class="note"><b>The change of units never escapes the rewrite.</b> Scaling leaves the model in different units,
       so the factors are kept with the run and applied to the rewritten side's result on the way back. Variable values,
@@ -366,13 +369,17 @@ time_limit = 300</code></pre>
       rewritten units and the status line says so.</p>
 
     <p>The rules feed each other (a singleton becomes a bound, the tighter bound makes another row redundant), so they
-      run to a fixpoint rather than once each. Reopening the picker shows the previous run's per-pass breakdown, which is
-      where the cascade becomes visible.</p>
+      run to a fixpoint, at most 10 passes, rather than once each. Reopening the picker shows the previous run's per-pass
+      breakdown.</p>
+    <p>Two logs show what happened. <kbd>l</kbd> in the picker runs the ticked rules and lists every action in order:
+      each row dropped and why, each column fixed and to what, each bound moved or row rescaled. <kbd>H</kbd> shows what
+      HiGHS's own presolve removes from the untouched file, by name. <kbd>w</kbd> in either log writes it to the working
+      directory, as <code>&lt;file&gt;_presolve_log.txt</code> or <code>&lt;file&gt;_highs_presolve.txt</code>.</p>
 
     <div class="note"><b>Rows are removed; columns are only ever fixed.</b> Keeping the variable set identical on both
       sides is what makes the comparison trustworthy: every variable still appears in both results, so a difference in
       the diff is a real difference and not an artefact of the rewrite. The objective values must agree, and that agreement
-      is the check that the rewrite was sound, and the solve times are the answer to whether it was worth it.</div>
+      is the check that the rewrite was sound. The solve times say whether it was worth it.</div>
   </div>
 </section>
 
@@ -381,7 +388,7 @@ time_limit = 300</code></pre>
     <p class="sec-label">Why is it slow</p>
     <h2>Which row is actually the problem</h2>
     <p class="lead">A solver log saying "200,000 iterations" and a numerics panel saying "coefficients span 1e-4 to 1e6"
-      are both true and neither tells you which constraint to go and fix. <kbd>D</kbd> joins them.</p>
+      are both true, and neither tells you which constraint to fix. <kbd>D</kbd> puts the two together.</p>
 
     <p>Every constraint and every variable gets one record carrying <em>both</em> its structure (density, coefficient
       spread, bound width) and its behaviour in the last solve (activity, shadow price, whether it sat at a bound with
@@ -423,8 +430,8 @@ time_limit = 300</code></pre>
       </div>
     </div>
 
-    <p style="margin-top:1.5rem;">The verdict checks degeneracy <em>before</em> conditioning, deliberately: it is both
-      the more common cause and the one where rescaling is wasted effort. The number it judges on is iterations
+    <p style="margin-top:1.5rem;">The verdict checks degeneracy before conditioning, because it is the more common
+      cause and the one where rescaling is wasted effort. The number it judges on is iterations
       <em>per row</em>, not the raw count. 200,000 iterations is unremarkable at 100,000 rows and alarming at 500.</p>
 
     <div class="note"><b>The degeneracy figures are proxies.</b> They are computed from the final solution, not from a
@@ -438,10 +445,10 @@ time_limit = 300</code></pre>
   <div class="wrap">
     <p class="sec-label">When it does not solve</p>
     <h2>Four questions the status line cannot answer</h2>
-    <p class="lead">A solve that comes back <em>Infeasible</em> or <em>Unbounded</em> tells you the model is wrong and
-      nothing about where. These four reach past the solver's answer to its working.</p>
+    <p class="lead">A solve that comes back <em>Infeasible</em> or <em>Unbounded</em> says the model is wrong but not
+      where. These four panes ask HiGHS for more than the status.</p>
 
-    <h3><kbd>U</kbd> &mdash; which variable runs away</h3>
+    <h3><kbd>U</kbd>: which variable runs away</h3>
     <p>An unbounded model has a direction you can travel forever while the objective keeps improving. HiGHS can produce
       that direction as a certificate; this names the variables in it, with the bound each one is missing.</p>
 
@@ -451,11 +458,11 @@ time_limit = 300</code></pre>
   production_x                <span class="bad">1.0000</span>        3.0000        0.0000            <span class="bad">+&#8734;</span></code></pre>
 
     <p>When HiGHS declines to produce a ray, the pane falls back to naming candidates by inspection: variables the
-      objective pushes towards a bound they do not have, <em>and</em> which no row holds in that direction. Consulting
-      the matrix is what makes that list usable &mdash; most variables in a real model carry no explicit bound and are
-      capped by their rows, so without it the list would name nearly every column. It is labelled as a guess on screen.</p>
+      objective pushes towards a bound they do not have, <em>and</em> which no row holds in that direction. Checking
+      the matrix is what keeps the list short: most variables in a real model have no explicit bound and are capped by
+      their rows, so without it the list would name nearly every column. It is labelled as a guess on screen.</p>
 
-    <h3><kbd>I</kbd> &mdash; the minimal conflicting set</h3>
+    <h3><kbd>I</kbd>: the minimal conflicting set</h3>
     <p>The infeasibility diagnosis on a solve (<kbd>e</kbd>) answers <em>what is cheapest to relax</em>, by total
       violation. This answers the different question of <em>what is minimally in conflict</em>: a set of constraints and
       bounds no proper subset of which is infeasible. When you are hunting a modelling mistake rather than negotiating a
@@ -468,19 +475,19 @@ time_limit = 300</code></pre>
   cap                          <span class="bad">upper</span>
   supply                       <span class="bad">lower</span></code></pre>
 
-    <h3><kbd>R</kbd> &mdash; how far a coefficient can move</h3>
+    <h3><kbd>R</kbd>: how far a coefficient can move</h3>
     <p>What-if (<kbd>E</kbd>) edits one right-hand side and re-solves. Ranging reads the optimal basis for the whole
-      interval at once, for every objective coefficient and every row, with no further solve &mdash; and the objective at
-      each end of it. The entry selected in the sidebar is shown in full at the top.</p>
+      interval at once, for every objective coefficient and every row, with no further solve, along with the objective
+      at each end of it. The entry selected in the sidebar is shown in full at the top.</p>
 
     <div class="note"><b>A row's interval brackets its activity, not its right-hand side.</b> That is what HiGHS
-      computes, and the two coincide only when the row is binding. Pairing the interval with the RHS instead would report
-      a range that does not contain its own value on every slack row.</div>
+      computes, and the two coincide only when the row is binding. Pairing the interval with the RHS instead would, on every
+      slack row, report a range that does not contain the RHS.</div>
 
-    <h3><kbd>B</kbd> &mdash; would another configuration be faster</h3>
-    <p>The same model solved under several HiGHS configurations, times side by side. The last row is the interesting
-      one: it applies <a href="#rewrite">the rewrite rules</a> first and charges their cost to the result, which is the
-      only honest way to answer whether the rewrite is helping.</p>
+    <h3><kbd>B</kbd>: would another configuration be faster</h3>
+    <p>The same model solved under six HiGHS configurations, with times side by side. The last row applies
+      <a href="#rewrite">the rewrite rules</a> first and includes their cost in its total, so it shows whether the rewrite
+      pays for itself.</p>
 
 <pre class="tty"><code>  <span class="dim">preset            status         total        solve   iterations</span>
   default           Optimal       0.041s       0.038s          312
@@ -493,8 +500,8 @@ time_limit = 300</code></pre>
   <span class="ok">fastest: local presolve &#8212; 1.41x over default</span></code></pre>
 
     <div class="note"><b>Presets run one after another, not in parallel.</b> Six solves competing for the same cores
-      inflate each other's wall-clock by an amount that depends on how many finish early &mdash; which is precisely the
-      quantity being measured. Later presets are capped by a budget derived from the baseline, so one pathological
+      inflate each other's wall-clock by an amount that depends on how many finish early, which is the quantity being
+      measured. Later presets are capped by a budget derived from the baseline, so one pathological
       configuration cannot hold the sweep open. Each row also carries its objective: a configuration that returns a
       <em>different</em> optimum is a bug to be flagged, not a speed-up to be taken.</div>
 
@@ -514,7 +521,7 @@ time_limit = 300</code></pre>
       <li><span class="cname">Suspend</span><span class="cbody"><kbd>Ctrl+Z</kbd> suspends and resumes cleanly, restoring the alternate screen and raw mode on the way back.</span></li>
       <li><span class="cname">Small terminals</span><span class="cbody">Guards against terminals too small to draw into, and every overlay scrolls.</span></li>
       <li><span class="cname">Mouse</span><span class="cbody">Scroll wheel navigates lists, clicking selects, and the keyboard still does everything.</span></li>
-      <li><span class="cname">Clipboard</span><span class="cbody"><kbd>yy</kbd> yanks an entry name, <kbd>yo</kbd>/<kbd>yn</kbd> either file's version, <kbd>Y</kbd> the whole detail panel.</span></li>
+      <li><span class="cname">Clipboard</span><span class="cbody"><kbd>yy</kbd> yanks an entry name, <kbd>yo</kbd>/<kbd>yn</kbd> either file's version, <kbd>Y</kbd> the whole detail panel. Over SSH or inside tmux the yank goes through the terminal as OSC 52, so it lands on your local clipboard (tmux needs <code>set -g set-clipboard on</code>).</span></li>
     </ul>
   </div>
 </section>
@@ -523,19 +530,19 @@ time_limit = 300</code></pre>
   <div class="wrap">
     <p class="sec-label">The whole keyboard</p>
     <h2>Key reference</h2>
-    <p class="lead">The in-app help (<kbd>?</kbd>) adapts to the mode you are in and is always current. This is the
-      summary.</p>
+    <p class="lead">The in-app help (<kbd>?</kbd>) matches the mode you are in. This is a summary.</p>
 
     <h3>Navigation</h3>
     <div class="tablewrap"><table class="keys">
       <tr><th>Key</th><th>Action</th></tr>
       <tr><td><kbd>j</kbd> <kbd>k</kbd> / <kbd>↓</kbd> <kbd>↑</kbd></td><td>Move down / up</td></tr>
-      <tr><td><kbd>g</kbd> / <kbd>G</kbd></td><td>Top / bottom</td></tr>
+      <tr><td><kbd>g</kbd> <kbd>G</kbd> / <kbd>Home</kbd> <kbd>End</kbd></td><td>Top / bottom</td></tr>
       <tr><td><kbd>Ctrl+d</kbd> <kbd>Ctrl+u</kbd></td><td>Half page down / up</td></tr>
       <tr><td><kbd>Ctrl+f</kbd> <kbd>Ctrl+b</kbd></td><td>Full page down / up</td></tr>
       <tr><td><kbd>Ctrl+o</kbd> <kbd>Ctrl+i</kbd></td><td>Jumplist back / forward</td></tr>
       <tr><td><kbd>Tab</kbd> / <kbd>⇧Tab</kbd></td><td>Next / previous panel</td></tr>
-      <tr><td><kbd>h</kbd> <kbd>l</kbd></td><td>Sidebar / detail</td></tr>
+      <tr><td><kbd>h</kbd> <kbd>l</kbd> / <kbd>Enter</kbd></td><td>Sidebar / detail</td></tr>
+      <tr><td><kbd>Esc</kbd></td><td>Back / clear search</td></tr>
       <tr><td><kbd>1</kbd>–<kbd>5</kbd>, <kbd>[</kbd> <kbd>]</kbd></td><td>Jump to section / cycle sections</td></tr>
       <tr><td><kbd>&lt;</kbd> <kbd>&gt;</kbd></td><td>Narrow / widen the sidebar (it grows to fit long names on its own)</td></tr>
       <tr><td><kbd>M</kbd></td><td>Mouse capture on / off; off hands the mouse to the terminal to select text (or hold <kbd>Shift</kbd> while dragging)</td></tr>
@@ -552,7 +559,7 @@ time_limit = 300</code></pre>
       <tr><td><kbd>U</kbd></td><td>Unbounded: which variables run to infinity, and the bound that would stop them</td></tr>
       <tr><td><kbd>I</kbd></td><td>Infeasible: the minimal conflicting set of constraints and bounds (IIS)</td></tr>
       <tr><td><kbd>R</kbd></td><td>Ranging: how far each objective coefficient and row activity can move before the optimal basis changes</td></tr>
-      <tr><td><kbd>e</kbd></td><td>Diagnose infeasibility (in the solve overlay) — the cheapest set to relax</td></tr>
+      <tr><td><kbd>e</kbd></td><td>Diagnose infeasibility (in the solve overlay): the cheapest set to relax</td></tr>
     </table></div>
 
     <h3>Diff, search and export</h3>
@@ -564,7 +571,7 @@ time_limit = 300</code></pre>
       <tr><td><kbd>/</kbd> · <kbd>n</kbd> <kbd>N</kbd></td><td>Open search · next / previous match</td></tr>
       <tr><td><kbd>Ctrl+p</kbd></td><td>Command palette</td></tr>
       <tr><td><kbd>yy</kbd> <kbd>yo</kbd> <kbd>yn</kbd> <kbd>Y</kbd></td><td>Yank name · old side · new side · detail panel</td></tr>
-      <tr><td><kbd>w</kbd></td><td>Export CSV</td></tr>
+      <tr><td><kbd>w</kbd></td><td>Export CSV: the diff report in diff mode, the model's objectives, constraints and variables in inspect mode</td></tr>
       <tr><td><kbd>?</kbd> · <kbd>q</kbd> · <kbd>Ctrl+C</kbd></td><td>Help · quit · force quit</td></tr>
     </table></div>
   </div>

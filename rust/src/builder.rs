@@ -1,9 +1,9 @@
 //! Ergonomic programmatic construction of an [`LpProblem`] using string names.
 //!
-//! [`ProblemBuilder`] handles interning internally, so callers work purely with
-//! `&str` names and never construct a [`NameId`](crate::interner::NameId) by
-//! hand. This covers the common "build a model in code" use case, distinct from
-//! the parse-then-mutate path.
+//! [`ProblemBuilder`] interns names itself, so callers work with `&str` names
+//! and never construct a [`NameId`] by hand. Use it
+//! to build a model in code; to change a parsed model, use the mutation
+//! methods on [`LpProblem`].
 
 use crate::model::{Coefficient, ComparisonOp, Constraint, Objective, SOSType, Sense, Variable, VariableBounds, VariableKind};
 use crate::problem::LpProblem;
@@ -58,8 +58,9 @@ impl ProblemBuilder {
     /// Declare a variable with an explicit kind and bounds.
     ///
     /// Declaring a variable before referencing it in an objective/constraint
-    /// preserves its kind and bounds; referencing an undeclared variable
-    /// auto-creates it as a continuous, free variable.
+    /// preserves its kind and bounds. Referencing an undeclared variable
+    /// creates it as continuous with no bounds declared, so LP's default of
+    /// `[0, +inf)` applies (not free).
     #[must_use]
     pub fn variable(mut self, name: &str, kind: VariableKind, bounds: VariableBounds) -> Self {
         let id = self.problem.intern(name);

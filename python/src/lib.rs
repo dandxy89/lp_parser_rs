@@ -15,15 +15,28 @@ use pyo3::exceptions::{PyNotADirectoryError, PyOSError, PyRuntimeError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
 
-create_exception!(parse_lp, LpParseError, PyRuntimeError, "Raised when an LP file or problem cannot be parsed.");
+create_exception!(parse_lp, LpParseError, PyRuntimeError, "Raised when LP or MPS input is not valid UTF-8 or cannot be parsed.");
+create_exception!(parse_lp, LpObjectNotFoundError, PyRuntimeError, "Raised when a named variable, constraint or objective does not exist.");
 create_exception!(
     parse_lp,
-    LpObjectNotFoundError,
+    LpInvalidValueError,
     PyRuntimeError,
-    "Raised when a named variable, constraint or objective cannot be found."
+    "Raised for an invalid argument, or an edit or write the problem cannot support."
 );
-create_exception!(parse_lp, LpInvalidValueError, PyRuntimeError, "Raised when an input value is invalid.");
 
+/// A parsed LP or MPS problem that can be inspected, edited and written back out.
+///
+/// `LpParser(path)` reads and parses the file straight away, inferring the
+/// format from the extension (`.mps` is MPS, anything else is LP). Use
+/// `LpParser.from_file` to choose the format explicitly, or
+/// `LpParser.from_string` to parse text already in memory.
+///
+/// A missing or unreadable file raises `OSError` (for example
+/// `FileNotFoundError`, or `IsADirectoryError` for a directory). A file that
+/// is not valid UTF-8 or does not parse raises `LpParseError`.
+///
+/// All of the library's own exceptions (`LpParseError`,
+/// `LpObjectNotFoundError`, `LpInvalidValueError`) subclass `RuntimeError`.
 #[pyclass(module = "parse_lp")]
 pub struct LpParser {
     lp_file: String,
@@ -37,19 +50,23 @@ pub struct LpParser {
 
 #[pymethods]
 impl LpParser {
-    /// Construct a parser from a file, parsing it immediately.
-    ///
-    /// The format is inferred from the extension (`.mps` -> MPS, everything else
-    /// -> LP); pass `format` to [`from_file`] to override it.
+    // PyO3 shows the struct's doc comment as the class docstring, so the
+    // constructor is documented there rather than here.
     #[new]
     #[pyo3(signature = (lp_file))]
     fn new(py: Python, lp_file: PathBuf) -> PyResult<Self> {
         Self::from_file(py, lp_file, None)
     }
 
-    /// Construct a parser from an in-memory string, parsing it immediately.
+    /// Parse LP or MPS text held in memory.
     ///
-    /// `format` is `"lp"` (default) or `"mps"`.
+    /// Useful when the model comes from a generator, a database or a test
+    /// rather than a file. `format` is `"lp"` (the default) or `"mps"`, in any
+    /// case. The resulting parser has `lp_file == "<string>"` and no source
+    /// file, so `parse()` cannot be called on it.
+    ///
+    /// Raises `LpParseError` if the text does not parse and
+    /// `LpInvalidValueError` for an unknown `format`.
     #[staticmethod]
     #[pyo3(signature = (text, format="lp"))]
     fn from_string(py: Python, text: String, format: &str) -> PyResult<Self> {
@@ -58,10 +75,15 @@ impl LpParser {
         Ok(Self { lp_file: "<string>".to_string(), source_path: None, format, problem })
     }
 
-    /// Construct a parser from a file, parsing it immediately.
+    /// Read and parse a file, optionally forcing the format.
     ///
-    /// The format is taken from `format` when given, otherwise inferred from the
-    /// extension (`.mps` -> MPS, everything else -> LP).
+    /// Same as `LpParser(path)`, but `format` (`"lp"` or `"mps"`, in any case)
+    /// overrides the extension check. Use it for MPS files that do not end in
+    /// `.mps`, such as `model.mps.txt` or files with no extension.
+    ///
+    /// Raises `OSError` if the file cannot be read, `LpParseError` if it is
+    /// not valid UTF-8 or does not parse, and `LpInvalidValueError` for an
+    /// unknown `format`.
     #[staticmethod]
     #[pyo3(signature = (path, format=None))]
     fn from_file(py: Python, path: PathBuf, format: Option<&str>) -> PyResult<Self> {
@@ -78,14 +100,21 @@ impl LpParser {
         Ok(Self { lp_file: file_path.to_string_lossy().into_owned(), source_path: Some(file_path), format: inferred, problem })
     }
 
+    /// The source path as given to the constructor, or `"<string>"` for a
+    /// parser built with `from_string`.
     #[getter]
     fn lp_file(&self) -> String {
         self.lp_file.clone()
     }
 
-    /// Re-read and re-parse the source file, in the format it was first parsed
-    /// as. Construction already parses, so this is only needed to pick up
-    /// changes made to the file since.
+    /// Re-read and re-parse the source file in the format it was first parsed as.
+    ///
+    /// Construction already parses the file, so call this only to pick up
+    /// changes made to it on disk since. Any in-memory edits are discarded.
+    ///
+    /// Raises `LpInvalidValueError` for a parser built with `from_string`,
+    /// which has no file to re-read, and otherwise the same exceptions as the
+    /// constructor. On failure the previously parsed problem is kept.
     fn parse(&mut self, py: Python) -> PyResult<()> {
         let Some(path) = self.source_path.as_deref() else {
             return Err(LpInvalidValueError::new_err(
@@ -102,6 +131,16 @@ impl LpParser {
         Ok(())
     }
 
+    /// Write the problem as three CSV files for inspection in a spreadsheet or
+    /// dataframe.
+    ///
+    /// Creates (or overwrites) `objectives.csv`, `constraints.csv` and
+    /// `variables.csv` in `base_directory`, which must already exist.
+    /// Constraints have one row per variable; quadratic terms appear as
+    /// `x*y`.
+    ///
+    /// Raises `NotADirectoryError` if `base_directory` is not an existing
+    /// directory and `OSError` if a file cannot be written.
     fn to_csv(&self, py: Python, base_directory: PathBuf) -> PyResult<()> {
         if !base_directory.is_dir() {
             return Err(PyNotADirectoryError::new_err(format!("Path {} is not a directory.", base_directory.display())));
@@ -111,6 +150,11 @@ impl LpParser {
         py.detach(|| problem.to_csv(&base_directory).map_err(|err| csv_err(&base_directory, err)))
     }
 
+    /// The problem name, or `None` if the source did not declare one.
+    ///
+    /// In LP files this is read from a leading comment such as
+    /// `\Problem name: diet` or `\* diet *\`; in MPS files from the `NAME`
+    /// record.
     #[getter]
     fn name(&self) -> PyResult<Option<String>> {
         // extract_problem_name already stores the bare name, without the
@@ -119,6 +163,7 @@ impl LpParser {
         Ok(problem.name.clone())
     }
 
+    /// The optimisation sense: `"maximize"` or `"minimize"`.
     #[getter]
     fn sense(&self) -> PyResult<String> {
         let problem = &self.problem;
@@ -128,6 +173,15 @@ impl LpParser {
         })
     }
 
+    /// Every objective as a list of dicts, in file order.
+    ///
+    /// Each dict has `name`, `coefficients` (a list of `{name, value}`),
+    /// `quadratic` (a list of `{var1, var2, coefficient}`, with the LP
+    /// `[ ... ] / 2` already applied) and `attributes` (Gurobi multi-objective
+    /// `priority`, `weight`, `abs_tol`, `rel_tol`, each `None` when unset).
+    ///
+    /// The list is rebuilt on every access and does not track later edits, so
+    /// bind it to a variable rather than reading the property in a loop.
     #[getter]
     fn objectives(&self, py: Python) -> PyResult<Py<PyAny>> {
         let problem = &self.problem;
@@ -151,7 +205,15 @@ impl LpParser {
         Ok(list.into())
     }
 
-    /// Every constraint, rebuilt as a fresh list of dicts on each access.
+    /// Every constraint as a list of dicts, in file order.
+    ///
+    /// The `type` key says which shape a dict has: `"standard"`, `"sos"`,
+    /// `"indicator"`, `"quadratic"` or `"general"`. See the type stubs for the
+    /// keys of each.
+    ///
+    /// The list is rebuilt on every access and does not track later edits.
+    /// Use `get_constraint` for a single lookup and `num_constraints` for the
+    /// count.
     #[getter]
     fn constraints(&self, py: Python) -> PyResult<Py<PyAny>> {
         let problem = &self.problem;
@@ -162,7 +224,16 @@ impl LpParser {
         Ok(list.into())
     }
 
-    /// Every variable keyed by name, rebuilt as a fresh dict on each access.
+    /// Every variable as a dict keyed by name.
+    ///
+    /// Each value has `name`, `kind` (such as `"Continuous"` or `"Binary"`),
+    /// `lower` and `upper`. A bound is `None` when it was never declared, so
+    /// the format default applies (LP: lower 0, upper +inf); a `free`
+    /// variable reports `-inf` and `inf`.
+    ///
+    /// The dict is rebuilt on every access and does not track later edits.
+    /// Use `get_variable` for a single lookup and `num_variables` for the
+    /// count.
     #[getter]
     fn variables(&self, py: Python) -> PyResult<Py<PyAny>> {
         let problem = &self.problem;
@@ -173,8 +244,11 @@ impl LpParser {
         Ok(dict.into())
     }
 
-    /// Look up one constraint by name without building the whole
-    /// `constraints` list.
+    /// Return one constraint by name, in the same shape as an entry of
+    /// `constraints`, without building the whole list.
+    ///
+    /// Raises `LpObjectNotFoundError` if there is no such constraint and
+    /// `LpInvalidValueError` if `name` is empty.
     fn get_constraint(&self, py: Python, name: String) -> PyResult<Py<PyAny>> {
         require_name("name", &name)?;
         let problem = &self.problem;
@@ -186,8 +260,11 @@ impl LpParser {
         Ok(constraint_to_dict(py, problem, name_id, constraint)?.into())
     }
 
-    /// Look up one variable by name without building the whole `variables`
-    /// dict.
+    /// Return one variable by name, in the same shape as a value of
+    /// `variables`, without building the whole dict.
+    ///
+    /// Raises `LpObjectNotFoundError` if there is no such variable and
+    /// `LpInvalidValueError` if `name` is empty.
     fn get_variable(&self, py: Python, name: String) -> PyResult<Py<PyAny>> {
         require_name("name", &name)?;
         let problem = &self.problem;
@@ -198,25 +275,36 @@ impl LpParser {
         Ok(variable_to_dict(py, problem, name_id, variable)?.into())
     }
 
-    /// Number of objectives, without building the `objectives` list.
+    /// Number of objectives. Cheaper than `len(parser.objectives)`.
     #[getter]
     fn num_objectives(&self) -> usize {
         self.problem.objectives.len()
     }
 
-    /// Number of constraints, without building the `constraints` list.
+    /// Number of constraints. Cheaper than `len(parser.constraints)`.
     #[getter]
     fn num_constraints(&self) -> usize {
         self.problem.constraints.len()
     }
 
-    /// Number of variables, without building the `variables` dict.
+    /// Number of variables. Cheaper than `len(parser.variables)`.
     #[getter]
     fn num_variables(&self) -> usize {
         self.problem.variables.len()
     }
 
-    /// Write the current problem to LP format string, with optional custom formatting
+    /// Serialise the current problem, including any edits, to LP text.
+    ///
+    /// With the defaults the output parses back to the same problem.
+    /// `include_problem_name` writes a `\Problem name:` comment at the top.
+    /// `max_line_length` is where long expressions wrap. `decimal_precision`
+    /// rounds every number to that many decimal places, which loses
+    /// precision; `None` writes the shortest form that reads back exactly.
+    /// `include_section_spacing` puts a blank line between sections.
+    ///
+    /// Raises `LpInvalidValueError` if `max_line_length` is 0 or the problem
+    /// holds something LP cannot express, such as a name containing
+    /// characters LP does not allow.
     #[pyo3(signature = (*, include_problem_name=true, max_line_length=80, decimal_precision=None, include_section_spacing=true))]
     fn to_lp_string(
         &self,
@@ -236,7 +324,15 @@ impl LpParser {
         py.detach(|| write_lp_string_with_options(problem, &options)).map_err(|err| to_py_err("Unable to write LP", err))
     }
 
-    /// Save the current problem to an LP file
+    /// Write the current problem, including any edits, to an LP file.
+    ///
+    /// Uses the default `to_lp_string` formatting and overwrites an existing
+    /// file. For custom formatting, write the result of `to_lp_string`
+    /// yourself.
+    ///
+    /// Raises `OSError` if the file cannot be written (for example
+    /// `FileNotFoundError` when the parent directory is missing) and
+    /// `LpInvalidValueError` as `to_lp_string` does.
     fn save_to_file(&self, py: Python, filepath: PathBuf) -> PyResult<()> {
         let problem = &self.problem;
         py.detach(|| {
@@ -246,7 +342,17 @@ impl LpParser {
         })
     }
 
-    /// Write the current problem to an MPS format string.
+    /// Serialise the current problem, including any edits, to MPS text.
+    ///
+    /// Use this to hand the model to a solver that prefers MPS, or to convert
+    /// LP files to MPS. `decimal_precision` behaves as in `to_lp_string`.
+    ///
+    /// MPS holds a single objective, so a problem with several raises
+    /// `LpInvalidValueError` unless `allow_multiple_objectives` is true, in
+    /// which case only the first is written (without any Gurobi
+    /// multi-objective attributes). Strict inequalities (`<`, `>`) and
+    /// general constraints cannot be written either and also raise
+    /// `LpInvalidValueError`.
     #[pyo3(signature = (*, decimal_precision=None, allow_multiple_objectives=false))]
     fn to_mps_string(&self, py: Python, decimal_precision: Option<usize>, allow_multiple_objectives: bool) -> PyResult<String> {
         let problem = &self.problem;
@@ -254,7 +360,10 @@ impl LpParser {
         py.detach(|| write_mps_string_with_options(problem, &options)).map_err(|err| to_py_err("Unable to write MPS", err))
     }
 
-    /// Save the current problem to an MPS file.
+    /// Write the current problem to an MPS file, overwriting any existing one.
+    ///
+    /// Takes the same options, and raises the same errors, as
+    /// `to_mps_string`, plus `OSError` if the file cannot be written.
     #[pyo3(signature = (filepath, *, decimal_precision=None, allow_multiple_objectives=false))]
     fn save_to_mps(
         &self,
@@ -271,11 +380,19 @@ impl LpParser {
         })
     }
 
-    /// Compare this problem against another parser's problem.
+    /// Compare this problem (the old one) with `other` (the new one) by name.
     ///
-    /// Returns a dict with `sense_changed`, `vars_added`, `vars_removed`, `vars_type_changed`,
-    /// `cons_added`, `cons_removed`, `cons_modified`, `objs_added`,
-    /// `objs_removed`, `objs_modified`, and `is_empty`.
+    /// Useful for checking what a model generator or a set of edits actually
+    /// changed. Returns a dict:
+    ///
+    /// - `sense_changed`: `(old, new)` such as `("Minimize", "Maximize")`, or
+    ///   `None` if the sense is the same.
+    /// - `vars_added`, `cons_added`, `objs_added`: names only in `other`.
+    /// - `vars_removed`, `cons_removed`, `objs_removed`: names only in `self`.
+    /// - `vars_type_changed`: `(name, old_type, new_type)` tuples.
+    /// - `cons_modified`, `objs_modified`: `(name, changes)` tuples, where
+    ///   `changes` is a list of human-readable descriptions.
+    /// - `is_empty`: true when nothing differs.
     fn diff(&self, py: Python, other: &Self) -> PyResult<Py<PyAny>> {
         let problem = &self.problem;
         let other_problem = &other.problem;
@@ -297,7 +414,15 @@ impl LpParser {
         Ok(dict.into())
     }
 
-    /// Update coefficient in an objective
+    /// Set a variable's coefficient in an objective.
+    ///
+    /// Replaces the coefficient if the variable is already in the objective
+    /// and adds the term if not; a variable not yet in the problem is
+    /// declared as continuous. A coefficient of 0 removes the term.
+    ///
+    /// Raises `LpObjectNotFoundError` if the objective does not exist and
+    /// `LpInvalidValueError` if `variable_name` is empty or `coefficient` is
+    /// not finite.
     fn update_objective_coefficient(&mut self, objective_name: String, variable_name: String, coefficient: f64) -> PyResult<()> {
         let problem = &mut self.problem;
         problem
@@ -306,7 +431,11 @@ impl LpParser {
         Ok(())
     }
 
-    /// Rename an objective
+    /// Rename an objective.
+    ///
+    /// Raises `LpObjectNotFoundError` if `old_name` does not exist and
+    /// `LpInvalidValueError` if `new_name` is already in use or either name
+    /// is empty.
     fn rename_objective(&mut self, old_name: String, new_name: String) -> PyResult<()> {
         let problem = &mut self.problem;
         problem.rename_objective(&old_name, &new_name).map_err(|err| to_py_err("Failed to rename objective", err))?;
@@ -314,7 +443,10 @@ impl LpParser {
         Ok(())
     }
 
-    /// Remove an objective
+    /// Remove an objective. Its variables stay in the problem.
+    ///
+    /// Raises `LpObjectNotFoundError` if the objective does not exist and
+    /// `LpInvalidValueError` if `objective_name` is empty.
     fn remove_objective(&mut self, objective_name: String) -> PyResult<()> {
         require_name("objective_name", &objective_name)?;
         let problem = &mut self.problem;
@@ -323,7 +455,16 @@ impl LpParser {
         Ok(())
     }
 
-    /// Update coefficient in a constraint
+    /// Set a variable's coefficient in a constraint.
+    ///
+    /// Works on the linear part of standard, indicator and quadratic
+    /// constraints. Replaces the coefficient if the variable is already
+    /// present and adds the term if not; a variable not yet in the problem is
+    /// declared as continuous. A coefficient of 0 removes the term.
+    ///
+    /// Raises `LpObjectNotFoundError` if the constraint does not exist and
+    /// `LpInvalidValueError` for an SOS or general constraint, an empty
+    /// `variable_name` or a non-finite `coefficient`.
     fn update_constraint_coefficient(&mut self, constraint_name: String, variable_name: String, coefficient: f64) -> PyResult<()> {
         let problem = &mut self.problem;
         problem
@@ -333,7 +474,12 @@ impl LpParser {
         Ok(())
     }
 
-    /// Update the right-hand side value of a constraint
+    /// Set the right-hand side of a standard, indicator or quadratic
+    /// constraint.
+    ///
+    /// Raises `LpObjectNotFoundError` if the constraint does not exist and
+    /// `LpInvalidValueError` for an SOS or general constraint, an empty name
+    /// or a non-finite `new_rhs`.
     fn update_constraint_rhs(&mut self, constraint_name: String, new_rhs: f64) -> PyResult<()> {
         let problem = &mut self.problem;
         problem.update_constraint_rhs(&constraint_name, new_rhs).map_err(|err| to_py_err("Failed to update constraint RHS", err))?;
@@ -341,7 +487,12 @@ impl LpParser {
         Ok(())
     }
 
-    /// Rename a constraint
+    /// Rename a constraint. Its position and class (normal, lazy or user cut)
+    /// are kept.
+    ///
+    /// Raises `LpObjectNotFoundError` if `old_name` does not exist and
+    /// `LpInvalidValueError` if `new_name` is already in use or either name
+    /// is empty.
     fn rename_constraint(&mut self, old_name: String, new_name: String) -> PyResult<()> {
         let problem = &mut self.problem;
         problem.rename_constraint(&old_name, &new_name).map_err(|err| to_py_err("Failed to rename constraint", err))?;
@@ -349,7 +500,10 @@ impl LpParser {
         Ok(())
     }
 
-    /// Remove a constraint
+    /// Remove a constraint. Its variables stay in the problem.
+    ///
+    /// Raises `LpObjectNotFoundError` if the constraint does not exist and
+    /// `LpInvalidValueError` if `constraint_name` is empty.
     fn remove_constraint(&mut self, constraint_name: String) -> PyResult<()> {
         require_name("constraint_name", &constraint_name)?;
         let problem = &mut self.problem;
@@ -358,7 +512,12 @@ impl LpParser {
         Ok(())
     }
 
-    /// Rename a variable across all objectives and constraints
+    /// Rename a variable everywhere it appears: objectives, constraints and
+    /// its bounds and type declarations.
+    ///
+    /// Raises `LpObjectNotFoundError` if `old_name` does not exist and
+    /// `LpInvalidValueError` if `new_name` is already in use or either name
+    /// is empty.
     fn rename_variable(&mut self, old_name: String, new_name: String) -> PyResult<()> {
         let problem = &mut self.problem;
         problem.rename_variable(&old_name, &new_name).map_err(|err| to_py_err("Failed to rename variable", err))?;
@@ -366,14 +525,18 @@ impl LpParser {
         Ok(())
     }
 
-    /// Update variable type (e.g., Binary, Integer, etc.)
+    /// Change a variable's type. `var_type` is case-insensitive.
     ///
-    /// `continuous` changes only the kind and keeps any declared bounds. The
-    /// discrete kinds (`binary`, `integer`, `general`, `semicontinuous`,
-    /// `semiinteger`) set
-    /// the kind and clear declared bounds, so the format default applies.
-    /// `free` is a bound, not a kind: it makes the variable continuous with
-    /// bounds `(-inf, +inf)`.
+    /// - `"continuous"` changes only the kind and keeps declared bounds.
+    /// - `"binary"`, `"integer"`, `"general"`, `"semicontinuous"` and
+    ///   `"semiinteger"` set the kind and clear declared bounds, so the
+    ///   format default applies (LP: lower 0, upper +inf). `"integer"` and
+    ///   `"general"` both mean a general integer variable.
+    /// - `"free"` is a bound rather than a kind: the variable becomes
+    ///   continuous with bounds `(-inf, +inf)`.
+    ///
+    /// Raises `LpObjectNotFoundError` if the variable does not exist and
+    /// `LpInvalidValueError` for an unknown `var_type` or an empty name.
     fn update_variable_type(&mut self, variable_name: String, var_type: String) -> PyResult<()> {
         require_name("variable_name", &variable_name)?;
         let problem = &mut self.problem;
@@ -408,7 +571,14 @@ impl LpParser {
         Ok(())
     }
 
-    /// Remove a variable from all objectives and constraints
+    /// Remove a variable and every term that uses it, in objectives,
+    /// constraints (including SOS weights) and declarations.
+    ///
+    /// Constraints left with no terms are kept. Raises
+    /// `LpObjectNotFoundError` if the variable does not exist and
+    /// `LpInvalidValueError` if the name is empty or the variable is the
+    /// indicator of an indicator constraint or appears in a general
+    /// constraint; remove those constraints first.
     fn remove_variable(&mut self, variable_name: String) -> PyResult<()> {
         require_name("variable_name", &variable_name)?;
         let problem = &mut self.problem;
@@ -417,7 +587,7 @@ impl LpParser {
         Ok(())
     }
 
-    /// Set problem name
+    /// Set the problem name written by `to_lp_string` and `to_mps_string`.
     fn set_problem_name(&mut self, name: String) -> PyResult<()> {
         let problem = &mut self.problem;
         problem.name = Some(name);
@@ -425,7 +595,10 @@ impl LpParser {
         Ok(())
     }
 
-    /// Set problem sense (maximize or minimize)
+    /// Set the optimisation sense.
+    ///
+    /// Accepts `"maximize"`, `"max"`, `"minimize"` or `"min"`, in any case.
+    /// Raises `LpInvalidValueError` for anything else.
     fn set_sense(&mut self, sense: String) -> PyResult<()> {
         let problem = &mut self.problem;
 
@@ -438,23 +611,30 @@ impl LpParser {
         Ok(())
     }
 
-    /// Perform comprehensive analysis on the LP problem.
+    /// Collect statistics about the problem and flag likely modelling or
+    /// numerical problems before handing it to a solver.
     ///
-    /// Returns a dictionary containing:
-    /// - summary: Basic statistics (counts, density, etc.)
-    /// - sparsity: Sparsity metrics (variables per constraint)
-    /// - variables: Variable analysis (type distribution, invalid bounds, etc.)
-    /// - constraints: Constraint analysis (type distribution, empty/singleton)
-    /// - coefficients: Coefficient range analysis
-    /// - issues: List of detected issues/warnings
+    /// Returns a dict with these keys:
     ///
-    /// Args:
-    ///     `large_coeff_threshold`: Threshold for large coefficient warnings (default: 1e9)
-    ///     `small_coeff_threshold`: Threshold for small coefficient warnings (default: 1e-9)
-    ///     `ratio_threshold`: Coefficient ratio threshold for scaling warnings (default: 1e6)
-    ///     `large_rhs_threshold`: Threshold for large right-hand side warnings (default: 1e9)
+    /// - `summary`: name, sense, counts, `total_nonzeros` and `density`.
+    /// - `sparsity`: minimum and maximum variables per constraint.
+    /// - `variables`: `type_distribution` and lists of free, fixed, unused
+    ///   and invalidly bounded variables.
+    /// - `constraints`: `type_distribution`, empty and singleton constraints,
+    ///   `rhs_range` and an SOS summary.
+    /// - `coefficients`: `constraint_coeff_range`, `objective_coeff_range`
+    ///   (each `{min, max, count}`), `coefficient_ratio` and the lists of
+    ///   large and small coefficients.
+    /// - `issues`: a list of `{severity, category, message, details}` dicts,
+    ///   where `severity` is `"ERROR"`, `"WARNING"` or `"INFO"`.
     ///
-    /// Every threshold must be finite and positive.
+    /// The keyword-only thresholds control what is flagged: coefficients
+    /// above `large_coeff_threshold` or below `small_coeff_threshold` (in
+    /// absolute value), a max/min coefficient ratio above `ratio_threshold`,
+    /// and right-hand sides above `large_rhs_threshold`.
+    ///
+    /// Raises `LpInvalidValueError` if a threshold is not finite and positive,
+    /// or if `small_coeff_threshold` exceeds `large_coeff_threshold`.
     #[pyo3(signature = (*, large_coeff_threshold=1e9, small_coeff_threshold=1e-9, ratio_threshold=1e6, large_rhs_threshold=1e9))]
     fn analyze(
         &self,
@@ -473,6 +653,13 @@ impl LpParser {
             if !(value.is_finite() && value > 0.0) {
                 return Err(LpInvalidValueError::new_err(format!("{name} must be finite and positive, got {value}")));
             }
+        }
+        // The core treats this as a precondition (debug_assert), so reject it
+        // here rather than let a debug build panic.
+        if small_coeff_threshold > large_coeff_threshold {
+            return Err(LpInvalidValueError::new_err(format!(
+                "small_coeff_threshold ({small_coeff_threshold}) must not exceed large_coeff_threshold ({large_coeff_threshold})"
+            )));
         }
         let problem = &self.problem;
         let config = AnalysisConfig {

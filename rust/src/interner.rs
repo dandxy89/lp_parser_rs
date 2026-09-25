@@ -1,12 +1,18 @@
 //! String interning for LP problem names.
 //!
 //! All variable, constraint, and objective names are stored once in a
-//! [`NameInterner`] and referenced by a cheap, copyable [`NameId`].
+//! [`NameInterner`] and referenced by a copyable [`NameId`]. A variable name
+//! typically appears in many constraints; interning stores it once, makes
+//! name comparison and hashing a `u32` operation, and lets the model own its
+//! names without borrowing from the input text.
 
 use rustc_hash::FxHashMap;
 
 /// Opaque handle to an interned name string.
-/// Implements `Copy`, `Eq`, `Ord`, `Hash` — suitable for use as `HashMap` key.
+///
+/// Only meaningful together with the interner that produced it: ids from two
+/// different problems are not comparable. `Ord` follows interning order, not
+/// the alphabetical order of the names.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NameId(u32);
 
@@ -43,8 +49,9 @@ impl NameInterner {
         Self { names: Vec::with_capacity(capacity), ids: FxHashMap::with_capacity_and_hasher(capacity, rustc_hash::FxBuildHasher) }
     }
 
-    /// Intern a string, returning its [`NameId`]. Idempotent — interning
-    /// the same string twice returns the same ID.
+    /// Intern a string, returning its [`NameId`]. Interning the same string
+    /// twice returns the same id. `name` must not be empty (checked in debug
+    /// builds).
     ///
     /// # Panics
     ///

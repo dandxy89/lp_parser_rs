@@ -1,4 +1,10 @@
-//! `HiGHS` solver integration — converts an `LpProblem` to a `HiGHS` problem and solves it.
+//! `HiGHS` solver integration.
+//!
+//! Converts an `LpProblem` to a `HiGHS` model ([`build_highs_model`], shared
+//! with the presolve report and the model queries so they all see the same
+//! model), solves it with optional cancellation and user options from
+//! `highs.opt`, and compares two solve results row by row. Also holds the
+//! elastic-relaxation infeasibility diagnosis and the solve CSV exports.
 
 use std::collections::HashMap;
 use std::error::Error;

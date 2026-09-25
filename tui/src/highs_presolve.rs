@@ -3,8 +3,8 @@
 //! The `P` picker applies *our* rewrite rules and logs what they did (see
 //! [`crate::presolve`]). This asks the same question of the solver: before
 //! `HiGHS` runs a single simplex iteration it throws rows and columns away, and
-//! until now the only trace of that was the totals it prints to its log
-//! ("Presolve : Reductions: rows 12(-8)"), which the diagnostics pane shows.
+//! its log only reports the totals ("Presolve : Reductions: rows 12(-8)"),
+//! which is what the diagnostics pane shows.
 //!
 //! The names are recoverable. `HPresolve::shrinkProblem` carries `col_names_`
 //! and `row_names_` through the reduction, and the C API exposes the survivors

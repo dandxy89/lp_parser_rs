@@ -1,3 +1,7 @@
+//! Plain state types held by [`crate::app::App`]: the solver and analysis
+//! state machines, per-section view state, filters, sort modes, the jumplist,
+//! and the command palette's command table.
+
 use std::time::Instant;
 
 use crossterm::event::KeyCode;
@@ -86,8 +90,8 @@ impl ScrollPane {
 /// State machine for a slow, read-only analysis that runs off the UI thread and
 /// renders into a [`ScrollPane`].
 ///
-/// One state serves every such analysis — the solve profile, the unbounded ray,
-/// ranging — because they differ only in what they compute. The producer runs on
+/// One state serves every such analysis (the solve profile, the unbounded ray,
+/// the IIS, ranging) because they differ only in what they compute. The producer runs on
 /// a worker thread and hands back finished lines, so the UI thread never formats
 /// a large report.
 #[derive(Debug)]

@@ -154,8 +154,9 @@ QuadElem: Elem<'input> = {
     "/" => Elem::Slash,
 };
 
-// One element of the constraint section body. Also admits `name "::"` and
-// comparison operators.
+// One element of a constraint section body (`Subject To`, `Lazy Constraints`,
+// `User Cuts`, `General Constraints`). Also admits `name "::"`, comparison
+// operators and the indicator arrow `->`.
 ConElem: SpannedElem<'input> = {
     <loc:@L> <id:"identifier"> ":" => (loc, Elem::Name(id)),
     <loc:@L> <id:"identifier"> "::" => (loc, Elem::Name(id)),

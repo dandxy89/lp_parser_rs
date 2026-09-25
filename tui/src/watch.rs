@@ -13,6 +13,7 @@ use std::time::SystemTime;
 use crate::parse::{ParsedFile, parse_file};
 
 /// Result of a background reload: both files re-parsed, or a user-facing error.
+/// In inspect mode both paths are the one input file.
 pub type ReloadOutcome = Result<Box<(ParsedFile, ParsedFile)>, String>;
 
 /// Watch-mode session state held on `App`.

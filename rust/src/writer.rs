@@ -1,8 +1,18 @@
-//! LP file writing and formatting utilities.
+//! Writes an [`LpProblem`] back out in CPLEX LP format.
 //!
-//! This module provides functionality to write `LpProblem` instances back to
-//! standard LP file format. It supports all major LP file components including
-//! objectives, constraints, bounds, and variable type declarations.
+//! The aim is that parsing the output gives back the same problem. To that
+//! end the writer refuses names that would not lex back as a single
+//! identifier and numbers no file can express (see
+//! [`write_lp_string_with_options`]), and by default writes each number in the
+//! shortest form that parses back to the identical `f64`. The one gap is an
+//! objective or constraint with no terms, which LP syntax cannot express; it
+//! is dropped, and [`write_lp_string_with_warnings`] reports which.
+//!
+//! Besides the objective, `Subject To`, `Bounds` and variable-type sections,
+//! the writer emits the CPLEX `Lazy Constraints`, `User Cuts` and `SOS`
+//! sections and Gurobi's multi-objective attributes and `General Constraints`
+//! section when the problem uses them. A variable with no declared bounds is
+//! left out of `Bounds` so that it keeps the default of `[0, +inf)`.
 //!
 //! # Example
 //!
@@ -29,12 +39,13 @@ use crate::lexer::Token;
 use crate::model::{Coefficient, Constraint, ConstraintClass, GeneralFunction, Objective, ObjectiveAttributes, QuadraticTerm, Variable};
 use crate::problem::LpProblem;
 
-/// Options for controlling LP file output format
+/// Options for controlling LP file output format.
 #[derive(Debug, Clone)]
 pub struct LpWriterOptions {
     /// Include problem name comment at the top
     pub include_problem_name: bool,
-    /// Maximum line length before wrapping coefficients
+    /// Line length at which expressions and variable-type lists wrap onto a
+    /// continuation line. A single term longer than this is not split.
     pub max_line_length: usize,
     /// Number of decimal places for numeric values. `None` (the default)
     /// writes the shortest representation that parses back to the exact same
@@ -62,8 +73,7 @@ impl Default for LpWriterOptions {
 ///
 /// # Errors
 ///
-/// Returns a validation error if a name cannot be written as an LP identifier
-/// that reads back unchanged -- see [`write_lp_string_with_options`].
+/// See [`write_lp_string_with_options`].
 pub fn write_lp_string(problem: &LpProblem) -> LpResult<String> {
     write_lp_string_with_options(problem, &LpWriterOptions::default())
 }
@@ -82,10 +92,15 @@ pub fn write_lp_string(problem: &LpProblem) -> LpResult<String> {
 /// # Errors
 ///
 /// Returns a validation error if an objective, constraint or variable name is
-/// not a single LP identifier -- e.g. a keyword such as `free` or `st`, a name
-/// starting with a digit, or one containing `:`, `<`, `=`, `+` or whitespace --
-/// or if the problem name (when written) contains a line break. Writing such a
-/// name would produce a file that fails to parse or means something else.
+/// not a single LP identifier (for example a keyword such as `free` or `st`, a
+/// name starting with a digit, or one containing `:`, `<`, `=`, `+` or
+/// whitespace), or if the problem name (when written) contains a line break.
+/// Writing such a name would produce a file that fails to parse or means
+/// something else.
+///
+/// Also returns a validation error for a value no LP file can hold: `NaN`
+/// anywhere, or an infinite coefficient or objective constant. Infinite
+/// right-hand sides and bounds are allowed and written as `inf` / `-inf`.
 ///
 /// Objectives and constraints with no terms cannot be expressed in LP syntax
 /// and are omitted; use [`write_lp_string_with_warnings`] to be told which.
@@ -397,8 +412,8 @@ fn write_objective_attributes(output: &mut String, attributes: &ObjectiveAttribu
     Ok(())
 }
 
-/// Write the constraints section (standard and indicator constraints; SOS
-/// constraints belong in their own `SOS` section)
+/// Write the `Subject To` section: ordinary standard, indicator and quadratic
+/// constraints. SOS and general constraints have their own sections.
 fn write_constraints_section(output: &mut String, problem: &LpProblem, options: &LpWriterOptions) -> std::fmt::Result {
     writeln!(output, "Subject To")?;
 
@@ -581,9 +596,8 @@ fn write_bounds_section(output: &mut String, problem: &LpProblem, options: &LpWr
 ///
 /// A variable with no declared bounds is omitted entirely: LP's default for it
 /// is `[0, +inf)`, and writing anything at all would state a bound the input
-/// never had. Emitting `x free` here — as this did while "free" and "no bounds
-/// declared" shared a representation — silently widened every undeclared
-/// variable's feasible region to include negatives on the way out.
+/// never had. In particular, writing `x free` would widen its range to include
+/// negative values.
 ///
 /// A declared-free variable is emitted as `x free` whatever its kind: an
 /// integer or general variable's default lower bound is still 0, so dropping

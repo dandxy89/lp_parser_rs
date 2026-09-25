@@ -1,9 +1,11 @@
 //! Presolve rule picker overlay: choose which rewrites to apply, then compare.
 //!
-//! Opened with `P`. Each rule is a solution-preserving rewrite (see
-//! [`crate::presolve`]); on confirm the app rewrites the baseline problem and
-//! launches an original-vs-rewritten comparison solve, so the objective values
-//! can be checked against each other and the solve times compared.
+//! Opened with `P`. Every rule except the what-ifs is a solution-preserving
+//! rewrite (see [`crate::presolve`]); on confirm the app rewrites the baseline
+//! problem and launches an original-vs-rewritten comparison solve, so the
+//! objective values can be checked against each other and the solve times
+//! compared. The picker also reaches the rewrite log (`l`), the `HiGHS`
+//! presolve report (`H`) and writing the rewritten model to disk (`w`).
 
 use ratatui::Frame;
 use ratatui::layout::Rect;

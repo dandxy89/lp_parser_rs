@@ -395,10 +395,12 @@ pre.tty .hdr { color: #7fb2e5; font-weight: 600; }
 .cards.three .card:nth-child(2n) { border-right: 1px solid var(--rule); }
 .cards.three .card:nth-child(3n) { border-right: none; }
 .cards.three .card:nth-last-child(-n+3) { border-bottom: none; }
+/* the two-up grid's "odd card out spans the row" rule must not apply here */
+.cards.three .card:nth-child(odd):last-child { grid-column: auto; }
 @media (max-width: 860px) {
   .cards.three { grid-template-columns: 1fr; }
   .cards.three .card, .cards.three .card:nth-child(2n) { border-right: none; }
-  .cards.three .card { border-bottom: 1px solid var(--rule); }
+  .cards.three .card, .cards.three .card:nth-last-child(-n+3) { border-bottom: 1px solid var(--rule); }
   .cards.three .card:last-child { border-bottom: none; }
 }
 

@@ -1,23 +1,21 @@
-//! Compatibility layer for the `lp-solvers` crate.
+//! Adapter for the [`lp-solvers`](https://docs.rs/lp-solvers) crate.
 //!
-//! This module provides adapters that allow `LpProblem` from `lp_parser_rs`
-//! to be used with the `lp-solvers` crate for solving LP problems using
-//! external solvers like Cbc, Gurobi, CPLEX, and GLPK.
+//! [`LpSolversCompat`] wraps a parsed [`LpProblem`] so it can be handed to an
+//! `lp-solvers` solver (CBC, Gurobi, CPLEX, GLPK and others), which writes it
+//! out as an LP file and runs the external solver binary.
 //!
-//! # Feature Flag
-//!
-//! This module is only available when the `lp-solvers` feature is enabled:
+//! This module needs the `lp-solvers` feature:
 //!
 //! ```toml
 //! [dependencies]
-//! lp_parser_rs = { version = "3.0", features = ["lp-solvers"] }
+//! lp_parser_rs = { version = "5", features = ["lp-solvers"] }
 //! ```
 //!
-//! # Usage Example
+//! # Example
 //!
-//! ```rust,ignore
-//! use lp_parser_rs::problem::LpProblem;
+//! ```rust,no_run
 //! use lp_parser_rs::compat::lp_solvers::LpSolversCompat;
+//! use lp_parser_rs::problem::LpProblem;
 //! use lp_solvers::solvers::{CbcSolver, SolverTrait};
 //!
 //! let lp_content = r"
@@ -31,31 +29,32 @@
 //! let problem = LpProblem::parse(lp_content).unwrap();
 //! let compat = LpSolversCompat::try_new(&problem).unwrap();
 //!
-//! // Check for any warnings about unsupported features
+//! // Features that were approximated or dropped are reported here.
 //! for warning in compat.warnings() {
-//!     eprintln!("Warning: {}", warning);
+//!     eprintln!("Warning: {warning}");
 //! }
 //!
-//! // Solve using CBC solver
 //! let solver = CbcSolver::new();
 //! let solution = solver.run(&compat).unwrap();
-//! println!("Solution: {:?}", solution);
+//! println!("Solution: {solution:?}");
 //! ```
 //!
 //! # Limitations
 //!
-//! The following features of `lp_parser_rs` are not fully supported by `lp-solvers`:
+//! `lp-solvers` handles a single linear objective with linear constraints.
+//! [`LpSolversCompat::try_new`] refuses anything whose loss would change the
+//! model, and warns about what it approximates:
 //!
-//! - **Multiple objectives**: Only single-objective problems are supported.
-//!   Multi-objective problems will result in an error.
+//! - Errors: no objective or more than one, a quadratic objective, strict
+//!   inequalities (`<`, `>`), and indicator, quadratic or general
+//!   constraints.
+//! - Warnings: SOS constraints are dropped; semi-continuous variables are
+//!   treated as continuous and semi-integer variables as integer, so the
+//!   option of taking the value zero is lost.
 //!
-//! - **Strict inequalities**: Constraints using `<` or `>` are not supported.
-//!   Use `<=` or `>=` instead.
-//!
-//! - **SOS constraints**: Special Ordered Set constraints are ignored with a warning.
-//!
-//! - **Semi-continuous variables**: These are approximated as continuous variables
-//!   with a warning.
+//! The objective's constant term is not passed on either, as the
+//! `lp-solvers` objective is a linear expression only. This does not change
+//! the optimal solution, only the objective value.
 
 use std::cmp::Ordering;
 use std::fmt;
@@ -283,8 +282,8 @@ impl<'a> LpSolversCompat<'a> {
     /// # Errors
     ///
     /// Returns an error if:
-    /// - The Problem has multiple objectives
-    /// - The Problem has no objectives
+    /// - The problem has multiple objectives
+    /// - The problem has no objectives
     /// - Any constraint uses strict inequalities (`<` or `>`)
     /// - Any constraint is an indicator, quadratic or general constraint
     /// - The objective has quadratic terms

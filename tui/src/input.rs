@@ -1,3 +1,12 @@
+//! Key, mouse and paste handling for [`App`].
+//!
+//! [`App::handle_key`] routes each key to the topmost open overlay (search,
+//! palette, what-if prompt, presolve panes, diagnostics, analysis, solver,
+//! help) and otherwise to the main view. Only one overlay receives a key, so
+//! a binding like `w` or `1` can mean different things in different overlays
+//! without conflict. Actions that start background work (solves, analyses)
+//! are also spawned from here.
+
 use std::sync::{Arc, mpsc};
 use std::time::Instant;
 
@@ -505,9 +514,9 @@ impl App {
     }
 
     /// Move focus into the section's content after a section change: the name
-    /// list when it has entries, otherwise the detail panel. This is the
-    /// ergonomic win — after `2`/`]` you land on the variable list and `j`/`k`
-    /// scroll it immediately, instead of parking on the tab bar.
+    /// list when it has entries, otherwise the detail panel. After `2` or `]`
+    /// the user lands on the variable list and `j`/`k` scroll it straight away,
+    /// rather than focus being parked on the tab bar.
     fn focus_section_content(&mut self) {
         if self.has_name_list() {
             if self.active_name_list_state_mut().selected().is_none() {
@@ -522,7 +531,7 @@ impl App {
 
     /// Toggle focus between the name list and the detail panel.
     ///
-    /// The tab bar (`SectionSelector`) is no longer part of the `Tab` cycle —
+    /// The tab bar (`SectionSelector`) is not part of the `Tab` cycle:
     /// sections are switched with `1`–`5` or `[`/`]`. A click on the tab bar can
     /// still leave focus there; `Tab` then moves into the content.
     fn cycle_focus_forward(&mut self) {
@@ -976,7 +985,7 @@ impl App {
         }
     }
 
-    /// Spawn both solvers in parallel for the "Both (diff)" option.
+    /// Solve both files, one after the other, for the "Both (diff)" option.
     fn spawn_both_solvers(&mut self) {
         let label1 = self.file1_path.display().to_string();
         let label2 = self.file2_path.display().to_string();
