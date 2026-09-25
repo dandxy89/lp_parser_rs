@@ -1354,6 +1354,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::float_cmp)]
     fn test_coefficient_stats_include_indicator_and_quadratic_linear_parts() {
         let problem = LpProblem::parse(
             "min\n obj: x + y\nst\n c1: x + y >= 1\n i1: b = 1 -> 1e12 x <= 4\n q1: 1e-12 y + [ x ^ 2 ] <= 9\nbinaries\n b\nend",

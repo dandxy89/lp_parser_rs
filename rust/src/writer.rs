@@ -1154,6 +1154,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::float_cmp)]
     fn test_near_one_coefficient_keeps_its_value_in_exact_mode() {
         let mut out = String::new();
         write_formatted_coefficient(&mut out, "x", 1.000_000_000_01, true, None).unwrap();
