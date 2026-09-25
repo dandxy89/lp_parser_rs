@@ -44,6 +44,9 @@ impl Encoding {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LineIndex {
     line_starts: Vec<usize>,
+    /// Per line: whether it is pure ASCII, so UTF-16 columns equal byte
+    /// columns and need no re-encoding (which is linear in the line length).
+    ascii: Vec<bool>,
     len: usize,
 }
 
@@ -51,10 +54,16 @@ impl LineIndex {
     /// Index `text` in one linear pass.
     #[must_use]
     pub fn new(text: &str) -> Self {
-        let mut line_starts = Vec::with_capacity(text.len() / 32 + 1);
-        line_starts.push(0);
-        line_starts.extend(text.bytes().enumerate().filter(|&(_, b)| b == b'\n').map(|(i, _)| i + 1));
-        Self { line_starts, len: text.len() }
+        let capacity = text.len() / 32 + 1;
+        let (mut line_starts, mut ascii) = (Vec::with_capacity(capacity), Vec::with_capacity(capacity));
+        let mut start = 0;
+        for line in text.split('\n') {
+            line_starts.push(start);
+            ascii.push(line.is_ascii());
+            start += line.len() + 1;
+        }
+        debug_assert_eq!(start, text.len() + 1, "every byte belongs to one line");
+        Self { line_starts, ascii, len: text.len() }
     }
 
     /// Number of lines (a trailing newline starts an empty last line).
@@ -97,8 +106,8 @@ impl LineIndex {
         let range = self.line_range(text, line);
         let end = offset.min(range.end).max(range.start);
         let column = match encoding {
-            Encoding::Utf8 => end - range.start,
-            Encoding::Utf16 => text[range.start..end].encode_utf16().count(),
+            Encoding::Utf16 if !self.ascii[line] => text[range.start..end].encode_utf16().count(),
+            Encoding::Utf8 | Encoding::Utf16 => end - range.start,
         };
         Position::new(to_u32(line), to_u32(column))
     }
@@ -116,6 +125,7 @@ impl LineIndex {
         let column = position.character as usize;
         let line_text = &text[range.clone()];
         match encoding {
+            Encoding::Utf16 if self.ascii[line] => range.start + column.min(line_text.len()),
             Encoding::Utf8 => range.start + floor_char_boundary(line_text, column.min(line_text.len())),
             Encoding::Utf16 => {
                 let mut units = 0;
@@ -216,6 +226,18 @@ mod tests {
     }
 
     proptest! {
+        #[test]
+        fn utf16_columns_count_code_units(text in text_strategy()) {
+            let index = LineIndex::new(&text);
+            for (offset, _) in text.char_indices().chain(std::iter::once((text.len(), ' '))) {
+                let position = index.position(&text, offset, Encoding::Utf16);
+                let line = index.line_range(&text, position.line as usize);
+                let expected = text[line.start..offset.min(line.end)].encode_utf16().count();
+                prop_assert_eq!(position.character as usize, expected);
+                prop_assert_eq!(index.offset(&text, position, Encoding::Utf16), offset.min(line.end));
+            }
+        }
+
         #[test]
         fn offsets_round_trip(text in text_strategy()) {
             let index = LineIndex::new(&text);
