@@ -170,8 +170,8 @@ mod tests {
     fn analysis_thresholds_use_camel_case_and_keep_defaults() {
         let config = Config::from_value(serde_json::json!({ "analysis": { "enabled": false, "largeRhsThreshold": 5.0 } })).unwrap();
         assert!(!config.analysis.enabled);
-        assert_eq!(config.analysis.thresholds.large_rhs_threshold, 5.0);
-        assert_eq!(config.analysis.thresholds.coefficient_ratio_threshold, AnalysisConfig::default().coefficient_ratio_threshold);
+        // Whole-struct comparison: the other thresholds keep their defaults.
+        assert_eq!(config.analysis.thresholds, AnalysisConfig { large_rhs_threshold: 5.0, ..AnalysisConfig::default() });
     }
 
     #[test]
