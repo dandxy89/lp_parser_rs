@@ -481,13 +481,16 @@ fn write_constraint(output: &mut String, constraint: &Constraint, interner: &Nam
                 // omission is reported by `omitted_expressions`.
                 return Ok(());
             }
-            write!(output, " {resolved_name}: ")?;
+            output.push(' ');
+            output.push_str(resolved_name);
+            output.push_str(": ");
 
             write_coefficients_line(output, coefficients, interner, options)?;
 
             write!(output, " {operator} ")?;
             write_number(output, *rhs, options.decimal_precision)?;
-            writeln!(output)
+            output.push('\n');
+            Ok(())
         }
         Constraint::General { name, resultant, function, .. } => {
             debug_assert!(!function.variables().is_empty(), "a general constraint has at least one variable argument");
@@ -785,28 +788,23 @@ pub(crate) fn write_formatted_coefficient(
         Some(_) => (abs_value - 1.0).abs() < NUMERIC_EPSILON,
     };
 
+    // Plain `push_str` rather than `write!`: this runs once per term, and
+    // the formatting machinery dominated the writer's profile.
     if is_first {
         if value < 0.0 {
-            if is_one {
-                write!(output, "- {name}")
-            } else {
-                write!(output, "- ")?;
-                write_number(output, abs_value, precision)?;
-                write!(output, " {name}")
-            }
-        } else if is_one {
-            write!(output, "{name}")
-        } else {
-            write_number(output, abs_value, precision)?;
-            write!(output, " {name}")
+            output.push_str("- ");
         }
-    } else if is_one {
-        write!(output, " {sign} {name}")
     } else {
-        write!(output, " {sign} ")?;
-        write_number(output, abs_value, precision)?;
-        write!(output, " {name}")
+        output.push(' ');
+        output.push_str(sign);
+        output.push(' ');
     }
+    if !is_one {
+        write_number(output, abs_value, precision)?;
+        output.push(' ');
+    }
+    output.push_str(name);
+    Ok(())
 }
 
 /// Magnitudes outside `[SCIENTIFIC_BELOW, SCIENTIFIC_FROM)` are written in
