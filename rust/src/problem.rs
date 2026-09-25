@@ -672,9 +672,9 @@ impl LpProblem {
             return Err(LpParseError::already_exists(EntityKind::Variable, new_name));
         }
 
-        let variable = self.variables.shift_remove(&old_id).expect("variable must exist: filter check passed");
+        let (index, _, variable) = self.variables.shift_remove_full(&old_id).expect("variable must exist: filter check passed");
         let new_variable = Variable::new(new_id).with_kind(variable.kind).with_bounds(variable.bounds);
-        self.variables.insert(new_id, new_variable);
+        self.variables.shift_insert(index, new_id, new_variable);
 
         // PERF: O(n*m) scan over all objectives and constraints to rename the variable.
         // Acceptable because rename is infrequent in typical LP workflows. For mutation-heavy
@@ -772,13 +772,13 @@ impl LpProblem {
             return Err(LpParseError::already_exists(EntityKind::Constraint, new_name));
         }
 
-        let mut constraint = self.constraints.shift_remove(&old_id).expect("constraint must exist: filter check passed");
+        let (index, _, mut constraint) = self.constraints.shift_remove_full(&old_id).expect("constraint must exist: filter check passed");
 
         *constraint.name_mut() = new_id;
 
-        self.constraints.insert(new_id, constraint);
-        if let Some(class) = self.constraint_classes.shift_remove(&old_id) {
-            self.constraint_classes.insert(new_id, class);
+        self.constraints.shift_insert(index, new_id, constraint);
+        if let Some((class_index, _, class)) = self.constraint_classes.shift_remove_full(&old_id) {
+            self.constraint_classes.shift_insert(class_index, new_id, class);
         }
 
         debug_assert!(!self.constraints.contains_key(&old_id), "postcondition: old_id must be gone from constraints");
@@ -811,9 +811,9 @@ impl LpProblem {
             return Err(LpParseError::already_exists(EntityKind::Objective, new_name));
         }
 
-        let mut objective = self.objectives.shift_remove(&old_id).expect("objective must exist: filter check passed");
+        let (index, _, mut objective) = self.objectives.shift_remove_full(&old_id).expect("objective must exist: filter check passed");
         objective.name = new_id;
-        self.objectives.insert(new_id, objective);
+        self.objectives.shift_insert(index, new_id, objective);
 
         debug_assert!(!self.objectives.contains_key(&old_id), "postcondition: old_id must be gone from objectives");
         debug_assert!(self.objectives.contains_key(&new_id), "postcondition: new_id must be present in objectives");
@@ -2554,6 +2554,28 @@ mod modification_tests {
 
         assert!(p.rename_variable("nonexistent", "x").is_err());
         assert!(p.rename_variable("new_x1", "x2").is_err());
+    }
+
+    /// Renaming keeps the entry where it was, so a written model keeps its
+    /// row and column order.
+    #[test]
+    fn test_rename_preserves_position() {
+        let mut p = LpProblem::parse(
+            "Minimize\n o1: x + y + z\n o2: x\nSubject To\n c1: x + y >= 1\n c2: y + z >= 1\n c3: x + z >= 1\nLazy Constraints\n l1: x <= \
+             5\n l2: y <= 5\nEnd",
+        )
+        .unwrap();
+
+        p.rename_variable("x", "x_new").unwrap();
+        p.rename_constraint("c1", "c1_new").unwrap();
+        p.rename_constraint("l1", "l1_new").unwrap();
+        p.rename_objective("o1", "o1_new").unwrap();
+
+        assert_eq!(p.variables.get_index_of(&p.name_id("x_new").unwrap()), Some(0));
+        assert_eq!(p.constraints.get_index_of(&p.name_id("c1_new").unwrap()), Some(0));
+        assert_eq!(p.constraints.get_index_of(&p.name_id("l1_new").unwrap()), Some(3));
+        assert_eq!(p.constraint_classes.get_index_of(&p.name_id("l1_new").unwrap()), Some(0));
+        assert_eq!(p.objectives.get_index_of(&p.name_id("o1_new").unwrap()), Some(0));
     }
 
     #[test]
