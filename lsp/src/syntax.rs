@@ -131,10 +131,20 @@ pub fn text<'a>(node: Node<'_>, source: &'a str) -> &'a str {
     &source[node.byte_range()]
 }
 
-/// Whether `node` is one of the section nodes.
+/// Whether `node` is one of the section nodes. Looked up by grammar symbol,
+/// without the string compares behind `Node::kind`.
 #[must_use]
 pub fn is_section(node: Node<'_>) -> bool {
-    SECTION_KINDS.contains(&node.kind())
+    static SECTIONS: std::sync::OnceLock<Vec<bool>> = std::sync::OnceLock::new();
+    let sections = SECTIONS.get_or_init(|| {
+        let mut sections = vec![false; language().node_kind_count()];
+        for id in SECTION_KINDS.iter().flat_map(|k| kind_ids(k, true)) {
+            sections[usize::from(id)] = true;
+        }
+        sections
+    });
+    // `ERROR` nodes have no entry: they are not sections.
+    sections.get(usize::from(node.kind_id())).copied().unwrap_or(false)
 }
 
 /// Leaf token touching `offset`: the token containing it, else the one ending
@@ -651,6 +661,24 @@ mod tests {
             _ => return None,
         };
         Some(bounds)
+    }
+
+    #[test]
+    fn symbol_lookups_match_kind_names() {
+        for text in [
+            "\\ c\nMaximize multi-objectives\n o1: Priority=2 3 x + [ x ^ 2 ] / 2\nSubject To\n c1: x + y <= 10\n ind: b = 1 -> x >= 1\nLazy Constraints\n l: x >= 0\nUser Cuts\n u: y <= 3\nGeneral Constraints\n g: r = MAX(x, y)\nBounds\n x free\nGenerals\n x\nIntegers\n y\nBinaries\n b\nSemi-Continuous\n s\nSOS\n s1: S1 :: x : 1\nEnd\n",
+            "min\n obj: 3 x + \nst\n c1: x + >= 1\n c2 x - y <= 4\nbounds\n x <= \nsos\n s1: S3 ::\nend\n",
+            "st\n c1: x >= 1\nMinimize\n obj: x\nBounds Generals\n",
+        ] {
+            let tree = parse(text, None);
+            let mut cursor = tree.walk();
+            let mut stack = vec![tree.root_node()];
+            while let Some(node) = stack.pop() {
+                assert_eq!(static_kind(node), node.kind());
+                assert_eq!(is_section(node), SECTION_KINDS.contains(&node.kind()), "{}", node.kind());
+                stack.extend(node.children(&mut cursor));
+            }
+        }
     }
 
     #[test]
