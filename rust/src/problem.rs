@@ -73,6 +73,13 @@ fn update_coefficient_vec(coefficients: &mut Vec<Coefficient>, variable_id: Name
     }
 }
 
+/// Drop a leading UTF-8 byte order mark, which some Windows editors write.
+/// Byte offsets in the parsed model are relative to the text after it.
+#[inline]
+fn strip_byte_order_mark(input: &str) -> &str {
+    input.strip_prefix('\u{FEFF}').unwrap_or(input)
+}
+
 /// Extract the problem name from LP file header comments.
 ///
 /// Supports multiple formats:
@@ -421,6 +428,7 @@ impl LpProblem {
     ///
     /// Returns an error if the input string is not valid MPS format.
     pub fn parse_mps(input: &str) -> LpResult<Self> {
+        let input = strip_byte_order_mark(input);
         // Empty-input validation is owned by the inner MPS parser.
         let problem_name = extract_mps_name(input);
         let parsed = parse_mps(input)?;
@@ -1355,6 +1363,7 @@ impl TryFrom<&str> for LpProblem {
     type Error = LpParseError;
 
     fn try_from(input: &str) -> Result<Self, Self::Error> {
+        let input = strip_byte_order_mark(input);
         let problem_name = extract_problem_name(input);
 
         let lexer = Lexer::new(input);
@@ -1944,6 +1953,17 @@ End";
         }
         // Large but finite sums are fine.
         LpProblem::parse("minimize\nobj: x\nsubject to\nc: 1e307 x + 1e307 x >= 1\nend").unwrap();
+    }
+
+    /// Files saved by some Windows editors start with a UTF-8 byte order mark.
+    #[test]
+    fn test_leading_byte_order_mark_is_ignored() {
+        let lp = LpProblem::parse("\u{FEFF}\\Problem name: bom\nMinimize\n obj: x\nSubject To\n c1: x >= 1\nEnd").unwrap();
+        assert_eq!((lp.name(), lp.constraint_count()), (Some("bom"), 1));
+
+        let mps = "\u{FEFF}NAME          bom\nROWS\n N  COST\n L  LIM1\nCOLUMNS\n    X         COST      1.0   LIM1      1.0\nRHS\n    RHS       LIM1      4.0\nENDATA\n";
+        let mps = LpProblem::parse_mps(mps).unwrap();
+        assert_eq!((mps.name(), mps.constraint_count()), (Some("bom"), 1));
     }
 
     #[test]
