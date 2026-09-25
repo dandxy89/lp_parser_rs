@@ -31,8 +31,8 @@ parser = LpParser("path/to/problem.lp")
 # Access problem information
 print(f"Problem: {parser.name}")
 print(f"Sense: {parser.sense}")
-print(f"Variables: {len(parser.variables)}")
-print(f"Constraints: {len(parser.constraints)}")
+print(f"Variables: {parser.num_variables}")
+print(f"Constraints: {parser.num_constraints}")
 
 # Modify the problem
 parser.update_objective_coefficient("OBJ", "x1", 5.0)
@@ -64,14 +64,24 @@ parser = LpParser("optimization_problem.lp")
 # Get problem overview
 print(f"Problem Name: {parser.name}")
 print(f"Optimization Sense: {parser.sense}")
-print(f"Variables: {len(parser.variables)}")
-print(f"Constraints: {len(parser.constraints)}")
-print(f"Objectives: {len(parser.objectives)}")
+print(f"Variables: {parser.num_variables}")
+print(f"Constraints: {parser.num_constraints}")
+print(f"Objectives: {parser.num_objectives}")
 ```
 
 ### Accessing Problem Data
 
+`objectives`, `constraints` and `variables` return snapshots: every access
+rebuilds the whole collection, so bind the result once rather than re-reading
+the property in a loop. For a single item use `get_constraint(name)` or
+`get_variable(name)`, and for sizes `num_objectives`, `num_constraints` and
+`num_variables`.
+
 ```python
+# Single lookups without building the whole collection
+c1 = parser.get_constraint("C1")
+x1 = parser.get_variable("x1")
+
 # Access objectives
 for i, objective in enumerate(parser.objectives):
     print(f"Objective {i + 1}: {objective['name']}")

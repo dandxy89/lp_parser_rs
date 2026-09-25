@@ -169,17 +169,47 @@ class LpParser:
     def sense(self) -> Sense:
         """Optimisation sense, either 'maximize' or 'minimize'."""
 
+    # `objectives`, `constraints` and `variables` return snapshots: each access
+    # rebuilds the whole collection from the model, and later mutations are not
+    # reflected in a snapshot already taken. Bind the result once rather than
+    # re-reading the property in a loop, and prefer `get_constraint`,
+    # `get_variable` and the `num_*` counts for single lookups and sizes.
+
     @property
     def objectives(self) -> list[Objective]:
-        """List of objectives with their coefficients."""
+        """Snapshot list of objectives with their coefficients, rebuilt on every access."""
 
     @property
     def constraints(self) -> list[Constraint]:
-        """List of constraints of every type: standard, sos, indicator, quadratic and general (see the "type" key)."""
+        """Snapshot list of constraints of every type: standard, sos, indicator, quadratic and general (see the "type" key).
+
+        Rebuilt on every access; use `get_constraint` for a single lookup.
+        """
 
     @property
     def variables(self) -> dict[str, VariableInfo]:
-        """Mapping of variable name to variable information."""
+        """Snapshot mapping of variable name to variable information, rebuilt on every access.
+
+        Use `get_variable` for a single lookup.
+        """
+
+    def get_constraint(self, name: str) -> Constraint:
+        """Return one constraint by name. Raises LpObjectNotFoundError if absent, LpInvalidValueError if empty."""
+
+    def get_variable(self, name: str) -> VariableInfo:
+        """Return one variable by name. Raises LpObjectNotFoundError if absent, LpInvalidValueError if empty."""
+
+    @property
+    def num_objectives(self) -> int:
+        """Number of objectives."""
+
+    @property
+    def num_constraints(self) -> int:
+        """Number of constraints."""
+
+    @property
+    def num_variables(self) -> int:
+        """Number of variables."""
 
     def parse(self) -> None:
         """Re-read and re-parse the source file in its original format (LP or MPS), picking up changes made since construction.
