@@ -57,6 +57,11 @@ test-case = "3.3.1"
 name = "parse"
 harness = false
 
+[[bench]]
+name = "ops"
+harness = false
+required-features = ["diff"]
+
 [features]
 cli = ["dep:clap", "dep:regex", "dep:serde_json", "dep:serde_yaml"]
 csv = ["dep:csv"]
