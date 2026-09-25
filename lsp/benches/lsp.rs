@@ -8,7 +8,7 @@
 
 use std::fmt::{self, Write as _};
 use std::hint::black_box;
-use std::sync::OnceLock;
+use std::sync::{Once, OnceLock};
 use std::time::Duration;
 
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
@@ -216,6 +216,17 @@ fn many(c: &mut Criterion) {
             },
             BatchSize::PerIteration,
         );
+    });
+
+    group.bench_function("code_lens_serialised", |b| {
+        // What `textDocument/codeLens` costs the server: compute and encode.
+        static SIZE: Once = Once::new();
+        let doc = constraints_200k();
+        doc.build_index();
+        SIZE.call_once(|| {
+            eprintln!("codeLens response: {} bytes", serde_json::to_vec(&code_lens::lenses(doc)).expect("lenses serialise").len());
+        });
+        b.iter(|| serde_json::to_vec(&code_lens::lenses(black_box(doc))).expect("lenses serialise"));
     });
 
     group.finish();
