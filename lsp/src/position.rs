@@ -192,6 +192,16 @@ impl LineIndex {
     }
 }
 
+/// Line terminator to write into `text`: that of its first line, so one
+/// stray `\r\n` in an `\n` file (or the reverse) does not decide it.
+#[must_use]
+pub fn line_ending(text: &str) -> &'static str {
+    match text.find('\n') {
+        Some(i) if i > 0 && text.as_bytes()[i - 1] == b'\r' => "\r\n",
+        _ => "\n",
+    }
+}
+
 /// Largest char boundary ≤ `offset`.
 #[must_use]
 pub fn floor_char_boundary(text: &str, mut offset: usize) -> usize {
@@ -229,6 +239,14 @@ mod tests {
         assert_eq!(index.position(text, 5, Encoding::Utf8), Position::new(0, 5));
         // A column inside the surrogate pair snaps to the emoji start.
         assert_eq!(index.offset(text, Position::new(0, 2), Encoding::Utf16), 1);
+    }
+
+    #[test]
+    fn line_ending_follows_the_first_line() {
+        assert_eq!(line_ending("a\r\nb\nc\n"), "\r\n");
+        assert_eq!(line_ending("a\nb\r\nc\r\n"), "\n");
+        assert_eq!(line_ending("\r\n"), "\r\n");
+        assert_eq!(line_ending("no break"), "\n");
     }
 
     #[test]

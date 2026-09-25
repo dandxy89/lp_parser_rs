@@ -166,6 +166,15 @@ fn crlf_line_endings_are_kept() {
 }
 
 #[test]
+fn line_endings_follow_the_first_line() {
+    // One stray CRLF in an LF file (or LF in a CRLF file) does not convert the rest.
+    let lf = "min\n obj:  x\nst\n c1: x>=1\r\n c2: x<=4\nend\n";
+    assert_eq!(fmt(lf, &settings()), "min\n  obj: x\nst\n  c1: x >= 1\n  c2: x <= 4\nend\n");
+    let crlf = "min\r\n obj:  x\r\nst\n c1: x>=1\r\nend\r\n";
+    assert_eq!(fmt(crlf, &settings()), "min\r\n  obj: x\r\nst\r\n  c1: x >= 1\r\nend\r\n");
+}
+
+#[test]
 fn range_formats_only_overlapping_entries() {
     let text = "min\n obj:  x\nst\n c1:x+y>=1\n c2:x+y<=4\n c3:   y>=0\nend\n";
     let d = doc(text);
