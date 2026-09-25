@@ -458,7 +458,13 @@ impl<'input> Lexer<'input> {
     /// Create a new lexer for the given input
     #[must_use]
     pub fn new(input: &'input str) -> Self {
-        Self { inner: Token::lexer(input), input, peeked: None, prev: None, seen_subject_to: false }
+        let mut inner = Token::lexer(input);
+        // Skip a leading UTF-8 byte order mark, which some Windows editors
+        // write, without shifting the byte offsets of the tokens after it.
+        if input.starts_with('\u{FEFF}') {
+            inner.bump('\u{FEFF}'.len_utf8());
+        }
+        Self { inner, input, peeked: None, prev: None, seen_subject_to: false }
     }
 
     /// Next significant raw token, skipping comments and newlines.
