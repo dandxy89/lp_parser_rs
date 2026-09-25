@@ -5,11 +5,11 @@ use std::path::{Path, PathBuf};
 
 use lp_parser_rs::analysis::AnalysisConfig;
 use lp_parser_rs::diff::DiffOptions;
-use lp_parser_rs::model::{Constraint, QuadraticTerm, Sense, VariableType};
+use lp_parser_rs::model::{Constraint, QuadraticTerm, Sense, Variable, VariableType};
 use lp_parser_rs::mps::writer::{MpsWriterOptions, write_mps_string_with_options};
 use lp_parser_rs::problem::LpProblem;
 use lp_parser_rs::writer::{LpWriterOptions, write_lp_string_with_options};
-use lp_parser_rs::{ConstraintClass, EntityKind, LpParseError as CoreError, VariableKind};
+use lp_parser_rs::{ConstraintClass, EntityKind, LpParseError as CoreError, NameId, VariableKind};
 use pyo3::create_exception;
 use pyo3::exceptions::{PyNotADirectoryError, PyOSError, PyRuntimeError};
 use pyo3::prelude::*;
@@ -151,79 +151,69 @@ impl LpParser {
         Ok(list.into())
     }
 
+    /// Every constraint, rebuilt as a fresh list of dicts on each access.
     #[getter]
     fn constraints(&self, py: Python) -> PyResult<Py<PyAny>> {
         let problem = &self.problem;
         let list = PyList::empty(py);
-
         for (name_id, constraint) in &problem.constraints {
-            let dict = PyDict::new(py);
-            dict.set_item("name", problem.resolve(*name_id))?;
-
-            match constraint {
-                Constraint::Standard { coefficients, operator, rhs, .. } => {
-                    dict.set_item("type", "standard")?;
-                    dict.set_item("coefficients", coefficients_to_list(py, problem, coefficients)?)?;
-                    dict.set_item("operator", format!("{operator:?}"))?;
-                    dict.set_item("rhs", rhs)?;
-                    dict.set_item("class", constraint_class_name(problem.constraint_class(*name_id)))?;
-                }
-                Constraint::General { resultant, function, .. } => {
-                    dict.set_item("type", "general")?;
-                    dict.set_item("resultant", problem.resolve(*resultant))?;
-                    dict.set_item("function", function.keyword())?;
-                    let arguments: Vec<&str> = function.variables().iter().map(|v| problem.resolve(*v)).collect();
-                    dict.set_item("arguments", arguments)?;
-                    dict.set_item("constant", function.constant())?;
-                }
-                Constraint::Quadratic { coefficients, quadratic, operator, rhs, .. } => {
-                    dict.set_item("type", "quadratic")?;
-                    dict.set_item("coefficients", coefficients_to_list(py, problem, coefficients)?)?;
-                    dict.set_item("quadratic", quadratic_to_list(py, problem, quadratic)?)?;
-                    dict.set_item("operator", format!("{operator:?}"))?;
-                    dict.set_item("rhs", rhs)?;
-                    dict.set_item("class", constraint_class_name(problem.constraint_class(*name_id)))?;
-                }
-                Constraint::Indicator { variable, active_value, coefficients, operator, rhs, .. } => {
-                    dict.set_item("type", "indicator")?;
-                    dict.set_item("indicator_variable", problem.resolve(*variable))?;
-                    dict.set_item("indicator_value", u8::from(*active_value))?;
-                    dict.set_item("coefficients", coefficients_to_list(py, problem, coefficients)?)?;
-                    dict.set_item("operator", format!("{operator:?}"))?;
-                    dict.set_item("rhs", rhs)?;
-                    dict.set_item("class", constraint_class_name(problem.constraint_class(*name_id)))?;
-                }
-                Constraint::SOS { weights, sos_type, .. } => {
-                    dict.set_item("type", "sos")?;
-                    dict.set_item("sos_type", format!("{sos_type:?}"))?;
-                    dict.set_item("weights", coefficients_to_list(py, problem, weights)?)?;
-                }
-            }
-            list.append(dict)?;
+            list.append(constraint_to_dict(py, problem, *name_id, constraint)?)?;
         }
-
         Ok(list.into())
     }
 
+    /// Every variable keyed by name, rebuilt as a fresh dict on each access.
     #[getter]
     fn variables(&self, py: Python) -> PyResult<Py<PyAny>> {
         let problem = &self.problem;
         let dict = PyDict::new(py);
-
-        for (name_id, var) in &problem.variables {
-            let resolved_name = problem.resolve(*name_id);
-            let var_dict = PyDict::new(py);
-            var_dict.set_item("name", resolved_name)?;
-            // Structured kind + bounds rather than a Debug string: `lower`/`upper`
-            // are `None` when undeclared on that side (the format default
-            // applies), and -inf/+inf when explicitly free.
-            var_dict.set_item("kind", var.kind.to_string())?;
-            var_dict.set_item("lower", var.bounds.lower)?;
-            var_dict.set_item("upper", var.bounds.upper)?;
-            dict.set_item(resolved_name, var_dict)?;
+        for (name_id, variable) in &problem.variables {
+            dict.set_item(problem.resolve(*name_id), variable_to_dict(py, problem, *name_id, variable)?)?;
         }
-
         Ok(dict.into())
+    }
+
+    /// Look up one constraint by name without building the whole
+    /// `constraints` list.
+    fn get_constraint(&self, py: Python, name: String) -> PyResult<Py<PyAny>> {
+        require_name("name", &name)?;
+        let problem = &self.problem;
+        let (name_id, constraint) =
+            problem
+                .name_id(&name)
+                .and_then(|id| problem.constraints.get(&id).map(|constraint| (id, constraint)))
+                .ok_or_else(|| to_py_err("Failed to get constraint", CoreError::not_found(EntityKind::Constraint, name.as_str())))?;
+        Ok(constraint_to_dict(py, problem, name_id, constraint)?.into())
+    }
+
+    /// Look up one variable by name without building the whole `variables`
+    /// dict.
+    fn get_variable(&self, py: Python, name: String) -> PyResult<Py<PyAny>> {
+        require_name("name", &name)?;
+        let problem = &self.problem;
+        let (name_id, variable) = problem
+            .name_id(&name)
+            .and_then(|id| problem.variables.get(&id).map(|variable| (id, variable)))
+            .ok_or_else(|| to_py_err("Failed to get variable", CoreError::not_found(EntityKind::Variable, name.as_str())))?;
+        Ok(variable_to_dict(py, problem, name_id, variable)?.into())
+    }
+
+    /// Number of objectives, without building the `objectives` list.
+    #[getter]
+    fn num_objectives(&self) -> usize {
+        self.problem.objectives.len()
+    }
+
+    /// Number of constraints, without building the `constraints` list.
+    #[getter]
+    fn num_constraints(&self) -> usize {
+        self.problem.constraints.len()
+    }
+
+    /// Number of variables, without building the `variables` dict.
+    #[getter]
+    fn num_variables(&self) -> usize {
+        self.problem.variables.len()
     }
 
     /// Write the current problem to LP format string, with optional custom formatting
@@ -610,6 +600,68 @@ fn analysis_to_dict(py: Python, analysis: &lp_parser_rs::analysis::ProblemAnalys
     // so overwrite the issues list to preserve that contract.
     dict.cast::<PyDict>()?.set_item("issues", issues_to_list(py, &analysis.issues)?)?;
     Ok(dict.into())
+}
+
+/// Build the Python dict for one constraint, as exposed by `constraints` and
+/// `get_constraint`.
+fn constraint_to_dict<'py>(py: Python<'py>, problem: &LpProblem, name_id: NameId, constraint: &Constraint) -> PyResult<Bound<'py, PyDict>> {
+    let dict = PyDict::new(py);
+    dict.set_item("name", problem.resolve(name_id))?;
+
+    match constraint {
+        Constraint::Standard { coefficients, operator, rhs, .. } => {
+            dict.set_item("type", "standard")?;
+            dict.set_item("coefficients", coefficients_to_list(py, problem, coefficients)?)?;
+            dict.set_item("operator", format!("{operator:?}"))?;
+            dict.set_item("rhs", rhs)?;
+            dict.set_item("class", constraint_class_name(problem.constraint_class(name_id)))?;
+        }
+        Constraint::General { resultant, function, .. } => {
+            dict.set_item("type", "general")?;
+            dict.set_item("resultant", problem.resolve(*resultant))?;
+            dict.set_item("function", function.keyword())?;
+            let arguments: Vec<&str> = function.variables().iter().map(|v| problem.resolve(*v)).collect();
+            dict.set_item("arguments", arguments)?;
+            dict.set_item("constant", function.constant())?;
+        }
+        Constraint::Quadratic { coefficients, quadratic, operator, rhs, .. } => {
+            dict.set_item("type", "quadratic")?;
+            dict.set_item("coefficients", coefficients_to_list(py, problem, coefficients)?)?;
+            dict.set_item("quadratic", quadratic_to_list(py, problem, quadratic)?)?;
+            dict.set_item("operator", format!("{operator:?}"))?;
+            dict.set_item("rhs", rhs)?;
+            dict.set_item("class", constraint_class_name(problem.constraint_class(name_id)))?;
+        }
+        Constraint::Indicator { variable, active_value, coefficients, operator, rhs, .. } => {
+            dict.set_item("type", "indicator")?;
+            dict.set_item("indicator_variable", problem.resolve(*variable))?;
+            dict.set_item("indicator_value", u8::from(*active_value))?;
+            dict.set_item("coefficients", coefficients_to_list(py, problem, coefficients)?)?;
+            dict.set_item("operator", format!("{operator:?}"))?;
+            dict.set_item("rhs", rhs)?;
+            dict.set_item("class", constraint_class_name(problem.constraint_class(name_id)))?;
+        }
+        Constraint::SOS { weights, sos_type, .. } => {
+            dict.set_item("type", "sos")?;
+            dict.set_item("sos_type", format!("{sos_type:?}"))?;
+            dict.set_item("weights", coefficients_to_list(py, problem, weights)?)?;
+        }
+    }
+    Ok(dict)
+}
+
+/// Build the Python dict for one variable, as exposed by `variables` and
+/// `get_variable`.
+fn variable_to_dict<'py>(py: Python<'py>, problem: &LpProblem, name_id: NameId, variable: &Variable) -> PyResult<Bound<'py, PyDict>> {
+    let dict = PyDict::new(py);
+    dict.set_item("name", problem.resolve(name_id))?;
+    // Structured kind + bounds rather than a Debug string: `lower`/`upper`
+    // are `None` when undeclared on that side (the format default
+    // applies), and -inf/+inf when explicitly free.
+    dict.set_item("kind", variable.kind.to_string())?;
+    dict.set_item("lower", variable.bounds.lower)?;
+    dict.set_item("upper", variable.bounds.upper)?;
+    Ok(dict)
 }
 
 /// Build a list of `{name, value}` dicts from coefficients, resolving interned names.

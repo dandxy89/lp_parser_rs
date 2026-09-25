@@ -115,6 +115,45 @@ class TestLpParserComponents:
         assert x1["kind"] == "Continuous"
         assert x1["lower"] is not None
 
+    def test_targeted_accessors_match_snapshots(self, afiro_lp_file: Path) -> None:
+        parser = LpParser(afiro_lp_file)
+        constraints = parser.constraints
+        variables = parser.variables
+        assert parser.num_constraints == len(constraints)
+        assert parser.num_variables == len(variables)
+        assert parser.num_objectives == len(parser.objectives)
+        for constraint in constraints:
+            assert parser.get_constraint(constraint["name"]) == constraint
+        for name, variable in variables.items():
+            assert parser.get_variable(name) == variable
+
+    def test_targeted_accessors_cover_every_constraint_type(self) -> None:
+        lp = (
+            "Minimize\n obj: x + y + r\nSubject To\n c1: x + y >= 1\n q: y + [ y ^ 2 ] <= 4\n"
+            " ind: b = 1 -> x + y <= 3\nGeneral Constraints\n g: r = MIN ( x , y , 2 )\n"
+            "Binaries\n b\nSOS\n s1: S1:: x:1 y:2\nEnd\n"
+        )
+        parser = LpParser.from_string(lp)
+        assert {c["type"] for c in parser.constraints} == {"standard", "quadratic", "indicator", "general", "sos"}
+        for constraint in parser.constraints:
+            assert parser.get_constraint(constraint["name"]) == constraint
+
+    def test_targeted_accessors_reject_missing_and_empty_names(self, simple_lp_file: Path) -> None:
+        parser = LpParser(simple_lp_file)
+        with pytest.raises(LpObjectNotFoundError):
+            parser.get_constraint("missing")
+        with pytest.raises(LpObjectNotFoundError):
+            parser.get_variable("missing")
+        # A variable name is not a constraint, and vice versa.
+        with pytest.raises(LpObjectNotFoundError):
+            parser.get_constraint("x1")
+        with pytest.raises(LpObjectNotFoundError):
+            parser.get_variable("C1")
+        with pytest.raises(LpInvalidValueError):
+            parser.get_constraint("")
+        with pytest.raises(LpInvalidValueError):
+            parser.get_variable("")
+
     def test_undeclared_bounds_are_none_and_free_is_infinite(self) -> None:
         """None means "not declared" (format default applies), not "unbounded"."""
         parser = LpParser.from_string("Minimize\n obj: x + y\nSubject To\n c1: x + y >= 1\nBounds\n y free\nEnd\n")
