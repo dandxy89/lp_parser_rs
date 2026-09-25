@@ -167,6 +167,11 @@ pub fn format_range(doc: &Document, range: LspRange, settings: &FormatSettings) 
     Some(snapped_edit(doc, &layout, first, last).into_iter().collect())
 }
 
+/// Documents above this size are only re-indented on Enter: the previous
+/// entry is not reformatted, since that lays out and reparses the whole
+/// document on every keystroke.
+pub const ON_TYPE_REFORMAT_MAX_BYTES: usize = 1024 * 1024;
+
 /// On-type formatting after `ch` (`\n`) at `position`.
 #[must_use]
 pub fn format_on_type(doc: &Document, position: Position, ch: &str, settings: &FormatSettings) -> Option<Vec<TextEdit>> {
@@ -177,8 +182,9 @@ pub fn format_on_type(doc: &Document, position: Position, ch: &str, settings: &F
     if line >= doc.lines.line_count() {
         return None;
     }
-    // Without a layout (syntax errors, e.g. while typing) only indent.
-    let layout = layout(&doc.text, &doc.tree, settings);
+    // Without a layout (syntax errors, e.g. while typing, or a large
+    // document) only indent.
+    let layout = (doc.text.len() <= ON_TYPE_REFORMAT_MAX_BYTES).then(|| layout(&doc.text, &doc.tree, settings)).flatten();
     let units: &[Placed] = layout.as_ref().map_or(&[], |l| &l.units);
     let line_start = doc.lines.line_start(line);
     let prev = doc.lines.line_range(&doc.text, line - 1);
