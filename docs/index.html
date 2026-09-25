@@ -4,18 +4,18 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>lp_parser_rs — Rust LP file parser, writer &amp; diff toolkit</title>
-<meta name="description" content="A Rust library, CLI, interactive TUI, and Python package for parsing, analysing, modifying, diffing, and solving Linear Programming (LP) files.">
+<meta name="description" content="A Rust library, CLI, interactive TUI, language server, and Python package for parsing, analysing, modifying, diffing, and solving Linear Programming (LP) files.">
 <link rel="canonical" href="https://dandxy89.github.io/lp_parser_rs/">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="lp_parser_rs">
 <meta property="og:url" content="https://dandxy89.github.io/lp_parser_rs/">
 <meta property="og:title" content="lp_parser_rs — Rust LP file parser, writer &amp; diff toolkit">
-<meta property="og:description" content="A Rust library, CLI, interactive TUI, and Python package for parsing, analysing, modifying, diffing, and solving Linear Programming (LP) files.">
+<meta property="og:description" content="A Rust library, CLI, interactive TUI, language server, and Python package for parsing, analysing, modifying, diffing, and solving Linear Programming (LP) files.">
 <meta property="og:image" content="https://dandxy89.github.io/lp_parser_rs/assets/demo-poster.jpg">
 <meta property="og:image:alt" content="The lp_diff terminal UI diffing two models: section tabs for Summary, Variables, Constraints, Objectives and Numerics, with counts of removed and changed entries.">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="lp_parser_rs — Rust LP file parser, writer &amp; diff toolkit">
-<meta name="twitter:description" content="A Rust library, CLI, interactive TUI, and Python package for parsing, analysing, modifying, diffing, and solving Linear Programming (LP) files.">
+<meta name="twitter:description" content="A Rust library, CLI, interactive TUI, language server, and Python package for parsing, analysing, modifying, diffing, and solving Linear Programming (LP) files.">
 <meta name="twitter:image" content="https://dandxy89.github.io/lp_parser_rs/assets/demo-poster.jpg">
 <meta name="twitter:image:alt" content="The lp_diff terminal UI diffing two models: section tabs for Summary, Variables, Constraints, Objectives and Numerics, with counts of removed and changed entries.">
 <script type="application/ld+json">
@@ -27,14 +27,14 @@
       "@id": "https://dandxy89.github.io/lp_parser_rs/#website",
       "url": "https://dandxy89.github.io/lp_parser_rs/",
       "name": "lp_parser_rs",
-      "description": "Rust library, CLI, TUI and Python package for Linear Programming (LP) files.",
+      "description": "Rust library, CLI, TUI, language server and Python package for Linear Programming (LP) files.",
       "inLanguage": "en"
     },
     {
       "@type": "SoftwareSourceCode",
       "@id": "https://dandxy89.github.io/lp_parser_rs/#source",
       "name": "lp_parser_rs",
-      "description": "A Rust library, CLI, interactive TUI, and Python package for parsing, analysing, modifying, diffing, and solving Linear Programming (LP) files, built on a LALRPOP grammar covering the CPLEX 22.1.1, Gurobi, FICO Xpress and Mosek LP specifications.",
+      "description": "A Rust library, CLI, interactive TUI, language server, and Python package for parsing, analysing, modifying, diffing, and solving Linear Programming (LP) files, built on a LALRPOP grammar covering the CPLEX 22.1.1, Gurobi, FICO Xpress and Mosek LP specifications.",
       "codeRepository": "https://github.com/dandxy89/lp_parser_rs",
       "programmingLanguage": ["Rust", "Python"],
       "license": ["https://opensource.org/licenses/MIT", "https://www.apache.org/licenses/LICENSE-2.0"],
@@ -79,6 +79,7 @@
       <a href="#library">Library</a>
       <a href="#cli">CLI</a>
       <a href="tui.html">TUI</a>
+      <a href="#lsp">LSP</a>
       <a href="#python">Python</a>
       <a href="#install">Install</a>
       <a href="https://github.com/dandxy89/lp_parser_rs">GitHub ↗</a>
@@ -90,8 +91,8 @@
 <header class="hero">
   <div class="wrap">
     <div>
-      <p class="eyebrow">\* Rust · CLI · TUI · Python *\</p>
-      <h1>A parser for LP files,<span class="line2">and the four tools built on it.</span></h1>
+      <p class="eyebrow">\* Rust · CLI · TUI · LSP · Python *\</p>
+      <h1>A parser for LP files,<span class="line2">and the five tools built on it.</span></h1>
       <p class="sub">Parse, analyse, modify, write, diff, and solve Linear Programming files.
         Built on a <a href="https://github.com/dandxy89/lp_parser_rs/blob/main/rust/src/lp.lalrpop">LALRPOP grammar</a>
         covering the CPLEX&nbsp;22.1.1, Gurobi, FICO&nbsp;Xpress, and Mosek LP specifications.</p>
@@ -123,7 +124,7 @@
 <section id="tools">
   <div class="wrap">
     <p class="sec-label">What's here</p>
-    <h2>Four ways to use it</h2>
+    <h2>Five ways to use it</h2>
     <div class="cards">
       <div class="card">
         <h3><a href="#library">lp_parser_rs — Rust crate</a></h3>
@@ -140,6 +141,10 @@
       <div class="card">
         <h3><a href="#python">parse_lp — Python package</a></h3>
         <p>The same Rust engine from Python, with full type hints. <code>pip install parse_lp</code>.</p>
+      </div>
+      <div class="card">
+        <h3><a href="#lsp">lp-lsp — language server</a></h3>
+        <p>Diagnostics, navigation, rename, completion, formatting, and code actions for <code>.lp</code> files in VS Code, Neovim, Helix, Zed, or any LSP client.</p>
       </div>
     </div>
   </div>
@@ -277,6 +282,37 @@ lp_parser convert problem.lp --format csv --output ./out</code></pre>
   </div>
 </section>
 
+<section id="lsp">
+  <div class="wrap">
+    <p class="sec-label">Editor support</p>
+    <h2>Language server: <code>lp-lsp</code></h2>
+    <p class="lead">A Language Server Protocol implementation for LP files. It understands the CPLEX LP format and the Gurobi extensions the parser supports, and keeps working while a file is half-written. It talks LSP over stdio and takes no arguments, so any editor that can run a language server can use it.</p>
+    <ul class="constraints">
+      <li><span class="cname">Diagnostics</span><span class="cbody">Syntax errors as you type, plus model checks such as duplicate names, conflicting bounds, unused declarations, and badly scaled coefficients, with thresholds you can configure.</span></li>
+      <li><span class="cname">Navigation</span><span class="cbody">Go to definition, find references, highlights, document and workspace symbols, and a "used in N constraints" code lens.</span></li>
+      <li><span class="cname">Rename</span><span class="cbody">Variables and constraint names across the workspace. It refuses names that would change how the file parses.</span></li>
+      <li><span class="cname">Hover and completion</span><span class="cbody">Details on variables, constraints, and keywords; suggestions that fit where the cursor is; signature help for <code>MAX</code>, <code>MIN</code>, <code>ABS</code>, <code>AND</code>, and <code>OR</code>.</span></li>
+      <li><span class="cname">Formatting</span><span class="cbody">Whole document, a selection, or on Enter, preserving comments. It never touches a file with syntax errors.</span></li>
+      <li><span class="cname">Code actions</span><span class="cbody">Quick fixes for the problems it reports, plus refactors such as adding a bound, moving a variable between type sections, and reordering sections.</span></li>
+      <li><span class="cname">Extras</span><span class="cbody">Inlay hints, semantic highlighting, folding, and the commands <code>lp.analyze</code>, <code>lp.convertToMps</code>, and <code>lp.showModelStats</code>.</span></li>
+    </ul>
+<pre><code><span class="c">-- Neovim 0.11+: ~/.config/nvim/lsp/lp_lsp.lua</span>
+<span class="k">return</span> {
+  cmd = { <span class="g">'lp-lsp'</span> },
+  filetypes = { <span class="g">'lp'</span> },
+  root_markers = { <span class="g">'.git'</span> },
+}
+
+<span class="c">-- init.lua</span>
+vim.filetype.add({ extension = { lp = <span class="g">'lp'</span> } })
+vim.lsp.enable(<span class="g">'lp_lsp'</span>)</code></pre>
+    <p>A VS Code extension lives in <a href="https://github.com/dandxy89/lp_parser_rs/tree/main/lsp/editors/vscode"><code>lsp/editors/vscode</code></a>; Helix and Zed need a few lines of config each.</p>
+    <div class="cta" style="justify-content:flex-start;margin-top:2.5rem;">
+      <a class="primary" href="https://github.com/dandxy89/lp_parser_rs/blob/main/lsp/README.md">lsp README: settings and editor setup</a>
+    </div>
+  </div>
+</section>
+
 <section id="python">
   <div class="wrap">
     <p class="sec-label">Python bindings</p>
@@ -309,6 +345,7 @@ print(analysis[<span class="g">"summary"</span>][<span class="g">"density"</span
       <tr><td>Rust crate</td><td><code>lp_parser_rs = { version = "5.0.1", features = ["serde", "diff"] }</code></td></tr> <!-- x-release-please-version -->
       <tr><td>CLI</td><td><code>cargo install lp_parser_rs --features cli,csv,diff,serde,lp-solvers</code></td></tr>
       <tr><td>TUI</td><td><code>cargo install --path tui</code> (from a clone)</td></tr>
+      <tr><td>Language server</td><td><code>cargo install --path lsp</code> (from a clone)</td></tr>
       <tr><td>Python</td><td><code>pip install parse_lp</code></td></tr>
     </table></div>
     <p style="margin-top:1.25rem;">Develop with <code>cargo insta test --all-features</code> and review snapshot changes with <code>cargo insta review</code>. Contributions welcome: <a href="https://github.com/dandxy89/lp_parser_rs">open a pull request</a>.</p>
