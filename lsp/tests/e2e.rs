@@ -26,21 +26,18 @@ impl Harness {
         let (service, socket) = LspService::new(Backend::new);
         let (tx, notifications) = mpsc::unbounded_channel();
         let (mut requests, mut responses) = socket.split();
-        // Play the client: forward notifications, answer server requests with `null`.
+        // Play the client: forward notifications and server requests, answer
+        // the requests with `null`.
         tokio::spawn(async move {
             while let Some(request) = requests.next().await {
                 let (method, id, params) = request.into_parts();
-                match id {
-                    Some(id) => {
-                        if responses.send(Response::from_ok(id, Value::Null)).await.is_err() {
-                            break;
-                        }
-                    }
-                    None => {
-                        if tx.send((method.into_owned(), params.unwrap_or(Value::Null))).is_err() {
-                            break;
-                        }
-                    }
+                if tx.send((method.into_owned(), params.unwrap_or(Value::Null))).is_err() {
+                    break;
+                }
+                if let Some(id) = id
+                    && responses.send(Response::from_ok(id, Value::Null)).await.is_err()
+                {
+                    break;
                 }
             }
         });
@@ -72,6 +69,31 @@ impl Harness {
                 return params["diagnostics"].as_array().cloned().unwrap_or_default();
             }
         }
+    }
+}
+
+const REFRESH: &str = "workspace/diagnostic/refresh";
+
+impl Harness {
+    /// Wait for a server message with `method`, skipping others.
+    async fn expect(&mut self, method: &str) {
+        let deadline = Duration::from_secs(10);
+        loop {
+            let (got, _) = tokio::time::timeout(deadline, self.notifications.recv()).await.expect("message in time").expect("channel open");
+            if got == method {
+                return;
+            }
+        }
+    }
+
+    /// Methods of the server messages received during `wait`.
+    async fn received(&mut self, wait: Duration) -> Vec<String> {
+        tokio::time::sleep(wait).await;
+        let mut methods = Vec::new();
+        while let Ok((method, _)) = self.notifications.try_recv() {
+            methods.push(method);
+        }
+        methods
     }
 }
 
@@ -152,6 +174,39 @@ async fn full_session() {
     assert_eq!(resolved["command"]["command"], "lp.showReferences");
     assert!(resolved["command"]["arguments"][2].is_array(), "reference locations: {resolved}");
 
+    assert_eq!(h.request("shutdown", Value::Null).await, Value::Null);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn pull_mode_refreshes_only_when_the_semantic_pass_lands() {
+    let mut h = Harness::start();
+    let capabilities = json!({ "textDocument": { "diagnostic": {} }, "workspace": { "diagnostics": { "refreshSupport": true } } });
+    // A long debounce keeps the edit's semantic pass out of the observed window.
+    let options = json!({ "lp": { "semantic": { "debounceMs": 60_000 } } });
+    let init = h.request("initialize", json!({ "capabilities": capabilities, "initializationOptions": options })).await;
+    assert!(init["capabilities"]["diagnosticProvider"].is_object(), "pull mode");
+    h.notify("initialized", json!({})).await;
+
+    h.notify("textDocument/didOpen", json!({ "textDocument": { "uri": URI, "languageId": "lp", "version": 1, "text": TEXT } })).await;
+    // The semantic pass after opening changes the diagnostics without an edit.
+    h.expect(REFRESH).await;
+
+    // The client pulls after its own edits: no refresh per keystroke.
+    for version in 2..6 {
+        h.notify(
+            "textDocument/didChange",
+            json!({
+                "textDocument": { "uri": URI, "version": version },
+                "contentChanges": [{ "range": { "start": { "line": 4, "character": 1 }, "end": { "line": 4, "character": 1 } }, "text": "d" }]
+            }),
+        )
+        .await;
+    }
+    let received = h.received(Duration::from_millis(500)).await;
+    assert!(!received.iter().any(|m| m == REFRESH), "no refresh on didChange: {received:?}");
+
+    let pulled = h.request("textDocument/diagnostic", json!({ "textDocument": { "uri": URI } })).await;
+    assert_eq!(pulled["kind"], "full");
     assert_eq!(h.request("shutdown", Value::Null).await, Value::Null);
 }
 
