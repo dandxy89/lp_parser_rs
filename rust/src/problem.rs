@@ -33,8 +33,9 @@ fn apply_variable_kind(interner: &mut NameInterner, variables: &mut IndexMap<Nam
         match variables.entry(id) {
             Entry::Occupied(mut entry) => {
                 let existing = entry.get().kind;
-                // Only override continuous (default) kind so explicit SOS/binary from bounds wins.
-                if existing == VariableKind::Continuous {
+                // Only override continuous (default) kind so explicit SOS/binary from bounds wins,
+                // except that binary beats general/integer: `{0, 1}` is the stronger statement.
+                if existing == VariableKind::Continuous || is_binary_over_integer(existing, kind) {
                     entry.get_mut().set_kind(kind);
                 } else if is_semi_integer(existing, kind) {
                     entry.get_mut().set_kind(VariableKind::SemiInteger);
@@ -45,6 +46,13 @@ fn apply_variable_kind(interner: &mut NameInterner, variables: &mut IndexMap<Nam
             }
         }
     }
+}
+
+/// Whether declaring `new` on a variable already of kind `existing` makes it
+/// binary: a variable listed in both `generals` (or `integers`) and
+/// `binaries` is binary, whichever section comes first.
+const fn is_binary_over_integer(existing: VariableKind, new: VariableKind) -> bool {
+    matches!((existing, new), (VariableKind::General | VariableKind::Integer, VariableKind::Binary))
 }
 
 /// Whether declaring `new` on a variable already of kind `existing` makes it
@@ -2332,6 +2340,22 @@ End";
         // A binary stays binary: semi-continuity adds nothing to {0, 1}.
         let p = LpProblem::parse("minimize\nx\nsubject to\nc: x >= 1\nbinary\nx\nsemi\nx\nend").unwrap();
         assert_eq!(p.variables[&p.name_id("x").unwrap()].kind, VariableKind::Binary);
+    }
+
+    /// A variable listed as both integer and binary is binary: `{0, 1}` is
+    /// the stronger statement, and keeping `General` would drop it.
+    #[test]
+    fn test_binary_wins_over_general_or_integer() {
+        for section in ["generals", "integers"] {
+            for input in [
+                format!("minimize\nx\nsubject to\nc: x >= 1\n{section}\nx\nbinary\nx\nend"),
+                format!("minimize\nx\nsubject to\nc: x >= 1\nbinary\nx\n{section}\nx\nend"),
+                format!("minimize\nx\nsubject to\nc: x >= 1\n{section}\nx\nbinary\nx\nsemi\nx\nend"),
+            ] {
+                let p = LpProblem::parse(&input).unwrap();
+                assert_eq!(p.variables[&p.name_id("x").unwrap()].kind, VariableKind::Binary, "{input:?}");
+            }
+        }
     }
 
     #[test]
