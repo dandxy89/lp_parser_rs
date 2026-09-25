@@ -282,6 +282,16 @@ Highlights: three-panel layout, five sections (Summary / Variables / Constraints
 
 See [`tui/README.md`](https://github.com/dandxy89/lp_parser_rs/blob/main/tui/README.md) for the complete reference.
 
+## Language Server (`lp-lsp`)
+
+A Language Server Protocol implementation for `.lp` files: diagnostics, navigation, rename, hover, completion, inlay hints, code actions, formatting, semantic highlighting and more, for any LSP-capable editor (Neovim, Helix, Zed, VS Code).
+
+```bash
+cargo install --path lsp
+```
+
+See [`lsp/README.md`](lsp/README.md) for the feature list, configuration reference and editor setup.
+
 ## Development
 
 ```bash

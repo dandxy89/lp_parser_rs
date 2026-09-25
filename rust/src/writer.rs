@@ -493,7 +493,7 @@ fn write_bounds_section(output: &mut String, problem: &LpProblem, options: &LpWr
 /// A declared-free variable is emitted as `x free` whatever its kind: an
 /// integer or general variable's default lower bound is still 0, so dropping
 /// the declaration would narrow its range on the way through.
-fn needs_bounds_declaration(variable: &Variable) -> bool {
+const fn needs_bounds_declaration(variable: &Variable) -> bool {
     !variable.bounds.is_unspecified()
 }
 

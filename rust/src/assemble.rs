@@ -81,7 +81,7 @@ struct Segment<'input> {
 
 impl Segment<'_> {
     /// Whether the segment mentions no variable at all (only constants).
-    fn is_numeric_only(&self) -> bool {
+    const fn is_numeric_only(&self) -> bool {
         self.coefficients.is_empty() && self.quadratic.is_empty()
     }
 }

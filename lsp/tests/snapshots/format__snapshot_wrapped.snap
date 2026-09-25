@@ -1,0 +1,17 @@
+---
+source: lsp/tests/format.rs
+expression: "fmt(text, &FormatSettings { line_width: 30, ..settings() })"
+---
+min
+  obj: 12 alpha + 13 beta
+    + 14 gamma - 15 delta
+    + 16 epsilon + 17 zeta
+    + [ x ^ 2 + y ^ 2
+    + z * x ] / 2
+st
+  long: 1 a1 + 2 a2 + 3 a3
+    + 4 a4 + 5 a5 + 6 a6
+    + 7 a7
+    + 8 a8 \ mid comment
+    + 9 a9 >= 1
+end
