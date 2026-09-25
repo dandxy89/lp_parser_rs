@@ -575,9 +575,7 @@ fn write_columns_section(
             in_block = wrap;
         }
         for &(row_name, value) in entries {
-            write!(output, "    {var_name:<10} {row_name:<10} ")?;
-            write_number(output, value, options.decimal_precision)?;
-            writeln!(output)?;
+            write_entry_line(output, var_name, row_name, value, options.decimal_precision)?;
         }
     }
     if in_block {
@@ -607,9 +605,7 @@ fn write_rhs_section(
     if let Some(obj) = objective
         && obj.constant != 0.0
     {
-        write!(output, "    {label:<10} {obj_row_name:<10} ")?;
-        write_number(output, -obj.constant, options.decimal_precision)?;
-        writeln!(output)?;
+        write_entry_line(output, label, obj_row_name, -obj.constant, options.decimal_precision)?;
     }
 
     for (constraint_id, constraint) in &problem.constraints {
@@ -621,9 +617,7 @@ fn write_rhs_section(
                 continue;
             }
             let resolved_name = problem.resolve(constraint.name());
-            write!(output, "    {label:<10} {resolved_name:<10} ")?;
-            write_number(output, rhs, options.decimal_precision)?;
-            writeln!(output)?;
+            write_entry_line(output, label, resolved_name, rhs, options.decimal_precision)?;
         }
     }
 
@@ -648,21 +642,51 @@ fn write_ranges_section(
     for constraint_id in problem.constraints.keys() {
         if let Some(range_value) = range_pairs.ranges.get(constraint_id) {
             let resolved_name = problem.resolve(*constraint_id);
-            write!(output, "    {label:<10} {resolved_name:<10} ")?;
-            write_number(output, *range_value, options.decimal_precision)?;
-            writeln!(output)?;
+            write_entry_line(output, label, resolved_name, *range_value, options.decimal_precision)?;
         }
     }
 
     Ok(())
 }
 
+/// Append `text` left-aligned in a field of `width` characters, exactly as
+/// `format!("{text:<width$}")` would: padding counts chars, not bytes, and
+/// a longer `text` is written whole.
+fn push_padded(output: &mut String, text: &str, width: usize) {
+    output.push_str(text);
+    let chars = text.chars().count();
+    for _ in chars..width {
+        output.push(' ');
+    }
+}
+
+/// Write a `    first second value` data line (COLUMNS, RHS, RANGES and
+/// quadratic sections) with both names in 10-character fields. Equivalent to
+/// `write!(output, "    {first:<10} {second:<10} ")` followed by the number
+/// and a newline, without the formatting machinery on this hot path.
+fn write_entry_line(output: &mut String, first: &str, second: &str, value: f64, precision: Option<usize>) -> std::fmt::Result {
+    output.push_str("    ");
+    push_padded(output, first, 10);
+    output.push(' ');
+    push_padded(output, second, 10);
+    output.push(' ');
+    write_number(output, value, precision)?;
+    output.push('\n');
+    Ok(())
+}
+
 /// Write a single BOUNDS line with a numeric value.
 fn write_bound_value(output: &mut String, bound_type: &str, var_name: &str, value: f64, style: BoundStyle<'_>) -> std::fmt::Result {
-    let label = style.label;
-    write!(output, " {bound_type} {label:<9} {var_name:<10} ")?;
+    output.push(' ');
+    output.push_str(bound_type);
+    output.push(' ');
+    push_padded(output, style.label, 9);
+    output.push(' ');
+    push_padded(output, var_name, 10);
+    output.push(' ');
     write_number(output, value, style.precision)?;
-    writeln!(output)
+    output.push('\n');
+    Ok(())
 }
 
 /// Write a single BOUNDS line without a numeric value (`FR`, `BV`).
@@ -930,10 +954,7 @@ fn write_quadratic_entry(
     value: f64,
     options: &MpsWriterOptions,
 ) -> std::fmt::Result {
-    let (a, b) = (problem.resolve(var1), problem.resolve(var2));
-    write!(output, "    {a:<10} {b:<10} ")?;
-    write_number(output, value, options.decimal_precision)?;
-    writeln!(output)
+    write_entry_line(output, problem.resolve(var1), problem.resolve(var2), value, options.decimal_precision)
 }
 
 /// Write the `QUADOBJ` section for the written objective and one `QCMATRIX`
@@ -1001,6 +1022,17 @@ mod tests {
     use super::*;
     use crate::model::{Coefficient, ComparisonOp, SOSType, VariableBounds, VariableKind, VariableType};
     use crate::mps::parse_mps;
+
+    #[test]
+    fn push_padded_matches_format_width() {
+        for text in ["", "x", "exactly10c", "longer_than_ten", "é", "naïve_ünï", "日本語", "ÿÿÿÿÿÿÿÿÿÿÿ"] {
+            for width in [0, 1, 9, 10, 12] {
+                let mut padded = String::new();
+                push_padded(&mut padded, text, width);
+                assert_eq!(padded, format!("{text:<width$}"), "{text:?} in {width}");
+            }
+        }
+    }
 
     fn build_problem_with_bounds_and_sos() -> LpProblem {
         let mut problem = LpProblem::new().with_problem_name(String::from("Sample")).with_sense(Sense::Maximize);
