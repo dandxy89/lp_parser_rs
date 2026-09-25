@@ -140,8 +140,9 @@ class LpParser:
     def __init__(self, lp_file: StrPath) -> None:
         """Create a parser for the given LP file path, parsing it immediately.
 
-        Raises FileNotFoundError if the path is not a file. The format is inferred
-        from the extension; use `from_file` to override it.
+        Raises FileNotFoundError if the path does not exist (IsADirectoryError
+        for a directory). The format is inferred from the extension; use
+        `from_file` to override it.
 
         I/O failures here and in the save/export methods raise OSError (or the
         matching subclass, e.g. PermissionError); parse failures raise LpParseError.

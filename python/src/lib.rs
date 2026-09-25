@@ -11,7 +11,7 @@ use lp_parser_rs::problem::LpProblem;
 use lp_parser_rs::writer::{LpWriterOptions, write_lp_string_with_options};
 use lp_parser_rs::{ConstraintClass, EntityKind, LpParseError as CoreError, VariableKind};
 use pyo3::create_exception;
-use pyo3::exceptions::{PyFileNotFoundError, PyNotADirectoryError, PyOSError, PyRuntimeError};
+use pyo3::exceptions::{PyNotADirectoryError, PyOSError, PyRuntimeError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
 
@@ -65,9 +65,6 @@ impl LpParser {
     #[staticmethod]
     #[pyo3(signature = (path, format=None))]
     fn from_file(py: Python, path: PathBuf, format: Option<&str>) -> PyResult<Self> {
-        if !path.is_file() {
-            return Err(PyFileNotFoundError::new_err(format!("File '{}' does not exist or is not a file", path.display())));
-        }
         let inferred = match format {
             Some(fmt) => normalise_format(fmt)?,
             None if path.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("mps")) => "mps",
