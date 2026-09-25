@@ -90,6 +90,12 @@ impl DiffTol {
             // A value that became NaN is a change; NaN on both sides is not.
             return a.is_nan() != b.is_nan();
         }
+        if a.is_infinite() || b.is_infinite() {
+            // `rel * inf` is NaN and `inf - inf` is NaN, so the tolerance
+            // arithmetic below cannot judge infinities: only equal ones match.
+            #[allow(clippy::float_cmp)]
+            return a != b;
+        }
         let diff = (a - b).abs();
         if diff == 0.0 {
             return false;
@@ -459,6 +465,17 @@ mod tests {
         let tol = DiffTol::default();
         assert!(!tol.differ(1.0, 1.0));
         assert!(tol.differ(1.0, 1.0 + 1e-12));
+    }
+
+    #[test]
+    fn tol_reports_change_to_or_from_infinity() {
+        for tol in [DiffTol::default(), DiffTol { abs: 1e-6, rel: 1e-9 }, DiffTol { abs: 0.0, rel: 0.5 }] {
+            assert!(tol.differ(1.0, f64::INFINITY), "{tol:?}");
+            assert!(tol.differ(f64::NEG_INFINITY, -5.0), "{tol:?}");
+            assert!(tol.differ(f64::NEG_INFINITY, f64::INFINITY), "{tol:?}");
+            assert!(!tol.differ(f64::INFINITY, f64::INFINITY), "{tol:?}");
+            assert!(!tol.differ(f64::NEG_INFINITY, f64::NEG_INFINITY), "{tol:?}");
+        }
     }
 
     #[test]
