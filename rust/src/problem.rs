@@ -12,24 +12,16 @@ use crate::model::{Coefficient, Constraint, ConstraintClass, Objective, Quadrati
 use crate::mps::{extract_mps_name, parse_mps};
 use crate::{INFINITE_BOUND_THRESHOLD, NUMERIC_EPSILON};
 
-/// Check if a floating-point value is effectively zero using both absolute
-/// and relative epsilon comparisons.
+/// Whether a coefficient is effectively zero: its magnitude is below
+/// [`NUMERIC_EPSILON`].
+///
+/// The test is absolute on purpose. Measuring against the value being
+/// replaced would drop a perfectly ordinary new coefficient (`50`) whenever
+/// the old one was huge (`1e12`).
 #[inline]
-fn is_effectively_zero(value: f64, reference: f64) -> bool {
+fn is_effectively_zero(value: f64) -> bool {
     debug_assert!(value.is_finite(), "is_effectively_zero called with non-finite value: {value}");
-    debug_assert!(reference.is_finite(), "is_effectively_zero called with non-finite reference: {reference}");
-    let abs_value = value.abs();
-    let abs_reference = reference.abs();
-
-    if abs_value < f64::EPSILON {
-        return true;
-    }
-
-    if abs_reference > f64::EPSILON {
-        return abs_value < abs_reference * NUMERIC_EPSILON;
-    }
-
-    false
+    value.abs() < NUMERIC_EPSILON
 }
 
 /// Apply a discrete kind to names, interning each and updating the variable map.
@@ -71,13 +63,12 @@ const fn is_semi_integer(existing: VariableKind, new: VariableKind) -> bool {
 #[inline]
 fn update_coefficient_vec(coefficients: &mut Vec<Coefficient>, variable_id: NameId, new_value: f64) {
     if let Some(idx) = coefficients.iter().position(|c| c.name == variable_id) {
-        let reference_value = coefficients[idx].value;
-        if is_effectively_zero(new_value, reference_value) {
+        if is_effectively_zero(new_value) {
             coefficients.swap_remove(idx);
         } else {
             coefficients[idx].value = new_value;
         }
-    } else if !is_effectively_zero(new_value, 1.0) {
+    } else if !is_effectively_zero(new_value) {
         coefficients.push(Coefficient { name: variable_id, value: new_value });
     }
 }
@@ -513,7 +504,7 @@ impl LpProblem {
 
         update_coefficient_vec(&mut objective.coefficients, var_id, new_coefficient);
 
-        if !is_effectively_zero(new_coefficient, 1.0) {
+        if !is_effectively_zero(new_coefficient) {
             self.variables.entry(var_id).or_insert_with(|| Variable::new(var_id));
         }
 
@@ -544,7 +535,7 @@ impl LpProblem {
             | Constraint::Quadratic { coefficients, .. } => {
                 update_coefficient_vec(coefficients, var_id, new_coefficient);
 
-                if !is_effectively_zero(new_coefficient, 1.0) {
+                if !is_effectively_zero(new_coefficient) {
                     self.variables.entry(var_id).or_insert_with(|| Variable::new(var_id));
                 }
             }
@@ -2355,6 +2346,29 @@ mod modification_tests {
 
         assert!(p.update_objective_coefficient("nonexistent", "x1", 1.0).is_err());
         assert!(p.update_constraint_coefficient("nonexistent", "x1", 1.0).is_err());
+    }
+
+    /// Replacing a huge coefficient with an ordinary one must keep the term:
+    /// "effectively zero" is judged on the new value alone.
+    #[test]
+    #[allow(clippy::float_cmp)]
+    fn test_update_coefficient_from_huge_value_keeps_term() {
+        let mut p = LpProblem::parse("Minimize\n obj: 1e12 x + y\nSubject To\n c: 1e12 x + y >= 1\nEnd").unwrap();
+        p.update_constraint_coefficient("c", "x", 50.0).unwrap();
+        p.update_objective_coefficient("obj", "x", 50.0).unwrap();
+
+        let x = p.name_id("x").unwrap();
+        let c = p.name_id("c").unwrap();
+        let obj = p.name_id("obj").unwrap();
+        let Constraint::Standard { coefficients, .. } = &p.constraints[&c] else { panic!("c must be a standard constraint") };
+        assert_eq!(coefficients.iter().find(|coeff| coeff.name == x).map(|coeff| coeff.value), Some(50.0));
+        let objective = &p.objectives[&obj].coefficients;
+        assert_eq!(objective.iter().find(|coeff| coeff.name == x).map(|coeff| coeff.value), Some(50.0));
+
+        // A genuinely tiny value still removes the term.
+        p.update_constraint_coefficient("c", "x", 1e-12).unwrap();
+        let Constraint::Standard { coefficients, .. } = &p.constraints[&c] else { panic!("c must be a standard constraint") };
+        assert!(!coefficients.iter().any(|coeff| coeff.name == x));
     }
 
     #[test]
