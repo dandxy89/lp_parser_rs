@@ -180,6 +180,18 @@ impl Backend {
         }
     }
 
+    /// [`Self::publish`] in the background, so the edit handler does not wait
+    /// for diagnostics. Skipped when an edit newer than `version` has landed
+    /// by the time it runs: that edit publishes its own.
+    fn publish_unless_superseded(&self, uri: Uri, version: i32) {
+        let this = self.clone();
+        tokio::spawn(async move {
+            if this.is_current(&uri, version) {
+                this.publish(&uri).await;
+            }
+        });
+    }
+
     /// Schedule the semantic pass for `uri`: debounced after edits, immediate
     /// on save. Large files only run on save. Stale results are discarded.
     fn schedule_semantic(&self, uri: Uri, trigger: Trigger) {
@@ -619,7 +631,7 @@ impl LanguageServer for Backend {
             return;
         };
         if size <= QUICK_DIAGNOSTICS_BYTES {
-            self.publish(&uri).await;
+            self.publish_unless_superseded(uri.clone(), params.text_document.version);
         }
         self.schedule_semantic(uri, Trigger::Edit);
     }
