@@ -156,15 +156,12 @@ impl Backend {
         read(&self.state.open).keys().any(|open| workspace::key(open) == key)
     }
 
-    /// Push diagnostics (push mode) or ask the client to pull (pull mode).
+    /// Push diagnostics for `uri` (push mode only). A pull-mode client pulls
+    /// by itself when it opens or edits a document; it is only asked to
+    /// re-pull ([`Self::refresh_diagnostics`]) when diagnostics change
+    /// without an edit, e.g. after the semantic pass.
     async fn publish(&self, uri: &Uri) {
-        let caps = self.caps();
-        if caps.pull_diagnostics {
-            if caps.diagnostic_refresh
-                && let Err(e) = self.client.workspace_diagnostic_refresh().await
-            {
-                self.log(MessageType::WARNING, format!("diagnostic refresh failed: {e}")).await;
-            }
+        if self.caps().pull_diagnostics {
             return;
         }
         let Some(doc) = read(&self.state.open).get(uri).cloned() else { return };
@@ -226,6 +223,7 @@ impl Backend {
                 Arc::make_mut(doc).semantic_result = Some(result);
             }
             this.publish(&uri).await;
+            this.refresh_diagnostics().await;
             this.refresh_views().await;
         });
     }
