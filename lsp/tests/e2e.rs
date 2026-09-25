@@ -144,6 +144,14 @@ async fn full_session() {
     let edits = formatting.as_array().expect("formatting edits");
     assert!(!edits.is_empty(), "messy spacing gets formatted");
 
+    // Usage lenses come without their reference lists, filled in on resolve.
+    assert_eq!(init["capabilities"]["codeLensProvider"]["resolveProvider"], true);
+    let lenses = h.request("textDocument/codeLens", json!({ "textDocument": { "uri": URI } })).await;
+    let unresolved = lenses.as_array().expect("lenses").iter().find(|l| l["command"].is_null()).expect("an unresolved usage lens").clone();
+    let resolved = h.request("codeLens/resolve", unresolved).await;
+    assert_eq!(resolved["command"]["command"], "lp.showReferences");
+    assert!(resolved["command"]["arguments"][2].is_array(), "reference locations: {resolved}");
+
     assert_eq!(h.request("shutdown", Value::Null).await, Value::Null);
 }
 
