@@ -1113,6 +1113,12 @@ fn comparable_linear_parts<'a>(
 }
 
 /// Diff the constraints section between two problems using sorted merge-join.
+///
+/// Also returns the indices of the added and removed entries whose source is a
+/// plain [`Constraint::Standard`] — the only ones rename detection may pair.
+/// Indicator, quadratic and general constraints resolve to the same
+/// `ResolvedConstraint::Standard` shape for display, so the entries alone
+/// cannot tell them apart.
 fn diff_constraints(
     p1: &LpProblem,
     p2: &LpProblem,
@@ -1120,10 +1126,11 @@ fn diff_constraints(
     line_map2: &HashMap<NameId, usize>,
     interner: &mut NameInterner,
     opts: &DiffOptions,
-) -> SectionDiff<ConstraintDiffEntry> {
+) -> (SectionDiff<ConstraintDiffEntry>, Vec<usize>) {
     let cons1 = build_sorted_constraints(p1, opts);
     let cons2 = build_sorted_constraints(p2, opts);
 
+    let mut rename_candidates = Vec::new();
     let mut entries = Vec::new();
     let mut counts = DiffCounts::default();
     let mut i = 0;
@@ -1147,6 +1154,9 @@ fn diff_constraints(
                 let line1 = line_map1.get(name_id).copied();
                 let line2 = line_map2.get(name_id).copied();
                 counts.removed += 1;
+                if matches!(constraint, Constraint::Standard { .. }) {
+                    rename_candidates.push(entries.len());
+                }
                 entries.push(ConstraintDiffEntry {
                     name: name.clone(),
                     kind: DiffKind::Removed,
@@ -1163,6 +1173,9 @@ fn diff_constraints(
                 let line1 = line_map1.get(name_id).copied();
                 let line2 = line_map2.get(name_id).copied();
                 counts.added += 1;
+                if matches!(constraint, Constraint::Standard { .. }) {
+                    rename_candidates.push(entries.len());
+                }
                 entries.push(ConstraintDiffEntry {
                     name: name.clone(),
                     kind: DiffKind::Added,
@@ -1212,7 +1225,7 @@ fn diff_constraints(
         }
     }
 
-    SectionDiff { entries, counts }
+    (SectionDiff { entries, counts }, rename_candidates)
 }
 
 /// A candidate constraint for rename matching: its entry index, RHS, and a
@@ -1262,31 +1275,12 @@ const fn operator_bucket_key(operator: ComparisonOp) -> u8 {
 /// [`DiffKind::Renamed`] entry carrying the old name in `renamed_from`.
 ///
 /// SOS constraints are skipped for v1 — rename detection covers standard
-/// constraints only.
-fn detect_constraint_renames(section: &mut SectionDiff<ConstraintDiffEntry>, opts: &DiffOptions) {
-    // (removed candidates, added candidates) bucketed by (operator key, term count).
-    let mut buckets: HashMap<(u8, usize), (Vec<RenameCandidate>, Vec<RenameCandidate>)> = HashMap::new();
-
-    for (entry_index, entry) in section.entries.iter().enumerate() {
-        let is_added = match entry.kind {
-            DiffKind::Added => true,
-            DiffKind::Removed => false,
-            DiffKind::Modified | DiffKind::Renamed => continue,
-        };
-        // Standard constraints only — SOS rename detection is deferred (see doc comment).
-        let ConstraintDiffDetail::AddedOrRemoved(ResolvedConstraint::Standard { coefficients, operator, rhs }) = &entry.detail else {
-            continue;
-        };
-        let mut signature: Vec<(NameId, f64)> = coefficients.iter().map(|c| (c.name, c.value)).collect();
-        signature.sort_unstable_by_key(|(name, _)| *name);
-        let bucket = buckets.entry((operator_bucket_key(*operator), signature.len())).or_default();
-        let candidate = RenameCandidate { entry_index, rhs: *rhs, signature };
-        if is_added {
-            bucket.1.push(candidate);
-        } else {
-            bucket.0.push(candidate);
-        }
-    }
+/// constraints only. `candidates` are the entry indices [`diff_constraints`]
+/// found to come from a plain standard row, so an indicator, quadratic or
+/// general constraint (which display in the same shape) is never paired with
+/// one.
+fn detect_constraint_renames(section: &mut SectionDiff<ConstraintDiffEntry>, candidates: &[usize], opts: &DiffOptions) {
+    let buckets = bucket_rename_candidates(&section.entries, candidates);
 
     // Greedy first-match pairing of (removed entry index, added entry index).
     let mut pairs: Vec<(usize, usize)> = Vec::new();
@@ -1380,6 +1374,37 @@ fn detect_constraint_renames(section: &mut SectionDiff<ConstraintDiffEntry>, opt
     section.counts.added -= pairs.len();
     section.counts.removed -= pairs.len();
     section.counts.renamed += pairs.len();
+}
+
+/// (removed candidates, added candidates) bucketed by the cheap exact key
+/// (operator key, term count).
+fn bucket_rename_candidates(
+    entries: &[ConstraintDiffEntry],
+    candidates: &[usize],
+) -> HashMap<(u8, usize), (Vec<RenameCandidate>, Vec<RenameCandidate>)> {
+    let mut buckets: HashMap<(u8, usize), (Vec<RenameCandidate>, Vec<RenameCandidate>)> = HashMap::new();
+    for &entry_index in candidates {
+        let entry = &entries[entry_index];
+        let is_added = match entry.kind {
+            DiffKind::Added => true,
+            DiffKind::Removed => false,
+            DiffKind::Modified | DiffKind::Renamed => continue,
+        };
+        // Standard constraints only — SOS rename detection is deferred (see doc comment).
+        let ConstraintDiffDetail::AddedOrRemoved(ResolvedConstraint::Standard { coefficients, operator, rhs }) = &entry.detail else {
+            continue;
+        };
+        let mut signature: Vec<(NameId, f64)> = coefficients.iter().map(|c| (c.name, c.value)).collect();
+        signature.sort_unstable_by_key(|(name, _)| *name);
+        let bucket = buckets.entry((operator_bucket_key(*operator), signature.len())).or_default();
+        let candidate = RenameCandidate { entry_index, rhs: *rhs, signature };
+        if is_added {
+            bucket.1.push(candidate);
+        } else {
+            bucket.0.push(candidate);
+        }
+    }
+    buckets
 }
 
 /// Diff the objectives section between two problems using sorted merge-join.
@@ -1508,8 +1533,8 @@ pub fn build_diff_report(input: &DiffInput<'_>) -> LpDiffReport {
     let opts = &input.options;
 
     let variables = diff_variables(input.p1, input.p2, opts);
-    let mut constraints = diff_constraints(input.p1, input.p2, input.line_map1, input.line_map2, &mut interner, opts);
-    detect_constraint_renames(&mut constraints, opts);
+    let (mut constraints, rename_candidates) = diff_constraints(input.p1, input.p2, input.line_map1, input.line_map2, &mut interner, opts);
+    detect_constraint_renames(&mut constraints, &rename_candidates, opts);
     let objectives = diff_objectives(input.p1, input.p2, &mut interner, opts);
 
     let sense_changed = if input.p1.sense == input.p2.sense { None } else { Some((input.p1.sense.clone(), input.p2.sense.clone())) };
@@ -2111,6 +2136,20 @@ mod tests {
         assert_eq!(report.constraints.counts.renamed, 1);
         assert_eq!(report.constraints.counts.added, 0);
         assert_eq!(report.constraints.counts.removed, 0);
+    }
+
+    #[test]
+    fn test_rename_not_detected_across_constraint_kinds() {
+        // A standard row and an indicator with the same linear part are not the
+        // same constraint under a new name: the indicator's condition is lost.
+        let p1 = LpProblem::parse("minimize\nobj: x\nsubject to\n c_old: x + y <= 10\nbinaries\n b\nend").unwrap();
+        let p2 = LpProblem::parse("minimize\nobj: x\nsubject to\n c_new: b = 1 -> x + y <= 10\nbinaries\n b\nend").unwrap();
+        assert!(matches!(p2.constraints.values().next(), Some(Constraint::Indicator { .. })), "fixture must parse as an indicator");
+        let report = quick_report(&p1, &p2);
+
+        assert_eq!(report.constraints.counts.renamed, 0, "different constraint kinds must not pair as a rename");
+        assert_eq!(report.constraints.counts.added, 1);
+        assert_eq!(report.constraints.counts.removed, 1);
     }
 
     #[test]
