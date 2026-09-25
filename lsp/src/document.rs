@@ -70,7 +70,7 @@ impl Document {
         let start_position = self.lines.point(range.start);
         let old_end_position = self.lines.point(range.end);
         self.text.replace_range(range.clone(), new_text);
-        self.lines = LineIndex::new(&self.text);
+        self.lines.edit(&self.text, range.clone(), new_text.len());
         let new_end_byte = range.start + new_text.len();
         self.tree.edit(&InputEdit {
             start_byte: range.start,
