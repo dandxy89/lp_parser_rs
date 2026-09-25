@@ -36,7 +36,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use crate::error::{LpParseError, LpResult};
 use crate::interner::NameId;
-use crate::model::{Coefficient, Constraint, GeneralFunction, QuadraticTerm};
+use crate::model::{Coefficient, Constraint, GeneralFunction, QuadraticTerm, Variable};
 use crate::problem::LpProblem;
 
 /// A name normaliser: rewrites a name before matching.
@@ -423,7 +423,7 @@ pub fn compare(p1: &LpProblem, p2: &LpProblem, options: &DiffOptions) -> LpDiff 
     for name in vars1.intersection(&vars2) {
         let v1 = &p1.variables[&cvars1[name]];
         let v2 = &p2.variables[&cvars2[name]];
-        if v1.kind != v2.kind || v1.bounds != v2.bounds {
+        if v1.kind != v2.kind || bounds_differ(tol, v1, v2) {
             vars_type_changed.push((name.clone(), format!("{:?}/{}", v1.kind, v1.bounds), format!("{:?}/{}", v2.kind, v2.bounds)));
         }
     }
@@ -442,6 +442,17 @@ pub fn compare(p1: &LpProblem, p2: &LpProblem, options: &DiffOptions) -> LpDiff 
         objs_removed: objs1.difference(&objs2).cloned().collect(),
         objs_modified: diff_modified_objectives(p1, p2, &cobjs1, &cobjs2, &objs_common, normalise, tol),
     }
+}
+
+/// Whether two variables' bounds differ beyond `tol`.
+///
+/// Compares the *effective* bounds a solver would use, so an unspecified
+/// bound and an explicit one equal to the default (`x >= 0`) match, and
+/// tolerances apply as they do to coefficients and right-hand sides.
+fn bounds_differ(tol: DiffTol, v1: &Variable, v2: &Variable) -> bool {
+    debug_assert!(v1.kind == v2.kind, "bounds are only compared for variables of the same kind");
+    tol.differ(v1.bounds.effective_lower(v1.kind), v2.bounds.effective_lower(v2.kind))
+        || tol.differ(v1.bounds.effective_upper(v1.kind), v2.bounds.effective_upper(v2.kind))
 }
 
 #[cfg(test)]
@@ -555,6 +566,25 @@ mod tests {
         let diff = p1.diff(&p2, &opts(DiffTol::default()));
         assert_eq!(diff.vars_type_changed.len(), 1);
         assert_eq!(diff.vars_type_changed[0].0, "x");
+    }
+
+    #[test]
+    fn variable_bounds_compare_effectively_and_within_tolerance() {
+        let p1 = parse("Minimize\n obj: x + y\nSubject To\n c1: x + y >= 1\nBounds\n y <= 10\nEnd");
+        // `x >= 0` restates the default; `y`'s bound moves by 1e-9.
+        let p2 = parse("Minimize\n obj: x + y\nSubject To\n c1: x + y >= 1\nBounds\n x >= 0\n y <= 10.00000001\nEnd");
+        let diff = p1.diff(&p2, &opts(DiffTol { abs: 1e-6, rel: 0.0 }));
+        assert!(diff.vars_type_changed.is_empty(), "{:?}", diff.vars_type_changed);
+
+        // Exact comparison still sees the moved bound, but not the restated default.
+        let diff = p1.diff(&p2, &opts(DiffTol::default()));
+        let names: Vec<&str> = diff.vars_type_changed.iter().map(|(n, ..)| n.as_str()).collect();
+        assert_eq!(names, ["y"]);
+
+        // A bound that becomes infinite is a change.
+        let p3 = parse("Minimize\n obj: x + y\nSubject To\n c1: x + y >= 1\nBounds\n y <= inf\nEnd");
+        let diff = p1.diff(&p3, &opts(DiffTol { abs: 1e-6, rel: 1e-6 }));
+        assert_eq!(diff.vars_type_changed.len(), 1);
     }
 
     #[test]
