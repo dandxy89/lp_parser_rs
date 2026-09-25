@@ -8,13 +8,14 @@
 
 use std::fmt::{self, Write as _};
 use std::hint::black_box;
-use std::sync::{Once, OnceLock};
+use std::sync::{Arc, Once, OnceLock};
 use std::time::Duration;
 
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
-use lp_lsp::config::FormatSettings;
-use lp_lsp::features::{code_action, code_lens, completion, format, semantic_tokens};
-use lp_lsp::{Document, Encoding, SymbolIndex, syntax};
+use lp_lsp::config::{FormatSettings, InlayHintSettings};
+use lp_lsp::features::{code_action, code_lens, completion, format, inlay, semantic_tokens};
+use lp_lsp::{Document, Encoding, SymbolIndex, semantic, syntax};
+use lp_parser_rs::analysis::AnalysisConfig;
 use tower_lsp_server::ls_types::{CodeActionContext, TextDocumentContentChangeEvent, Uri};
 use tree_sitter::InputEdit;
 
@@ -267,6 +268,21 @@ fn many(c: &mut Criterion) {
         let range = tower_lsp_server::ls_types::Range::new(at, at);
         let context = CodeActionContext::default();
         b.iter(|| code_action::actions(black_box(doc), range, &context, true));
+    });
+
+    group.bench_function("inlay_hints_viewport", |b| {
+        // Hints for a 60-line viewport near the middle, after the semantic pass.
+        let mut doc = constraints_200k().clone();
+        doc.semantic_result = Some(Arc::new(semantic::run(&doc.text, doc.version, &AnalysisConfig::default())));
+        assert!(doc.semantic().and_then(|s| s.model()).is_some(), "generated model parses upstream");
+        doc.build_index();
+        let first = u32::try_from(doc.lines.line_of(doc.text.len() / 2)).expect("line fits");
+        let range = tower_lsp_server::ls_types::Range::new(
+            tower_lsp_server::ls_types::Position::new(first, 0),
+            tower_lsp_server::ls_types::Position::new(first + 60, 0),
+        );
+        let settings = InlayHintSettings::default();
+        b.iter(|| inlay::hints(black_box(&doc), range, &settings));
     });
 
     group.finish();
