@@ -843,6 +843,24 @@ fn bound_propagation(problem: &mut LpProblem, pass: &mut Pass<'_>, infeasible: &
     apply_bounds(problem, &updates, pass, infeasible, "propagate");
 }
 
+/// An integer variable's bound rounded inwards with `round` (`ceil` for a
+/// lower bound, `floor` for an upper), or `None` when it is already integral.
+///
+/// A bound within [`EPS`] (relative to its magnitude) of an integer is taken to
+/// be that integer: `2.9999999999999996` is float noise for `3`, and flooring
+/// it to `2` would cut off a feasible point. `outward` (`-1.0` for a lower
+/// bound, `+1.0` for an upper) nudges the value away from the interior by that
+/// tolerance before rounding.
+fn rounded_bound(value: f64, round: fn(f64) -> f64, outward: f64) -> Option<f64> {
+    debug_assert!((outward.abs() - 1.0).abs() < f64::EPSILON, "outward must be a unit direction");
+    if !value.is_finite() {
+        return None;
+    }
+    let rounded = round(value + outward * EPS * value.abs().max(1.0));
+    debug_assert!(rounded.fract() == 0.0, "a rounded bound is integral");
+    (rounded - value != 0.0).then_some(rounded)
+}
+
 /// Round fractional bounds on integer variables inwards.
 fn integer_rounding(problem: &mut LpProblem, pass: &mut Pass<'_>, infeasible: &mut Option<String>) {
     let mut updates = Vec::new();
@@ -852,8 +870,8 @@ fn integer_rounding(problem: &mut LpProblem, pass: &mut Pass<'_>, infeasible: &m
             continue;
         }
         // An absent bound is the solver's implicit 0 / +inf, both already integral.
-        let lower = variable.bounds.lower.filter(|value| value.is_finite() && value.fract() != 0.0).map(f64::ceil);
-        let upper = variable.bounds.upper.filter(|value| value.is_finite() && value.fract() != 0.0).map(f64::floor);
+        let lower = variable.bounds.lower.and_then(|value| rounded_bound(value, f64::ceil, -1.0));
+        let upper = variable.bounds.upper.and_then(|value| rounded_bound(value, f64::floor, 1.0));
         if lower.is_some() || upper.is_some() {
             updates.push((*var_id, lower, upper));
         }
@@ -1497,6 +1515,16 @@ mod tests {
         let (out, _) = presolve(&problem, only(&[Rule::IntegerRounding]));
 
         assert_eq!(bounds_of(&out, "x"), (1.0, 3.0), "an integer variable's fractional bounds round inwards");
+    }
+
+    #[test]
+    fn integer_bounds_within_tolerance_of_an_integer_snap_to_it() {
+        let problem = parse(
+            "Maximize\n obj: x\nSubject To\n c1: x + y <= 9\nBounds\n 1.0000000000000002 <= x <= 2.9999999999999996\nGenerals\n x\nEnd",
+        );
+        let (out, _) = presolve(&problem, only(&[Rule::IntegerRounding]));
+
+        assert_eq!(bounds_of(&out, "x"), (1.0, 3.0), "float noise around an integer must not cut off that integer");
     }
 
     #[test]
