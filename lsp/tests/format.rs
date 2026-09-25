@@ -4,7 +4,7 @@
 use std::path::{Path, PathBuf};
 
 use lp_lsp::config::{FormatSettings, KeywordCase};
-use lp_lsp::features::format::{format_document, format_on_type, format_range, format_text};
+use lp_lsp::features::format::{ON_TYPE_REFORMAT_MAX_BYTES, format_document, format_on_type, format_range, format_text};
 use lp_lsp::{Document, Encoding};
 use lp_parser_rs::diff::DiffOptions;
 use lp_parser_rs::problem::LpProblem;
@@ -260,6 +260,19 @@ fn on_type_after_end_and_in_sos_sections() {
     assert!(apply(text, &d, &edits).contains("    x: 1\n    \nend"), "{:?}", apply(text, &d, &edits));
     // After `End`: column 0, so nothing to change.
     assert_eq!(format_on_type(&d, Position::new(9, 0), "\n", &settings()), Some(vec![]));
+}
+
+#[test]
+fn on_type_only_indents_large_documents() {
+    let filler = "  c: x + y >= 1\n";
+    let mut text = format!("min\n  obj: x\nst\n{}", filler.repeat(ON_TYPE_REFORMAT_MAX_BYTES / filler.len() + 1));
+    let line = u32::try_from(text.matches('\n').count()).unwrap();
+    text.push_str("last:x+y>=1\n\nend\n");
+    let d = doc(&text);
+    let edits = format_on_type(&d, Position::new(line + 1, 0), "\n", &settings()).unwrap();
+    // The new line is indented; the unformatted entry above is left alone.
+    assert_eq!(edits.len(), 1, "{edits:?}");
+    assert!(apply(&text, &d, &edits).ends_with("\nlast:x+y>=1\n  \nend\n"));
 }
 
 #[test]
