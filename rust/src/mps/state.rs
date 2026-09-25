@@ -330,6 +330,16 @@ impl<'input> MpsParseState<'input> {
     }
     /// Validate required sections and build the final [`ParseResult`].
     fn build_result(mut self) -> LpResult<ParseResult<'input>> {
+        // ENDATA flushes the last SOS set, but input without ENDATA is read
+        // leniently, so flush here too (a no-op once ENDATA has flushed).
+        flush_sos_constraint(
+            &mut self.sos_constraints,
+            &mut self.current_sos_name,
+            &mut self.current_sos_type,
+            &mut self.current_sos_weights,
+        );
+        debug_assert!(self.current_sos_weights.is_empty(), "all SOS weights must be flushed before building the result");
+
         if self.columns.in_integer_block {
             eprintln!("unclosed INTORG marker block at end of MPS input; trailing columns treated as integer");
         }
