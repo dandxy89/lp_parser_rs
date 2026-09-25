@@ -261,6 +261,9 @@ impl<'p1, 'p2, 'c> LinearComparer<'p1, 'p2, 'c> {
     /// Equivalent to building a name -> value map of each side and comparing
     /// the maps, but sorts two reused buffers and merges them instead.
     fn count(&mut self, old: &[Coefficient], new: &[Coefficient]) -> usize {
+        if let Some(diffs) = self.count_aligned(old, new) {
+            return diffs;
+        }
         sorted_by_name(&mut self.old, self.p1, old, self.canon);
         sorted_by_name(&mut self.new, self.p2, new, self.canon);
         let (a, b) = (&self.old, &self.new);
@@ -285,6 +288,23 @@ impl<'p1, 'p2, 'c> LinearComparer<'p1, 'p2, 'c> {
             }
         }
         diffs + (a.len() - i) + (b.len() - j)
+    }
+
+    /// Fast path for the common case of a row whose variables are listed in
+    /// the same order on both sides: count the changed values position by
+    /// position. Returns `None` when that would not match [`Self::count`]:
+    /// with a normaliser (distinct names may merge), when the names differ
+    /// in order or number, or when a name repeats (only its last value
+    /// counts). Without a normaliser, equal names within one problem are
+    /// equal ids, so repeats are found by comparing ids.
+    fn count_aligned(&self, old: &[Coefficient], new: &[Coefficient]) -> Option<usize> {
+        const MAX_ALIGNED_LEN: usize = 16;
+        if self.canon.0.is_some() || old.len() != new.len() || old.len() > MAX_ALIGNED_LEN {
+            return None;
+        }
+        let aligned = old.iter().zip(new).all(|(a, b)| self.p1.resolve(a.name) == self.p2.resolve(b.name));
+        let repeats = old.iter().enumerate().any(|(i, a)| old[..i].iter().any(|earlier| earlier.name == a.name));
+        (aligned && !repeats).then(|| old.iter().zip(new).filter(|(a, b)| self.tol.differ(a.value, b.value)).count())
     }
 }
 
@@ -607,6 +627,12 @@ mod tests {
             (vec![c(ids1[0], 1.0), c(ids1[0], 3.0), c(ids1[2], 1.0)], vec![c(id2("x"), 3.0), c(id2("z"), 1.0), c(id2("z"), 2.0)]),
             (vec![c(ids1[4], 1.0), c(ids1[5], 2.0), c(ids1[6], 0.0)], vec![c(id2("x"), 1.0), c(id2("y"), 2.0), c(id2("w"), f64::NAN)]),
             (vec![c(ids1[3], 1.0), c(ids1[0], 1.0)], vec![c(id2("X"), 1.0), c(id2("x"), 1.0), c(id2("x_1"), 1.0)]),
+            // Same names in the same order (the aligned fast path).
+            (vec![c(ids1[0], 1.0), c(ids1[1], 2.0), c(ids1[2], 3.0)], vec![c(id2("x"), 1.0), c(id2("y"), 2.5), c(id2("z"), 3.0)]),
+            (vec![c(ids1[4], 1.0), c(ids1[5], 2.0)], vec![c(id2("x_1"), 1.0), c(id2("y_2"), 2.0)]),
+            // Aligned but repeated: only the last value of `x` counts.
+            (vec![c(ids1[0], 1.0), c(ids1[0], 2.0)], vec![c(id2("x"), 2.0), c(id2("x"), 1.0)]),
+            (vec![c(ids1[0], 1.0), c(ids1[0], 2.0)], vec![c(id2("x"), 1.0), c(id2("x"), 2.0)]),
         ];
         let normalise = |name: &str| strip_index_suffix(&name.to_ascii_lowercase());
         for canon in [Canon(None), Canon(Some(&normalise))] {
