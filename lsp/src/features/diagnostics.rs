@@ -88,8 +88,17 @@ fn related(doc: &Document, range: Range<usize>, message: impl Into<String>) -> D
 }
 
 /// `ERROR` and `MISSING` nodes (one diagnostic per `ERROR`, its subtree
-/// skipped) and `=<` / `=>` operator spellings, in one walk.
+/// skipped) and `=<` / `=>` operator spellings, in one walk. Only subtrees
+/// with errors (`has_error` holds on every ancestor of an `ERROR` or
+/// `MISSING` node) or spanning one of those spellings are entered: nothing
+/// else can produce a diagnostic.
 fn syntax_diagnostics(doc: &Document, out: &mut Vec<Diagnostic>) {
+    let mut spellings: Vec<usize> = doc.text.match_indices("=<").chain(doc.text.match_indices("=>")).map(|(i, _)| i).collect();
+    spellings.sort_unstable();
+    let spans_spelling = |node: Node<'_>| {
+        let next = spellings.partition_point(|&s| s < node.start_byte());
+        spellings.get(next).is_some_and(|&s| s + 2 <= node.end_byte())
+    };
     let mut cursor = doc.tree.walk();
     loop {
         let node = cursor.node();
@@ -112,7 +121,7 @@ fn syntax_diagnostics(doc: &Document, out: &mut Vec<Diagnostic>) {
             }
             descend = false;
         }
-        if descend && cursor.goto_first_child() {
+        if descend && (node.has_error() || spans_spelling(node)) && cursor.goto_first_child() {
             continue;
         }
         loop {
@@ -373,6 +382,79 @@ mod tests {
 
     fn covered(doc: &Document, d: &Diagnostic) -> String {
         doc.slice(doc.byte_range(d.range)).to_owned()
+    }
+
+    /// [`syntax_diagnostics`] visiting every node: the pruned walk must match.
+    fn syntax_diagnostics_full_walk(doc: &Document) -> Vec<Diagnostic> {
+        let mut out = Vec::new();
+        let mut cursor = doc.tree.walk();
+        loop {
+            let node = cursor.node();
+            let mut descend = true;
+            if node.is_error() {
+                out.push(unexpected(doc, node));
+                descend = false;
+            } else if node.is_missing() {
+                let expected = if node.is_named() { node.kind().replace('_', " ") } else { format!("`{}`", node.kind()) };
+                out.push(diagnostic(
+                    doc,
+                    node.byte_range(),
+                    DiagnosticSeverity::ERROR,
+                    codes::MISSING_TOKEN,
+                    format!("missing {expected}"),
+                ));
+            } else if node.kind() == kind::COMPARISON_OPERATOR {
+                let preferred = match doc.node_text(node) {
+                    "=<" => Some("<="),
+                    "=>" => Some(">="),
+                    _ => None,
+                };
+                if let Some(preferred) = preferred {
+                    let message = format!("`{}` is a non-standard spelling of `{preferred}`", doc.node_text(node));
+                    out.push(diagnostic(doc, node.byte_range(), DiagnosticSeverity::INFORMATION, codes::OPERATOR_SPELLING, message));
+                }
+                descend = false;
+            }
+            if descend && cursor.goto_first_child() {
+                continue;
+            }
+            loop {
+                if cursor.goto_next_sibling() {
+                    break;
+                }
+                if !cursor.goto_parent() {
+                    return out;
+                }
+            }
+        }
+    }
+
+    proptest::proptest! {
+        #![proptest_config(proptest::prelude::ProptestConfig::with_cases(256))]
+        #[test]
+        fn pruned_syntax_walk_matches_full_walk(
+            parts in proptest::collection::vec(
+                proptest::prop_oneof![
+                    proptest::strategy::Just("Minimize\n obj: x + y\n".to_owned()),
+                    proptest::strategy::Just("Subject To\n c1: x + y >= 1\n".to_owned()),
+                    proptest::strategy::Just(" c2: x - y =< 4\n".to_owned()),
+                    proptest::strategy::Just(" c3: 2 x => 1\n".to_owned()),
+                    proptest::strategy::Just(" c4: b = 1 -> x + y <= 2\n".to_owned()),
+                    proptest::strategy::Just("Bounds\n x <= 10\n -1 =< y =< 3\n".to_owned()),
+                    proptest::strategy::Just("Generals\n y\n".to_owned()),
+                    proptest::strategy::Just("General Constraints\n g: r = MAX(x, y)\n".to_owned()),
+                    proptest::strategy::Just(" [ x ^ 2 ]".to_owned()),
+                    proptest::strategy::Just("End\n".to_owned()),
+                    "[a-z0-9 :+<=>\\n-]{0,8}",
+                ],
+                0..14,
+            )
+        ) {
+            let doc = Document::new("file:///t.lp".parse().unwrap(), parts.concat(), 1, Encoding::Utf16);
+            let mut pruned = Vec::new();
+            syntax_diagnostics(&doc, &mut pruned);
+            proptest::prop_assert_eq!(pruned, syntax_diagnostics_full_walk(&doc));
+        }
     }
 
     #[test]
