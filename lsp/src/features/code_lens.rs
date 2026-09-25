@@ -5,6 +5,8 @@
 //! title and the reference locations, so a large model does not send every
 //! variable's full location list up front.
 
+use std::fmt::Write as _;
+
 use serde_json::{Value, json};
 use tower_lsp_server::ls_types::{CodeLens, Command, Range};
 
@@ -96,9 +98,17 @@ pub fn resolve(doc: &Document, mut lens: CodeLens) -> Result<CodeLens, String> {
 
 /// `template` with `{}` replaced by `n`, pluralised with a trailing `s`.
 fn count(n: usize, template: &str) -> String {
-    debug_assert!(template.contains("{}"));
-    let text = template.replace("{}", &n.to_string());
-    if n == 1 { text } else { text + "s" }
+    debug_assert_eq!(template.matches("{}").count(), 1, "one placeholder");
+    let Some((before, after)) = template.split_once("{}") else { return template.to_owned() };
+    // One allocation: the text, up to 20 digits and the plural `s`.
+    let mut text = String::with_capacity(before.len() + 20 + after.len() + 1);
+    text.push_str(before);
+    write!(text, "{n}").expect("writing to a String cannot fail");
+    text.push_str(after);
+    if n != 1 {
+        text.push('s');
+    }
+    text
 }
 
 #[cfg(test)]
@@ -156,6 +166,16 @@ mod tests {
         // Resolved against a newer version where the variable is gone.
         let edited = Document::new(doc.uri.clone(), "min\n obj: y\nEnd\n".to_owned(), 1, Encoding::Utf16);
         assert!(resolve(&edited, lens).unwrap_err().contains("`x`"));
+    }
+
+    #[test]
+    fn counts_pluralise_like_replace() {
+        for template in ["{} variable", "used in {} constraint"] {
+            for n in [0, 1, 2, 9, 10, 11, 100, 12_345, usize::MAX] {
+                let replaced = template.replace("{}", &n.to_string());
+                assert_eq!(count(n, template), if n == 1 { replaced } else { replaced + "s" });
+            }
+        }
     }
 
     #[test]
