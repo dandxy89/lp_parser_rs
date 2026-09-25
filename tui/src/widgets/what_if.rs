@@ -32,6 +32,13 @@ pub fn draw_what_if(frame: &mut Frame, area: Rect, prompt: &WhatIfPrompt) {
     let inner_width = popup.width.saturating_sub(4) as usize;
     let name = truncate_with_ellipsis(&prompt.constraint_name, inner_width.saturating_sub(12));
 
+    // Columns the input may use: the popup less its borders and the label,
+    // less one so the cursor has a cell after the last character.
+    let field_width = (popup.width.saturating_sub(2) as usize).saturating_sub(INPUT_LABEL.len() + 1);
+    // Scrolled so the cursor stays in view however long the input grows.
+    let scroll = prompt.input.visual_scroll(field_width);
+    let visible_input = skip_columns(prompt.input.value(), scroll);
+
     let mut lines = vec![
         Line::from(vec![
             Span::styled(" constraint ", Style::default().fg(t.muted)),
@@ -43,7 +50,7 @@ pub fn draw_what_if(frame: &mut Frame, area: Rect, prompt: &WhatIfPrompt) {
         ]),
         Line::from(vec![
             Span::styled(INPUT_LABEL, Style::default().fg(t.muted)),
-            Span::styled(prompt.input.value().to_owned(), Style::default().fg(t.accent).add_modifier(Modifier::BOLD)),
+            Span::styled(visible_input.to_owned(), Style::default().fg(t.accent).add_modifier(Modifier::BOLD)),
         ]),
     ];
     if let Some(error) = &prompt.error {
@@ -60,10 +67,60 @@ pub fn draw_what_if(frame: &mut Frame, area: Rect, prompt: &WhatIfPrompt) {
 
     // Place the real terminal cursor at the edit position on the input line
     // (row 3 inside the border; column after the label).
-    #[allow(clippy::cast_possible_truncation)] // label and input are far narrower than u16::MAX
-    let cursor_x = popup.x + 1 + INPUT_LABEL.len() as u16 + prompt.input.visual_cursor() as u16;
+    let visual_cursor = prompt.input.visual_cursor().saturating_sub(scroll);
+    debug_assert!(visual_cursor <= field_width, "the scroll keeps the cursor inside the field");
+    #[allow(clippy::cast_possible_truncation)] // bounded by the popup width, itself a u16
+    let cursor_x = popup.x + 1 + INPUT_LABEL.len() as u16 + visual_cursor as u16;
     let cursor_y = popup.y + 3;
     if cursor_x < popup.right().saturating_sub(1) && cursor_y < popup.bottom().saturating_sub(1) {
         frame.set_cursor_position((cursor_x, cursor_y));
+    }
+}
+
+/// `text` with its first `columns` display columns dropped (as counted by
+/// `tui_input`'s own scroll, so the two stay in step).
+fn skip_columns(text: &str, columns: usize) -> &str {
+    let mut skipped = 0;
+    for (index, c) in text.char_indices() {
+        if skipped >= columns {
+            return &text[index..];
+        }
+        skipped += unicode_width::UnicodeWidthChar::width(c).unwrap_or(0);
+    }
+    ""
+}
+
+#[cfg(test)]
+mod tests {
+    use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
+
+    use super::*;
+
+    fn prompt(value: &str) -> WhatIfPrompt {
+        WhatIfPrompt { constraint_name: "c1".to_owned(), current_rhs: 2.0, input: tui_input::Input::new(value.to_owned()), error: None }
+    }
+
+    /// Regression: the input never scrolled, so once it outgrew the field the
+    /// tail (where the cursor is) was clipped and the cursor vanished.
+    #[test]
+    fn a_long_input_scrolls_to_keep_the_cursor_in_view() {
+        let value = format!("{}END", "1".repeat(120));
+        let mut terminal = Terminal::new(TestBackend::new(80, 24)).expect("test terminal must build");
+        terminal.draw(|frame| draw_what_if(frame, frame.area(), &prompt(&value))).expect("draw must succeed");
+
+        let text: String = terminal.backend().buffer().content().iter().map(ratatui::buffer::Cell::symbol).collect();
+        assert!(text.contains("END"), "the tail being edited must be visible");
+        let cursor = terminal.get_cursor_position().expect("cursor position is readable");
+        let popup = centred_rect(Rect::new(0, 0, 80, 24), POPUP_WIDTH, POPUP_HEIGHT);
+        assert!(cursor.x > popup.x && cursor.x < popup.right() - 1, "the cursor sits inside the popup, got {cursor:?}");
+        assert_eq!(cursor.y, popup.y + 3, "on the input row");
+    }
+
+    #[test]
+    fn skip_columns_counts_display_width() {
+        assert_eq!(skip_columns("abcdef", 0), "abcdef");
+        assert_eq!(skip_columns("abcdef", 2), "cdef");
+        assert_eq!(skip_columns("ab", 5), "");
     }
 }
