@@ -21,6 +21,9 @@ name = "parse_lp"
 crate-type = ["cdylib"]
 
 [dependencies]
+# Same version as lp_parser_rs uses, so `to_csv` errors can be downcast to
+# `csv::Error`.
+csv = "1.4"
 lp_parser_rs = { path = "../rust", features = ["csv", "serde", "diff"] }
 pyo3 = { version = "0.29.0", features = [
     "extension-module",
