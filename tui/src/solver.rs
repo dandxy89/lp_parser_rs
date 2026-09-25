@@ -845,6 +845,22 @@ pub fn solve_problem_with(problem: &LpProblem, extra: &[(&str, &str)]) -> Result
 
 /// The solve behind [`solve_problem_with`] and [`solve_problem_cancellable`].
 fn solve(problem: &LpProblem, extra: &[(&str, &str)], cancel: Option<&AtomicBool>) -> Result<SolveResult, String> {
+    // pid+sequence-named temp file + explicit cleanup instead of the
+    // tempfile crate. The sequence number keeps concurrent solves in one process
+    // ("Solve both" runs two solver threads) from clobbering each other's log.
+    let log_seq = SOLVE_LOG_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let log_path = std::env::temp_dir().join(format!("lp_diff_solver_{}_{log_seq}.log", std::process::id()));
+    solve_logged(problem, extra, cancel, &log_path)
+}
+
+/// [`solve`] with `HiGHS`'s log written to `log_path`, which is removed again
+/// whether the solve succeeds or fails.
+fn solve_logged(
+    problem: &LpProblem,
+    extra: &[(&str, &str)],
+    cancel: Option<&AtomicBool>,
+    log_path: &std::path::Path,
+) -> Result<SolveResult, String> {
     debug_assert!(!problem.variables.is_empty(), "cannot solve a problem with no variables");
     debug_assert!(
         extra.iter().all(|(key, _)| !RESERVED_OPTIONS.contains(key)),
@@ -857,12 +873,6 @@ fn solve(problem: &LpProblem, extra: &[(&str, &str)], cancel: Option<&AtomicBool
     if !model.objective_quadratic.is_empty() && problem.variables.values().any(|v| v.kind != VariableKind::Continuous) {
         return Err("HiGHS cannot solve a quadratic objective with integer, semi-continuous or SOS variables (MIQP)".to_owned());
     }
-
-    // pid+sequence-named temp file + explicit cleanup instead of the
-    // tempfile crate. The sequence number keeps concurrent solves in one process
-    // ("Solve both" runs two solver threads) from clobbering each other's log.
-    let log_seq = SOLVE_LOG_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let log_path = std::env::temp_dir().join(format!("lp_diff_solver_{}_{log_seq}.log", std::process::id()));
 
     let BuiltModel {
         row_problem,
@@ -892,6 +902,43 @@ fn solve(problem: &LpProblem, extra: &[(&str, &str)], cancel: Option<&AtomicBool
             .try_pass_hessian(highs::HessianFormat::Triangular, columns)
             .map_err(|e| format!("HiGHS rejected the quadratic objective: {e}"))?;
     }
+    // Every step from here on may have created the log file, so every exit
+    // goes through the removal below rather than a bare `?`.
+    let run = configure_and_run(highs_model, log_path, extra, cancel);
+    let cleanup = std::fs::remove_file(log_path);
+    let (solved, solve_time, solver_log) = match (run, cleanup) {
+        (Ok(run), Ok(())) => run,
+        // Cleanup failure is non-fatal (overwritten next solve, reaped by the OS); surface it in the log.
+        (Ok((solved, solve_time, mut solver_log)), Err(e)) => {
+            write!(solver_log, "\n[lp_diff] warning: failed to remove solver log {}: {e}\n", log_path.display())
+                .expect("fmt::Write to String is infallible");
+            (solved, solve_time, solver_log)
+        }
+        (Err(error), Ok(())) => return Err(error),
+        // An error before HiGHS opened the log leaves nothing to remove.
+        (Err(error), Err(e)) if e.kind() == std::io::ErrorKind::NotFound => return Err(error),
+        (Err(error), Err(e)) => return Err(format!("{error} (and failed to remove solver log {}: {e})", log_path.display())),
+    };
+    debug_assert!(!log_path.exists() || solver_log.contains("[lp_diff] warning"), "the solver log must be removed or its failure reported");
+
+    let extract_start = Instant::now();
+    let mut result = extract_solution(&metadata, &solved, build_time, solve_time, solver_log);
+    result.extract_time = extract_start.elapsed();
+
+    Ok(result)
+}
+
+/// Point `HiGHS`'s log at `log_path`, apply the options, solve, and read the
+/// log back, prefixed with the options applied. Returns the solved model, the
+/// solve time and the log.
+///
+/// Leaves `log_path` for the caller to remove, on success and failure alike.
+fn configure_and_run(
+    mut highs_model: highs::Model,
+    log_path: &std::path::Path,
+    extra: &[(&str, &str)],
+    cancel: Option<&AtomicBool>,
+) -> Result<(highs::SolvedModel, std::time::Duration, String), String> {
     highs_model.set_option("output_flag", true);
     highs_model.set_option("log_file", log_path.to_str().ok_or_else(|| "temp file path is not valid UTF-8".to_owned())?);
     // After `log_file`, so anything `HiGHS` rejects is written to the log the pane
@@ -911,29 +958,16 @@ fn solve(problem: &LpProblem, extra: &[(&str, &str)], cancel: Option<&AtomicBool
     }
 
     let solve_start = Instant::now();
-    let solved = run_model(highs_model).map_err(|error| match std::fs::remove_file(&log_path) {
-        Ok(()) => error,
-        Err(e) => format!("{error} (and failed to remove solver log {}: {e})", log_path.display()),
-    })?;
+    let solved = run_model(highs_model)?;
     let solve_time = solve_start.elapsed();
 
-    let mut solver_log = std::fs::read_to_string(&log_path).map_err(|e| format!("failed to read solver log: {e}"))?;
+    let mut solver_log = std::fs::read_to_string(log_path).map_err(|e| format!("failed to read solver log: {e}"))?;
     // Options applied silently would be indistinguishable from a default solve, so
     // record them alongside the log the pane shows.
     if !applied_options.is_empty() {
         solver_log.insert_str(0, &format!("[lp_diff] options: {}\n\n", applied_options.join(", ")));
     }
-    // Cleanup failure is non-fatal (overwritten next solve, reaped by the OS); surface it in the log.
-    if let Err(e) = std::fs::remove_file(&log_path) {
-        write!(solver_log, "\n[lp_diff] warning: failed to remove solver log {}: {e}\n", log_path.display())
-            .expect("fmt::Write to String is infallible");
-    }
-
-    let extract_start = Instant::now();
-    let mut result = extract_solution(&metadata, &solved, build_time, solve_time, solver_log);
-    result.extract_time = extract_start.elapsed();
-
-    Ok(result)
+    Ok((solved, solve_time, solver_log))
 }
 
 /// Lower-triangular Hessian columns for `HiGHS`, whose objective is
@@ -1505,6 +1539,18 @@ empty =\n";
         let result = solve_problem(&problem).expect("a bounded MIP must solve");
         let objective = result.objective_value.expect("an optimal solve has an objective");
         assert!((objective - 0.25).abs() < 1e-9, "x = 0, y = 0.5 is optimal, got {objective}");
+    }
+
+    #[test]
+    fn test_a_failed_solve_removes_its_log_file() {
+        // A rejected option fails after HiGHS has opened its log; that early
+        // exit used to leave the file behind in the temp directory.
+        let problem = LpProblem::parse("Minimize\n obj: x\nSubject To\n c1: x >= 2\nEnd").expect("must parse");
+        let log_path = std::env::temp_dir().join(format!("lp_diff_solver_test_{}_failed.log", std::process::id()));
+        let error = solve_logged(&problem, &[("no_such_option", "1")], None, &log_path).expect_err("an unknown option is refused");
+
+        assert!(error.contains("no_such_option"), "unexpected error: {error}");
+        assert!(!log_path.exists(), "the solver log must not outlive a failed solve");
     }
 
     #[test]
