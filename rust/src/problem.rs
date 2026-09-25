@@ -129,46 +129,84 @@ fn register_variables_from_coefficients(
     }
 }
 
+/// The error for a sum of repeated terms that overflowed to infinity (or
+/// NaN), located at the entry's byte offset when it has one.
+fn merged_overflow_error(what: &str, byte_offset: Option<usize>) -> LpParseError {
+    let message = format!("the {what} overflows when its repeated terms are summed");
+    match byte_offset {
+        Some(position) => LpParseError::parse_error(position, message),
+        None => LpParseError::validation_error(message),
+    }
+}
+
 /// Intern a slice of raw coefficients into model coefficients.
 ///
 /// Repeated terms for the same variable (`x + x`) are summed, matching
 /// solver LP readers; first-occurrence order is preserved.
+///
+/// # Errors
+///
+/// Returns an error when a sum of finite terms overflows.
 #[inline]
-fn intern_coefficients(interner: &mut NameInterner, raw: &[RawCoefficient<'_>]) -> Vec<Coefficient> {
+fn intern_coefficients(interner: &mut NameInterner, raw: &[RawCoefficient<'_>], byte_offset: Option<usize>) -> LpResult<Vec<Coefficient>> {
     let mut merged: IndexMap<NameId, f64> = IndexMap::with_capacity(raw.len());
     for rc in raw {
-        *merged.entry(interner.intern(rc.name)).or_insert(0.0) += rc.value;
+        match merged.entry(interner.intern(rc.name)) {
+            Entry::Occupied(mut entry) => {
+                let sum = *entry.get() + rc.value;
+                if !sum.is_finite() {
+                    return Err(merged_overflow_error(&format!("coefficient of '{}'", rc.name), byte_offset));
+                }
+                *entry.get_mut() = sum;
+            }
+            Entry::Vacant(entry) => {
+                entry.insert(rc.value);
+            }
+        }
     }
-    merged.into_iter().map(|(name, value)| Coefficient { name, value }).collect()
+    Ok(merged.into_iter().map(|(name, value)| Coefficient { name, value }).collect())
 }
 
 /// Intern raw quadratic terms. Repeated products of the same pair (`x * y`
 /// and `y * x` included) are summed into the first occurrence, keeping its
 /// orientation, so a written model reads back identically.
-fn intern_quadratic(interner: &mut NameInterner, raw: &[RawQuadraticTerm<'_>]) -> Vec<QuadraticTerm> {
+///
+/// # Errors
+///
+/// Returns an error when a sum of finite terms overflows.
+fn intern_quadratic(interner: &mut NameInterner, raw: &[RawQuadraticTerm<'_>], byte_offset: Option<usize>) -> LpResult<Vec<QuadraticTerm>> {
     let mut merged: Vec<QuadraticTerm> = Vec::with_capacity(raw.len());
     let mut index: rustc_hash::FxHashMap<(NameId, NameId), usize> = rustc_hash::FxHashMap::default();
     for term in raw {
         let (var1, var2) = (interner.intern(term.var1), interner.intern(term.var2));
         let key = if var1 <= var2 { (var1, var2) } else { (var2, var1) };
         if let Some(&at) = index.get(&key) {
-            merged[at].coefficient += term.coefficient;
+            let sum = merged[at].coefficient + term.coefficient;
+            if !sum.is_finite() {
+                let what = format!("quadratic coefficient of '{} * {}'", interner.resolve(var1), interner.resolve(var2));
+                return Err(merged_overflow_error(&what, byte_offset));
+            }
+            merged[at].coefficient = sum;
         } else {
             index.insert(key, merged.len());
             merged.push(QuadraticTerm { var1, var2, coefficient: term.coefficient });
         }
     }
     debug_assert!(merged.len() <= raw.len(), "merging never adds terms");
-    merged
+    Ok(merged)
 }
 
 /// Intern a raw constraint into a model constraint.
+///
+/// # Errors
+///
+/// Returns an error when summing repeated terms overflows.
 #[inline]
-fn intern_constraint(interner: &mut NameInterner, raw: &RawConstraint<'_>) -> Constraint {
-    match raw {
+fn intern_constraint(interner: &mut NameInterner, raw: &RawConstraint<'_>) -> LpResult<Constraint> {
+    Ok(match raw {
         RawConstraint::Standard { name, coefficients, operator, rhs, byte_offset } => Constraint::Standard {
             name: interner.intern(name),
-            coefficients: intern_coefficients(interner, coefficients),
+            coefficients: intern_coefficients(interner, coefficients, *byte_offset)?,
             operator: *operator,
             rhs: *rhs,
             byte_offset: *byte_offset,
@@ -176,7 +214,7 @@ fn intern_constraint(interner: &mut NameInterner, raw: &RawConstraint<'_>) -> Co
         RawConstraint::SOS { name, sos_type, weights, byte_offset } => Constraint::SOS {
             name: interner.intern(name),
             sos_type: *sos_type,
-            weights: intern_coefficients(interner, weights),
+            weights: intern_coefficients(interner, weights, *byte_offset)?,
             byte_offset: *byte_offset,
         },
         RawConstraint::General { name, resultant, function, byte_offset } => Constraint::General {
@@ -187,8 +225,8 @@ fn intern_constraint(interner: &mut NameInterner, raw: &RawConstraint<'_>) -> Co
         },
         RawConstraint::Quadratic { name, coefficients, quadratic, operator, rhs, byte_offset } => Constraint::Quadratic {
             name: interner.intern(name),
-            coefficients: intern_coefficients(interner, coefficients),
-            quadratic: intern_quadratic(interner, quadratic),
+            coefficients: intern_coefficients(interner, coefficients, *byte_offset)?,
+            quadratic: intern_quadratic(interner, quadratic, *byte_offset)?,
             operator: *operator,
             rhs: *rhs,
             byte_offset: *byte_offset,
@@ -197,25 +235,29 @@ fn intern_constraint(interner: &mut NameInterner, raw: &RawConstraint<'_>) -> Co
             name: interner.intern(name),
             variable: interner.intern(variable),
             active_value: *active_value,
-            coefficients: intern_coefficients(interner, coefficients),
+            coefficients: intern_coefficients(interner, coefficients, *byte_offset)?,
             operator: *operator,
             rhs: *rhs,
             byte_offset: *byte_offset,
         },
-    }
+    })
 }
 
 /// Intern a raw objective into a model objective.
+///
+/// # Errors
+///
+/// Returns an error when summing repeated terms overflows.
 #[inline]
-fn intern_objective(interner: &mut NameInterner, raw: &RawObjective<'_>) -> Objective {
-    Objective {
+fn intern_objective(interner: &mut NameInterner, raw: &RawObjective<'_>) -> LpResult<Objective> {
+    Ok(Objective {
         name: interner.intern(&raw.name),
-        coefficients: intern_coefficients(interner, &raw.coefficients),
+        coefficients: intern_coefficients(interner, &raw.coefficients, raw.byte_offset)?,
         constant: raw.constant,
-        quadratic: intern_quadratic(interner, &raw.quadratic),
+        quadratic: intern_quadratic(interner, &raw.quadratic, raw.byte_offset)?,
         attributes: raw.attributes,
         byte_offset: raw.byte_offset,
-    }
+    })
 }
 
 /// Represents a Linear Programming (LP) problem.
@@ -382,7 +424,7 @@ impl LpProblem {
         // Empty-input validation is owned by the inner MPS parser.
         let problem_name = extract_mps_name(input);
         let parsed = parse_mps(input)?;
-        Ok(from_parse_result(parsed, problem_name))
+        from_parse_result(parsed, problem_name)
     }
 
     #[inline]
@@ -1248,7 +1290,11 @@ impl Display for LpProblem {
 
 /// Convert a [`ParseResult`] into an [`LpProblem`], interning all names and
 /// building the full model. Shared by both LP and MPS parse paths.
-fn from_parse_result(parsed: ParseResult<'_>, problem_name: Option<String>) -> LpProblem {
+///
+/// # Errors
+///
+/// Returns an error when summing the repeated terms of an entry overflows.
+fn from_parse_result(parsed: ParseResult<'_>, problem_name: Option<String>) -> LpResult<LpProblem> {
     // An empty objective section with no constraints is degenerate but valid LP.
     debug_assert!(parsed.objectives.iter().all(|o| !o.name.is_empty()), "all objectives must have non-empty names");
 
@@ -1278,7 +1324,7 @@ fn from_parse_result(parsed: ParseResult<'_>, problem_name: Option<String>) -> L
         .filter_map(|c| (c.name() != "__c__").then_some(c.name()))
         .collect();
 
-    let objectives = intern_objectives(&mut interner, &parsed.objectives, &mut variables);
+    let objectives = intern_objectives(&mut interner, &parsed.objectives, &mut variables)?;
     let mut constraints = IndexMap::with_capacity(parsed.constraints.len() + parsed.lazy_constraints.len() + parsed.user_cuts.len());
     let mut constraint_classes = IndexMap::new();
     for (raw, class) in [
@@ -1287,7 +1333,7 @@ fn from_parse_result(parsed: ParseResult<'_>, problem_name: Option<String>) -> L
         (&parsed.user_cuts, ConstraintClass::UserCut),
     ] {
         let mut names = NameAllocation { counter: &mut constraint_counter, reserved: &reserved };
-        for id in intern_constraints(&mut interner, raw, &mut variables, &mut constraints, &mut names) {
+        for id in intern_constraints(&mut interner, raw, &mut variables, &mut constraints, &mut names)? {
             if class.is_normal() {
                 // A later ordinary definition replaces a lazy one of the same name.
                 constraint_classes.shift_remove(&id);
@@ -1299,10 +1345,10 @@ fn from_parse_result(parsed: ParseResult<'_>, problem_name: Option<String>) -> L
 
     process_bounds(&mut interner, &parsed.bounds, &mut variables);
     process_variable_types(&mut interner, &parsed, &mut variables);
-    intern_sos_constraints(&mut interner, &parsed.sos, &mut variables, &mut constraints, &mut constraint_counter, &reserved);
+    intern_sos_constraints(&mut interner, &parsed.sos, &mut variables, &mut constraints, &mut constraint_counter, &reserved)?;
 
     debug_assert!(constraint_classes.keys().all(|id| constraints.contains_key(id)), "every classed constraint must exist");
-    LpProblem { name: problem_name, sense: parsed.sense, objectives, constraints, variables, constraint_classes, interner }
+    Ok(LpProblem { name: problem_name, sense: parsed.sense, objectives, constraints, variables, constraint_classes, interner })
 }
 
 impl TryFrom<&str> for LpProblem {
@@ -1315,7 +1361,7 @@ impl TryFrom<&str> for LpProblem {
         let parser = LpProblemParser::new();
         let parsed = parser.parse(lexer).map_err(|e| LpParseError::from(e).with_source(input))?;
 
-        Ok(from_parse_result(parsed, problem_name))
+        from_parse_result(parsed, problem_name).map_err(|e| e.with_source(input))
     }
 }
 
@@ -1324,7 +1370,7 @@ fn intern_objectives(
     interner: &mut NameInterner,
     raw_objectives: &[RawObjective<'_>],
     variables: &mut IndexMap<NameId, Variable>,
-) -> IndexMap<NameId, Objective> {
+) -> LpResult<IndexMap<NameId, Objective>> {
     let mut objectives = IndexMap::with_capacity(raw_objectives.len());
     let mut obj_counter: u32 = 0;
     let mut name_buf = String::with_capacity(16);
@@ -1332,7 +1378,7 @@ fn intern_objectives(
     let reserved: HashSet<&str> = raw_objectives.iter().map(|o| o.name.as_ref()).filter(|n| *n != "__obj__").collect();
 
     for raw_obj in raw_objectives {
-        let mut obj = intern_objective(interner, raw_obj);
+        let mut obj = intern_objective(interner, raw_obj)?;
 
         if raw_obj.name == "__obj__" {
             loop {
@@ -1358,7 +1404,7 @@ fn intern_objectives(
         }
     }
 
-    objectives
+    Ok(objectives)
 }
 
 /// State for generating constraint names: the running `C<n>` counter and
@@ -1376,12 +1422,12 @@ fn intern_constraints(
     variables: &mut IndexMap<NameId, Variable>,
     constraints: &mut IndexMap<NameId, Constraint>,
     names: &mut NameAllocation<'_, '_>,
-) -> Vec<NameId> {
+) -> LpResult<Vec<NameId>> {
     let mut name_buf = String::with_capacity(16);
     let mut ids = Vec::with_capacity(raw_constraints.len());
 
     for raw_con in raw_constraints {
-        let mut con = intern_constraint(interner, raw_con);
+        let mut con = intern_constraint(interner, raw_con)?;
         let final_id = assign_constraint_name(interner, constraints, names.reserved, &mut con, names.counter, "C", &mut name_buf);
         register_constraint_variables(variables, &con);
         if constraints.insert(final_id, con).is_some() {
@@ -1390,7 +1436,7 @@ fn intern_constraints(
         ids.push(final_id);
     }
 
-    ids
+    Ok(ids)
 }
 
 /// Map a bound value of magnitude `>= 1e30` to the matching infinity (the
@@ -1452,13 +1498,13 @@ fn intern_sos_constraints(
     constraints: &mut IndexMap<NameId, Constraint>,
     constraint_counter: &mut u32,
     reserved: &HashSet<&str>,
-) {
+) -> LpResult<()> {
     let mut name_buf = String::with_capacity(16);
     for raw_sos_con in raw_sos {
         if matches!(raw_sos_con, RawConstraint::Standard { .. }) {
             continue;
         }
-        let mut sos = intern_constraint(interner, raw_sos_con);
+        let mut sos = intern_constraint(interner, raw_sos_con)?;
         let mut final_id = assign_constraint_name(interner, constraints, reserved, &mut sos, constraint_counter, "SOS", &mut name_buf);
         if constraints.contains_key(&final_id) {
             // An SOS entry sharing a name with an existing constraint would
@@ -1471,6 +1517,7 @@ fn intern_sos_constraints(
         debug_assert!(!constraints.contains_key(&final_id), "SOS constraint name must be free before insertion");
         constraints.insert(final_id, sos);
     }
+    Ok(())
 }
 
 /// Assign a name to a constraint, generating one if unnamed.
@@ -1879,6 +1926,24 @@ End";
 
         // A name other than S1/S2 before '::' is not a set type.
         assert!(LpProblem::parse("minimize\nobj: x\nsubject to\nc1: x <= 1\nsos\nS3:: x:1\nend").is_err());
+    }
+
+    /// Summing repeated terms (`x + x`) must not overflow into an infinite
+    /// coefficient that no individual term had.
+    #[test]
+    fn test_merged_duplicate_terms_overflowing_is_an_error() {
+        for input in [
+            "minimize\nobj: x\nsubject to\nc: 1e308 x + 1e308 x >= 1\nend",
+            "minimize\nobj: 1e308 x + 1e308 x\nsubject to\nc: x >= 1\nend",
+            // Halved by `/ 2`, so three terms are needed to overflow.
+            "minimize\nobj: [ 1.7e308 x * y + 1.7e308 y * x + 1.7e308 x * y ] / 2\nsubject to\nc: x >= 1\nend",
+            "minimize\nobj: x\nsubject to\nc: [ 1e308 x ^ 2 + 1e308 x ^ 2 ] >= 1\nend",
+        ] {
+            let error = LpProblem::parse(input).expect_err("an overflowing merged coefficient must be rejected");
+            assert!(error.to_string().contains("overflow"), "unexpected error for {input:?}: {error}");
+        }
+        // Large but finite sums are fine.
+        LpProblem::parse("minimize\nobj: x\nsubject to\nc: 1e307 x + 1e307 x >= 1\nend").unwrap();
     }
 
     #[test]
