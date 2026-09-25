@@ -1496,7 +1496,13 @@ impl App {
         self.report.analysis2 = analysis2;
         self.rebuild_report();
 
+        // Interrupt a running solve before the session goes, and carry its
+        // cancel flag over: the worker still holds a clone until it exits, and
+        // that is what keeps a new solve from starting alongside it.
+        self.solver.cancel_running();
+        let in_flight = self.solver.cancel.take();
         self.solver = SolverSession::new();
+        self.solver.cancel = in_flight;
         self.discard_model_derived_state();
 
         self.flash_ok("reloaded");
@@ -2020,6 +2026,25 @@ mod tests {
         assert!(app.presolve_log.is_none(), "the presolve log described the old model");
         assert!(app.last_presolve.is_none(), "the presolve stats described the old model");
         assert_eq!(app.what_if.as_ref().map(|prompt| prompt.current_rhs), Some(7.0), "the what-if prompt shows the new RHS");
+    }
+
+    /// Regression: a reload replaced the solver session outright, dropping the
+    /// cancel flag of a running solve — `HiGHS` kept running uncancelled, and a
+    /// new solve could start alongside it.
+    #[test]
+    fn a_reload_cancels_a_running_solve_and_waits_for_it() {
+        let mut app = crate::snapshot_tests::diff_app_from(crate::snapshot_tests::BASE_LP, crate::snapshot_tests::BASE_LP);
+        let worker = app.solver.arm_cancel();
+        app.solver.state = SolveState::Running { file: "model.lp".to_owned(), started: Instant::now() };
+
+        let reparse = |source: &str| crate::parse::parse_text(source, false, "a.lp").expect("fixture parses");
+        app.apply_reload((reparse(crate::snapshot_tests::BASE_LP), reparse(crate::snapshot_tests::BASE_LP)));
+
+        assert!(worker.load(Ordering::Relaxed), "the reload interrupts HiGHS");
+        assert!(matches!(app.solver.state, SolveState::Idle), "the stale solve's overlay is gone");
+        assert!(app.solver.solve_in_flight(), "the worker is still winding down, so no new solve may start");
+        drop(worker);
+        assert!(!app.solver.solve_in_flight(), "the worker's exit frees the solver");
     }
 
     /// Regression: the jumplist stored list positions, so once the rows moved
