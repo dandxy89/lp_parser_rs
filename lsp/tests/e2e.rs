@@ -60,12 +60,14 @@ impl Harness {
     }
 
     /// Next `publishDiagnostics` for [`URI`], skipping other notifications.
-    async fn diagnostics(&mut self) -> Vec<Value> {
+    /// Diagnostics published for `version`. Earlier versions are skipped: the
+    /// semantic pass for an older version may publish after a later edit arrives.
+    async fn diagnostics(&mut self, version: i64) -> Vec<Value> {
         let deadline = Duration::from_secs(10);
         loop {
             let (method, params) =
                 tokio::time::timeout(deadline, self.notifications.recv()).await.expect("diagnostics in time").expect("channel open");
-            if method == "textDocument/publishDiagnostics" && params["uri"] == URI {
+            if method == "textDocument/publishDiagnostics" && params["uri"] == URI && params["version"] == version {
                 return params["diagnostics"].as_array().cloned().unwrap_or_default();
             }
         }
@@ -119,7 +121,7 @@ async fn full_session() {
     h.notify("initialized", json!({})).await;
 
     h.notify("textDocument/didOpen", json!({ "textDocument": { "uri": URI, "languageId": "lp", "version": 1, "text": TEXT } })).await;
-    let first = h.diagnostics().await;
+    let first = h.diagnostics(1).await;
     assert!(codes(&first).contains(&"duplicate-name".to_owned()), "duplicate constraint name reported: {first:?}");
 
     // Rename the second `c1` (line 4, columns 1..3) to `c2`.
@@ -131,7 +133,7 @@ async fn full_session() {
         }),
     )
     .await;
-    let second = h.diagnostics().await;
+    let second = h.diagnostics(2).await;
     assert!(!codes(&second).contains(&"duplicate-name".to_owned()), "duplicate cleared after edit: {second:?}");
 
     let rename = h
