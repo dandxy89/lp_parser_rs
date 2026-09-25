@@ -329,8 +329,30 @@ pub fn describe(key: &str) -> Option<String> {
 /// with the byte length of the header within `line`.
 #[must_use]
 pub fn section_header(line: &str) -> Option<(&'static Keyword, usize)> {
+    // Every alias starts with a byte matched ASCII case-insensitively: most
+    // lines (entries) are ruled out by their first byte alone.
+    static ALIAS_STARTS: std::sync::OnceLock<[bool; 256]> = std::sync::OnceLock::new();
+    let starts = ALIAS_STARTS.get_or_init(|| {
+        let mut starts = [false; 256];
+        for alias in KEYWORDS.iter().flat_map(|k| k.aliases) {
+            debug_assert!(!alias.is_empty(), "an empty alias would match every line");
+            if let Some(&b) = alias.as_bytes().first() {
+                starts[usize::from(b.to_ascii_lowercase())] = true;
+                starts[usize::from(b.to_ascii_uppercase())] = true;
+            }
+        }
+        starts
+    });
     let indent = line.len() - line.trim_start().len();
     let rest = &line[indent..];
+    if !rest.as_bytes().first().is_some_and(|&b| starts[usize::from(b)]) {
+        return None;
+    }
+    longest_header(rest).map(|(k, len)| (k, indent + len))
+}
+
+/// The longest section header alias starting `rest`, with its length.
+fn longest_header(rest: &str) -> Option<(&'static Keyword, usize)> {
     let mut best: Option<(&'static Keyword, usize)> = None;
     for keyword in KEYWORDS.iter().filter(|k| k.snippet.is_some() || k.id == "end") {
         for alias in keyword.aliases {
@@ -344,7 +366,7 @@ pub fn section_header(line: &str) -> Option<(&'static Keyword, usize)> {
             }
         }
     }
-    best.map(|(k, len)| (k, indent + len))
+    best
 }
 
 /// Length of `text`'s prefix matching `alias` case-insensitively (spaces in
@@ -404,6 +426,25 @@ pub const fn is_name_byte(b: u8) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn first_byte_filter_keeps_every_header() {
+        let mut lines: Vec<String> = Vec::new();
+        for alias in KEYWORDS.iter().flat_map(|k| k.aliases) {
+            for variant in [alias.to_string(), alias.to_uppercase(), alias.replace(' ', "\t ")] {
+                for suffix in ["", ":", " :", " x", "x", "-1", "\t\\ c"] {
+                    lines.push(format!("{variant}{suffix}"));
+                    lines.push(format!("  \t{variant}{suffix}"));
+                }
+            }
+        }
+        lines.extend(["", " ", "c1: x >= 1", " x <= 4", "é", "\u{a0}st", "[ x ^ 2 ]", "_min", "1e3"].map(str::to_owned));
+        for line in &lines {
+            let indent = line.len() - line.trim_start().len();
+            let unfiltered = longest_header(&line[indent..]).map(|(k, len)| (k.id, indent + len));
+            assert_eq!(section_header(line).map(|(k, len)| (k.id, len)), unfiltered, "{line:?}");
+        }
+    }
 
     #[test]
     fn matches_section_headers() {
