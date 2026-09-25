@@ -518,8 +518,10 @@ fn children(node: Node<'_>) -> Vec<Node<'_>> {
 }
 
 /// Nodes of `kind` under `root` touching `range`, in document order. Does not
-/// descend into a match.
+/// descend into a match. Only children that can touch `range` are visited,
+/// so a cursor in a section of many entries does not walk all of them.
 fn nodes_in<'t>(root: Node<'t>, range: &Range<usize>, kind: &str) -> Vec<Node<'t>> {
+    debug_assert!(range.start <= range.end, "range must not be reversed");
     let mut out = Vec::new();
     let mut stack = vec![root];
     while let Some(node) = stack.pop() {
@@ -530,8 +532,26 @@ fn nodes_in<'t>(root: Node<'t>, range: &Range<usize>, kind: &str) -> Vec<Node<'t
             out.push(node);
             continue;
         }
+        // Children are in document order: jump to the first one ending at or
+        // after `range.start` and stop past `range.end`.
         let mut cursor = node.walk();
-        stack.extend(node.children(&mut cursor));
+        let found = match range.start.checked_sub(1) {
+            Some(before) => cursor.goto_first_child_for_byte(before).is_some(),
+            None => cursor.goto_first_child(),
+        };
+        if !found {
+            continue;
+        }
+        loop {
+            let child = cursor.node();
+            if child.start_byte() > range.end {
+                break;
+            }
+            stack.push(child);
+            if !cursor.goto_next_sibling() {
+                break;
+            }
+        }
     }
     out.sort_by_key(Node::start_byte);
     out
@@ -823,6 +843,37 @@ mod tests {
                 CodeActionOrCommand::Command(c) => panic!("unexpected command {c:?}"),
             })
             .collect()
+    }
+
+    #[test]
+    fn nodes_in_matches_a_full_walk() {
+        // Every node of `kind` touching `range`, not nested in another match.
+        fn walk<'t>(node: Node<'t>, range: &Range<usize>, kind: &str, out: &mut Vec<Node<'t>>) {
+            if !touches(&node.byte_range(), range) {
+                return;
+            }
+            if node.kind() == kind {
+                out.push(node);
+                return;
+            }
+            for child in children(node) {
+                walk(child, range, kind, out);
+            }
+        }
+        let d = doc("min\n obj: [ x ^ 2 ] / 2 + y\nst\n c1: x + y =< 1\n c2: 2 x >= [ x * y ]\n c3: b = 1 -> x <= 1\n\
+             c4:x=>1\nBounds\n x <= 1\nEnd\n");
+        let root = d.tree.root_node();
+        for kind in [kind::COMPARISON_OPERATOR, kind::QUADRATIC_BLOCK, kind::INDICATOR, kind::CONSTRAINT] {
+            assert!(!nodes_in(root, &(0..d.text.len()), kind).is_empty(), "the sample has a {kind}");
+            for start in 0..=d.text.len() {
+                for end in [start, start + 1, start + 7].into_iter().filter(|&e| e <= d.text.len()) {
+                    let mut expected = Vec::new();
+                    walk(root, &(start..end), kind, &mut expected);
+                    expected.sort_by_key(Node::start_byte);
+                    assert_eq!(nodes_in(root, &(start..end), kind), expected, "{kind} in {start}..{end}");
+                }
+            }
+        }
     }
 
     /// Actions with the cursor at the first occurrence of `needle`.
