@@ -9,8 +9,8 @@ use std::ops::Range;
 
 use serde_json::{Value, json};
 use tower_lsp_server::ls_types::{
-    CompletionItem, CompletionItemKind, CompletionItemLabelDetails, CompletionTextEdit, Documentation, InsertTextFormat, MarkupContent,
-    MarkupKind, Position, TextEdit,
+    CompletionItem, CompletionItemKind, CompletionItemLabelDetails, CompletionList, CompletionTextEdit, Documentation, InsertTextFormat,
+    MarkupContent, MarkupKind, Position, TextEdit,
 };
 
 use super::docs;
@@ -18,21 +18,26 @@ use crate::document::Document;
 use crate::index::{Role, Variable};
 use crate::syntax::kind;
 
+/// Most variables offered at once. Beyond this, variables are filtered by
+/// the typed prefix on the server and the list is marked incomplete, so the
+/// client asks again as the word grows instead of receiving every variable.
+pub const MAX_VARIABLE_ITEMS: usize = 500;
+
 /// Completion items at `position`.
 #[must_use]
-pub fn complete(doc: &Document, position: Position) -> Vec<CompletionItem> {
+pub fn complete(doc: &Document, position: Position) -> CompletionList {
     let offset = doc.offset(position);
     let text = &doc.text;
     let line_start = line_start(text, offset);
     let word = word_start(text, line_start, offset)..offset;
     let before = &text[line_start..word.start];
     if before.contains('\\') || in_comment(doc, offset) {
-        return Vec::new();
+        return CompletionList::default();
     }
     let place = place(doc, word.start);
     let rest = lex(&text[place.rest_start..word.start]);
     let ends_with_space = text[..word.start].ends_with([' ', '\t']);
-    let mut out = Completions { doc, replace: word.clone(), items: Vec::new() };
+    let mut out = Completions { doc, replace: word.clone(), items: Vec::new(), incomplete: false };
 
     if before.trim().is_empty() {
         out.section_keywords(place.section == Section::Start);
@@ -74,7 +79,7 @@ pub fn complete(doc: &Document, position: Position) -> Vec<CompletionItem> {
             _ => out.variables(),
         },
     }
-    out.items
+    CompletionList { is_incomplete: out.incomplete, items: out.items }
 }
 
 /// Fill in documentation for a completion item.
@@ -141,6 +146,8 @@ struct Completions<'a> {
     doc: &'a Document,
     replace: Range<usize>,
     items: Vec<CompletionItem>,
+    /// Whether the list depends on the typed word (see [`MAX_VARIABLE_ITEMS`]).
+    incomplete: bool,
 }
 
 impl Completions<'_> {
@@ -180,13 +187,20 @@ impl Completions<'_> {
         self.push(keyword.label, CompletionItemKind::KEYWORD, &insert, false, Some(format!("keyword:{id}")));
     }
 
+    /// Every variable, or when there are more than [`MAX_VARIABLE_ITEMS`],
+    /// the first of those starting with the typed word (ignoring ASCII case).
     fn variables(&mut self) {
         let doc = self.doc;
-        for var in &doc.index().variables {
-            // Skip the name being typed, which the index already holds.
-            if var.occurrences.iter().all(|o| o.range == self.replace) {
-                continue;
-            }
+        let variables = &doc.index().variables;
+        let prefix = &doc.text[self.replace.clone()];
+        // A filtered list depends on the prefix: the client must ask again as it changes.
+        let filter = variables.len() > MAX_VARIABLE_ITEMS;
+        self.incomplete |= filter;
+        let matches = |name: &str| !filter || name.get(..prefix.len()).is_some_and(|head| head.eq_ignore_ascii_case(prefix));
+        // Skip the name being typed, which the index already holds.
+        let typed = self.replace.clone();
+        let candidates = variables.iter().filter(|v| matches(&v.name) && !v.occurrences.iter().all(|o| o.range == typed));
+        for var in candidates.take(MAX_VARIABLE_ITEMS) {
             let item = self.push(&var.name, CompletionItemKind::VARIABLE, &var.name, false, None);
             item.detail = Some(variable_detail(var));
         }
@@ -441,7 +455,7 @@ mod tests {
         let at = text.find('|').expect("cursor marker");
         let source = text.replacen('|', "", 1);
         let doc = Document::new("file:///t.lp".parse::<Uri>().unwrap(), source, 1, Encoding::Utf16);
-        complete(&doc, doc.position(at)).into_iter().map(|i| i.label).collect()
+        complete(&doc, doc.position(at)).items.into_iter().map(|i| i.label).collect()
     }
 
     /// `BASE` with `line` inserted before the line starting with `anchor`.
@@ -470,7 +484,7 @@ mod tests {
         let source = with_line("End", "");
         let at = source.find("\nEnd").unwrap() + 1;
         let doc = Document::new("file:///t.lp".parse::<Uri>().unwrap(), source, 1, Encoding::Utf8);
-        let items = complete(&doc, doc.position(at));
+        let items = complete(&doc, doc.position(at)).items;
         let snippet = items.iter().find(|i| i.label == "Subject To" && i.kind == Some(CompletionItemKind::SNIPPET)).unwrap();
         assert_eq!(snippet.insert_text_format, Some(InsertTextFormat::SNIPPET));
         let Some(CompletionTextEdit::Edit(edit)) = &snippet.text_edit else { panic!("text edit expected") };
@@ -534,11 +548,35 @@ mod tests {
     }
 
     #[test]
+    fn many_variables_are_capped_and_filtered_by_prefix() {
+        let count = MAX_VARIABLE_ITEMS * 2;
+        let names: Vec<String> = (0..count).map(|i| if i % 2 == 0 { format!("x{i}") } else { format!("Y{i}") }).collect();
+        let source = format!("min\n obj: {}\nst\n c1: |\nend\n", names.join(" + "));
+        let at = source.find('|').unwrap();
+        let doc = Document::new("file:///t.lp".parse::<Uri>().unwrap(), source.replacen('|', "", 1), 1, Encoding::Utf16);
+        let all = complete(&doc, doc.position(at));
+        assert!(all.is_incomplete, "more variables than the cap");
+        assert_eq!(all.items.len(), MAX_VARIABLE_ITEMS);
+
+        // `y` matches the `Y` half only, which fits under the cap.
+        let edited = format!("{}y{}", &doc.text[..at], &doc.text[at..]);
+        let doc = Document::new(doc.uri.clone(), edited, 2, Encoding::Utf16);
+        let typed = complete(&doc, doc.position(at + 1));
+        assert!(typed.is_incomplete, "a prefix-filtered list must be re-requested");
+        assert_eq!(typed.items.len(), count / 2);
+        assert!(typed.items.iter().all(|i| i.label.starts_with('Y')), "{:?}", typed.items.first());
+
+        let few = Document::new(doc.uri.clone(), "min\n obj: x + y\nst\n c1: \nend\n".to_owned(), 1, Encoding::Utf16);
+        let few = complete(&few, Position::new(3, 5));
+        assert!(!few.is_incomplete && few.items.len() == 2, "{few:?}");
+    }
+
+    #[test]
     fn resolve_adds_documentation() {
         let source = with_line("End", "");
         let at = source.find("\nEnd").unwrap() + 1;
         let doc = Document::new("file:///t.lp".parse::<Uri>().unwrap(), source, 1, Encoding::Utf8);
-        let item = complete(&doc, doc.position(at)).into_iter().find(|i| i.label == "Bounds").unwrap();
+        let item = complete(&doc, doc.position(at)).items.into_iter().find(|i| i.label == "Bounds").unwrap();
         assert!(item.documentation.is_none());
         let Some(Documentation::MarkupContent(markup)) = resolve(item).documentation else { panic!("markdown expected") };
         assert!(markup.value.contains("`bound`"));

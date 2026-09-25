@@ -838,7 +838,7 @@ impl LanguageServer for Backend {
 
     async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
         let (doc, position) = self.position_params(&params.text_document_position)?;
-        self.run(move || Some(CompletionResponse::Array(completion::complete(&doc, position)))).await
+        self.run(move || Some(CompletionResponse::List(completion::complete(&doc, position)))).await
     }
 
     async fn completion_resolve(&self, item: CompletionItem) -> Result<CompletionItem> {
