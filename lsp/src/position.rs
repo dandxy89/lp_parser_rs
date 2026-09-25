@@ -131,7 +131,13 @@ impl LineIndex {
     #[must_use]
     pub fn position(&self, text: &str, offset: usize, encoding: Encoding) -> Position {
         let offset = floor_char_boundary(text, offset.min(text.len()));
-        let line = self.line_of(offset);
+        self.position_on(text, self.line_of(offset), offset, encoding)
+    }
+
+    /// [`Self::position`] of a char-boundary `offset` known to be on `line`.
+    fn position_on(&self, text: &str, line: usize, offset: usize, encoding: Encoding) -> Position {
+        debug_assert!(text.is_char_boundary(offset), "offset {offset} is not a char boundary");
+        debug_assert_eq!(self.line_of(offset), line, "offset {offset} is not on line {line}");
         let range = self.line_range(text, line);
         let end = offset.min(range.end).max(range.start);
         let column = match encoding {
@@ -173,7 +179,13 @@ impl LineIndex {
     /// Convert a byte range to an LSP range.
     #[must_use]
     pub fn range(&self, text: &str, range: Range<usize>, encoding: Encoding) -> tower_lsp_server::ls_types::Range {
-        tower_lsp_server::ls_types::Range::new(self.position(text, range.start, encoding), self.position(text, range.end, encoding))
+        let start = floor_char_boundary(text, range.start.min(text.len()));
+        let line = self.line_of(start);
+        let end = floor_char_boundary(text, range.end.min(text.len()));
+        // Most ranges sit on one line: skip the second line search.
+        let on_line = self.line_starts[line] <= end && self.line_starts.get(line + 1).is_none_or(|&next| end < next);
+        let end = if on_line { self.position_on(text, line, end, encoding) } else { self.position(text, range.end, encoding) };
+        tower_lsp_server::ls_types::Range::new(self.position_on(text, line, start, encoding), end)
     }
 
     /// Convert an LSP range to a byte range (start ≤ end guaranteed).
@@ -273,6 +285,25 @@ mod tests {
     }
 
     proptest! {
+        #[test]
+        fn ranges_are_their_endpoint_positions(text in text_strategy(), extra in 0usize..4) {
+            let index = LineIndex::new(&text);
+            // Every byte offset (including inside characters and past the end),
+            // with ends before and after starts.
+            let offsets: Vec<usize> = (0..=text.len() + extra).collect();
+            for encoding in [Encoding::Utf8, Encoding::Utf16] {
+                for &start in &offsets {
+                    for &end in &offsets {
+                        let expected = tower_lsp_server::ls_types::Range::new(
+                            index.position(&text, start, encoding),
+                            index.position(&text, end, encoding),
+                        );
+                        prop_assert_eq!(index.range(&text, start..end, encoding), expected);
+                    }
+                }
+            }
+        }
+
         #[test]
         fn utf16_columns_count_code_units(text in text_strategy()) {
             let index = LineIndex::new(&text);
