@@ -1655,15 +1655,17 @@ impl App {
             }
         } else if over_name_list && self.active_section.list_index().is_none() {
             // The Overview shown for Summary and Numerics: each row opens its section.
-            let relative_row = row.saturating_sub(self.layout.name_list.y + 1) as usize;
-            if let Some(&section) = crate::widgets::sidebar::OVERVIEW_SECTIONS.get(relative_row) {
+            if let Some(&section) =
+                self.name_list_row(row).and_then(|relative_row| crate::widgets::sidebar::OVERVIEW_SECTIONS.get(relative_row))
+            {
                 self.set_section(section);
             }
         } else if over_name_list {
             self.focus = Focus::NameList;
             let len = self.name_list_len();
-            if len > 0 {
-                let relative_row = row.saturating_sub(self.layout.name_list.y + 1) as usize;
+            if len > 0
+                && let Some(relative_row) = self.name_list_row(row)
+            {
                 let scroll_offset = self.active_name_list_state_mut().offset();
                 let clicked_index = relative_row + scroll_offset;
                 if clicked_index < len {
@@ -1674,6 +1676,15 @@ impl App {
         } else if over_detail {
             self.focus = Focus::Detail;
         }
+    }
+
+    /// The row within the name list's bordered content area that screen row
+    /// `row` falls on, or `None` for its top or bottom border (a click there
+    /// would otherwise select a row outside the visible window).
+    fn name_list_row(&self, row: u16) -> Option<usize> {
+        let area = self.layout.name_list;
+        let (first, last) = (area.y.saturating_add(1), area.bottom().saturating_sub(2));
+        (row >= first && row <= last).then(|| usize::from(row - first))
     }
 }
 
@@ -1725,6 +1736,26 @@ mod tests {
         app.handle_mouse(click(3));
         assert_eq!(app.active_section, Section::Constraints, "the second row is Constraints");
         assert!(app.selected_entry_index().is_some(), "and lands on its first entry");
+    }
+
+    /// Regression: a click on the name list's bottom border selected the row
+    /// just below the visible window.
+    #[test]
+    fn clicking_the_name_list_border_selects_nothing() {
+        let rows: Vec<String> = (0..60).map(|i| format!("c{i:02}: x + y >= {i}")).collect();
+        let mut app = crate::snapshot_tests::inspect_app_from(&format!("min\nobj: x + y\nst\n{}\nend\n", rows.join("\n")));
+        app.set_section(Section::Constraints);
+        // Ten rows tall: a top border, eight list rows (1..=8), a bottom border.
+        app.layout.name_list = ratatui::layout::Rect::new(0, 0, 20, 10);
+        app.active_name_list_state_mut().select(Some(0));
+        let click = |row| MouseEvent { kind: MouseEventKind::Down(MouseButton::Left), column: 4, row, modifiers: KeyModifiers::NONE };
+
+        app.handle_mouse(click(9));
+        assert_eq!(app.active_name_list_state_mut().selected(), Some(0), "the bottom border selects nothing");
+        app.handle_mouse(click(0));
+        assert_eq!(app.active_name_list_state_mut().selected(), Some(0), "nor does the top border");
+        app.handle_mouse(click(8));
+        assert_eq!(app.active_name_list_state_mut().selected(), Some(7), "the last visible row is still clickable");
     }
 
     /// `Esc` interrupts a running solve; `q` asks first; and no new solve can
