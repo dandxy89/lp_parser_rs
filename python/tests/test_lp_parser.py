@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from parse_lp import LpInvalidValueError, LpObjectNotFoundError, LpParser
+from parse_lp import LpInvalidValueError, LpObjectNotFoundError, LpParseError, LpParser
 
 from .conftest import EXPECTED_PARSE_FAILURES, collect_lp_resource_files
 
@@ -328,6 +328,12 @@ class TestIoErrors:
             parser.parse()
         assert not isinstance(info.value, RuntimeError)
         assert info.value.filename == str(path)
+
+    def test_non_utf8_file_raises_parse_error_with_encoding_hint(self, tmp_path: Path) -> None:
+        path = tmp_path / "latin1.lp"
+        path.write_bytes("Minimize\n obj: x\nSubject To\n c\u00e9: x >= 1\nEnd\n".encode("latin-1"))
+        with pytest.raises(LpParseError, match="not valid UTF-8"):
+            LpParser(path)
 
     def test_save_into_missing_directory_raises_os_error(self, simple_lp_file: Path, tmp_path: Path) -> None:
         parser = LpParser(simple_lp_file)
