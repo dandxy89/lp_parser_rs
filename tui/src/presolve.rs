@@ -550,10 +550,29 @@ pub fn presolve(problem: &LpProblem, rules: RuleSet) -> (LpProblem, PresolveStat
 // Shared helpers
 // ---------------------------------------------------------------------------
 
-/// The box `HiGHS` will see for `var`, as `(lower, upper)`.
+/// The smallest box containing every value `var` can take, as `(lower, upper)`.
+///
+/// For an ordinary column that is the box `HiGHS` sees. A semi-continuous or
+/// semi-integer column may also sit at zero outside its bounds, so its box is
+/// widened to include zero — the activity rules need a range that really does
+/// contain every value, or they call a satisfiable row infeasible.
 fn effective_box(problem: &LpProblem, var: NameId) -> (f64, f64) {
-    let (_, lower, upper) = variable_bounds(problem.variables.get(&var));
+    let variable = problem.variables.get(&var);
+    let (_, lower, upper) = variable_bounds(variable);
+    if variable.is_some_and(|v| v.kind.is_semi()) {
+        return (lower.min(0.0), upper.max(0.0));
+    }
     (lower, upper)
+}
+
+/// Whether `var` is semi-continuous or semi-integer.
+///
+/// No rule may rewrite such a column's bounds, fix it, or drop a row on the
+/// strength of a bound it would have to carry: its domain is `{0} ∪ [l, u]`,
+/// so a bound written into `[l, u]` still lets it escape to zero, and `l = u`
+/// does not fix it.
+fn is_semi(problem: &LpProblem, var: NameId) -> bool {
+    problem.variables.get(&var).is_some_and(|v| v.kind.is_semi())
 }
 
 /// Collapse a row's coefficients into `(variable, coefficient)` terms: repeated
@@ -675,6 +694,11 @@ fn is_tighter(old: f64, new: f64) -> bool {
 /// `kind` labels the resulting log line: the same narrowing is a bound
 /// tightening from propagation and a column fixing from a forcing row.
 fn tighten(problem: &mut LpProblem, var: NameId, lower: Option<f64>, upper: Option<f64>, pass: &mut Pass<'_>, kind: &str) -> Tighten {
+    // Callers filter these out; this is the backstop (see `is_semi`).
+    if is_semi(problem, var) {
+        debug_assert!(false, "a semi-continuous column's bounds must never be rewritten");
+        return Tighten::Unchanged;
+    }
     let (old_lower, old_upper) = effective_box(problem, var);
     let new_lower = lower.map_or(old_lower, |value| old_lower.max(value));
     let new_upper = upper.map_or(old_upper, |value| old_upper.min(value));
@@ -775,6 +799,10 @@ fn singleton_to_bound(problem: &mut LpProblem, pass: &mut Pass<'_>, infeasible: 
             continue;
         }
         let (var, coefficient) = terms[0];
+        // The row cannot become a bound on a semi column, so it stays.
+        if is_semi(problem, var) {
+            continue;
+        }
         let (lower, upper) = implied_bound(*operator, coefficient, *rhs);
         let implied = match (lower, upper) {
             (Some(low), Some(high)) if (high - low).abs() <= EPS => format!("{} = {}", problem.resolve(var), num(low)),
@@ -816,6 +844,11 @@ fn bound_propagation(problem: &mut LpProblem, pass: &mut Pass<'_>, infeasible: &
 
         for &(var, coefficient) in &terms {
             let (min_contribution, max_contribution) = contributions(problem, var, coefficient);
+            // A semi column still contributes to the others' bounds (over its
+            // widened box), but never receives one.
+            if is_semi(problem, var) {
+                continue;
+            }
 
             if bounded_above(*operator)
                 && let Some(rest) = min.without(min_contribution)
@@ -937,7 +970,10 @@ fn redundant_rows(problem: &mut LpProblem, pass: &mut Pass<'_>, infeasible: &mut
         // pins every variable in it to one end of its box.
         let forcing_at_min = above && min.total().is_some_and(|value| value >= rhs - EPS);
         let forcing_at_max = below && max.total().is_some_and(|value| value <= rhs + EPS);
-        if forcing_at_min || forcing_at_max {
+        // A semi column cannot be pinned by bounds, so a forcing row over one
+        // is kept rather than traded for fixes that would not hold.
+        let pins_semi = terms.iter().any(|&(var, _)| is_semi(problem, var));
+        if (forcing_at_min || forcing_at_max) && !pins_semi {
             let activity = if forcing_at_min { min.total() } else { max.total() };
             let extreme = if forcing_at_min { "min" } else { "max" };
             pass.record(
@@ -1041,8 +1077,8 @@ fn empty_rows_cols(problem: &mut LpProblem, pass: &mut Pass<'_>, infeasible: &mu
     let minimising = matches!(problem.sense, Sense::Minimize);
     let mut fixes = Vec::new();
 
-    for var_id in problem.variables.keys() {
-        if used.binary_search(var_id).is_ok() {
+    for (var_id, variable) in &problem.variables {
+        if used.binary_search(var_id).is_ok() || variable.kind.is_semi() {
             continue;
         }
         let cost = objective.get(var_id).copied().unwrap_or(0.0);
@@ -1081,6 +1117,10 @@ fn fixed_to_rhs(problem: &mut LpProblem, pass: &mut Pass<'_>) {
         .variables
         .iter()
         .filter_map(|(id, variable)| {
+            // `l = u` leaves a semi column free to sit at zero: not fixed.
+            if variable.kind.is_semi() {
+                return None;
+            }
             let (_, lower, upper) = variable_bounds(Some(variable));
             (lower.is_finite() && (upper - lower).abs() <= EPS).then_some((*id, lower))
         })
@@ -1525,6 +1565,33 @@ mod tests {
         let (out, _) = presolve(&problem, only(&[Rule::IntegerRounding]));
 
         assert_eq!(bounds_of(&out, "x"), (1.0, 3.0), "float noise around an integer must not cut off that integer");
+    }
+
+    #[test]
+    fn semi_continuous_columns_keep_their_zero_branch_through_presolve() {
+        // s is 0 or in [2, 10]. Every rule must leave that choice intact:
+        // - c1 (s + y >= 1) is satisfiable with s = 0, y = 1;
+        // - c2 (a singleton on s) cannot become a bound on s;
+        // - c3 (s <= 0 via a forcing row) must not "fix" s at 0 by bounds;
+        // - s appears in no other way that would let the rules fix it.
+        let source = "Minimize\n obj: s + y + z\nSubject To\n c1: s + y >= 1\n c2: s <= 5\n c3: z + t <= 0\nBounds\n 2 <= s <= 10\n 1 <= t <= 1\nSemi-Continuous\n s\n t\nEnd";
+        let problem = parse(source);
+        let (out, stats) = presolve(&problem, DEFAULT_RULES);
+
+        assert!(stats.infeasible.is_none(), "the model is feasible at s = 0: {:?}", stats.infeasible);
+        for name in ["s", "t"] {
+            let id = out.name_id(name).expect("column survives");
+            let bounds = out.variables[&id].bounds;
+            let original = problem.variables[&problem.name_id(name).expect("column exists")].bounds;
+            assert_eq!((bounds.lower, bounds.upper), (original.lower, original.upper), "{name}'s bounds must be untouched");
+        }
+        assert!(out.name_id("c2").is_some_and(|id| out.constraints.contains_key(&id)), "a singleton on a semi column stays a row");
+        assert!(out.name_id("c3").is_some_and(|id| out.constraints.contains_key(&id)), "a forcing row over a semi column stays");
+
+        let solved = crate::solver::solve_problem(&out).expect("the presolved model solves");
+        let original = crate::solver::solve_problem(&problem).expect("the original model solves");
+        let (a, b) = (solved.objective_value.expect("optimal"), original.objective_value.expect("optimal"));
+        assert!((a - b).abs() < 1e-9, "presolve must not change the optimum: {a} vs {b}");
     }
 
     #[test]
