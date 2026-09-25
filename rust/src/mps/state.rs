@@ -4,7 +4,7 @@ use super::builders::{build_bounds, build_constraints, build_objectives};
 use super::sections::{
     BoundsState, ColumnsState, flush_sos_constraint, parse_ranges_line, parse_rhs_line, parse_rows_line, parse_sos_line,
 };
-use super::{MpsSection, RawCoefficient, RowType, SOSType};
+use super::{MpsSection, RawCoefficient, RowType, SOSType, whitespace_fields};
 use crate::error::{LpParseError, LpResult};
 use crate::lexer::{ParseResult, RawConstraint, RawQuadraticTerm};
 use crate::model::{ConstraintClass, Sense};
@@ -263,7 +263,7 @@ impl<'input> MpsParseState<'input> {
     /// Parse one `column column value` line of a `QUADOBJ`, `QMATRIX` or
     /// `QCMATRIX` section.
     fn parse_quadratic_line(&mut self, current_section: MpsSection, line: &'input str, line_num: usize) -> LpResult<()> {
-        let fields: Vec<&str> = line.split_whitespace().take_while(|f| !f.starts_with('$')).collect();
+        let fields: Vec<&str> = whitespace_fields(line).take_while(|f| !f.starts_with('$')).collect();
         let [var1, var2, value] = fields.as_slice() else {
             if fields.is_empty() {
                 return Ok(());
@@ -300,7 +300,7 @@ impl<'input> MpsParseState<'input> {
 
     /// Parse one `IF row column value` line of the `INDICATORS` section.
     fn parse_indicator_line(&mut self, line: &'input str, line_num: usize) -> LpResult<()> {
-        let fields: Vec<&str> = line.split_whitespace().take_while(|f| !f.starts_with('$')).collect();
+        let fields: Vec<&str> = whitespace_fields(line).take_while(|f| !f.starts_with('$')).collect();
         match fields.as_slice() {
             [] => {}
             [kind, row, column, value] if kind.eq_ignore_ascii_case("IF") => {
@@ -545,7 +545,7 @@ pub fn parse_mps(input: &str) -> LpResult<ParseResult<'_>> {
         let line_num = line_idx + 1;
 
         // Skip blank lines and comment lines (start with '*' at column 0)
-        if line.trim().is_empty() || line.starts_with('*') {
+        if line.trim_start().is_empty() || line.starts_with('*') {
             continue;
         }
 

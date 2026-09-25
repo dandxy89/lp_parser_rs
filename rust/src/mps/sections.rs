@@ -3,7 +3,7 @@ use std::collections::hash_map::Entry;
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use super::{BoundAccumulator, RowType, split_fields};
+use super::{BoundAccumulator, RowType, split_fields, whitespace_fields};
 use crate::error::{LpParseError, LpResult};
 use crate::lexer::{RawCoefficient, RawConstraint};
 use crate::model::SOSType;
@@ -11,7 +11,7 @@ use crate::model::SOSType;
 /// Iterate the whitespace-separated fields of an MPS data line, honouring `$`
 /// inline comments (a `$`-prefixed field truncates the rest of the line).
 fn data_fields(line: &str) -> impl Iterator<Item = &str> {
-    line.split_whitespace().take_while(|f| !f.starts_with('$'))
+    whitespace_fields(line).take_while(|f| !f.starts_with('$'))
 }
 
 /// Parse a single ROWS data line.
