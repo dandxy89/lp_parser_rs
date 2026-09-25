@@ -21,7 +21,6 @@
 use std::fmt::Write;
 
 use logos::Logos;
-use rustc_hash::FxHashSet;
 
 use crate::NUMERIC_EPSILON;
 use crate::error::{LpParseError, LpResult};
@@ -167,9 +166,20 @@ fn validate_lp_names(problem: &LpProblem, options: &LpWriterOptions) -> LpResult
         return Err(LpParseError::validation_error(format!("problem name {name:?} cannot be written to LP: it contains a line break")));
     }
 
-    let mut checked: FxHashSet<NameId> = FxHashSet::default();
-    let mut check =
-        |id: NameId, kind: &str| -> LpResult<()> { if checked.insert(id) { check_lp_name(problem.resolve(id), kind) } else { Ok(()) } };
+    // Ids are dense, so a flag per interned name replaces a hash set. An id
+    // outside the table (from another interner) is checked every time, and
+    // `resolve` rejects it exactly as before.
+    let mut checked = vec![false; problem.interner.len()];
+    let mut check = |id: NameId, kind: &str| -> LpResult<()> {
+        match checked.get_mut(id.index()) {
+            Some(true) => Ok(()),
+            Some(seen) => {
+                *seen = true;
+                check_lp_name(problem.resolve(id), kind)
+            }
+            None => check_lp_name(problem.resolve(id), kind),
+        }
+    };
     for id in problem.variables.keys() {
         check(*id, "variable")?;
     }
