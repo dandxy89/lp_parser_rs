@@ -1,5 +1,52 @@
 # Changelog
 
+## [4.1.0](https://github.com/dandxy89/lp_parser_rs/compare/parse_lp-v4.0.0...parse_lp-v4.1.0) (2026-09-25)
+
+
+### Miscellaneous Chores
+
+* release main ([d3ba294](https://github.com/dandxy89/lp_parser_rs/commit/d3ba2946cc0fce6a256da7feb8fee3a740453973))
+* release main ([d24c5c8](https://github.com/dandxy89/lp_parser_rs/commit/d24c5c81325f1cc28600250900b44d73a68ff26d))
+* release main ([948ff5d](https://github.com/dandxy89/lp_parser_rs/commit/948ff5d43f3cecd2aa5bae41c8ae42a44407a38d))
+* set MSRV to 1.88.0 across workspace crates ([071c612](https://github.com/dandxy89/lp_parser_rs/commit/071c612c5f76b37db24119dea8debe8c9332e163))
+
+
+### Documentation
+
+* correct and rewrite documentation across the library, bindings, TUI, LSP and site ([471b7ff](https://github.com/dandxy89/lp_parser_rs/commit/471b7ff37fd5918eca0e286537dc22431f5cb104))
+
+
+### Features
+
+* **python:** add string/MPS parsing, diff and structured variables ([ecbef95](https://github.com/dandxy89/lp_parser_rs/commit/ecbef9570f7ee60037d47ffdfbffa5e57747a584))
+
+
+### Bug Fixes
+
+* General improvements ([#212](https://github.com/dandxy89/lp_parser_rs/issues/212)) ([9449d5d](https://github.com/dandxy89/lp_parser_rs/commit/9449d5de2c71601b27cfe3a6a99c906ae4c3f7a2))
+* **lsp:** adding a LSP ([#213](https://github.com/dandxy89/lp_parser_rs/issues/213)) ([f2d2609](https://github.com/dandxy89/lp_parser_rs/commit/f2d2609bdb482723b1e8fb5d4a239c03f6284d95))
+* **python:** declare dual MIT OR Apache-2.0 licence on PyPI ([de7d14e](https://github.com/dandxy89/lp_parser_rs/commit/de7d14e503f01ceb1b52259283f4049d46a9db42))
+* **python:** document every constraint type and test Python 3.14 in CI ([2cd441d](https://github.com/dandxy89/lp_parser_rs/commit/2cd441d31cc34c1bf51cfdfcded5855a546ba32b))
+* **python:** drop is_file pre-check so read failures raise errno-aware OSError subclasses ([fc9d09d](https://github.com/dandxy89/lp_parser_rs/commit/fc9d09d5761e08d13c96a7345ce590ed8a1fe585))
+* **python:** map to_csv I/O failures inside csv::Error to OSError subclasses ([f717bbf](https://github.com/dandxy89/lp_parser_rs/commit/f717bbfae712cc0995b130939530f31901500f56))
+* **python:** raise exceptions by error kind, not by the call site ([9e85fdc](https://github.com/dandxy89/lp_parser_rs/commit/9e85fdc4f35550fb88eae230411a5dfcd8d54d77))
+* **python:** raise LpParseError with an encoding hint for non-UTF-8 source files ([3d13ed7](https://github.com/dandxy89/lp_parser_rs/commit/3d13ed76bfdbda68f3e45676b695988fbcd12afe))
+* **python:** reject empty names in remove_* and update_variable_type with LpInvalidValueError ([13bdc0e](https://github.com/dandxy89/lp_parser_rs/commit/13bdc0ebfe39c0667c39d08007cbb349e73eff7a))
+* **python:** route MPS writer errors through to_py_err ([3191d44](https://github.com/dandxy89/lp_parser_rs/commit/3191d44d9e6b5f38e2ea7a6646a61094620af3f4))
+
+
+### Performance Improvements
+
+* **python:** add get_constraint, get_variable and num_* accessors ([f334dda](https://github.com/dandxy89/lp_parser_rs/commit/f334dda87fd07de52bfeb22943b569327e0bd453))
+* **python:** release the GIL while writing, diffing and analysing ([2066580](https://github.com/dandxy89/lp_parser_rs/commit/2066580d2ee811611a4b94619d119eac7a64557d))
+
+
+### Code Refactoring
+
+* derive the clipboard yank from the widgets' lines, and drop the legacy VariableType view ([3cc93c9](https://github.com/dandxy89/lp_parser_rs/commit/3cc93c99913113a4a7316875ce5efa07b8db4198))
+* remove over-engineering flagged by repo audit ([5d3ec69](https://github.com/dandxy89/lp_parser_rs/commit/5d3ec6951243ec27362992240bc839e10753892c))
+* strip over-engineering found by repo-wide audit ([c842456](https://github.com/dandxy89/lp_parser_rs/commit/c842456c5fdd1d67ed16fea3dd17d9de71d6393a))
+
 ## [4.0.0](https://github.com/dandxy89/lp_parser_rs/compare/parse_lp-v3.0.2...parse_lp-v4.0.0) (2026-09-10)
 
 

@@ -1,5 +1,61 @@
 # Changelog
 
+## [5.0.2](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v5.0.1...lp_parser_rs-v5.0.2) (2026-09-25)
+
+
+### Documentation
+
+* correct and rewrite documentation across the library, bindings, TUI, LSP and site ([471b7ff](https://github.com/dandxy89/lp_parser_rs/commit/471b7ff37fd5918eca0e286537dc22431f5cb104))
+
+
+### Bug Fixes
+
+* General improvements ([#212](https://github.com/dandxy89/lp_parser_rs/issues/212)) ([9449d5d](https://github.com/dandxy89/lp_parser_rs/commit/9449d5de2c71601b27cfe3a6a99c906ae4c3f7a2))
+* **lsp:** adding a LSP ([#213](https://github.com/dandxy89/lp_parser_rs/issues/213)) ([f2d2609](https://github.com/dandxy89/lp_parser_rs/commit/f2d2609bdb482723b1e8fb5d4a239c03f6284d95))
+* **rust:** accept a leading UTF-8 byte order mark in LP and MPS input ([759c5c0](https://github.com/dandxy89/lp_parser_rs/commit/759c5c0b7a4cda202e7259f97d1244543e8f39ea))
+* **rust:** accept a leading UTF-8 byte order mark in the raw MPS parser ([ca42ef0](https://github.com/dandxy89/lp_parser_rs/commit/ca42ef0a64002254e1da593026492b0c9fb78bfe))
+* **rust:** allow exact float comparison in coefficient tests ([02d8e73](https://github.com/dandxy89/lp_parser_rs/commit/02d8e739dffde7e814ef7b20d10a84df4921f212))
+* **rust:** compare variable bounds effectively and within tolerance in diff ([b4954b3](https://github.com/dandxy89/lp_parser_rs/commit/b4954b3fae3cfd514485b39e17d1eab4ad320659))
+* **rust:** count objective quadratic variables as used in analysis ([d0b02f8](https://github.com/dandxy89/lp_parser_rs/commit/d0b02f8cfefbd19daa947b9ff9fdb3fc40f4de2f))
+* **rust:** fold MPS RANGES pairs only when the range reconstructs exactly ([a24d491](https://github.com/dandxy89/lp_parser_rs/commit/a24d4918d5a89d42c2a53e20c80f8ac888204970))
+* **rust:** include indicator and quadratic linear parts in coefficient stats ([0b67452](https://github.com/dandxy89/lp_parser_rs/commit/0b674528d85c7102fe411eb7003f3361920ec010))
+* **rust:** judge an updated coefficient as zero on an absolute tolerance ([698cc26](https://github.com/dandxy89/lp_parser_rs/commit/698cc26096bca425b8d16186a61d16d4cb2d8a14))
+* **rust:** keep an entry's position when renaming it ([81f95d1](https://github.com/dandxy89/lp_parser_rs/commit/81f95d12a5fdc52fc26b6b0f8ed7f32e5f34fe81))
+* **rust:** keep the last MPS SOS set when input has no ENDATA ([2a51c72](https://github.com/dandxy89/lp_parser_rs/commit/2a51c72ed111ee508b1d4c085f261d64d4416369))
+* **rust:** leave MPS continuous default bounds unspecified ([af1f33f](https://github.com/dandxy89/lp_parser_rs/commit/af1f33fee5d2b3ae1da76d06e4c0a2ee525e91b1))
+* **rust:** make a variable in both generals and binaries binary ([bdae0c4](https://github.com/dandxy89/lp_parser_rs/commit/bdae0c4fb2754f43f926e1102887e3acca90d2b7))
+* **rust:** merge a bound given to update_variable_type into existing bounds ([9b6dc08](https://github.com/dandxy89/lp_parser_rs/commit/9b6dc08e47c6a65eb6a6c5c92858cc14216368cf))
+* **rust:** only drop an exact unit coefficient in exact LP output ([418295d](https://github.com/dandxy89/lp_parser_rs/commit/418295db4a53ed2ac9c0109af40af824ff46bfc9))
+* **rust:** read the set name from the extended MPS SOS header ([4ac647e](https://github.com/dandxy89/lp_parser_rs/commit/4ac647e3dad12e17f2582736a6f9d5ef46780da2))
+* **rust:** reject NaN and misplaced infinities in MPS RHS, RANGES, BOUNDS and SOS ([a61b327](https://github.com/dandxy89/lp_parser_rs/commit/a61b327127a366a974ef70c4c48c2609296bf9a0))
+* **rust:** reject orphan SOS weights and empty sets, accept unnamed sets ([a845f24](https://github.com/dandxy89/lp_parser_rs/commit/a845f248a8a9a80d91825f5f44abe8b282856715))
+* **rust:** reject ranged constraints whose operators disagree in direction ([ec4d2e8](https://github.com/dandxy89/lp_parser_rs/commit/ec4d2e8289056061cb7f69838bfefc6981b1f745))
+* **rust:** reject repeated terms whose sum overflows to infinity ([f1a2789](https://github.com/dandxy89/lp_parser_rs/commit/f1a2789061335e2e99fff73930732dd8da9a9b79))
+* **rust:** report diff changes to or from infinity ([c5fd753](https://github.com/dandxy89/lp_parser_rs/commit/c5fd753b6b390baf84762722c40e652e259225c3))
+* **rust:** return a validation error for NaN values in the LP and MPS writers ([6272c5e](https://github.com/dandxy89/lp_parser_rs/commit/6272c5ee85a52e6ad48b33d18e40c9f85084bd70))
+* **rust:** return an error for an empty name in remove and type updates ([5a7fb76](https://github.com/dandxy89/lp_parser_rs/commit/5a7fb768bbfd6367312cb6c70e9aeec1a4b91c6a))
+* **rust:** share one MPS marker block across consecutive integer columns ([a7c5939](https://github.com/dandxy89/lp_parser_rs/commit/a7c59393a2eef7bea4efce3b9e1082f41050fb03))
+* **rust:** skip a byte order mark in the lexer so offsets match the raw input ([2d26fed](https://github.com/dandxy89/lp_parser_rs/commit/2d26feda2ceb4d56d0a550653bd170cb27335672))
+* **rust:** write lp-solvers coefficients losslessly and keep small ones ([677f848](https://github.com/dandxy89/lp_parser_rs/commit/677f848b527c5255b34bb66478250945b3707641))
+
+
+### Performance Improvements
+
+* byte-identical performance improvements for the library and LSP ([#215](https://github.com/dandxy89/lp_parser_rs/issues/215)) ([e9c1b52](https://github.com/dandxy89/lp_parser_rs/commit/e9c1b52ed4d9cca93da6315aeacc19640d17361d))
+* **rust:** add criterion benchmark for MPS INDICATORS and QCMATRIX parsing ([642dca6](https://github.com/dandxy89/lp_parser_rs/commit/642dca6e66e3904d1a9fc77b150621a0687f3cc6))
+* **rust:** cheaper coefficient merging and name sets when building a problem ([1714ebe](https://github.com/dandxy89/lp_parser_rs/commit/1714ebe967e113caab3c2af12110f1d35e34f50d))
+* **rust:** locate MPS INDICATORS and QCMATRIX rows via a hash index ([4bf567a](https://github.com/dandxy89/lp_parser_rs/commit/4bf567adde8f238f1d4cda1f39fc759e8b21e8be))
+
+
+### Reverts
+
+* read the set name from the extended MPS SOS header ([a99e323](https://github.com/dandxy89/lp_parser_rs/commit/a99e3238a0793cf60950f32fac8e353baa278f8c))
+
+
+### Tests
+
+* **rust:** add a criterion benchmark for LP and MPS parsing ([68cd4c0](https://github.com/dandxy89/lp_parser_rs/commit/68cd4c08f2c32a1497a0af786b4ce067cf758636))
+
 ## [5.0.1](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v5.0.0...lp_parser_rs-v5.0.1) (2026-09-10)
 
 
