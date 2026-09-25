@@ -21,7 +21,6 @@ pub(super) fn parse_rows_line<'input>(
     objective_rows: &mut Vec<&'input str>,
     row_types: &mut FxHashMap<&'input str, RowType>,
     row_order: &mut Vec<&'input str>,
-    row_slots: &mut FxHashMap<&'input str, u32>,
 ) -> LpResult<()> {
     debug_assert!(!line.is_empty(), "parse_rows_line called with empty line");
     debug_assert!(line_num > 0, "line_num must be 1-based");
@@ -53,10 +52,6 @@ pub(super) fn parse_rows_line<'input>(
     if row_types.insert(row_name, row_type).is_some() {
         return Err(LpParseError::parse_error(line_num, format!("Duplicate row name: '{row_name}'")));
     }
-    // Row count fits in u32 for the same reason the column count does.
-    let slot = u32::try_from(row_slots.len()).unwrap_or(u32::MAX);
-    row_slots.insert(row_name, slot);
-    debug_assert!(row_slots.len() == row_types.len(), "every declared row has a slot");
 
     if row_type == RowType::N {
         if fields.len() > 2 {
@@ -76,19 +71,13 @@ pub(super) fn parse_rows_line<'input>(
 /// Mutable state for parsing the COLUMNS section.
 #[derive(Default)]
 pub(super) struct ColumnsState<'input> {
-    /// Slot of every row declared so far (`ROWS`, `LAZYCONS`, `USERCUTS`),
-    /// in declaration order: the index of its list in `row_entries`. Holds
-    /// exactly the keys of the parser's `row_types`.
-    pub(super) row_slots: FxHashMap<&'input str, u32>,
-    /// Position in `row_entries[row slot]` of each (column index, row slot)
-    /// pair's entry. MPS allows split entries, so values are summed on
-    /// duplicate keys.
-    pub(super) coefficients: FxHashMap<(u32, u32), usize>,
-    /// Per-row list, indexed by row slot, of (column index, variable,
-    /// accumulated value) entries in first-insertion order. Lets the builders
-    /// iterate only a row's nonzeros instead of probing every (row, column)
-    /// combination.
-    pub(super) row_entries: Vec<Vec<(u32, &'input str, f64)>>,
+    /// Position in `row_entries[row]` of each (variable, row) pair's entry.
+    /// MPS allows split entries, so values are summed on duplicate keys.
+    pub(super) coefficients: FxHashMap<(&'input str, &'input str), usize>,
+    /// Per-row list of (column index, variable, accumulated value) entries in
+    /// first-insertion order. Lets the builders iterate only a row's nonzeros
+    /// instead of probing every (row, column) combination.
+    pub(super) row_entries: FxHashMap<&'input str, Vec<(u32, &'input str, f64)>>,
     pub(super) column_order: Vec<&'input str>,
     pub(super) column_index: FxHashMap<&'input str, u32>,
     pub(super) in_integer_block: bool,
@@ -102,7 +91,13 @@ impl<'input> ColumnsState<'input> {
     /// The strict MPS format allows at most two (row, value) pairs per line,
     /// but free-format writers emit more; all pairs are parsed. A trailing row
     /// name without a value is an error rather than silent data loss.
-    pub(super) fn parse_line(&mut self, line: &'input str, line_num: usize) -> LpResult<()> {
+    pub(super) fn parse_line(
+        &mut self,
+        line: &'input str,
+        line_num: usize,
+        row_types: &FxHashMap<&str, RowType>,
+        objective_rows: &[&str],
+    ) -> LpResult<()> {
         debug_assert!(!line.is_empty(), "ColumnsState::parse_line called with empty line");
         debug_assert!(line_num > 0, "line_num must be 1-based");
 
@@ -153,12 +148,12 @@ impl<'input> ColumnsState<'input> {
             self.integer_vars.push(var_name);
         }
 
-        self.parse_entry(first_row, first_value, var_name, col_idx, line_num)?;
+        self.parse_entry(first_row, first_value, var_name, col_idx, line_num, row_types, objective_rows)?;
         while let Some(row_name) = fields.next() {
             let Some(value) = fields.next() else {
                 return Err(LpParseError::parse_error(line_num, format!("COLUMNS row '{row_name}' has no value field")));
             };
-            self.parse_entry(row_name, value, var_name, col_idx, line_num)?;
+            self.parse_entry(row_name, value, var_name, col_idx, line_num, row_types, objective_rows)?;
         }
 
         Ok(())
@@ -166,6 +161,7 @@ impl<'input> ColumnsState<'input> {
 
     /// Parse a single (`row_name`, value) entry from a COLUMNS line of the
     /// column `var_name`, whose index in `column_order` is `col_idx`.
+    #[allow(clippy::too_many_arguments)]
     fn parse_entry(
         &mut self,
         row_name: &'input str,
@@ -173,15 +169,16 @@ impl<'input> ColumnsState<'input> {
         var_name: &'input str,
         col_idx: u32,
         line_num: usize,
+        row_types: &FxHashMap<&str, RowType>,
+        objective_rows: &[&str],
     ) -> LpResult<()> {
         debug_assert!(!row_name.is_empty(), "parse_entry called with empty row_name");
         debug_assert!(!var_name.is_empty(), "parse_entry called with empty var_name");
         debug_assert!(self.column_index.get(var_name) == Some(&col_idx), "col_idx must be var_name's registered column index");
 
-        // Every declared row, objective rows included, has a slot.
-        let Some(&slot) = self.row_slots.get(row_name) else {
+        if !row_types.contains_key(row_name) && !objective_rows.contains(&row_name) {
             return Err(LpParseError::parse_error(line_num, format!("Reference to undefined row: '{row_name}'")));
-        };
+        }
 
         let value: f64 = value_str.parse().map_err(|_| LpParseError::invalid_number(value_str, line_num))?;
         if !value.is_finite() {
@@ -192,18 +189,15 @@ impl<'input> ColumnsState<'input> {
         }
 
         // Accumulate coefficient (additive -- MPS allows split entries)
-        let slot_index = slot as usize;
-        match self.coefficients.entry((col_idx, slot)) {
+        match self.coefficients.entry((var_name, row_name)) {
             Entry::Occupied(entry) => {
-                let (_, entry_var, accumulated) = &mut self.row_entries[slot_index][*entry.get()];
+                let entries = self.row_entries.get_mut(row_name).expect("a recorded (variable, row) pair has a row entry");
+                let (_, entry_var, accumulated) = &mut entries[*entry.get()];
                 debug_assert!(*entry_var == var_name, "coefficient position must point at its own entry");
                 *accumulated += value;
             }
             Entry::Vacant(entry) => {
-                if slot_index >= self.row_entries.len() {
-                    self.row_entries.resize_with(slot_index + 1, Vec::new);
-                }
-                let entries = &mut self.row_entries[slot_index];
+                let entries = self.row_entries.entry(row_name).or_default();
                 entry.insert(entries.len());
                 entries.push((col_idx, var_name, value));
             }

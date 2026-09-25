@@ -204,27 +204,13 @@ impl<'input> MpsParseState<'input> {
                 self.sense = parse_objsense_value(line.trim(), line_num)?;
             }
             MpsSection::Rows => {
-                parse_rows_line(
-                    line,
-                    line_num,
-                    &mut self.objective_rows,
-                    &mut self.row_types,
-                    &mut self.row_order,
-                    &mut self.columns.row_slots,
-                )?;
+                parse_rows_line(line, line_num, &mut self.objective_rows, &mut self.row_types, &mut self.row_order)?;
             }
             MpsSection::LazyCons | MpsSection::UserCuts => {
                 let class = if current_section == MpsSection::LazyCons { ConstraintClass::Lazy } else { ConstraintClass::UserCut };
                 let objective_count = self.objective_rows.len();
                 let row_count = self.row_order.len();
-                parse_rows_line(
-                    line,
-                    line_num,
-                    &mut self.objective_rows,
-                    &mut self.row_types,
-                    &mut self.row_order,
-                    &mut self.columns.row_slots,
-                )?;
+                parse_rows_line(line, line_num, &mut self.objective_rows, &mut self.row_types, &mut self.row_order)?;
                 if self.objective_rows.len() != objective_count {
                     return Err(LpParseError::parse_error(line_num, "an objective (N) row cannot be a lazy constraint or user cut"));
                 }
@@ -233,7 +219,7 @@ impl<'input> MpsParseState<'input> {
                 }
             }
             MpsSection::Columns => {
-                self.columns.parse_line(line, line_num)?;
+                self.columns.parse_line(line, line_num, &self.row_types, &self.objective_rows)?;
             }
             MpsSection::Rhs => {
                 parse_rhs_line(line, line_num, &self.row_types, &self.objective_rows, &mut self.rhs_values, &mut self.rhs_vector_label)?;
@@ -367,7 +353,7 @@ impl<'input> MpsParseState<'input> {
 
         // Sort each row's entries by column index so builders emit
         // coefficients in column order, matching the original file layout.
-        for entries in &mut self.columns.row_entries {
+        for entries in self.columns.row_entries.values_mut() {
             entries.sort_unstable_by_key(|&(col_idx, _, _)| col_idx);
         }
 
