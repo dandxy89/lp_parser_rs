@@ -449,6 +449,65 @@ pub struct ObjectiveDiffEntry {
     pub order_changed: bool,
     /// Whether the only difference is coefficient ordering.
     pub order_only: bool,
+    /// The constant and quadratic parts, which the coefficient lists omit.
+    pub extras: ObjectiveExtras,
+}
+
+/// The parts of an objective beyond its linear coefficients.
+#[derive(Debug, Clone, Default)]
+pub struct ObjectiveExtras {
+    /// Constant term in each problem (`0.0` on the missing side of an added or
+    /// removed objective).
+    pub old_constant: f64,
+    pub new_constant: f64,
+    /// Quadratic terms in each problem as canonical `(var, var, coefficient)`
+    /// triples (see [`constraint_summary_terms`]).
+    pub old_quadratic: Vec<(String, String, f64)>,
+    pub new_quadratic: Vec<(String, String, f64)>,
+    /// Whether the constant differs beyond the configured tolerance.
+    pub constant_changed: bool,
+    /// Whether the quadratic terms differ (by variable pair, or by coefficient
+    /// beyond the configured tolerance).
+    pub quadratic_changed: bool,
+}
+
+impl ObjectiveExtras {
+    /// One side only, for an added (`side_is_new`) or removed objective.
+    fn one_side(problem: &LpProblem, objective: &lp_parser_rs::model::Objective, side_is_new: bool, opts: &DiffOptions) -> Self {
+        let quadratic = constraint_summary_terms(problem, &objective.quadratic, opts);
+        if side_is_new {
+            Self { new_constant: objective.constant, new_quadratic: quadratic, ..Self::default() }
+        } else {
+            Self { old_constant: objective.constant, old_quadratic: quadratic, ..Self::default() }
+        }
+    }
+
+    /// Both sides of an objective present in both problems.
+    fn compare(
+        p1: &LpProblem,
+        o1: &lp_parser_rs::model::Objective,
+        p2: &LpProblem,
+        o2: &lp_parser_rs::model::Objective,
+        opts: &DiffOptions,
+    ) -> Self {
+        let old_quadratic = constraint_summary_terms(p1, &o1.quadratic, opts);
+        let new_quadratic = constraint_summary_terms(p2, &o2.quadratic, opts);
+        let quadratic_changed = quadratic_terms_differ(&old_quadratic, &new_quadratic, opts);
+        Self {
+            old_constant: o1.constant,
+            new_constant: o2.constant,
+            old_quadratic,
+            new_quadratic,
+            constant_changed: opts.numeric_differs(o1.constant, o2.constant),
+            quadratic_changed,
+        }
+    }
+
+    /// Whether anything beyond the linear coefficients changed.
+    #[must_use]
+    pub const fn changed(&self) -> bool {
+        self.constant_changed || self.quadratic_changed
+    }
 }
 
 /// Trait implemented by all diff entry types so the TUI can render them uniformly.
@@ -651,7 +710,10 @@ pub fn objective_sort_delta(entry: &ObjectiveDiffEntry, relative: bool) -> Optio
     if entry.kind != DiffKind::Modified {
         return None;
     }
-    Some(max_coefficient_delta(&entry.coeff_changes, relative))
+    let extras = &entry.extras;
+    let constant_delta =
+        if extras.constant_changed { change_delta(Some(extras.old_constant), Some(extras.new_constant), relative) } else { 0.0 };
+    Some(constant_delta.max(max_coefficient_delta(&entry.coeff_changes, relative)))
 }
 
 /// Sort `indices` (positions into `entries`) by descending delta.
@@ -780,6 +842,12 @@ fn constraint_summary_terms(
         .collect();
     out.sort_by(|x, y| (&x.0, &x.1).cmp(&(&y.0, &y.1)));
     out
+}
+
+/// Whether two canonical quadratic term lists differ: a different variable pair
+/// anywhere, or a coefficient outside the configured tolerance.
+fn quadratic_terms_differ(old: &[(String, String, f64)], new: &[(String, String, f64)], opts: &DiffOptions) -> bool {
+    old.len() != new.len() || old.iter().zip(new).any(|(a, b)| a.0 != b.0 || a.1 != b.1 || opts.numeric_differs(a.2, b.2))
 }
 
 /// Build a sorted vec of (`canonical_name`, &Variable) pairs.
@@ -1347,6 +1415,7 @@ fn diff_objectives(p1: &LpProblem, p2: &LpProblem, interner: &mut NameInterner, 
                     coeff_changes: Vec::new(),
                     order_changed: false,
                     order_only: false,
+                    extras: ObjectiveExtras::one_side(p1, o, false, opts),
                 });
                 i += 1;
             }
@@ -1361,14 +1430,16 @@ fn diff_objectives(p1: &LpProblem, p2: &LpProblem, interner: &mut NameInterner, 
                     coeff_changes: Vec::new(),
                     order_changed: false,
                     order_only: false,
+                    extras: ObjectiveExtras::one_side(p2, o, true, opts),
                 });
                 j += 1;
             }
             std::cmp::Ordering::Equal => {
                 let (name, o1_val) = &objs1[i];
                 let o2_val = objs2[j].1;
+                let extras = ObjectiveExtras::compare(p1, o1_val, p2, o2_val, opts);
                 // Fast path: skip resolution if the raw coefficients are identical under tolerance/rename.
-                if coefficients_equal(p1, &o1_val.coefficients, p2, &o2_val.coefficients, opts) {
+                if !extras.changed() && coefficients_equal(p1, &o1_val.coefficients, p2, &o2_val.coefficients, opts) {
                     counts.unchanged += 1;
                     i += 1;
                     j += 1;
@@ -1378,10 +1449,10 @@ fn diff_objectives(p1: &LpProblem, p2: &LpProblem, interner: &mut NameInterner, 
                 let old_resolved = resolve_coefficients(p1, &o1_val.coefficients, interner, opts);
                 let new_resolved = resolve_coefficients(p2, &o2_val.coefficients, interner, opts);
                 let coeff_changes = diff_coefficients(&old_resolved, &new_resolved, opts);
-                if coeff_changes.is_empty() && !reordered {
+                if coeff_changes.is_empty() && !reordered && !extras.changed() {
                     counts.unchanged += 1;
                 } else {
-                    let order_only = coeff_changes.is_empty() && reordered;
+                    let order_only = coeff_changes.is_empty() && reordered && !extras.changed();
                     counts.modified += 1;
                     if order_only {
                         counts.order_only += 1;
@@ -1394,6 +1465,7 @@ fn diff_objectives(p1: &LpProblem, p2: &LpProblem, interner: &mut NameInterner, 
                         coeff_changes,
                         order_changed: reordered,
                         order_only,
+                        extras,
                     });
                 }
                 i += 1;
@@ -1807,6 +1879,7 @@ mod tests {
             coeff_changes: vec![],
             order_changed: false,
             order_only: false,
+            extras: ObjectiveExtras::default(),
         };
         assert_diff_entry(&added_obj, "obj", DiffKind::Added);
     }
@@ -1892,6 +1965,34 @@ mod tests {
         assert!(entry.order_changed);
         assert!(entry.coeff_changes.is_empty());
         assert_eq!(report.objectives.counts.order_only, 1);
+    }
+
+    #[test]
+    fn test_objective_constant_change_is_reported() {
+        let p1 = LpProblem::parse("minimize\nobj: 2 x + 5\nsubject to\n c: x >= 0\nend").unwrap();
+        let p2 = LpProblem::parse("minimize\nobj: 2 x + 7\nsubject to\n c: x >= 0\nend").unwrap();
+        let report = quick_report(&p1, &p2);
+
+        let entry = report.objectives.entries.iter().find(|e| e.name == "obj").expect("a changed constant is a modification");
+        assert_eq!(entry.kind, DiffKind::Modified);
+        assert!(entry.extras.constant_changed && !entry.order_only);
+        assert!((entry.extras.old_constant - 5.0).abs() < 1e-12 && (entry.extras.new_constant - 7.0).abs() < 1e-12);
+        assert_eq!(objective_sort_delta(entry, false), Some(2.0), "the constant delta ranks the entry");
+    }
+
+    #[test]
+    fn test_objective_quadratic_change_is_reported() {
+        let p1 = LpProblem::parse("minimize\nobj: 2 x + [ x ^ 2 ] / 2\nsubject to\n c: x >= 0\nend").unwrap();
+        let p2 = LpProblem::parse("minimize\nobj: 2 x + [ 3 x ^ 2 ] / 2\nsubject to\n c: x >= 0\nend").unwrap();
+        assert!(!p1.objectives.values().next().unwrap().quadratic.is_empty(), "fixture must carry a quadratic term");
+        let report = quick_report(&p1, &p2);
+
+        let entry = report.objectives.entries.iter().find(|e| e.name == "obj").expect("changed quadratic terms are a modification");
+        assert_eq!(entry.kind, DiffKind::Modified);
+        assert!(entry.extras.quadratic_changed && !entry.extras.constant_changed && entry.coeff_changes.is_empty());
+
+        let same = quick_report(&p1, &p1);
+        assert!(same.objectives.entries.is_empty(), "identical quadratic objectives are unchanged");
     }
 
     /// Build a report with custom `DiffOptions`. Uses empty line maps + dummy analyses.

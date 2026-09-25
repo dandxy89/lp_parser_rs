@@ -493,6 +493,8 @@ pub fn build_objective_detail(
         lines.push(Line::from(Span::styled("  Note: coefficient order also differs", Style::default().fg(t.modified))));
     }
 
+    push_objective_extras(&mut lines, entry);
+
     lines.push(Line::from(Span::styled("  Coefficients:", muted().add_modifier(Modifier::BOLD))));
 
     if entry.kind == DiffKind::Modified {
@@ -521,6 +523,52 @@ pub fn build_objective_detail(
     }
 
     lines
+}
+
+/// Push the objective's constant and quadratic part, when they matter: the
+/// change for a modified objective, the one side's value for an added or
+/// removed one. Nothing is pushed for a plain linear objective with no constant.
+fn push_objective_extras(lines: &mut Vec<Line<'static>>, entry: &ObjectiveDiffEntry) {
+    let t = theme();
+    let extras = &entry.extras;
+    let term_count = |terms: &[(String, String, f64)]| crate::format::plural(terms.len(), "term", "terms");
+    if entry.kind == DiffKind::Modified {
+        if extras.constant_changed {
+            lines.push(Line::from(vec![
+                Span::styled("  Constant: ", muted()),
+                Span::styled(format!("{}", extras.old_constant), Style::default().fg(t.removed)),
+                Span::styled(ARROW, muted()),
+                Span::styled(format!("{}", extras.new_constant), Style::default().fg(t.added)),
+            ]));
+        }
+        if extras.quadratic_changed {
+            lines.push(Line::from(vec![
+                Span::styled("  Quadratic: ", muted()),
+                Span::styled(format!("changed, {}", term_count(&extras.old_quadratic)), Style::default().fg(t.removed)),
+                Span::styled(ARROW, muted()),
+                Span::styled(term_count(&extras.new_quadratic), Style::default().fg(t.added)),
+            ]));
+        }
+        return;
+    }
+    let (constant, quadratic) = if entry.kind == DiffKind::Added {
+        (extras.new_constant, &extras.new_quadratic)
+    } else {
+        (extras.old_constant, &extras.old_quadratic)
+    };
+    let colour = kind_colour(entry.kind);
+    if constant != 0.0 {
+        lines.push(Line::from(vec![
+            Span::styled("  Constant: ", muted()),
+            Span::styled(format!("{constant}"), Style::default().fg(colour)),
+        ]));
+    }
+    if !quadratic.is_empty() {
+        lines.push(Line::from(vec![
+            Span::styled("  Quadratic: ", muted()),
+            Span::styled(term_count(quadratic), Style::default().fg(colour)),
+        ]));
+    }
 }
 
 /// Render an objective detail panel. Returns the total content line count.
