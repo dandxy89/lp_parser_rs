@@ -84,6 +84,23 @@ impl<'input> ClassifiedConstraints<'input> {
         }
     }
 
+    /// The buckets in a fixed order: normal, lazy, user cuts. A bucket's
+    /// index in this array is the first half of a position for [`Self::slot_mut`].
+    pub(super) fn buckets(&self) -> [&[RawConstraint<'input>]; 3] {
+        [&self.normal, &self.lazy, &self.user_cuts]
+    }
+
+    /// The constraint at `(bucket, index)`, as located via [`Self::buckets`].
+    pub(super) fn slot_mut(&mut self, (bucket, index): (usize, usize)) -> &mut RawConstraint<'input> {
+        debug_assert!(bucket < 3, "bucket index out of range: {bucket}");
+        let bucket = match bucket {
+            0 => &mut self.normal,
+            1 => &mut self.lazy,
+            _ => &mut self.user_cuts,
+        };
+        &mut bucket[index]
+    }
+
     const fn len(&self) -> usize {
         self.normal.len() + self.lazy.len() + self.user_cuts.len()
     }
