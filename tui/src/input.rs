@@ -1553,6 +1553,9 @@ impl App {
 
     /// Handle a mouse event: scroll wheels and left-click panel selection.
     pub fn handle_mouse(&mut self, event: MouseEvent) {
+        if !mouse_event_is_actionable(event.kind) {
+            return;
+        }
         // An open overlay owns the mouse: the wheel scrolls it where it
         // scrolls, and nothing reaches the lists behind it.
         if self.has_overlay() {
@@ -1703,6 +1706,14 @@ impl App {
     }
 }
 
+/// Whether [`App::handle_mouse`] reacts to a mouse event of this kind: the
+/// wheel and a left click. Everything else — above all the stream of `Moved`
+/// (and `Drag`) events that any-motion tracking reports — is ignored, and the
+/// event loop skips the repaint for it.
+pub(crate) const fn mouse_event_is_actionable(kind: MouseEventKind) -> bool {
+    matches!(kind, MouseEventKind::ScrollDown | MouseEventKind::ScrollUp | MouseEventKind::Down(MouseButton::Left))
+}
+
 /// Return the RHS of a standard constraint in `problem`, or `None` if the
 /// constraint is missing or is an SOS constraint.
 pub(crate) fn baseline_constraint_rhs(problem: &LpProblem, name: &str) -> Option<f64> {
@@ -1751,6 +1762,16 @@ mod tests {
         app.handle_mouse(click(3));
         assert_eq!(app.active_section, Section::Constraints, "the second row is Constraints");
         assert!(app.selected_entry_index().is_some(), "and lands on its first entry");
+    }
+
+    #[test]
+    fn only_the_wheel_and_a_left_click_are_actionable() {
+        assert!(mouse_event_is_actionable(MouseEventKind::ScrollDown));
+        assert!(mouse_event_is_actionable(MouseEventKind::ScrollUp));
+        assert!(mouse_event_is_actionable(MouseEventKind::Down(MouseButton::Left)));
+        assert!(!mouse_event_is_actionable(MouseEventKind::Moved), "motion must not trigger a repaint");
+        assert!(!mouse_event_is_actionable(MouseEventKind::Drag(MouseButton::Left)));
+        assert!(!mouse_event_is_actionable(MouseEventKind::Up(MouseButton::Left)));
     }
 
     /// Regression: a click on the name list's bottom border selected the row
