@@ -63,7 +63,6 @@ use std::fmt;
 use indexmap::map::Values;
 use lp_solvers::lp_format::{AsVariable, LpObjective, WriteToLpFileFormat};
 
-use crate::NUMERIC_EPSILON;
 use crate::interner::{NameId, NameInterner};
 use crate::model::{Coefficient, ComparisonOp, Constraint, Objective, Sense, Variable, VariableKind};
 use crate::problem::LpProblem;
@@ -182,15 +181,11 @@ pub struct ExpressionAdapter<'a> {
     interner: &'a NameInterner,
 }
 
-/// Decimal precision for coefficients emitted to `lp-solvers`. High enough to
-/// preserve solver-relevant fidelity; `write_formatted_coefficient` trims
-/// trailing zeros so whole numbers stay compact.
-const COEFFICIENT_PRECISION: usize = 15;
-
 impl WriteToLpFileFormat for ExpressionAdapter<'_> {
     fn to_lp_file_format(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // Filter out zero and non-finite coefficients
-        let non_zero: Vec<_> = self.coefficients.iter().filter(|c| c.value.is_finite() && c.value.abs() > NUMERIC_EPSILON).collect();
+        // Drop exact zeros only: a tiny coefficient (e.g. 1e-12) is still part
+        // of the model. Non-finite coefficients cannot be written as LP.
+        let non_zero: Vec<_> = self.coefficients.iter().filter(|c| c.value.is_finite() && c.value != 0.0).collect();
 
         // Handle empty expression (all zeros or no terms)
         if non_zero.is_empty() {
@@ -206,7 +201,8 @@ impl WriteToLpFileFormat for ExpressionAdapter<'_> {
                 self.interner.resolve(coeff.name),
                 coeff.value,
                 i == 0,
-                Some(COEFFICIENT_PRECISION),
+                // Shortest representation that reads back as the same `f64`.
+                None,
             )?;
         }
         f.write_str(&out)
@@ -594,5 +590,23 @@ mod tests {
         assert_eq!(expr_fmt(&p, &[c(x, -1.0)]), "- x");
         assert_eq!(expr_fmt(&p, &[c(x, 2.0), c(y, -3.0), c(z, 1.0)]), "2 x - 3 y + z");
         assert_eq!(expr_fmt(&p, &[c(x, 0.0), c(y, 2.0)]), "2 y");
+        assert_eq!(expr_fmt(&p, &[c(x, -0.0), c(y, 2.0)]), "2 y");
+    }
+
+    #[test]
+    fn test_expression_formatting_preserves_small_and_precise_coefficients() {
+        let mut p = LpProblem::new();
+        let x = p.intern("x");
+        let y = p.intern("y");
+        let c = |name: NameId, v: f64| Coefficient { name, value: v };
+        // Small coefficients used to be dropped (|c| <= 1e-10) or rounded to
+        // zero by the fixed 15-decimal formatting.
+        assert_eq!(expr_fmt(&p, &[c(x, 1e-12), c(y, 1.0)]), "1e-12 x + y");
+        assert_eq!(expr_fmt(&p, &[c(x, 3.5e-7)]), "3.5e-7 x");
+        // Digits beyond the 15th decimal must survive.
+        let precise = 0.123_456_789_012_345_68;
+        let written = expr_fmt(&p, &[c(x, precise)]);
+        let value: f64 = written.trim_end_matches(" x").parse().unwrap();
+        assert_eq!(value.to_bits(), precise.to_bits(), "{written}");
     }
 }
