@@ -340,7 +340,9 @@ fn layout(text: &str, tree: &Tree, settings: &FormatSettings) -> Option<Layout> 
         return None;
     }
     let after = collect_leaves(reparsed.root_node(), &layout.text);
-    let same = leaves.len() == after.len() && leaves.iter().zip(&after).all(|(a, b)| a.kind == b.kind && canonical(a) == canonical(b));
+    // `canonical` depends only on kind and text: equal texts need no rendering.
+    let same = leaves.len() == after.len()
+        && leaves.iter().zip(&after).all(|(a, b)| a.kind == b.kind && (a.text == b.text || canonical(a) == canonical(b)));
     same.then_some(layout)
 }
 
