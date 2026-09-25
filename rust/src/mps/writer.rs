@@ -37,7 +37,8 @@
 //! ordinary constraints -- `X` (`>=` lower) and `X_rng` (`<=` upper) with
 //! identical coefficients. This writer reverses that flattening: when a
 //! constraint pair matches the reader's exact pattern (`X` is `>=`, `X_rng`
-//! is `<=`, identical coefficient vectors, upper >= lower, both RHS finite),
+//! is `<=`, identical coefficient vectors, upper >= lower, both RHS finite,
+//! and `lower + (upper - lower)` reproduces `upper` exactly in `f64`),
 //! it is re-emitted as a single `G` row with a `RANGES` entry of
 //! `upper - lower`, so `MPS -> LpProblem -> MPS` preserves the section. An
 //! LP-authored pair that happens to match the pattern is merged the same way;
@@ -361,8 +362,18 @@ fn detect_range_pairs(problem: &LpProblem) -> RangePairs {
         if !coefficients_match(base_coefficients, coefficients) {
             continue;
         }
+        // The reader rebuilds the upper side of a `G` row as `rhs + |range|`.
+        // `lower + (upper - lower)` is not always `upper` in floating point
+        // (e.g. -238056000 and 628.89), so fold only when the reconstruction
+        // is exact; otherwise the pair is written as two ordinary rows.
+        let range = upper_rhs - lower_rhs;
+        debug_assert!(range >= 0.0, "upper >= lower was checked above");
+        #[allow(clippy::float_cmp)]
+        if lower_rhs + range != *upper_rhs {
+            continue;
+        }
 
-        pairs.ranges.insert(base_id, upper_rhs - lower_rhs);
+        pairs.ranges.insert(base_id, range);
         pairs.skip.insert(*name_id);
     }
 
@@ -1316,6 +1327,35 @@ ENDATA
                 panic!("constraint '{name}' must be a standard constraint");
             };
             assert_eq!(*operator, expected_op, "operator mismatch for '{name}'");
+            assert_eq!(*rhs, expected_rhs, "rhs mismatch for '{name}'");
+        }
+    }
+
+    #[test]
+    fn test_range_pair_not_folded_when_reconstruction_is_inexact() {
+        // -238056000 + (628.89 - -238056000) == 628.8899999856949, so a RANGES
+        // entry would silently move the upper side; the pair must stay two rows.
+        let input = "\
+Minimize
+ obj: x
+Subject To
+ c1: x >= -238056000
+ c1_rng: x <= 628.89
+ c2: x >= 1
+ c2_rng: x <= 5
+End
+";
+        let problem = LpProblem::parse(input).unwrap();
+        let output = write_mps_string(&problem).unwrap();
+        assert!(output.contains("c1_rng"), "inexact pair must be written as two rows:\n{output}");
+        assert!(!output.contains("c2_rng"), "exact pair must still fold into RANGES:\n{output}");
+
+        let reparsed = LpProblem::parse_mps(&output).unwrap();
+        for (name, expected_rhs) in [("c1", -238_056_000.0), ("c1_rng", 628.89), ("c2", 1.0), ("c2_rng", 5.0)] {
+            let id = reparsed.name_id(name).unwrap_or_else(|| panic!("constraint '{name}' missing after round trip"));
+            let Some(Constraint::Standard { rhs, .. }) = reparsed.constraints.get(&id) else {
+                panic!("constraint '{name}' must be a standard constraint");
+            };
             assert_eq!(*rhs, expected_rhs, "rhs mismatch for '{name}'");
         }
     }
