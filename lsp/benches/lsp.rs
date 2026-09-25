@@ -12,7 +12,8 @@ use std::sync::{Once, OnceLock};
 use std::time::Duration;
 
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
-use lp_lsp::features::{code_lens, completion, semantic_tokens};
+use lp_lsp::config::FormatSettings;
+use lp_lsp::features::{code_lens, completion, format, semantic_tokens};
 use lp_lsp::{Document, Encoding, SymbolIndex, syntax};
 use tower_lsp_server::ls_types::{TextDocumentContentChangeEvent, Uri};
 use tree_sitter::InputEdit;
@@ -242,6 +243,19 @@ fn many(c: &mut Criterion) {
             eprintln!("completion response: {bytes} bytes");
         });
         b.iter(|| serde_json::to_vec(&completion::complete(black_box(doc), position)).expect("items serialise"));
+    });
+
+    group.bench_function("format_on_type_enter", |b| {
+        // Enter pressed at the end of a constraint near the middle.
+        let base = constraints_200k();
+        let line = base.lines.line_of(base.text.len() / 2);
+        let end = base.lines.line_range(&base.text, line).end;
+        let mut text = base.text.clone();
+        text.insert(end, '\n');
+        let doc = document(text);
+        let position = tower_lsp_server::ls_types::Position::new(u32::try_from(line + 1).expect("line fits"), 0);
+        let settings = FormatSettings::default();
+        b.iter(|| format::format_on_type(black_box(&doc), position, "\n", &settings));
     });
 
     group.finish();
