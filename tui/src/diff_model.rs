@@ -723,16 +723,38 @@ pub fn objective_sort_delta(entry: &ObjectiveDiffEntry, relative: bool) -> Optio
 /// Ties within the delta group fall back to name order.
 pub fn sort_indices_by_delta<T: DiffEntry>(entries: &[T], indices: &mut [usize], relative: bool) {
     debug_assert!(indices.iter().all(|&i| i < entries.len()), "all indices must be in bounds");
-    indices.sort_by(|&a, &b| {
-        let delta_a = entries[a].sort_delta(relative);
-        let delta_b = entries[b].sort_delta(relative);
-        match (delta_a, delta_b) {
-            (Some(x), Some(y)) => y.total_cmp(&x).then_with(|| entries[a].name().cmp(entries[b].name())),
-            (Some(_), None) => std::cmp::Ordering::Less,
-            (None, Some(_)) => std::cmp::Ordering::Greater,
-            (None, None) => entries[a].name().cmp(entries[b].name()),
-        }
+    // Cached: a delta is a scan over the entry's changes, and a comparator
+    // would recompute it on both sides of every one of the O(n log n) compares.
+    indices.sort_by_cached_key(|&index| {
+        let entry = &entries[index];
+        // `None` sorts after every `Some`, and a larger delta sorts first.
+        let delta = entry.sort_delta(relative).map(|delta| std::cmp::Reverse(TotalF64(delta)));
+        (delta.is_none(), delta, entry.name())
     });
+}
+
+/// An `f64` ordered by [`f64::total_cmp`], for use in a sort key.
+#[derive(Debug, Clone, Copy)]
+struct TotalF64(f64);
+
+impl PartialEq for TotalF64 {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.total_cmp(&other.0).is_eq()
+    }
+}
+
+impl Eq for TotalF64 {}
+
+impl PartialOrd for TotalF64 {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for TotalF64 {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.0.total_cmp(&other.0)
+    }
 }
 
 /// Diff two coefficient lists using sorted merge-join and return only the changed entries.
@@ -2239,6 +2261,26 @@ mod tests {
         let mut sorted_tail = tail.clone();
         sorted_tail.sort_unstable();
         assert_eq!(tail, sorted_tail, "no-delta entries must be alphabetical");
+    }
+
+    #[test]
+    fn test_sort_orders_by_descending_delta_then_name() {
+        // Deltas: a = 1, b = 5, c = 5, d = 0 (order-only), plus e added and f removed.
+        let p1 = LpProblem::parse(
+            "minimize\nobj: _d\nsubject to\n a: 1 x <= 10\n b: 1 x <= 10\n c: 1 x <= 10\n d: 1 x + 1 y <= 1\n f: 1 z <= 3\nend",
+        )
+        .unwrap();
+        let p2 = LpProblem::parse(
+            "minimize\nobj: _d\nsubject to\n a: 1 x <= 11\n b: 1 x <= 15\n c: 1 x <= 15\n d: 1 y + 1 x <= 1\n e: 1 w <= 5\nend",
+        )
+        .unwrap();
+        let report = quick_report(&p1, &p2);
+        let entries = &report.constraints.entries;
+        let mut indices: Vec<usize> = (0..entries.len()).collect();
+        sort_indices_by_delta(entries, &mut indices, false);
+
+        let order: Vec<&str> = indices.iter().map(|&i| entries[i].name.as_str()).collect();
+        assert_eq!(order, ["b", "c", "a", "d", "e", "f"], "largest delta first, names break ties, no-delta entries last");
     }
 
     #[test]
