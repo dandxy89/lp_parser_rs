@@ -935,7 +935,11 @@ impl LpProblem {
         let mut small_coefficients = Vec::new();
 
         for (name_id, constraint) in &self.constraints {
-            if let Constraint::Standard { coefficients, .. } = constraint {
+            // Indicator and quadratic constraints carry a linear part too.
+            if let Constraint::Standard { coefficients, .. }
+            | Constraint::Indicator { coefficients, .. }
+            | Constraint::Quadratic { coefficients, .. } = constraint
+            {
                 let name_str = self.interner.resolve(*name_id);
                 collect_coefficient_stats(
                     coefficients,
@@ -1343,6 +1347,21 @@ mod tests {
         let problem = LpProblem::parse("min\n obj: x + [ y ^ 2 + 2 x * z ] / 2\nst\n c1: x >= 1\nend").unwrap();
         let analysis = problem.analyze();
         assert!(analysis.variables.unused_variables.is_empty(), "{:?}", analysis.variables.unused_variables);
+    }
+
+    #[test]
+    fn test_coefficient_stats_include_indicator_and_quadratic_linear_parts() {
+        let problem = LpProblem::parse(
+            "min\n obj: x + y\nst\n c1: x + y >= 1\n i1: b = 1 -> 1e12 x <= 4\n q1: 1e-12 y + [ x ^ 2 ] <= 9\nbinaries\n b\nend",
+        )
+        .unwrap();
+        let analysis = problem.analyze();
+        assert_eq!(analysis.coefficients.constraint_coeff_range.max, 1e12);
+        assert_eq!(analysis.coefficients.constraint_coeff_range.min, 1e-12);
+        let located: Vec<&str> = analysis.coefficients.large_coefficients.iter().map(|c| c.location.as_str()).collect();
+        assert_eq!(located, ["i1"]);
+        let located: Vec<&str> = analysis.coefficients.small_coefficients.iter().map(|c| c.location.as_str()).collect();
+        assert_eq!(located, ["q1"]);
     }
 
     #[test]
