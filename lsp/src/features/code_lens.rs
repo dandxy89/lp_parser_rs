@@ -6,7 +6,7 @@
 //! variable's full location list up front.
 
 use serde_json::{Value, json};
-use tower_lsp_server::ls_types::{CodeLens, Command};
+use tower_lsp_server::ls_types::{CodeLens, Command, Range};
 
 use crate::document::Document;
 use crate::features::navigation;
@@ -25,30 +25,39 @@ pub fn lenses(doc: &Document) -> Vec<CodeLens> {
     // `Variable::entities` is deduplicated: an entity's occurrences of one
     // variable are contiguous because entities are disjoint and in order.
     let mut variable_counts = vec![0usize; index.entities.len()];
-    let mut lenses = Vec::with_capacity(index.entities.len() + index.variables.len());
-    let uri = doc.uri.as_str();
-    for variable in &index.variables {
-        for entity in variable.entities() {
-            variable_counts[entity] += 1;
+    // Each lens's range and source (variable `i`, or entity `i - variables`),
+    // sorted by start with ties in source order before any lens is built, so
+    // the sort moves small keys rather than whole lenses.
+    let variables = index.variables.len();
+    let mut anchors: Vec<(Range, usize)> = Vec::with_capacity(variables + index.entities.len());
+    for (i, variable) in index.variables.iter().enumerate() {
+        let mut previous = None;
+        for entity in variable.occurrences.iter().filter_map(|o| o.entity) {
+            if previous != Some(entity) {
+                variable_counts[entity] += 1;
+                previous = Some(entity);
+            }
         }
-        lenses.push(CodeLens {
-            range: doc.range(variable.definition().range.clone()),
-            command: None,
-            data: Some(json!({ "uri": uri, "variable": variable.name })),
-        });
+        anchors.push((doc.range(variable.definition().range.clone()), i));
     }
-
-    for (entity, &variables) in index.entities.iter().zip(&variable_counts) {
+    for (i, entity) in index.entities.iter().enumerate() {
         let anchor = entity.name_range.clone().unwrap_or(entity.range.start..entity.range.start);
-        lenses.push(CodeLens {
-            range: doc.range(anchor),
-            command: Some(Command::new(count(variables, "{} variable"), String::new(), None)),
-            data: None,
-        });
+        anchors.push((doc.range(anchor), variables + i));
     }
+    anchors.sort_unstable_by_key(|(range, i)| (range.start.line, range.start.character, *i));
 
-    lenses.sort_by_key(|lens| (lens.range.start.line, lens.range.start.character));
-    lenses
+    let uri = doc.uri.as_str();
+    anchors
+        .into_iter()
+        .map(|(range, i)| match index.variables.get(i) {
+            Some(variable) => CodeLens { range, command: None, data: Some(json!({ "uri": uri, "variable": variable.name })) },
+            None => CodeLens {
+                range,
+                command: Some(Command::new(count(variable_counts[i - variables], "{} variable"), String::new(), None)),
+                data: None,
+            },
+        })
+        .collect()
 }
 
 /// Document URI of an unresolved lens from [`lenses`].
