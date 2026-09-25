@@ -115,7 +115,7 @@ pub(super) fn split_fields(line: &str) -> ([&str; MAX_FIELDS], usize) {
 
     let mut buf = [""; MAX_FIELDS];
     let mut len = 0;
-    for field in whitespace_fields(line) {
+    for field in line.split_whitespace() {
         if field.starts_with('$') || len == MAX_FIELDS {
             break;
         }
@@ -125,85 +125,4 @@ pub(super) fn split_fields(line: &str) -> ([&str; MAX_FIELDS], usize) {
 
     debug_assert!(len <= MAX_FIELDS, "field count cannot exceed buffer length");
     (buf, len)
-}
-
-/// Split `line` on whitespace exactly as [`str::split_whitespace`] does, with
-/// a byte-level fast path for ASCII text.
-///
-/// MPS data is almost always ASCII, where decoding `char`s and running the
-/// generic pattern searcher dominates parse time. The fast path splits on the
-/// ASCII bytes that [`char::is_whitespace`] accepts (which, unlike
-/// [`u8::is_ascii_whitespace`], include the vertical tab). On meeting a
-/// non-ASCII byte it hands the rest of the line, from the start of the
-/// current field, to [`str::split_whitespace`]: splitting is local, so the
-/// fields are identical to splitting the whole line that way.
-pub(super) const fn whitespace_fields(line: &str) -> WhitespaceFields<'_> {
-    WhitespaceFields::Ascii(line)
-}
-
-/// Iterator returned by [`whitespace_fields`].
-pub(super) enum WhitespaceFields<'a> {
-    /// The unsplit remainder, so far all ASCII.
-    Ascii(&'a str),
-    /// Fallback once a non-ASCII byte has been seen.
-    Unicode(std::str::SplitWhitespace<'a>),
-}
-
-/// Whether an ASCII byte is whitespace according to [`char::is_whitespace`].
-const fn is_ascii_char_whitespace(byte: u8) -> bool {
-    matches!(byte, b' ' | b'\t' | b'\n' | 0x0B | 0x0C | b'\r')
-}
-
-impl<'a> Iterator for WhitespaceFields<'a> {
-    type Item = &'a str;
-
-    fn next(&mut self) -> Option<&'a str> {
-        let rest = match self {
-            Self::Ascii(rest) => *rest,
-            Self::Unicode(fields) => return fields.next(),
-        };
-        let bytes = rest.as_bytes();
-        let mut start = 0;
-        while start < bytes.len() && is_ascii_char_whitespace(bytes[start]) {
-            start += 1;
-        }
-        let mut end = start;
-        while end < bytes.len() && !is_ascii_char_whitespace(bytes[end]) {
-            if !bytes[end].is_ascii() {
-                // Every byte before `end` is ASCII, so `start` is a char boundary.
-                *self = Self::Unicode(rest[start..].split_whitespace());
-                return self.next();
-            }
-            end += 1;
-        }
-        debug_assert!(rest.is_char_boundary(start) && rest.is_char_boundary(end), "field bounds must be char boundaries");
-        *self = Self::Ascii(&rest[end..]);
-        (end > start).then(|| &rest[start..end])
-    }
-}
-
-#[cfg(test)]
-mod whitespace_fields_tests {
-    use super::whitespace_fields;
-
-    #[test]
-    fn matches_split_whitespace() {
-        let cases = [
-            "",
-            "   ",
-            "a",
-            "  a  b\tc\r\n",
-            "a\x0Bb\x0Cc",
-            "x\u{a0}y z",
-            "  \u{3000}lead  trail\u{2003}",
-            "é b",
-            "a é\u{85}b  c",
-            "caf\u{e9}  \u{a0} d",
-        ];
-        for line in cases {
-            let fast: Vec<&str> = whitespace_fields(line).collect();
-            let reference: Vec<&str> = line.split_whitespace().collect();
-            assert_eq!(fast, reference, "{line:?}");
-        }
-    }
 }
