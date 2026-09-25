@@ -840,6 +840,12 @@ pub(crate) fn write_number(output: &mut String, value: f64, precision: Option<us
 
     let Some(precision) = precision else {
         let abs_value = value.abs();
+        if abs_value < EXACT_INTEGER_LIMIT && value.fract() == 0.0 {
+            // Below 2^53 a whole `f64` is an exact integer and its shortest
+            // round-trip form is that integer's digits, as `{value}` prints.
+            push_integer(output, value as i64);
+            return Ok(());
+        }
         return if (SCIENTIFIC_BELOW..SCIENTIFIC_FROM).contains(&abs_value) {
             write!(output, "{value}")
         } else {
@@ -853,7 +859,8 @@ pub(crate) fn write_number(output: &mut String, value: f64, precision: Option<us
     if is_whole_number && is_safe_for_i64 && value.abs() < 1e10 {
         let cast = value as i64;
         debug_assert!((cast as f64 - value).abs() < 1.0, "i64 cast lost precision: {value} -> {cast}");
-        write!(output, "{cast}")
+        push_integer(output, cast);
+        Ok(())
     } else {
         let start = output.len();
         write!(output, "{value:.precision$}")?;
@@ -870,6 +877,31 @@ pub(crate) fn write_number(output: &mut String, value: f64, precision: Option<us
     }
 }
 
+/// 2^53: every whole `f64` of smaller magnitude is exactly representable as
+/// an integer, and every integer up to it as an `f64`.
+const EXACT_INTEGER_LIMIT: f64 = 9_007_199_254_740_992.0;
+
+/// Append the decimal digits of `value`, as `write!(output, "{value}")` does.
+#[allow(clippy::cast_possible_truncation)]
+fn push_integer(output: &mut String, value: i64) {
+    let mut digits = [0u8; 20];
+    let mut start = digits.len();
+    let mut rest = value.unsigned_abs();
+    loop {
+        start -= 1;
+        // `rest % 10` is a single digit, so the cast cannot truncate.
+        digits[start] = b'0' + (rest % 10) as u8;
+        rest /= 10;
+        if rest == 0 {
+            break;
+        }
+    }
+    if value < 0 {
+        output.push('-');
+    }
+    output.push_str(std::str::from_utf8(&digits[start..]).expect("ASCII digits are valid UTF-8"));
+}
+
 /// Format a number with specified precision, removing trailing zeros.
 /// Convenience wrapper around `write_number` for use in tests.
 #[cfg(test)]
@@ -884,6 +916,30 @@ mod tests {
     use super::*;
     use crate::model::{Coefficient, ComparisonOp, Constraint, Objective, Sense, Variable, VariableBounds, VariableKind, VariableType};
     use crate::problem::LpProblem;
+
+    #[test]
+    #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
+    fn whole_numbers_format_as_display_does() {
+        let mut values = vec![1.0, 7.0, 10.0, 99.0, 100.0, 12_345.0, 1e15, 9_007_199_254_740_991.0, 9_007_199_254_740_992.0, 1e16];
+        let mut x: u64 = 0x9E37_79B9_7F4A_7C15;
+        for _ in 0..2000 {
+            x ^= x << 13;
+            x ^= x >> 7;
+            x ^= x << 17;
+            values.push((x >> (x % 60)) as f64);
+        }
+        for value in values.iter().filter(|v| **v != 0.0).flat_map(|v| [*v, -*v]) {
+            let expected =
+                if (SCIENTIFIC_BELOW..SCIENTIFIC_FROM).contains(&value.abs()) { format!("{value}") } else { format!("{value:e}") };
+            assert_eq!(format_number(value, None), expected, "{value}");
+            if value.abs() < 1e10 {
+                assert_eq!(format_number(value, Some(3)), format!("{}", value as i64), "{value}");
+            }
+        }
+        let mut digits = String::new();
+        push_integer(&mut digits, i64::MIN);
+        assert_eq!(digits, i64::MIN.to_string());
+    }
 
     #[test]
     fn test_format_number() {
