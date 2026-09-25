@@ -100,6 +100,7 @@ pub use problem::LpProblem;
     clippy::trivially_copy_pass_by_ref,
     clippy::type_complexity,
     clippy::unnecessary_wraps,
+    clippy::unused_self,
     clippy::use_self,
     missing_docs
 )]
@@ -107,7 +108,53 @@ mod lp_grammar {
     use super::lalrpop_mod;
     lalrpop_mod!(pub lp);
 }
-pub use lp_grammar::lp;
+
+/// The LALRPOP-generated LP parser.
+///
+/// The grammar's start symbol yields a boxed [`ParseResult`]: LALRPOP keeps
+/// every value on its parse stack in one enum as large as the largest
+/// value, so an unboxed `ParseResult` would make each token move several
+/// hundred bytes. [`LpProblemParser`] unboxes the result,
+/// keeping the interface the generated parser has always had.
+pub mod lp {
+    use lalrpop_util::ParseError;
+
+    use crate::lexer::{LexerError, ParseResult, Token};
+    pub use crate::lp_grammar::lp::__ToTriple;
+
+    /// Parser for a whole LP file, driven by a [`Lexer`](crate::lexer::Lexer).
+    pub struct LpProblemParser {
+        inner: crate::lp_grammar::lp::BoxedLpProblemParser,
+    }
+
+    impl Default for LpProblemParser {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
+
+    impl LpProblemParser {
+        /// Create a parser.
+        #[must_use]
+        pub fn new() -> Self {
+            Self { inner: crate::lp_grammar::lp::BoxedLpProblemParser::new() }
+        }
+
+        /// Parse a token stream into a [`ParseResult`].
+        ///
+        /// # Errors
+        ///
+        /// Returns the parse error for a token stream that is not a valid LP
+        /// file, or the lexer's error for input it cannot tokenise.
+        pub fn parse<'input, T, I>(&self, tokens: I) -> Result<ParseResult<'input>, ParseError<usize, Token<'input>, LexerError>>
+        where
+            T: __ToTriple<'input>,
+            I: IntoIterator<Item = T>,
+        {
+            self.inner.parse(tokens).map(|parsed| *parsed)
+        }
+    }
+}
 
 /// Tolerance for floating-point comparisons in coefficient handling.
 /// Used for checking if values are effectively zero or one.

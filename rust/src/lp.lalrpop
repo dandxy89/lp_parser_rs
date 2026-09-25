@@ -55,7 +55,8 @@ extern {
     }
 }
 
-pub LpProblem: ParseResult<'input> = {
+// Boxed: see the `lp` module in lib.rs, which unboxes it for `LpProblemParser`.
+pub BoxedLpProblem: Box<ParseResult<'input>> = {
     <sense:"sense">
     <multi:"multi-objectives"?>
     <obj_elems:ObjElem*>
@@ -110,9 +111,9 @@ pub LpProblem: ParseResult<'input> = {
         let lazy_constraints: Vec<RawConstraint<'input>> = assembled.by_ref().take(lazy_bodies.len()).flatten().collect();
         let user_cuts: Vec<RawConstraint<'input>> = assembled.flatten().collect();
 
-        Ok(ParseResult {
+        Ok(Box::new(ParseResult {
             sense, objectives, constraints, bounds, generals, integers, binaries, semi_continuous, sos, lazy_constraints, user_cuts,
-        })
+        }))
     }
 };
 
