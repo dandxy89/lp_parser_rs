@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import errno
 from typing import TYPE_CHECKING
 
 import pytest
@@ -28,8 +29,15 @@ class TestLpParserBasic:
         assert repr(from_string) == "LpParser(lp_file='<string>', format='lp')"
 
     def test_create_parser_nonexistent_file(self) -> None:
-        with pytest.raises(FileNotFoundError):
+        with pytest.raises(FileNotFoundError) as info:
             LpParser("nonexistent.lp")
+        assert info.value.errno == errno.ENOENT
+        assert info.value.filename == "nonexistent.lp"
+
+    def test_create_parser_from_directory_raises_is_a_directory(self, tmp_path: Path) -> None:
+        with pytest.raises(IsADirectoryError) as info:
+            LpParser.from_file(tmp_path)
+        assert info.value.filename == str(tmp_path)
 
     @pytest.mark.parametrize(
         ("fixture_name", "expected_sense", "expected_vars", "expected_constraints"),
