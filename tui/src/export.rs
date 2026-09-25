@@ -106,6 +106,12 @@ pub fn write_diff_csv(report: &LpDiffReport, dir: &Path) -> Result<String, Box<d
             if !entry.coeff_changes.is_empty() {
                 parts.push(format!("{} coefficient(s) changed", entry.coeff_changes.len()));
             }
+            if entry.extras.constant_changed {
+                parts.push(format!("constant: {} -> {}", entry.extras.old_constant, entry.extras.new_constant));
+            }
+            if entry.extras.quadratic_changed {
+                parts.push("quadratic terms changed".to_owned());
+            }
             if entry.order_changed {
                 parts.push("order changed".to_owned());
             }
