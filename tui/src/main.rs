@@ -268,9 +268,13 @@ fn run_event_loop<W: io::Write>(
                 app.handle_key(key);
                 needs_redraw = true;
             }
+            // Any-motion tracking reports every pointer move; repainting for
+            // events nothing reacts to would redraw the whole UI per pixel.
             Event::Mouse(mouse) => {
-                app.handle_mouse(mouse);
-                needs_redraw = true;
+                if crate::input::mouse_event_is_actionable(mouse.kind) {
+                    app.handle_mouse(mouse);
+                    needs_redraw = true;
+                }
             }
             Event::Paste(text) => {
                 app.handle_paste(&text);
