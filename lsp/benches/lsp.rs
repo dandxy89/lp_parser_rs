@@ -346,5 +346,92 @@ fn small(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(lsp, large_file, long_line, many, medium, small);
+/// The server in-process, answering the client's side of the socket (every
+/// server request gets `null`) and counting diagnostics publications.
+struct Server {
+    runtime: tokio::runtime::Runtime,
+    service: tower_lsp_server::LspService<lp_lsp::Backend>,
+    published: tokio::sync::mpsc::UnboundedReceiver<()>,
+    next_id: i64,
+}
+
+impl Server {
+    fn start() -> Self {
+        use futures::{SinkExt, StreamExt};
+        let runtime = tokio::runtime::Builder::new_multi_thread().enable_all().build().expect("tokio runtime");
+        let (service, socket) = tower_lsp_server::LspService::new(lp_lsp::Backend::new);
+        let (tx, published) = tokio::sync::mpsc::unbounded_channel();
+        runtime.spawn(async move {
+            let (mut requests, mut responses) = socket.split();
+            while let Some(request) = requests.next().await {
+                let (method, id, _) = request.into_parts();
+                if method == "textDocument/publishDiagnostics" && tx.send(()).is_err() {
+                    break;
+                }
+                if let Some(id) = id
+                    && responses.send(tower_lsp_server::jsonrpc::Response::from_ok(id, serde_json::Value::Null)).await.is_err()
+                {
+                    break;
+                }
+            }
+        });
+        Self { runtime, service, published, next_id: 1 }
+    }
+
+    /// Send a request (with an id) or a notification (`did*`, `initialized`).
+    fn call(&mut self, method: &'static str, params: serde_json::Value) -> Option<serde_json::Value> {
+        use tower::{Service, ServiceExt};
+        let mut request = tower_lsp_server::jsonrpc::Request::build(method).params(params);
+        if !method.starts_with("textDocument/did") && method != "initialized" {
+            request = request.id(self.next_id);
+            self.next_id += 1;
+        }
+        let service = &mut self.service;
+        let response = self
+            .runtime
+            .block_on(async { service.ready().await.expect("service ready").call(request.finish()).await.expect("service call") });
+        response.map(|r| r.into_parts().1.expect("request succeeds"))
+    }
+
+    /// Wait for `count` diagnostics publications.
+    fn await_published(&mut self, count: usize) {
+        let published = &mut self.published;
+        self.runtime.block_on(async {
+            for _ in 0..count {
+                published.recv().await.expect("server running");
+            }
+        });
+    }
+}
+
+fn server(c: &mut Criterion) {
+    let mut group = c.benchmark_group("server_200k");
+    group.sample_size(10).warm_up_time(Duration::from_secs(1)).measurement_time(Duration::from_secs(10));
+
+    group.bench_function("semantic_tokens_delta_request", |b| {
+        // `semanticTokens/full/delta` against the previous result: what the
+        // client asks after every edit (here with no edit, so the delta is empty).
+        let mut server = Server::start();
+        server.call("initialize", serde_json::json!({ "capabilities": {} }));
+        server.call("initialized", serde_json::json!({}));
+        let text = constraints_200k().text.clone();
+        let document = serde_json::json!({ "uri": "file:///bench.lp", "languageId": "lp", "version": 1, "text": text });
+        server.call("textDocument/didOpen", serde_json::json!({ "textDocument": document }));
+        // Once on open, once after the semantic pass: then the server is idle.
+        server.await_published(2);
+        let id = serde_json::json!({ "uri": "file:///bench.lp" });
+        let full = server.call("textDocument/semanticTokens/full", serde_json::json!({ "textDocument": id })).expect("a response");
+        let mut previous = full["resultId"].clone();
+        b.iter(|| {
+            let params = serde_json::json!({ "textDocument": id, "previousResultId": previous });
+            let delta = server.call("textDocument/semanticTokens/full/delta", params).expect("a response");
+            assert!(delta["edits"].as_array().is_some_and(Vec::is_empty), "an unchanged document has an empty delta");
+            previous = delta["resultId"].clone();
+        });
+    });
+
+    group.finish();
+}
+
+criterion_group!(lsp, large_file, long_line, many, medium, small, server);
 criterion_main!(lsp);
