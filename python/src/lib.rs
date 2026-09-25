@@ -110,12 +110,7 @@ impl LpParser {
             return Err(PyNotADirectoryError::new_err(format!("Path {} is not a directory.", base_directory.display())));
         }
 
-        self.problem.to_csv(&base_directory).map_err(|err| match err.downcast::<std::io::Error>() {
-            Ok(io) => io_err(&base_directory, &io),
-            Err(err) => PyRuntimeError::new_err(format!("Unable to write to .csv files: {err}")),
-        })?;
-
-        Ok(())
+        self.problem.to_csv(&base_directory).map_err(|err| csv_err(&base_directory, err))
     }
 
     #[getter]
@@ -535,6 +530,24 @@ fn io_err(path: &Path, err: &std::io::Error) -> PyErr {
             PyOSError::new_err((errno, strerror, filename))
         }
         None => PyOSError::new_err(format!("{filename}: {err}")),
+    }
+}
+
+/// Map a `to_csv` failure onto a Python exception. The core returns a boxed
+/// error that is either a `csv::Error` (from creating or writing a file) or a
+/// bare `std::io::Error` (from flushing). I/O failures become `OSError`
+/// subclasses via [`io_err`]; anything else is an invalid value.
+fn csv_err(base_directory: &Path, err: Box<dyn std::error::Error>) -> PyErr {
+    let err = match err.downcast::<std::io::Error>() {
+        Ok(io) => return io_err(base_directory, &io),
+        Err(err) => err,
+    };
+    match err.downcast::<csv::Error>() {
+        Ok(csv_error) => match csv_error.kind() {
+            csv::ErrorKind::Io(io) => io_err(base_directory, io),
+            _ => LpInvalidValueError::new_err(format!("Unable to write to .csv files: {csv_error}")),
+        },
+        Err(err) => LpInvalidValueError::new_err(format!("Unable to write to .csv files: {err}")),
     }
 }
 
