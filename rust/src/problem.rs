@@ -1,8 +1,8 @@
-use std::collections::HashSet;
 use std::fmt::{Display, Formatter, Result as FmtResult, Write as _};
 
 use indexmap::IndexMap;
 use indexmap::map::Entry;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::error::{EntityKind, LpParseError, LpResult};
 use crate::interner::{NameId, NameInterner};
@@ -154,6 +154,10 @@ fn merged_overflow_error(what: &str, byte_offset: Option<usize>) -> LpParseError
     }
 }
 
+/// Rows at most this long are merged by a linear scan; longer ones use a
+/// hash index. Most LP rows are short, where a scan beats hashing.
+const LINEAR_MERGE_LIMIT: usize = 16;
+
 /// Intern a slice of raw coefficients into model coefficients.
 ///
 /// Repeated terms for the same variable (`x + x`) are summed, matching
@@ -164,22 +168,29 @@ fn merged_overflow_error(what: &str, byte_offset: Option<usize>) -> LpParseError
 /// Returns an error when a sum of finite terms overflows.
 #[inline]
 fn intern_coefficients(interner: &mut NameInterner, raw: &[RawCoefficient<'_>], byte_offset: Option<usize>) -> LpResult<Vec<Coefficient>> {
-    let mut merged: IndexMap<NameId, f64> = IndexMap::with_capacity(raw.len());
+    let mut merged: Vec<Coefficient> = Vec::with_capacity(raw.len());
+    let mut index: FxHashMap<NameId, usize> = FxHashMap::default();
+    if raw.len() > LINEAR_MERGE_LIMIT {
+        index.reserve(raw.len());
+    }
     for rc in raw {
-        match merged.entry(interner.intern(rc.name)) {
-            Entry::Occupied(mut entry) => {
-                let sum = *entry.get() + rc.value;
-                if !sum.is_finite() {
-                    return Err(merged_overflow_error(&format!("coefficient of '{}'", rc.name), byte_offset));
-                }
-                *entry.get_mut() = sum;
+        let name = interner.intern(rc.name);
+        let existing = if raw.len() > LINEAR_MERGE_LIMIT { index.get(&name).copied() } else { merged.iter().position(|c| c.name == name) };
+        if let Some(at) = existing {
+            let sum = merged[at].value + rc.value;
+            if !sum.is_finite() {
+                return Err(merged_overflow_error(&format!("coefficient of '{}'", rc.name), byte_offset));
             }
-            Entry::Vacant(entry) => {
-                entry.insert(rc.value);
+            merged[at].value = sum;
+        } else {
+            if raw.len() > LINEAR_MERGE_LIMIT {
+                index.insert(name, merged.len());
             }
+            merged.push(Coefficient { name, value: rc.value });
         }
     }
-    Ok(merged.into_iter().map(|(name, value)| Coefficient { name, value }).collect())
+    debug_assert!(merged.len() <= raw.len(), "merging never adds terms");
+    Ok(merged)
 }
 
 /// Intern raw quadratic terms. Repeated products of the same pair (`x * y`
@@ -191,7 +202,7 @@ fn intern_coefficients(interner: &mut NameInterner, raw: &[RawCoefficient<'_>], 
 /// Returns an error when a sum of finite terms overflows.
 fn intern_quadratic(interner: &mut NameInterner, raw: &[RawQuadraticTerm<'_>], byte_offset: Option<usize>) -> LpResult<Vec<QuadraticTerm>> {
     let mut merged: Vec<QuadraticTerm> = Vec::with_capacity(raw.len());
-    let mut index: rustc_hash::FxHashMap<(NameId, NameId), usize> = rustc_hash::FxHashMap::default();
+    let mut index: FxHashMap<(NameId, NameId), usize> = FxHashMap::default();
     for term in raw {
         let (var1, var2) = (interner.intern(term.var1), interner.intern(term.var2));
         let key = if var1 <= var2 { (var1, var2) } else { (var2, var1) };
@@ -1345,15 +1356,14 @@ fn from_parse_result(parsed: ParseResult<'_>, problem_name: Option<String>) -> L
     let mut constraint_counter: u32 = 0;
 
     // Auto-generated names (`C<n>`, `SOS<n>`) must not collide with a name the
-    // file declares explicitly, even one that appears later in the file.
-    let reserved: HashSet<&str> = parsed
-        .constraints
-        .iter()
-        .chain(&parsed.lazy_constraints)
-        .chain(&parsed.user_cuts)
-        .chain(&parsed.sos)
-        .filter_map(|c| (c.name() != "__c__").then_some(c.name()))
-        .collect();
+    // file declares explicitly, even one that appears later in the file. Only
+    // needed when something is unnamed.
+    let all_raw = || parsed.constraints.iter().chain(&parsed.lazy_constraints).chain(&parsed.user_cuts).chain(&parsed.sos);
+    let reserved: FxHashSet<&str> = if all_raw().any(|c| c.name() == "__c__") {
+        all_raw().filter_map(|c| (c.name() != "__c__").then_some(c.name())).collect()
+    } else {
+        FxHashSet::default()
+    };
 
     let objectives = intern_objectives(&mut interner, &parsed.objectives, &mut variables)?;
     let mut constraints = IndexMap::with_capacity(parsed.constraints.len() + parsed.lazy_constraints.len() + parsed.user_cuts.len());
@@ -1407,7 +1417,7 @@ fn intern_objectives(
     let mut obj_counter: u32 = 0;
     let mut name_buf = String::with_capacity(16);
     // `OBJ<n>` must skip names declared explicitly anywhere in the section.
-    let reserved: HashSet<&str> = raw_objectives.iter().map(|o| o.name.as_ref()).filter(|n| *n != "__obj__").collect();
+    let reserved: FxHashSet<&str> = raw_objectives.iter().map(|o| o.name.as_ref()).filter(|n| *n != "__obj__").collect();
 
     for raw_obj in raw_objectives {
         let mut obj = intern_objective(interner, raw_obj)?;
@@ -1443,7 +1453,7 @@ fn intern_objectives(
 /// the names the file declares explicitly.
 struct NameAllocation<'a, 'r> {
     counter: &'a mut u32,
-    reserved: &'a HashSet<&'r str>,
+    reserved: &'a FxHashSet<&'r str>,
 }
 
 /// Intern raw constraints into `constraints`, assigning auto-names to unnamed
@@ -1529,7 +1539,7 @@ fn intern_sos_constraints(
     variables: &mut IndexMap<NameId, Variable>,
     constraints: &mut IndexMap<NameId, Constraint>,
     constraint_counter: &mut u32,
-    reserved: &HashSet<&str>,
+    reserved: &FxHashSet<&str>,
 ) -> LpResult<()> {
     let mut name_buf = String::with_capacity(16);
     for raw_sos_con in raw_sos {
@@ -1558,7 +1568,7 @@ fn intern_sos_constraints(
 fn assign_constraint_name(
     interner: &mut NameInterner,
     existing: &IndexMap<NameId, Constraint>,
-    reserved: &HashSet<&str>,
+    reserved: &FxHashSet<&str>,
     constraint: &mut Constraint,
     counter: &mut u32,
     prefix: &str,
@@ -1581,7 +1591,7 @@ fn assign_constraint_name(
 fn generate_constraint_name(
     interner: &mut NameInterner,
     existing: &IndexMap<NameId, Constraint>,
-    reserved: &HashSet<&str>,
+    reserved: &FxHashSet<&str>,
     counter: &mut u32,
     prefix: &str,
     name_buf: &mut String,
@@ -1958,6 +1968,28 @@ End";
 
         // A name other than S1/S2 before '::' is not a set type.
         assert!(LpProblem::parse("minimize\nobj: x\nsubject to\nc1: x <= 1\nsos\nS3:: x:1\nend").is_err());
+    }
+
+    /// Repeated terms merge in first-occurrence order on both sides of
+    /// `LINEAR_MERGE_LIMIT` (short rows scan, long rows use a hash index).
+    #[test]
+    #[allow(clippy::float_cmp)]
+    fn test_repeated_terms_merge_in_short_and_long_rows() {
+        for width in [3, super::LINEAR_MERGE_LIMIT, super::LINEAR_MERGE_LIMIT + 1, 4 * super::LINEAR_MERGE_LIMIT] {
+            // x0 .. x{width-2}, then x0 again: `width` terms, one repeat.
+            let terms: Vec<String> =
+                (0..width - 1).map(|i| format!("{} x{i}", i + 1)).chain(std::iter::once("10 x0".to_string())).collect();
+            let input = format!("minimize\nobj: x0\nsubject to\nc: {} >= 1\nend", terms.join(" + "));
+            let p = LpProblem::parse(&input).unwrap();
+            let Constraint::Standard { coefficients, .. } = &p.constraints[&p.name_id("c").unwrap()] else { panic!("c must be standard") };
+            let got: Vec<(&str, f64)> = coefficients.iter().map(|c| (p.resolve(c.name), c.value)).collect();
+            let expected: Vec<(String, f64)> =
+                (0..width - 1).map(|i| (format!("x{i}"), if i == 0 { 11.0 } else { f64::from(u32::try_from(i + 1).unwrap()) })).collect();
+            assert_eq!(got.len(), expected.len(), "width {width}");
+            for ((name, value), (want_name, want_value)) in got.iter().zip(&expected) {
+                assert_eq!((*name, *value), (want_name.as_str(), *want_value), "width {width}");
+            }
+        }
     }
 
     /// Summing repeated terms (`x + x`) must not overflow into an infinite

@@ -15,6 +15,9 @@
 
 use std::borrow::Cow;
 use std::collections::HashSet;
+use std::hash::BuildHasher;
+
+use rustc_hash::FxHashSet;
 
 use crate::lexer::{LexerError, RawCoefficient, RawConstraint, RawObjective, RawQuadraticTerm, SosEntryKind};
 use crate::model::{ComparisonOp, GeneralFunction, ObjectiveAttributes, SOSType};
@@ -397,7 +400,7 @@ fn parse_objective_attributes(
 ///
 /// Without this a user constraint genuinely called `c1_rng` and the generated
 /// half of `c1: 2 <= x <= 10` collide, and one of the two is lost.
-pub(crate) fn range_upper_name<'input>(base: &'input str, taken: &HashSet<&'input str>) -> Cow<'input, str> {
+pub(crate) fn range_upper_name<'input, S: BuildHasher>(base: &'input str, taken: &HashSet<&'input str, S>) -> Cow<'input, str> {
     let mut candidate = format!("{base}_rng");
     let mut suffix: u32 = 1;
     while taken.contains(candidate.as_str()) {
@@ -470,18 +473,34 @@ pub fn assemble_constraints<'input>(elems: &[SpannedElem<'input>]) -> Result<Vec
 ///
 /// See [`assemble_constraints`].
 pub fn assemble_constraint_sections<'input>(bodies: &[&[SpannedElem<'input>]]) -> Result<Vec<Vec<RawConstraint<'input>>>, LexerError> {
-    let explicit_names: HashSet<&'input str> = bodies
-        .iter()
-        .flat_map(|elems| elems.iter())
-        .filter_map(|(_, elem)| if let Elem::Name(n) = *elem { Some(n) } else { None })
-        .collect();
-    bodies.iter().map(|elems| assemble_body(elems, &explicit_names)).collect()
+    let mut explicit_names = ExplicitNames { bodies, names: None };
+    bodies.iter().map(|elems| assemble_body(elems, &mut explicit_names)).collect()
+}
+
+/// The explicit constraint names of every body, collected on first use: only
+/// a named ranged constraint needs them.
+struct ExplicitNames<'b, 'input> {
+    bodies: &'b [&'b [SpannedElem<'input>]],
+    names: Option<FxHashSet<&'input str>>,
+}
+
+impl<'input> ExplicitNames<'_, 'input> {
+    fn get(&mut self) -> &FxHashSet<&'input str> {
+        let bodies = self.bodies;
+        self.names.get_or_insert_with(|| {
+            bodies
+                .iter()
+                .flat_map(|elems| elems.iter())
+                .filter_map(|(_, elem)| if let Elem::Name(n) = *elem { Some(n) } else { None })
+                .collect()
+        })
+    }
 }
 
 /// Assemble one constraint body; see [`assemble_constraints`].
 fn assemble_body<'input>(
     elems: &[SpannedElem<'input>],
-    explicit_names: &HashSet<&'input str>,
+    explicit_names: &mut ExplicitNames<'_, 'input>,
 ) -> Result<Vec<RawConstraint<'input>>, LexerError> {
     let mut constraints = Vec::new();
     let mut i = 0;
@@ -538,7 +557,7 @@ fn assemble_body<'input>(
                 quadratic = Vec::new();
 
                 let lower_name: Cow<'input, str> = name.map_or(Cow::Borrowed("__c__"), Cow::Borrowed);
-                let upper_name: Cow<'input, str> = name.map_or(Cow::Borrowed("__c__"), |n| range_upper_name(n, explicit_names));
+                let upper_name: Cow<'input, str> = name.map_or(Cow::Borrowed("__c__"), |n| range_upper_name(n, explicit_names.get()));
                 constraints.push(RawConstraint::Standard {
                     name: lower_name,
                     coefficients: mid.coefficients.clone(),
