@@ -24,6 +24,7 @@ use tree_sitter::{Node, Tree};
 
 use crate::config::{FormatSettings, KeywordCase};
 use crate::document::Document;
+use crate::position::line_ending;
 use crate::syntax::{self, kind};
 
 /// Header units: printed at column 0 on a line of their own.
@@ -330,7 +331,7 @@ fn layout(text: &str, tree: &Tree, settings: &FormatSettings) -> Option<Layout> 
     }
     let leaves = collect_leaves(root, text);
     let units = group_units(&leaves);
-    let newline = if text.contains("\r\n") { "\r\n" } else { "\n" };
+    let newline = line_ending(text);
     let layout = render(text, &leaves, &units, settings, newline)?;
 
     // Last line of defence: same tokens, same kinds, no errors.

@@ -18,6 +18,7 @@ use tree_sitter::Node;
 use crate::document::Document;
 use crate::features::diagnostics::codes;
 use crate::index::{EntityKind, Namespace, Role, Section, Symbol};
+use crate::position::line_ending;
 use crate::syntax::{self, kind};
 
 /// Source action kind for reordering sections canonically.
@@ -591,11 +592,6 @@ fn conflicts(first: Role, later: Role) -> bool {
     !(semi_integer(first, later) || semi_integer(later, first))
 }
 
-/// Line terminator used by the document.
-fn eol(text: &str) -> &'static str {
-    if text.contains("\r\n") { "\r\n" } else { "\n" }
-}
-
 /// Deletion of `item`: its whole line when nothing else is on it, else the
 /// item and adjacent horizontal whitespace. `None` when the deletion would
 /// leave a keyword-like word (`bin`, `end`, ...) starting the line, which
@@ -677,7 +673,7 @@ fn attached_start(doc: &Document, offset: usize) -> Option<usize> {
 /// Insert `entry` into the first section of `section_kind`, or create the
 /// section (`header` then the entry) at its canonical position.
 fn insert_entry(doc: &Document, section_kind: &str, header: &str, entry: &str) -> Option<Edit> {
-    let eol = eol(&doc.text);
+    let eol = line_ending(&doc.text);
     let own_rank = rank(section_kind)?;
     if let Some(span) = doc.index().sections.iter().find(|s| s.kind == section_kind) {
         let section = doc.node(span.range.clone(), section_kind)?;
@@ -792,7 +788,7 @@ fn organise_sections(doc: &Document) -> Option<Edit> {
     let mut chunks: Vec<(usize, &str)> =
         sections.iter().enumerate().map(|(i, (r, _))| (*r, &doc.text[starts[i]..starts.get(i + 1).copied().unwrap_or(tail)])).collect();
     chunks.sort_by_key(|(r, _)| *r);
-    let eol = eol(&doc.text);
+    let eol = line_ending(&doc.text);
     let mut text = String::with_capacity(tail - starts[0] + eol.len());
     for (i, (_, chunk)) in chunks.iter().enumerate() {
         text.push_str(chunk);
@@ -1084,6 +1080,18 @@ mod tests {
         let without = doc("min\n obj: x\nst\n c: x >= 1\n\\ integer part\ngenerals\n x\nend\n");
         let created = apply(&without, &find(&at(&without, "x >="), "Add bound for `x`"));
         assert_eq!(created, "min\n obj: x\nst\n c: x >= 1\nBounds\n 0 <= x <= 1e30\n\\ integer part\ngenerals\n x\nend\n");
+    }
+
+    #[test]
+    fn inserted_lines_use_the_first_line_terminator() {
+        // One stray CRLF must not switch an LF file's insertions to CRLF.
+        let lf = doc("min\n obj: x + y\nst\n c: x + y >= 1 \\ note\r\nbounds\n  x <= 4\nend\n");
+        let added = apply(&lf, &find(&at(&lf, "y >="), "Add bound for `y`"));
+        assert!(added.contains("  x <= 4\n  0 <= y <= 1e30\nend"), "{added:?}");
+
+        let crlf = doc("min\r\n obj: x + y\r\nst\r\n c: x + y >= 1\nbounds\r\n  x <= 4\r\nend\r\n");
+        let added = apply(&crlf, &find(&at(&crlf, "y >="), "Add bound for `y`"));
+        assert!(added.contains("  x <= 4\r\n  0 <= y <= 1e30\r\nend"), "{added:?}");
     }
 
     #[test]
