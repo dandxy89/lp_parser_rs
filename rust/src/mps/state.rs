@@ -532,6 +532,8 @@ fn parse_objsense_value(value: &str, line_num: usize) -> LpResult<Sense> {
 /// sections, invalid row/bound types, number parse failures, and references
 /// to undefined rows.
 pub fn parse_mps(input: &str) -> LpResult<ParseResult<'_>> {
+    // Some Windows editors write a leading UTF-8 byte order mark.
+    let input = input.strip_prefix('\u{FEFF}').unwrap_or(input);
     // Input is external, so empty input must be a runtime error rather than an assertion.
     if input.trim().is_empty() {
         return Err(LpParseError::parse_error(0, "MPS input is empty"));
