@@ -66,6 +66,35 @@ impl LineIndex {
         Self { line_starts, ascii, len: text.len() }
     }
 
+    /// Update the index after `range` of the indexed text was replaced by
+    /// `new_len` bytes, giving `text`. Only the edited lines are rescanned;
+    /// later line starts are shifted.
+    pub fn edit(&mut self, text: &str, range: Range<usize>, new_len: usize) {
+        debug_assert!(range.start <= range.end && range.end <= self.len, "edit range out of bounds");
+        debug_assert_eq!(text.len() + (range.end - range.start), self.len + new_len, "text does not match the edit");
+        let first = self.line_of(range.start);
+        let last = self.line_of(range.end);
+        let removed = range.end - range.start;
+        // Starts after the edit lie beyond `range.end`, so they are at least `removed`.
+        for start in &mut self.line_starts[last + 1..] {
+            *start = *start - removed + new_len;
+        }
+        let new_end = range.start + new_len;
+        let inserted: Vec<usize> = text[range.start..new_end].match_indices('\n').map(|(i, _)| range.start + i + 1).collect();
+        let added = inserted.len();
+        self.line_starts.splice(first + 1..=last, inserted);
+        self.len = text.len();
+        let ascii: Vec<bool> = (first..=first + added)
+            .map(|line| {
+                let end = self.line_starts.get(line + 1).map_or(self.len, |&next| next - 1);
+                text[self.line_starts[line]..end].is_ascii()
+            })
+            .collect();
+        self.ascii.splice(first..=last, ascii);
+        debug_assert_eq!(self.ascii.len(), self.line_starts.len(), "one flag per line");
+        debug_assert!(self.line_starts.last().is_some_and(|&start| start <= self.len), "line starts stay within the text");
+    }
+
     /// Number of lines (a trailing newline starts an empty last line).
     #[must_use]
     pub const fn line_count(&self) -> usize {
@@ -260,6 +289,17 @@ mod tests {
                 let position = index.position(&text, offset, encoding);
                 prop_assert_eq!(index.offset(&text, position, encoding), offset);
             }
+        }
+
+        #[test]
+        fn edit_matches_a_fresh_index(text in text_strategy(), start in any::<usize>(), len in 0usize..12, insert in text_strategy()) {
+            let mut index = LineIndex::new(&text);
+            let start = floor_char_boundary(&text, start % (text.len() + 1));
+            let end = floor_char_boundary(&text, (start + len).min(text.len()));
+            let mut edited = text.clone();
+            edited.replace_range(start..end, &insert);
+            index.edit(&edited, start..end, insert.len());
+            prop_assert_eq!(index, LineIndex::new(&edited));
         }
 
         #[test]
