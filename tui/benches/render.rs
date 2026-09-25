@@ -177,5 +177,38 @@ fn bench_detail(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, bench_detail);
+/// A report pane of `TERMS` one-line rows.
+fn big_pane() -> state::ScrollPane {
+    let lines = (0..TERMS).map(|i| ratatui::text::Line::from(format!("  row {i:06}  value {}", f64::from(i) * 0.5))).collect();
+    state::ScrollPane { lines, scroll: 0, export: None }
+}
+
+fn bench_overlays(c: &mut Criterion) {
+    let mut group = c.benchmark_group("overlay");
+    let mut terminal = Terminal::new(TestBackend::new(WIDTH, HEIGHT)).expect("test terminal must build");
+    let mut app = inspect_app(&big_lp("obj", 1.0));
+
+    // The search pop-up with an empty query lists every entry.
+    app.search_popup.visible = true;
+    app.recompute_search_popup();
+    assert!(app.search_popup.results.len() > usize::try_from(TERMS).expect("fits"), "every variable is a result");
+    draw(&mut terminal, &mut app);
+    group.bench_function("search_popup_200k_results", |b| b.iter(|| draw(black_box(&mut terminal), black_box(&mut app))));
+    app.search_popup.selected = 100_000;
+    group.bench_function("search_popup_200k_results_mid", |b| b.iter(|| draw(black_box(&mut terminal), black_box(&mut app))));
+    app.search_popup.visible = false;
+
+    // A finished analysis report and the presolve log: both scroll panes.
+    app.analysis = state::AnalysisState::Done { label: "Ranging", pane: big_pane() };
+    draw(&mut terminal, &mut app);
+    group.bench_function("analysis_pane_200k_lines", |b| b.iter(|| draw(black_box(&mut terminal), black_box(&mut app))));
+    app.analysis = state::AnalysisState::Idle;
+
+    app.presolve_log = Some(big_pane());
+    draw(&mut terminal, &mut app);
+    group.bench_function("presolve_log_200k_lines", |b| b.iter(|| draw(black_box(&mut terminal), black_box(&mut app))));
+    group.finish();
+}
+
+criterion_group!(benches, bench_detail, bench_overlays);
 criterion_main!(benches);
