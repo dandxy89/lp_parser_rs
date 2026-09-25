@@ -542,17 +542,34 @@ ENDATA
 ";
     let result = parse_mps(input).unwrap();
 
-    // Variables with no BOUNDS entry should default to LowerBound(0.0)
-    assert!(
-        result.bounds.iter().any(|(n, t)| *n == "x1" && *t == VariableType::LowerBound(0.0)),
-        "x1 should have default LowerBound(0.0), got: {:?}",
-        result.bounds.iter().find(|(n, _)| *n == "x1")
-    );
-    assert!(
-        result.bounds.iter().any(|(n, t)| *n == "x2" && *t == VariableType::LowerBound(0.0)),
-        "x2 should have default LowerBound(0.0), got: {:?}",
-        result.bounds.iter().find(|(n, _)| *n == "x2")
-    );
+    // Continuous columns with no BOUNDS entry take the shared [0, +inf)
+    // default, which is left unspecified (as for an unbounded LP variable).
+    assert!(result.bounds.is_empty(), "no bounds should be recorded, got: {:?}", result.bounds);
+
+    let problem = crate::LpProblem::parse_mps(input).unwrap();
+    for name in ["x1", "x2"] {
+        let variable = &problem.variables[&problem.name_id(name).unwrap()];
+        assert_eq!(variable.bounds, crate::VariableBounds::unspecified(), "{name}");
+        assert_eq!(variable.bounds.effective_lower(variable.kind), 0.0, "{name}");
+        assert_eq!(variable.bounds.effective_upper(variable.kind), f64::INFINITY, "{name}");
+    }
+}
+
+#[test]
+fn test_default_bounds_match_the_lp_default() {
+    // The same model read from LP and from MPS must not differ in bounds, and
+    // MPS -> LP must not grow an explicit `x >= 0` per column.
+    let lp = "minimize\nobj: x1 + 2 x2\nsubject to\nc1: x1 + 3 x2 <= 4\nend\n";
+    let mps = "NAME\nROWS\n N  obj\n L  c1\nCOLUMNS\n    x1 obj 1 c1 1\n    x2 obj 2 c1 3\nRHS\n    RHS c1 4\nENDATA\n";
+    let from_lp = crate::LpProblem::parse(lp).unwrap();
+    let from_mps = crate::LpProblem::parse_mps(mps).unwrap();
+    for name in ["x1", "x2"] {
+        let a = &from_lp.variables[&from_lp.name_id(name).unwrap()];
+        let b = &from_mps.variables[&from_mps.name_id(name).unwrap()];
+        assert_eq!((a.kind, a.bounds), (b.kind, b.bounds), "{name}");
+    }
+    let written = crate::writer::write_lp_string(&from_mps).unwrap();
+    assert!(!written.contains(">= 0"), "no explicit default bounds expected:\n{written}");
 }
 
 #[test]
@@ -852,8 +869,8 @@ ENDATA
 
     // x1 has explicit FR bound
     assert!(result.bounds.iter().any(|(n, t)| *n == "x1" && *t == VariableType::Free));
-    // x2 has no explicit bounds -- should get default LowerBound(0.0)
-    assert!(result.bounds.iter().any(|(n, t)| *n == "x2" && *t == VariableType::LowerBound(0.0)));
+    // x2 has no explicit bounds -- the continuous default is left unspecified
+    assert!(!result.bounds.iter().any(|(n, _)| *n == "x2"), "x2 must not get a recorded bound: {:?}", result.bounds);
 }
 
 #[test]

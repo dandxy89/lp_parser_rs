@@ -198,8 +198,8 @@ pub(super) fn build_constraints<'input>(
 
 /// Build bounds from accumulated bound data.
 ///
-/// Applies MPS default bounds: variables without explicit BOUNDS entries get
-/// `[0, +inf]`. Integer variables (INTORG/INTEND) without explicit bounds get
+/// Applies MPS default bounds: continuous variables without explicit BOUNDS
+/// entries are left unspecified (the shared `[0, +inf)` default). Integer variables (INTORG/INTEND) without explicit bounds get
 /// `[0, 1]` per the CPLEX MPS spec (note: Gurobi defaults these to
 /// `[0, +inf)` instead -- a documented dialect divergence). When an UP bound
 /// is negative with no explicit LO, the lower bound is set to `-inf` per
@@ -262,18 +262,15 @@ pub(super) fn build_bounds<'input>(
         bounds.push((var_name, var_type));
     }
 
-    // Apply MPS default bounds for variables without explicit BOUNDS entries
+    // Apply MPS default bounds for integer variables without explicit BOUNDS
+    // entries: `[0, 1]`, which differs from the LP default and so must be
+    // recorded. A continuous column's MPS default `[0, +inf)` is the LP
+    // default too, so it is left unspecified -- exactly like an LP variable
+    // that was never bounded. Recording an explicit `>= 0` would make
+    // `diff a.lp a.mps` flag every column and MPS -> LP write `x >= 0` for each.
     for &var_name in column_order {
-        if has_explicit_bounds.contains(var_name) {
-            continue;
-        }
-
-        if integer_vars.contains(var_name) {
-            // Integer variables default to [0, 1]
+        if !has_explicit_bounds.contains(var_name) && integer_vars.contains(var_name) {
             bounds.push((var_name, VariableType::DoubleBound(0.0, 1.0)));
-        } else {
-            // Continuous variables default to [0, +inf]
-            bounds.push((var_name, VariableType::LowerBound(0.0)));
         }
     }
 
