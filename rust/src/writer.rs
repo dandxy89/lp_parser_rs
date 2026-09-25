@@ -27,7 +27,7 @@ use crate::NUMERIC_EPSILON;
 use crate::error::{LpParseError, LpResult};
 use crate::interner::{NameId, NameInterner};
 use crate::lexer::Token;
-use crate::model::{Coefficient, Constraint, ConstraintClass, Objective, ObjectiveAttributes, QuadraticTerm, Variable};
+use crate::model::{Coefficient, Constraint, ConstraintClass, GeneralFunction, Objective, ObjectiveAttributes, QuadraticTerm, Variable};
 use crate::problem::LpProblem;
 
 /// Options for controlling LP file output format
@@ -108,6 +108,7 @@ pub fn write_lp_string_with_options(problem: &LpProblem, options: &LpWriterOptio
 #[allow(clippy::missing_panics_doc)]
 pub fn write_lp_string_with_warnings(problem: &LpProblem, options: &LpWriterOptions) -> LpResult<(String, Vec<String>)> {
     validate_lp_names(problem, options)?;
+    validate_numbers(problem)?;
     let mut output = String::new();
     build_lp(&mut output, problem, options).expect("fmt::Write to String is infallible");
     Ok((output, omitted_expressions(problem)))
@@ -191,6 +192,87 @@ fn validate_lp_names(problem: &LpProblem, options: &LpWriterOptions) -> LpResult
             }
         });
         result?;
+    }
+    Ok(())
+}
+
+/// Validate every numeric value a writer will emit.
+///
+/// `LpProblem` fields are public, so a hand-built problem can carry values no
+/// file format can express. Rather than write `NaN` (or trip the debug
+/// assertions in [`write_number`] / [`write_formatted_coefficient`]), reject
+/// them up front: `NaN` anywhere, and infinite linear or quadratic
+/// coefficients or objective constants. Infinite right-hand sides and bounds
+/// stay legal; they are written as `inf` / `-inf`.
+///
+/// `pub(crate)` so the MPS writer shares the same checks.
+///
+/// # Errors
+///
+/// Returns a validation error naming the offending objective, constraint or
+/// variable.
+pub(crate) fn validate_numbers(problem: &LpProblem) -> LpResult<()> {
+    let invalid = |kind: &str, id: NameId, what: &str, value: f64| {
+        Err(LpParseError::validation_error(format!("{kind} '{}' has {what} {value}, which cannot be written", problem.resolve(id))))
+    };
+    let check_linear = |kind: &str, owner: NameId, coefficients: &[Coefficient]| -> LpResult<()> {
+        match coefficients.iter().find(|c| !c.value.is_finite()) {
+            Some(c) => invalid(kind, owner, &format!("a coefficient on '{}' of", problem.resolve(c.name)), c.value),
+            None => Ok(()),
+        }
+    };
+    let check_quadratic = |kind: &str, owner: NameId, terms: &[QuadraticTerm]| -> LpResult<()> {
+        match terms.iter().find(|t| !t.coefficient.is_finite()) {
+            Some(t) => invalid(kind, owner, "a quadratic coefficient of", t.coefficient),
+            None => Ok(()),
+        }
+    };
+
+    for objective in problem.objectives.values() {
+        check_linear("objective", objective.name, &objective.coefficients)?;
+        check_quadratic("objective", objective.name, &objective.quadratic)?;
+        if !objective.constant.is_finite() {
+            return invalid("objective", objective.name, "a constant of", objective.constant);
+        }
+        let ObjectiveAttributes { weight, abs_tol, rel_tol, .. } = objective.attributes;
+        if let Some(value) = [weight, abs_tol, rel_tol].into_iter().flatten().find(|v| v.is_nan()) {
+            return invalid("objective", objective.name, "an attribute of", value);
+        }
+    }
+    for constraint in problem.constraints.values() {
+        let name = constraint.name();
+        match constraint {
+            Constraint::Standard { coefficients, rhs, .. } | Constraint::Indicator { coefficients, rhs, .. } => {
+                check_linear("constraint", name, coefficients)?;
+                if rhs.is_nan() {
+                    return invalid("constraint", name, "a right-hand side of", *rhs);
+                }
+            }
+            Constraint::Quadratic { coefficients, quadratic, rhs, .. } => {
+                check_linear("constraint", name, coefficients)?;
+                check_quadratic("constraint", name, quadratic)?;
+                if rhs.is_nan() {
+                    return invalid("constraint", name, "a right-hand side of", *rhs);
+                }
+            }
+            Constraint::SOS { weights, .. } => {
+                if let Some(w) = weights.iter().find(|w| w.value.is_nan()) {
+                    return invalid("SOS constraint", name, &format!("a weight on '{}' of", problem.resolve(w.name)), w.value);
+                }
+            }
+            Constraint::General { function, .. } => {
+                if let GeneralFunction::Max { constant: Some(c), .. } | GeneralFunction::Min { constant: Some(c), .. } = function
+                    && c.is_nan()
+                {
+                    return invalid("general constraint", name, "a constant argument of", *c);
+                }
+            }
+        }
+    }
+    for (id, variable) in &problem.variables {
+        if let Some(value) = [variable.bounds.lower, variable.bounds.upper].into_iter().flatten().find(|v| v.is_nan()) {
+            return invalid("variable", *id, "a bound of", value);
+        }
     }
     Ok(())
 }
@@ -993,6 +1075,42 @@ mod tests {
         assert!(write_lp_string(&named).is_err(), "a line break in the problem name comment must be rejected");
         let options = LpWriterOptions { include_problem_name: false, ..LpWriterOptions::default() };
         assert!(write_lp_string_with_options(&named, &options).is_ok(), "the name is irrelevant when it is not written");
+    }
+
+    #[test]
+    fn test_non_finite_values_are_a_validation_error_not_a_panic() {
+        fn problem_with(rhs: f64, coefficient: f64, bound: f64) -> LpProblem {
+            let mut problem = LpProblem::parse("minimize\nobj: x\nsubject to\nc1: x <= 1\nend").expect("fixture must parse");
+            let c1 = problem.name_id("c1").expect("c1 exists");
+            let x = problem.name_id("x").expect("x exists");
+            problem.constraints.insert(
+                c1,
+                Constraint::Standard {
+                    name: c1,
+                    coefficients: vec![Coefficient { name: x, value: coefficient }],
+                    operator: ComparisonOp::LTE,
+                    rhs,
+                    byte_offset: None,
+                },
+            );
+            problem.variables.get_mut(&x).expect("x registered").bounds.upper = Some(bound);
+            problem
+        }
+
+        assert!(write_lp_string(&problem_with(1.0, 1.0, 4.0)).is_ok(), "finite control case must write");
+        assert!(write_lp_string(&problem_with(1.0, 1.0, f64::INFINITY)).is_ok(), "an infinite bound is legal");
+        assert!(write_lp_string(&problem_with(f64::INFINITY, 1.0, 4.0)).is_ok(), "an infinite RHS is legal");
+        for (label, problem) in [
+            ("NaN RHS", problem_with(f64::NAN, 1.0, 4.0)),
+            ("NaN coefficient", problem_with(1.0, f64::NAN, 4.0)),
+            ("infinite coefficient", problem_with(1.0, f64::INFINITY, 4.0)),
+            ("NaN bound", problem_with(1.0, 1.0, f64::NAN)),
+        ] {
+            let err = write_lp_string(&problem).expect_err(label);
+            assert!(matches!(err, LpParseError::ValidationError { .. }), "{label}: {err}");
+            let err = crate::mps::writer::write_mps_string(&problem).expect_err(label);
+            assert!(matches!(err, LpParseError::ValidationError { .. }), "{label}: {err}");
+        }
     }
 
     #[test]

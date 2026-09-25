@@ -278,6 +278,7 @@ fn build_mps(output: &mut String, problem: &LpProblem, options: &MpsWriterOption
     }
     let obj_row_name: &str = objective.map_or(EMPTY_OBJECTIVE_ROW_NAME, |o| problem.resolve(o.name));
     validate_mps_names(problem, obj_row_name)?;
+    crate::writer::validate_numbers(problem)?;
     let range_pairs = detect_range_pairs(problem);
     let labels = VectorLabels::new(problem, obj_row_name);
 
