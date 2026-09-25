@@ -237,9 +237,9 @@ fn conflicting_bounds<'d>(doc: &'d Document, out: &mut Vec<Diagnostic>) -> HashS
     let mut reported = HashSet::new();
     let entries = bound_entries(doc);
     let entry = |range: &Range<usize>| {
-        let at = entries.binary_search_by_key(&range.start, |(identifier, _)| identifier.start).ok()?;
-        let (identifier, declaration) = &entries[at];
-        (identifier == range).then_some(*declaration)
+        let at = entries.binary_search_by_key(&range.start, |(identifier, ..)| identifier.start).ok()?;
+        let (identifier, declaration, bounds) = &entries[at];
+        (identifier == range).then_some((*declaration, *bounds))
     };
     for variable in &doc.index().variables {
         let declarations: Vec<(Range<usize>, VariableBounds)> = variable
@@ -248,7 +248,7 @@ fn conflicting_bounds<'d>(doc: &'d Document, out: &mut Vec<Diagnostic>) -> HashS
             .filter(|o| o.role == Role::Bound)
             .filter_map(|o| entry(&o.range))
             // Entries that do not parse as a bound are syntax errors, reported elsewhere.
-            .filter_map(|n| Some((n.byte_range(), syntax::declared_bounds(n, &doc.text)?)))
+            .filter_map(|(n, bounds)| Some((n.byte_range(), bounds?)))
             .collect();
         let merged = declarations.iter().fold(VariableBounds::unspecified(), |acc, (_, b)| acc.merge(*b));
         let (Some(lower), Some(upper)) = (merged.lower, merged.upper) else { continue };
@@ -263,21 +263,24 @@ fn conflicting_bounds<'d>(doc: &'d Document, out: &mut Vec<Diagnostic>) -> HashS
 }
 
 /// Every identifier of a `bound_declaration` in a top-level `Bounds` section
-/// (where the index finds [`Role::Bound`] occurrences) with its declaration,
-/// in document order. One pass, rather than a lookup from the root per
-/// occurrence.
-fn bound_entries(doc: &Document) -> Vec<(Range<usize>, Node<'_>)> {
+/// (where the index finds [`Role::Bound`] occurrences) with its declaration
+/// and the bounds it declares, in document order. One pass over each
+/// declaration, rather than a lookup from the root per occurrence.
+fn bound_entries(doc: &Document) -> Vec<(Range<usize>, Node<'_>, Option<VariableBounds>)> {
     let language = syntax::language();
     let bounds_section = language.id_for_node_kind(kind::BOUNDS_SECTION, true);
     let bound_declaration = language.id_for_node_kind(kind::BOUND_DECLARATION, true);
-    let identifier = language.id_for_node_kind(kind::IDENTIFIER, true);
     let mut out = Vec::new();
     let root = doc.tree.root_node();
     let (mut sections, mut entries, mut parts) = (root.walk(), root.walk(), root.walk());
     for section in root.children(&mut sections).filter(|n| n.kind_id() == bounds_section) {
         for declaration in section.children(&mut entries).filter(|n| n.kind_id() == bound_declaration) {
-            let identifiers = declaration.children(&mut parts).filter(|n| n.kind_id() == identifier);
-            out.extend(identifiers.map(|n| (n.byte_range(), declaration)));
+            let first = out.len();
+            let bounds =
+                syntax::declared_bounds_with(declaration, &doc.text, &mut parts, |n| out.push((n.byte_range(), declaration, None)));
+            for entry in &mut out[first..] {
+                entry.2 = bounds;
+            }
         }
     }
     debug_assert!(out.windows(2).all(|w| w[0].0.end <= w[1].0.start), "entries in document order");
@@ -572,7 +575,8 @@ mod tests {
                     .node(occurrence.range.clone(), kind::IDENTIFIER)
                     .and_then(|n| n.parent())
                     .filter(|n| n.kind() == kind::BOUND_DECLARATION);
-                let found = entries.iter().find(|(range, _)| *range == occurrence.range).map(|(_, n)| *n);
+                let found = entries.iter().find(|(range, ..)| *range == occurrence.range).map(|(_, n, bounds)| (*n, *bounds));
+                let expected = expected.map(|n| (n, syntax::declared_bounds(n, &doc.text)));
                 assert_eq!(found, expected, "{text:?} at {:?}", occurrence.range);
             }
         }

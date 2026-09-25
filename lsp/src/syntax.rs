@@ -3,7 +3,7 @@
 use std::cell::RefCell;
 
 use lp_parser_rs::VariableBounds;
-use tree_sitter::{Language, Node, Parser, Tree};
+use tree_sitter::{Language, Node, Parser, Tree, TreeCursor};
 
 /// Node kind names from the tree-sitter-lp grammar (`src/node-types.json`).
 pub mod kind {
@@ -372,36 +372,45 @@ pub const INFINITE_BOUND: f64 = 1e30;
 /// `None` for shapes upstream rejects.
 #[must_use]
 pub fn declared_bounds(node: Node<'_>, text: &str) -> Option<VariableBounds> {
-    #[derive(Clone, Copy)]
-    enum Item {
-        Variable,
-        Free,
-        /// `Some(true)` for `<=`-like, `Some(false)` for `>=`-like, `None` for `=`.
-        Operator(Option<bool>),
-        Value(f64),
-    }
-    /// What a child of a `bound_declaration` contributes, by grammar symbol.
-    #[derive(Clone, Copy, PartialEq, Eq)]
-    enum Part {
-        Other,
-        Minus,
-        Variable,
-        Free,
-        Operator,
-        Value,
-    }
-    static PARTS: std::sync::OnceLock<Vec<Part>> = std::sync::OnceLock::new();
-    /// Longest item list that makes a bound: any more and there is none.
-    const MAX_ITEMS: usize = 5;
-    let parts = PARTS.get_or_init(|| {
-        let mut parts = vec![Part::Other; language().node_kind_count()];
+    declared_bounds_with(node, text, &mut node.walk(), |_| {})
+}
+
+/// A significant part of a `bound_declaration`.
+#[derive(Clone, Copy)]
+enum BoundItem {
+    Variable,
+    Free,
+    /// `Some(true)` for `<=`-like, `Some(false)` for `>=`-like, `None` for `=`.
+    Operator(Option<bool>),
+    Value(f64),
+}
+
+/// What a child of a `bound_declaration` contributes, by grammar symbol.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum BoundPart {
+    Other,
+    Minus,
+    Variable,
+    Free,
+    Operator,
+    Value,
+}
+
+/// Longest item list that makes a bound: any more and there is none.
+const MAX_BOUND_ITEMS: usize = 5;
+
+/// [`BoundPart`] per grammar symbol id.
+fn bound_parts() -> &'static [BoundPart] {
+    static PARTS: std::sync::OnceLock<Vec<BoundPart>> = std::sync::OnceLock::new();
+    PARTS.get_or_init(|| {
+        let mut parts = vec![BoundPart::Other; language().node_kind_count()];
         let kinds = [
-            ("-", false, Part::Minus),
-            (kind::IDENTIFIER, true, Part::Variable),
-            (kind::FREE_KEYWORD, true, Part::Free),
-            (kind::COMPARISON_OPERATOR, true, Part::Operator),
-            (kind::NUMBER, true, Part::Value),
-            (kind::INFINITY, true, Part::Value),
+            ("-", false, BoundPart::Minus),
+            (kind::IDENTIFIER, true, BoundPart::Variable),
+            (kind::FREE_KEYWORD, true, BoundPart::Free),
+            (kind::COMPARISON_OPERATOR, true, BoundPart::Operator),
+            (kind::NUMBER, true, BoundPart::Value),
+            (kind::INFINITY, true, BoundPart::Value),
         ];
         for (name, named, part) in kinds {
             for id in kind_ids(name, named) {
@@ -409,33 +418,53 @@ pub fn declared_bounds(node: Node<'_>, text: &str) -> Option<VariableBounds> {
             }
         }
         parts
-    });
+    })
+}
+
+/// [`declared_bounds`] walking the children with `cursor`, and calling
+/// `identifier` with every identifier child (whatever the result), so one
+/// pass over the children serves both.
+pub fn declared_bounds_with<'t>(
+    node: Node<'t>,
+    text: &str,
+    cursor: &mut TreeCursor<'t>,
+    mut identifier: impl FnMut(Node<'t>),
+) -> Option<VariableBounds> {
     debug_assert_eq!(node.kind(), kind::BOUND_DECLARATION);
-    let mut items = [Item::Variable; MAX_ITEMS];
+    let parts = bound_parts();
+    let mut items = [BoundItem::Variable; MAX_BOUND_ITEMS];
     let mut len = 0;
     let mut negative = false;
-    let mut cursor = node.walk();
-    for child in node.children(&mut cursor) {
+    // Whether the parts so far can still make a bound; the walk goes on
+    // regardless, for `identifier`.
+    let mut valid = true;
+    for child in node.children(cursor) {
         // ERROR nodes have no entry: they contribute nothing.
-        let part = parts.get(usize::from(child.kind_id())).copied().unwrap_or(Part::Other);
+        let part = parts.get(usize::from(child.kind_id())).copied().unwrap_or(BoundPart::Other);
         let item = match part {
-            Part::Other => continue,
-            Part::Minus => {
+            BoundPart::Other => continue,
+            BoundPart::Minus => {
                 negative = true;
                 continue;
             }
-            Part::Variable => Item::Variable,
-            Part::Free => Item::Free,
-            Part::Operator => Item::Operator(match canonical_operator(self::text(child, text)) {
+            BoundPart::Variable => {
+                identifier(child);
+                BoundItem::Variable
+            }
+            BoundPart::Free => BoundItem::Free,
+            BoundPart::Operator => BoundItem::Operator(match canonical_operator(self::text(child, text)) {
                 "<=" | "<" => Some(true),
                 ">=" | ">" => Some(false),
                 _ => None,
             }),
-            Part::Value => {
-                let value = parse_number(self::text(child, text))?;
+            BoundPart::Value => {
+                let Some(value) = parse_number(self::text(child, text)) else {
+                    valid = false;
+                    continue;
+                };
                 let value = if negative { -value } else { value };
                 negative = false;
-                Item::Value(if value >= INFINITE_BOUND {
+                BoundItem::Value(if value >= INFINITE_BOUND {
                     f64::INFINITY
                 } else if value <= -INFINITE_BOUND {
                     f64::NEG_INFINITY
@@ -444,31 +473,34 @@ pub fn declared_bounds(node: Node<'_>, text: &str) -> Option<VariableBounds> {
                 })
             }
         };
-        if len == MAX_ITEMS {
-            return None;
+        if len == MAX_BOUND_ITEMS {
+            valid = false;
         }
-        items[len] = item;
-        len += 1;
+        if valid {
+            items[len] = item;
+            len += 1;
+        }
     }
-    let items = &items[..len];
+    if valid { bounds_of(&items[..len]) } else { None }
+}
+
+/// Bounds of a declaration's significant parts, `None` for other shapes.
+fn bounds_of(items: &[BoundItem]) -> Option<VariableBounds> {
+    use BoundItem::{Free, Operator, Value, Variable};
     let bounds = match items {
-        [Item::Variable, Item::Free] => VariableBounds::free(),
-        [Item::Variable, Item::Operator(le), Item::Value(v)] => match le {
+        [Variable, Free] => VariableBounds::free(),
+        [Variable, Operator(le), Value(v)] => match le {
             Some(true) => VariableBounds::upper(*v),
             Some(false) => VariableBounds::lower(*v),
             None => VariableBounds::range(*v, *v),
         },
-        [Item::Value(v), Item::Operator(le), Item::Variable] => match le {
+        [Value(v), Operator(le), Variable] => match le {
             Some(true) => VariableBounds::lower(*v),
             Some(false) => VariableBounds::upper(*v),
             None => VariableBounds::range(*v, *v),
         },
-        [Item::Value(a), Item::Operator(Some(true)), Item::Variable, Item::Operator(Some(true)), Item::Value(b)] => {
-            VariableBounds::range(*a, *b)
-        }
-        [Item::Value(a), Item::Operator(Some(false)), Item::Variable, Item::Operator(Some(false)), Item::Value(b)] => {
-            VariableBounds::range(*b, *a)
-        }
+        [Value(a), Operator(Some(true)), Variable, Operator(Some(true)), Value(b)] => VariableBounds::range(*a, *b),
+        [Value(a), Operator(Some(false)), Variable, Operator(Some(false)), Value(b)] => VariableBounds::range(*b, *a),
         _ => return None,
     };
     Some(bounds)
