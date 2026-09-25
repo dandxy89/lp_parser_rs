@@ -32,9 +32,15 @@ use lp_parser_rs::problem::LpProblem;
 use crate::solver::build_highs_model;
 
 /// Size of the buffer `HiGHS` writes a name into — `kHighsMaximumStringLength`.
-/// The C API documents this as a requirement, not a suggestion: it writes up to
-/// this many bytes.
+/// `HiGHS` `strcpy`s the stored name into it with no length check, so every name
+/// we pass must be far shorter than this. That is why only the synthetic names
+/// from [`synthetic_name`] are ever handed over — never the model's own, which
+/// can be arbitrarily long.
 const NAME_BUFFER: usize = 512;
+
+/// Longest synthetic name: one prefix byte plus the digits of `i32::MAX`.
+const SYNTHETIC_NAME_MAX: usize = 1 + 10;
+const _: () = assert!(SYNTHETIC_NAME_MAX < NAME_BUFFER, "synthetic names must fit the HiGHS name buffer");
 
 /// What `HiGHS`'s presolve did to a model.
 #[derive(Debug, Clone)]
@@ -142,11 +148,13 @@ pub fn highs_presolve(problem: &LpProblem) -> Result<HighsPresolveReport, String
     model.make_quiet();
     let highs = model.as_mut_ptr();
 
-    for (index, name) in variable_names.iter().enumerate() {
-        pass_name(highs, index, name, Kind::Col)?;
+    // Short synthetic names, not ours: HiGHS copies a presolved name into a
+    // fixed buffer without checking its length (see `NAME_BUFFER`).
+    for index in 0..variable_names.len() {
+        pass_name(highs, index, Kind::Col)?;
     }
-    for (index, name) in row_names.iter().enumerate() {
-        pass_name(highs, index, name, Kind::Row)?;
+    for index in 0..row_names.len() {
+        pass_name(highs, index, Kind::Row)?;
     }
 
     // SAFETY: `highs` is the live model owned by `model` for the rest of this
@@ -204,13 +212,39 @@ enum Kind {
     Col,
 }
 
-/// Give `HiGHS` our name for one row or column, so the presolved model carries
-/// it too.
-fn pass_name(highs: *mut c_void, index: usize, name: &str, kind: Kind) -> Result<(), String> {
-    let c_name = CString::new(name).map_err(|_| format!("name {name:?} contains a NUL byte and cannot be passed to HiGHS"))?;
+impl Kind {
+    const fn prefix(self) -> char {
+        match self {
+            Self::Row => 'r',
+            Self::Col => 'c',
+        }
+    }
+}
+
+/// The name `HiGHS` is given for row or column `index`: a one-letter prefix and
+/// the index, so it always fits `NAME_BUFFER` and maps straight back.
+fn synthetic_name(index: i32, kind: Kind) -> String {
+    debug_assert!(index >= 0, "HiGHS indices are non-negative");
+    let name = format!("{}{index}", kind.prefix());
+    debug_assert!(name.len() <= SYNTHETIC_NAME_MAX, "synthetic name {name:?} exceeds its bound");
+    name
+}
+
+/// The index a synthetic name encodes, or `None` for anything we did not pass.
+fn synthetic_index(name: &str, kind: Kind) -> Option<usize> {
+    name.strip_prefix(kind.prefix())?.parse().ok()
+}
+
+/// Give `HiGHS` a synthetic name for one row or column, so the presolved model
+/// carries it and the survivors can be mapped back to indices.
+fn pass_name(highs: *mut c_void, index: usize, kind: Kind) -> Result<(), String> {
     let index = i32::try_from(index).map_err(|_| "the model has more rows or columns than HiGHS can index".to_owned())?;
+    let name = synthetic_name(index, kind);
+    let c_name = CString::new(name.as_str()).map_err(|_| format!("synthetic name {name:?} contains a NUL byte"))?;
     // SAFETY: `highs` is a live model; `c_name` outlives the call, and HiGHS
-    // copies the string rather than retaining the pointer.
+    // copies the string rather than retaining the pointer. The name is at most
+    // `SYNTHETIC_NAME_MAX` bytes, so reading it back later cannot overflow the
+    // `NAME_BUFFER`-sized buffer `surviving` provides.
     let status = unsafe {
         match kind {
             Kind::Row => highs_sys::Highs_passRowName(highs, index, c_name.as_ptr()),
@@ -223,12 +257,13 @@ fn pass_name(highs: *mut c_void, index: usize, name: &str, kind: Kind) -> Result
     Ok(())
 }
 
-/// The names still present in the presolved model.
+/// The original indices of the rows or columns still present in the presolved
+/// model.
 ///
 /// A name `HiGHS` declines to give back is simply absent from the set, which
 /// lands it in the removed list — the honest reading, since we then have no
 /// evidence it survived.
-fn surviving(highs: *mut c_void, count: usize, kind: Kind) -> HashSet<String> {
+fn surviving(highs: *mut c_void, count: usize, kind: Kind) -> HashSet<usize> {
     let mut names = HashSet::with_capacity(count);
     let mut buffer: [c_char; NAME_BUFFER] = [0; NAME_BUFFER];
     for index in 0..count {
@@ -236,8 +271,11 @@ fn surviving(highs: *mut c_void, count: usize, kind: Kind) -> HashSet<String> {
             debug_assert!(false, "a presolved index must fit HighsInt: it came from HiGHS");
             break;
         };
-        // SAFETY: `highs` is a live model, `index` is below the count HiGHS
-        // itself reported, and `buffer` is the documented size for these calls.
+        // SAFETY: `highs` is a live model and `index` is below the count HiGHS
+        // itself reported. HiGHS `strcpy`s the stored name into `buffer` with
+        // no length check; every stored name is one of ours from
+        // `synthetic_name`, at most `SYNTHETIC_NAME_MAX` bytes plus the NUL,
+        // well inside `NAME_BUFFER`.
         let status = unsafe {
             match kind {
                 Kind::Row => highs_sys::Highs_getPresolvedRowName(highs, index, buffer.as_mut_ptr()),
@@ -247,11 +285,14 @@ fn surviving(highs: *mut c_void, count: usize, kind: Kind) -> HashSet<String> {
         if status == highs_sys::kHighsStatusError {
             continue;
         }
-        // SAFETY: on success HiGHS has written a NUL-terminated string into the
-        // buffer, within the length it documents as required.
+        // SAFETY: on success HiGHS has written one of our NUL-terminated
+        // synthetic names into the buffer, which is far longer than any of them.
         let name = unsafe { std::ffi::CStr::from_ptr(buffer.as_ptr()) };
-        if let Ok(name) = name.to_str() {
-            names.insert(name.to_owned());
+        match name.to_str().ok().and_then(|name| synthetic_index(name, kind)) {
+            Some(original) => {
+                names.insert(original);
+            }
+            None => debug_assert!(false, "HiGHS returned a name we did not give it: {name:?}"),
         }
     }
     names
@@ -259,8 +300,8 @@ fn surviving(highs: *mut c_void, count: usize, kind: Kind) -> HashSet<String> {
 
 /// The names that went, in the order they were passed to `HiGHS` (which is
 /// sorted by name, so the report is stable across runs).
-fn removed(passed: &[String], survivors: &HashSet<String>) -> Vec<String> {
-    passed.iter().filter(|name| !survivors.contains(*name)).cloned().collect()
+fn removed(passed: &[String], survivors: &HashSet<usize>) -> Vec<String> {
+    passed.iter().enumerate().filter(|(index, _)| !survivors.contains(index)).map(|(_, name)| name.clone()).collect()
 }
 
 #[cfg(test)]
@@ -304,6 +345,41 @@ mod tests {
             assert!(report.removed_rows.is_empty(), "an infeasible verdict leaves no reduced model to compare against");
             assert!(report.headline().contains("infeasible"));
         }
+    }
+
+    #[test]
+    fn names_longer_than_the_highs_buffer_do_not_overflow_it() {
+        // HiGHS strcpy's presolved names into a 512-byte buffer; names this
+        // long used to be passed through verbatim and, once they survived
+        // presolve, overran it (SIGBUS/SIGSEGV).
+        let x = format!("x{}", "a".repeat(2000));
+        let y = format!("y{}", "b".repeat(2000));
+        let r1 = format!("r{}", "c".repeat(2000));
+        let r2 = format!("s{}", "d".repeat(2000));
+        let source = format!(
+            "Minimize\n obj: {x} + {y}\nSubject To\n {r1}: {x} + 2 {y} >= 3\n {r2}: 2 {x} + {y} >= 3\n c3: {x} + {y} + z >= 1.5\nBounds\n 0 <= {x} <= 10\n 0 <= {y} <= 10\nGeneral\n z\nEnd"
+        );
+        let problem = parse(&source);
+        let report = highs_presolve(&problem).expect("a MIP with long names presolves");
+
+        assert!(report.rows_after > 0 && report.cols_after > 0, "long-named rows and columns survive: {}", report.headline());
+        assert_eq!(report.removed_rows.len(), report.rows_before - report.rows_after, "every removed row is accounted for");
+        assert_eq!(report.removed_cols.len(), report.cols_before - report.cols_after, "every removed column is accounted for");
+        for name in report.removed_rows.iter().chain(&report.removed_cols) {
+            assert!([&x, &y, &r1, &r2].contains(&name) || name == "c3" || name == "z", "removed names map back to ours: {name}");
+        }
+    }
+
+    #[test]
+    fn synthetic_names_round_trip() {
+        for kind in [Kind::Row, Kind::Col] {
+            for index in [0, 7, i32::MAX] {
+                let name = synthetic_name(index, kind);
+                assert!(name.len() <= SYNTHETIC_NAME_MAX);
+                assert_eq!(synthetic_index(&name, kind), Some(usize::try_from(index).expect("non-negative")));
+            }
+        }
+        assert_eq!(synthetic_index("c3", Kind::Row), None, "a column name is not a row index");
     }
 
     #[test]
