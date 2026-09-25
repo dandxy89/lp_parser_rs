@@ -890,6 +890,11 @@ impl App {
     /// rebuilding them every keystroke is wasted work. Watch reloads pass
     /// `true` because they install fresh analyses.
     fn rebuild_report_inner(&mut self, analyses_changed: bool) {
+        // Captured by name: the rebuild reshuffles entries (a tolerance change
+        // hides some and reveals others), so a list position would land on a
+        // different entry.
+        let selected_name = self.selected_entry_name().map(str::to_owned);
+
         match self.mode {
             AppMode::Diff => {
                 let file1 = self.file1_path.display().to_string();
@@ -940,10 +945,26 @@ impl App {
         self.detail_scroll = 0;
         self.ensure_active_section_cache();
         self.clamp_active_selection();
+        self.reselect_by_name(selected_name.as_deref());
 
         // The search pop-up references haystack indices — refresh if it is open.
         if self.search_popup.visible {
             self.recompute_search_popup();
+        }
+    }
+
+    /// Select the entry named `name` in the active section if it is still
+    /// visible; otherwise leave the selection as it is. Must be called after
+    /// `ensure_active_section_cache`.
+    fn reselect_by_name(&mut self, name: Option<&str>) {
+        let (Some(name), Some(index)) = (name, self.active_section.list_index()) else {
+            return;
+        };
+        let Some(entry) = self.entry_index_by_name(self.active_section, name) else {
+            return;
+        };
+        if let Some(position) = self.section_states[index].cached_indices().iter().position(|&i| i == entry) {
+            self.section_states[index].list_state.select(Some(position));
         }
     }
 
@@ -2071,6 +2092,26 @@ mod tests {
         app.jump_back();
 
         assert_eq!(app.selected_entry_name(), Some("c2"), "the jump must land on the recorded entry");
+    }
+
+    /// Regression: a tolerance change kept the list position rather than the
+    /// entry, so once a row above the selection became unchanged (and hidden)
+    /// the selection silently moved to the next entry.
+    #[test]
+    fn a_tolerance_change_keeps_the_selected_entry() {
+        let mut app = crate::snapshot_tests::diff_app_from(
+            "min\nobj: x\nst\nc1: x + y >= 2\nc2: x <= 8\nc3: y <= 4\nend\n",
+            "min\nobj: x\nst\nc1: x + y >= 2.0001\nc2: x <= 9\nc3: y <= 5\nend\n",
+        );
+        app.set_section(Section::Constraints);
+        app.active_name_list_state_mut().select(Some(1));
+        assert_eq!(app.selected_entry_name(), Some("c2"), "fixture: c2 is the second row");
+
+        // abs_tol 0.001 makes c1's change vanish; c2 and c3 still differ.
+        app.diff_options.abs_tol = 1e-3;
+        app.rebuild_report_inner(false);
+
+        assert_eq!(app.selected_entry_name(), Some("c2"), "the selection follows the entry, not the row");
     }
 
     /// Regression: `Ctrl+i` after `Ctrl+o` returned to the entry just jumped
