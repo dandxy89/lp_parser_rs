@@ -1151,8 +1151,9 @@ fn diff_constraints(
             std::cmp::Ordering::Less => {
                 let (name_id, name, constraint) = &cons1[i];
                 // Line-map lookup uses the ORIGINAL per-file NameId (pre-rename).
+                // A removed constraint has no line in file 2, and a file-1
+                // NameId means nothing to file 2's line map anyway.
                 let line1 = line_map1.get(name_id).copied();
-                let line2 = line_map2.get(name_id).copied();
                 counts.removed += 1;
                 if matches!(constraint, Constraint::Standard { .. }) {
                     rename_candidates.push(entries.len());
@@ -1162,7 +1163,7 @@ fn diff_constraints(
                     kind: DiffKind::Removed,
                     detail: ConstraintDiffDetail::AddedOrRemoved(resolve_constraint(p1, constraint, interner, opts)),
                     line_file1: line1,
-                    line_file2: line2,
+                    line_file2: None,
                     order_only: false,
                     renamed_from: None,
                 });
@@ -1170,7 +1171,7 @@ fn diff_constraints(
             }
             std::cmp::Ordering::Greater => {
                 let (name_id, name, constraint) = &cons2[j];
-                let line1 = line_map1.get(name_id).copied();
+                // As above: an added constraint has no line in file 1.
                 let line2 = line_map2.get(name_id).copied();
                 counts.added += 1;
                 if matches!(constraint, Constraint::Standard { .. }) {
@@ -1180,7 +1181,7 @@ fn diff_constraints(
                     name: name.clone(),
                     kind: DiffKind::Added,
                     detail: ConstraintDiffDetail::AddedOrRemoved(resolve_constraint(p2, constraint, interner, opts)),
-                    line_file1: line1,
+                    line_file1: None,
                     line_file2: line2,
                     order_only: false,
                     renamed_from: None,
@@ -1927,6 +1928,24 @@ mod tests {
         let entry = report.constraints.entries.iter().find(|e| e.name == "c1").expect("should have c1 entry");
         assert_eq!(entry.line_file1, Some(5));
         assert_eq!(entry.line_file2, Some(8));
+    }
+
+    #[test]
+    fn test_added_and_removed_constraints_carry_only_their_own_line() {
+        // Both problems intern their first constraint name as the same NameId,
+        // so a lookup with the wrong file's id would find the other's line.
+        let p1 = problem_with_standard_constraint("gone", &[("x", 1.0)], ComparisonOp::LTE, 10.0);
+        let p2 = problem_with_standard_constraint("fresh", &[("x", 1.0)], ComparisonOp::GTE, 3.0);
+        let (gone_id, fresh_id) = (constraint_name_id(&p1, "gone"), constraint_name_id(&p2, "fresh"));
+        assert_eq!(gone_id, fresh_id, "fixture relies on colliding per-file NameIds");
+        let lm1 = HashMap::from([(gone_id, 5)]);
+        let lm2 = HashMap::from([(fresh_id, 8)]);
+
+        let report = test_diff_report("a.lp", "b.lp", &p1, &p2, &lm1, &lm2, dummy_analysis(), dummy_analysis());
+        let removed = report.constraints.entries.iter().find(|e| e.name == "gone").expect("gone is removed");
+        assert_eq!((removed.line_file1, removed.line_file2), (Some(5), None));
+        let added = report.constraints.entries.iter().find(|e| e.name == "fresh").expect("fresh is added");
+        assert_eq!((added.line_file1, added.line_file2), (None, Some(8)));
     }
 
     #[test]
