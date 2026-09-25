@@ -1,12 +1,18 @@
 //! Large-file benchmarks: incremental reparse, symbol index rebuild and full
-//! semantic tokens on a generated ~50 MB LP file.
+//! semantic tokens on a generated ~50 MB LP file, plus request handlers on
+//! generated models that stress one dimension each (a very long line, very
+//! many constraints).
+//!
+//! Every model is generated lazily inside the bench closure, so filtering to
+//! one bench only pays for the models it uses.
 
 use std::fmt::{self, Write as _};
 use std::hint::black_box;
+use std::sync::OnceLock;
 use std::time::Duration;
 
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
-use lp_lsp::features::semantic_tokens;
+use lp_lsp::features::{code_lens, semantic_tokens};
 use lp_lsp::{Document, Encoding, SymbolIndex, syntax};
 use tower_lsp_server::ls_types::{TextDocumentContentChangeEvent, Uri};
 use tree_sitter::InputEdit;
@@ -16,6 +22,16 @@ const VARIABLES: usize = 200_000;
 
 fn put(text: &mut String, args: fmt::Arguments<'_>) {
     text.write_fmt(args).expect("writing to a String cannot fail");
+}
+
+fn uri() -> Uri {
+    "file:///bench.lp".parse().expect("valid URI")
+}
+
+fn document(text: String) -> Document {
+    let doc = Document::new(uri(), text, 1, Encoding::Utf16);
+    assert!(!doc.has_syntax_errors(), "generated file must parse cleanly");
+    doc
 }
 
 /// Deterministic LP model of roughly `TARGET_BYTES`: constraints fill most of
@@ -53,22 +69,31 @@ fn generate() -> String {
     text
 }
 
-fn benches(c: &mut Criterion) {
-    let text = generate();
-    eprintln!("generated LP file: {} bytes (~{} MiB)", text.len(), text.len() / (1024 * 1024));
-    let uri: Uri = "file:///bench.lp".parse().expect("valid URI");
-    let doc = Document::new(uri, text, 1, Encoding::Utf16);
-    assert!(!doc.has_syntax_errors(), "generated file must parse cleanly");
+/// The ~50 MB document, parsed once.
+fn large() -> &'static Document {
+    static DOC: OnceLock<Document> = OnceLock::new();
+    DOC.get_or_init(|| {
+        let text = generate();
+        eprintln!("generated LP file: {} bytes (~{} MiB)", text.len(), text.len() / (1024 * 1024));
+        document(text)
+    })
+}
 
-    // Insert a digit in front of a constraint coefficient near the middle.
+/// Offset just after the `: ` of a constraint near the middle of `doc`.
+fn middle_constraint(doc: &Document) -> usize {
     let middle = doc.text.len() / 2;
-    let at = doc.text[middle..].find(": ").expect("a constraint after the middle") + middle + 2;
-    let change = TextDocumentContentChangeEvent { range: Some(doc.range(at..at)), range_length: None, text: "1".to_owned() };
+    doc.text[middle..].find(": ").expect("a constraint after the middle") + middle + 2
+}
 
+fn large_file(c: &mut Criterion) {
     let mut group = c.benchmark_group("lsp_50mb");
     group.sample_size(10).warm_up_time(Duration::from_secs(1)).measurement_time(Duration::from_secs(10));
 
     group.bench_function("apply_changes_single_char", |b| {
+        // Insert a digit in front of a constraint coefficient near the middle.
+        let doc = large();
+        let at = middle_constraint(doc);
+        let change = TextDocumentContentChangeEvent { range: Some(doc.range(at..at)), range_length: None, text: "1".to_owned() };
         b.iter_batched(
             || doc.clone(),
             |mut doc| {
@@ -80,6 +105,8 @@ fn benches(c: &mut Criterion) {
     });
 
     group.bench_function("incremental_reparse_only", |b| {
+        let doc = large();
+        let at = middle_constraint(doc);
         let mut edited = doc.text.clone();
         edited.insert(at, '1');
         let point = doc.lines.point(at);
@@ -102,12 +129,43 @@ fn benches(c: &mut Criterion) {
         );
     });
 
-    group.bench_function("symbol_index_build", |b| b.iter(|| SymbolIndex::build(black_box(&doc.tree), black_box(&doc.text))));
+    group.bench_function("symbol_index_build", |b| {
+        let doc = large();
+        b.iter(|| SymbolIndex::build(black_box(&doc.tree), black_box(&doc.text)));
+    });
 
-    group.bench_function("semantic_tokens_full", |b| b.iter(|| semantic_tokens::tokens(black_box(&doc), None)));
+    group.bench_function("semantic_tokens_full", |b| {
+        let doc = large();
+        b.iter(|| semantic_tokens::tokens(black_box(doc), None));
+    });
 
     group.finish();
 }
 
-criterion_group!(lsp, benches);
+/// A model whose objective is a single line of `terms` terms.
+fn long_objective(terms: usize) -> Document {
+    debug_assert!(terms >= 2, "the constraint uses x0 and x1");
+    let mut text = String::with_capacity(terms * 12 + 64);
+    text.push_str("Minimize\n obj: x0");
+    for v in 1..terms {
+        put(&mut text, format_args!(" + {} x{v}", v % 7 + 1));
+    }
+    text.push_str("\nSubject To\n c0: x0 + x1 >= 1\nEnd\n");
+    document(text)
+}
+
+fn long_line(c: &mut Criterion) {
+    let mut group = c.benchmark_group("long_line");
+    group.sample_size(10).warm_up_time(Duration::from_secs(1)).measurement_time(Duration::from_secs(10));
+
+    group.bench_function("code_lens_40k_term_objective", |b| {
+        let doc = long_objective(40_000);
+        doc.build_index();
+        b.iter(|| code_lens::lenses(black_box(&doc)));
+    });
+
+    group.finish();
+}
+
+criterion_group!(lsp, large_file, long_line);
 criterion_main!(lsp);
