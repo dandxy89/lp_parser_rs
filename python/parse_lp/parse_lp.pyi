@@ -175,7 +175,7 @@ class LpParser:
 
     @property
     def constraints(self) -> list[Constraint]:
-        """List of standard and SOS constraints."""
+        """List of constraints of every type: standard, sos, indicator, quadratic and general (see the "type" key)."""
 
     @property
     def variables(self) -> dict[str, VariableInfo]:
