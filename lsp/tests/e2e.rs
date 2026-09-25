@@ -210,6 +210,42 @@ async fn pull_mode_refreshes_only_when_the_semantic_pass_lands() {
     assert_eq!(h.request("shutdown", Value::Null).await, Value::Null);
 }
 
+#[tokio::test(flavor = "multi_thread")]
+async fn burst_of_edits_publishes_in_order_up_to_the_latest() {
+    let mut h = Harness::start();
+    let options = json!({ "lp": { "semantic": { "debounceMs": 60_000 } } });
+    h.request("initialize", json!({ "capabilities": { "textDocument": { "publishDiagnostics": {} } }, "initializationOptions": options }))
+        .await;
+    h.notify("initialized", json!({})).await;
+    h.notify("textDocument/didOpen", json!({ "textDocument": { "uri": URI, "languageId": "lp", "version": 1, "text": TEXT } })).await;
+
+    let last = 40;
+    for version in 2..=last {
+        h.notify(
+            "textDocument/didChange",
+            json!({
+                "textDocument": { "uri": URI, "version": version },
+                "contentChanges": [{ "range": { "start": { "line": 4, "character": 1 }, "end": { "line": 4, "character": 1 } }, "text": "d" }]
+            }),
+        )
+        .await;
+    }
+    // Stale versions may be skipped, but never published after a newer one,
+    // and the latest one always is.
+    let mut published = Vec::new();
+    while published.last() != Some(&last) {
+        let (method, params) = tokio::time::timeout(Duration::from_secs(10), h.notifications.recv())
+            .await
+            .expect("diagnostics in time")
+            .expect("channel open");
+        if method == "textDocument/publishDiagnostics" {
+            published.push(params["version"].as_i64().expect("versioned diagnostics"));
+        }
+    }
+    assert!(published.windows(2).all(|w| w[0] < w[1]), "published out of order: {published:?}");
+    assert_eq!(h.request("shutdown", Value::Null).await, Value::Null);
+}
+
 /// Names returned by `workspace/symbol` for `query`, with their URIs.
 async fn symbols(h: &mut Harness, query: &str) -> Vec<(String, String)> {
     let found = h.request("workspace/symbol", json!({ "query": query })).await;
