@@ -1066,7 +1066,23 @@ pub fn collect_violations(slack_names: &[String], slack_values: &[f64], toleranc
 /// Returns an error if the elastic problem does not solve to optimality. By
 /// construction it is feasible in both its constraints and its (sanitised)
 /// bounds, so this only occurs on a solver failure.
+#[cfg(test)]
 pub fn diagnose_infeasibility(problem: &LpProblem) -> Result<InfeasibilityDiagnosis, String> {
+    diagnose(problem, None)
+}
+
+/// `diagnose_infeasibility`, interrupted once `cancel` is set.
+///
+/// # Errors
+///
+/// As `diagnose_infeasibility`, and when cancelled.
+pub fn diagnose_infeasibility_cancellable(problem: &LpProblem, cancel: &AtomicBool) -> Result<InfeasibilityDiagnosis, String> {
+    diagnose(problem, Some(cancel))
+}
+
+/// The diagnosis behind `diagnose_infeasibility` and
+/// [`diagnose_infeasibility_cancellable`].
+fn diagnose(problem: &LpProblem, cancel: Option<&AtomicBool>) -> Result<InfeasibilityDiagnosis, String> {
     debug_assert!(!problem.variables.is_empty(), "cannot diagnose a problem with no variables");
 
     check_supported(problem)?;
@@ -1153,8 +1169,14 @@ pub fn diagnose_infeasibility(problem: &LpProblem) -> Result<InfeasibilityDiagno
     let mut highs_model = pass_model(row_problem, highs::Sense::Minimise)?;
     // Suppress solver output: the diagnosis runs while the TUI owns the terminal.
     highs_model.set_option("output_flag", false);
+    if let Some(cancel) = cancel {
+        register_cancel(&mut highs_model, cancel)?;
+    }
 
     let solved = run_model(highs_model)?;
+    if cancel.is_some_and(|flag| flag.load(Ordering::Relaxed)) {
+        return Err("diagnosis cancelled".to_owned());
+    }
     let status = solved.status();
     debug_assert!(
         matches!(status, highs::HighsModelStatus::Optimal),
@@ -1373,6 +1395,17 @@ empty =\n";
         assert!((violations[0].1 - 0.75).abs() < 1e-12, "c2 slacks must aggregate to 0.75, got {}", violations[0].1);
         assert_eq!(violations[1].0, "c1");
         assert!((violations[1].1 - 0.5).abs() < 1e-12);
+    }
+
+    #[test]
+    fn test_a_cancelled_diagnosis_reports_cancellation() {
+        let problem = LpProblem::parse("min\nobj: x\nst\nc1: x >= 2\nc2: x <= 1\nend").expect("failed to parse tiny LP");
+        let cancel = AtomicBool::new(true);
+        let error = diagnose_infeasibility_cancellable(&problem, &cancel).expect_err("a cancelled diagnosis has no result");
+        assert!(error.contains("cancelled"), "unexpected error: {error}");
+
+        let cancel = AtomicBool::new(false);
+        assert!(diagnose_infeasibility_cancellable(&problem, &cancel).is_ok(), "an uncancelled diagnosis still runs");
     }
 
     #[test]
