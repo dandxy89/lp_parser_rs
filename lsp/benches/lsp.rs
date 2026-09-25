@@ -12,7 +12,7 @@ use std::sync::{Once, OnceLock};
 use std::time::Duration;
 
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
-use lp_lsp::features::{code_lens, semantic_tokens};
+use lp_lsp::features::{code_lens, completion, semantic_tokens};
 use lp_lsp::{Document, Encoding, SymbolIndex, syntax};
 use tower_lsp_server::ls_types::{TextDocumentContentChangeEvent, Uri};
 use tree_sitter::InputEdit;
@@ -227,6 +227,21 @@ fn many(c: &mut Criterion) {
             eprintln!("codeLens response: {} bytes", serde_json::to_vec(&code_lens::lenses(doc)).expect("lenses serialise").len());
         });
         b.iter(|| serde_json::to_vec(&code_lens::lenses(black_box(doc))).expect("lenses serialise"));
+    });
+
+    group.bench_function("completion_after_label_serialised", |b| {
+        // Completion right after a constraint label (`c100000: |`), where
+        // every variable is a candidate: what a trigger character costs.
+        static SIZE: Once = Once::new();
+        let doc = constraints_200k();
+        doc.build_index();
+        let at = doc.text.find(" c100000: ").expect("constraint c100000") + " c100000: ".len();
+        let position = doc.position(at);
+        SIZE.call_once(|| {
+            let bytes = serde_json::to_vec(&completion::complete(doc, position)).expect("items serialise").len();
+            eprintln!("completion response: {bytes} bytes");
+        });
+        b.iter(|| serde_json::to_vec(&completion::complete(black_box(doc), position)).expect("items serialise"));
     });
 
     group.finish();
