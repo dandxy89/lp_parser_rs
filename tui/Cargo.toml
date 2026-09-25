@@ -36,4 +36,9 @@ libc = "0.2.189"
 workspace = true
 
 [dev-dependencies]
+criterion = "0.8.2"
 insta = "1.48.0"
+
+[[bench]]
+name = "render"
+harness = false
