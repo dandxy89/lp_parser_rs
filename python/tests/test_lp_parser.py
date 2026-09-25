@@ -247,6 +247,22 @@ class TestMutationErrors:
         with pytest.raises(LpInvalidValueError):
             parser.rename_variable("V1", "")
 
+    @pytest.mark.parametrize(
+        ("method", "args"),
+        [
+            ("remove_objective", ("",)),
+            ("remove_constraint", ("",)),
+            ("remove_variable", ("",)),
+            ("update_variable_type", ("", "binary")),
+            ("update_variable_type", ("", "continuous")),
+        ],
+    )
+    def test_empty_name_on_remove_or_retype_raises_invalid_value(
+        self, parser: LpParser, method: str, args: tuple[str, ...]
+    ) -> None:
+        with pytest.raises(LpInvalidValueError, match="must not be empty"):
+            getattr(parser, method)(*args)
+
     def test_rejected_mutation_leaves_the_model_writable(self, parser: LpParser) -> None:
         with pytest.raises(LpInvalidValueError):
             parser.update_constraint_rhs("c1", float("nan"))

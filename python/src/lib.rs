@@ -318,6 +318,7 @@ impl LpParser {
 
     /// Remove an objective
     fn remove_objective(&mut self, objective_name: String) -> PyResult<()> {
+        require_name("objective_name", &objective_name)?;
         let problem = &mut self.problem;
         problem.remove_objective(&objective_name).map_err(|err| to_py_err("Failed to remove objective", err))?;
 
@@ -352,6 +353,7 @@ impl LpParser {
 
     /// Remove a constraint
     fn remove_constraint(&mut self, constraint_name: String) -> PyResult<()> {
+        require_name("constraint_name", &constraint_name)?;
         let problem = &mut self.problem;
         problem.remove_constraint(&constraint_name).map_err(|err| to_py_err("Failed to remove constraint", err))?;
 
@@ -375,6 +377,7 @@ impl LpParser {
     /// `free` is a bound, not a kind: it makes the variable continuous with
     /// bounds `(-inf, +inf)`.
     fn update_variable_type(&mut self, variable_name: String, var_type: String) -> PyResult<()> {
+        require_name("variable_name", &variable_name)?;
         let problem = &mut self.problem;
 
         // Parse the variable type string
@@ -409,6 +412,7 @@ impl LpParser {
 
     /// Remove a variable from all objectives and constraints
     fn remove_variable(&mut self, variable_name: String) -> PyResult<()> {
+        require_name("variable_name", &variable_name)?;
         let problem = &mut self.problem;
         problem.remove_variable(&variable_name).map_err(|err| to_py_err("Failed to remove variable", err))?;
 
@@ -506,6 +510,16 @@ fn to_py_err(context: &str, err: CoreError) -> PyErr {
         CoreError::MissingSection { .. } | CoreError::ParseError { .. } => LpParseError::new_err(message),
         CoreError::IoError { .. } => PyOSError::new_err(message),
     }
+}
+
+/// Reject an empty name at the binding boundary with `LpInvalidValueError`,
+/// before it reaches core methods that treat a non-empty name as a
+/// precondition.
+fn require_name(field: &str, value: &str) -> PyResult<()> {
+    if value.is_empty() {
+        return Err(LpInvalidValueError::new_err(format!("{field} must not be empty")));
+    }
+    Ok(())
 }
 
 /// Raise an I/O failure as `OSError`. Given an OS error code, Python's
