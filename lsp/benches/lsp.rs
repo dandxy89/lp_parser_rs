@@ -324,5 +324,27 @@ fn medium(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(lsp, large_file, long_line, many, medium);
+fn small(c: &mut Criterion) {
+    let mut group = c.benchmark_group("constraints_15k");
+    group.sample_size(10).warm_up_time(Duration::from_secs(1)).measurement_time(Duration::from_secs(10));
+
+    group.bench_function("format_on_type_enter", |b| {
+        // Enter pressed at the end of a constraint near the middle of a model
+        // small enough (under 1 MiB) to be laid out and re-parsed.
+        let base = many_constraints(15_000);
+        let line = base.lines.line_of(base.text.len() / 2);
+        let end = base.lines.line_range(&base.text, line).end;
+        let mut text = base.text.clone();
+        text.insert(end, '\n');
+        let doc = document(text);
+        assert!(doc.text.len() <= format::ON_TYPE_REFORMAT_MAX_BYTES, "laid out on Enter");
+        let position = tower_lsp_server::ls_types::Position::new(u32::try_from(line + 1).expect("line fits"), 0);
+        let settings = FormatSettings::default();
+        b.iter(|| format::format_on_type(black_box(&doc), position, "\n", &settings));
+    });
+
+    group.finish();
+}
+
+criterion_group!(lsp, large_file, long_line, many, medium, small);
 criterion_main!(lsp);
