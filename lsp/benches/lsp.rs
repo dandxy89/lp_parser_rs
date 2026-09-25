@@ -310,5 +310,19 @@ fn many(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(lsp, large_file, long_line, many);
+fn medium(c: &mut Criterion) {
+    let mut group = c.benchmark_group("constraints_50k");
+    group.sample_size(10).warm_up_time(Duration::from_secs(1)).measurement_time(Duration::from_secs(10));
+
+    group.bench_function("symbol_index_build", |b| {
+        // Below the parallel threshold (~2.5 MB): built on one thread after every edit.
+        let doc = many_constraints(50_000);
+        assert_eq!(lp_lsp::index::workers(doc.text.len()), 1, "built on one thread");
+        b.iter(|| SymbolIndex::build(black_box(&doc.tree), black_box(&doc.text)));
+    });
+
+    group.finish();
+}
+
+criterion_group!(lsp, large_file, long_line, many, medium);
 criterion_main!(lsp);
