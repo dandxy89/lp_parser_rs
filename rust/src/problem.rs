@@ -2051,6 +2051,21 @@ End";
         assert_eq!(p.constraint_count(), 2);
     }
 
+    /// A range needs both operators pointing the same way: `lo <= expr <= hi`
+    /// or `hi >= expr >= lo`. Mixed directions and `=` have no range meaning.
+    #[test]
+    fn test_ranged_constraint_rejects_mixed_or_equality_operators() {
+        for body in ["c1: 2 <= x >= 10", "c1: 10 >= x <= 2", "c1: 2 = x <= 5", "c1: 2 <= x = 5", "c1: 2 = x = 2", "c1: 2 < x > 1"] {
+            let input = format!("minimize\nobj: x\nsubject to\n{body}\nend");
+            assert!(LpProblem::parse(&input).is_err(), "'{body}' must be rejected");
+        }
+        // Strict and non-strict of the same direction may be mixed.
+        for body in ["c1: 2 < x <= 10", "c1: 10 >= x > 2"] {
+            let input = format!("minimize\nobj: x\nsubject to\n{body}\nend");
+            assert_eq!(LpProblem::parse(&input).unwrap().constraint_count(), 2, "'{body}' must parse as a range");
+        }
+    }
+
     #[test]
     fn test_backslash_comment_inside_token_stream() {
         // Per CPLEX, `\` starts a comment anywhere on a line, even glued to a name.

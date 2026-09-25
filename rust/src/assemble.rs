@@ -416,6 +416,21 @@ fn checked_rhs(rhs: f64, position: usize) -> Result<f64, LexerError> {
     Ok(rhs)
 }
 
+/// Check that `op1` and `op2` form a range, `lo op1 expr op2 hi`: both must
+/// point the same way (`<`/`<=` or `>`/`>=`). An `=` or a mix of directions
+/// (`2 <= x >= 10`) states no range.
+fn check_range_operators(op1: ComparisonOp, op2: ComparisonOp, position: usize) -> Result<(), LexerError> {
+    let same_direction = matches!(
+        (op1, op2),
+        (ComparisonOp::LT | ComparisonOp::LTE, ComparisonOp::LT | ComparisonOp::LTE)
+            | (ComparisonOp::GT | ComparisonOp::GTE, ComparisonOp::GT | ComparisonOp::GTE)
+    );
+    if same_direction {
+        return Ok(());
+    }
+    Err(err(position, "a ranged constraint needs both operators in the same direction ('lo <= expr <= hi' or 'hi >= expr >= lo')"))
+}
+
 /// Flip a comparison operator for moving it to the other side of a relation.
 const fn flip(op: ComparisonOp) -> ComparisonOp {
     match op {
@@ -511,8 +526,9 @@ fn assemble_body<'input>(
             }
             i = next;
 
-            if let Some(&(_, Elem::Op(op2))) = elems.get(i) {
+            if let Some(&(op2_loc, Elem::Op(op2))) = elems.get(i) {
                 // Ranged: lhs.constant op1 mid op2 rhs
+                check_range_operators(op1, op2, op2_loc)?;
                 i += 1;
                 let (rhs, next) = parse_signed_number(elems, i, "range bound")?;
                 i = next;
