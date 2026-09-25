@@ -257,6 +257,14 @@ fn indicator_errors() {
     assert!(LpProblem::parse_mps(&format!("{base}RANGES\n RNG c1 2\nINDICATORS\n IF c1 b 1\nENDATA\n")).is_err());
     assert!(LpProblem::parse_mps(&format!("{base}INDICATORS\n IF nope b 1\nENDATA\n")).is_err());
     assert!(LpProblem::parse_mps(&format!("{base}INDICATORS\n IF c1 b 2\nENDATA\n")).is_err());
+    // A row may carry one indicator, and cannot also be quadratic.
+    assert!(LpProblem::parse_mps(&format!("{base}INDICATORS\n IF c1 b 1\n IF c1 b 0\nENDATA\n")).is_err());
+    assert!(LpProblem::parse_mps(&format!("{base}QCMATRIX c1\n x x 1\nINDICATORS\n IF c1 b 1\nENDATA\n")).is_err());
+    // An indicator on a lazy row is found in its bucket.
+    let lazy = "NAME t\nROWS\n N obj\nLAZYCONS\n L c1\nCOLUMNS\n x obj 1 c1 1\n b obj 1\nRHS\n RHS c1 4\n";
+    let problem = LpProblem::parse_mps(&format!("{lazy}INDICATORS\n IF c1 b 1\nENDATA\n")).unwrap();
+    let c1 = problem.name_id("c1").unwrap();
+    assert!(matches!(problem.constraints[&c1], Constraint::Indicator { .. }));
 }
 
 #[test]
@@ -392,6 +400,8 @@ fn mps_quadratic_sections_follow_their_conventions() {
     assert!(LpProblem::parse_mps(&format!("{base}QCMATRIX nope\n x x 1\nENDATA\n")).is_err());
     assert!(LpProblem::parse_mps(&format!("{base}RANGES\n RNG c1 2\nQCMATRIX c1\n x x 1\nENDATA\n")).is_err());
     assert!(LpProblem::parse_mps(&format!("{base}QUADOBJ\n x x\nENDATA\n")).is_err());
+    // A row may have only one QCMATRIX section.
+    assert!(LpProblem::parse_mps(&format!("{base}QCMATRIX c1\n x x 1\nQCMATRIX c1\n y y 1\nENDATA\n")).is_err());
 }
 
 #[test]

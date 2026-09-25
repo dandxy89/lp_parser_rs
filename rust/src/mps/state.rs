@@ -50,6 +50,8 @@ pub(super) struct MpsParseState<'input> {
     objective_quadratic: Vec<RawQuadraticTerm<'input>>,
     // QCMATRIX entries per row (with the header's line number), in file order.
     constraint_quadratic: Vec<(&'input str, usize, Vec<RawQuadraticTerm<'input>>)>,
+    /// Rows already given a `QCMATRIX` section (duplicate detection).
+    constraint_quadratic_rows: FxHashSet<&'input str>,
 
     // INDICATORS section data: (row, indicator column, active value, line)
     indicators: Vec<(&'input str, &'input str, bool, usize)>,
@@ -80,6 +82,7 @@ impl<'input> MpsParseState<'input> {
             current_sos_weights: Vec::new(),
             objective_quadratic: Vec::new(),
             constraint_quadratic: Vec::new(),
+            constraint_quadratic_rows: FxHashSet::default(),
             indicators: Vec::new(),
             has_rows: false,
             has_columns: false,
@@ -162,7 +165,7 @@ impl<'input> MpsParseState<'input> {
                     }
                     Some(_) => {}
                 }
-                if self.constraint_quadratic.iter().any(|(r, ..)| *r == row) {
+                if !self.constraint_quadratic_rows.insert(row) {
                     return Err(LpParseError::parse_error(line_num, format!("row '{row}' has more than one QCMATRIX section")));
                 }
                 self.constraint_quadratic.push((row, line_num, Vec::new()));
@@ -347,8 +350,16 @@ impl<'input> MpsParseState<'input> {
         let objectives = build_objectives(&self.objective_rows, &self.columns, &self.rhs_values);
         let mut constraints =
             build_constraints(&self.row_types, &self.row_order, &self.row_classes, &self.columns, &self.rhs_values, &self.range_values);
-        apply_indicators(&mut constraints, &self.indicators, &self.range_values)?;
-        apply_constraint_quadratics(&mut constraints, self.constraint_quadratic, &self.range_values)?;
+        // Locate every row the INDICATORS / QCMATRIX sections name in one
+        // pass, rather than a linear scan per entry. Rewriting a row in place
+        // keeps its position, so one index serves both passes.
+        let positions = if self.indicators.is_empty() && self.constraint_quadratic.is_empty() {
+            FxHashMap::default()
+        } else {
+            locate_rows(&constraints, self.indicators.iter().map(|&(row, ..)| row).chain(self.constraint_quadratic_rows.iter().copied()))
+        };
+        apply_indicators(&mut constraints, &positions, &self.indicators, &self.range_values)?;
+        apply_constraint_quadratics(&mut constraints, &positions, self.constraint_quadratic, &self.range_values)?;
         let mut objectives = objectives;
         if !self.objective_quadratic.is_empty() {
             // MPS has one objective row; its quadratic part belongs to it.
@@ -390,6 +401,31 @@ impl<'input> MpsParseState<'input> {
     }
 }
 
+/// Position of a constraint: its bucket (see
+/// [`ClassifiedConstraints::slot_mut`](super::builders::ClassifiedConstraints))
+/// and its index within that bucket.
+type RowPositions<'input> = FxHashMap<&'input str, (usize, usize)>;
+
+/// Map each of the `wanted` row names to the position of the first
+/// constraint carrying that name, in a single pass over `constraints`. Names
+/// with no matching constraint are absent from the result.
+fn locate_rows<'input>(
+    constraints: &super::builders::ClassifiedConstraints<'input>,
+    wanted: impl Iterator<Item = &'input str>,
+) -> RowPositions<'input> {
+    let mut found: FxHashMap<&'input str, Option<(usize, usize)>> = wanted.map(|row| (row, None)).collect();
+    for (bucket_idx, bucket) in constraints.buckets().into_iter().enumerate() {
+        for (idx, constraint) in bucket.iter().enumerate() {
+            if let Some(slot) = found.get_mut(constraint.name())
+                && slot.is_none()
+            {
+                *slot = Some((bucket_idx, idx));
+            }
+        }
+    }
+    found.into_iter().filter_map(|(row, position)| position.map(|p| (row, p))).collect()
+}
+
 /// Turn each row named in the `INDICATORS` section into an indicator
 /// constraint whose linear part is that row.
 ///
@@ -399,6 +435,7 @@ impl<'input> MpsParseState<'input> {
 /// indicator constrains exactly one) or a row given two indicators.
 fn apply_indicators<'input>(
     constraints: &mut super::builders::ClassifiedConstraints<'input>,
+    positions: &RowPositions<'input>,
     indicators: &[(&'input str, &'input str, bool, usize)],
     range_values: &FxHashMap<&'input str, f64>,
 ) -> LpResult<()> {
@@ -410,11 +447,10 @@ fn apply_indicators<'input>(
         if range_values.contains_key(row) {
             return Err(LpParseError::parse_error(line_num, format!("indicator row '{row}' cannot have a RANGES entry")));
         }
-        let slot = [&mut constraints.normal, &mut constraints.lazy, &mut constraints.user_cuts]
-            .into_iter()
-            .flat_map(|bucket| bucket.iter_mut())
-            .find(|c| c.name() == row)
-            .ok_or_else(|| LpParseError::parse_error(line_num, format!("INDICATORS references unknown row '{row}'")))?;
+        let &position =
+            positions.get(row).ok_or_else(|| LpParseError::parse_error(line_num, format!("INDICATORS references unknown row '{row}'")))?;
+        let slot = constraints.slot_mut(position);
+        debug_assert!(slot.name() == row, "row position index must point at the named row");
         let RawConstraint::Standard { name, coefficients, operator, rhs, byte_offset } = slot else {
             return Err(LpParseError::parse_error(line_num, format!("row '{row}' cannot take an indicator")));
         };
@@ -439,6 +475,7 @@ fn apply_indicators<'input>(
 /// `QCMATRIX` section with no entries.
 fn apply_constraint_quadratics<'input>(
     constraints: &mut super::builders::ClassifiedConstraints<'input>,
+    positions: &RowPositions<'input>,
     quadratics: Vec<(&'input str, usize, Vec<RawQuadraticTerm<'input>>)>,
     range_values: &FxHashMap<&'input str, f64>,
 ) -> LpResult<()> {
@@ -449,11 +486,10 @@ fn apply_constraint_quadratics<'input>(
         if range_values.contains_key(row) {
             return Err(LpParseError::parse_error(line_num, format!("quadratic row '{row}' cannot have a RANGES entry")));
         }
-        let slot = [&mut constraints.normal, &mut constraints.lazy, &mut constraints.user_cuts]
-            .into_iter()
-            .flat_map(|bucket| bucket.iter_mut())
-            .find(|c| c.name() == row)
-            .ok_or_else(|| LpParseError::parse_error(line_num, format!("QCMATRIX references unknown row '{row}'")))?;
+        let &position =
+            positions.get(row).ok_or_else(|| LpParseError::parse_error(line_num, format!("QCMATRIX references unknown row '{row}'")))?;
+        let slot = constraints.slot_mut(position);
+        debug_assert!(slot.name() == row, "row position index must point at the named row");
         let RawConstraint::Standard { name, coefficients, operator, rhs, byte_offset } = slot else {
             return Err(LpParseError::parse_error(line_num, format!("row '{row}' cannot be both an indicator and quadratic")));
         };
