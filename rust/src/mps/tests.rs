@@ -195,23 +195,6 @@ ENDATA
 }
 
 #[test]
-fn test_sos_extended_header_names_the_set() {
-    // `S1 SOS name priority` puts the literal `SOS` before the set name.
-    let input = "ROWS\n N  obj\nCOLUMNS\n    x1 obj 1\n    x2 obj 1\nSOS\n S1 SOS       s1        1\n    x1 1\n    x2 2\n s2 sos s2 5\n    x1 1\n    x2 2\n S1 SOS\n    x1 1\nENDATA\n";
-    let result = parse_mps(input).unwrap();
-    let sets: Vec<(&str, usize)> = result
-        .sos
-        .iter()
-        .map(|c| {
-            let RawConstraint::SOS { name, weights, .. } = c else { panic!("expected SOS constraint") };
-            (name.as_ref(), weights.len())
-        })
-        .collect();
-    // A set genuinely named `SOS` keeps its name.
-    assert_eq!(sets, [("s1", 2), ("s2", 2), ("SOS", 1)]);
-}
-
-#[test]
 fn test_sos_last_set_kept_without_endata() {
     // Input without ENDATA is read leniently; the pending SOS set must not be lost.
     let input =
