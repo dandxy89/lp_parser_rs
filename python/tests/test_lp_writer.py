@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -200,3 +201,21 @@ class TestLpModificationErrors:
         parser = LpParser(str(simple_lp_file))
         parser.update_objective_coefficient("OBJ", "x1", 5.0)
         assert parser.objectives[0]["coefficients"][0]["value"] == 5.0
+
+
+class TestConcurrentWrites:
+    """Writers, diff and analyze release the GIL; concurrent calls on one
+    parser must still agree with a single-threaded call."""
+
+    def test_concurrent_calls_match_serial(self, afiro_lp_file: Path) -> None:
+        parser = LpParser(afiro_lp_file)
+        other = LpParser(afiro_lp_file)
+
+        def call(_: int) -> tuple[str, str, object, object]:
+            mps = parser.to_mps_string(allow_multiple_objectives=True)
+            return (parser.to_lp_string(), mps, parser.diff(other), parser.analyze())
+
+        expected = call(0)
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            results = list(pool.map(call, range(16)))
+        assert all(result == expected for result in results)
