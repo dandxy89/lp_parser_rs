@@ -167,5 +167,59 @@ fn long_line(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(lsp, large_file, long_line);
+/// A model of `n` constraints over `n` variables (about 50 bytes each), each
+/// variable bounded.
+fn many_constraints(n: usize) -> Document {
+    debug_assert!(n >= 1);
+    let mut text = String::with_capacity(n * 64 + 64);
+    text.push_str("Minimize\n obj: x0 + x1\nSubject To\n");
+    for i in 0..n {
+        let (b, c) = ((i * 7 + 3) % n, (i * 13 + 11) % n);
+        put(&mut text, format_args!(" c{i}: {}.5 x{i} + {} x{b} - x{c} >= {}\n", i % 9 + 1, i % 5 + 2, i % 100));
+    }
+    text.push_str("Bounds\n");
+    for v in 0..n {
+        put(&mut text, format_args!(" x{v} <= {}\n", v % 1000 + 1));
+    }
+    text.push_str("End\n");
+    document(text)
+}
+
+/// [`many_constraints`] with 200k constraints (~10 MB), parsed once.
+fn constraints_200k() -> &'static Document {
+    static DOC: OnceLock<Document> = OnceLock::new();
+    DOC.get_or_init(|| many_constraints(200_000))
+}
+
+fn many(c: &mut Criterion) {
+    let mut group = c.benchmark_group("constraints_200k");
+    group.sample_size(10).warm_up_time(Duration::from_secs(1)).measurement_time(Duration::from_secs(10));
+
+    group.bench_function("apply_changes_1000_edits", |b| {
+        // One `didChange` carrying 1000 single-character insertions, each a
+        // line further down from the middle (ranges refer to the text after
+        // the previous change).
+        let doc = constraints_200k();
+        let first = doc.lines.line_of(doc.text.len() / 2);
+        let changes: Vec<TextDocumentContentChangeEvent> = (0..1000u32)
+            .map(|k| {
+                let position = tower_lsp_server::ls_types::Position::new(u32::try_from(first).expect("line fits") + k, 1);
+                let range = tower_lsp_server::ls_types::Range::new(position, position);
+                TextDocumentContentChangeEvent { range: Some(range), range_length: None, text: "d".to_owned() }
+            })
+            .collect();
+        b.iter_batched(
+            || doc.clone(),
+            |mut doc| {
+                doc.apply_changes(&changes, 2);
+                doc
+            },
+            BatchSize::PerIteration,
+        );
+    });
+
+    group.finish();
+}
+
+criterion_group!(lsp, large_file, long_line, many);
 criterion_main!(lsp);
