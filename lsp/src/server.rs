@@ -477,7 +477,7 @@ fn capabilities(pull_diagnostics: bool, encoding: Encoding) -> ServerCapabilitie
             resolve_provider: Some(true),
             ..Default::default()
         })),
-        code_lens_provider: Some(CodeLensOptions { resolve_provider: Some(false) }),
+        code_lens_provider: Some(CodeLensOptions { resolve_provider: Some(true) }),
         document_formatting_provider: Some(OneOf::Left(true)),
         document_range_formatting_provider: Some(OneOf::Left(true)),
         document_on_type_formatting_provider: Some(DocumentOnTypeFormattingOptions {
@@ -878,6 +878,15 @@ impl LanguageServer for Backend {
     async fn code_lens(&self, params: CodeLensParams) -> Result<Option<Vec<CodeLens>>> {
         let doc = self.document_or_error(&params.text_document.uri)?;
         self.run(move || Some(code_lens::lenses(&doc))).await
+    }
+
+    async fn code_lens_resolve(&self, lens: CodeLens) -> Result<CodeLens> {
+        let uri: Uri = code_lens::uri(&lens)
+            .map_err(Error::invalid_params)?
+            .parse()
+            .map_err(|e| Error::invalid_params(format!("invalid document URI: {e}")))?;
+        let doc = self.document_or_error(&uri)?;
+        self.run(move || code_lens::resolve(&doc, lens)).await?.map_err(Error::invalid_params)
     }
 
     async fn formatting(&self, params: DocumentFormattingParams) -> Result<Option<Vec<TextEdit>>> {
