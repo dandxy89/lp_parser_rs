@@ -546,7 +546,8 @@ fn build_columns<'p>(
 }
 
 /// Write the `COLUMNS` section, wrapping integer/general/binary variables in
-/// `'MARKER'` `INTORG`/`INTEND` blocks.
+/// `'MARKER'` `INTORG`/`INTEND` blocks. Consecutive integer columns share one
+/// block: markers are written only where the column kind changes.
 fn write_columns_section(
     output: &mut String,
     problem: &LpProblem,
@@ -555,28 +556,32 @@ fn write_columns_section(
 ) -> std::fmt::Result {
     writeln!(output, "COLUMNS")?;
 
+    let mut in_block = false;
     for (name_id, variable) in &problem.variables {
         let entries = columns.get(name_id).map_or([].as_slice(), Vec::as_slice);
         if entries.is_empty() {
             // No row references this variable and it doesn't need a marker
             // block: nothing to emit (it is still registered via BOUNDS).
+            debug_assert!(!needs_marker(variable.kind), "integer columns always get at least one entry");
             continue;
         }
 
         let var_name = problem.resolve(*name_id);
         let wrap = needs_marker(variable.kind);
 
-        if wrap {
-            writeln!(output, "    MARKER                 'MARKER'                 'INTORG'")?;
+        if wrap != in_block {
+            let marker = if wrap { "INTORG" } else { "INTEND" };
+            writeln!(output, "    MARKER                 'MARKER'                 '{marker}'")?;
+            in_block = wrap;
         }
         for &(row_name, value) in entries {
             write!(output, "    {var_name:<10} {row_name:<10} ")?;
             write_number(output, value, options.decimal_precision)?;
             writeln!(output)?;
         }
-        if wrap {
-            writeln!(output, "    MARKER                 'MARKER'                 'INTEND'")?;
-        }
+    }
+    if in_block {
+        writeln!(output, "    MARKER                 'MARKER'                 'INTEND'")?;
     }
 
     Ok(())
@@ -1103,6 +1108,37 @@ mod tests {
             assert_eq!(*operator, ComparisonOp::LTE);
         } else {
             panic!("expected Standard constraint");
+        }
+    }
+
+    #[test]
+    fn test_consecutive_integer_columns_share_one_marker_block() {
+        let input = "\
+Minimize
+ obj: a + b + c + d + e
+Subject To
+ c1: a + b + c + d + e >= 1
+Bounds
+ a <= 5
+ b <= 5
+ d <= 5
+ e <= 5
+Generals
+ a b d
+Binaries
+ e
+End
+";
+        let problem = LpProblem::parse(input).unwrap();
+        let output = write_mps_string(&problem).unwrap();
+        // a, b integer | c continuous | d, e integer: two blocks, not four.
+        assert_eq!(output.matches("'INTORG'").count(), 2, "{output}");
+        assert_eq!(output.matches("'INTEND'").count(), 2, "{output}");
+
+        let reparsed = LpProblem::parse_mps(&output).unwrap();
+        for (name, integral) in [("a", true), ("b", true), ("c", false), ("d", true), ("e", true)] {
+            let variable = &reparsed.variables[&reparsed.name_id(name).unwrap()];
+            assert_eq!(variable.kind.is_integer(), integral, "{name}: {:?}", variable.kind);
         }
     }
 
