@@ -12,8 +12,8 @@ use std::sync::{Arc, Once, OnceLock};
 use std::time::Duration;
 
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
-use lp_lsp::config::{FormatSettings, InlayHintSettings};
-use lp_lsp::features::{code_action, code_lens, completion, folding, format, inlay, semantic_tokens};
+use lp_lsp::config::{Config, FormatSettings, InlayHintSettings};
+use lp_lsp::features::{code_action, code_lens, completion, diagnostics, folding, format, inlay, semantic_tokens};
 use lp_lsp::{Document, Encoding, SymbolIndex, semantic, syntax};
 use lp_parser_rs::analysis::AnalysisConfig;
 use tower_lsp_server::ls_types::{CodeActionContext, TextDocumentContentChangeEvent, Uri};
@@ -268,6 +268,15 @@ fn many(c: &mut Criterion) {
         let range = tower_lsp_server::ls_types::Range::new(at, at);
         let context = CodeActionContext::default();
         b.iter(|| code_action::actions(black_box(doc), range, &context, true));
+    });
+
+    group.bench_function("diagnostics", |b| {
+        // Diagnostics for a clean model before the semantic pass: what a
+        // pull-mode client asks for after every edit.
+        let doc = constraints_200k();
+        doc.build_index();
+        let config = Config::default();
+        b.iter(|| diagnostics::compute(black_box(doc), &config));
     });
 
     group.bench_function("folding_ranges", |b| {
