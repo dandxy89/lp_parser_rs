@@ -470,17 +470,27 @@ pub fn render_constraint_detail(
     render_panel(frame, area, detail_title("Constraint", &entry.name, Some(entry.kind), true, area.width), lines, border_style, scroll)
 }
 
-/// Build the content lines of an objective detail panel.
-///
-/// `viewport` is the `(scroll, area)` the panel will be drawn into; when given,
-/// `Line`s are only built for the coefficient rows actually visible. `None`
-/// builds them all, which is what the plain-text yank needs.
+/// Build the content lines of an objective detail panel, with every
+/// coefficient row present (the plain-text yank).
 pub fn build_objective_detail(
     entry: &ObjectiveDiffEntry,
     cached_rows: Option<&[crate::detail_model::CoefficientRow]>,
     interner: &NameInterner,
-    viewport: Option<(u16, Rect)>,
 ) -> Vec<Line<'static>> {
+    objective_detail_lines(entry, cached_rows, interner, None).lines
+}
+
+/// The content of an objective detail panel.
+///
+/// `viewport` is the `(scroll, area)` the panel will be drawn into; when given,
+/// `Line`s are only built for the coefficient rows actually visible. `None`
+/// builds them all.
+fn objective_detail_lines(
+    entry: &ObjectiveDiffEntry,
+    cached_rows: Option<&[crate::detail_model::CoefficientRow]>,
+    interner: &NameInterner,
+    viewport: Option<(u16, Rect)>,
+) -> PanelLines {
     let t = theme();
     let mut lines: Vec<Line<'static>> = Vec::new();
 
@@ -497,8 +507,8 @@ pub fn build_objective_detail(
 
     lines.push(Line::from(Span::styled("  Coefficients:", muted().add_modifier(Modifier::BOLD))));
 
+    let window = viewport.map(|(scroll, area)| coeff_visible_range(scroll, area, lines.len()));
     if entry.kind == DiffKind::Modified {
-        let window = viewport.map(|(scroll, area)| coeff_visible_range(scroll, area, lines.len()));
         render_coeff_changes(
             &mut lines,
             &entry.coeff_changes,
@@ -509,20 +519,17 @@ pub fn build_objective_detail(
             viewport.map(|(_, area)| area.width),
             interner,
         );
+        // `render_coeff_changes` pads the rows outside the window with
+        // placeholders, so nothing is left out.
+        let total = lines.len();
+        PanelLines { lines, skipped: 0, total }
     } else {
         let coeffs = if entry.kind == DiffKind::Added { &entry.new_coefficients } else { &entry.old_coefficients };
-        let colour = kind_colour(entry.kind);
-        let name_w = name_column_width(longest_coefficient_name(coeffs, interner), viewport.map(|(_, area)| area.width), VALUE_COLUMN);
-        for c in coeffs {
-            let name = interner.resolve(c.name);
-            lines.push(Line::from(vec![
-                Span::styled(name_cell(name, name_w), Style::default().fg(colour)),
-                Span::styled(format!("{}", c.value), Style::default().fg(colour)),
-            ]));
-        }
+        let style = Style::default().fg(kind_colour(entry.kind));
+        let total = lines.len() + coeffs.len();
+        let skipped = push_coefficient_rows(&mut lines, coeffs, interner, viewport.map(|(_, area)| area.width), style, window);
+        PanelLines { lines, skipped, total }
     }
-
-    lines
 }
 
 /// Push the objective's constant and quadratic part, when they matter: the
@@ -589,8 +596,15 @@ pub fn render_objective_detail(
     if area.width == 0 || area.height == 0 {
         return 0;
     }
-    let lines = build_objective_detail(entry, cached_rows, interner, Some((scroll, area)));
-    render_panel(frame, area, detail_title("Objective", &entry.name, Some(entry.kind), true, area.width), lines, border_style, scroll)
+    let content = objective_detail_lines(entry, cached_rows, interner, Some((scroll, area)));
+    render_windowed_panel(
+        frame,
+        area,
+        detail_title("Objective", &entry.name, Some(entry.kind), true, area.width),
+        content,
+        border_style,
+        scroll,
+    )
 }
 
 /// Build the neutral header line for a yanked inspect detail panel: entity
@@ -629,8 +643,22 @@ pub fn render_inspect_variable(frame: &mut Frame, area: Rect, entry: &VariableDi
 /// Build the content lines of an inspect (single-file) constraint detail panel:
 /// operator, RHS, and coefficients (or SOS type and weights), neutrally coloured.
 pub fn build_inspect_constraint(entry: &ConstraintDiffEntry, interner: &NameInterner, pane_width: Option<u16>) -> Vec<Line<'static>> {
+    inspect_constraint_lines(entry, interner, pane_width, None).lines
+}
+
+/// The content of an inspect constraint panel, windowed to `viewport` when
+/// given (see [`objective_detail_lines`]).
+fn inspect_constraint_lines(
+    entry: &ConstraintDiffEntry,
+    interner: &NameInterner,
+    pane_width: Option<u16>,
+    viewport: Option<(u16, Rect)>,
+) -> PanelLines {
     let t = theme();
     let mut lines: Vec<Line<'static>> = Vec::new();
+    let mut skipped = 0;
+    // Set by the branches with rows: the height with every row present.
+    let mut total = None;
 
     // Source location (inspect builds the model on the `new`/file-2 side).
     if let Some(line) = entry.line_file2.or(entry.line_file1) {
@@ -644,13 +672,17 @@ pub fn build_inspect_constraint(entry: &ConstraintDiffEntry, interner: &NameInte
             lines.push(Line::from(vec![Span::styled("  RHS:      ", muted()), Span::styled(format!("{rhs}"), text())]));
             lines.push(Line::from(""));
             lines.push(Line::from(Span::styled("  Coefficients:", muted().add_modifier(Modifier::BOLD))));
-            render_inspect_coefficients(&mut lines, coefficients, interner, pane_width);
+            let window = viewport.map(|(scroll, area)| coeff_visible_range(scroll, area, lines.len()));
+            total = Some(lines.len() + coefficients.len());
+            skipped = push_coefficient_rows(&mut lines, coefficients, interner, pane_width, text(), window);
         }
         ConstraintDiffDetail::AddedOrRemoved(ResolvedConstraint::Sos { sos_type, weights }) => {
             lines.push(Line::from(vec![Span::styled("  SOS Type: ", muted()), Span::styled(format!("{sos_type}"), text())]));
             lines.push(Line::from(""));
             lines.push(Line::from(Span::styled("  Weights:", muted().add_modifier(Modifier::BOLD))));
-            render_inspect_coefficients(&mut lines, weights, interner, pane_width);
+            let window = viewport.map(|(scroll, area)| coeff_visible_range(scroll, area, lines.len()));
+            total = Some(lines.len() + weights.len());
+            skipped = push_coefficient_rows(&mut lines, weights, interner, pane_width, text(), window);
         }
         // Inspect always diffs against an empty base, so every constraint is an
         // AddedOrRemoved single-side entry; other variants cannot occur.
@@ -660,7 +692,8 @@ pub fn build_inspect_constraint(entry: &ConstraintDiffEntry, interner: &NameInte
         }
     }
 
-    lines
+    let total = total.unwrap_or(lines.len());
+    PanelLines { lines, skipped, total }
 }
 
 /// Render an inspect (single-file) constraint detail panel. Returns the total content line count.
@@ -675,17 +708,30 @@ pub fn render_inspect_constraint(
     if area.width == 0 || area.height == 0 {
         return 0;
     }
-    let lines = build_inspect_constraint(entry, interner, Some(area.width));
-    render_panel(frame, area, detail_title("Constraint", &entry.name, None, false, area.width), lines, border_style, scroll)
+    let content = inspect_constraint_lines(entry, interner, Some(area.width), Some((scroll, area)));
+    render_windowed_panel(frame, area, detail_title("Constraint", &entry.name, None, false, area.width), content, border_style, scroll)
 }
 
 /// Build the content lines of an inspect (single-file) objective detail panel:
 /// coefficients, neutral.
 pub fn build_inspect_objective(entry: &ObjectiveDiffEntry, interner: &NameInterner, pane_width: Option<u16>) -> Vec<Line<'static>> {
+    inspect_objective_lines(entry, interner, pane_width, None).lines
+}
+
+/// The content of an inspect objective panel, windowed to `viewport` when
+/// given (see [`objective_detail_lines`]).
+fn inspect_objective_lines(
+    entry: &ObjectiveDiffEntry,
+    interner: &NameInterner,
+    pane_width: Option<u16>,
+    viewport: Option<(u16, Rect)>,
+) -> PanelLines {
     let mut lines: Vec<Line<'static>> = Vec::new();
     lines.push(Line::from(Span::styled("  Coefficients:", muted().add_modifier(Modifier::BOLD))));
-    render_inspect_coefficients(&mut lines, &entry.new_coefficients, interner, pane_width);
-    lines
+    let window = viewport.map(|(scroll, area)| coeff_visible_range(scroll, area, lines.len()));
+    let total = lines.len() + entry.new_coefficients.len();
+    let skipped = push_coefficient_rows(&mut lines, &entry.new_coefficients, interner, pane_width, text(), window);
+    PanelLines { lines, skipped, total }
 }
 
 /// Render an inspect (single-file) objective detail panel. Returns the total content line count.
@@ -700,22 +746,58 @@ pub fn render_inspect_objective(
     if area.width == 0 || area.height == 0 {
         return 0;
     }
-    let lines = build_inspect_objective(entry, interner, Some(area.width));
-    render_panel(frame, area, detail_title("Objective", &entry.name, None, false, area.width), lines, border_style, scroll)
+    let content = inspect_objective_lines(entry, interner, Some(area.width), Some((scroll, area)));
+    render_windowed_panel(frame, area, detail_title("Objective", &entry.name, None, false, area.width), content, border_style, scroll)
 }
 
-/// Append neutral `name  value` rows for a resolved coefficient/weight list.
-fn render_inspect_coefficients(
+/// Append `name  value` rows in `style` for a resolved coefficient/weight
+/// list: all of them, or only those in `window` (`(first, count)`, as from
+/// [`coeff_visible_range`]). Returns how many rows before the window were left
+/// out.
+fn push_coefficient_rows(
     lines: &mut Vec<Line<'static>>,
     coefficients: &[ResolvedCoefficient],
     interner: &NameInterner,
     pane_width: Option<u16>,
-) {
+    style: Style,
+    window: Option<(usize, usize)>,
+) -> usize {
     let name_w = name_column_width(longest_coefficient_name(coefficients, interner), pane_width, VALUE_COLUMN);
-    for coeff in coefficients {
+    let (first, count) = window.unwrap_or((0, coefficients.len()));
+    let skipped = first.min(coefficients.len());
+    for coeff in coefficients.iter().skip(skipped).take(count) {
         let name = interner.resolve(coeff.name);
-        lines.push(Line::from(vec![Span::styled(name_cell(name, name_w), text()), Span::styled(format!("{}", coeff.value), text())]));
+        lines.push(Line::from(vec![Span::styled(name_cell(name, name_w), style), Span::styled(format!("{}", coeff.value), style)]));
     }
+    skipped
+}
+
+/// Detail-panel content windowed to the viewport: the header lines and the
+/// coefficient rows in view, with `skipped` rows left out between the two.
+struct PanelLines {
+    lines: Vec<Line<'static>>,
+    /// Rows left out ahead of the first one in `lines` after the header.
+    skipped: usize,
+    /// Content height as if every row were present, for the scroll bound.
+    total: usize,
+}
+
+/// [`render_panel`] for windowed content: the rows left out above the window
+/// stand in for that much of the scroll. Returns the total content line count.
+fn render_windowed_panel(
+    frame: &mut Frame,
+    area: Rect,
+    title: Line<'static>,
+    content: PanelLines,
+    border_style: Style,
+    scroll: u16,
+) -> usize {
+    debug_assert!(content.skipped <= usize::from(scroll), "only rows scrolled past are left out");
+    debug_assert!(content.lines.len() + content.skipped <= content.total, "the window cannot hold more than the content");
+    #[allow(clippy::cast_possible_truncation)] // skipped <= scroll, a u16
+    let local_scroll = scroll - content.skipped as u16;
+    render_panel(frame, area, title, content.lines, border_style, local_scroll);
+    content.total
 }
 
 /// Render a side-by-side old/new coefficient comparison for modified
@@ -1152,7 +1234,68 @@ fn render_panel(frame: &mut Frame, area: Rect, title: Line<'static>, lines: Vec<
 
 #[cfg(test)]
 mod tests {
+    use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
+
     use super::*;
+
+    /// The windowed renderers must draw exactly what rendering every line and
+    /// scrolling the paragraph would, at every scroll offset.
+    #[test]
+    fn windowed_panels_match_the_full_render_at_every_scroll() {
+        let terms: Vec<String> = (0..300).map(|i| format!("{} x{i:03}", i + 1)).collect();
+        let source = format!("min\nobj: {}\nst\nc1: {} >= 2\nend\n", terms.join(" + "), terms.join(" + "));
+        let app = crate::snapshot_tests::inspect_app_from(&source);
+        let interner = &app.report.interner;
+        let objective = &app.report.objectives.entries[0];
+        let constraint = &app.report.constraints.entries[0];
+        let area = Rect::new(0, 0, 60, 20);
+        let draw = |f: &dyn Fn(&mut Frame)| {
+            let mut terminal = Terminal::new(TestBackend::new(area.width, area.height)).expect("test terminal must build");
+            terminal.draw(|frame| f(frame)).expect("draw must succeed");
+            terminal.backend().buffer().clone()
+        };
+        let style = Style::default();
+
+        for scroll in [0_u16, 1, 2, 3, 4, 5, 17, 150, 290, 300] {
+            let windowed = draw(&|frame| {
+                render_inspect_objective(frame, area, objective, style, scroll, interner);
+            });
+            let full = draw(&|frame| {
+                let title = detail_title("Objective", &objective.name, None, false, area.width);
+                render_panel(frame, area, title, build_inspect_objective(objective, interner, Some(area.width)), style, scroll);
+            });
+            assert_eq!(windowed, full, "inspect objective differs at scroll {scroll}");
+
+            let windowed = draw(&|frame| {
+                render_inspect_constraint(frame, area, constraint, style, scroll, interner);
+            });
+            let full = draw(&|frame| {
+                let title = detail_title("Constraint", &constraint.name, None, false, area.width);
+                render_panel(frame, area, title, build_inspect_constraint(constraint, interner, Some(area.width)), style, scroll);
+            });
+            assert_eq!(windowed, full, "inspect constraint differs at scroll {scroll}");
+        }
+
+        // A diff-mode objective present on one side only.
+        let diff = crate::snapshot_tests::diff_app_from(&source, &source.replace("obj:", "renamed_obj:"));
+        let interner = &diff.report.interner;
+        let removed = diff.report.objectives.entries.iter().find(|e| e.kind == DiffKind::Removed).expect("obj is removed");
+        for scroll in [0_u16, 1, 2, 150, 300] {
+            let windowed = draw(&|frame| {
+                render_objective_detail(frame, area, removed, style, scroll, None, interner);
+            });
+            let full = draw(&|frame| {
+                // A viewport tall enough to hold every row: the same pane width, no window.
+                let everything = Rect::new(0, 0, area.width, u16::MAX);
+                let content = objective_detail_lines(removed, None, interner, Some((0, everything)));
+                assert_eq!(content.lines.len(), content.total, "every row is built");
+                let title = detail_title("Objective", &removed.name, Some(removed.kind), true, area.width);
+                render_panel(frame, area, title, content.lines, style, scroll);
+            });
+            assert_eq!(windowed, full, "removed objective differs at scroll {scroll}");
+        }
+    }
 
     #[test]
     fn unified_columns_keep_the_badge_in_narrow_panes() {

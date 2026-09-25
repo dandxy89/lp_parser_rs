@@ -168,7 +168,8 @@ fn bench_detail(c: &mut Criterion) {
 
     // Diff mode, modified everywhere: the windowed unified and side-by-side views.
     let mut app = diff_app(&big_lp("obj", 1.0), &big_lp("obj", 2.0));
-    for (section, label) in [(Section::Objectives, "diff_objective_modified_200k"), (Section::Constraints, "diff_constraint_modified_200k")] {
+    for (section, label) in [(Section::Objectives, "diff_objective_modified_200k"), (Section::Constraints, "diff_constraint_modified_200k")]
+    {
         app.set_section(section);
         draw(&mut terminal, &mut app);
         group.bench_function(label, |b| b.iter(|| draw(black_box(&mut terminal), black_box(&mut app))));
