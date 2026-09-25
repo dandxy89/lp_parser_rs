@@ -727,37 +727,40 @@ fn write_expression(
     interner: &NameInterner,
     options: &LpWriterOptions,
 ) -> std::fmt::Result {
-    const CONTINUATION_INDENT: &str = "        ";
+    const CONTINUATION_INDENT: &str = "\n        ";
     let mut current_line_length: usize = 0;
-    let mut piece = String::new();
     let mut pieces_written = 0usize;
-    let mut emit = |output: &mut String, piece: &str| {
-        if current_line_length + piece.len() > options.max_line_length && pieces_written > 0 {
-            output.push('\n');
-            output.push_str(CONTINUATION_INDENT);
-            current_line_length = CONTINUATION_INDENT.len();
+    // Each piece is written straight into `output` from `start`; once its
+    // real width is known, a line break is inserted in front of it if it
+    // would overflow the line. Inserting shifts only the piece itself.
+    let mut place = |output: &mut String, start: usize| {
+        debug_assert!(start <= output.len(), "a piece starts within the output");
+        let piece_len = output.len() - start;
+        if current_line_length + piece_len > options.max_line_length && pieces_written > 0 {
+            output.insert_str(start, CONTINUATION_INDENT);
+            // The newline starts the continuation line; only the indent counts.
+            current_line_length = CONTINUATION_INDENT.len() - 1;
         }
-        output.push_str(piece);
-        current_line_length += piece.len();
+        current_line_length += piece_len;
         pieces_written += 1;
     };
 
     for (i, coeff) in coefficients.iter().enumerate() {
         let var_name = interner.resolve(coeff.name);
-
-        // Format into a scratch buffer so wrapping decisions use the real width.
-        piece.clear();
-        write_formatted_coefficient(&mut piece, var_name, coeff.value, i == 0, options.decimal_precision)?;
-        emit(output, &piece);
+        let start = output.len();
+        write_formatted_coefficient(output, var_name, coeff.value, i == 0, options.decimal_precision)?;
+        place(output, start);
     }
 
     if quadratic.is_empty() {
         return Ok(());
     }
     let scale = if block == QuadraticBlock::Halved { 2.0 } else { 1.0 };
-    emit(output, if coefficients.is_empty() { "[" } else { " + [" });
+    let start = output.len();
+    output.push_str(if coefficients.is_empty() { "[" } else { " + [" });
+    place(output, start);
     for (i, term) in quadratic.iter().enumerate() {
-        piece.clear();
+        let start = output.len();
         let product = if term.is_square() {
             format!("{} ^ 2", interner.resolve(term.var1))
         } else {
@@ -765,12 +768,14 @@ fn write_expression(
         };
         // A leading space separates the first term from the opening bracket.
         if i == 0 {
-            piece.push(' ');
+            output.push(' ');
         }
-        write_formatted_coefficient(&mut piece, &product, term.coefficient * scale, i == 0, options.decimal_precision)?;
-        emit(output, &piece);
+        write_formatted_coefficient(output, &product, term.coefficient * scale, i == 0, options.decimal_precision)?;
+        place(output, start);
     }
-    emit(output, if block == QuadraticBlock::Halved { " ] / 2" } else { " ]" });
+    let start = output.len();
+    output.push_str(if block == QuadraticBlock::Halved { " ] / 2" } else { " ]" });
+    place(output, start);
     Ok(())
 }
 
