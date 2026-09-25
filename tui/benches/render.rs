@@ -210,5 +210,45 @@ fn bench_overlays(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, bench_detail, bench_overlays);
+/// Two LPs with `ROWS` constraints of `WIDTH_TERMS` terms each, every
+/// coefficient changed between them, so every constraint is modified.
+fn many_modified_rows() -> (String, String) {
+    const ROWS: u32 = 50_000;
+    const WIDTH_TERMS: u32 = 20;
+    let model = |scale: u32| {
+        let mut text = String::from("Minimize\n obj: x0\nSubject To\n");
+        for row in 0..ROWS {
+            write!(text, " r{row:05}: ").expect("writing to a String cannot fail");
+            for term in 0..WIDTH_TERMS {
+                let sep = if term == 0 { "" } else { " + " };
+                let coefficient = (row * 7 + term * scale) % 101 + 1;
+                write!(text, "{sep}{coefficient} x{}", (row + term) % 1_000).expect("writing to a String cannot fail");
+            }
+            text.push_str(" >= 1\n");
+        }
+        text.push_str("End\n");
+        text
+    };
+    (model(1), model(3))
+}
+
+fn bench_sort(c: &mut Criterion) {
+    let (base, changed) = many_modified_rows();
+    let app = diff_app(&base, &changed);
+    let entries = &app.report.constraints.entries;
+    let all: Vec<usize> = (0..entries.len()).collect();
+    let mut group = c.benchmark_group("sort");
+    for (label, relative) in [("constraints_50k_abs_delta", false), ("constraints_50k_rel_delta", true)] {
+        group.bench_function(label, |b| {
+            b.iter_batched_ref(
+                || all.clone(),
+                |indices| diff_model::sort_indices_by_delta(black_box(entries), indices, relative),
+                criterion::BatchSize::LargeInput,
+            );
+        });
+    }
+    group.finish();
+}
+
+criterion_group!(benches, bench_detail, bench_overlays, bench_sort);
 criterion_main!(benches);
