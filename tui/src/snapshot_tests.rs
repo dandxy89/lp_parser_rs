@@ -415,6 +415,32 @@ fn side_by_side_last_coefficient_is_reachable_at_full_scroll() {
     assert!(frame_contains(&terminal, "v59"), "the last coefficient must be visible at maximum scroll");
 }
 
+/// Regression: the detail scroll offset was a `u16`, so nothing past line
+/// 65,535 of a panel could ever be shown.
+#[test]
+fn detail_rows_past_line_65535_are_reachable() {
+    const TERMS: u32 = 70_000;
+    let terms = |scale: u32| (0..TERMS).map(|i| format!("{} v{i:05}", i % 7 * scale + 1)).collect::<Vec<_>>().join(" + ");
+    let last = format!("v{:05}", TERMS - 1);
+
+    let mut app = inspect_app_from(&format!("min\nobj: {}\nst\nc1: v00000 >= 1\nend\n", terms(1)));
+    app.set_section(Section::Objectives);
+    render(&mut app, 100, 30);
+    assert!(app.max_detail_scroll() > usize::from(u16::MAX), "fixture: the panel is taller than a u16 can scroll");
+    app.detail_scroll = app.max_detail_scroll();
+    assert!(frame_contains(&render(&mut app, 100, 30), &last), "the last inspect row must be visible at maximum scroll");
+
+    // The side-by-side view of a modified constraint.
+    let mut app = diff_app_from(
+        &format!("min\nobj: v00000\nst\nc1: {} >= 2\nend\n", terms(1)),
+        &format!("min\nobj: v00000\nst\nc1: {} >= 2\nend\n", terms(2)),
+    );
+    app.set_section(Section::Constraints);
+    render(&mut app, 100, 30);
+    app.detail_scroll = app.max_detail_scroll();
+    assert!(frame_contains(&render(&mut app, 100, 30), &last), "the last side-by-side row must be visible at maximum scroll");
+}
+
 /// Regression: `j` grew the solve overlay's scroll offset without bound, so
 /// over-scrolling left a blank pane that `k` had to climb back out of.
 #[test]

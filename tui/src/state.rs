@@ -407,7 +407,7 @@ pub struct JumpEntry {
     /// index: re-sorting, `ignore_order`, a tolerance change or a watch reload
     /// all move entries, and the jump must land on the same one.
     pub entry_name: Option<String>,
-    pub detail_scroll: u16,
+    pub detail_scroll: usize,
     pub filter: DiffFilter,
 }
 

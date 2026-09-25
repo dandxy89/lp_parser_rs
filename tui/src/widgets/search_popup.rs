@@ -210,7 +210,7 @@ fn draw_detail_preview(frame: &mut Frame, area: Rect, app: &App) {
 
     let selected = app.search_popup.selected.min(app.search_popup.results.len().saturating_sub(1));
     let result = &app.search_popup.results[selected];
-    let scroll = app.search_popup.scroll;
+    let scroll = usize::from(app.search_popup.scroll);
     // Inspect mode previews through the neutral single-model renderers so no
     // diff badge or added/removed colouring leaks into the pop-up.
     let inspect = app.mode == crate::state::AppMode::Inspect;

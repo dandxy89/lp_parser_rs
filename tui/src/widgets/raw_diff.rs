@@ -20,7 +20,7 @@ pub fn draw_raw_diff(
     area: Rect,
     old_text: Option<&str>,
     new_text: Option<&str>,
-    scroll: u16,
+    scroll: usize,
     border_style: Style,
 ) -> usize {
     let block = panel_block(border_style)
@@ -35,20 +35,26 @@ pub fn draw_raw_diff(
     // Split into two columns with a 1-char divider.
     let chunks = Layout::horizontal([Constraint::Percentage(50), Constraint::Length(1), Constraint::Percentage(50)]).split(inner);
 
-    let left_lines = build_column_lines(old_text, "File 1");
-    let right_lines = build_column_lines(new_text, "File 2");
+    let mut left_lines = build_column_lines(old_text, "File 1");
+    let mut right_lines = build_column_lines(new_text, "File 2");
 
     let max_lines = left_lines.len().max(right_lines.len());
 
+    // Scrolled by dropping lines from the front rather than by `Paragraph`'s
+    // `u16` offset, which would cap the view at line 65,535.
+    for lines in [&mut left_lines, &mut right_lines] {
+        lines.drain(..scroll.min(lines.len()));
+    }
+
     // Render left column.
-    let left_para = Paragraph::new(left_lines).scroll((scroll, 0));
+    let left_para = Paragraph::new(left_lines);
     frame.render_widget(left_para, chunks[0]);
 
     // Render divider.
     render_divider(frame, chunks[1], inner.height);
 
     // Render right column.
-    let right_para = Paragraph::new(right_lines).scroll((scroll, 0));
+    let right_para = Paragraph::new(right_lines);
     frame.render_widget(right_para, chunks[2]);
 
     max_lines

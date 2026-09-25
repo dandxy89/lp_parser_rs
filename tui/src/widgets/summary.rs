@@ -182,14 +182,14 @@ fn inspect_value_row(lines: &mut Vec<Line<'static>>, label: &str, value: &str) {
 ///
 /// Uses O(visible) windowed rendering instead of cloning all lines into a `Paragraph`.
 /// Returns the total content line count.
-pub fn draw_summary(frame: &mut Frame, area: Rect, cached_lines: &[Line<'static>], scroll: u16) -> usize {
+pub fn draw_summary(frame: &mut Frame, area: Rect, cached_lines: &[Line<'static>], scroll: usize) -> usize {
     // A zero-sized area is an environmental condition (shrunken terminal), not a
     // programming error: drawing into it is a no-op.
     if area.width == 0 || area.height == 0 {
         return 0;
     }
     let line_count = cached_lines.len();
-    let skip = scroll as usize;
+    let skip = scroll;
     let visible = area.height as usize;
     let buf: &mut Buffer = frame.buffer_mut();
 

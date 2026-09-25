@@ -16,7 +16,7 @@ use crate::theme::theme;
 
 /// Optional detail scroll position for the status bar.
 pub struct DetailPosition {
-    pub scroll: u16,
+    pub scroll: usize,
     pub content_lines: usize,
 }
 
@@ -212,7 +212,7 @@ pub fn draw_status_bar(frame: &mut Frame, area: Rect, params: &StatusBarParams<'
     if let Some(position) = params.detail_position
         && position.content_lines > 0
     {
-        let top_line = (position.scroll as usize).min(position.content_lines) + 1;
+        let top_line = position.scroll.min(position.content_lines) + 1;
         segments.push(vec![Span::styled(format!("L{top_line}/{}", position.content_lines), Style::default().fg(t.accent))]);
     }
 
