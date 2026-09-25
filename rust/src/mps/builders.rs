@@ -14,7 +14,8 @@ use crate::model::{ComparisonOp, ConstraintClass, VariableType};
 /// Iterates only the row's nonzero entries (pre-sorted by column index in
 /// `MpsParseState::build_result`) instead of probing every (row, column) pair.
 fn row_coefficients<'input>(columns: &ColumnsState<'input>, row_name: &'input str) -> Vec<RawCoefficient<'input>> {
-    columns.row_entries.get(row_name).map_or_else(Vec::new, |entries| {
+    let entries = columns.row_slots.get(row_name).and_then(|&slot| columns.row_entries.get(slot as usize));
+    entries.map_or_else(Vec::new, |entries| {
         debug_assert!(entries.windows(2).all(|w| w[0].0 < w[1].0), "row entries must be sorted by column index without duplicates");
         entries.iter().map(|&(_, var_name, value)| RawCoefficient { name: var_name, value }).collect()
     })
