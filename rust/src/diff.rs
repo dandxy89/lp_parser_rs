@@ -32,7 +32,10 @@
 //! # Ok::<(), lp_parser_rs::LpParseError>(())
 //! ```
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::borrow::Cow;
+use std::hash::Hash;
+
+use rustc_hash::FxHashMap;
 
 use crate::error::{LpParseError, LpResult};
 use crate::interner::NameId;
@@ -177,17 +180,159 @@ impl LpProblem {
     }
 }
 
-/// Build a coefficient map keyed by canonical (normalised) variable name.
-fn coeff_map(problem: &LpProblem, coeffs: &[Coefficient], normalise: Normaliser) -> BTreeMap<String, f64> {
-    coeffs.iter().map(|c| (normalise(problem.resolve(c.name)), c.value)).collect()
+/// Maps a name to its canonical form: through the caller's normaliser when
+/// one is set, otherwise the name itself, borrowed without allocating.
+#[derive(Clone, Copy)]
+struct Canon<'a>(Option<Normaliser<'a>>);
+
+impl Canon<'_> {
+    fn name(self, name: &str) -> Cow<'_, str> {
+        match self.0 {
+            Some(normalise) => Cow::Owned(normalise(name)),
+            None => Cow::Borrowed(name),
+        }
+    }
+}
+
+/// Canonical name -> position in the owning `IndexMap`. A later entry with
+/// the same canonical name replaces an earlier one.
+type CanonIndex<'p> = FxHashMap<Cow<'p, str>, usize>;
+
+/// Index the names yielded by `names` (in `IndexMap` order) by canonical name.
+fn canon_index<'p>(problem: &'p LpProblem, names: impl Iterator<Item = NameId>, canon: Canon) -> CanonIndex<'p> {
+    names.enumerate().map(|(position, id)| (canon.name(problem.resolve(id)), position)).collect()
+}
+
+/// Canonical names split by which side has them, each list sorted (as a
+/// `BTreeSet` would order them), borrowed from the indexes' keys.
+struct NameSplit<'n> {
+    /// Names only in the first problem.
+    removed: Vec<&'n str>,
+    /// Names in both problems.
+    common: Vec<&'n str>,
+    /// Names only in the second problem.
+    added: Vec<&'n str>,
+}
+
+impl<'n> NameSplit<'n> {
+    /// Split the keys of `old` and `new`. Each name is sorted once, in the
+    /// list it belongs to, rather than sorting both sides whole.
+    fn new(old: &'n CanonIndex<'_>, new: &'n CanonIndex<'_>) -> Self {
+        let mut removed = Vec::new();
+        let mut common = Vec::with_capacity(old.len().min(new.len()));
+        for name in old.keys() {
+            if new.contains_key(name) { common.push(name.as_ref()) } else { removed.push(name.as_ref()) }
+        }
+        let mut added: Vec<&str> = new.keys().filter(|name| !old.contains_key(*name)).map(AsRef::as_ref).collect();
+        // Keys are unique, so an unstable sort gives the one sorted order.
+        removed.sort_unstable();
+        common.sort_unstable();
+        added.sort_unstable();
+        debug_assert!(removed.len() + common.len() == old.len() && added.len() + common.len() == new.len(), "every name lands in one list");
+        Self { removed, common, added }
+    }
+}
+
+/// Owned copies of `names`, for the result.
+fn owned(names: &[&str]) -> Vec<String> {
+    names.iter().map(|name| (*name).to_string()).collect()
+}
+
+/// Counts linear coefficient differences between rows of `p1` and `p2`,
+/// reusing its buffers across rows.
+struct LinearComparer<'p1, 'p2, 'c> {
+    p1: &'p1 LpProblem,
+    p2: &'p2 LpProblem,
+    canon: Canon<'c>,
+    tol: DiffTol,
+    old: Vec<(Cow<'p1, str>, f64)>,
+    new: Vec<(Cow<'p2, str>, f64)>,
+}
+
+impl<'p1, 'p2, 'c> LinearComparer<'p1, 'p2, 'c> {
+    const fn new(p1: &'p1 LpProblem, p2: &'p2 LpProblem, canon: Canon<'c>, tol: DiffTol) -> Self {
+        Self { p1, p2, canon, tol, old: Vec::new(), new: Vec::new() }
+    }
+
+    /// Count coefficients that changed value, were removed, or were added,
+    /// matching them by canonical variable name. A later coefficient on the
+    /// same canonical name replaces an earlier one.
+    ///
+    /// Equivalent to building a name -> value map of each side and comparing
+    /// the maps, but sorts two reused buffers and merges them instead.
+    fn count(&mut self, old: &[Coefficient], new: &[Coefficient]) -> usize {
+        if let Some(diffs) = self.count_aligned(old, new) {
+            return diffs;
+        }
+        sorted_by_name(&mut self.old, self.p1, old, self.canon);
+        sorted_by_name(&mut self.new, self.p2, new, self.canon);
+        let (a, b) = (&self.old, &self.new);
+        let (mut i, mut j, mut diffs) = (0, 0, 0);
+        while i < a.len() && j < b.len() {
+            match a[i].0.cmp(&b[j].0) {
+                std::cmp::Ordering::Less => {
+                    diffs += 1;
+                    i += 1;
+                }
+                std::cmp::Ordering::Greater => {
+                    diffs += 1;
+                    j += 1;
+                }
+                std::cmp::Ordering::Equal => {
+                    if self.tol.differ(a[i].1, b[j].1) {
+                        diffs += 1;
+                    }
+                    i += 1;
+                    j += 1;
+                }
+            }
+        }
+        diffs + (a.len() - i) + (b.len() - j)
+    }
+
+    /// Fast path for the common case of a row whose variables are listed in
+    /// the same order on both sides: count the changed values position by
+    /// position. Returns `None` when that would not match [`Self::count`]:
+    /// with a normaliser (distinct names may merge), when the names differ
+    /// in order or number, or when a name repeats (only its last value
+    /// counts). Without a normaliser, equal names within one problem are
+    /// equal ids, so repeats are found by comparing ids.
+    fn count_aligned(&self, old: &[Coefficient], new: &[Coefficient]) -> Option<usize> {
+        const MAX_ALIGNED_LEN: usize = 16;
+        if self.canon.0.is_some() || old.len() != new.len() || old.len() > MAX_ALIGNED_LEN {
+            return None;
+        }
+        let aligned = old.iter().zip(new).all(|(a, b)| self.p1.resolve(a.name) == self.p2.resolve(b.name));
+        let repeats = old.iter().enumerate().any(|(i, a)| old[..i].iter().any(|earlier| earlier.name == a.name));
+        (aligned && !repeats).then(|| old.iter().zip(new).filter(|(a, b)| self.tol.differ(a.value, b.value)).count())
+    }
+}
+
+/// Fill `buffer` with `coeffs` keyed by canonical name, sorted by name with
+/// one entry per name holding the value of its last occurrence.
+fn sorted_by_name<'p>(buffer: &mut Vec<(Cow<'p, str>, f64)>, problem: &'p LpProblem, coeffs: &[Coefficient], canon: Canon) {
+    buffer.clear();
+    buffer.extend(coeffs.iter().map(|c| (canon.name(problem.resolve(c.name)), c.value)));
+    // Stable, so repeats of a name stay in their original order...
+    buffer.sort_by(|x, y| x.0.cmp(&y.0));
+    // ...and the first of each run, which is kept, takes the last value.
+    buffer.dedup_by(|later, kept| {
+        if later.0 == kept.0 {
+            kept.1 = later.1;
+            true
+        } else {
+            false
+        }
+    });
+    debug_assert!(buffer.windows(2).all(|w| w[0].0 < w[1].0), "names must be strictly increasing after dedup");
 }
 
 /// Build a quadratic-term map keyed by the canonical (normalised, sorted)
 /// variable pair, so `x * y` and `y * x` match. Repeated pairs are summed.
-fn quad_map(problem: &LpProblem, terms: &[QuadraticTerm], normalise: Normaliser) -> BTreeMap<String, f64> {
-    let mut map = BTreeMap::new();
+fn quad_map(problem: &LpProblem, terms: &[QuadraticTerm], canon: Canon) -> FxHashMap<String, f64> {
+    let mut map = FxHashMap::default();
     for term in terms {
-        let (a, b) = (normalise(problem.resolve(term.var1)), normalise(problem.resolve(term.var2)));
+        let (a, b) = (canon.name(problem.resolve(term.var1)), canon.name(problem.resolve(term.var2)));
         let key = if a <= b { format!("{a}*{b}") } else { format!("{b}*{a}") };
         *map.entry(key).or_insert(0.0) += term.coefficient;
     }
@@ -195,7 +340,7 @@ fn quad_map(problem: &LpProblem, terms: &[QuadraticTerm], normalise: Normaliser)
 }
 
 /// Count coefficients that changed value, were removed, or were added.
-fn count_coeff_diffs(m1: &BTreeMap<String, f64>, m2: &BTreeMap<String, f64>, tol: DiffTol) -> usize {
+fn count_coeff_diffs<K: Hash + Eq>(m1: &FxHashMap<K, f64>, m2: &FxHashMap<K, f64>, tol: DiffTol) -> usize {
     let mut diffs = 0usize;
     for (k, v1) in m1 {
         match m2.get(k) {
@@ -212,18 +357,20 @@ fn count_coeff_diffs(m1: &BTreeMap<String, f64>, m2: &BTreeMap<String, f64>, tol
 fn diff_modified_constraints(
     p1: &LpProblem,
     p2: &LpProblem,
-    ccons1: &HashMap<String, NameId>,
-    ccons2: &HashMap<String, NameId>,
-    common: &[String],
-    normalise: Normaliser,
+    ccons1: &CanonIndex<'_>,
+    ccons2: &CanonIndex<'_>,
+    common: &[&str],
+    canon: Canon,
     tol: DiffTol,
 ) -> Vec<(String, Vec<String>)> {
     let mut modified = Vec::new();
-    for name in common {
-        let c1 = &p1.constraints[&ccons1[name]];
-        let c2 = &p2.constraints[&ccons2[name]];
+    let mut linear = LinearComparer::new(p1, p2, canon, tol);
+    for &name in common {
+        let (id1, c1) = p1.constraints.get_index(ccons1[name]).expect("canonical index holds positions of existing constraints");
+        let (id2, c2) = p2.constraints.get_index(ccons2[name]).expect("canonical index holds positions of existing constraints");
+        debug_assert!(*id1 == c1.name() && *id2 == c2.name(), "constraints are keyed by their own name");
         let mut changes = Vec::new();
-        let (class1, class2) = (p1.constraint_class(ccons1[name]), p2.constraint_class(ccons2[name]));
+        let (class1, class2) = (p1.constraint_class(c1.name()), p2.constraint_class(c2.name()));
         if class1 != class2 {
             changes.push(format!("class {class1} -> {class2}"));
         }
@@ -238,7 +385,7 @@ fn diff_modified_constraints(
                 if tol.differ(*r1, *r2) {
                     changes.push(format!("rhs {r1} -> {r2}"));
                 }
-                let coef_diffs = count_coeff_diffs(&coeff_map(p1, cf1, normalise), &coeff_map(p2, cf2, normalise), tol);
+                let coef_diffs = linear.count(cf1, cf2);
                 if coef_diffs > 0 {
                     changes.push(format!("{coef_diffs} coefficient change(s)"));
                 }
@@ -247,7 +394,7 @@ fn diff_modified_constraints(
                 // Compare by resolved (normalised) member name: the two problems'
                 // NameIds come from different interners, and an SOS set's order is
                 // given by its weights, not by the order the members are listed in.
-                if t1 != t2 || count_coeff_diffs(&coeff_map(p1, w1, normalise), &coeff_map(p2, w2, normalise), tol) > 0 {
+                if t1 != t2 || linear.count(w1, w2) > 0 {
                     changes.push("SOS definition changed".to_string());
                 }
             }
@@ -255,7 +402,7 @@ fn diff_modified_constraints(
                 Constraint::Indicator { variable: v1, active_value: a1, coefficients: cf1, operator: op1, rhs: r1, .. },
                 Constraint::Indicator { variable: v2, active_value: a2, coefficients: cf2, operator: op2, rhs: r2, .. },
             ) => {
-                let (var1, var2) = (normalise(p1.resolve(*v1)), normalise(p2.resolve(*v2)));
+                let (var1, var2) = (canon.name(p1.resolve(*v1)), canon.name(p2.resolve(*v2)));
                 if var1 != var2 || a1 != a2 {
                     changes.push(format!("indicator {var1} = {} -> {var2} = {}", u8::from(*a1), u8::from(*a2)));
                 }
@@ -265,7 +412,7 @@ fn diff_modified_constraints(
                 if tol.differ(*r1, *r2) {
                     changes.push(format!("rhs {r1} -> {r2}"));
                 }
-                let coef_diffs = count_coeff_diffs(&coeff_map(p1, cf1, normalise), &coeff_map(p2, cf2, normalise), tol);
+                let coef_diffs = linear.count(cf1, cf2);
                 if coef_diffs > 0 {
                     changes.push(format!("{coef_diffs} coefficient change(s)"));
                 }
@@ -280,22 +427,22 @@ fn diff_modified_constraints(
                 if tol.differ(*r1, *r2) {
                     changes.push(format!("rhs {r1} -> {r2}"));
                 }
-                let coef_diffs = count_coeff_diffs(&coeff_map(p1, cf1, normalise), &coeff_map(p2, cf2, normalise), tol);
+                let coef_diffs = linear.count(cf1, cf2);
                 if coef_diffs > 0 {
                     changes.push(format!("{coef_diffs} coefficient change(s)"));
                 }
-                let quad_diffs = count_coeff_diffs(&quad_map(p1, q1, normalise), &quad_map(p2, q2, normalise), tol);
+                let quad_diffs = count_coeff_diffs(&quad_map(p1, q1, canon), &quad_map(p2, q2, canon), tol);
                 if quad_diffs > 0 {
                     changes.push(format!("{quad_diffs} quadratic term change(s)"));
                 }
             }
             (Constraint::General { resultant: r1, function: f1, .. }, Constraint::General { resultant: r2, function: f2, .. }) => {
-                changes.extend(general_constraint_change((p1, *r1, f1), (p2, *r2, f2), normalise, tol));
+                changes.extend(general_constraint_change((p1, *r1, f1), (p2, *r2, f2), canon, tol));
             }
             _ => changes.push(format!("constraint kind changed ({} <-> {})", constraint_kind(c1), constraint_kind(c2))),
         }
         if !changes.is_empty() {
-            modified.push((name.clone(), changes));
+            modified.push((name.to_string(), changes));
         }
     }
     modified
@@ -305,18 +452,18 @@ fn diff_modified_constraints(
 type GeneralSide<'a> = (&'a LpProblem, NameId, &'a GeneralFunction);
 
 /// Describe a change between two general constraints, if there is one.
-fn general_constraint_change(old: GeneralSide<'_>, new: GeneralSide<'_>, normalise: Normaliser, tol: DiffTol) -> Option<String> {
+fn general_constraint_change(old: GeneralSide<'_>, new: GeneralSide<'_>, canon: Canon, tol: DiffTol) -> Option<String> {
     let describe = |(p, resultant, function): GeneralSide<'_>| {
-        let args: Vec<String> = function.variables().iter().map(|v| normalise(p.resolve(*v))).collect();
+        let args: Vec<String> = function.variables().iter().map(|v| canon.name(p.resolve(*v)).into_owned()).collect();
         let constant = function.constant().map_or_else(String::new, |c| format!(", {c}"));
-        format!("{} = {} ({}{constant})", normalise(p.resolve(resultant)), function.keyword(), args.join(", "))
+        format!("{} = {} ({}{constant})", canon.name(p.resolve(resultant)), function.keyword(), args.join(", "))
     };
     let constants_differ = match (old.2.constant(), new.2.constant()) {
         (Some(a), Some(b)) => tol.differ(a, b),
         (a, b) => a.is_some() != b.is_some(),
     };
     let names = |(p, resultant, function): GeneralSide<'_>| -> Vec<String> {
-        std::iter::once(&resultant).chain(function.variables()).map(|v| normalise(p.resolve(*v))).collect()
+        std::iter::once(&resultant).chain(function.variables()).map(|v| canon.name(p.resolve(*v)).into_owned()).collect()
     };
     let structure_differs = old.2.keyword() != new.2.keyword() || names(old) != names(new);
     (structure_differs || constants_differ).then(|| format!("general constraint {} -> {}", describe(old), describe(new)))
@@ -337,17 +484,18 @@ const fn constraint_kind(constraint: &Constraint) -> &'static str {
 fn diff_modified_objectives(
     p1: &LpProblem,
     p2: &LpProblem,
-    cobjs1: &HashMap<String, NameId>,
-    cobjs2: &HashMap<String, NameId>,
-    common: &[String],
-    normalise: Normaliser,
+    cobjs1: &CanonIndex<'_>,
+    cobjs2: &CanonIndex<'_>,
+    common: &[&str],
+    canon: Canon,
     tol: DiffTol,
 ) -> Vec<(String, Vec<String>)> {
     let mut modified = Vec::new();
-    for name in common {
-        let o1 = &p1.objectives[&cobjs1[name]];
-        let o2 = &p2.objectives[&cobjs2[name]];
-        let coef_diffs = count_coeff_diffs(&coeff_map(p1, &o1.coefficients, normalise), &coeff_map(p2, &o2.coefficients, normalise), tol);
+    let mut linear = LinearComparer::new(p1, p2, canon, tol);
+    for &name in common {
+        let (_, o1) = p1.objectives.get_index(cobjs1[name]).expect("canonical index holds positions of existing objectives");
+        let (_, o2) = p2.objectives.get_index(cobjs2[name]).expect("canonical index holds positions of existing objectives");
+        let coef_diffs = linear.count(&o1.coefficients, &o2.coefficients);
         let mut changes = Vec::new();
         if coef_diffs > 0 {
             changes.push(format!("{coef_diffs} coefficient change(s)"));
@@ -355,7 +503,7 @@ fn diff_modified_objectives(
         if tol.differ(o1.constant, o2.constant) {
             changes.push(format!("constant: {} -> {}", o1.constant, o2.constant));
         }
-        let quad_diffs = count_coeff_diffs(&quad_map(p1, &o1.quadratic, normalise), &quad_map(p2, &o2.quadratic, normalise), tol);
+        let quad_diffs = count_coeff_diffs(&quad_map(p1, &o1.quadratic, canon), &quad_map(p2, &o2.quadratic, canon), tol);
         if quad_diffs > 0 {
             changes.push(format!("{quad_diffs} quadratic term change(s)"));
         }
@@ -376,7 +524,7 @@ fn diff_modified_objectives(
             }
         }
         if !changes.is_empty() {
-            modified.push((name.clone(), changes));
+            modified.push((name.to_string(), changes));
         }
     }
     modified
@@ -390,41 +538,30 @@ fn diff_modified_objectives(
 /// (sorted by canonical name) so callers can render stable output.
 #[must_use]
 // The paired 1/2-suffixed bindings are the domain language of a two-file diff.
-#[allow(clippy::similar_names)]
+// The only panics are the expects on positions taken from the same maps.
+#[allow(clippy::similar_names, clippy::missing_panics_doc)]
 pub fn compare(p1: &LpProblem, p2: &LpProblem, options: &DiffOptions) -> LpDiff {
-    let identity = |name: &str| name.to_string();
-    let normalise: Normaliser = options.normalise.unwrap_or(&identity);
+    let canon = Canon(options.normalise);
     let tol = options.tol;
 
-    let canon = |problem: &LpProblem, ids: Vec<NameId>| -> HashMap<String, NameId> {
-        ids.iter().map(|id| (normalise(problem.resolve(*id)), *id)).collect()
-    };
+    let cvars1 = canon_index(p1, p1.variables.keys().copied(), canon);
+    let cvars2 = canon_index(p2, p2.variables.keys().copied(), canon);
+    let ccons1 = canon_index(p1, p1.constraints.values().map(Constraint::name), canon);
+    let ccons2 = canon_index(p2, p2.constraints.values().map(Constraint::name), canon);
+    let cobjs1 = canon_index(p1, p1.objectives.keys().copied(), canon);
+    let cobjs2 = canon_index(p2, p2.objectives.keys().copied(), canon);
 
-    let cvars1 = canon(p1, p1.variables.keys().copied().collect());
-    let cvars2 = canon(p2, p2.variables.keys().copied().collect());
-    let ccons1: HashMap<String, NameId> = p1.constraints.values().map(|c| (normalise(p1.resolve(c.name())), c.name())).collect();
-    let ccons2: HashMap<String, NameId> = p2.constraints.values().map(|c| (normalise(p2.resolve(c.name())), c.name())).collect();
-    let cobjs1 = canon(p1, p1.objectives.keys().copied().collect());
-    let cobjs2 = canon(p2, p2.objectives.keys().copied().collect());
-
-    let set_of = |m: &HashMap<String, NameId>| -> BTreeSet<String> { m.keys().cloned().collect() };
-    let vars1 = set_of(&cvars1);
-    let vars2 = set_of(&cvars2);
-    let cons1 = set_of(&ccons1);
-    let cons2 = set_of(&ccons2);
-    let objs1 = set_of(&cobjs1);
-    let objs2 = set_of(&cobjs2);
-
-    // Sorted intersections keep modified-section output deterministic.
-    let cons_common: Vec<String> = cons1.intersection(&cons2).cloned().collect();
-    let objs_common: Vec<String> = objs1.intersection(&objs2).cloned().collect();
+    // Sorted name lists keep the output deterministic.
+    let vars = NameSplit::new(&cvars1, &cvars2);
+    let cons = NameSplit::new(&ccons1, &ccons2);
+    let objs = NameSplit::new(&cobjs1, &cobjs2);
 
     let mut vars_type_changed = Vec::new();
-    for name in vars1.intersection(&vars2) {
-        let v1 = &p1.variables[&cvars1[name]];
-        let v2 = &p2.variables[&cvars2[name]];
+    for &name in &vars.common {
+        let (_, v1) = p1.variables.get_index(cvars1[name]).expect("canonical index holds positions of existing variables");
+        let (_, v2) = p2.variables.get_index(cvars2[name]).expect("canonical index holds positions of existing variables");
         if v1.kind != v2.kind || bounds_differ(tol, v1, v2) {
-            vars_type_changed.push((name.clone(), format!("{:?}/{}", v1.kind, v1.bounds), format!("{:?}/{}", v2.kind, v2.bounds)));
+            vars_type_changed.push((name.to_string(), format!("{:?}/{}", v1.kind, v1.bounds), format!("{:?}/{}", v2.kind, v2.bounds)));
         }
     }
 
@@ -432,15 +569,15 @@ pub fn compare(p1: &LpProblem, p2: &LpProblem, options: &DiffOptions) -> LpDiff 
 
     LpDiff {
         sense_changed,
-        vars_added: vars2.difference(&vars1).cloned().collect(),
-        vars_removed: vars1.difference(&vars2).cloned().collect(),
+        vars_added: owned(&vars.added),
+        vars_removed: owned(&vars.removed),
         vars_type_changed,
-        cons_added: cons2.difference(&cons1).cloned().collect(),
-        cons_removed: cons1.difference(&cons2).cloned().collect(),
-        cons_modified: diff_modified_constraints(p1, p2, &ccons1, &ccons2, &cons_common, normalise, tol),
-        objs_added: objs2.difference(&objs1).cloned().collect(),
-        objs_removed: objs1.difference(&objs2).cloned().collect(),
-        objs_modified: diff_modified_objectives(p1, p2, &cobjs1, &cobjs2, &objs_common, normalise, tol),
+        cons_added: owned(&cons.added),
+        cons_removed: owned(&cons.removed),
+        cons_modified: diff_modified_constraints(p1, p2, &ccons1, &ccons2, &cons.common, canon, tol),
+        objs_added: owned(&objs.added),
+        objs_removed: owned(&objs.removed),
+        objs_modified: diff_modified_objectives(p1, p2, &cobjs1, &cobjs2, &objs.common, canon, tol),
     }
 }
 
@@ -458,6 +595,55 @@ fn bounds_differ(tol: DiffTol, v1: &Variable, v2: &Variable) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The map-based definition `LinearComparer::count` must agree with.
+    fn map_count(p1: &LpProblem, c1: &[Coefficient], p2: &LpProblem, c2: &[Coefficient], canon: Canon, tol: DiffTol) -> usize {
+        let map = |p: &LpProblem, c: &[Coefficient]| -> FxHashMap<String, f64> {
+            c.iter().map(|c| (canon.name(p.resolve(c.name)).into_owned(), c.value)).collect()
+        };
+        let (m1, m2) = (map(p1, c1), map(p2, c2));
+        m1.iter().filter(|(k, v)| m2.get(*k).is_none_or(|w| tol.differ(**v, *w))).count()
+            + m2.keys().filter(|k| !m1.contains_key(*k)).count()
+    }
+
+    #[test]
+    fn linear_comparer_matches_map_semantics() {
+        let mut p1 = LpProblem::new();
+        let mut p2 = LpProblem::new();
+        let names = ["x", "y", "z", "X", "x_1", "y_2", "w"];
+        let ids1: Vec<NameId> = names.iter().map(|n| p1.intern(n)).collect();
+        // Interned in reverse, so equal names have different ids on each side.
+        for name in names.iter().rev() {
+            p2.intern(name);
+        }
+        let id2 = |name: &str| p2.name_id(name).expect("known name");
+        let c = |id: NameId, value: f64| Coefficient { name: id, value };
+        let cases: Vec<(Vec<Coefficient>, Vec<Coefficient>)> = vec![
+            (vec![], vec![]),
+            (vec![c(ids1[0], 1.0)], vec![]),
+            (vec![], vec![c(id2("y"), 2.0)]),
+            (vec![c(ids1[0], 1.0), c(ids1[1], 2.0)], vec![c(id2("y"), 2.0), c(id2("x"), 1.5)]),
+            // Repeated names: the last value counts, on either side.
+            (vec![c(ids1[0], 1.0), c(ids1[0], 3.0), c(ids1[2], 1.0)], vec![c(id2("x"), 3.0), c(id2("z"), 1.0), c(id2("z"), 2.0)]),
+            (vec![c(ids1[4], 1.0), c(ids1[5], 2.0), c(ids1[6], 0.0)], vec![c(id2("x"), 1.0), c(id2("y"), 2.0), c(id2("w"), f64::NAN)]),
+            (vec![c(ids1[3], 1.0), c(ids1[0], 1.0)], vec![c(id2("X"), 1.0), c(id2("x"), 1.0), c(id2("x_1"), 1.0)]),
+            // Same names in the same order (the aligned fast path).
+            (vec![c(ids1[0], 1.0), c(ids1[1], 2.0), c(ids1[2], 3.0)], vec![c(id2("x"), 1.0), c(id2("y"), 2.5), c(id2("z"), 3.0)]),
+            (vec![c(ids1[4], 1.0), c(ids1[5], 2.0)], vec![c(id2("x_1"), 1.0), c(id2("y_2"), 2.0)]),
+            // Aligned but repeated: only the last value of `x` counts.
+            (vec![c(ids1[0], 1.0), c(ids1[0], 2.0)], vec![c(id2("x"), 2.0), c(id2("x"), 1.0)]),
+            (vec![c(ids1[0], 1.0), c(ids1[0], 2.0)], vec![c(id2("x"), 1.0), c(id2("x"), 2.0)]),
+        ];
+        let normalise = |name: &str| strip_index_suffix(&name.to_ascii_lowercase());
+        for canon in [Canon(None), Canon(Some(&normalise))] {
+            for tol in [DiffTol::default(), DiffTol { abs: 0.6, rel: 0.0 }] {
+                let mut linear = LinearComparer::new(&p1, &p2, canon, tol);
+                for (a, b) in &cases {
+                    assert_eq!(linear.count(a, b), map_count(&p1, a, &p2, b, canon, tol), "{a:?} vs {b:?}");
+                }
+            }
+        }
+    }
 
     /// Strip a trailing `_<digits>` suffix from a name (a volatile index).
     fn strip_index_suffix(name: &str) -> String {

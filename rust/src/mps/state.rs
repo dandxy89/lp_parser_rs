@@ -354,7 +354,7 @@ impl<'input> MpsParseState<'input> {
         // Sort each row's entries by column index so builders emit
         // coefficients in column order, matching the original file layout.
         for entries in self.columns.row_entries.values_mut() {
-            entries.sort_unstable_by_key(|&(col_idx, _)| col_idx);
+            entries.sort_unstable_by_key(|&(col_idx, _, _)| col_idx);
         }
 
         let objectives = build_objectives(&self.objective_rows, &self.columns, &self.rhs_values);

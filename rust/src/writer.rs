@@ -21,7 +21,6 @@
 use std::fmt::Write;
 
 use logos::Logos;
-use rustc_hash::FxHashSet;
 
 use crate::NUMERIC_EPSILON;
 use crate::error::{LpParseError, LpResult};
@@ -167,9 +166,20 @@ fn validate_lp_names(problem: &LpProblem, options: &LpWriterOptions) -> LpResult
         return Err(LpParseError::validation_error(format!("problem name {name:?} cannot be written to LP: it contains a line break")));
     }
 
-    let mut checked: FxHashSet<NameId> = FxHashSet::default();
-    let mut check =
-        |id: NameId, kind: &str| -> LpResult<()> { if checked.insert(id) { check_lp_name(problem.resolve(id), kind) } else { Ok(()) } };
+    // Ids are dense, so a flag per interned name replaces a hash set. An id
+    // outside the table (from another interner) is checked every time, and
+    // `resolve` rejects it exactly as before.
+    let mut checked = vec![false; problem.interner.len()];
+    let mut check = |id: NameId, kind: &str| -> LpResult<()> {
+        match checked.get_mut(id.index()) {
+            Some(true) => Ok(()),
+            Some(seen) => {
+                *seen = true;
+                check_lp_name(problem.resolve(id), kind)
+            }
+            None => check_lp_name(problem.resolve(id), kind),
+        }
+    };
     for id in problem.variables.keys() {
         check(*id, "variable")?;
     }
@@ -481,13 +491,16 @@ fn write_constraint(output: &mut String, constraint: &Constraint, interner: &Nam
                 // omission is reported by `omitted_expressions`.
                 return Ok(());
             }
-            write!(output, " {resolved_name}: ")?;
+            output.push(' ');
+            output.push_str(resolved_name);
+            output.push_str(": ");
 
             write_coefficients_line(output, coefficients, interner, options)?;
 
             write!(output, " {operator} ")?;
             write_number(output, *rhs, options.decimal_precision)?;
-            writeln!(output)
+            output.push('\n');
+            Ok(())
         }
         Constraint::General { name, resultant, function, .. } => {
             debug_assert!(!function.variables().is_empty(), "a general constraint has at least one variable argument");
@@ -714,37 +727,40 @@ fn write_expression(
     interner: &NameInterner,
     options: &LpWriterOptions,
 ) -> std::fmt::Result {
-    const CONTINUATION_INDENT: &str = "        ";
+    const CONTINUATION_INDENT: &str = "\n        ";
     let mut current_line_length: usize = 0;
-    let mut piece = String::new();
     let mut pieces_written = 0usize;
-    let mut emit = |output: &mut String, piece: &str| {
-        if current_line_length + piece.len() > options.max_line_length && pieces_written > 0 {
-            output.push('\n');
-            output.push_str(CONTINUATION_INDENT);
-            current_line_length = CONTINUATION_INDENT.len();
+    // Each piece is written straight into `output` from `start`; once its
+    // real width is known, a line break is inserted in front of it if it
+    // would overflow the line. Inserting shifts only the piece itself.
+    let mut place = |output: &mut String, start: usize| {
+        debug_assert!(start <= output.len(), "a piece starts within the output");
+        let piece_len = output.len() - start;
+        if current_line_length + piece_len > options.max_line_length && pieces_written > 0 {
+            output.insert_str(start, CONTINUATION_INDENT);
+            // The newline starts the continuation line; only the indent counts.
+            current_line_length = CONTINUATION_INDENT.len() - 1;
         }
-        output.push_str(piece);
-        current_line_length += piece.len();
+        current_line_length += piece_len;
         pieces_written += 1;
     };
 
     for (i, coeff) in coefficients.iter().enumerate() {
         let var_name = interner.resolve(coeff.name);
-
-        // Format into a scratch buffer so wrapping decisions use the real width.
-        piece.clear();
-        write_formatted_coefficient(&mut piece, var_name, coeff.value, i == 0, options.decimal_precision)?;
-        emit(output, &piece);
+        let start = output.len();
+        write_formatted_coefficient(output, var_name, coeff.value, i == 0, options.decimal_precision)?;
+        place(output, start);
     }
 
     if quadratic.is_empty() {
         return Ok(());
     }
     let scale = if block == QuadraticBlock::Halved { 2.0 } else { 1.0 };
-    emit(output, if coefficients.is_empty() { "[" } else { " + [" });
+    let start = output.len();
+    output.push_str(if coefficients.is_empty() { "[" } else { " + [" });
+    place(output, start);
     for (i, term) in quadratic.iter().enumerate() {
-        piece.clear();
+        let start = output.len();
         let product = if term.is_square() {
             format!("{} ^ 2", interner.resolve(term.var1))
         } else {
@@ -752,12 +768,14 @@ fn write_expression(
         };
         // A leading space separates the first term from the opening bracket.
         if i == 0 {
-            piece.push(' ');
+            output.push(' ');
         }
-        write_formatted_coefficient(&mut piece, &product, term.coefficient * scale, i == 0, options.decimal_precision)?;
-        emit(output, &piece);
+        write_formatted_coefficient(output, &product, term.coefficient * scale, i == 0, options.decimal_precision)?;
+        place(output, start);
     }
-    emit(output, if block == QuadraticBlock::Halved { " ] / 2" } else { " ]" });
+    let start = output.len();
+    output.push_str(if block == QuadraticBlock::Halved { " ] / 2" } else { " ]" });
+    place(output, start);
     Ok(())
 }
 
@@ -785,28 +803,23 @@ pub(crate) fn write_formatted_coefficient(
         Some(_) => (abs_value - 1.0).abs() < NUMERIC_EPSILON,
     };
 
+    // Plain `push_str` rather than `write!`: this runs once per term, and
+    // the formatting machinery dominated the writer's profile.
     if is_first {
         if value < 0.0 {
-            if is_one {
-                write!(output, "- {name}")
-            } else {
-                write!(output, "- ")?;
-                write_number(output, abs_value, precision)?;
-                write!(output, " {name}")
-            }
-        } else if is_one {
-            write!(output, "{name}")
-        } else {
-            write_number(output, abs_value, precision)?;
-            write!(output, " {name}")
+            output.push_str("- ");
         }
-    } else if is_one {
-        write!(output, " {sign} {name}")
     } else {
-        write!(output, " {sign} ")?;
-        write_number(output, abs_value, precision)?;
-        write!(output, " {name}")
+        output.push(' ');
+        output.push_str(sign);
+        output.push(' ');
     }
+    if !is_one {
+        write_number(output, abs_value, precision)?;
+        output.push(' ');
+    }
+    output.push_str(name);
+    Ok(())
 }
 
 /// Magnitudes outside `[SCIENTIFIC_BELOW, SCIENTIFIC_FROM)` are written in
@@ -842,6 +855,12 @@ pub(crate) fn write_number(output: &mut String, value: f64, precision: Option<us
 
     let Some(precision) = precision else {
         let abs_value = value.abs();
+        if abs_value < EXACT_INTEGER_LIMIT && value.fract() == 0.0 {
+            // Below 2^53 a whole `f64` is an exact integer and its shortest
+            // round-trip form is that integer's digits, as `{value}` prints.
+            push_integer(output, value as i64);
+            return Ok(());
+        }
         return if (SCIENTIFIC_BELOW..SCIENTIFIC_FROM).contains(&abs_value) {
             write!(output, "{value}")
         } else {
@@ -855,7 +874,8 @@ pub(crate) fn write_number(output: &mut String, value: f64, precision: Option<us
     if is_whole_number && is_safe_for_i64 && value.abs() < 1e10 {
         let cast = value as i64;
         debug_assert!((cast as f64 - value).abs() < 1.0, "i64 cast lost precision: {value} -> {cast}");
-        write!(output, "{cast}")
+        push_integer(output, cast);
+        Ok(())
     } else {
         let start = output.len();
         write!(output, "{value:.precision$}")?;
@@ -872,6 +892,31 @@ pub(crate) fn write_number(output: &mut String, value: f64, precision: Option<us
     }
 }
 
+/// 2^53: every whole `f64` of smaller magnitude is exactly representable as
+/// an integer, and every integer up to it as an `f64`.
+const EXACT_INTEGER_LIMIT: f64 = 9_007_199_254_740_992.0;
+
+/// Append the decimal digits of `value`, as `write!(output, "{value}")` does.
+#[allow(clippy::cast_possible_truncation)]
+fn push_integer(output: &mut String, value: i64) {
+    let mut digits = [0u8; 20];
+    let mut start = digits.len();
+    let mut rest = value.unsigned_abs();
+    loop {
+        start -= 1;
+        // `rest % 10` is a single digit, so the cast cannot truncate.
+        digits[start] = b'0' + (rest % 10) as u8;
+        rest /= 10;
+        if rest == 0 {
+            break;
+        }
+    }
+    if value < 0 {
+        output.push('-');
+    }
+    output.push_str(std::str::from_utf8(&digits[start..]).expect("ASCII digits are valid UTF-8"));
+}
+
 /// Format a number with specified precision, removing trailing zeros.
 /// Convenience wrapper around `write_number` for use in tests.
 #[cfg(test)]
@@ -886,6 +931,30 @@ mod tests {
     use super::*;
     use crate::model::{Coefficient, ComparisonOp, Constraint, Objective, Sense, Variable, VariableBounds, VariableKind, VariableType};
     use crate::problem::LpProblem;
+
+    #[test]
+    #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
+    fn whole_numbers_format_as_display_does() {
+        let mut values = vec![1.0, 7.0, 10.0, 99.0, 100.0, 12_345.0, 1e15, 9_007_199_254_740_991.0, 9_007_199_254_740_992.0, 1e16];
+        let mut x: u64 = 0x9E37_79B9_7F4A_7C15;
+        for _ in 0..2000 {
+            x ^= x << 13;
+            x ^= x >> 7;
+            x ^= x << 17;
+            values.push((x >> (x % 60)) as f64);
+        }
+        for value in values.iter().filter(|v| **v != 0.0).flat_map(|v| [*v, -*v]) {
+            let expected =
+                if (SCIENTIFIC_BELOW..SCIENTIFIC_FROM).contains(&value.abs()) { format!("{value}") } else { format!("{value:e}") };
+            assert_eq!(format_number(value, None), expected, "{value}");
+            if value.abs() < 1e10 {
+                assert_eq!(format_number(value, Some(3)), format!("{}", value as i64), "{value}");
+            }
+        }
+        let mut digits = String::new();
+        push_integer(&mut digits, i64::MIN);
+        assert_eq!(digits, i64::MIN.to_string());
+    }
 
     #[test]
     fn test_format_number() {

@@ -88,8 +88,17 @@ fn related(doc: &Document, range: Range<usize>, message: impl Into<String>) -> D
 }
 
 /// `ERROR` and `MISSING` nodes (one diagnostic per `ERROR`, its subtree
-/// skipped) and `=<` / `=>` operator spellings, in one walk.
+/// skipped) and `=<` / `=>` operator spellings, in one walk. Only subtrees
+/// with errors (`has_error` holds on every ancestor of an `ERROR` or
+/// `MISSING` node) or spanning one of those spellings are entered: nothing
+/// else can produce a diagnostic.
 fn syntax_diagnostics(doc: &Document, out: &mut Vec<Diagnostic>) {
+    let mut spellings: Vec<usize> = doc.text.match_indices("=<").chain(doc.text.match_indices("=>")).map(|(i, _)| i).collect();
+    spellings.sort_unstable();
+    let spans_spelling = |node: Node<'_>| {
+        let next = spellings.partition_point(|&s| s < node.start_byte());
+        spellings.get(next).is_some_and(|&s| s + 2 <= node.end_byte())
+    };
     let mut cursor = doc.tree.walk();
     loop {
         let node = cursor.node();
@@ -112,7 +121,7 @@ fn syntax_diagnostics(doc: &Document, out: &mut Vec<Diagnostic>) {
             }
             descend = false;
         }
-        if descend && cursor.goto_first_child() {
+        if descend && (node.has_error() || spans_spelling(node)) && cursor.goto_first_child() {
             continue;
         }
         loop {
@@ -226,15 +235,20 @@ fn unused_declarations<'d>(doc: &'d Document, out: &mut Vec<Diagnostic>) -> Hash
 /// Returns the names reported.
 fn conflicting_bounds<'d>(doc: &'d Document, out: &mut Vec<Diagnostic>) -> HashSet<&'d str> {
     let mut reported = HashSet::new();
+    let entries = bound_entries(doc);
+    let entry = |range: &Range<usize>| {
+        let at = entries.binary_search_by_key(&range.start, |(identifier, ..)| identifier.start).ok()?;
+        let (identifier, declaration, bounds) = &entries[at];
+        (identifier == range).then_some((*declaration, *bounds))
+    };
     for variable in &doc.index().variables {
         let declarations: Vec<(Range<usize>, VariableBounds)> = variable
             .occurrences
             .iter()
             .filter(|o| o.role == Role::Bound)
-            .filter_map(|o| doc.node(o.range.clone(), kind::IDENTIFIER)?.parent())
-            .filter(|n| n.kind() == kind::BOUND_DECLARATION)
+            .filter_map(|o| entry(&o.range))
             // Entries that do not parse as a bound are syntax errors, reported elsewhere.
-            .filter_map(|n| Some((n.byte_range(), syntax::declared_bounds(n, &doc.text)?)))
+            .filter_map(|(n, bounds)| Some((n.byte_range(), bounds?)))
             .collect();
         let merged = declarations.iter().fold(VariableBounds::unspecified(), |acc, (_, b)| acc.merge(*b));
         let (Some(lower), Some(upper)) = (merged.lower, merged.upper) else { continue };
@@ -246,6 +260,31 @@ fn conflicting_bounds<'d>(doc: &'d Document, out: &mut Vec<Diagnostic>) -> HashS
         reported.insert(variable.name.as_str());
     }
     reported
+}
+
+/// Every identifier of a `bound_declaration` in a top-level `Bounds` section
+/// (where the index finds [`Role::Bound`] occurrences) with its declaration
+/// and the bounds it declares, in document order. One pass over each
+/// declaration, rather than a lookup from the root per occurrence.
+fn bound_entries(doc: &Document) -> Vec<(Range<usize>, Node<'_>, Option<VariableBounds>)> {
+    let language = syntax::language();
+    let bounds_section = language.id_for_node_kind(kind::BOUNDS_SECTION, true);
+    let bound_declaration = language.id_for_node_kind(kind::BOUND_DECLARATION, true);
+    let mut out = Vec::new();
+    let root = doc.tree.root_node();
+    let (mut sections, mut entries, mut parts) = (root.walk(), root.walk(), root.walk());
+    for section in root.children(&mut sections).filter(|n| n.kind_id() == bounds_section) {
+        for declaration in section.children(&mut entries).filter(|n| n.kind_id() == bound_declaration) {
+            let first = out.len();
+            let bounds =
+                syntax::declared_bounds_with(declaration, &doc.text, &mut parts, |n| out.push((n.byte_range(), declaration, None)));
+            for entry in &mut out[first..] {
+                entry.2 = bounds;
+            }
+        }
+    }
+    debug_assert!(out.windows(2).all(|w| w[0].0.end <= w[1].0.start), "entries in document order");
+    out
 }
 
 fn analysis_issue(issue: &AnalysisIssue, doc: &Document, model: &Model, out: &mut Vec<Diagnostic>) {
@@ -348,6 +387,79 @@ mod tests {
         doc.slice(doc.byte_range(d.range)).to_owned()
     }
 
+    /// [`syntax_diagnostics`] visiting every node: the pruned walk must match.
+    fn syntax_diagnostics_full_walk(doc: &Document) -> Vec<Diagnostic> {
+        let mut out = Vec::new();
+        let mut cursor = doc.tree.walk();
+        loop {
+            let node = cursor.node();
+            let mut descend = true;
+            if node.is_error() {
+                out.push(unexpected(doc, node));
+                descend = false;
+            } else if node.is_missing() {
+                let expected = if node.is_named() { node.kind().replace('_', " ") } else { format!("`{}`", node.kind()) };
+                out.push(diagnostic(
+                    doc,
+                    node.byte_range(),
+                    DiagnosticSeverity::ERROR,
+                    codes::MISSING_TOKEN,
+                    format!("missing {expected}"),
+                ));
+            } else if node.kind() == kind::COMPARISON_OPERATOR {
+                let preferred = match doc.node_text(node) {
+                    "=<" => Some("<="),
+                    "=>" => Some(">="),
+                    _ => None,
+                };
+                if let Some(preferred) = preferred {
+                    let message = format!("`{}` is a non-standard spelling of `{preferred}`", doc.node_text(node));
+                    out.push(diagnostic(doc, node.byte_range(), DiagnosticSeverity::INFORMATION, codes::OPERATOR_SPELLING, message));
+                }
+                descend = false;
+            }
+            if descend && cursor.goto_first_child() {
+                continue;
+            }
+            loop {
+                if cursor.goto_next_sibling() {
+                    break;
+                }
+                if !cursor.goto_parent() {
+                    return out;
+                }
+            }
+        }
+    }
+
+    proptest::proptest! {
+        #![proptest_config(proptest::prelude::ProptestConfig::with_cases(256))]
+        #[test]
+        fn pruned_syntax_walk_matches_full_walk(
+            parts in proptest::collection::vec(
+                proptest::prop_oneof![
+                    proptest::strategy::Just("Minimize\n obj: x + y\n".to_owned()),
+                    proptest::strategy::Just("Subject To\n c1: x + y >= 1\n".to_owned()),
+                    proptest::strategy::Just(" c2: x - y =< 4\n".to_owned()),
+                    proptest::strategy::Just(" c3: 2 x => 1\n".to_owned()),
+                    proptest::strategy::Just(" c4: b = 1 -> x + y <= 2\n".to_owned()),
+                    proptest::strategy::Just("Bounds\n x <= 10\n -1 =< y =< 3\n".to_owned()),
+                    proptest::strategy::Just("Generals\n y\n".to_owned()),
+                    proptest::strategy::Just("General Constraints\n g: r = MAX(x, y)\n".to_owned()),
+                    proptest::strategy::Just(" [ x ^ 2 ]".to_owned()),
+                    proptest::strategy::Just("End\n".to_owned()),
+                    "[a-z0-9 :+<=>\\n-]{0,8}",
+                ],
+                0..14,
+            )
+        ) {
+            let doc = Document::new("file:///t.lp".parse().unwrap(), parts.concat(), 1, Encoding::Utf16);
+            let mut pruned = Vec::new();
+            syntax_diagnostics(&doc, &mut pruned);
+            proptest::prop_assert_eq!(pruned, syntax_diagnostics_full_walk(&doc));
+        }
+    }
+
     #[test]
     fn clean_file_has_no_diagnostics() {
         let doc = document(CLEAN);
@@ -447,6 +559,27 @@ mod tests {
 
         let used = document("min\n obj: x\nst\n c1: x >= 1\nsos\n s1: S1 :: w : 1\nbounds\n w <= 4\nend\n");
         assert_eq!(only(&used, codes::UNUSED_DECLARATION), []);
+    }
+
+    #[test]
+    fn bound_entries_are_the_parents_of_bound_occurrences() {
+        for text in [
+            "min\n obj: x + y\nst\n c1: x + y >= 1\nbounds\n x >= 5\n x <= 2\n 3 >= y >= 1\n -inf <= z <= x\nend\n",
+            "min\n obj: x\nbounds\n x <= \n y free\nst\n c1: x >= 1\nbounds\n 1 <= x <= 2 <= 3\n <= y\n w\nend\n",
+            "min\n obj: x\nst\n c1: x >= 1\nbounds\n x >= 1 bounds x <= 2\n [ x ]\nend\n",
+        ] {
+            let doc = document(text);
+            let entries = bound_entries(&doc);
+            for occurrence in doc.index().variables.iter().flat_map(|v| &v.occurrences).filter(|o| o.role == Role::Bound) {
+                let expected = doc
+                    .node(occurrence.range.clone(), kind::IDENTIFIER)
+                    .and_then(|n| n.parent())
+                    .filter(|n| n.kind() == kind::BOUND_DECLARATION);
+                let found = entries.iter().find(|(range, ..)| *range == occurrence.range).map(|(_, n, bounds)| (*n, *bounds));
+                let expected = expected.map(|n| (n, syntax::declared_bounds(n, &doc.text)));
+                assert_eq!(found, expected, "{text:?} at {:?}", occurrence.range);
+            }
+        }
     }
 
     #[test]

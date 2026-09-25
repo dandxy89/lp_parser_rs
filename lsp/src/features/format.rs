@@ -340,7 +340,9 @@ fn layout(text: &str, tree: &Tree, settings: &FormatSettings) -> Option<Layout> 
         return None;
     }
     let after = collect_leaves(reparsed.root_node(), &layout.text);
-    let same = leaves.len() == after.len() && leaves.iter().zip(&after).all(|(a, b)| a.kind == b.kind && canonical(a) == canonical(b));
+    // `canonical` depends only on kind and text: equal texts need no rendering.
+    let same = leaves.len() == after.len()
+        && leaves.iter().zip(&after).all(|(a, b)| a.kind == b.kind && (a.text == b.text || canonical(a) == canonical(b)));
     same.then_some(layout)
 }
 
@@ -351,7 +353,7 @@ fn collect_leaves<'a>(root: Node<'_>, source: &'a str) -> Vec<Leaf<'a>> {
     let mut path = vec![root];
     loop {
         let node = cursor.node();
-        let is_leaf = node.child_count() == 0 || node.kind() == kind::COMPARISON_OPERATOR;
+        let is_leaf = node.child_count() == 0 || syntax::static_kind(node) == kind::COMPARISON_OPERATOR;
         if is_leaf {
             leaves.push(leaf(&path, source));
         }
@@ -381,8 +383,8 @@ fn leaf<'a>(path: &[Node<'_>], source: &'a str) -> Leaf<'a> {
     let parent = if path.len() >= 2 { syntax::static_kind(path[path.len() - 2]) } else { "" };
     let in_section = path.len() >= 3 && syntax::is_section(path[1]);
     let unit_node = if in_section { path[2] } else { path.get(1).copied().unwrap_or(node) };
-    let unit =
-        if unit_node.kind() == kind::SENSE || unit_node.kind() == kind::MULTI_OBJECTIVES_KEYWORD { SENSE_KEY } else { unit_node.id() };
+    let unit_kind = syntax::static_kind(unit_node);
+    let unit = if unit_kind == kind::SENSE || unit_kind == kind::MULTI_OBJECTIVES_KEYWORD { SENSE_KEY } else { unit_node.id() };
     Leaf {
         kind: syntax::static_kind(node),
         named: node.is_named(),
@@ -391,7 +393,7 @@ fn leaf<'a>(path: &[Node<'_>], source: &'a str) -> Leaf<'a> {
         start: node.start_byte(),
         end: node.end_byte(),
         unit,
-        unit_kind: syntax::static_kind(unit_node),
+        unit_kind,
         section: if in_section { syntax::static_kind(path[1]) } else { kind::SOURCE_FILE },
         section_id: if in_section { path[1].id() } else { 0 },
     }

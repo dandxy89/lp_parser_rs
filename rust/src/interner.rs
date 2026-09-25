@@ -10,6 +10,16 @@ use rustc_hash::FxHashMap;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NameId(u32);
 
+impl NameId {
+    /// Dense index of this id within its interner (`0..interner.len()`), for
+    /// per-name tables that avoid hashing.
+    #[inline]
+    #[must_use]
+    pub(crate) const fn index(self) -> usize {
+        self.0 as usize
+    }
+}
+
 /// Mutable string interner for LP problem names.
 ///
 /// Used during parsing and problem construction. Ids are dense indices in
@@ -49,6 +59,14 @@ impl NameInterner {
         self.names.push(name.to_owned());
         self.ids.insert(name.to_owned(), id);
         id
+    }
+
+    /// Number of interned names; every [`NameId`] this interner produced has
+    /// an [`index`](NameId::index) below it.
+    #[inline]
+    #[must_use]
+    pub(crate) const fn len(&self) -> usize {
+        self.names.len()
     }
 
     /// Resolve a [`NameId`] back to its string.

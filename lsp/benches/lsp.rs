@@ -12,8 +12,8 @@ use std::sync::{Arc, Once, OnceLock};
 use std::time::Duration;
 
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
-use lp_lsp::config::{FormatSettings, InlayHintSettings};
-use lp_lsp::features::{code_action, code_lens, completion, format, inlay, semantic_tokens};
+use lp_lsp::config::{Config, FormatSettings, InlayHintSettings};
+use lp_lsp::features::{code_action, code_lens, completion, diagnostics, folding, format, inlay, semantic_tokens, symbols};
 use lp_lsp::{Document, Encoding, SymbolIndex, semantic, syntax};
 use lp_parser_rs::analysis::AnalysisConfig;
 use tower_lsp_server::ls_types::{CodeActionContext, TextDocumentContentChangeEvent, Uri};
@@ -270,6 +270,28 @@ fn many(c: &mut Criterion) {
         b.iter(|| code_action::actions(black_box(doc), range, &context, true));
     });
 
+    group.bench_function("diagnostics", |b| {
+        // Diagnostics for a clean model before the semantic pass: what a
+        // pull-mode client asks for after every edit.
+        let doc = constraints_200k();
+        doc.build_index();
+        let config = Config::default();
+        b.iter(|| diagnostics::compute(black_box(doc), &config));
+    });
+
+    group.bench_function("document_symbols_serialised", |b| {
+        // What `textDocument/documentSymbol` costs the server: compute and encode.
+        let doc = constraints_200k();
+        doc.build_index();
+        b.iter(|| serde_json::to_vec(&symbols::document_symbols(black_box(doc))).expect("symbols serialise"));
+    });
+
+    group.bench_function("folding_ranges", |b| {
+        // What `textDocument/foldingRange` costs after every edit.
+        let doc = constraints_200k();
+        b.iter(|| folding::ranges(black_box(doc)));
+    });
+
     group.bench_function("inlay_hints_viewport", |b| {
         // Hints for a 60-line viewport near the middle, after the semantic pass.
         let mut doc = constraints_200k().clone();
@@ -288,5 +310,128 @@ fn many(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(lsp, large_file, long_line, many);
+fn medium(c: &mut Criterion) {
+    let mut group = c.benchmark_group("constraints_50k");
+    group.sample_size(10).warm_up_time(Duration::from_secs(1)).measurement_time(Duration::from_secs(10));
+
+    group.bench_function("symbol_index_build", |b| {
+        // Below the parallel threshold (~2.5 MB): built on one thread after every edit.
+        let doc = many_constraints(50_000);
+        assert_eq!(lp_lsp::index::workers(doc.text.len()), 1, "built on one thread");
+        b.iter(|| SymbolIndex::build(black_box(&doc.tree), black_box(&doc.text)));
+    });
+
+    group.finish();
+}
+
+fn small(c: &mut Criterion) {
+    let mut group = c.benchmark_group("constraints_15k");
+    group.sample_size(10).warm_up_time(Duration::from_secs(1)).measurement_time(Duration::from_secs(10));
+
+    group.bench_function("format_on_type_enter", |b| {
+        // Enter pressed at the end of a constraint near the middle of a model
+        // small enough (under 1 MiB) to be laid out and re-parsed.
+        let base = many_constraints(15_000);
+        let line = base.lines.line_of(base.text.len() / 2);
+        let end = base.lines.line_range(&base.text, line).end;
+        let mut text = base.text.clone();
+        text.insert(end, '\n');
+        let doc = document(text);
+        assert!(doc.text.len() <= format::ON_TYPE_REFORMAT_MAX_BYTES, "laid out on Enter");
+        let position = tower_lsp_server::ls_types::Position::new(u32::try_from(line + 1).expect("line fits"), 0);
+        let settings = FormatSettings::default();
+        b.iter(|| format::format_on_type(black_box(&doc), position, "\n", &settings));
+    });
+
+    group.finish();
+}
+
+/// The server in-process, answering the client's side of the socket (every
+/// server request gets `null`) and counting diagnostics publications.
+struct Server {
+    runtime: tokio::runtime::Runtime,
+    service: tower_lsp_server::LspService<lp_lsp::Backend>,
+    published: tokio::sync::mpsc::UnboundedReceiver<()>,
+    next_id: i64,
+}
+
+impl Server {
+    fn start() -> Self {
+        use futures::{SinkExt, StreamExt};
+        let runtime = tokio::runtime::Builder::new_multi_thread().enable_all().build().expect("tokio runtime");
+        let (service, socket) = tower_lsp_server::LspService::new(lp_lsp::Backend::new);
+        let (tx, published) = tokio::sync::mpsc::unbounded_channel();
+        runtime.spawn(async move {
+            let (mut requests, mut responses) = socket.split();
+            while let Some(request) = requests.next().await {
+                let (method, id, _) = request.into_parts();
+                if method == "textDocument/publishDiagnostics" && tx.send(()).is_err() {
+                    break;
+                }
+                if let Some(id) = id
+                    && responses.send(tower_lsp_server::jsonrpc::Response::from_ok(id, serde_json::Value::Null)).await.is_err()
+                {
+                    break;
+                }
+            }
+        });
+        Self { runtime, service, published, next_id: 1 }
+    }
+
+    /// Send a request (with an id) or a notification (`did*`, `initialized`).
+    fn call(&mut self, method: &'static str, params: serde_json::Value) -> Option<serde_json::Value> {
+        use tower::{Service, ServiceExt};
+        let mut request = tower_lsp_server::jsonrpc::Request::build(method).params(params);
+        if !method.starts_with("textDocument/did") && method != "initialized" {
+            request = request.id(self.next_id);
+            self.next_id += 1;
+        }
+        let service = &mut self.service;
+        let response = self
+            .runtime
+            .block_on(async { service.ready().await.expect("service ready").call(request.finish()).await.expect("service call") });
+        response.map(|r| r.into_parts().1.expect("request succeeds"))
+    }
+
+    /// Wait for `count` diagnostics publications.
+    fn await_published(&mut self, count: usize) {
+        let published = &mut self.published;
+        self.runtime.block_on(async {
+            for _ in 0..count {
+                published.recv().await.expect("server running");
+            }
+        });
+    }
+}
+
+fn server(c: &mut Criterion) {
+    let mut group = c.benchmark_group("server_200k");
+    group.sample_size(10).warm_up_time(Duration::from_secs(1)).measurement_time(Duration::from_secs(10));
+
+    group.bench_function("semantic_tokens_delta_request", |b| {
+        // `semanticTokens/full/delta` against the previous result: what the
+        // client asks after every edit (here with no edit, so the delta is empty).
+        let mut server = Server::start();
+        server.call("initialize", serde_json::json!({ "capabilities": {} }));
+        server.call("initialized", serde_json::json!({}));
+        let text = constraints_200k().text.clone();
+        let document = serde_json::json!({ "uri": "file:///bench.lp", "languageId": "lp", "version": 1, "text": text });
+        server.call("textDocument/didOpen", serde_json::json!({ "textDocument": document }));
+        // Once on open, once after the semantic pass: then the server is idle.
+        server.await_published(2);
+        let id = serde_json::json!({ "uri": "file:///bench.lp" });
+        let full = server.call("textDocument/semanticTokens/full", serde_json::json!({ "textDocument": id })).expect("a response");
+        let mut previous = full["resultId"].clone();
+        b.iter(|| {
+            let params = serde_json::json!({ "textDocument": id, "previousResultId": previous });
+            let delta = server.call("textDocument/semanticTokens/full/delta", params).expect("a response");
+            assert!(delta["edits"].as_array().is_some_and(Vec::is_empty), "an unchanged document has an empty delta");
+            previous = delta["resultId"].clone();
+        });
+    });
+
+    group.finish();
+}
+
+criterion_group!(lsp, large_file, long_line, many, medium, small, server);
 criterion_main!(lsp);

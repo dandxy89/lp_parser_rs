@@ -305,7 +305,7 @@ impl SymbolIndex {
     fn build_with(tree: &Tree, text: &str, threads: usize) -> Self {
         debug_assert!(threads >= 1, "at least one worker");
         let mut index = if threads == 1 {
-            Builder::window(tree, text, 0..usize::MAX)
+            Builder::window(tree, text, 0..usize::MAX, true)
         } else {
             let bounds: Vec<usize> = (0..=threads).map(|i| if i == threads { usize::MAX } else { text.len() * i / threads }).collect();
             let parts: Vec<Self> = std::thread::scope(|scope| {
@@ -313,7 +313,9 @@ impl SymbolIndex {
                     .windows(2)
                     .map(|w| {
                         let window = w[0]..w[1];
-                        scope.spawn(move || Builder::window(tree, text, window))
+                        // Partial name lookups are only needed while building: merging
+                        // builds the final one.
+                        scope.spawn(move || Builder::window(tree, text, window, false))
                     })
                     .collect();
                 // A worker panic is a bug in the builder; surface it unchanged.
@@ -331,31 +333,51 @@ impl SymbolIndex {
         let mut out = Self::default();
         out.sites.reserve(parts.iter().map(|p| p.sites.len()).sum());
         out.entities.reserve(parts.iter().map(|p| p.entities.len()).sum());
-        for part in parts {
+        // Per part and partial variable: its global id and how many of its
+        // occurrences precede this part's; and each global variable's total,
+        // so its occurrences are allocated once.
+        let mut totals: Vec<usize> = Vec::new();
+        let remaps: Vec<Vec<(usize, usize)>> = parts
+            .iter()
+            .map(|part| {
+                part.variables
+                    .iter()
+                    .map(|variable| {
+                        let global = if let Some(&global) = out.variable_ids.get(&variable.name) {
+                            global
+                        } else {
+                            let global = totals.len();
+                            out.variable_ids.insert(variable.name.clone(), global);
+                            totals.push(0);
+                            global
+                        };
+                        let offset = totals[global];
+                        totals[global] += variable.occurrences.len();
+                        (global, offset)
+                    })
+                    .collect()
+            })
+            .collect();
+        out.variables.reserve_exact(totals.len());
+        for (part, remap) in parts.into_iter().zip(remaps) {
             let entity_offset = out.entities.len();
             let attribute_offset = out.attributes.len();
-            // Per partial variable: its global id and how many occurrences precede this part's.
-            let remap: Vec<(usize, usize)> = part
-                .variables
-                .into_iter()
-                .map(|variable| {
-                    let global = if let Some(&global) = out.variable_ids.get(&variable.name) {
-                        global
-                    } else {
-                        let global = out.variables.len();
-                        out.variable_ids.insert(variable.name.clone(), global);
-                        out.variables.push(Variable { name: variable.name, occurrences: Vec::new() });
-                        global
-                    };
-                    let occurrences = &mut out.variables[global].occurrences;
-                    let offset = occurrences.len();
-                    occurrences.extend(variable.occurrences.into_iter().map(|mut o| {
-                        o.entity = o.entity.map(|e| e + entity_offset);
-                        o
-                    }));
-                    (global, offset)
-                })
-                .collect();
+            for (variable, &(global, offset)) in part.variables.into_iter().zip(&remap) {
+                let occurrences = variable.occurrences.into_iter().map(|mut o| {
+                    o.entity = o.entity.map(|e| e + entity_offset);
+                    o
+                });
+                if offset == 0 {
+                    // First part using the variable: variables are first seen in global id order.
+                    debug_assert_eq!(global, out.variables.len(), "global ids follow first use");
+                    let mut all = Vec::with_capacity(totals[global]);
+                    all.extend(occurrences);
+                    out.variables.push(Variable { name: variable.name, occurrences: all });
+                } else {
+                    debug_assert_eq!(out.variables[global].occurrences.len(), offset, "parts are merged in order");
+                    out.variables[global].occurrences.extend(occurrences);
+                }
+            }
             out.entities.extend(part.entities);
             out.attributes.extend(part.attributes.into_iter().map(|mut a| {
                 a.objective += entity_offset;
@@ -519,20 +541,26 @@ struct Builder<'a> {
     text: &'a str,
     ids: &'static Ids,
     index: SymbolIndex,
+    /// Whether to fill the index's own variable lookup. Partial indexes
+    /// (merged afterwards) look names up in `names` instead, borrowing them
+    /// from the text rather than allocating a key per variable.
+    lookup: bool,
+    names: FxHashMap<&'a str, usize>,
     /// Only section entries starting in this byte window are indexed (and
     /// only sections starting in it are recorded).
     window: Range<usize>,
 }
 
 impl Builder<'_> {
-    /// Index the entries starting in `window` (without duplicate detection).
-    fn window(tree: &Tree, text: &str, window: Range<usize>) -> SymbolIndex {
+    /// Index the entries starting in `window` (without duplicate detection),
+    /// with the variable lookup filled only if `lookup`.
+    fn window(tree: &Tree, text: &str, window: Range<usize>, lookup: bool) -> SymbolIndex {
         let mut index = SymbolIndex::default();
         // Rough capacities from the text size avoid repeated regrowth on large files.
         let share = text.len().min(window.end - window.start);
         index.sites.reserve(share / 16);
         index.entities.reserve(share / 64);
-        let mut builder = Builder { text, ids: Ids::get(), index, window };
+        let mut builder = Builder { text, ids: Ids::get(), index, lookup, names: FxHashMap::default(), window };
         let mut cursor = tree.root_node().walk();
         builder.children(&mut cursor, |b, c| {
             let node = c.node();
@@ -540,11 +568,16 @@ impl Builder<'_> {
                 b.section(c);
             }
         });
+        debug_assert_eq!(
+            if lookup { builder.index.variable_ids.len() } else { builder.names.len() },
+            builder.index.variables.len(),
+            "one lookup entry per variable"
+        );
         builder.index
     }
 }
 
-impl<'t> Builder<'_> {
+impl<'a, 't> Builder<'a> {
     /// Like [`Builder::children`], but only children starting in the window.
     fn entries(&mut self, cursor: &mut TreeCursor<'t>, mut f: impl FnMut(&mut Self, &mut TreeCursor<'t>)) {
         let entered = if self.window.start > cursor.node().start_byte() {
@@ -825,14 +858,19 @@ impl<'t> Builder<'_> {
 
     fn occurrence(&mut self, node: Node<'_>, role: Role, entity: Option<usize>, coefficient: Option<f64>) {
         debug_assert_eq!(node.kind(), kind::IDENTIFIER);
-        let name = syntax::text(node, self.text);
+        let name: &'a str = syntax::text(node, self.text);
         // Look up before inserting: most occurrences repeat a known name, and
-        // `entry` would allocate the key every time.
-        let var = if let Some(&var) = self.index.variable_ids.get(name) {
+        // `entry` would allocate an owned key every time.
+        let known = if self.lookup { self.index.variable_ids.get(name) } else { self.names.get(name) };
+        let var = if let Some(&var) = known {
             var
         } else {
             let var = self.index.variables.len();
-            self.index.variable_ids.insert(name.to_owned(), var);
+            if self.lookup {
+                self.index.variable_ids.insert(name.to_owned(), var);
+            } else {
+                self.names.insert(name, var);
+            }
             self.index.variables.push(Variable { name: name.to_owned(), occurrences: Vec::new() });
             var
         };

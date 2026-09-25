@@ -7,6 +7,7 @@ use std::path::Path;
 
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
 use lp_parser_rs::LpProblem;
+use lp_parser_rs::mps::writer::write_mps_string;
 
 const GENERATED_ROWS: usize = 100_000;
 const GENERATED_VARIABLES: usize = 20_000;
@@ -61,9 +62,13 @@ fn parse_lp(c: &mut Criterion) {
 
 fn parse_mps(c: &mut Criterion) {
     let mut group = c.benchmark_group("parse_mps");
-    let input = resource("mps/fit2d.mps");
-    group.throughput(Throughput::Bytes(input.len() as u64));
-    group.bench_function("fit2d", |b| b.iter(|| LpProblem::parse_mps(black_box(&input)).expect("benchmark input must parse")));
+    let generated = LpProblem::parse(&generate()).expect("benchmark input must parse");
+    let generated = write_mps_string(&generated).expect("benchmark input must write as MPS");
+    let inputs = [("generated_100k_rows", generated), ("fit2d", resource("mps/fit2d.mps"))];
+    for (name, input) in &inputs {
+        group.throughput(Throughput::Bytes(input.len() as u64));
+        group.bench_function(*name, |b| b.iter(|| LpProblem::parse_mps(black_box(input)).expect("benchmark input must parse")));
+    }
     group.finish();
 }
 

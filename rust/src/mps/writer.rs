@@ -97,7 +97,6 @@
 
 use std::fmt::Write;
 
-use indexmap::IndexMap;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::error::{LpParseError, LpResult};
@@ -470,15 +469,62 @@ const fn needs_marker(kind: VariableKind) -> bool {
     kind.is_integer()
 }
 
-/// Per-variable list of (row name, coefficient) pairs, in the order rows are
+/// Per-variable lists of (row name, coefficient) pairs, in the order rows are
 /// encountered (objective first, then constraints in insertion order).
-type ColumnEntries<'p> = IndexMap<NameId, Vec<(&'p str, f64)>>;
+///
+/// Stored flat: the entries of the variable at position `p` in
+/// [`LpProblem::variables`] are `entries[starts[p]..starts[p + 1]]`.
+struct ColumnEntries<'p> {
+    starts: Vec<usize>,
+    entries: Vec<(&'p str, f64)>,
+}
+
+impl<'p> ColumnEntries<'p> {
+    /// The entries of the variable at `position` in [`LpProblem::variables`].
+    fn column(&self, position: usize) -> &[(&'p str, f64)] {
+        &self.entries[self.starts[position]..self.starts[position + 1]]
+    }
+}
+
+/// Visit every (variable, row name, coefficient) triple the COLUMNS section
+/// writes, in order: the objective's, then each written constraint row's.
+fn for_each_column_entry<'p>(
+    problem: &'p LpProblem,
+    objective: Option<&'p Objective>,
+    obj_row_name: &'p str,
+    range_pairs: &RangePairs,
+    mut visit: impl FnMut(NameId, &'p str, f64),
+) {
+    if let Some(obj) = objective {
+        for coeff in &obj.coefficients {
+            debug_assert!(problem.variables.contains_key(&coeff.name), "objective coefficient must reference a registered variable");
+            visit(coeff.name, obj_row_name, coeff.value);
+        }
+    }
+
+    for (constraint_id, constraint) in &problem.constraints {
+        if range_pairs.skip.contains(constraint_id) {
+            continue; // The base row already carries these coefficients.
+        }
+        if let Some((coefficients, _, _)) = row_parts(constraint) {
+            let row_name = problem.resolve(constraint.name());
+            for coeff in coefficients {
+                debug_assert!(problem.variables.contains_key(&coeff.name), "constraint coefficient must reference a registered variable");
+                visit(coeff.name, row_name, coeff.value);
+            }
+        }
+    }
+}
 
 /// Build the per-variable COLUMNS entries.
 ///
-/// Iterates the objective and constraints once (rather than probing every
+/// Iterates the objective and constraints (rather than probing every
 /// (variable, row) pair) and groups coefficients by variable, preserving
-/// [`LpProblem::variables`] insertion order.
+/// [`LpProblem::variables`] insertion order. A first pass counts each
+/// variable's entries so the second can place them without per-variable
+/// allocations; variables are found through a table indexed by [`NameId`]
+/// rather than by hashing. A coefficient on a name that is not a variable
+/// is dropped: the COLUMNS section only writes variables.
 ///
 /// Variables that require a marker block ([`needs_marker`]) but have no
 /// coefficients anywhere (isolated integer/general/binary variables) still
@@ -491,58 +537,73 @@ fn build_columns<'p>(
     obj_row_name: &'p str,
     range_pairs: &RangePairs,
 ) -> ColumnEntries<'p> {
-    let mut columns: ColumnEntries<'p> = IndexMap::with_capacity(problem.variables.len());
-    for name_id in problem.variables.keys() {
-        columns.insert(*name_id, Vec::new());
+    const NOT_A_VARIABLE: usize = usize::MAX;
+    let mut position_of = vec![NOT_A_VARIABLE; problem.interner.len()];
+    for (position, name_id) in problem.variables.keys().enumerate() {
+        position_of[name_id.index()] = position;
     }
+    let position = |id: NameId| position_of.get(id.index()).copied().filter(|&p| p != NOT_A_VARIABLE);
 
-    if let Some(obj) = objective {
-        for coeff in &obj.coefficients {
-            debug_assert!(problem.variables.contains_key(&coeff.name), "objective coefficient must reference a registered variable");
-            columns.entry(coeff.name).or_default().push((obj_row_name, coeff.value));
+    let variable_count = problem.variables.len();
+    let mut counts = vec![0usize; variable_count];
+    for_each_column_entry(problem, objective, obj_row_name, range_pairs, |id, _, _| {
+        if let Some(p) = position(id) {
+            counts[p] += 1;
         }
-    }
-
-    for (constraint_id, constraint) in &problem.constraints {
-        if range_pairs.skip.contains(constraint_id) {
-            continue; // The base row already carries these coefficients.
-        }
-        if let Some((coefficients, _, _)) = row_parts(constraint) {
-            let row_name = problem.resolve(constraint.name());
-            for coeff in coefficients {
-                debug_assert!(problem.variables.contains_key(&coeff.name), "constraint coefficient must reference a registered variable");
-                columns.entry(coeff.name).or_default().push((row_name, coeff.value));
-            }
-        }
-    }
+    });
 
     // An indicator variable, or one that only appears in quadratic terms, must
     // still be a column for the INDICATORS / QUADOBJ / QCMATRIX sections to
     // name it.
-    let mut needs_column: FxHashSet<NameId> = FxHashSet::default();
+    let mut needs_column = vec![false; variable_count];
+    let mut mark = |id: NameId| {
+        if let Some(p) = position(id) {
+            needs_column[p] = true;
+        }
+    };
     for constraint in problem.constraints.values() {
         match constraint {
-            Constraint::Indicator { variable, .. } => {
-                needs_column.insert(*variable);
-            }
-            Constraint::Quadratic { quadratic, .. } => needs_column.extend(quadratic.iter().flat_map(|t| [t.var1, t.var2])),
+            Constraint::Indicator { variable, .. } => mark(*variable),
+            Constraint::Quadratic { quadratic, .. } => quadratic.iter().flat_map(|t| [t.var1, t.var2]).for_each(&mut mark),
             Constraint::Standard { .. } | Constraint::SOS { .. } => {}
             Constraint::General { .. } => unreachable!("general constraints are rejected before columns are built"),
         }
     }
     if let Some(obj) = objective {
-        needs_column.extend(obj.quadratic.iter().flat_map(|t| [t.var1, t.var2]));
+        obj.quadratic.iter().flat_map(|t| [t.var1, t.var2]).for_each(&mut mark);
     }
-    for (name_id, variable) in &problem.variables {
-        if needs_marker(variable.kind) || needs_column.contains(name_id) {
-            let entries = columns.entry(*name_id).or_default();
-            if entries.is_empty() {
-                entries.push((obj_row_name, 0.0));
-            }
+    let mut synthesised = vec![false; variable_count];
+    for (p, variable) in problem.variables.values().enumerate() {
+        if counts[p] == 0 && (needs_marker(variable.kind) || needs_column[p]) {
+            counts[p] = 1;
+            synthesised[p] = true;
         }
     }
 
-    columns
+    let mut starts = Vec::with_capacity(variable_count + 1);
+    let mut total = 0usize;
+    starts.push(0);
+    for count in &counts {
+        total += count;
+        starts.push(total);
+    }
+    let mut entries = vec![("", 0.0); total];
+    let mut next = starts[..variable_count].to_vec();
+    for_each_column_entry(problem, objective, obj_row_name, range_pairs, |id, row_name, value| {
+        if let Some(p) = position(id) {
+            entries[next[p]] = (row_name, value);
+            next[p] += 1;
+        }
+    });
+    for (p, &synthesise) in synthesised.iter().enumerate() {
+        if synthesise {
+            entries[next[p]] = (obj_row_name, 0.0);
+            next[p] += 1;
+        }
+    }
+    debug_assert!(next.iter().zip(&starts[1..]).all(|(n, end)| n == end), "every column slot must be filled");
+
+    ColumnEntries { starts, entries }
 }
 
 /// Write the `COLUMNS` section, wrapping integer/general/binary variables in
@@ -557,8 +618,8 @@ fn write_columns_section(
     writeln!(output, "COLUMNS")?;
 
     let mut in_block = false;
-    for (name_id, variable) in &problem.variables {
-        let entries = columns.get(name_id).map_or([].as_slice(), Vec::as_slice);
+    for (position, (name_id, variable)) in problem.variables.iter().enumerate() {
+        let entries = columns.column(position);
         if entries.is_empty() {
             // No row references this variable and it doesn't need a marker
             // block: nothing to emit (it is still registered via BOUNDS).
@@ -575,9 +636,7 @@ fn write_columns_section(
             in_block = wrap;
         }
         for &(row_name, value) in entries {
-            write!(output, "    {var_name:<10} {row_name:<10} ")?;
-            write_number(output, value, options.decimal_precision)?;
-            writeln!(output)?;
+            write_entry_line(output, var_name, row_name, value, options.decimal_precision)?;
         }
     }
     if in_block {
@@ -607,9 +666,7 @@ fn write_rhs_section(
     if let Some(obj) = objective
         && obj.constant != 0.0
     {
-        write!(output, "    {label:<10} {obj_row_name:<10} ")?;
-        write_number(output, -obj.constant, options.decimal_precision)?;
-        writeln!(output)?;
+        write_entry_line(output, label, obj_row_name, -obj.constant, options.decimal_precision)?;
     }
 
     for (constraint_id, constraint) in &problem.constraints {
@@ -621,9 +678,7 @@ fn write_rhs_section(
                 continue;
             }
             let resolved_name = problem.resolve(constraint.name());
-            write!(output, "    {label:<10} {resolved_name:<10} ")?;
-            write_number(output, rhs, options.decimal_precision)?;
-            writeln!(output)?;
+            write_entry_line(output, label, resolved_name, rhs, options.decimal_precision)?;
         }
     }
 
@@ -648,21 +703,51 @@ fn write_ranges_section(
     for constraint_id in problem.constraints.keys() {
         if let Some(range_value) = range_pairs.ranges.get(constraint_id) {
             let resolved_name = problem.resolve(*constraint_id);
-            write!(output, "    {label:<10} {resolved_name:<10} ")?;
-            write_number(output, *range_value, options.decimal_precision)?;
-            writeln!(output)?;
+            write_entry_line(output, label, resolved_name, *range_value, options.decimal_precision)?;
         }
     }
 
     Ok(())
 }
 
+/// Append `text` left-aligned in a field of `width` characters, exactly as
+/// `format!("{text:<width$}")` would: padding counts chars, not bytes, and
+/// a longer `text` is written whole.
+fn push_padded(output: &mut String, text: &str, width: usize) {
+    output.push_str(text);
+    let chars = text.chars().count();
+    for _ in chars..width {
+        output.push(' ');
+    }
+}
+
+/// Write a `    first second value` data line (COLUMNS, RHS, RANGES and
+/// quadratic sections) with both names in 10-character fields. Equivalent to
+/// `write!(output, "    {first:<10} {second:<10} ")` followed by the number
+/// and a newline, without the formatting machinery on this hot path.
+fn write_entry_line(output: &mut String, first: &str, second: &str, value: f64, precision: Option<usize>) -> std::fmt::Result {
+    output.push_str("    ");
+    push_padded(output, first, 10);
+    output.push(' ');
+    push_padded(output, second, 10);
+    output.push(' ');
+    write_number(output, value, precision)?;
+    output.push('\n');
+    Ok(())
+}
+
 /// Write a single BOUNDS line with a numeric value.
 fn write_bound_value(output: &mut String, bound_type: &str, var_name: &str, value: f64, style: BoundStyle<'_>) -> std::fmt::Result {
-    let label = style.label;
-    write!(output, " {bound_type} {label:<9} {var_name:<10} ")?;
+    output.push(' ');
+    output.push_str(bound_type);
+    output.push(' ');
+    push_padded(output, style.label, 9);
+    output.push(' ');
+    push_padded(output, var_name, 10);
+    output.push(' ');
     write_number(output, value, style.precision)?;
-    writeln!(output)
+    output.push('\n');
+    Ok(())
 }
 
 /// Write a single BOUNDS line without a numeric value (`FR`, `BV`).
@@ -930,10 +1015,7 @@ fn write_quadratic_entry(
     value: f64,
     options: &MpsWriterOptions,
 ) -> std::fmt::Result {
-    let (a, b) = (problem.resolve(var1), problem.resolve(var2));
-    write!(output, "    {a:<10} {b:<10} ")?;
-    write_number(output, value, options.decimal_precision)?;
-    writeln!(output)
+    write_entry_line(output, problem.resolve(var1), problem.resolve(var2), value, options.decimal_precision)
 }
 
 /// Write the `QUADOBJ` section for the written objective and one `QCMATRIX`
@@ -1001,6 +1083,17 @@ mod tests {
     use super::*;
     use crate::model::{Coefficient, ComparisonOp, SOSType, VariableBounds, VariableKind, VariableType};
     use crate::mps::parse_mps;
+
+    #[test]
+    fn push_padded_matches_format_width() {
+        for text in ["", "x", "exactly10c", "longer_than_ten", "é", "naïve_ünï", "日本語", "ÿÿÿÿÿÿÿÿÿÿÿ"] {
+            for width in [0, 1, 9, 10, 12] {
+                let mut padded = String::new();
+                push_padded(&mut padded, text, width);
+                assert_eq!(padded, format!("{text:<width$}"), "{text:?} in {width}");
+            }
+        }
+    }
 
     fn build_problem_with_bounds_and_sos() -> LpProblem {
         let mut problem = LpProblem::new().with_problem_name(String::from("Sample")).with_sense(Sense::Maximize);

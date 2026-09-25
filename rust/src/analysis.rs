@@ -24,8 +24,6 @@
 
 use std::fmt::{Display, Formatter, Result as FmtResult};
 
-use rustc_hash::FxHashSet;
-
 use crate::error::EntityKind;
 use crate::interner::NameId;
 use crate::model::{ComparisonOp, Constraint, ConstraintClass, SOSType, VariableKind};
@@ -810,26 +808,32 @@ impl LpProblem {
 
     /// Find variables declared but not referenced in any objective or constraint.
     fn find_unused_variables(&self) -> Vec<String> {
-        let mut used_variables: FxHashSet<NameId> = FxHashSet::default();
+        // A flag per interned name (ids are dense), rather than a hash set.
+        let mut used_variables = vec![false; self.interner.len()];
+        let mut mark_used = |id: NameId| {
+            let index = id.index();
+            if index >= used_variables.len() {
+                used_variables.resize(index + 1, false);
+            }
+            used_variables[index] = true;
+        };
 
         for objective in self.objectives.values() {
             for coeff in &objective.coefficients {
-                used_variables.insert(coeff.name);
+                mark_used(coeff.name);
             }
             // A variable appearing only in quadratic terms is used too.
-            used_variables.extend(objective.quadratic.iter().flat_map(|term| [term.var1, term.var2]));
+            objective.quadratic.iter().flat_map(|term| [term.var1, term.var2]).for_each(&mut mark_used);
         }
 
         for constraint in self.constraints.values() {
-            constraint.for_each_variable(|id| {
-                used_variables.insert(id);
-            });
+            constraint.for_each_variable(&mut mark_used);
         }
 
         let unused: Vec<String> = self
             .variables
             .keys()
-            .filter(|name_id| !used_variables.contains(name_id))
+            .filter(|name_id| !used_variables.get(name_id.index()).copied().unwrap_or(false))
             .map(|id| self.interner.resolve(*id).to_string())
             .collect();
         debug_assert!(
