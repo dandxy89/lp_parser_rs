@@ -13,9 +13,9 @@ use std::time::Duration;
 
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
 use lp_lsp::config::FormatSettings;
-use lp_lsp::features::{code_lens, completion, format, semantic_tokens};
+use lp_lsp::features::{code_action, code_lens, completion, format, semantic_tokens};
 use lp_lsp::{Document, Encoding, SymbolIndex, syntax};
-use tower_lsp_server::ls_types::{TextDocumentContentChangeEvent, Uri};
+use tower_lsp_server::ls_types::{CodeActionContext, TextDocumentContentChangeEvent, Uri};
 use tree_sitter::InputEdit;
 
 const TARGET_BYTES: usize = 50 * 1024 * 1024;
@@ -256,6 +256,17 @@ fn many(c: &mut Criterion) {
         let position = tower_lsp_server::ls_types::Position::new(u32::try_from(line + 1).expect("line fits"), 0);
         let settings = FormatSettings::default();
         b.iter(|| format::format_on_type(black_box(&doc), position, "\n", &settings));
+    });
+
+    group.bench_function("code_actions_at_cursor", |b| {
+        // What the client asks for on every cursor move: actions for an
+        // empty range inside a constraint near the middle.
+        let doc = constraints_200k();
+        doc.build_index();
+        let at = doc.position(middle_constraint(doc));
+        let range = tower_lsp_server::ls_types::Range::new(at, at);
+        let context = CodeActionContext::default();
+        b.iter(|| code_action::actions(black_box(doc), range, &context, true));
     });
 
     group.finish();
