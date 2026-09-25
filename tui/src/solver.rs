@@ -488,11 +488,14 @@ fn build_highs_qp_model(problem: &LpProblem) -> Result<BuiltModel, String> {
 
         let (is_integer, lower, upper) = variable_bounds(variable);
 
-        // A semi-integer column is passed as such (HiGHS rejects one with an
-        // infinite upper bound, which surfaces as a model error rather than a
-        // silently relaxed solve).
-        let integrality =
-            if variable.is_some_and(|v| v.kind == VariableKind::SemiInteger) { highs::Integrality::SemiInteger } else { is_integer.into() };
+        // A semi-continuous or semi-integer column is passed as such (HiGHS
+        // rejects one with an infinite upper bound, which surfaces as a model
+        // error rather than a silently relaxed solve).
+        let integrality = match variable.map(|v| v.kind) {
+            Some(VariableKind::SemiInteger) => highs::Integrality::SemiInteger,
+            Some(VariableKind::SemiContinuous) => highs::Integrality::SemiContinuous,
+            _ => is_integer.into(),
+        };
         let col = row_problem.add_column_with_integrality_kind(objective_coefficient, lower..=upper, integrality);
         columns.push(col);
     }
@@ -1481,6 +1484,17 @@ empty =\n";
         let result = solve_problem(&problem).expect("a bounded MIP must solve");
         let objective = result.objective_value.expect("an optimal solve has an objective");
         assert!((objective - 0.25).abs() < 1e-9, "x = 0, y = 0.5 is optimal, got {objective}");
+    }
+
+    #[test]
+    fn test_a_semi_continuous_variable_keeps_its_zero_branch() {
+        // x is 0 or in [2, 10]. Taking x = 0 gives 1; solving x as a plain
+        // continuous variable in [2, 10] would report 3 instead.
+        let source = "Minimize\n obj: x + y\nSubject To\n c1: y >= 1\nBounds\n 2 <= x <= 10\nSemi-Continuous\n x\nEnd";
+        let problem = LpProblem::parse(source).expect("must parse");
+        let result = solve_problem(&problem).expect("a bounded semi-continuous model must solve");
+        let objective = result.objective_value.expect("an optimal solve has an objective");
+        assert!((objective - 1.0).abs() < 1e-9, "x = 0, y = 1 is optimal, got {objective}");
     }
 
     #[test]
