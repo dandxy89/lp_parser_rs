@@ -71,13 +71,13 @@ pub(super) fn parse_rows_line<'input>(
 /// Mutable state for parsing the COLUMNS section.
 #[derive(Default)]
 pub(super) struct ColumnsState<'input> {
-    /// Accumulated coefficient per (variable, row) pair. MPS allows split
-    /// entries, so values are summed on duplicate keys.
-    pub(super) coefficients: FxHashMap<(&'input str, &'input str), f64>,
-    /// Per-row list of (column index, variable) pairs in first-insertion
-    /// order. Lets the builders iterate only a row's nonzeros instead of
-    /// probing every (row, column) combination.
-    pub(super) row_entries: FxHashMap<&'input str, Vec<(u32, &'input str)>>,
+    /// Position in `row_entries[row]` of each (variable, row) pair's entry.
+    /// MPS allows split entries, so values are summed on duplicate keys.
+    pub(super) coefficients: FxHashMap<(&'input str, &'input str), usize>,
+    /// Per-row list of (column index, variable, accumulated value) entries in
+    /// first-insertion order. Lets the builders iterate only a row's nonzeros
+    /// instead of probing every (row, column) combination.
+    pub(super) row_entries: FxHashMap<&'input str, Vec<(u32, &'input str, f64)>>,
     pub(super) column_order: Vec<&'input str>,
     pub(super) column_index: FxHashMap<&'input str, u32>,
     pub(super) in_integer_block: bool,
@@ -132,41 +132,49 @@ impl<'input> ColumnsState<'input> {
         };
 
         // Track column order
-        if let Entry::Vacant(entry) = self.column_index.entry(var_name) {
-            // Column count fits in u32: an MPS file with > 4 billion columns
-            // would exceed addressable memory long before this truncates.
-            entry.insert(u32::try_from(self.column_order.len()).unwrap_or(u32::MAX));
-            self.column_order.push(var_name);
-        }
+        let col_idx = match self.column_index.entry(var_name) {
+            Entry::Occupied(entry) => *entry.get(),
+            Entry::Vacant(entry) => {
+                // Column count fits in u32: an MPS file with > 4 billion columns
+                // would exceed addressable memory long before this truncates.
+                let col_idx = *entry.insert(u32::try_from(self.column_order.len()).unwrap_or(u32::MAX));
+                self.column_order.push(var_name);
+                col_idx
+            }
+        };
 
         // Mark as integer if inside INTORG/INTEND block
         if self.in_integer_block && self.integer_vars_set.insert(var_name) {
             self.integer_vars.push(var_name);
         }
 
-        self.parse_entry(first_row, first_value, var_name, line_num, row_types, objective_rows)?;
+        self.parse_entry(first_row, first_value, var_name, col_idx, line_num, row_types, objective_rows)?;
         while let Some(row_name) = fields.next() {
             let Some(value) = fields.next() else {
                 return Err(LpParseError::parse_error(line_num, format!("COLUMNS row '{row_name}' has no value field")));
             };
-            self.parse_entry(row_name, value, var_name, line_num, row_types, objective_rows)?;
+            self.parse_entry(row_name, value, var_name, col_idx, line_num, row_types, objective_rows)?;
         }
 
         Ok(())
     }
 
-    /// Parse a single (`row_name`, value) entry from a COLUMNS line.
+    /// Parse a single (`row_name`, value) entry from a COLUMNS line of the
+    /// column `var_name`, whose index in `column_order` is `col_idx`.
+    #[allow(clippy::too_many_arguments)]
     fn parse_entry(
         &mut self,
         row_name: &'input str,
         value_str: &str,
         var_name: &'input str,
+        col_idx: u32,
         line_num: usize,
         row_types: &FxHashMap<&str, RowType>,
         objective_rows: &[&str],
     ) -> LpResult<()> {
         debug_assert!(!row_name.is_empty(), "parse_entry called with empty row_name");
         debug_assert!(!var_name.is_empty(), "parse_entry called with empty var_name");
+        debug_assert!(self.column_index.get(var_name) == Some(&col_idx), "col_idx must be var_name's registered column index");
 
         if !row_types.contains_key(row_name) && !objective_rows.contains(&row_name) {
             return Err(LpParseError::parse_error(line_num, format!("Reference to undefined row: '{row_name}'")));
@@ -182,11 +190,16 @@ impl<'input> ColumnsState<'input> {
 
         // Accumulate coefficient (additive -- MPS allows split entries)
         match self.coefficients.entry((var_name, row_name)) {
-            Entry::Occupied(mut entry) => *entry.get_mut() += value,
+            Entry::Occupied(entry) => {
+                let entries = self.row_entries.get_mut(row_name).expect("a recorded (variable, row) pair has a row entry");
+                let (_, entry_var, accumulated) = &mut entries[*entry.get()];
+                debug_assert!(*entry_var == var_name, "coefficient position must point at its own entry");
+                *accumulated += value;
+            }
             Entry::Vacant(entry) => {
-                entry.insert(value);
-                let col_idx = *self.column_index.get(var_name).expect("column index registered in parse_line before parse_entry");
-                self.row_entries.entry(row_name).or_default().push((col_idx, var_name));
+                let entries = self.row_entries.entry(row_name).or_default();
+                entry.insert(entries.len());
+                entries.push((col_idx, var_name, value));
             }
         }
 

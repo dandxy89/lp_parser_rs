@@ -16,13 +16,7 @@ use crate::model::{ComparisonOp, ConstraintClass, VariableType};
 fn row_coefficients<'input>(columns: &ColumnsState<'input>, row_name: &'input str) -> Vec<RawCoefficient<'input>> {
     columns.row_entries.get(row_name).map_or_else(Vec::new, |entries| {
         debug_assert!(entries.windows(2).all(|w| w[0].0 < w[1].0), "row entries must be sorted by column index without duplicates");
-        entries
-            .iter()
-            .map(|&(_, var_name)| {
-                let value = *columns.coefficients.get(&(var_name, row_name)).expect("row_entries keys must exist in coefficients");
-                RawCoefficient { name: var_name, value }
-            })
-            .collect()
+        entries.iter().map(|&(_, var_name, value)| RawCoefficient { name: var_name, value }).collect()
     })
 }
 
