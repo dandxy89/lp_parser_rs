@@ -145,7 +145,8 @@ class LpParser:
         `from_file` to override it.
 
         I/O failures here and in the save/export methods raise OSError (or the
-        matching subclass, e.g. PermissionError); parse failures raise LpParseError.
+        matching subclass, e.g. PermissionError); parse failures, including a
+        file that is not valid UTF-8, raise LpParseError.
         """
 
     @staticmethod

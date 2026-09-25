@@ -72,7 +72,7 @@ impl LpParser {
         };
         let file_path = path;
         let problem = py.detach(|| {
-            let input = std::fs::read_to_string(&file_path).map_err(|err| io_err(&file_path, &err))?;
+            let input = read_source(&file_path)?;
             parse_source(&input, inferred)
         })?;
         Ok(Self { lp_file: file_path.to_string_lossy().into_owned(), source_path: Some(file_path), format: inferred, problem })
@@ -96,7 +96,7 @@ impl LpParser {
         // Release the GIL while reading and parsing so other Python threads
         // are not blocked by the heavy pure-Rust work.
         self.problem = py.detach(|| {
-            let input = std::fs::read_to_string(path).map_err(|err| io_err(path, &err))?;
+            let input = read_source(path)?;
             parse_source(&input, format)
         })?;
         Ok(())
@@ -512,6 +512,22 @@ fn require_name(field: &str, value: &str) -> PyResult<()> {
         return Err(LpInvalidValueError::new_err(format!("{field} must not be empty")));
     }
     Ok(())
+}
+
+/// Read a source file as UTF-8. Invalid UTF-8 is a problem with the file's
+/// contents rather than an I/O failure, so it raises `LpParseError`; every
+/// other failure goes through [`io_err`].
+fn read_source(path: &Path) -> PyResult<String> {
+    std::fs::read_to_string(path).map_err(|err| {
+        if err.kind() == std::io::ErrorKind::InvalidData {
+            LpParseError::new_err(format!(
+                "Unable to read '{}': the file is not valid UTF-8 ({err}); re-encode it as UTF-8 (ASCII is a subset)",
+                path.display()
+            ))
+        } else {
+            io_err(path, &err)
+        }
+    })
 }
 
 /// Raise an I/O failure as `OSError`. Given an OS error code, Python's
