@@ -22,7 +22,7 @@ use lp_parser_rs::interner::NameId;
 use lp_parser_rs::model::{ComparisonOp, Constraint, Sense, VariableBounds, VariableKind};
 use lp_parser_rs::problem::LpProblem;
 
-use crate::solver::{build_highs_model, primary_objective_coefficients, variable_bounds};
+use crate::solver::{build_highs_model, primary_objective_coefficients, primary_objective_constant, variable_bounds};
 
 /// Ray components at or below this magnitude are treated as zero, matching the
 /// tolerance the diagnostics pane uses for matrix entries.
@@ -389,6 +389,9 @@ pub fn ranging(problem: &LpProblem) -> Result<Ranging, String> {
     let (variable_names, row_names) = (built.variable_names, built.row_constraint_names);
     let skipped_sos = built.skipped_sos;
     let costs_by_id = primary_objective_coefficients(&relaxed);
+    // HiGHS never sees the objective constant, so every objective value it
+    // reports — and the one computed here — is shifted by it.
+    let constant = primary_objective_constant(&relaxed);
 
     let mut model = crate::solver::pass_model(built.row_problem, built.sense)?;
     model.make_quiet();
@@ -408,7 +411,8 @@ pub fn ranging(problem: &LpProblem) -> Result<Ranging, String> {
             .iter()
             .zip(solution.columns())
             .filter_map(|(name, value)| relaxed.name_id(name).and_then(|id| costs_by_id.get(&id)).map(|cost| cost * value))
-            .sum();
+            .sum::<f64>()
+            + constant;
         (Some(objective), solution.rows().to_vec())
     };
     debug_assert_eq!(row_activities.len(), row_names.len(), "one activity per row");
@@ -473,9 +477,9 @@ pub fn ranging(problem: &LpProblem) -> Result<Ranging, String> {
             name: name.clone(),
             current: relaxed.name_id(name).and_then(|id| costs_by_id.get(&id)).copied().unwrap_or(0.0),
             down: cost_down[index],
-            down_objective: cost_down_objective[index],
+            down_objective: cost_down_objective[index] + constant,
             up: cost_up[index],
-            up_objective: cost_up_objective[index],
+            up_objective: cost_up_objective[index] + constant,
         })
         .collect();
 
@@ -486,9 +490,9 @@ pub fn ranging(problem: &LpProblem) -> Result<Ranging, String> {
             name: name.clone(),
             current: row_activities.get(index).copied().unwrap_or(f64::NAN),
             down: rhs_down[index],
-            down_objective: rhs_down_objective[index],
+            down_objective: rhs_down_objective[index] + constant,
             up: rhs_up[index],
-            up_objective: rhs_up_objective[index],
+            up_objective: rhs_up_objective[index] + constant,
         })
         .collect();
 
@@ -817,6 +821,18 @@ mod tests {
     #[test]
     fn an_unbounded_model_is_refused_too() {
         assert!(ranging(&parse(UNBOUNDED)).is_err(), "an unbounded model has no optimal basis");
+    }
+
+    #[test]
+    fn ranging_includes_the_objective_constant() {
+        // Optimum is x = 3, y = 1: 3x + 2y = 11, plus the constant 10.
+        let problem = parse("Maximize\n obj: 3 x + 2 y + 10\nSubject To\n c1: x + y <= 4\n c2: x <= 3\nEnd");
+        let report = ranging(&problem).expect("an optimal LP must range");
+
+        let objective = report.objective_value.expect("an optimal basis has an objective");
+        assert!((objective - 21.0).abs() < 1e-9, "the constant belongs in the objective, got {objective}");
+        let c1 = report.rows.iter().find(|e| e.name == "c1").expect("c1 must be ranged");
+        assert!(c1.down_objective > 10.0 - 1e-9, "range-end objectives carry the constant too, got {}", c1.down_objective);
     }
 
     #[test]

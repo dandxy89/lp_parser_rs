@@ -376,6 +376,8 @@ struct SolveMetadata {
     sorted_var_ids: Vec<NameId>,
     objective_coefficients: HashMap<NameId, f64>,
     objective_quadratic: Vec<(usize, usize, f64)>,
+    /// Constant term of the primary objective, which `HiGHS` never sees.
+    objective_constant: f64,
     row_constraint_names: Vec<String>,
     skipped_sos: usize,
 }
@@ -410,6 +412,17 @@ pub(crate) fn primary_objective_coefficients(problem: &LpProblem) -> HashMap<Nam
         map.insert(coefficient.name, coefficient.value);
     }
     map
+}
+
+/// Constant term of the problem's primary objective (see
+/// [`primary_objective_coefficients`]), or zero when there is no objective.
+///
+/// `HiGHS` is never given it (the `highs` crate fixes the offset at zero), so
+/// every objective value read back from the solver must have it added.
+pub(crate) fn primary_objective_constant(problem: &LpProblem) -> f64 {
+    let constant = problem.objectives.iter().min_by_key(|(id, _)| problem.resolve(**id)).map_or(0.0, |(_, objective)| objective.constant);
+    debug_assert!(!constant.is_nan(), "an objective constant is never NaN");
+    constant
 }
 
 /// Sort variable `NameId`s by resolved name for deterministic column ordering.
@@ -625,7 +638,8 @@ fn extract_solution(
                         .objective_quadratic
                         .iter()
                         .map(|&(i, j, coefficient)| coefficient * solution.columns()[i] * solution.columns()[j])
-                        .sum::<f64>(),
+                        .sum::<f64>()
+                    + metadata.objective_constant,
             );
 
             let variables: Vec<(String, f64)> =
@@ -862,8 +876,15 @@ fn solve(problem: &LpProblem, extra: &[(&str, &str)], cancel: Option<&AtomicBool
     } = model;
 
     let hessian = hessian_columns(&objective_quadratic, variable_names.len());
-    let metadata =
-        SolveMetadata { variable_names, sorted_var_ids, objective_coefficients, objective_quadratic, row_constraint_names, skipped_sos };
+    let metadata = SolveMetadata {
+        variable_names,
+        sorted_var_ids,
+        objective_coefficients,
+        objective_quadratic,
+        objective_constant: primary_objective_constant(problem),
+        row_constraint_names,
+        skipped_sos,
+    };
 
     let mut highs_model = pass_model(row_problem, sense)?;
     if let Some(columns) = hessian {
@@ -1484,6 +1505,14 @@ empty =\n";
         let result = solve_problem(&problem).expect("a bounded MIP must solve");
         let objective = result.objective_value.expect("an optimal solve has an objective");
         assert!((objective - 0.25).abs() < 1e-9, "x = 0, y = 0.5 is optimal, got {objective}");
+    }
+
+    #[test]
+    fn test_the_objective_value_includes_its_constant() {
+        let problem = LpProblem::parse("Minimize\n obj: x + 5\nSubject To\n c1: x >= 2\nEnd").expect("must parse");
+        let result = solve_problem(&problem).expect("a bounded LP must solve");
+        let objective = result.objective_value.expect("an optimal solve has an objective");
+        assert!((objective - 7.0).abs() < 1e-9, "x = 2 plus the constant 5, got {objective}");
     }
 
     #[test]
