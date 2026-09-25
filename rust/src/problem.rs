@@ -128,47 +128,15 @@ fn extract_problem_name(input: &str) -> Option<String> {
     None
 }
 
-/// Variables collected while assembling a parsed problem.
-///
-/// Alongside the map, `registered` flags (by [`NameId::index`]) the ids
-/// already inserted, so the many repeated references to a variable skip the
-/// map's hash lookup. Assembly never removes a variable, so a set flag
-/// stays true.
-struct VariableRegistry<'v> {
-    variables: &'v mut IndexMap<NameId, Variable>,
-    registered: Vec<bool>,
-}
-
-impl<'v> VariableRegistry<'v> {
-    fn new(variables: &'v mut IndexMap<NameId, Variable>) -> Self {
-        Self { variables, registered: Vec::new() }
-    }
-
-    /// Insert `id` as `make()` unless it is already a variable.
-    #[inline]
-    fn register(&mut self, id: NameId, make: impl FnOnce() -> Variable) {
-        let index = id.index();
-        if self.registered.get(index).copied().unwrap_or(false) {
-            debug_assert!(self.variables.contains_key(&id), "a registered variable stays in the map");
-            return;
-        }
-        self.variables.entry(id).or_insert_with(make);
-        if index >= self.registered.len() {
-            self.registered.resize(index + 1, false);
-        }
-        self.registered[index] = true;
-    }
-}
-
 /// Register variables from coefficient lists into the variables map.
 #[inline]
 fn register_variables_from_coefficients(
-    registry: &mut VariableRegistry<'_>,
+    variables: &mut IndexMap<NameId, Variable>,
     coefficients: &[Coefficient],
     var_type: Option<&VariableType>,
 ) {
     for coeff in coefficients {
-        registry.register(coeff.name, || {
+        variables.entry(coeff.name).or_insert_with(|| {
             let v = Variable::new(coeff.name);
             if let Some(vt) = var_type { v.with_var_type(vt.clone()) } else { v }
         });
@@ -1396,8 +1364,7 @@ fn from_parse_result(parsed: ParseResult<'_>, problem_name: Option<String>) -> L
         FxHashSet::default()
     };
 
-    let mut registry = VariableRegistry::new(&mut variables);
-    let objectives = intern_objectives(&mut interner, &parsed.objectives, &mut registry)?;
+    let objectives = intern_objectives(&mut interner, &parsed.objectives, &mut variables)?;
     let mut constraints = IndexMap::with_capacity(parsed.constraints.len() + parsed.lazy_constraints.len() + parsed.user_cuts.len());
     let mut constraint_classes = IndexMap::new();
     for (raw, class) in [
@@ -1406,7 +1373,7 @@ fn from_parse_result(parsed: ParseResult<'_>, problem_name: Option<String>) -> L
         (&parsed.user_cuts, ConstraintClass::UserCut),
     ] {
         let mut names = NameAllocation { counter: &mut constraint_counter, reserved: &reserved };
-        for id in intern_constraints(&mut interner, raw, &mut registry, &mut constraints, &mut names)? {
+        for id in intern_constraints(&mut interner, raw, &mut variables, &mut constraints, &mut names)? {
             if class.is_normal() {
                 // A later ordinary definition replaces a lazy one of the same name.
                 constraint_classes.shift_remove(&id);
@@ -1416,9 +1383,9 @@ fn from_parse_result(parsed: ParseResult<'_>, problem_name: Option<String>) -> L
         }
     }
 
-    process_bounds(&mut interner, &parsed.bounds, registry.variables);
-    process_variable_types(&mut interner, &parsed, registry.variables);
-    intern_sos_constraints(&mut interner, &parsed.sos, &mut registry, &mut constraints, &mut constraint_counter, &reserved)?;
+    process_bounds(&mut interner, &parsed.bounds, &mut variables);
+    process_variable_types(&mut interner, &parsed, &mut variables);
+    intern_sos_constraints(&mut interner, &parsed.sos, &mut variables, &mut constraints, &mut constraint_counter, &reserved)?;
 
     debug_assert!(constraint_classes.keys().all(|id| constraints.contains_key(id)), "every classed constraint must exist");
     Ok(LpProblem { name: problem_name, sense: parsed.sense, objectives, constraints, variables, constraint_classes, interner })
@@ -1443,7 +1410,7 @@ impl TryFrom<&str> for LpProblem {
 fn intern_objectives(
     interner: &mut NameInterner,
     raw_objectives: &[RawObjective<'_>],
-    variables: &mut VariableRegistry<'_>,
+    variables: &mut IndexMap<NameId, Variable>,
 ) -> LpResult<IndexMap<NameId, Objective>> {
     let mut objectives = IndexMap::with_capacity(raw_objectives.len());
     let mut obj_counter: u32 = 0;
@@ -1469,8 +1436,8 @@ fn intern_objectives(
 
         register_variables_from_coefficients(variables, &obj.coefficients, None);
         for term in &obj.quadratic {
-            variables.register(term.var1, || Variable::new(term.var1));
-            variables.register(term.var2, || Variable::new(term.var2));
+            variables.entry(term.var1).or_insert_with(|| Variable::new(term.var1));
+            variables.entry(term.var2).or_insert_with(|| Variable::new(term.var2));
         }
         let name = obj.name;
         if objectives.insert(name, obj).is_some() {
@@ -1493,7 +1460,7 @@ struct NameAllocation<'a, 'r> {
 fn intern_constraints(
     interner: &mut NameInterner,
     raw_constraints: &[RawConstraint<'_>],
-    variables: &mut VariableRegistry<'_>,
+    variables: &mut IndexMap<NameId, Variable>,
     constraints: &mut IndexMap<NameId, Constraint>,
     names: &mut NameAllocation<'_, '_>,
 ) -> LpResult<Vec<NameId>> {
@@ -1568,7 +1535,7 @@ fn process_variable_types(interner: &mut NameInterner, parsed: &ParseResult<'_>,
 fn intern_sos_constraints(
     interner: &mut NameInterner,
     raw_sos: &[RawConstraint<'_>],
-    variables: &mut VariableRegistry<'_>,
+    variables: &mut IndexMap<NameId, Variable>,
     constraints: &mut IndexMap<NameId, Constraint>,
     constraint_counter: &mut u32,
     reserved: &FxHashSet<&str>,
@@ -1649,7 +1616,7 @@ const fn set_constraint_name(constraint: &mut Constraint, name_id: NameId) {
 
 /// Register variables referenced by a constraint into the variables map.
 #[inline]
-fn register_constraint_variables(variables: &mut VariableRegistry<'_>, constraint: &Constraint) {
+fn register_constraint_variables(variables: &mut IndexMap<NameId, Variable>, constraint: &Constraint) {
     match constraint {
         Constraint::Standard { coefficients, .. } => {
             register_variables_from_coefficients(variables, coefficients, None);
@@ -1658,7 +1625,9 @@ fn register_constraint_variables(variables: &mut VariableRegistry<'_>, constrain
             register_variables_from_coefficients(variables, weights, Some(&VariableType::SOS));
         }
         Constraint::Indicator { .. } | Constraint::Quadratic { .. } | Constraint::General { .. } => {
-            constraint.for_each_variable(|id| variables.register(id, || Variable::new(id)));
+            constraint.for_each_variable(|id| {
+                variables.entry(id).or_insert_with(|| Variable::new(id));
+            });
         }
     }
 }
