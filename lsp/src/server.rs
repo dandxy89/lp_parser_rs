@@ -36,6 +36,9 @@ struct ClientCaps {
     code_action_resolve: bool,
 }
 
+/// Result id and data of the semantic tokens last sent for a document.
+type CachedTokens = (String, Arc<Vec<SemanticToken>>);
+
 /// Shared server state. Locks are never held across `.await`.
 #[derive(Debug, Default)]
 struct State {
@@ -56,8 +59,9 @@ struct State {
     /// Latest scheduled semantic pass per document (debounce generation).
     generations: RwLock<HashMap<Uri, u64>>,
     next_generation: AtomicU64,
-    /// Last semantic tokens sent per document, for deltas.
-    tokens: RwLock<HashMap<Uri, (String, Vec<SemanticToken>)>>,
+    /// Last semantic tokens sent per document, for deltas. Shared, so a
+    /// delta request does not copy them.
+    tokens: RwLock<HashMap<Uri, CachedTokens>>,
     next_result_id: AtomicU64,
     /// Bumped on every configuration change; part of workspace diagnostic
     /// result ids, since settings change the diagnostics.
@@ -429,7 +433,7 @@ impl Backend {
         Ok((self.document_or_error(&params.text_document.uri)?, params.position))
     }
 
-    fn cache_tokens(&self, uri: &Uri, tokens: Vec<SemanticToken>) -> String {
+    fn cache_tokens(&self, uri: &Uri, tokens: Arc<Vec<SemanticToken>>) -> String {
         let id = self.state.next_result_id.fetch_add(1, Ordering::Relaxed).to_string();
         write(&self.state.tokens).insert(uri.clone(), (id.clone(), tokens));
         id
@@ -931,7 +935,7 @@ impl LanguageServer for Backend {
         let uri = params.text_document.uri;
         let doc = self.document_or_error(&uri)?;
         let data = self.run(move || semantic_tokens::tokens(&doc, None)).await?;
-        let result_id = self.cache_tokens(&uri, data.clone());
+        let result_id = self.cache_tokens(&uri, Arc::new(data.clone()));
         Ok(Some(SemanticTokensResult::Tokens(SemanticTokens { result_id: Some(result_id), data })))
     }
 
@@ -939,7 +943,7 @@ impl LanguageServer for Backend {
         let uri = params.text_document.uri;
         let doc = self.document_or_error(&uri)?;
         let previous =
-            read(&self.state.tokens).get(&uri).filter(|(id, _)| *id == params.previous_result_id).map(|(_, tokens)| tokens.clone());
+            read(&self.state.tokens).get(&uri).filter(|(id, _)| *id == params.previous_result_id).map(|(_, tokens)| Arc::clone(tokens));
         let (data, edits) = self
             .run(move || {
                 let data = semantic_tokens::tokens(&doc, None);
@@ -947,11 +951,13 @@ impl LanguageServer for Backend {
                 (data, edits)
             })
             .await?;
-        let result_id = self.cache_tokens(&uri, data.clone());
-        Ok(Some(match edits {
-            Some(edits) => SemanticTokensFullDeltaResult::TokensDelta(SemanticTokensDelta { result_id: Some(result_id), edits }),
-            None => SemanticTokensFullDeltaResult::Tokens(SemanticTokens { result_id: Some(result_id), data }),
-        }))
+        // Only a full response needs its own copy of the tokens.
+        if let Some(edits) = edits {
+            let result_id = self.cache_tokens(&uri, Arc::new(data));
+            return Ok(Some(SemanticTokensFullDeltaResult::TokensDelta(SemanticTokensDelta { result_id: Some(result_id), edits })));
+        }
+        let result_id = self.cache_tokens(&uri, Arc::new(data.clone()));
+        Ok(Some(SemanticTokensFullDeltaResult::Tokens(SemanticTokens { result_id: Some(result_id), data })))
     }
 
     async fn semantic_tokens_range(&self, params: SemanticTokensRangeParams) -> Result<Option<SemanticTokensRangeResult>> {
