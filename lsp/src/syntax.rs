@@ -380,37 +380,78 @@ pub fn declared_bounds(node: Node<'_>, text: &str) -> Option<VariableBounds> {
         Operator(Option<bool>),
         Value(f64),
     }
+    /// What a child of a `bound_declaration` contributes, by grammar symbol.
+    #[derive(Clone, Copy, PartialEq, Eq)]
+    enum Part {
+        Other,
+        Minus,
+        Variable,
+        Free,
+        Operator,
+        Value,
+    }
+    static PARTS: std::sync::OnceLock<Vec<Part>> = std::sync::OnceLock::new();
+    /// Longest item list that makes a bound: any more and there is none.
+    const MAX_ITEMS: usize = 5;
+    let parts = PARTS.get_or_init(|| {
+        let mut parts = vec![Part::Other; language().node_kind_count()];
+        let kinds = [
+            ("-", false, Part::Minus),
+            (kind::IDENTIFIER, true, Part::Variable),
+            (kind::FREE_KEYWORD, true, Part::Free),
+            (kind::COMPARISON_OPERATOR, true, Part::Operator),
+            (kind::NUMBER, true, Part::Value),
+            (kind::INFINITY, true, Part::Value),
+        ];
+        for (name, named, part) in kinds {
+            for id in kind_ids(name, named) {
+                parts[usize::from(id)] = part;
+            }
+        }
+        parts
+    });
     debug_assert_eq!(node.kind(), kind::BOUND_DECLARATION);
-    let mut items = Vec::new();
+    let mut items = [Item::Variable; MAX_ITEMS];
+    let mut len = 0;
     let mut negative = false;
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
-        let source = self::text(child, text);
-        match child.kind() {
-            "-" => negative = true,
-            kind::IDENTIFIER => items.push(Item::Variable),
-            kind::FREE_KEYWORD => items.push(Item::Free),
-            kind::COMPARISON_OPERATOR => items.push(Item::Operator(match canonical_operator(source) {
+        // ERROR nodes have no entry: they contribute nothing.
+        let part = parts.get(usize::from(child.kind_id())).copied().unwrap_or(Part::Other);
+        let item = match part {
+            Part::Other => continue,
+            Part::Minus => {
+                negative = true;
+                continue;
+            }
+            Part::Variable => Item::Variable,
+            Part::Free => Item::Free,
+            Part::Operator => Item::Operator(match canonical_operator(self::text(child, text)) {
                 "<=" | "<" => Some(true),
                 ">=" | ">" => Some(false),
                 _ => None,
-            })),
-            kind::NUMBER | kind::INFINITY => {
-                let value = parse_number(source)?;
+            }),
+            Part::Value => {
+                let value = parse_number(self::text(child, text))?;
                 let value = if negative { -value } else { value };
                 negative = false;
-                items.push(Item::Value(if value >= INFINITE_BOUND {
+                Item::Value(if value >= INFINITE_BOUND {
                     f64::INFINITY
                 } else if value <= -INFINITE_BOUND {
                     f64::NEG_INFINITY
                 } else {
                     value
-                }));
+                })
             }
-            _ => {}
+        };
+        if len == MAX_ITEMS {
+            return None;
         }
+        items[len] = item;
+        len += 1;
     }
-    let bounds = match items.as_slice() {
+    let items = &items[..len];
+    let bounds = match items {
         [Item::Variable, Item::Free] => VariableBounds::free(),
         [Item::Variable, Item::Operator(le), Item::Value(v)] => match le {
             Some(true) => VariableBounds::upper(*v),
@@ -516,6 +557,140 @@ pub fn is_line_start_keyword(word: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// [`declared_bounds`] as first written: kind names and a growing list.
+    fn declared_bounds_reference(node: Node<'_>, text: &str) -> Option<VariableBounds> {
+        #[derive(Clone, Copy)]
+        enum Item {
+            Variable,
+            Free,
+            /// `Some(true)` for `<=`-like, `Some(false)` for `>=`-like, `None` for `=`.
+            Operator(Option<bool>),
+            Value(f64),
+        }
+        debug_assert_eq!(node.kind(), kind::BOUND_DECLARATION);
+        let mut items = Vec::new();
+        let mut negative = false;
+        let mut cursor = node.walk();
+        for child in node.children(&mut cursor) {
+            let source = self::text(child, text);
+            match child.kind() {
+                "-" => negative = true,
+                kind::IDENTIFIER => items.push(Item::Variable),
+                kind::FREE_KEYWORD => items.push(Item::Free),
+                kind::COMPARISON_OPERATOR => items.push(Item::Operator(match canonical_operator(source) {
+                    "<=" | "<" => Some(true),
+                    ">=" | ">" => Some(false),
+                    _ => None,
+                })),
+                kind::NUMBER | kind::INFINITY => {
+                    let value = parse_number(source)?;
+                    let value = if negative { -value } else { value };
+                    negative = false;
+                    items.push(Item::Value(if value >= INFINITE_BOUND {
+                        f64::INFINITY
+                    } else if value <= -INFINITE_BOUND {
+                        f64::NEG_INFINITY
+                    } else {
+                        value
+                    }));
+                }
+                _ => {}
+            }
+        }
+        let bounds = match items.as_slice() {
+            [Item::Variable, Item::Free] => VariableBounds::free(),
+            [Item::Variable, Item::Operator(le), Item::Value(v)] => match le {
+                Some(true) => VariableBounds::upper(*v),
+                Some(false) => VariableBounds::lower(*v),
+                None => VariableBounds::range(*v, *v),
+            },
+            [Item::Value(v), Item::Operator(le), Item::Variable] => match le {
+                Some(true) => VariableBounds::lower(*v),
+                Some(false) => VariableBounds::upper(*v),
+                None => VariableBounds::range(*v, *v),
+            },
+            [Item::Value(a), Item::Operator(Some(true)), Item::Variable, Item::Operator(Some(true)), Item::Value(b)] => {
+                VariableBounds::range(*a, *b)
+            }
+            [Item::Value(a), Item::Operator(Some(false)), Item::Variable, Item::Operator(Some(false)), Item::Value(b)] => {
+                VariableBounds::range(*b, *a)
+            }
+            _ => return None,
+        };
+        Some(bounds)
+    }
+
+    #[test]
+    fn declared_bounds_of_every_shape_match_reference() {
+        let lines = [
+            "x free",
+            "x <= 4",
+            "x >= -inf",
+            "x = 2",
+            "-3 <= x",
+            "2 >= x",
+            "1e30 = x",
+            "-1 <= x <= 1e31",
+            "5 >= x >= -2.5",
+            "1 <= x >= 2",
+            "1 <= x <= 2 <= 3",
+            "- - 3 <= x",
+        ];
+        for line in lines {
+            let text = format!("min\n obj: x\nst\n c: x >= 1\nbounds\n {line}\nend\n");
+            let tree = parse(&text, None);
+            let mut cursor = tree.walk();
+            let mut stack = vec![tree.root_node()];
+            let mut found = 0;
+            while let Some(node) = stack.pop() {
+                if node.kind() == kind::BOUND_DECLARATION {
+                    assert_eq!(declared_bounds(node, &text), declared_bounds_reference(node, &text), "{line}");
+                    found += 1;
+                }
+                stack.extend(node.children(&mut cursor));
+            }
+            assert!(found > 0, "{line} has a bound declaration");
+        }
+    }
+
+    proptest::proptest! {
+        #[test]
+        fn declared_bounds_match_reference(
+            line in proptest::collection::vec(
+                proptest::prop_oneof![
+                    proptest::strategy::Just("x"),
+                    proptest::strategy::Just("y"),
+                    proptest::strategy::Just("free"),
+                    proptest::strategy::Just("-"),
+                    proptest::strategy::Just("+"),
+                    proptest::strategy::Just("<="),
+                    proptest::strategy::Just("=<"),
+                    proptest::strategy::Just(">="),
+                    proptest::strategy::Just("<"),
+                    proptest::strategy::Just("="),
+                    proptest::strategy::Just("3"),
+                    proptest::strategy::Just("-2.5e3"),
+                    proptest::strategy::Just("1e31"),
+                    proptest::strategy::Just("inf"),
+                    proptest::strategy::Just("-infinity"),
+                    proptest::strategy::Just("["),
+                ],
+                0..9,
+            )
+        ) {
+            let text = format!("min\n obj: x\nst\n c: x >= 1\nbounds\n {}\n x <= 4\nend\n", line.join(" "));
+            let tree = parse(&text, None);
+            let mut cursor = tree.walk();
+            let mut stack = vec![tree.root_node()];
+            while let Some(node) = stack.pop() {
+                if node.kind() == kind::BOUND_DECLARATION {
+                    proptest::prop_assert_eq!(declared_bounds(node, &text), declared_bounds_reference(node, &text), "{:?}", text);
+                }
+                stack.extend(node.children(&mut cursor));
+            }
+        }
+    }
 
     #[test]
     fn parses_numbers_and_infinity() {
