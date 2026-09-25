@@ -776,7 +776,14 @@ pub(crate) fn write_formatted_coefficient(
     debug_assert!(value.is_finite(), "coefficient value must be finite, got: {value}");
     let abs_value = value.abs();
     let sign = if value < 0.0 { "-" } else { "+" };
-    let is_one = (abs_value - 1.0).abs() < NUMERIC_EPSILON;
+    // In exact mode (`precision == None`) the output must read back as the
+    // identical `f64`, so only an exact 1 may drop its coefficient; a
+    // rounding precision already writes near-1 values as `1`.
+    #[allow(clippy::float_cmp)]
+    let is_one = match precision {
+        None => abs_value == 1.0,
+        Some(_) => (abs_value - 1.0).abs() < NUMERIC_EPSILON,
+    };
 
     if is_first {
         if value < 0.0 {
@@ -1075,6 +1082,28 @@ mod tests {
         assert!(write_lp_string(&named).is_err(), "a line break in the problem name comment must be rejected");
         let options = LpWriterOptions { include_problem_name: false, ..LpWriterOptions::default() };
         assert!(write_lp_string_with_options(&named, &options).is_ok(), "the name is irrelevant when it is not written");
+    }
+
+    #[test]
+    fn test_near_one_coefficient_keeps_its_value_in_exact_mode() {
+        let mut out = String::new();
+        write_formatted_coefficient(&mut out, "x", 1.000_000_000_01, true, None).unwrap();
+        assert_eq!(out, "1.00000000001 x");
+        out.clear();
+        write_formatted_coefficient(&mut out, "x", -0.999_999_999_99, false, None).unwrap();
+        assert_eq!(out, " - 0.99999999999 x");
+        out.clear();
+        write_formatted_coefficient(&mut out, "x", 1.0, true, None).unwrap();
+        assert_eq!(out, "x");
+        // A rounding precision collapses near-1 values to 1 anyway.
+        out.clear();
+        write_formatted_coefficient(&mut out, "x", 1.000_000_000_01, true, Some(6)).unwrap();
+        assert_eq!(out, "x");
+
+        let problem = LpProblem::parse("minimize\nobj: 1.00000000001 x\nsubject to\nc1: x <= 1\nend").unwrap();
+        let reparsed = LpProblem::parse(&write_lp_string(&problem).unwrap()).unwrap();
+        let obj = reparsed.objectives.values().next().unwrap();
+        assert_eq!(obj.coefficients[0].value, 1.000_000_000_01, "exact mode must round-trip the coefficient");
     }
 
     #[test]
