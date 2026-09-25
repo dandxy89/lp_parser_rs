@@ -816,6 +816,8 @@ impl LpProblem {
             for coeff in &objective.coefficients {
                 used_variables.insert(coeff.name);
             }
+            // A variable appearing only in quadratic terms is used too.
+            used_variables.extend(objective.quadratic.iter().flat_map(|term| [term.var1, term.var2]));
         }
 
         for constraint in self.constraints.values() {
@@ -1334,6 +1336,13 @@ mod tests {
             "expected an UnusedVariable Info issue: {:?}",
             analysis.issues
         );
+    }
+
+    #[test]
+    fn test_objective_quadratic_variable_is_not_unused() {
+        let problem = LpProblem::parse("min\n obj: x + [ y ^ 2 + 2 x * z ] / 2\nst\n c1: x >= 1\nend").unwrap();
+        let analysis = problem.analyze();
+        assert!(analysis.variables.unused_variables.is_empty(), "{:?}", analysis.variables.unused_variables);
     }
 
     #[test]
