@@ -102,12 +102,13 @@ impl LpParser {
         Ok(())
     }
 
-    fn to_csv(&self, base_directory: PathBuf) -> PyResult<()> {
+    fn to_csv(&self, py: Python, base_directory: PathBuf) -> PyResult<()> {
         if !base_directory.is_dir() {
             return Err(PyNotADirectoryError::new_err(format!("Path {} is not a directory.", base_directory.display())));
         }
 
-        self.problem.to_csv(&base_directory).map_err(|err| csv_err(&base_directory, err))
+        let problem = &self.problem;
+        py.detach(|| problem.to_csv(&base_directory).map_err(|err| csv_err(&base_directory, err)))
     }
 
     #[getter]
@@ -229,6 +230,7 @@ impl LpParser {
     #[pyo3(signature = (*, include_problem_name=true, max_line_length=80, decimal_precision=None, include_section_spacing=true))]
     fn to_lp_string(
         &self,
+        py: Python,
         include_problem_name: bool,
         max_line_length: usize,
         decimal_precision: Option<usize>,
@@ -239,30 +241,44 @@ impl LpParser {
         }
         let problem = &self.problem;
         let options = LpWriterOptions { include_problem_name, max_line_length, decimal_precision, include_section_spacing };
-        write_lp_string_with_options(problem, &options).map_err(|err| to_py_err("Unable to write LP", err))
+        // Release the GIL: writing is pure Rust and can take a while on large
+        // problems.
+        py.detach(|| write_lp_string_with_options(problem, &options)).map_err(|err| to_py_err("Unable to write LP", err))
     }
 
     /// Save the current problem to an LP file
-    fn save_to_file(&self, filepath: PathBuf) -> PyResult<()> {
+    fn save_to_file(&self, py: Python, filepath: PathBuf) -> PyResult<()> {
         let problem = &self.problem;
-        let lp_content =
-            write_lp_string_with_options(problem, &LpWriterOptions::default()).map_err(|err| to_py_err("Unable to write LP", err))?;
-        std::fs::write(&filepath, lp_content).map_err(|err| io_err(&filepath, &err))
+        py.detach(|| {
+            let lp_content =
+                write_lp_string_with_options(problem, &LpWriterOptions::default()).map_err(|err| to_py_err("Unable to write LP", err))?;
+            std::fs::write(&filepath, lp_content).map_err(|err| io_err(&filepath, &err))
+        })
     }
 
     /// Write the current problem to an MPS format string.
     #[pyo3(signature = (*, decimal_precision=None, allow_multiple_objectives=false))]
-    fn to_mps_string(&self, decimal_precision: Option<usize>, allow_multiple_objectives: bool) -> PyResult<String> {
+    fn to_mps_string(&self, py: Python, decimal_precision: Option<usize>, allow_multiple_objectives: bool) -> PyResult<String> {
         let problem = &self.problem;
         let options = MpsWriterOptions { decimal_precision, allow_multiple_objectives };
-        write_mps_string_with_options(problem, &options).map_err(|err| to_py_err("Unable to write MPS", err))
+        py.detach(|| write_mps_string_with_options(problem, &options)).map_err(|err| to_py_err("Unable to write MPS", err))
     }
 
     /// Save the current problem to an MPS file.
     #[pyo3(signature = (filepath, *, decimal_precision=None, allow_multiple_objectives=false))]
-    fn save_to_mps(&self, filepath: PathBuf, decimal_precision: Option<usize>, allow_multiple_objectives: bool) -> PyResult<()> {
-        let content = self.to_mps_string(decimal_precision, allow_multiple_objectives)?;
-        std::fs::write(&filepath, content).map_err(|err| io_err(&filepath, &err))
+    fn save_to_mps(
+        &self,
+        py: Python,
+        filepath: PathBuf,
+        decimal_precision: Option<usize>,
+        allow_multiple_objectives: bool,
+    ) -> PyResult<()> {
+        let problem = &self.problem;
+        let options = MpsWriterOptions { decimal_precision, allow_multiple_objectives };
+        py.detach(|| {
+            let content = write_mps_string_with_options(problem, &options).map_err(|err| to_py_err("Unable to write MPS", err))?;
+            std::fs::write(&filepath, content).map_err(|err| io_err(&filepath, &err))
+        })
     }
 
     /// Compare this problem against another parser's problem.
@@ -273,7 +289,7 @@ impl LpParser {
     fn diff(&self, py: Python, other: &Self) -> PyResult<Py<PyAny>> {
         let problem = &self.problem;
         let other_problem = &other.problem;
-        let result = problem.diff(other_problem, &DiffOptions::default());
+        let result = py.detach(|| problem.diff(other_problem, &DiffOptions::default()));
         let is_empty = result.is_empty();
 
         let dict = PyDict::new(py);
@@ -475,7 +491,7 @@ impl LpParser {
             large_rhs_threshold,
             coefficient_ratio_threshold: ratio_threshold,
         };
-        let analysis = problem.analyze_with_config(&config);
+        let analysis = py.detach(|| problem.analyze_with_config(&config));
         analysis_to_dict(py, &analysis)
     }
 
