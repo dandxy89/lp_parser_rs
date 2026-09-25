@@ -919,6 +919,12 @@ impl LpProblem {
 
     /// Update the type of a variable from a legacy [`VariableType`].
     ///
+    /// A bound ([`VariableType::LowerBound`], [`VariableType::UpperBound`],
+    /// [`VariableType::DoubleBound`]) is merged into the declared bounds, as in
+    /// a `Bounds` section: the kind and any side it does not set are kept.
+    /// Every other type replaces both the kind and the bounds; in particular
+    /// [`VariableType::Free`] makes the variable continuous on `(-inf, +inf)`.
+    ///
     /// # Errors
     ///
     /// Returns an error if the variable does not exist.
@@ -928,7 +934,13 @@ impl LpProblem {
 
         let variable = self.variables.get_mut(&var_id).ok_or_else(|| LpParseError::not_found(EntityKind::Variable, variable_name))?;
 
-        variable.set_var_type(new_type);
+        if matches!(new_type, VariableType::LowerBound(_) | VariableType::UpperBound(_) | VariableType::DoubleBound(_, _)) {
+            let (kind, bounds) = new_type.into_kind_and_bounds();
+            debug_assert_eq!(kind, VariableKind::Continuous, "a bound declaration carries no kind of its own");
+            variable.set_bounds(variable.bounds.merge(bounds));
+        } else {
+            variable.set_var_type(new_type);
+        }
         Ok(())
     }
 
@@ -2413,7 +2425,7 @@ End";
 
 #[cfg(test)]
 mod modification_tests {
-    use crate::model::{Coefficient, ComparisonOp, Constraint, Objective, SOSType, Sense, VariableKind, VariableType};
+    use crate::model::{Coefficient, ComparisonOp, Constraint, Objective, SOSType, Sense, VariableBounds, VariableKind, VariableType};
     use crate::problem::LpProblem;
 
     fn create_test_problem() -> LpProblem {
@@ -2546,6 +2558,26 @@ mod modification_tests {
         p.update_variable_type("x1", VariableType::Binary).unwrap();
         let x1 = p.name_id("x1").unwrap();
         assert_eq!(p.variables[&x1].kind, VariableKind::Binary);
+    }
+
+    /// A one-sided bound tightens what is already declared, as it does in a
+    /// `Bounds` section: the other side and the kind survive.
+    #[test]
+    fn test_variable_type_update_with_a_bound_keeps_kind_and_other_bound() {
+        let mut p = LpProblem::parse("Minimize\n obj: x\nSubject To\n c1: x >= 1\nBounds\n x <= 10\nGenerals\n x\nEnd").unwrap();
+        p.update_variable_type("x", VariableType::LowerBound(2.0)).unwrap();
+        let x = &p.variables[&p.name_id("x").unwrap()];
+        assert_eq!(x.kind, VariableKind::General);
+        assert_eq!(x.bounds, VariableBounds::range(2.0, 10.0));
+
+        p.update_variable_type("x", VariableType::UpperBound(8.0)).unwrap();
+        let x = &p.variables[&p.name_id("x").unwrap()];
+        assert_eq!((x.kind, x.bounds), (VariableKind::General, VariableBounds::range(2.0, 8.0)));
+
+        // `Free` still resets to a continuous (-inf, +inf) variable.
+        p.update_variable_type("x", VariableType::Free).unwrap();
+        let x = &p.variables[&p.name_id("x").unwrap()];
+        assert_eq!((x.kind, x.bounds), (VariableKind::Continuous, VariableBounds::free()));
     }
 
     #[test]
