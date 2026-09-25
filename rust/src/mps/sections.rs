@@ -592,17 +592,7 @@ pub(super) fn parse_sos_line<'input>(
         let sos_type = if upper == "S1" { SOSType::S1 } else { SOSType::S2 };
         // The rest of the header might contain a name; the fields borrow from
         // `line`, so no re-slicing or allocation is needed.
-        let mut name = fields.next().unwrap_or("");
-        // The extended header `S1 SOS name priority` (written by CPLEX and
-        // read by SCIP / HiGHS) puts the literal `SOS` before the set name.
-        // Without this every such set would be named `SOS`. The priority has
-        // no counterpart in the model and is ignored. A set genuinely named
-        // `SOS` (no further field) keeps its name.
-        if name.eq_ignore_ascii_case("SOS")
-            && let Some(extended_name) = fields.next().filter(|f| !f.starts_with('$'))
-        {
-            name = extended_name;
-        }
+        let name = fields.next().unwrap_or("");
 
         *current_type = Some(sos_type);
         *current_name = Some(if name.is_empty() { type_token } else { name });
