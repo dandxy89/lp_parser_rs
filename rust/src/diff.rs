@@ -33,7 +33,6 @@
 //! ```
 
 use std::borrow::Cow;
-use std::collections::BTreeSet;
 use std::hash::Hash;
 
 use rustc_hash::FxHashMap;
@@ -204,9 +203,39 @@ fn canon_index<'p>(problem: &'p LpProblem, names: impl Iterator<Item = NameId>, 
     names.enumerate().map(|(position, id)| (canon.name(problem.resolve(id)), position)).collect()
 }
 
-/// The sorted set of canonical names in `index`, borrowed from its keys.
-fn name_set<'i>(index: &'i CanonIndex<'_>) -> BTreeSet<&'i str> {
-    index.keys().map(AsRef::as_ref).collect()
+/// Canonical names split by which side has them, each list sorted (as a
+/// `BTreeSet` would order them), borrowed from the indexes' keys.
+struct NameSplit<'n> {
+    /// Names only in the first problem.
+    removed: Vec<&'n str>,
+    /// Names in both problems.
+    common: Vec<&'n str>,
+    /// Names only in the second problem.
+    added: Vec<&'n str>,
+}
+
+impl<'n> NameSplit<'n> {
+    /// Split the keys of `old` and `new`. Each name is sorted once, in the
+    /// list it belongs to, rather than sorting both sides whole.
+    fn new(old: &'n CanonIndex<'_>, new: &'n CanonIndex<'_>) -> Self {
+        let mut removed = Vec::new();
+        let mut common = Vec::with_capacity(old.len().min(new.len()));
+        for name in old.keys() {
+            if new.contains_key(name) { common.push(name.as_ref()) } else { removed.push(name.as_ref()) }
+        }
+        let mut added: Vec<&str> = new.keys().filter(|name| !old.contains_key(*name)).map(AsRef::as_ref).collect();
+        // Keys are unique, so an unstable sort gives the one sorted order.
+        removed.sort_unstable();
+        common.sort_unstable();
+        added.sort_unstable();
+        debug_assert!(removed.len() + common.len() == old.len() && added.len() + common.len() == new.len(), "every name lands in one list");
+        Self { removed, common, added }
+    }
+}
+
+/// Owned copies of `names`, for the result.
+fn owned(names: &[&str]) -> Vec<String> {
+    names.iter().map(|name| (*name).to_string()).collect()
 }
 
 /// Counts linear coefficient differences between rows of `p1` and `p2`,
@@ -502,19 +531,13 @@ pub fn compare(p1: &LpProblem, p2: &LpProblem, options: &DiffOptions) -> LpDiff 
     let cobjs1 = canon_index(p1, p1.objectives.keys().copied(), canon);
     let cobjs2 = canon_index(p2, p2.objectives.keys().copied(), canon);
 
-    let vars1 = name_set(&cvars1);
-    let vars2 = name_set(&cvars2);
-    let cons1 = name_set(&ccons1);
-    let cons2 = name_set(&ccons2);
-    let objs1 = name_set(&cobjs1);
-    let objs2 = name_set(&cobjs2);
-
-    // Sorted intersections keep modified-section output deterministic.
-    let cons_common: Vec<&str> = cons1.intersection(&cons2).copied().collect();
-    let objs_common: Vec<&str> = objs1.intersection(&objs2).copied().collect();
+    // Sorted name lists keep the output deterministic.
+    let vars = NameSplit::new(&cvars1, &cvars2);
+    let cons = NameSplit::new(&ccons1, &ccons2);
+    let objs = NameSplit::new(&cobjs1, &cobjs2);
 
     let mut vars_type_changed = Vec::new();
-    for &name in vars1.intersection(&vars2) {
+    for &name in &vars.common {
         let (_, v1) = p1.variables.get_index(cvars1[name]).expect("canonical index holds positions of existing variables");
         let (_, v2) = p2.variables.get_index(cvars2[name]).expect("canonical index holds positions of existing variables");
         if v1.kind != v2.kind || bounds_differ(tol, v1, v2) {
@@ -523,20 +546,18 @@ pub fn compare(p1: &LpProblem, p2: &LpProblem, options: &DiffOptions) -> LpDiff 
     }
 
     let sense_changed = (p1.sense != p2.sense).then(|| (p1.sense.to_string(), p2.sense.to_string()));
-    let owned =
-        |names: std::collections::btree_set::Difference<'_, &str>| -> Vec<String> { names.map(|name| (*name).to_string()).collect() };
 
     LpDiff {
         sense_changed,
-        vars_added: owned(vars2.difference(&vars1)),
-        vars_removed: owned(vars1.difference(&vars2)),
+        vars_added: owned(&vars.added),
+        vars_removed: owned(&vars.removed),
         vars_type_changed,
-        cons_added: owned(cons2.difference(&cons1)),
-        cons_removed: owned(cons1.difference(&cons2)),
-        cons_modified: diff_modified_constraints(p1, p2, &ccons1, &ccons2, &cons_common, canon, tol),
-        objs_added: owned(objs2.difference(&objs1)),
-        objs_removed: owned(objs1.difference(&objs2)),
-        objs_modified: diff_modified_objectives(p1, p2, &cobjs1, &cobjs2, &objs_common, canon, tol),
+        cons_added: owned(&cons.added),
+        cons_removed: owned(&cons.removed),
+        cons_modified: diff_modified_constraints(p1, p2, &ccons1, &ccons2, &cons.common, canon, tol),
+        objs_added: owned(&objs.added),
+        objs_removed: owned(&objs.removed),
+        objs_modified: diff_modified_objectives(p1, p2, &cobjs1, &cobjs2, &objs.common, canon, tol),
     }
 }
 
