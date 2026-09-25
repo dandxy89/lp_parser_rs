@@ -398,6 +398,23 @@ fn narrow_side_by_side_values_are_rounded_and_keep_their_badge() {
     assert!(frame_contains(&terminal, "[~]"), "the change badge must stay in view");
 }
 
+/// Regression: the side-by-side view kept its header chunk at full height after
+/// the header had scrolled away, so the last coefficient rows — as many as the
+/// header had lines — could never be scrolled into view.
+#[test]
+fn side_by_side_last_coefficient_is_reachable_at_full_scroll() {
+    let terms = |scale: f64| (0..60).map(|i| format!("{} v{i:02}", f64::from(i) * scale + 1.0)).collect::<Vec<_>>().join(" + ");
+    let mut app = diff_app_from(
+        &format!("min\nobj: v00\nst\nc1: {} >= 2\nend\n", terms(1.0)),
+        &format!("min\nobj: v00\nst\nc1: {} >= 2\nend\n", terms(2.0)),
+    );
+    app.set_section(Section::Constraints);
+    render(&mut app, 100, 30);
+    app.detail_scroll = app.max_detail_scroll();
+    let terminal = render(&mut app, 100, 30);
+    assert!(frame_contains(&terminal, "v59"), "the last coefficient must be visible at maximum scroll");
+}
+
 /// Regression: `j` grew the solve overlay's scroll offset without bound, so
 /// over-scrolling left a blank pane that `k` had to climb back out of.
 #[test]

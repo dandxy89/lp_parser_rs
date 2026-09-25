@@ -752,7 +752,11 @@ fn render_constraint_side_by_side(
 
     #[allow(clippy::cast_possible_truncation)]
     let header_height = header_line_count as u16;
-    let v_chunks = Layout::vertical([Constraint::Length(header_height), Constraint::Min(0)]).split(inner);
+    // The header shrinks as it scrolls away, handing its rows to the
+    // coefficients: a fixed-height header chunk would hide the last
+    // `header_height` rows at maximum scroll.
+    let header_visible = header_height.saturating_sub(scroll);
+    let v_chunks = Layout::vertical([Constraint::Length(header_visible), Constraint::Min(0)]).split(inner);
 
     let header_paragraph = Paragraph::new(header_lines).scroll((scroll, 0));
     frame.render_widget(header_paragraph, v_chunks[0]);
