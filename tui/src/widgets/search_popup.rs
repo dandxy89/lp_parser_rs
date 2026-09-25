@@ -137,15 +137,25 @@ pub fn build_result_lines(results: &[SearchResult], names: &[String], show_badge
 }
 
 /// Draw the ranked results list on the left side using pre-built cached lines.
+///
+/// Only the rows in view are handed to the `List`: the window is the one a
+/// fresh `ListState` would scroll to (the selection on the last row once it
+/// is past the first screenful), so cloning every cached line per frame buys
+/// nothing.
 fn draw_results_list(frame: &mut Frame, area: Rect, cached_lines: &[Line<'static>], result_count: usize, selected: usize) {
     let t = theme();
-    let items: Vec<ListItem> = cached_lines.iter().enumerate().map(|(i, line)| ListItem::new(line.clone()).style(zebra_style(i))).collect();
+    let visible = area.height.saturating_sub(2) as usize;
+    let offset = selected.saturating_sub(visible.saturating_sub(1)).min(cached_lines.len());
+    let window = &cached_lines[offset..(offset + visible).min(cached_lines.len())];
+    let items: Vec<ListItem> =
+        window.iter().enumerate().map(|(i, line)| ListItem::new(line.clone()).style(zebra_style(offset + i))).collect();
 
     let block = panel_block(Style::default().fg(t.border)).title(" Results ");
 
     let mut state = ListState::default();
     if result_count > 0 {
-        state.select(Some(selected));
+        debug_assert!(selected >= offset, "the window starts at or above the selection");
+        state.select(Some(selected - offset));
     }
 
     let list = List::new(items).block(block).highlight_style(selection_style(true)).highlight_symbol(SELECTION_CURSOR);
@@ -301,6 +311,37 @@ fn centred_rect(area: Rect) -> Rect {
 mod tests {
     use super::*;
     use crate::diff_model::DiffKind;
+
+    /// The windowed list must draw exactly what a `List` of every cached line
+    /// would, wherever the selection sits.
+    #[test]
+    fn the_windowed_results_list_matches_the_full_list() {
+        use ratatui::Terminal;
+        use ratatui::backend::TestBackend;
+
+        let lines: Vec<Line<'static>> = (0..100).map(|i| Line::from(format!("result {i}"))).collect();
+        let area = Rect::new(0, 0, 30, 12);
+        let draw = |f: &dyn Fn(&mut Frame)| {
+            let mut terminal = Terminal::new(TestBackend::new(area.width, area.height)).expect("test terminal must build");
+            terminal.draw(|frame| f(frame)).expect("draw must succeed");
+            terminal.backend().buffer().clone()
+        };
+        for selected in [0, 1, 9, 10, 11, 57, 99] {
+            let windowed = draw(&|frame| draw_results_list(frame, area, &lines, lines.len(), selected));
+            let full = draw(&|frame| {
+                let items: Vec<ListItem> =
+                    lines.iter().enumerate().map(|(i, line)| ListItem::new(line.clone()).style(zebra_style(i))).collect();
+                let block = panel_block(Style::default().fg(theme().border)).title(" Results ");
+                let mut state = ListState::default();
+                state.select(Some(selected));
+                let list = List::new(items).block(block).highlight_style(selection_style(true)).highlight_symbol(SELECTION_CURSOR);
+                frame.render_stateful_widget(list, area, &mut state);
+                let mut scrollbar_state = ScrollbarState::new(lines.len()).position(selected);
+                crate::widgets::render_panel_scrollbar(frame, area, &mut scrollbar_state);
+            });
+            assert_eq!(windowed, full, "results list differs with row {selected} selected");
+        }
+    }
 
     fn result(name_index: usize, kind: DiffKind) -> SearchResult {
         SearchResult { section: Section::Variables, entry_index: 0, score: 0, match_indices: Vec::new(), haystack_index: name_index, kind }

@@ -405,8 +405,12 @@ pub fn report_rect(area: Rect, content_lines: usize) -> Rect {
 /// is taller than the pane.
 pub fn draw_scroll_pane(frame: &mut ratatui::Frame, popup: Rect, lines: &[Line<'static>], scroll: u16, block: Block<'static>) {
     frame.render_widget(ratatui::widgets::Clear, popup);
-    frame.render_widget(ratatui::widgets::Paragraph::new(lines.to_vec()).block(block).scroll((scroll, 0)), popup);
     let inner_height = popup.height.saturating_sub(2) as usize;
+    // Only the rows in view are cloned: the lines never wrap, so row `scroll`
+    // of the content is `lines[scroll]`.
+    let first = usize::from(scroll).min(lines.len());
+    let window = &lines[first..(first + inner_height).min(lines.len())];
+    frame.render_widget(ratatui::widgets::Paragraph::new(window.to_vec()).block(block), popup);
     if lines.len() > inner_height {
         let max_scroll = lines.len() - inner_height;
         let mut state = ratatui::widgets::ScrollbarState::new(max_scroll + 1).position(scroll as usize);
@@ -542,6 +546,31 @@ pub fn centred_rect(area: Rect, width: u16, height: u16) -> Rect {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The windowed scroll pane must draw exactly what scrolling a paragraph
+    /// of every line would.
+    #[test]
+    fn the_windowed_scroll_pane_matches_the_full_paragraph() {
+        use ratatui::Terminal;
+        use ratatui::backend::TestBackend;
+
+        let lines: Vec<Line<'static>> = (0..100).map(|i| Line::from(format!("line {i}"))).collect();
+        let popup = Rect::new(0, 0, 30, 12);
+        let draw = |f: &dyn Fn(&mut ratatui::Frame)| {
+            let mut terminal = Terminal::new(TestBackend::new(popup.width, popup.height)).expect("test terminal must build");
+            terminal.draw(|frame| f(frame)).expect("draw must succeed");
+            terminal.backend().buffer().clone()
+        };
+        for scroll in [0_u16, 1, 50, 90, 99, 100, 150] {
+            let windowed = draw(&|frame| draw_scroll_pane(frame, popup, &lines, scroll, Block::bordered()));
+            let full = draw(&|frame| {
+                frame.render_widget(ratatui::widgets::Paragraph::new(lines.clone()).block(Block::bordered()).scroll((scroll, 0)), popup);
+                let mut state = ratatui::widgets::ScrollbarState::new(lines.len() - 10 + 1).position(usize::from(scroll));
+                render_panel_scrollbar(frame, popup, &mut state);
+            });
+            assert_eq!(windowed, full, "scroll pane differs at scroll {scroll}");
+        }
+    }
 
     #[test]
     fn test_truncate_fits_unchanged() {

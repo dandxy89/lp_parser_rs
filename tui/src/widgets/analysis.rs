@@ -4,6 +4,8 @@
 //! scrollable report when it finishes, an error if it does not — so the pane
 //! itself is written once and the individual analyses only supply lines.
 
+use std::borrow::Cow;
+
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
@@ -25,7 +27,7 @@ pub fn draw_analysis(frame: &mut ratatui::Frame, area: Rect, app: &mut crate::ap
 
     // Running and failed states are a couple of lines; a finished report wants
     // the whole screen, since the value is in comparing rows against each other.
-    let (popup, lines, title) = match &mut app.analysis {
+    let (popup, lines, title, scroll) = match &mut app.analysis {
         AnalysisState::Idle => return,
         AnalysisState::Running { label, started } => {
             let elapsed = started.elapsed();
@@ -37,7 +39,12 @@ pub fn draw_analysis(frame: &mut ratatui::Frame, area: Rect, app: &mut crate::ap
                 )),
                 indented_hints("any key:cancel"),
             ];
-            (centred_rect(area, 56.min(area.width), 5.min(area.height)), lines, Line::styled(format!(" {label} "), border_style))
+            (
+                centred_rect(area, 56.min(area.width), 5.min(area.height)),
+                Cow::Owned(lines),
+                Line::styled(format!(" {label} "), border_style),
+                0,
+            )
         }
         AnalysisState::Failed { label, error } => {
             let lines = vec![
@@ -45,7 +52,12 @@ pub fn draw_analysis(frame: &mut ratatui::Frame, area: Rect, app: &mut crate::ap
                 Line::from(Span::styled(format!("  {error}"), Style::default().fg(t.removed))),
                 indented_hints("any key:close"),
             ];
-            (centred_rect(area, 76.min(area.width), 5.min(area.height)), lines, Line::styled(format!(" {label} "), border_style))
+            (
+                centred_rect(area, 76.min(area.width), 5.min(area.height)),
+                Cow::Owned(lines),
+                Line::styled(format!(" {label} "), border_style),
+                0,
+            )
         }
         AnalysisState::Done { label, pane } => {
             let popup = crate::widgets::report_rect(area, pane.lines.len());
@@ -53,11 +65,11 @@ pub fn draw_analysis(frame: &mut ratatui::Frame, area: Rect, app: &mut crate::ap
             let max_scroll = u16::try_from(pane.lines.len().saturating_sub(inner_height)).unwrap_or(u16::MAX);
             pane.scroll = pane.scroll.min(max_scroll);
             let hints = if max_scroll > 0 { "j/k:scroll  w:write  Esc:close" } else { "w:write  Esc:close" };
-            (popup, pane.lines.clone(), crate::widgets::title_with_hints(label, hints, border_style))
+            // Borrowed, not cloned: `draw_scroll_pane` copies only the rows in view.
+            (popup, Cow::Borrowed(pane.lines.as_slice()), crate::widgets::title_with_hints(label, hints, border_style), pane.scroll)
         }
     };
 
-    let scroll = app.analysis.pane().map_or(0, |pane| pane.scroll);
     let block = panel_block(border_style).title(title);
     crate::widgets::draw_scroll_pane(frame, popup, &lines, scroll, block);
 }
