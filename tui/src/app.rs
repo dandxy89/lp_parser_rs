@@ -2042,7 +2042,7 @@ impl App {
     /// visible window, from the layout recorded on the previous frame. Content
     /// height is stable for a given entry (and scroll resets on entry change),
     /// so last frame's value is the right bound for this frame's input.
-    pub(crate) fn max_detail_scroll(&self) -> usize {
+    pub(crate) const fn max_detail_scroll(&self) -> usize {
         let visible = self.layout.detail_height.saturating_sub(2) as usize; // borders
         self.layout.detail_content_lines.saturating_sub(visible)
     }

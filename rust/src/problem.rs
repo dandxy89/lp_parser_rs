@@ -1421,6 +1421,14 @@ impl TryFrom<&str> for LpProblem {
     }
 }
 
+impl core::str::FromStr for LpProblem {
+    type Err = LpParseError;
+
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
+        Self::try_from(input)
+    }
+}
+
 /// Intern raw objectives, assigning auto-names to unnamed ones.
 fn intern_objectives(
     interner: &mut NameInterner,

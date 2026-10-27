@@ -809,7 +809,7 @@ struct PanelLines {
 
 impl PanelLines {
     /// Content with nothing left out.
-    fn whole(lines: Vec<Line<'static>>) -> Self {
+    const fn whole(lines: Vec<Line<'static>>) -> Self {
         let total = lines.len();
         Self { lines, skipped: 0, total }
     }

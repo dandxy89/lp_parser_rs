@@ -495,7 +495,7 @@ pub fn declared_bounds_with<'t>(
 }
 
 /// Bounds of a declaration's significant parts, `None` for other shapes.
-fn bounds_of(items: &[BoundItem]) -> Option<VariableBounds> {
+const fn bounds_of(items: &[BoundItem]) -> Option<VariableBounds> {
     use BoundItem::{Free, Operator, Value, Variable};
     let bounds = match items {
         [Variable, Free] => VariableBounds::free(),
