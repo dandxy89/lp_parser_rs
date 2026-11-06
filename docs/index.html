@@ -74,7 +74,7 @@
 
 <nav aria-label="Sections">
   <div class="row">
-    <span class="brand">lp_parser_rs</span>
+    <span class="brand"><a href="index.html">lp_parser_rs</a></span>
     <div class="links">
       <a href="#library">Library</a>
       <a href="#cli">CLI</a>
@@ -121,10 +121,32 @@
   </div>
 </header>
 
+<div class="strip" aria-label="Supported dialects and solvers">
+  <div class="wrap">
+    <span class="lbl">Dialects</span><span class="c">CPLEX</span><span class="c">Gurobi</span><span class="c">FICO Xpress</span><span class="c">Mosek</span>
+    <span class="lbl">Solvers</span><span class="c">HiGHS</span><span class="c">CBC</span><span class="c">GLPK</span>
+  </div>
+</div>
+
+<div class="strip" aria-label="At a glance">
+  <div class="wrap">
+    <span class="stat"><b>6</b>CLI subcommands</span><span class="stat"><b>5</b>TUI sections</span><span class="stat"><b>MIT / Apache-2.0</b></span><span class="stat"><b>3.9+</b>Python</span>
+  </div>
+</div>
+
+<div class="strip" aria-label="Latest releases">
+  <div class="wrap">
+    <span class="lbl">Latest</span>
+    <a class="stat" href="https://github.com/dandxy89/lp_parser_rs/releases/tag/lp_parser_rs-v5.0.1"><b>lp_parser_rs 5.0.1</b>10 Sep 2026</a>
+    <a class="stat" href="https://github.com/dandxy89/lp_parser_rs/releases/tag/lp_diff-v4.1.0"><b>lp_diff 4.1.0</b>10 Sep 2026</a>
+    <a class="stat" href="https://github.com/dandxy89/lp_parser_rs/releases"><b>All releases ↗</b></a>
+  </div>
+</div>
+
 <section id="tools">
   <div class="wrap">
     <p class="sec-label">What's here</p>
-    <h2>The crate and its tools</h2>
+    <h2>The crate<span class="dim"> and its tools</span></h2>
     <div class="cards">
       <div class="card">
         <h3><a href="#library">lp_parser_rs — Rust crate</a></h3>
@@ -153,7 +175,7 @@
 <section id="library">
   <div class="wrap">
     <p class="sec-label">The Rust library</p>
-    <h2>Library capabilities</h2>
+    <h2>Library<span class="dim"> capabilities</span></h2>
     <ul class="constraints">
       <li><span class="cname">Parsing</span><span class="cbody">Objectives (several per file, with Gurobi multi-objective attributes), linear constraints, bounds, variable-type sections, SOS1/SOS2 sets and comments, with the section keyword variants of the CPLEX, Gurobi, Xpress and Mosek dialects.</span></li>
       <li><span class="cname">Extended syntax</span><span class="cbody">Quadratic objectives and constraints, indicator constraints, lazy constraints and user cuts, and Gurobi general constraints (<code>MAX</code>, <code>MIN</code>, <code>ABS</code>, <code>AND</code>, <code>OR</code>; not <code>PWL</code>).</span></li>
@@ -208,7 +230,7 @@ std::fs::write(<span class="g">"modified.lp"</span>, write_lp_string(&amp;proble
 <section id="cli">
   <div class="wrap">
     <p class="sec-label">The command line</p>
-    <h2>CLI: <code>lp_parser</code></h2>
+    <h2>CLI:<span class="dim"> <code>lp_parser</code></span></h2>
     <p class="lead">Every subcommand reads LP or MPS (a <code>.mps</code> extension reads MPS) and writes to stdout or a file (<code>-o</code>). <code>-f</code> picks text, JSON or YAML, and <code>--pretty</code> indents JSON. Global flags: <code>-v/--verbose</code>, <code>-q/--quiet</code>.</p>
 
     <h3>parse — display file structure</h3>
@@ -263,7 +285,7 @@ lp_parser convert problem.lp --format csv --output ./out</code></pre>
 <section id="tui">
   <div class="wrap">
     <p class="sec-label">The terminal UI</p>
-    <h2>TUI: <code>lp_diff</code></h2>
+    <h2>TUI:<span class="dim"> <code>lp_diff</code></span></h2>
     <p class="lead">A <a href="https://ratatui.rs">ratatui</a> explorer and diff viewer for LP and MPS files. One file opens a single-model explorer; two files are diffed, in any mix of formats (<code>lp_diff model.lp model.mps</code>). It also solves with HiGHS, re-solves after an RHS edit, applies presolve-style rewrites and compares the result, and ranks the rows and columns most likely to be slowing a solve down.</p>
     <video class="demo" width="1280" height="800" loop muted playsinline controls
            preload="none" poster="assets/demo-poster.jpg" aria-label="Diffing an MPS file against an LP file: a coefficient-level constraint diff, raw text view, fuzzy search and a HiGHS solve of both files, then a single model with presolve rewrites and the diagnostics pane.">
@@ -290,7 +312,7 @@ lp_parser convert problem.lp --format csv --output ./out</code></pre>
 <section id="lsp">
   <div class="wrap">
     <p class="sec-label">Editor support</p>
-    <h2>Language server: <code>lp-lsp</code></h2>
+    <h2>Language server:<span class="dim"> <code>lp-lsp</code></span></h2>
     <p class="lead">A language server for <code>.lp</code> files. It understands the CPLEX LP format and the Gurobi extensions the parser supports, and keeps working while a file is half-written. It talks LSP over stdio and takes no arguments, so any editor that can run a language server can use it.</p>
     <ul class="constraints">
       <li><span class="cname">Diagnostics</span><span class="cbody">Syntax errors as you type, plus model checks such as duplicate names, conflicting bounds, unused declarations and badly scaled coefficients, with configurable thresholds.</span></li>
@@ -321,7 +343,7 @@ vim.lsp.enable(<span class="g">'lp_lsp'</span>)</code></pre>
 <section id="python">
   <div class="wrap">
     <p class="sec-label">Python bindings</p>
-    <h2>Python: <code>parse_lp</code></h2>
+    <h2>Python:<span class="dim"> <code>parse_lp</code></span></h2>
     <p class="lead">Python bindings to the Rust library, with type stubs (Python 3.9+). They cover parsing, data access, modification, LP and MPS writing, analysis with configurable thresholds, CSV export and <code>diff</code> between two problems.</p>
 <pre><code><span class="k">from</span> parse_lp <span class="k">import</span> LpParser
 
@@ -413,5 +435,6 @@ print(analysis[<span class="g">"summary"</span>][<span class="g">"density"</span
   })();
 </script>
 
+<script src="assets/site.js"></script>
 </body>
 </html>
