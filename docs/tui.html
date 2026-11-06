@@ -64,7 +64,7 @@
 
 <nav aria-label="Sections">
   <div class="row">
-    <span class="brand"><a href="index.html" style="color:inherit">lp_parser_rs</a></span>
+    <span class="brand"><a href="index.html">lp_parser_rs</a></span>
     <div class="links">
       <a href="index.html#library">Library</a>
       <a href="index.html#cli">CLI</a>
@@ -106,14 +106,8 @@
   </div>
 </header>
 
-<section id="modes">
-  <div class="wrap">
-    <p class="sec-label">Getting oriented</p>
-    <h2>One file explores. Two files diff.</h2>
-    <p class="lead">The file count decides the mode. Format is detected by extension, and the two files do not have to
-      match: comparing an LP against an MPS is a supported case.</p>
-
-    <div class="subnav">
+<div class="subnav-bar" role="navigation" aria-label="On this page">
+  <div class="subnav">
       <a href="#modes">Modes</a>
       <a href="#layout">Layout</a>
       <a href="#diffing">Diffing</a>
@@ -125,7 +119,16 @@
       <a href="#answers">Infeasible &amp; unbounded</a>
       <a href="#manners">Terminal manners</a>
       <a href="#keys">Key reference</a>
-    </div>
+  </div>
+</div>
+
+<section id="modes">
+  <div class="wrap">
+    <p class="sec-label">Getting oriented</p>
+    <h2>One file explores.<span class="dim"> Two files diff.</span></h2>
+    <p class="lead">The file count decides the mode. Format is detected by extension, and the two files do not have to
+      match: comparing an LP against an MPS is a supported case.</p>
+
 
 <pre><code><span class="c"># inspect a single model</span>
 lp_diff model.lp
@@ -186,7 +189,7 @@ lp_diff base.lp modified.lp --summary</code></pre>
 <section id="diffing">
   <div class="wrap">
     <p class="sec-label">Comparing models</p>
-    <h2>Diffing down to the coefficient</h2>
+    <h2>Diffing down<span class="dim"> to the coefficient</span></h2>
     <p class="lead">A modified constraint is not just "modified". The two-column view puts old and new coefficients
       beside each other, so you can see which term moved and by how much.</p>
 
@@ -213,7 +216,7 @@ lp_diff base.lp modified.lp --summary</code></pre>
 <section id="search">
   <div class="wrap">
     <p class="sec-label">Finding things</p>
-    <h2>Search and navigation</h2>
+    <h2>Search<span class="dim"> and navigation</span></h2>
     <p class="lead">A Telescope-style pop-up searches every section at once, with four modes chosen by prefix.</p>
 
     <div class="tablewrap"><table>
@@ -238,7 +241,7 @@ lp_diff base.lp modified.lp --summary</code></pre>
 <section id="solve">
   <div class="wrap">
     <p class="sec-label">Running the model</p>
-    <h2>Solving in the background</h2>
+    <h2>Solving<span class="dim"> in the background</span></h2>
     <p class="lead"><kbd>S</kbd> solves with <a href="https://highs.dev">HiGHS</a> on a background thread. The interface
       stays responsive and shows the elapsed time while a long solve runs; <kbd>Esc</kbd> interrupts it.</p>
 
@@ -284,7 +287,7 @@ time_limit = 300</code></pre>
 <section id="whatif">
   <div class="wrap">
     <p class="sec-label">Asking questions</p>
-    <h2>Moving a bound to see what happens</h2>
+    <h2>Moving a bound<span class="dim"> to see what happens</span></h2>
     <p class="lead">Select a constraint, press <kbd>E</kbd> and type a new right-hand side. The baseline problem (file 1 in
       diff mode) is cloned in memory, the RHS is changed, and both versions are solved one after the other into the
       standard comparison view.</p>
@@ -298,7 +301,7 @@ time_limit = 300</code></pre>
 <section id="rewrite">
   <div class="wrap">
     <p class="sec-label">Making it smaller</p>
-    <h2>Presolve rules you can measure</h2>
+    <h2>Presolve rules<span class="dim"> you can measure</span></h2>
     <p class="lead"><kbd>P</kbd> opens a rule picker. Each rule is a <em>solution-preserving</em> rewrite: it removes
       work from the model without changing the set of optimal solutions. <kbd>Space</kbd> toggles a rule, <kbd>a</kbd>
       toggles all, and <kbd>Enter</kbd> solves the original and the rewritten model one after the other, so the two runs
@@ -386,7 +389,7 @@ time_limit = 300</code></pre>
 <section id="diagnostics">
   <div class="wrap">
     <p class="sec-label">Why is it slow</p>
-    <h2>Which row is actually the problem</h2>
+    <h2>Which row<span class="dim"> is actually the problem</span></h2>
     <p class="lead">A solver log saying "200,000 iterations" and a numerics panel saying "coefficients span 1e-4 to 1e6"
       are both true, and neither tells you which constraint to fix. <kbd>D</kbd> puts the two together.</p>
 
@@ -444,7 +447,7 @@ time_limit = 300</code></pre>
 <section id="answers">
   <div class="wrap">
     <p class="sec-label">When it does not solve</p>
-    <h2>Four questions the status line cannot answer</h2>
+    <h2>Four questions<span class="dim"> the status line cannot answer</span></h2>
     <p class="lead">A solve that comes back <em>Infeasible</em> or <em>Unbounded</em> says the model is wrong but not
       where. These four panes ask HiGHS for more than the status.</p>
 
@@ -514,7 +517,7 @@ time_limit = 300</code></pre>
 <section id="manners">
   <div class="wrap">
     <p class="sec-label">Living in a terminal</p>
-    <h2>Terminal manners</h2>
+    <h2>Terminal<span class="dim"> manners</span></h2>
     <ul class="constraints">
       <li><span class="cname">Theme</span><span class="cbody">Detects light or dark from <code>COLORFGBG</code>, or else by asking the terminal for its background colour (OSC 11, with a 100&nbsp;ms limit); force it with <code>--theme</code>. <a href="https://no-color.org"><code>NO_COLOR</code></a> forces monochrome, unless you passed <code>--theme</code> explicitly, which wins.</span></li>
       <li><span class="cname">Watch</span><span class="cbody"><code>--watch</code> reloads when a file changes on disk and rebuilds the diff in place, keeping your position. Stale solve results are discarded; the model has moved under them.</span></li>
@@ -529,7 +532,7 @@ time_limit = 300</code></pre>
 <section id="keys">
   <div class="wrap">
     <p class="sec-label">The whole keyboard</p>
-    <h2>Key reference</h2>
+    <h2>Key<span class="dim"> reference</span></h2>
     <p class="lead">The in-app help (<kbd>?</kbd>) matches the mode you are in. This is a summary.</p>
 
     <h3>Navigation</h3>
@@ -649,5 +652,6 @@ cargo run -p lp_parser_tui -- base.lp modified.mps</code></pre>
   })();
 </script>
 
+<script src="assets/site.js"></script>
 </body>
 </html>
