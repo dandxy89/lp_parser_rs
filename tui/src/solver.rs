@@ -182,7 +182,7 @@ fn count_constraint_diffs_from_rows(rows: &[ConstraintDiffRow]) -> DiffCounts {
 }
 
 // NameRef indices fit u32: solver column counts are far below 4 billion.
-#[allow(clippy::cast_possible_truncation)]
+#[expect(clippy::cast_possible_truncation)]
 fn diff_variables(r1: &SolveResult, r2: &SolveResult, threshold: f64) -> Vec<VarDiffRow> {
     debug_assert_eq!(r1.variables.len(), r1.reduced_costs.len(), "variables and reduced_costs must have equal length for result 1");
     debug_assert_eq!(r2.variables.len(), r2.reduced_costs.len(), "variables and reduced_costs must have equal length for result 2");
@@ -232,7 +232,7 @@ fn diff_variables(r1: &SolveResult, r2: &SolveResult, threshold: f64) -> Vec<Var
 }
 
 // NameRef indices fit u32: solver row counts are far below 4 billion.
-#[allow(clippy::cast_possible_truncation)]
+#[expect(clippy::cast_possible_truncation)]
 fn diff_constraints(r1: &SolveResult, r2: &SolveResult, threshold: f64) -> Vec<ConstraintDiffRow> {
     debug_assert_eq!(r1.row_values.len(), r1.shadow_prices.len(), "row_values and shadow_prices must have equal length for result 1");
     debug_assert_eq!(r2.row_values.len(), r2.shadow_prices.len(), "row_values and shadow_prices must have equal length for result 2");

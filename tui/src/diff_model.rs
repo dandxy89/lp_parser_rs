@@ -28,7 +28,7 @@ pub const TOLERANCE_PRESETS: [f64; 5] = [0.0, 1e-9, 1e-6, 1e-4, 1e-2];
 #[must_use]
 // Cycling matches the exact preset constants; a fuzzy match would wrongly
 // treat a nearby custom CLI tolerance as one of the presets.
-#[allow(clippy::float_cmp)]
+#[expect(clippy::float_cmp)]
 pub fn next_tolerance_preset(current: f64) -> f64 {
     debug_assert!(current.is_finite() && current >= 0.0, "tolerance must be finite and non-negative");
     match TOLERANCE_PRESETS.iter().position(|&p| p == current) {
@@ -967,7 +967,7 @@ fn diff_variables(p1: &LpProblem, p2: &LpProblem, opts: &DiffOptions) -> Section
 }
 
 /// Diff two standard constraints and return the detail if they differ, `None` if unchanged.
-#[allow(clippy::too_many_arguments)]
+#[expect(clippy::too_many_arguments)]
 fn diff_standard_constraints(
     old_coefficients: &[ResolvedCoefficient],
     old_operator: ComparisonOp,
@@ -1666,7 +1666,7 @@ mod tests {
     }
 
     /// Shorthand for building a `DiffInput` and calling `build_diff_report` in tests.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments)]
     fn test_diff_report(
         file1: &str,
         file2: &str,

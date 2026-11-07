@@ -37,7 +37,7 @@ impl SearchMode {
 /// - `s:text` → `(Substring, "text")`
 /// - `c:text` → `(Content, "text")`
 /// - anything else → `(Fuzzy, raw)`
-#[allow(clippy::option_if_let_else)] // chained if-let is clearer than nested map_or_else
+#[expect(clippy::option_if_let_else)] // chained if-let is clearer than nested map_or_else
 pub fn parse_query(raw: &str) -> (SearchMode, &str) {
     if let Some(pattern) = raw.strip_prefix("r:") {
         (SearchMode::Regex, pattern)

@@ -424,7 +424,7 @@ pub fn draw_scroll_pane(frame: &mut ratatui::Frame, popup: Rect, lines: &[Line<'
 pub fn gauge_bar(fraction: f64, cells: usize) -> String {
     debug_assert!(cells > 0, "gauge_bar needs at least one cell");
     let clamped = fraction.clamp(0.0, 1.0);
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss, clippy::cast_precision_loss)] // clamped to [0, cells]
+    #[expect(clippy::cast_possible_truncation, clippy::cast_sign_loss, clippy::cast_precision_loss)] // clamped to [0, cells]
     let filled = ((clamped * cells as f64).round() as usize).min(cells);
     let mut bar = String::with_capacity(2 + cells * 3);
     bar.push('\u{2590}');
@@ -505,7 +505,7 @@ pub fn draw_prompt_input(frame: &mut ratatui::Frame, area: Rect, input: &tui_inp
         return;
     }
     let t = theme();
-    #[allow(clippy::cast_possible_truncation)] // PROMPT is 3 columns
+    #[expect(clippy::cast_possible_truncation)] // PROMPT is 3 columns
     let prompt_width = (PROMPT.len() as u16).min(area.width);
     let prompt_area = Rect { width: prompt_width, ..area };
     frame.render_widget(
@@ -519,11 +519,11 @@ pub fn draw_prompt_input(frame: &mut ratatui::Frame, area: Rect, input: &tui_inp
     }
     // Keep one column free so the cursor can sit past the last character.
     let scroll = input.visual_scroll(text_area.width.saturating_sub(1) as usize);
-    #[allow(clippy::cast_possible_truncation)] // scroll is bounded by the query width
+    #[expect(clippy::cast_possible_truncation)] // scroll is bounded by the query width
     let paragraph = ratatui::widgets::Paragraph::new(Span::styled(input.value(), Style::default().fg(t.text))).scroll((0, scroll as u16));
     frame.render_widget(paragraph, text_area);
 
-    #[allow(clippy::cast_possible_truncation)] // cursor offset is bounded by text_area.width
+    #[expect(clippy::cast_possible_truncation)] // cursor offset is bounded by text_area.width
     let cursor_x = text_area.x + (input.visual_cursor().saturating_sub(scroll)) as u16;
     frame.set_cursor_position((cursor_x.min(text_area.right().saturating_sub(1)), text_area.y));
 }

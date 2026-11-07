@@ -67,6 +67,20 @@ jobs:
           cargo clippy --package lp_parser_rs --no-default-features --lib -- -D warnings
           echo "::endgroup::"
 
+  msrv:
+    name: MSRV
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v7
+      - name: Setup Rust (workspace rust-version)
+        run: |
+          msrv=$(grep -m1 '^rust-version' Cargo.toml | cut -d'"' -f2)
+          rustup toolchain install "$msrv" --profile minimal
+          rustup default "$msrv"
+      - uses: Swatinem/rust-cache@v2
+      # python crate needs a Python interpreter to link; check the rest.
+      - run: cargo check --workspace --exclude parse_lp --all-features
+
   test:
     runs-on: ubuntu-24.04-arm
     steps:

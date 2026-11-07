@@ -53,7 +53,7 @@ fn cmd_parse(args: ParseArgs, verbose: bool) -> Result<(), BoxError> {
         }
         #[cfg(feature = "serde")]
         OutputFormat::Yaml => {
-            serde_yaml::to_writer(&mut writer, &problem)?;
+            serde_norway::to_writer(&mut writer, &problem)?;
         }
     }
 
@@ -87,7 +87,7 @@ fn cmd_info(args: &InfoArgs, verbose: bool) -> Result<(), BoxError> {
         #[cfg(feature = "serde")]
         OutputFormat::Yaml => {
             let info = build_info_value(&problem, args);
-            serde_yaml::to_writer(&mut writer, &info)?;
+            serde_norway::to_writer(&mut writer, &info)?;
         }
     }
 
@@ -150,9 +150,9 @@ fn cmd_analyze(args: AnalyzeArgs, verbose: bool) -> Result<ExitCode, BoxError> {
         #[cfg(feature = "serde")]
         OutputFormat::Yaml => {
             if args.issues_only {
-                serde_yaml::to_writer(&mut writer, &analysis.issues)?;
+                serde_norway::to_writer(&mut writer, &analysis.issues)?;
             } else {
-                serde_yaml::to_writer(&mut writer, &analysis)?;
+                serde_norway::to_writer(&mut writer, &analysis)?;
             }
         }
     }
@@ -481,7 +481,7 @@ fn cmd_diff(args: &DiffArgs, verbose: bool) -> Result<ExitCode, BoxError> {
                     }
                     writeln!(writer)?;
                 }
-                OutputFormat::Yaml => serde_yaml::to_writer(&mut writer, &summary)?,
+                OutputFormat::Yaml => serde_norway::to_writer(&mut writer, &summary)?,
                 OutputFormat::Text => unreachable!(),
             }
         }
@@ -563,7 +563,7 @@ fn cmd_convert(args: ConvertArgs, verbose: bool, quiet: bool) -> Result<(), BoxE
         #[cfg(feature = "serde")]
         ConvertFormat::Yaml => {
             let mut writer = OutputWriter::new(args.output)?;
-            serde_yaml::to_writer(&mut writer, &problem)?;
+            serde_norway::to_writer(&mut writer, &problem)?;
             writer.finish()?;
         }
     }
@@ -657,7 +657,7 @@ fn cmd_solve(args: SolveArgs, verbose: bool, quiet: bool) -> Result<(), BoxError
                 "status": solve_status_str(&solution.status),
                 "variables": solution.results
             });
-            serde_yaml::to_writer(&mut writer, &solution_yaml)?;
+            serde_norway::to_writer(&mut writer, &solution_yaml)?;
         }
     }
 

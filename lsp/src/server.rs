@@ -573,7 +573,7 @@ impl LanguageServer for Backend {
             .flatten()
             .filter_map(|folder| folder.uri.to_file_path().map(std::borrow::Cow::into_owned))
             .collect();
-        #[allow(deprecated)]
+        #[expect(deprecated)]
         if roots.is_empty()
             && let Some(root) = params.root_uri.as_ref().and_then(Uri::to_file_path)
         {

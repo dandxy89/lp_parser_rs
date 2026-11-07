@@ -241,7 +241,7 @@ impl Actions<'_> {
         for indicator in nodes_in(doc.tree.root_node(), &self.request, kind::INDICATOR) {
             let Some(value) = children(indicator).into_iter().find(|c| c.kind() == kind::NUMBER) else { continue };
             // Upstream compares the literal exactly with 0 and 1.
-            #[allow(clippy::float_cmp)]
+            #[expect(clippy::float_cmp)]
             let valid = syntax::parse_number(doc.node_text(value)).is_some_and(|v| v == 0.0 || v == 1.0);
             if valid {
                 continue;

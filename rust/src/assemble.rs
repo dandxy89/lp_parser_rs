@@ -3,7 +3,7 @@
 //! The LALRPOP grammar cannot decide with one token of lookahead whether
 //! `... + 10 obj2: y` ends an objective with the constant `10` or scales a
 //! variable named `obj2`, so the grammar collects each section body as a flat
-//! list of [`Elem`](crate::assemble::Elem)s and the functions here assemble entries with unbounded
+//! list of [`Elem`]s and the functions here assemble entries with unbounded
 //! lookahead. The same approach handles constant terms (`obj: x + 10`,
 //! `c1: x + 2 <= 10`), empty objectives, flipped constraints (`10 >= x`),
 //! ranged constraints (`2 <= x + y <= 10`, expanded into two constraints like
@@ -215,7 +215,7 @@ fn parse_quadratic_block<'input>(
         let var2 = match (elems.get(j), elems.get(j + 1)) {
             (Some((_, Elem::Caret)), Some(&(loc, Elem::Num(exponent)))) => {
                 // The exponent is a literal and only a square is quadratic.
-                #[allow(clippy::float_cmp)]
+                #[expect(clippy::float_cmp)]
                 if exponent != 2.0 {
                     return Err(err(loc, format!("only squares ('{var1} ^ 2') are quadratic, not '{var1} ^ {exponent}'")));
                 }
@@ -232,7 +232,7 @@ fn parse_quadratic_block<'input>(
     match (context, elems.get(j), elems.get(j + 1)) {
         (QuadraticContext::Objective, Some((_, Elem::Slash)), Some(&(_, Elem::Num(divisor)))) => {
             // CPLEX and Gurobi only ever write `/ 2`.
-            #[allow(clippy::float_cmp)]
+            #[expect(clippy::float_cmp)]
             if divisor != 2.0 {
                 return Err(err(pos_at(elems, j + 1), format!("an objective's quadratic block must be divided by 2, not {divisor}")));
             }
@@ -373,7 +373,7 @@ fn parse_objective_attributes(
             "priority" => {
                 repeated(attributes.priority.is_some())?;
                 // Priorities are integers; 2^53 bounds the exactly representable ones.
-                #[allow(clippy::cast_possible_truncation)]
+                #[expect(clippy::cast_possible_truncation)]
                 let priority = (value.fract() == 0.0 && value.abs() < 9_007_199_254_740_992.0).then_some(value as i64);
                 attributes.priority = Some(priority.ok_or_else(|| err(loc, format!("priority must be an integer, got {value}")))?);
             }
@@ -810,7 +810,7 @@ fn parse_indicator_head<'input>(elems: &[SpannedElem<'input>], i: usize) -> Resu
         return Ok(None);
     };
     // The literals are compared exactly: only `0` and `1` are indicator values.
-    #[allow(clippy::float_cmp)]
+    #[expect(clippy::float_cmp)]
     let active_value = if value == 1.0 {
         true
     } else if value == 0.0 {

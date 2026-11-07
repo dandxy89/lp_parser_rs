@@ -134,7 +134,7 @@ impl std::fmt::Display for ParseContext {
 
 // `position` is taken by reference because thiserror's `.field` shorthand in the
 // `#[error(...)]` attribute expands to `&self.field`.
-#[allow(clippy::trivially_copy_pass_by_ref)]
+#[expect(clippy::trivially_copy_pass_by_ref)]
 fn format_parse_error(position: &usize, message: &str, context: Option<&ParseContext>) -> String {
     match context {
         Some(ctx) => format!("Parse error at position {position}: {message}\n{ctx}"),

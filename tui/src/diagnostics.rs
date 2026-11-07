@@ -151,14 +151,14 @@ pub struct Degeneracy {
 impl Degeneracy {
     /// Share of binding rows carrying a zero dual.
     #[must_use]
-    #[allow(clippy::cast_precision_loss)] // counts are model sizes, far below 2^52
+    #[expect(clippy::cast_precision_loss)] // counts are model sizes, far below 2^52
     pub fn row_share(&self) -> f64 {
         if self.rows_binding == 0 { 0.0 } else { self.rows_degenerate as f64 / self.rows_binding as f64 }
     }
 
     /// Share of at-bound variables carrying a zero reduced cost.
     #[must_use]
-    #[allow(clippy::cast_precision_loss)] // counts are model sizes, far below 2^52
+    #[expect(clippy::cast_precision_loss)] // counts are model sizes, far below 2^52
     pub fn col_share(&self) -> f64 {
         if self.vars_at_bound == 0 { 0.0 } else { self.vars_degenerate as f64 / self.vars_at_bound as f64 }
     }
@@ -237,7 +237,7 @@ pub struct Diagnostics {
 impl Diagnostics {
     /// Iterations per row, the headline health ratio.
     #[must_use]
-    #[allow(clippy::cast_precision_loss)] // iteration and row counts are far below 2^52
+    #[expect(clippy::cast_precision_loss)] // iteration and row counts are far below 2^52
     pub fn iterations_per_row(&self) -> Option<f64> {
         let iterations = self.telemetry.as_ref()?.iterations?;
         if self.rows == 0 { None } else { Some(iterations as f64 / self.rows as f64) }

@@ -1,7 +1,7 @@
 //! Ergonomic programmatic construction of an [`LpProblem`] using string names.
 //!
 //! [`ProblemBuilder`] interns names itself, so callers work with `&str` names
-//! and never construct a [`NameId`] by hand. Use it
+//! and never construct a [`NameId`](crate::interner::NameId) by hand. Use it
 //! to build a model in code; to change a parsed model, use the mutation
 //! methods on [`LpProblem`].
 

@@ -119,7 +119,7 @@ pub fn write_lp_string_with_options(problem: &LpProblem, options: &LpWriterOptio
 ///
 /// See [`write_lp_string_with_options`].
 // The only panic is the expect on fmt::Write to String, which is infallible.
-#[allow(clippy::missing_panics_doc)]
+#[expect(clippy::missing_panics_doc)]
 pub fn write_lp_string_with_warnings(problem: &LpProblem, options: &LpWriterOptions) -> LpResult<(String, Vec<String>)> {
     validate_lp_names(problem, options)?;
     validate_numbers(problem)?;
@@ -811,7 +811,7 @@ pub(crate) fn write_formatted_coefficient(
     // In exact mode (`precision == None`) the output must read back as the
     // identical `f64`, so only an exact 1 may drop its coefficient; a
     // rounding precision already writes near-1 values as `1`.
-    #[allow(clippy::float_cmp)]
+    #[expect(clippy::float_cmp)]
     let is_one = match precision {
         None => abs_value == 1.0,
         Some(_) => (abs_value - 1.0).abs() < NUMERIC_EPSILON,
@@ -855,7 +855,7 @@ const SCIENTIFIC_BELOW: f64 = 1e-5;
 ///
 /// `pub(crate)` so the MPS writer ([`crate::mps::writer`]) can reuse the same
 /// numeric formatting instead of duplicating it.
-#[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
+#[expect(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
 pub(crate) fn write_number(output: &mut String, value: f64, precision: Option<usize>) -> std::fmt::Result {
     debug_assert!(!value.is_nan(), "write_number called with NaN");
     if value.is_infinite() {
@@ -947,7 +947,7 @@ mod tests {
     use crate::problem::LpProblem;
 
     #[test]
-    #[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
+    #[expect(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
     fn whole_numbers_format_as_display_does() {
         let mut values = vec![1.0, 7.0, 10.0, 99.0, 100.0, 12_345.0, 1e15, 9_007_199_254_740_991.0, 9_007_199_254_740_992.0, 1e16];
         let mut x: u64 = 0x9E37_79B9_7F4A_7C15;

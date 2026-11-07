@@ -146,7 +146,7 @@ mod tests {
 
     /// Helper: a deterministic mtime `n` seconds after the epoch.
     // Wrapped in Option so call sites match observe()'s parameters directly.
-    #[allow(clippy::unnecessary_wraps)]
+    #[expect(clippy::unnecessary_wraps)]
     fn mtime(n: u64) -> Option<SystemTime> {
         Some(UNIX_EPOCH + Duration::from_secs(n))
     }

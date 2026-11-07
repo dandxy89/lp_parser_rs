@@ -65,7 +65,7 @@ pub(crate) fn sidebar_width(app: &App, main_width: u16) -> u16 {
     let auto = wanted.clamp(SIDEBAR_MIN_WIDTH, cap);
     let adjusted = i32::from(auto) + i32::from(app.sidebar_adjust);
     let ceiling = main_width.saturating_sub(DETAIL_MIN_WIDTH).max(SIDEBAR_FLOOR);
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)] // clamped into u16 range
+    #[expect(clippy::cast_possible_truncation, clippy::cast_sign_loss)] // clamped into u16 range
     let width = adjusted.clamp(i32::from(SIDEBAR_FLOOR), i32::from(ceiling)) as u16;
     width.min(main_width)
 }
@@ -409,7 +409,7 @@ fn draw_too_small(frame: &mut Frame, area: Rect) {
         Line::from(Span::styled("Terminal too small", Style::default().fg(t.removed).add_modifier(Modifier::BOLD))),
         Line::from(Span::styled(format!("Need at least {MIN_WIDTH}×{MIN_HEIGHT}"), Style::default().fg(t.muted))),
     ];
-    #[allow(clippy::cast_possible_truncation)] // tiny fixed message
+    #[expect(clippy::cast_possible_truncation)] // tiny fixed message
     let popup = centred_rect(area, 24.min(area.width), (lines.len() as u16).min(area.height));
     frame.render_widget(Paragraph::new(lines).centered(), popup);
 }
