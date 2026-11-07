@@ -2,6 +2,9 @@
 members = ["lsp", "python", "rust", "tui"]
 resolver = "3"
 
+[workspace.package]
+rust-version = "1.90"
+
 [workspace.lints.clippy]
 pedantic = { level = "warn", priority = -1 }
 

@@ -166,7 +166,7 @@ fn model_block(lines: &mut Vec<Line<'static>>, diagnostics: &Diagnostics) {
     heading(lines, "Model", "");
 
     let cells = diagnostics.rows.saturating_mul(diagnostics.cols);
-    #[allow(clippy::cast_precision_loss)] // model dimensions are far below 2^52
+    #[expect(clippy::cast_precision_loss)] // model dimensions are far below 2^52
     let density = if cells == 0 { 0.0 } else { diagnostics.nnz as f64 / cells as f64 * 100.0 };
     field(
         lines,

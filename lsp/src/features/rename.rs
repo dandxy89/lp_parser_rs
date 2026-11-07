@@ -176,8 +176,8 @@ fn identifier_error(name: &str) -> Option<String> {
             c => return Some(format!("{c:?} is not allowed in a name")),
         }
         // The character after `-` / `>` was checked above; consume it.
-        debug_assert!(chars.peek().is_some());
-        chars.next();
+        let consumed = chars.next();
+        debug_assert!(consumed.is_some());
     }
     None
 }

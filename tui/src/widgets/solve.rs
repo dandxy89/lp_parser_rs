@@ -195,7 +195,7 @@ fn draw_done(
     // clipping long lines to width like the previous unwrapped `Paragraph`.
     let buf = frame.buffer_mut();
     for (i, line) in lines.iter().skip(scroll as usize).take(inner.height as usize).enumerate() {
-        #[allow(clippy::cast_possible_truncation)] // i < inner.height (u16)
+        #[expect(clippy::cast_possible_truncation)] // i < inner.height (u16)
         let y = inner.y + i as u16;
         buf.set_line(inner.x, y, line, inner.width);
     }
@@ -1083,7 +1083,7 @@ fn count_delta_span(count1: usize, count2: usize) -> Option<Span<'static>> {
     if count1 == count2 {
         return None;
     }
-    #[allow(clippy::cast_possible_wrap)]
+    #[expect(clippy::cast_possible_wrap)]
     let delta = count2 as i64 - count1 as i64;
     let sign = if delta > 0 { "+" } else { "" };
     let colour = if delta > 0 { t.added } else { t.removed };

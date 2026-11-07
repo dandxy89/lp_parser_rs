@@ -192,7 +192,7 @@ fn desired_width<S: AsRef<str>>(text: &[S]) -> u16 {
 /// Clamped to the terminal at draw time, so on short terminals the content
 /// scrolls instead of being silently truncated.
 const fn desired_height(lines: usize) -> u16 {
-    #[allow(clippy::cast_possible_truncation)] // help text is a few dozen lines
+    #[expect(clippy::cast_possible_truncation)] // help text is a few dozen lines
     let lines = lines as u16;
     lines.saturating_add(2)
 }
@@ -307,7 +307,7 @@ pub fn draw_help(frame: &mut Frame, area: Rect, app: &mut App) {
     let popup = super::centred_rect(area, width, desired_height(help_lines.len()));
 
     let inner_height = popup.height.saturating_sub(2) as usize;
-    #[allow(clippy::cast_possible_truncation)] // help text is a few dozen lines
+    #[expect(clippy::cast_possible_truncation)] // help text is a few dozen lines
     let max_scroll = help_lines.len().saturating_sub(inner_height) as u16;
     app.help_scroll = app.help_scroll.min(max_scroll);
 

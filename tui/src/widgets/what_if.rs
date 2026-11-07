@@ -69,7 +69,7 @@ pub fn draw_what_if(frame: &mut Frame, area: Rect, prompt: &WhatIfPrompt) {
     // (row 3 inside the border; column after the label).
     let visual_cursor = prompt.input.visual_cursor().saturating_sub(scroll);
     debug_assert!(visual_cursor <= field_width, "the scroll keeps the cursor inside the field");
-    #[allow(clippy::cast_possible_truncation)] // bounded by the popup width, itself a u16
+    #[expect(clippy::cast_possible_truncation)] // bounded by the popup width, itself a u16
     let cursor_x = popup.x + 1 + INPUT_LABEL.len() as u16 + visual_cursor as u16;
     let cursor_y = popup.y + 3;
     if cursor_x < popup.right().saturating_sub(1) && cursor_y < popup.bottom().saturating_sub(1) {

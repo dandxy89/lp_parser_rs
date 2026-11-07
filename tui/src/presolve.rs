@@ -1396,7 +1396,7 @@ fn split_dense_rows(problem: &mut LpProblem, pass: &mut Pass<'_>) {
 
         // ceil(sqrt(n)) balances the two levels: chunks of this size give about
         // this many chunks, so neither level is the dense one.
-        #[allow(clippy::cast_precision_loss, clippy::cast_sign_loss, clippy::cast_possible_truncation)]
+        #[expect(clippy::cast_precision_loss, clippy::cast_sign_loss, clippy::cast_possible_truncation)]
         let chunk = (terms.len() as f64).sqrt().ceil() as usize;
         debug_assert!(chunk >= 2, "a row of {} terms must chunk into at least pairs", terms.len());
         let parts = terms.len().div_ceil(chunk);

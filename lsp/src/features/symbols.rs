@@ -41,7 +41,7 @@ pub fn document_symbols(doc: &Document) -> Vec<DocumentSymbol> {
         }
         out.push(symbol(name, detail, SymbolKind::NAMESPACE, doc, range, selection, children));
     }
-    debug_assert!(entities.next().is_none(), "every entity belongs to a section");
+    debug_assert!(entities.peek().is_none(), "every entity belongs to a section");
     out
 }
 
@@ -142,7 +142,7 @@ fn symbol(
     children: Vec<DocumentSymbol>,
 ) -> DocumentSymbol {
     debug_assert!(range.start <= selection.start && selection.end <= range.end, "selection range must lie inside the range");
-    #[allow(deprecated, reason = "`deprecated` is a required field of the LSP type")]
+    #[expect(deprecated, reason = "`deprecated` is a required field of the LSP type")]
     DocumentSymbol {
         name,
         detail,

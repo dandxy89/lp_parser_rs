@@ -201,7 +201,7 @@ pub(super) fn build_constraints<'input>(
 /// lower bound is set to `-inf`, also per the CPLEX spec.
 // Binary detection compares bounds strictly against the sentinel values 0/1
 // written in the MPS text; an epsilon comparison would misclassify variables.
-#[allow(clippy::float_cmp)]
+#[expect(clippy::float_cmp)]
 pub(super) fn build_bounds<'input>(
     bound_accumulators: &FxHashMap<&'input str, BoundAccumulator>,
     bound_order: &[&'input str],

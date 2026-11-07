@@ -23,9 +23,9 @@ pub fn fmt_num(value: f64) -> String {
     }
     let magnitude = value.abs();
     if (1e-4..1e6).contains(&magnitude) {
-        #[allow(clippy::cast_possible_truncation)] // log10 of a value in [1e-4, 1e6) is in [-4, 6)
+        #[expect(clippy::cast_possible_truncation)] // log10 of a value in [1e-4, 1e6) is in [-4, 6)
         let exponent = magnitude.log10().floor() as i32;
-        #[allow(clippy::cast_sign_loss)] // clamped non-negative
+        #[expect(clippy::cast_sign_loss)] // clamped non-negative
         let decimals = (SIGNIFICANT - 1 - exponent).clamp(0, 12) as usize;
         let text = format!("{value:.decimals$}");
         let text = if text.contains('.') { text.trim_end_matches('0').trim_end_matches('.') } else { &text };

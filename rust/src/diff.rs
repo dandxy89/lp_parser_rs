@@ -98,7 +98,7 @@ impl DiffTol {
         if a.is_infinite() || b.is_infinite() {
             // `rel * inf` is NaN and `inf - inf` is NaN, so the tolerance
             // arithmetic below cannot judge infinities: only equal ones match.
-            #[allow(clippy::float_cmp)]
+            #[expect(clippy::float_cmp)]
             return a != b;
         }
         let diff = (a - b).abs();

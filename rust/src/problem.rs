@@ -1119,7 +1119,7 @@ mod serde_support {
     }
 
     // Serde's `skip_serializing_if` passes the field by reference.
-    #[allow(clippy::trivially_copy_pass_by_ref)]
+    #[expect(clippy::trivially_copy_pass_by_ref)]
     const fn is_normal(class: &ConstraintClass) -> bool {
         class.is_normal()
     }
@@ -2457,7 +2457,7 @@ End";
         assert!(LpProblem::parse("minimize\nobj: x\nsubject to\nc1: -inf <= x <= 1\nbounds\n-inf <= x <= +inf\nend").is_ok());
     }
 
-    #[allow(clippy::float_cmp)]
+    #[expect(clippy::float_cmp)]
     #[test]
     fn test_infinity_prefixed_variable_name() {
         let p = LpProblem::parse("minimize\nobj: x\nsubject to\nc: -inflow + x >= 0\nend").unwrap();
@@ -2594,7 +2594,7 @@ mod modification_tests {
     }
 
     #[test]
-    #[allow(clippy::similar_names)]
+    #[expect(clippy::similar_names)]
     fn test_rename_operations() {
         let mut p = create_test_problem();
 

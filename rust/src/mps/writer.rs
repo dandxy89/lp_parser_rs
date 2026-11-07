@@ -371,7 +371,7 @@ fn detect_range_pairs(problem: &LpProblem) -> RangePairs {
         // is exact; otherwise the pair is written as two ordinary rows.
         let range = upper_rhs - lower_rhs;
         debug_assert!(range >= 0.0, "upper >= lower was checked above");
-        #[allow(clippy::float_cmp)]
+        #[expect(clippy::float_cmp)]
         if lower_rhs + range != *upper_rhs {
             continue;
         }
@@ -936,7 +936,7 @@ fn write_double_bound(output: &mut String, var_name: &str, lb: f64, ub: f64, sty
         return Err(invalid_bound_error(var_name, &format!("has a nonsensical double bound ({lb}, {ub}), which MPS cannot represent")));
     }
 
-    #[allow(clippy::float_cmp)]
+    #[expect(clippy::float_cmp)]
     if lb == ub {
         write_bound_value(output, "FX", var_name, lb, style).expect("fmt::Write to String is infallible");
         return Ok(());

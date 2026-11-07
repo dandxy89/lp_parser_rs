@@ -95,7 +95,7 @@ fn draw_search_input(frame: &mut Frame, area: Rect, query: &tui_input::Input, mo
     }
 
     let right_text = format!("[{mode_label}] {match_count} matches");
-    #[allow(clippy::cast_possible_truncation)] // label is a few dozen columns
+    #[expect(clippy::cast_possible_truncation)] // label is a few dozen columns
     let right_len = (right_text.len() as u16).min(inner.width);
     let chunks = Layout::horizontal([Constraint::Min(0), Constraint::Length(right_len)]).split(inner);
 

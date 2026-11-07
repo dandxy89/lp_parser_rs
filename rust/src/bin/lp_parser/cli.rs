@@ -123,7 +123,7 @@ fn positive_finite(value: &str) -> Result<f64, String> {
 }
 
 #[derive(clap::Args)]
-#[allow(clippy::struct_excessive_bools)]
+#[expect(clippy::struct_excessive_bools)]
 pub struct InfoArgs {
     /// Path to the LP or MPS file (`.mps` extension reads MPS)
     pub file: PathBuf,
