@@ -767,7 +767,7 @@ fn invalid_bound_error(var_name: &str, message: &str) -> LpParseError {
     LpParseError::validation_error(format!("variable '{var_name}' {message}"))
 }
 
-/// Write the bound line(s) for a single variable's [`VariableType`].
+/// Write the bound line(s) for a single variable's [`VariableKind`].
 ///
 /// See the module documentation for the `Integer`/`General`/`SemiContinuous`
 /// mapping caveats, and for how undeclared and free variables are written.

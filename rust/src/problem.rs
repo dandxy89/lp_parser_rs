@@ -1517,7 +1517,7 @@ fn saturate_infinite_bound(value: f64) -> f64 {
 
 /// Process bounds declarations into the variables map.
 ///
-/// Bound-shaped declarations update [`VariableBounds`]; kind-shaped declarations
+/// Bound-shaped declarations update [`VariableBounds`](crate::model::VariableBounds); kind-shaped declarations
 /// (Binary/Integer/…) update [`VariableKind`] without clobbering bounds.
 fn process_bounds(interner: &mut NameInterner, bounds: &[(&str, VariableType)], variables: &mut IndexMap<NameId, Variable>) {
     for &(var_name, ref decl) in bounds {

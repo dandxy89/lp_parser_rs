@@ -185,7 +185,7 @@ pub struct DiffArgs {
 
     /// Regex rewrite applied to names in BOTH files before matching.
     /// Takes two values: PATTERN REPLACEMENT. May be repeated; rules apply in order.
-    /// Example: --rename '%>%\[\d+,\d+,[^]]*\]$' '%>%idx'
+    /// Example: `--rename '%>%\[\d+,\d+,[^]]*\]$' '%>%idx'`
     #[arg(long, num_args = 2, value_names = ["PATTERN", "REPLACEMENT"], action = clap::ArgAction::Append)]
     pub rename: Vec<String>,
 }

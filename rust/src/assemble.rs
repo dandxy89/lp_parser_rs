@@ -3,7 +3,7 @@
 //! The LALRPOP grammar cannot decide with one token of lookahead whether
 //! `... + 10 obj2: y` ends an objective with the constant `10` or scales a
 //! variable named `obj2`, so the grammar collects each section body as a flat
-//! list of [`Elem`](crate::assemble::Elem)s and the functions here assemble entries with unbounded
+//! list of [`Elem`]s and the functions here assemble entries with unbounded
 //! lookahead. The same approach handles constant terms (`obj: x + 10`,
 //! `c1: x + 2 <= 10`), empty objectives, flipped constraints (`10 >= x`),
 //! ranged constraints (`2 <= x + y <= 10`, expanded into two constraints like
