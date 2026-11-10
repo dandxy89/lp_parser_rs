@@ -1463,9 +1463,13 @@ fn intern_objectives(
             variables.entry(term.var2).or_insert_with(|| Variable::new(term.var2));
         }
         let name = obj.name;
-        if objectives.insert(name, obj).is_some() {
-            eprintln!("duplicate objective name '{}': the later definition replaces the earlier one", interner.resolve(name));
+        if objectives.contains_key(&name) {
+            return Err(LpParseError::parse_error(
+                raw_obj.byte_offset.unwrap_or(0),
+                format!("duplicate objective name '{}'", interner.resolve(name)),
+            ));
         }
+        objectives.insert(name, obj);
     }
 
     Ok(objectives)
@@ -1494,9 +1498,13 @@ fn intern_constraints(
         let mut con = intern_constraint(interner, raw_con)?;
         let final_id = assign_constraint_name(interner, constraints, names.reserved, &mut con, names.counter, "C", &mut name_buf);
         register_constraint_variables(variables, &con);
-        if constraints.insert(final_id, con).is_some() {
-            eprintln!("duplicate constraint name '{}': the later definition replaces the earlier one", interner.resolve(final_id));
+        if constraints.contains_key(&final_id) {
+            return Err(LpParseError::parse_error(
+                raw_con.byte_offset().unwrap_or(0),
+                format!("duplicate constraint name '{}'", interner.resolve(final_id)),
+            ));
         }
+        constraints.insert(final_id, con);
         ids.push(final_id);
     }
 
@@ -1859,25 +1867,13 @@ End";
         assert_eq!(coefficients[0].value, 4.0);
     }
 
-    // Parsed values round-trip bit-exactly from source text.
-    #[allow(clippy::float_cmp)]
     #[test]
-    fn test_duplicate_names_last_wins() {
-        // A repeated constraint name replaces the earlier definition.
-        let p = LpProblem::parse("minimize\nx1\nsubject to\nc1: x1 <= 1\nc1: x1 >= 2\nend").unwrap();
-        assert_eq!(p.constraint_count(), 1);
-        let Constraint::Standard { operator, rhs, .. } = p.constraints.values().next().unwrap() else {
-            panic!("expected standard constraint");
-        };
-        assert_eq!(*operator, ComparisonOp::GTE);
-        assert_eq!(*rhs, 2.0);
+    fn test_duplicate_names_are_errors() {
+        let err = LpProblem::parse("minimize\nx1\nsubject to\nc1: x1 <= 1\nc1: x1 >= 2\nend").unwrap_err();
+        assert!(err.to_string().contains("duplicate constraint name 'c1'"), "{err}");
 
-        // Same for objective names.
-        let p = LpProblem::parse("minimize\nobj: x1\nobj: 3 x2\nsubject to\nc1: x1 <= 1\nend").unwrap();
-        assert_eq!(p.objective_count(), 1);
-        let obj = p.objectives.values().next().unwrap();
-        assert_eq!(obj.coefficients.len(), 1);
-        assert_eq!(obj.coefficients[0].value, 3.0);
+        let err = LpProblem::parse("minimize\nobj: x1\nobj: 3 x2\nsubject to\nc1: x1 <= 1\nend").unwrap_err();
+        assert!(err.to_string().contains("duplicate objective name 'obj'"), "{err}");
     }
 
     #[test]

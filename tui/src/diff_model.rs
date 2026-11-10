@@ -699,7 +699,8 @@ pub fn variable_sort_delta(entry: &VariableDiffEntry, relative: bool) -> Option<
     let (old_lower, old_upper) = entry.old_type.map_or((None, None), |spec| (spec.bounds.lower, spec.bounds.upper));
     let (new_lower, new_upper) = entry.new_type.map_or((None, None), |spec| (spec.bounds.lower, spec.bounds.upper));
     let max = change_delta(old_lower, new_lower, relative).max(change_delta(old_upper, new_upper, relative));
-    debug_assert!(max.is_finite() && max >= 0.0, "variable sort delta must be finite and non-negative");
+    // Infinite when a bound gained or lost an infinite value.
+    debug_assert!(!max.is_nan() && max >= 0.0, "variable sort delta must not be NaN or negative");
     Some(max)
 }
 

@@ -70,13 +70,8 @@ pub fn build_coeff_rows(
         })
         .collect();
 
-    debug_assert!(
-        rows.len() >= old_coefficients.len().max(new_coefficients.len()),
-        "output rows ({}) must cover the union of old ({}) and new ({}) variables",
-        rows.len(),
-        old_coefficients.len(),
-        new_coefficients.len(),
-    );
+    // No row-count assertion: rename rules can legitimately merge variables,
+    // so the union may be smaller than either input.
 
     rows
 }

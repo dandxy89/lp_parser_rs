@@ -146,6 +146,18 @@ impl RawConstraint<'_> {
             | Self::General { name, .. } => name,
         }
     }
+
+    /// Byte offset of the constraint in the source text, when known.
+    #[must_use]
+    pub const fn byte_offset(&self) -> Option<usize> {
+        match self {
+            Self::Standard { byte_offset, .. }
+            | Self::SOS { byte_offset, .. }
+            | Self::Indicator { byte_offset, .. }
+            | Self::Quadratic { byte_offset, .. }
+            | Self::General { byte_offset, .. } => *byte_offset,
+        }
+    }
 }
 
 /// Raw quadratic term produced by the grammar (zero-copy): `coefficient *
