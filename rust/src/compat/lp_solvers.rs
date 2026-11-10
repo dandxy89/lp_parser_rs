@@ -573,7 +573,7 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::many_single_char_names)]
+    #[expect(clippy::many_single_char_names)]
     fn test_expression_formatting() {
         let mut p = LpProblem::new();
         let x = p.intern("x");

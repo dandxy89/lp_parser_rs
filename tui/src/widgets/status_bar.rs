@@ -232,7 +232,7 @@ pub fn draw_status_bar(frame: &mut Frame, area: Rect, params: &StatusBarParams<'
     // A leading space keeps a visible gap between the two halves.
     right_spans.insert(0, Span::raw(" "));
 
-    #[allow(clippy::cast_possible_truncation)] // hint strings are far below u16::MAX
+    #[expect(clippy::cast_possible_truncation)] // hint strings are far below u16::MAX
     let right_len = (right_width as u16).saturating_add(2).min(area.width);
     let chunks = Layout::horizontal([Constraint::Min(0), Constraint::Length(right_len)]).split(area);
     frame.render_widget(Paragraph::new(Line::from(left_spans)), chunks[0]);

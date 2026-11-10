@@ -592,7 +592,7 @@ impl Display for ProblemAnalysis {
 
 /// Collect coefficient statistics for one location, classifying each
 /// coefficient as normal, large, or small.
-#[allow(clippy::too_many_arguments)]
+#[expect(clippy::too_many_arguments)]
 fn collect_coefficient_stats(
     coefficients: &[crate::model::Coefficient],
     location_name: &str,
@@ -697,7 +697,7 @@ impl LpProblem {
         let constraint_count = self.constraint_count();
         let variable_count = self.variable_count();
 
-        #[allow(clippy::cast_precision_loss)]
+        #[expect(clippy::cast_precision_loss)]
         let density = if constraint_count > 0 && variable_count > 0 {
             total_nonzeros as f64 / (constraint_count as f64 * variable_count as f64)
         } else {

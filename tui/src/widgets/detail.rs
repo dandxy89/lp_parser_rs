@@ -154,15 +154,15 @@ pub fn build_variable_detail(entry: &VariableDiffEntry) -> Vec<Line<'static>> {
             if old_label == new_label {
                 lines.push(Line::from(vec![
                     Span::styled("  Type:   ", muted()),
-                    Span::styled(old_label.clone(), Style::default().fg(t.text)),
+                    Span::styled(old_label, Style::default().fg(t.text)),
                     Span::styled(" (unchanged)", muted()),
                 ]));
             } else {
                 lines.push(Line::from(vec![
                     Span::styled("  Type:   ", muted()),
-                    Span::styled(old_label.clone(), Style::default().fg(t.removed)),
+                    Span::styled(old_label, Style::default().fg(t.removed)),
                     Span::styled(ARROW, muted()),
-                    Span::styled(new_label.clone(), Style::default().fg(t.added)),
+                    Span::styled(new_label, Style::default().fg(t.added)),
                 ]));
             }
 
@@ -240,7 +240,7 @@ enum ConstraintBody<'a> {
 /// Shared by the styled renderer (which windows the coefficient rows to the
 /// viewport, or splits them into two columns) and by the plain-text builder
 /// (which appends all of them unified).
-#[allow(clippy::too_many_lines)]
+#[expect(clippy::too_many_lines)]
 fn constraint_detail_parts<'a>(
     entry: &'a ConstraintDiffEntry,
     interner: &NameInterner,
@@ -847,7 +847,7 @@ fn render_windowed_panel(
 /// Uses windowed rendering: only builds `Line` objects for coefficient rows
 /// visible in the viewport, avoiding `O(total_rows)` allocations per frame.
 /// Column widths come from the visible rows too.
-#[allow(clippy::too_many_arguments)]
+#[expect(clippy::too_many_arguments)]
 fn render_constraint_side_by_side(
     frame: &mut Frame,
     area: Rect,
@@ -867,7 +867,7 @@ fn render_constraint_side_by_side(
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
-    #[allow(clippy::cast_possible_truncation)]
+    #[expect(clippy::cast_possible_truncation)]
     let header_height = header_line_count as u16;
     // The header shrinks as it scrolls away, handing its rows to the
     // coefficients: a fixed-height header chunk would hide the last
@@ -1154,7 +1154,7 @@ const fn coeff_visible_range(scroll: usize, area: Rect, header_line_count: usize
 /// for the visible window, avoiding `O(total_rows)` work per frame. Returns
 /// `(skipped, rows)`: how many rows ahead of the window were left out, and how
 /// many rows there are in all.
-#[allow(clippy::too_many_arguments)] // the row source, window and pane width are all independent
+#[expect(clippy::too_many_arguments)] // the row source, window and pane width are all independent
 fn render_coeff_changes(
     lines: &mut Vec<Line<'static>>,
     changes: &[CoefficientChange],

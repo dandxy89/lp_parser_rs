@@ -371,7 +371,7 @@ fn detect_range_pairs(problem: &LpProblem) -> RangePairs {
         // is exact; otherwise the pair is written as two ordinary rows.
         let range = upper_rhs - lower_rhs;
         debug_assert!(range >= 0.0, "upper >= lower was checked above");
-        #[allow(clippy::float_cmp)]
+        #[expect(clippy::float_cmp)]
         if lower_rhs + range != *upper_rhs {
             continue;
         }
@@ -767,7 +767,7 @@ fn invalid_bound_error(var_name: &str, message: &str) -> LpParseError {
     LpParseError::validation_error(format!("variable '{var_name}' {message}"))
 }
 
-/// Write the bound line(s) for a single variable's [`VariableType`].
+/// Write the bound line(s) for a single variable's [`VariableKind`].
 ///
 /// See the module documentation for the `Integer`/`General`/`SemiContinuous`
 /// mapping caveats, and for how undeclared and free variables are written.
@@ -936,7 +936,7 @@ fn write_double_bound(output: &mut String, var_name: &str, lb: f64, ub: f64, sty
         return Err(invalid_bound_error(var_name, &format!("has a nonsensical double bound ({lb}, {ub}), which MPS cannot represent")));
     }
 
-    #[allow(clippy::float_cmp)]
+    #[expect(clippy::float_cmp)]
     if lb == ub {
         write_bound_value(output, "FX", var_name, lb, style).expect("fmt::Write to String is infallible");
         return Ok(());

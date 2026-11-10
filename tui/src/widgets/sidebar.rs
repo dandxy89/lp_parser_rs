@@ -90,7 +90,7 @@ pub fn draw_tab_bar(frame: &mut Frame, area: Rect, app: &mut App) {
             spans.push(Span::styled(" \u{2502} ", Style::default().fg(t.border)));
             x = x.saturating_add(3);
         }
-        #[allow(clippy::cast_possible_truncation)] // labels are short, far below u16::MAX
+        #[expect(clippy::cast_possible_truncation)] // labels are short, far below u16::MAX
         let width = spans_width(&tab) as u16;
         bounds[index] = (x, x.saturating_add(width));
         x = x.saturating_add(width);

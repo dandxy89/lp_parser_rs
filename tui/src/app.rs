@@ -322,7 +322,7 @@ impl SolverSession {
     }
 }
 
-#[allow(clippy::struct_excessive_bools)] // independent toggles (help, ignore-order, mouse capture, quit), not a hidden state machine
+#[expect(clippy::struct_excessive_bools)] // independent toggles (help, ignore-order, mouse capture, quit), not a hidden state machine
 pub struct App {
     /// Diff (two files) or Inspect (single file). Fixed at startup.
     pub mode: AppMode,
@@ -649,7 +649,7 @@ pub(crate) fn build_section_labels(
 
 impl App {
     /// Construct the diff-mode app (two files).
-    #[allow(clippy::too_many_arguments)] // constructor mirrors main.rs wiring; a params struct adds noise
+    #[expect(clippy::too_many_arguments)] // constructor mirrors main.rs wiring; a params struct adds noise
     pub fn new(
         report: LpDiffReport,
         file1_path: PathBuf,
@@ -705,7 +705,7 @@ impl App {
         )
     }
 
-    #[allow(clippy::too_many_arguments)] // constructor mirrors main.rs wiring; a params struct adds noise
+    #[expect(clippy::too_many_arguments)] // constructor mirrors main.rs wiring; a params struct adds noise
     fn build(
         mode: AppMode,
         report: LpDiffReport,

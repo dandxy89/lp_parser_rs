@@ -238,7 +238,7 @@ mod tests {
                 // Ranges must survive the LSP round trip (not split a CRLF).
                 let lsp_range = doc.range(start..end);
                 let bytes = doc.byte_range(lsp_range);
-                replay.replace_range(bytes.clone(), &text);
+                replay.replace_range(bytes, &text);
                 let event = TextDocumentContentChangeEvent { range: Some(lsp_range), range_length: None, text };
                 doc.apply_changes(&[event], i32::try_from(version).unwrap() + 1);
                 prop_assert_eq!(&doc.text, &replay);

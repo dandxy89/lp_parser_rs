@@ -6,7 +6,7 @@
 //! crate's modules are compiled into this benchmark directly, with the one
 //! crate-root item they use (`disconnected`) restated below.
 
-#![allow(dead_code, unused_imports)]
+#![expect(dead_code, unused_imports)]
 
 #[path = "../src/app.rs"]
 mod app;

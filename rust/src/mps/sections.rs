@@ -161,7 +161,7 @@ impl<'input> ColumnsState<'input> {
 
     /// Parse a single (`row_name`, value) entry from a COLUMNS line of the
     /// column `var_name`, whose index in `column_order` is `col_idx`.
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments)]
     fn parse_entry(
         &mut self,
         row_name: &'input str,

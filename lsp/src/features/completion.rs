@@ -37,7 +37,7 @@ pub fn complete(doc: &Document, position: Position) -> CompletionList {
     let place = place(doc, word.start);
     let rest = lex(&text[place.rest_start..word.start]);
     let ends_with_space = text[..word.start].ends_with([' ', '\t']);
-    let mut out = Completions { doc, replace: word.clone(), items: Vec::new(), incomplete: false };
+    let mut out = Completions { doc, replace: word, items: Vec::new(), incomplete: false };
 
     if before.trim().is_empty() {
         out.section_keywords(place.section == Section::Start);

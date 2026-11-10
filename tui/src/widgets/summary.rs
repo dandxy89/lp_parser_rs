@@ -194,7 +194,7 @@ pub fn draw_summary(frame: &mut Frame, area: Rect, cached_lines: &[Line<'static>
     let buf: &mut Buffer = frame.buffer_mut();
 
     for (i, line) in cached_lines.iter().skip(skip).take(visible).enumerate() {
-        #[allow(clippy::cast_possible_truncation)] // i < visible <= area.height (u16)
+        #[expect(clippy::cast_possible_truncation)] // i < visible <= area.height (u16)
         let y = area.y + i as u16;
         debug_assert!(y < area.y + area.height, "summary line y={y} exceeds area bounds");
         buf.set_line(area.x, y, line, area.width);
@@ -326,7 +326,7 @@ fn comparison_header(lines: &mut Vec<Line<'static>>, label_width: usize) {
 }
 
 /// Render a comparison row with usize values and a delta.
-#[allow(clippy::cast_possible_wrap)] // values are LP problem dimensions, never close to i64::MAX
+#[expect(clippy::cast_possible_wrap)] // values are LP problem dimensions, never close to i64::MAX
 fn comparison_row_usize(lines: &mut Vec<Line<'static>>, label: &str, label_width: usize, a: usize, b: usize) {
     let t = theme();
     let delta = b as i64 - a as i64;
