@@ -8,6 +8,9 @@ on:
       - "**/Cargo.toml"
       - "**/Cargo.lock"
       - "**.yml"
+      - "**/*.lalrpop"
+      - "rust/tests/**"
+      - "**/*.pyi"
   pull_request:
     # Trigger on pull request events to the main branch and on changes to specific files
     types: [assigned, opened, synchronize, reopened]
@@ -16,6 +19,9 @@ on:
       - "**/Cargo.toml"
       - "**/Cargo.lock"
       - "**.yml"
+      - "**/*.lalrpop"
+      - "rust/tests/**"
+      - "**/*.pyi"
 
 name: Cargo Test
 
