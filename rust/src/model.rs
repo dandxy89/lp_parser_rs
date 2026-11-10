@@ -679,19 +679,15 @@ impl VariableBounds {
     /// Lower bound a solver should use: the declared one, or the format default
     /// of `0` when none was declared.
     ///
-    /// A binary variable is canonically `[0, 1]`, so any explicit (redundant or
-    /// contradictory) bound stored alongside the `Binary` kind is ignored here.
+    /// A binary variable is canonically `[0, 1]`; any explicit bound stored
+    /// alongside the `Binary` kind is intersected with that range, so a
+    /// fixing such as `[1, 1]` is preserved.
     /// A variable declared `free` carries `-inf` as its lower bound and so
     /// needs no special case here.
     #[must_use]
-    pub const fn effective_lower(self, kind: VariableKind) -> f64 {
-        if matches!(kind, VariableKind::Binary) {
-            return 0.0;
-        }
-        match self.lower {
-            Some(lower) => lower,
-            None => 0.0,
-        }
+    pub fn effective_lower(self, kind: VariableKind) -> f64 {
+        let lower = self.lower.unwrap_or(0.0);
+        if matches!(kind, VariableKind::Binary) { lower.max(0.0) } else { lower }
     }
 
     /// Default upper bound assumed by solvers when none is set.
@@ -699,10 +695,8 @@ impl VariableBounds {
     /// A binary variable is canonically `[0, 1]` (see [`Self::effective_lower`]).
     #[must_use]
     pub fn effective_upper(self, kind: VariableKind) -> f64 {
-        if matches!(kind, VariableKind::Binary) {
-            return 1.0;
-        }
-        self.upper.unwrap_or(f64::INFINITY)
+        let upper = self.upper.unwrap_or(f64::INFINITY);
+        if matches!(kind, VariableKind::Binary) { upper.min(1.0) } else { upper }
     }
 }
 

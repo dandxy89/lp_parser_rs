@@ -202,15 +202,16 @@ impl Actions<'_> {
                 if slash.is_some() {
                     continue;
                 }
-                let mut keep = scale_terms(doc, block, |v| v * 2.0);
-                keep.push((end..end, " / 2".to_owned()));
-                self.push(
-                    "Append `/ 2` and double the coefficients (keeps values)".to_owned(),
-                    CodeActionKind::QUICKFIX,
-                    keep,
-                    diagnostics.clone(),
-                    true,
-                );
+                if let Some(mut keep) = scale_terms(doc, block, |v| v * 2.0) {
+                    keep.push((end..end, " / 2".to_owned()));
+                    self.push(
+                        "Append `/ 2` and double the coefficients (keeps values)".to_owned(),
+                        CodeActionKind::QUICKFIX,
+                        keep,
+                        diagnostics.clone(),
+                        true,
+                    );
+                }
                 self.push(
                     "Append `/ 2` (halves the quadratic terms)".to_owned(),
                     CodeActionKind::QUICKFIX,
@@ -224,8 +225,9 @@ impl Actions<'_> {
                 let divisor_text = divisor_node.map_or("", |n| doc.node_text(n));
                 let remove = (close.end_byte()..end, String::new());
                 let divisor = divisor_node.and_then(|n| syntax::parse_number(doc.node_text(n))).filter(|d| d.is_finite() && *d > 0.0);
-                if let Some(divisor) = divisor {
-                    let mut keep = scale_terms(doc, block, |v| v / divisor);
+                if let Some(divisor) = divisor
+                    && let Some(mut keep) = scale_terms(doc, block, |v| v / divisor)
+                {
                     keep.push(remove.clone());
                     let title = format!("Remove `/ {divisor_text}` and divide the coefficients by {divisor_text} (keeps values)");
                     self.push(title, CodeActionKind::QUICKFIX, keep, diagnostics.clone(), true);
@@ -560,20 +562,24 @@ fn nodes_in<'t>(root: Node<'t>, range: &Range<usize>, kind: &str) -> Vec<Node<'t
 
 /// Rescale every coefficient in a quadratic block (inserting one where the
 /// term has an implicit 1).
-fn scale_terms(doc: &Document, block: Node<'_>, scale: impl Fn(f64) -> f64) -> Vec<Edit> {
+fn scale_terms(doc: &Document, block: Node<'_>, scale: impl Fn(f64) -> f64) -> Option<Vec<Edit>> {
     debug_assert_eq!(block.kind(), kind::QUADRATIC_BLOCK);
     let mut edits = Vec::new();
     for term in children(block).into_iter().filter(|c| c.kind() == kind::QUADRATIC_TERM) {
         let Some(head) = term.named_child(0) else { continue };
         if head.kind() == kind::NUMBER {
             let Some(value) = syntax::parse_number(doc.node_text(head)) else { continue };
-            edits.push((head.byte_range(), format_number(scale(value))));
+            let scaled = scale(value);
+            if !scaled.is_finite() {
+                return None; // overflow: offer no fix rather than writing `inf`
+            }
+            edits.push((head.byte_range(), format_number(scaled)));
         } else {
             let at = head.start_byte();
             edits.push((at..at, format!("{} ", format_number(scale(1.0)))));
         }
     }
-    edits
+    Some(edits)
 }
 
 /// Shortest round-tripping decimal, in exponent form when very large or small.

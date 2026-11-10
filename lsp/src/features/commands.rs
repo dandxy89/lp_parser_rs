@@ -199,7 +199,9 @@ fn convert_to_mps(doc: &Document) -> Result<Output, String> {
     }
     let source = doc.uri.to_file_path().filter(|p| p.is_absolute()).ok_or_else(not_a_file)?;
     let target = source.with_extension("mps");
-    debug_assert_ne!(source.as_ref(), target.as_path(), "the MPS file must not overwrite its source");
+    if source == target {
+        return Err(format!("refusing to overwrite {} with its own MPS conversion", source.display()));
+    }
     let problem = parse(doc)?;
     let mps = write_mps_string(&problem).map_err(|e| format!("cannot convert {} to MPS: {e}", display_name(doc)))?;
     std::fs::write(&target, mps).map_err(|e| format!("cannot write {}: {e}", target.display()))?;

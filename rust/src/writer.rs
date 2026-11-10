@@ -839,6 +839,8 @@ pub(crate) fn write_formatted_coefficient(
 /// Magnitudes outside `[SCIENTIFIC_BELOW, SCIENTIFIC_FROM)` are written in
 /// scientific notation, so neither `1e300` nor `1e-300` expands to hundreds of
 /// digits.
+/// Upper limit for decimal precision; `{:.p$}` panics above `u16::MAX`.
+const MAX_DECIMAL_PRECISION: usize = 1100;
 const SCIENTIFIC_FROM: f64 = 1e16;
 /// See [`SCIENTIFIC_FROM`].
 const SCIENTIFIC_BELOW: f64 = 1e-5;
@@ -857,6 +859,8 @@ const SCIENTIFIC_BELOW: f64 = 1e-5;
 /// numeric formatting instead of duplicating it.
 #[expect(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
 pub(crate) fn write_number(output: &mut String, value: f64, precision: Option<usize>) -> std::fmt::Result {
+    // `{:.p$}` panics above u16::MAX; an f64 has at most ~1100 significant decimals.
+    let precision = precision.map(|p| p.min(MAX_DECIMAL_PRECISION));
     debug_assert!(!value.is_nan(), "write_number called with NaN");
     if value.is_infinite() {
         // Infinite bounds are legitimate LP syntax; the lexer accepts `inf`/`-inf`.

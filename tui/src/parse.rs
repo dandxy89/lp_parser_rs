@@ -8,7 +8,6 @@ use std::path::Path;
 use lp_parser_rs::LineIndex;
 use lp_parser_rs::analysis::ProblemAnalysis;
 use lp_parser_rs::interner::NameId;
-use lp_parser_rs::parser::MappedFile;
 use lp_parser_rs::problem::LpProblem;
 
 /// Parsed file: the problem, structural analysis, constraint→line-number map, and raw text.
@@ -49,7 +48,8 @@ pub fn parse_text(content: &str, is_mps: bool, label: &str) -> Result<ParsedFile
 pub fn parse_file(path: &Path) -> Result<ParsedFile, Box<dyn std::error::Error + Send + Sync>> {
     debug_assert!(path.exists(), "parse_file called with non-existent path: {}", path.display());
 
-    let mapped = MappedFile::open(path).map_err(|e| format!("failed to read '{}': {e}", path.display()))?;
+    // Plain read, not mmap: `--watch` re-parses while the file is being rewritten.
+    let text = std::fs::read_to_string(path).map_err(|e| format!("failed to read '{}': {e}", path.display()))?;
     let is_mps = path.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("mps"));
-    parse_text(mapped.as_str(), is_mps, &path.display().to_string())
+    parse_text(&text, is_mps, &path.display().to_string())
 }

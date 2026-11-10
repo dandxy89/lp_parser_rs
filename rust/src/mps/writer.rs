@@ -788,10 +788,14 @@ fn write_variable_bound(
     // record already carries the bounds implied by the kind.
     match kind {
         VariableKind::Binary => {
-            // Binary is canonically [0, 1]; emit BV regardless of any redundant
-            // or contradictory explicit bounds carried alongside the kind.
-            write_bound_flag(output, "BV", var_name, style).expect("fmt::Write to String is infallible");
-            return Ok(());
+            // Binary is canonically [0, 1]: BV. A narrower declared range (a
+            // fixing) is written as explicit bounds on the integer column.
+            let (lb, ub) = (bounds.effective_lower(kind), bounds.effective_upper(kind));
+            if lb.to_bits() == 0.0_f64.to_bits() && ub.to_bits() == 1.0_f64.to_bits() {
+                write_bound_flag(output, "BV", var_name, style).expect("fmt::Write to String is infallible");
+                return Ok(());
+            }
+            return write_double_bound(output, var_name, lb, ub, style);
         }
         VariableKind::SemiContinuous | VariableKind::SemiInteger => {
             // The SC / SI record carries the upper bound only, so any lower

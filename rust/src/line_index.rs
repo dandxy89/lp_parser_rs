@@ -96,9 +96,10 @@ impl LineIndex {
             "  --> line {line_no}, column {col}\n\
              {blank:pad$} |\n\
              {gutter} | {line_text}\n\
-             {blank:pad$} | {caret:>caret_pad$}^",
+             {blank:pad$} | {caret}^",
             blank = "",
-            caret = "",
+            // `{:>width$}` panics for widths above u16::MAX.
+            caret = " ".repeat(caret_pad),
         ))
     }
 }
