@@ -1,5 +1,17 @@
 # Changelog
 
+## [4.1.2](https://github.com/dandxy89/lp_parser_rs/compare/lp_diff-v4.1.1...lp_diff-v4.1.2) (2026-11-13)
+
+
+### Build System
+
+* add cargo-binstall metadata for lp-lsp and lp_diff ([ca75e5e](https://github.com/dandxy89/lp_parser_rs/commit/ca75e5e73a452ac506f5d4cb784cb5b89b796891))
+
+
+### Code Refactoring
+
+* TUI updates ([#227](https://github.com/dandxy89/lp_parser_rs/issues/227)) ([b814358](https://github.com/dandxy89/lp_parser_rs/commit/b81435817112d9ded59e4e28203deaa2e1d7b21d))
+
 ## [4.1.1](https://github.com/dandxy89/lp_parser_rs/compare/lp_diff-v4.1.0...lp_diff-v4.1.1) (2026-11-13)
 
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.1.1](https://github.com/dandxy89/lp_parser_rs/compare/parse_lp-v4.1.0...parse_lp-v4.1.1) (2026-11-13)
+
+
+### Build System
+
+* **python:** require Python 3.10 or later ([22c21d3](https://github.com/dandxy89/lp_parser_rs/commit/22c21d30004d3363af55a7cdc5d855f231d174da))
+
 ## [4.1.0](https://github.com/dandxy89/lp_parser_rs/compare/parse_lp-v4.0.0...parse_lp-v4.1.0) (2026-11-13)
 
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.0.3](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v5.0.2...lp_parser_rs-v5.0.3) (2026-11-13)
+
+
+### Code Refactoring
+
+* TUI updates ([#227](https://github.com/dandxy89/lp_parser_rs/issues/227)) ([b814358](https://github.com/dandxy89/lp_parser_rs/commit/b81435817112d9ded59e4e28203deaa2e1d7b21d))
+
 ## [5.0.2](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v5.0.1...lp_parser_rs-v5.0.2) (2026-11-13)
 
 
