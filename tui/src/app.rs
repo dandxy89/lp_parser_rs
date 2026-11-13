@@ -336,7 +336,7 @@ pub struct App {
     pub show_help: bool,
 
     /// Scroll offset for the help overlay (clamped to content height at draw time).
-    pub help_scroll: u16,
+    pub help_scroll: usize,
 
     /// `Ctrl+P` command palette state.
     pub palette: CommandPaletteState,
@@ -1441,8 +1441,12 @@ impl App {
     /// selected instead.
     pub(crate) fn restore_jump(&mut self, entry: &JumpEntry) {
         self.set_active_section(entry.section);
-        self.apply_filter(entry.filter);
-        self.invalidate_cache();
+        if self.filter == entry.filter {
+            self.coeff_row_cache = None;
+        } else {
+            self.apply_filter(entry.filter);
+            self.invalidate_cache();
+        }
         self.ensure_active_section_cache();
         self.detail_scroll = entry.detail_scroll;
 
@@ -1988,9 +1992,13 @@ impl App {
         // Switch to the target section.
         self.set_active_section(section);
 
-        // Reset filter and recompute caches.
-        self.apply_filter(DiffFilter::All);
-        self.invalidate_cache();
+        // Reset the filter; caches only go stale if it actually changed.
+        if self.filter == DiffFilter::All {
+            self.coeff_row_cache = None;
+        } else {
+            self.apply_filter(DiffFilter::All);
+            self.invalidate_cache();
+        }
         self.ensure_active_section_cache();
 
         // Find the position of `entry_index` within the filtered indices and select it.

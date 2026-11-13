@@ -42,6 +42,17 @@ fn flash_style(level: crate::app::FlashLevel) -> Style {
     Style::default().fg(colour).add_modifier(Modifier::BOLD)
 }
 
+/// Flash text with a severity word for warnings and errors, so the level
+/// survives `NO_COLOR` and colour-blind palettes.
+fn flash_label(level: crate::app::FlashLevel, message: &str) -> String {
+    use crate::app::FlashLevel;
+    match level {
+        FlashLevel::Warn => format!("warn: {message}"),
+        FlashLevel::Err => format!("error: {message}"),
+        FlashLevel::Info | FlashLevel::Ok => message.to_owned(),
+    }
+}
+
 /// Inspect-mode left segment: the single filename and current section counts.
 ///
 /// When present, it replaces the diff-oriented change/filter segment entirely so
@@ -222,13 +233,17 @@ pub fn draw_status_bar(frame: &mut Frame, area: Rect, params: &StatusBarParams<'
     // A flash is transient and is the thing the user is waiting to read, so
     // it keeps its full width instead.
     let available = area.width as usize;
-    let right_floor = params.yank_flash.map_or_else(|| last_hint_width(params.hints), |flash| flash.message.chars().count()) + 2;
+    let flash_text = params.yank_flash.map(|flash| flash_label(flash.level, flash.message));
+    let right_floor = flash_text.as_ref().map_or_else(|| last_hint_width(params.hints), |text| text.chars().count()) + 2;
     let (left_spans, left_width) = fit_segments(segments, &separator, available.saturating_sub(right_floor));
 
-    let (mut right_spans, right_width) = params.yank_flash.map_or_else(
-        || hint_spans(params.hints, available.saturating_sub(left_width + 2)),
-        |flash| (vec![Span::styled(flash.message, flash_style(flash.level))], flash.message.chars().count()),
-    );
+    let (mut right_spans, right_width) = match (params.yank_flash, flash_text) {
+        (Some(flash), Some(text)) => {
+            let width = text.chars().count();
+            (vec![Span::styled(text, flash_style(flash.level))], width)
+        }
+        _ => hint_spans(params.hints, available.saturating_sub(left_width + 2)),
+    };
     // A leading space keeps a visible gap between the two halves.
     right_spans.insert(0, Span::raw(" "));
 

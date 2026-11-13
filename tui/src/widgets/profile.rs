@@ -133,12 +133,12 @@ pub fn export_text(profile: &Profile) -> String {
 
     let mut out = String::with_capacity(profile.runs.len() * 96);
     out.push_str("Solve profile\n\n");
-    let _ = writeln!(out, "{:<18}{:<24}{:>12}{:>12}{:>12}  objective", "preset", "status", "total", "solve", "iterations");
+    writeln!(out, "{:<18}{:<24}{:>12}{:>12}{:>12}  objective", "preset", "status", "total", "solve", "iterations").expect("writing to String is infallible");
 
     for run in &profile.runs {
         match &run.outcome {
             Ok(m) => {
-                let _ = writeln!(
+                writeln!(
                     out,
                     "{:<18}{:<24}{:>12}{:>12}{:>12}  {}{}",
                     run.label,
@@ -148,10 +148,11 @@ pub fn export_text(profile: &Profile) -> String {
                     m.iterations.map_or_else(|| "-".to_owned(), |i| i.to_string()),
                     objective(m.objective),
                     if m.differs { "  (differs from baseline)" } else { "" },
-                );
+                )
+                .expect("writing to String is infallible");
             }
             Err(error) => {
-                let _ = writeln!(out, "{:<18}failed: {error}", run.label);
+                writeln!(out, "{:<18}failed: {error}", run.label).expect("writing to String is infallible");
             }
         }
     }
@@ -159,14 +160,14 @@ pub fn export_text(profile: &Profile) -> String {
     out.push('\n');
     match profile.speedup() {
         Some((label, factor)) => {
-            let _ = writeln!(out, "fastest: {label} - {factor:.2}x over default");
+            writeln!(out, "fastest: {label} - {factor:.2}x over default").expect("writing to String is infallible");
         }
         None => out.push_str("no configuration beat the default\n"),
     }
     if let Some(rewrite) = &profile.rewrite {
-        let _ = writeln!(out, "local presolve: {}", rewrite.headline());
+        writeln!(out, "local presolve: {}", rewrite.headline()).expect("writing to String is infallible");
     }
-    let _ = writeln!(out, "baseline objective {}", objective(profile.baseline));
-    let _ = writeln!(out, "budget {} per preset after the baseline; sweep took {}", seconds(profile.budget), seconds(profile.duration));
+    writeln!(out, "baseline objective {}", objective(profile.baseline)).expect("writing to String is infallible");
+    writeln!(out, "budget {} per preset after the baseline; sweep took {}", seconds(profile.budget), seconds(profile.duration)).expect("writing to String is infallible");
     out
 }

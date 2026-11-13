@@ -318,7 +318,7 @@ pub fn draw_diagnostics(frame: &mut ratatui::Frame, area: ratatui::layout::Rect,
     let popup = crate::widgets::report_rect(area, pane.lines.len());
 
     let inner_height = popup.height.saturating_sub(2) as usize;
-    let max_scroll = u16::try_from(pane.lines.len().saturating_sub(inner_height)).unwrap_or(u16::MAX);
+    let max_scroll = pane.lines.len().saturating_sub(inner_height);
     pane.scroll = pane.scroll.min(max_scroll);
 
     let border_style = Style::default().fg(t.accent).add_modifier(Modifier::BOLD);

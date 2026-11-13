@@ -124,7 +124,7 @@ impl ThemeArg {
             Self::Dark => theme::ThemeMode::Dark,
             Self::Light => theme::ThemeMode::Light,
             Self::Auto => {
-                if std::env::var_os("NO_COLOR").is_some() {
+                if std::env::var_os("NO_COLOR").is_some_and(|value| !value.is_empty()) {
                     return theme::ThemeMode::Mono;
                 }
                 std::env::var("COLORFGBG")
@@ -227,6 +227,9 @@ fn suspend<W: io::Write>(terminal: &mut Terminal<CrosstermBackend<W>>) -> io::Re
     Ok(())
 }
 
+/// Most frames put off in a row while input is queued.
+const MAX_DEFERRED_FRAMES: u8 = 8;
+
 /// Draw/event loop, running until the user quits.
 ///
 /// Redraws only for input, resize, or active animation — `Event::Tick` fires
@@ -237,6 +240,10 @@ fn run_event_loop<W: io::Write>(
     events: &EventHandler,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut needs_redraw = true;
+    // An event read ahead while deciding whether a frame is worth drawing, and
+    // how many frames have been put off in a row (capped so a flood still paints).
+    let mut pending: Option<Event> = None;
+    let mut deferred = 0_u8;
     // The capture state the terminal is in, so a toggle is applied once.
     let mut mouse_captured = true;
     while !app.should_quit {
@@ -248,11 +255,24 @@ fn run_event_loop<W: io::Write>(
             }
             mouse_captured = app.mouse_capture;
         }
-        if needs_redraw {
+        // With input already queued (key repeat on a slow frame), handle it
+        // first: only the last state before a lull needs painting.
+        if needs_redraw && pending.is_none() && deferred < MAX_DEFERRED_FRAMES {
+            pending = events.try_next();
+        }
+        if needs_redraw && (pending.is_none() || deferred >= MAX_DEFERRED_FRAMES) {
             terminal.draw(|frame| ui::draw(frame, app))?;
+            needs_redraw = false;
+            deferred = 0;
+        } else if needs_redraw {
+            deferred += 1;
         }
 
-        match events.next()? {
+        let event = match pending.take() {
+            Some(event) => event,
+            None => events.next()?,
+        };
+        match event {
             Event::Key(key) => {
                 // Ctrl+Z: in raw mode the terminal does not generate SIGTSTP, so
                 // suspend ourselves explicitly, restoring the terminal first.
@@ -298,7 +318,7 @@ fn run_event_loop<W: io::Write>(
 
                 app.poll_solve();
                 app.poll_watch();
-                needs_redraw = was_animating || app.is_animating();
+                needs_redraw |= was_animating || app.is_animating();
             }
             Event::Error(e) => return Err(e.into()),
         }

@@ -23,7 +23,7 @@ use crate::state::{
 };
 
 /// Lines an overlay moves per mouse-wheel notch, matching the detail panel.
-const MOUSE_SCROLL_LINES: u16 = 3;
+const MOUSE_SCROLL_LINES: usize = 3;
 
 impl App {
     pub fn handle_key(&mut self, key: KeyEvent) {
@@ -96,18 +96,21 @@ impl App {
     /// Handle a key event while the help overlay is visible.
     ///
     /// Navigation keys scroll the help text (it can exceed the screen on small
-    /// terminals); any other key dismisses the overlay. `G`'s `u16::MAX` is
+    /// terminals); Esc, `q` or `?` dismisses it. `G`'s `usize::MAX` is
     /// clamped to the real content height when the overlay is drawn.
-    const fn handle_help_key(&mut self, key: KeyEvent) {
+    fn handle_help_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Char('j') | KeyCode::Down => self.help_scroll = self.help_scroll.saturating_add(1),
             KeyCode::Char('k') | KeyCode::Up => self.help_scroll = self.help_scroll.saturating_sub(1),
             KeyCode::Char('g') | KeyCode::Home => self.help_scroll = 0,
-            KeyCode::Char('G') | KeyCode::End => self.help_scroll = u16::MAX,
-            _ => {
+            KeyCode::Char('G') | KeyCode::End => self.help_scroll = usize::MAX,
+            KeyCode::PageDown => self.help_scroll = self.help_scroll.saturating_add(usize::from(self.layout.detail_height.max(1))),
+            KeyCode::PageUp => self.help_scroll = self.help_scroll.saturating_sub(usize::from(self.layout.detail_height.max(1))),
+            KeyCode::Esc | KeyCode::Char('q' | '?') => {
                 self.show_help = false;
                 self.help_scroll = 0;
             }
+            _ => {}
         }
     }
 
@@ -751,7 +754,7 @@ impl App {
     /// Returns `true` if the key was consumed by shared navigation.
     fn handle_solve_results_nav(&mut self, key: KeyEvent) -> bool {
         match key.code {
-            KeyCode::Esc => self.solver.close_overlay(),
+            KeyCode::Esc | KeyCode::Char('q') => self.solver.close_overlay(),
             KeyCode::Char('1') => self.switch_solve_tab(SolveTab::Summary),
             KeyCode::Char('2') => self.switch_solve_tab(SolveTab::Variables),
             KeyCode::Char('3') => self.switch_solve_tab(SolveTab::Constraints),
@@ -766,6 +769,14 @@ impl App {
             KeyCode::Char('k') | KeyCode::Up => {
                 let tab_index = self.solver.view.tab.index();
                 self.solver.view.scroll[tab_index] = self.solver.view.scroll[tab_index].saturating_sub(1);
+            }
+            KeyCode::Char('g') | KeyCode::Home => self.solver.view.scroll[self.solver.view.tab.index()] = 0,
+            // Clamped against the real content height when the overlay is drawn.
+            KeyCode::Char('G') | KeyCode::End => self.solver.view.scroll[self.solver.view.tab.index()] = usize::MAX,
+            KeyCode::PageDown | KeyCode::PageUp => {
+                let page = usize::from(self.layout.detail_height.max(1));
+                let scroll = &mut self.solver.view.scroll[self.solver.view.tab.index()];
+                *scroll = if key.code == KeyCode::PageDown { scroll.saturating_add(page) } else { scroll.saturating_sub(page) };
             }
             _ => return false,
         }
@@ -1208,7 +1219,7 @@ impl App {
             debug_assert!(false, "handle_presolve_log_key called with the pane closed");
             return;
         };
-        if !pane.scroll_key(key.code, page_size) {
+        if !pane.handle_key(key, page_size) {
             self.presolve_log = None;
         }
     }
@@ -1341,15 +1352,15 @@ impl App {
             debug_assert!(false, "handle_diagnostics_key called with the pane closed");
             return;
         };
-        if !pane.scroll_key(key.code, page_size) {
+        if !pane.handle_key(key, page_size) {
             self.diagnostics = None;
         }
     }
 
     /// Handle a key event while the analysis pane is open.
     ///
-    /// `w` writes the report; any non-scroll key closes the pane, including
-    /// while it is still running — the worker's send then fails harmlessly.
+    /// `w` writes the report; Esc/`q` close the pane (any key while it is
+    /// running or failed, where there is nothing to scroll) — the worker's send then fails harmlessly.
     fn handle_analysis_key(&mut self, key: KeyEvent) {
         let page_size = self.layout.detail_height.max(1);
         if matches!(key.code, KeyCode::Char('w')) {
@@ -1359,7 +1370,7 @@ impl App {
             return;
         }
         let scrolled = match &mut self.analysis {
-            AnalysisState::Done { pane, .. } => pane.scroll_key(key.code, page_size),
+            AnalysisState::Done { pane, .. } => pane.handle_key(key, page_size),
             // Nothing to scroll while it runs or after it failed: any key closes.
             _ => false,
         };
@@ -1530,7 +1541,7 @@ impl App {
     fn select_section_via_selector(&mut self, new_section: Section) {
         if self.active_section != new_section {
             self.set_active_section(new_section);
-            self.invalidate_cache();
+            self.coeff_row_cache = None;
             self.ensure_active_section_cache();
             self.reselect_entry(None);
             self.detail_scroll = 0;
@@ -1540,7 +1551,9 @@ impl App {
     pub(crate) fn set_section(&mut self, section: Section) {
         self.record_jump();
         self.set_active_section(section);
-        self.invalidate_cache();
+        // Section caches depend on filter, sort and report only; each is
+        // invalidated when one of those changes, so a plain switch keeps them.
+        self.coeff_row_cache = None;
         self.ensure_active_section_cache();
         self.reselect_entry(None);
         self.detail_scroll = 0;
@@ -1603,7 +1616,7 @@ impl App {
     /// The scroll offset of the topmost open overlay, taken in `handle_key`'s
     /// priority order, or `None` when that overlay does not scroll (a prompt,
     /// a picker, a running solve or analysis).
-    fn overlay_scroll_mut(&mut self) -> Option<&mut u16> {
+    fn overlay_scroll_mut(&mut self) -> Option<&mut usize> {
         if self.search_popup.visible || self.palette.visible || self.what_if.is_some() {
             return None;
         }

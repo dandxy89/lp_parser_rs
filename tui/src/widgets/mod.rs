@@ -225,7 +225,9 @@ pub const SELECTION_CURSOR: &str = "\u{258d} ";
 /// only one list at a time looks live.
 pub fn selection_style(focused: bool) -> Style {
     let t = theme();
-    Style::new().bg(if focused { t.selection_bg } else { t.selection_bg_dim }).add_modifier(Modifier::BOLD)
+    // `text` is forced as the foreground: rows keep their kind colour otherwise,
+    // and red or teal on the selection bar fell well under readable contrast.
+    Style::new().fg(t.text).bg(if focused { t.selection_bg } else { t.selection_bg_dim }).add_modifier(Modifier::BOLD)
 }
 
 /// Background style for alternating rows, keyed on the absolute item index so
@@ -249,11 +251,21 @@ pub const fn spinner_frame(elapsed: Duration) -> &'static str {
 /// it does not fit. Names in LP files are ASCII in practice, but truncation is
 /// performed on a char boundary so multibyte input cannot panic.
 pub fn truncate_with_ellipsis(name: &str, max_width: usize) -> Cow<'_, str> {
+    use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
     debug_assert!(max_width >= 2, "truncate_with_ellipsis needs room for at least one char plus ellipsis");
-    if name.chars().count() <= max_width || max_width < 2 {
+    if name.width() <= max_width || max_width < 2 {
         return Cow::Borrowed(name);
     }
-    let mut truncated: String = name.chars().take(max_width - 1).collect();
+    let mut used = 0;
+    let mut truncated = String::new();
+    for c in name.chars() {
+        let width = c.width().unwrap_or(0);
+        if used + width > max_width - 1 {
+            break;
+        }
+        used += width;
+        truncated.push(c);
+    }
     truncated.push('\u{2026}');
     Cow::Owned(truncated)
 }
@@ -403,17 +415,17 @@ pub fn report_rect(area: Rect, content_lines: usize) -> Rect {
 /// Draw a scrollable report pane: `lines` inside `block` at `popup`, from
 /// `scroll`, with the shared scrollbar down the right edge when the content
 /// is taller than the pane.
-pub fn draw_scroll_pane(frame: &mut ratatui::Frame, popup: Rect, lines: &[Line<'static>], scroll: u16, block: Block<'static>) {
+pub fn draw_scroll_pane(frame: &mut ratatui::Frame, popup: Rect, lines: &[Line<'static>], scroll: usize, block: Block<'static>) {
     frame.render_widget(ratatui::widgets::Clear, popup);
     let inner_height = popup.height.saturating_sub(2) as usize;
     // Only the rows in view are cloned: the lines never wrap, so row `scroll`
     // of the content is `lines[scroll]`.
-    let first = usize::from(scroll).min(lines.len());
+    let first = scroll.min(lines.len());
     let window = &lines[first..(first + inner_height).min(lines.len())];
     frame.render_widget(ratatui::widgets::Paragraph::new(window.to_vec()).block(block), popup);
     if lines.len() > inner_height {
         let max_scroll = lines.len() - inner_height;
-        let mut state = ratatui::widgets::ScrollbarState::new(max_scroll + 1).position(scroll as usize);
+        let mut state = ratatui::widgets::ScrollbarState::new(max_scroll + 1).position(scroll);
         render_panel_scrollbar(frame, popup, &mut state);
     }
 }
@@ -562,7 +574,7 @@ mod tests {
             terminal.backend().buffer().clone()
         };
         for scroll in [0_u16, 1, 50, 90, 99, 100, 150] {
-            let windowed = draw(&|frame| draw_scroll_pane(frame, popup, &lines, scroll, Block::bordered()));
+            let windowed = draw(&|frame| draw_scroll_pane(frame, popup, &lines, usize::from(scroll), Block::bordered()));
             let full = draw(&|frame| {
                 frame.render_widget(ratatui::widgets::Paragraph::new(lines.clone()).block(Block::bordered()).scroll((scroll, 0)), popup);
                 let mut state = ratatui::widgets::ScrollbarState::new(lines.len() - 10 + 1).position(usize::from(scroll));
@@ -573,9 +585,29 @@ mod tests {
     }
 
     #[test]
+    fn scroll_pane_reaches_rows_past_u16_max() {
+        use ratatui::Terminal;
+        use ratatui::backend::TestBackend;
+
+        let lines: Vec<Line<'static>> = (0..70_000).map(|i| Line::from(format!("row {i}"))).collect();
+        let popup = Rect::new(0, 0, 20, 6);
+        let mut terminal = Terminal::new(TestBackend::new(popup.width, popup.height)).expect("test terminal must build");
+        terminal.draw(|frame| draw_scroll_pane(frame, popup, &lines, 69_996, Block::bordered())).expect("draw must succeed");
+        let text: String = terminal.backend().buffer().content().iter().map(ratatui::buffer::Cell::symbol).collect();
+        assert!(text.contains("row 69999"), "the last row must be reachable: {text}");
+    }
+
+    #[test]
     fn test_truncate_fits_unchanged() {
         assert_eq!(truncate_with_ellipsis("short", 10), "short");
         assert_eq!(truncate_with_ellipsis("exact", 5), "exact");
+    }
+
+    #[test]
+    fn truncation_counts_columns_not_chars() {
+        // Each CJK char is two columns wide.
+        assert_eq!(truncate_with_ellipsis("\u{65e5}\u{672c}\u{8a9e}\u{540d}\u{524d}", 6), "\u{65e5}\u{672c}\u{2026}");
+        assert_eq!(truncate_with_ellipsis("\u{65e5}\u{672c}", 4), "\u{65e5}\u{672c}");
     }
 
     #[test]

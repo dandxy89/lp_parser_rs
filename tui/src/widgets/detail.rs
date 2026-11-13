@@ -286,7 +286,7 @@ fn constraint_detail_parts<'a>(
     // Order-only badge.
     if entry.order_only {
         lines.push(Line::from(Span::styled(
-            "  \u{26a0} Order Changed \u{2014} coefficients are identical but appear in a different order",
+            "  ! Order Changed \u{2014} coefficients are identical but appear in a different order",
             Style::default().fg(t.modified),
         )));
     }
@@ -523,7 +523,7 @@ fn objective_detail_lines(
 
     if entry.order_only {
         lines.push(Line::from(Span::styled(
-            "  \u{26a0} Order Changed \u{2014} coefficients are identical but appear in a different order",
+            "  ! Order Changed \u{2014} coefficients are identical but appear in a different order",
             Style::default().fg(t.modified),
         )));
     } else if entry.order_changed {

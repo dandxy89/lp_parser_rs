@@ -284,6 +284,41 @@ pub fn query_background_mode(_timeout: std::time::Duration) -> Option<ThemeMode>
 mod tests {
     use super::*;
 
+    /// xterm RGB for a 256-colour index. `None` for 0-15, which each terminal defines itself.
+    fn xterm_rgb(color: Color) -> Option<[f64; 3]> {
+        let Color::Indexed(n) = color else { return None };
+        let channels = match n {
+            16..=231 => {
+                const LEVELS: [u8; 6] = [0, 95, 135, 175, 215, 255];
+                let n = usize::from(n - 16);
+                [LEVELS[n / 36], LEVELS[n / 6 % 6], LEVELS[n % 6]]
+            }
+            232..=255 => [8 + 10 * (n - 232); 3],
+            _ => return None,
+        };
+        Some(channels.map(|c| {
+            let c = f64::from(c) / 255.0;
+            if c <= 0.03928 { c / 12.92 } else { ((c + 0.055) / 1.055).powf(2.4) }
+        }))
+    }
+
+    fn contrast(a: Color, b: Color) -> Option<f64> {
+        let luminance = |[r, g, b]: [f64; 3]| 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        let (a, b) = (luminance(xterm_rgb(a)?), luminance(xterm_rgb(b)?));
+        Some((a.max(b) + 0.05) / (a.min(b) + 0.05))
+    }
+
+    /// Guard for user-visible readability: selected rows draw `text` over the selection bars.
+    #[test]
+    fn selected_rows_meet_wcag_aa() {
+        for (name, theme) in [("dark", &DARK_THEME), ("light", &LIGHT_THEME)] {
+            for (bar, bg) in [("selection_bg", theme.selection_bg), ("selection_bg_dim", theme.selection_bg_dim), ("zebra_bg", theme.zebra_bg)] {
+                let ratio = contrast(theme.text, bg).expect("built-in neutrals are 256-colour indices");
+                assert!(ratio >= 4.5, "{name}: text on {bar} is {ratio:.2}:1");
+            }
+        }
+    }
+
     #[test]
     fn osc11_replies_are_read_by_luminance() {
         assert_eq!(detect_mode_from_osc11(b"\x1b]11;rgb:ffff/ffff/ffff\x07"), Some(ThemeMode::Light));

@@ -49,8 +49,7 @@ const HELP_TEXT: &[&str] = &[
     "  U       Unbounded: which variables run away?",
     "  I       Infeasible: minimal conflicting set",
     "  R       Ranging: how far can a coefficient move?",
-    "  Tab     Next panel",
-    "  ⇧Tab    Prev panel",
+    "  Tab     Next panel (⇧Tab too)",
     "  Enter   Go to detail",
     "  h / l   Sidebar / Detail",
     "  1–5     Jump to section (5: Numerics)",
@@ -110,7 +109,7 @@ const INSPECT_HELP_TEXT: &[&str] = &[
     "  Ctrl-d / Ctrl-u  Half page ↓ / ↑                Clipboard",
     "  Ctrl-f / Ctrl-b  Full page ↓ / ↑                ─────────",
     "  Ctrl-o / Ctrl-i  Jump back / forward            yy      Yank name",
-    "  Tab / ⇧Tab       Next / prev panel              Y       Yank detail",
+    "  Tab / ⇧Tab       Next panel (cycles)            Y       Yank detail",
     "  Enter            Go to detail                   w       Export CSV",
     "  h / l            Sidebar / Detail",
     "  1–5              Jump to section (5: Numerics)",
@@ -283,7 +282,7 @@ static NARROW_INSPECT_HELP_LINES: LazyLock<Vec<Line<'static>>> = LazyLock::new(|
 /// Draw a centred help pop-up overlay on top of the current frame.
 ///
 /// Takes `&mut App` so the scroll offset can be clamped to the real content
-/// height: `G`/End sets `help_scroll` to `u16::MAX`, which is corrected here
+/// height: `G`/End sets `help_scroll` to `usize::MAX`, which is corrected here
 /// once the visible window is known.
 ///
 /// Below the width the side-by-side key tables need, the stacked layout is
@@ -307,8 +306,7 @@ pub fn draw_help(frame: &mut Frame, area: Rect, app: &mut App) {
     let popup = super::centred_rect(area, width, desired_height(help_lines.len()));
 
     let inner_height = popup.height.saturating_sub(2) as usize;
-    #[expect(clippy::cast_possible_truncation)] // help text is a few dozen lines
-    let max_scroll = help_lines.len().saturating_sub(inner_height) as u16;
+    let max_scroll = help_lines.len().saturating_sub(inner_height);
     app.help_scroll = app.help_scroll.min(max_scroll);
 
     let t = theme();
@@ -320,7 +318,7 @@ pub fn draw_help(frame: &mut Frame, area: Rect, app: &mut App) {
     };
     let block = panel_block(border_style).title(title);
 
-    let paragraph = Paragraph::new(help_lines.to_vec()).block(block).scroll((app.help_scroll, 0));
+    let paragraph = Paragraph::new(help_lines.to_vec()).block(block).scroll((u16::try_from(app.help_scroll).unwrap_or(u16::MAX), 0));
 
     frame.render_widget(Clear, popup);
     frame.render_widget(paragraph, popup);

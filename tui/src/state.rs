@@ -4,7 +4,7 @@
 
 use std::time::Instant;
 
-use crossterm::event::KeyCode;
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::ListState;
 
@@ -57,7 +57,7 @@ pub struct ScrollPane {
     /// Pre-built display lines.
     pub lines: Vec<Line<'static>>,
     /// Scroll offset, clamped to the content height when the pane is drawn.
-    pub scroll: u16,
+    pub scroll: usize,
     /// What `w` writes, as `(filename suffix, body)`. `None` in panes with
     /// nothing to export — the pane carries its own write target so the key
     /// handler does not have to work out which report is on screen.
@@ -78,12 +78,30 @@ impl ScrollPane {
             KeyCode::Char('k') | KeyCode::Up => self.scroll = self.scroll.saturating_sub(1),
             KeyCode::Char('g') | KeyCode::Home => self.scroll = 0,
             // Clamped against the real content height when the pane is drawn.
-            KeyCode::Char('G') | KeyCode::End => self.scroll = u16::MAX,
-            KeyCode::PageDown => self.scroll = self.scroll.saturating_add(page_size),
-            KeyCode::PageUp => self.scroll = self.scroll.saturating_sub(page_size),
+            KeyCode::Char('G') | KeyCode::End => self.scroll = usize::MAX,
+            KeyCode::PageDown => self.scroll = self.scroll.saturating_add(usize::from(page_size)),
+            KeyCode::PageUp => self.scroll = self.scroll.saturating_sub(usize::from(page_size)),
             _ => return false,
         }
         true
+    }
+
+    /// Handle any key for a pane: scroll keys (including Ctrl-d/u/f/b) scroll,
+    /// Esc and `q` close, everything else is ignored. Returns `false` to close.
+    pub fn handle_key(&mut self, key: KeyEvent, page_size: u16) -> bool {
+        debug_assert!(page_size > 0, "page size must be positive");
+        if key.modifiers.contains(KeyModifiers::CONTROL) {
+            let (half, full) = (usize::from(page_size / 2).max(1), usize::from(page_size));
+            match key.code {
+                KeyCode::Char('d') => self.scroll = self.scroll.saturating_add(half),
+                KeyCode::Char('u') => self.scroll = self.scroll.saturating_sub(half),
+                KeyCode::Char('f') => self.scroll = self.scroll.saturating_add(full),
+                KeyCode::Char('b') => self.scroll = self.scroll.saturating_sub(full),
+                _ => {}
+            }
+            return true;
+        }
+        self.scroll_key(key.code, page_size) || !matches!(key.code, KeyCode::Esc | KeyCode::Char('q'))
     }
 }
 
@@ -186,7 +204,7 @@ const DEFAULT_THRESHOLD_INDEX: usize = 1;
 pub struct SolveViewState {
     pub tab: SolveTab,
     /// Per-tab scroll offsets, indexed by `SolveTab::index()`.
-    pub scroll: [u16; 5],
+    pub scroll: [usize; 5],
     /// When `true`, the Variables and Constraints tabs in diff view show only changed rows.
     pub diff_only: bool,
     /// Delta threshold for filtering insignificant differences in the diff view.

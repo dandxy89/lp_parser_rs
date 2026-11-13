@@ -250,7 +250,7 @@ fn overlay_hints(app: &App) -> Option<&'static str> {
         SolveState::DoneBoth(_) => return Some("1-5:tabs  j/k:scroll  d:diff only  t/T:threshold  w:csv  y:yank  Esc:close"),
         SolveState::Failed(_) => return Some("Esc:close"),
     }
-    app.show_help.then_some("j/k:scroll  any key:close")
+    app.show_help.then_some("j/k:scroll  Esc:close")
 }
 
 /// Pick the context-sensitive key hints for the status bar's right segment:
@@ -408,6 +408,7 @@ fn draw_too_small(frame: &mut Frame, area: Rect) {
     let lines = vec![
         Line::from(Span::styled("Terminal too small", Style::default().fg(t.removed).add_modifier(Modifier::BOLD))),
         Line::from(Span::styled(format!("Need at least {MIN_WIDTH}×{MIN_HEIGHT}"), Style::default().fg(t.muted))),
+        Line::from(Span::styled(format!("Now {}×{}", area.width, area.height), Style::default().fg(t.muted))),
     ];
     #[expect(clippy::cast_possible_truncation)] // tiny fixed message
     let popup = centred_rect(area, 24.min(area.width), (lines.len() as u16).min(area.height));
@@ -541,7 +542,7 @@ mod tests {
         app.show_help = true;
         assert!(context_hints(&app).ends_with("Esc:cancel"), "help sits below the solve overlay");
         app.solver.state = crate::state::SolveState::Idle;
-        assert_eq!(context_hints(&app), "j/k:scroll  any key:close");
+        assert_eq!(context_hints(&app), "j/k:scroll  Esc:close");
     }
 
     #[test]

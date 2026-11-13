@@ -5,7 +5,7 @@ use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{HighlightSpacing, List, ListItem, Paragraph, ScrollbarState};
+use ratatui::widgets::{HighlightSpacing, List, ListItem, Paragraph, ScrollbarState, Wrap};
 
 use crate::app::{App, Focus, Section};
 use crate::theme::theme;
@@ -288,7 +288,13 @@ fn draw_entry_name_list(frame: &mut Frame, area: Rect, params: &NameListParams<'
     let block = panel_block(params.border_style).title(title);
 
     if total_items == 0 || inner_height == 0 {
-        frame.render_widget(block, area);
+        let note = if total_items == 0 && inner_height > 0 {
+            let text = if params.total_count > 0 { "Filtered out; a clears the filter" } else { "No entries" };
+            Paragraph::new(Line::styled(text, Style::default().fg(theme().muted))).wrap(Wrap { trim: true })
+        } else {
+            Paragraph::new("")
+        };
+        frame.render_widget(note.block(block), area);
         return;
     }
 
