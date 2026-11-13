@@ -51,7 +51,7 @@ With one file the viewer opens a single-model explorer (inspect mode); with two 
 | `--abs-tol <X>` | Absolute tolerance for comparing coefficients and right-hand sides: values within `X` compare equal. Default `0`; a floor of `1e-10` always applies. |
 | `--rel-tol <X>` | Relative tolerance: values within `X * max(\|a\|, \|b\|)` compare equal. Default `0`. |
 | `--rename <PATTERN> <REPLACEMENT>` | Regex rewrite applied to names in both files before they are matched. Repeatable; rules apply in order. `--rename '\[\d+\]' '[i]'` matches `x[1]` and `x[2]` as the same name. |
-| `--theme <auto\|dark\|light>` | Colour palette. `auto` (the default) reads `COLORFGBG`, then asks the terminal for its background colour, and falls back to dark. With `auto`, setting `NO_COLOR` gives a monochrome palette. |
+| `--theme <NAME\|PATH>` | Colour palette. `auto` (the default) reads `COLORFGBG`, then asks the terminal for its background colour, falls back to dark, and applies the theme file if one exists. With `auto`, a non-empty `NO_COLOR` gives a monochrome palette. Built-ins: `dark`, `light`, `mono`, `flat-dark`, `flat-light`, `high-contrast`, `colour-blind`. A path loads that theme file. See [Themes](#themes). |
 
 The tolerance and rename options only affect diff mode. Invalid values are rejected before any file is parsed.
 
@@ -449,6 +449,41 @@ Navigation positions are recorded automatically when you change sections, apply 
 | `[>]` | accent | Renamed |
 
 With `NO_COLOR` set the badges are the only marker.
+
+## Themes
+
+The palette can be switched while the TUI runs: the command palette (`Ctrl-p`) has *Cycle colour theme*. Open reports (diagnostics, presolve log, analyses) are closed by a switch, because they hold lines styled when they were built.
+
+A theme file is read from `--theme <PATH>`, or, under `--theme auto`, from `$XDG_CONFIG_HOME/lp_diff/theme.toml` (else `~/.config/lp_diff/theme.toml`, else `%APPDATA%\lp_diff\theme.toml`). It is a flat list of `token = "value"` lines; `#` starts a comment. `base = "<built-in>"` picks the palette to start from and must come before any colour it should not discard.
+
+```toml
+base = "flat-dark"
+added = "#4ec97a"      # #rrggbb
+removed = "ansi:red"   # an ANSI colour name
+muted = "256:245"      # a 256-colour index
+focus = "default"      # the terminal's own colour
+square = true          # square corners instead of rounded
+focus_thick = true     # mark focus with a heavy border
+```
+
+Colour tokens: `added removed modified renamed muted faint accent key heading info text selection_bg selection_fg selection_bg_dim focus secondary_accent border zebra_bg`. An unknown token or a malformed value is an error, so a typo is not silently ignored.
+
+RGB colours are reduced to what the terminal can show: `COLORTERM=truecolor` (or `24bit`) keeps them, a `*256color` `TERM` maps them to the 256 ramp, and anything else to the 16 ANSI colours.
+
+## Source editor (`--features editor`)
+
+Built with `cargo install --locked --path tui --features editor`, `v` opens the source of file 1 (`V`: file 2) at the selected entry, in a small Vim-style editor that runs the `lp-lsp` language features in-process (no server, no extra binary). `Enter` returns to the parsed view with the entry under the cursor selected. In inspect mode `v` and `V` open the one file.
+
+| Mode | Keys |
+| --- | --- |
+| Normal | `h j k l`, `w b`, `0 ^ $`, `gg G`, `Ctrl-d/u/f/b`, `x`, `dd`, `yy`, `p P`, `o O`, `i a I A`, `u`, `Ctrl-r`, `/` `n N`, `:` |
+| Language (LP) | `gd` definition, `gr` references list, `K` hover, `]d` `[d` next / previous diagnostic |
+| Insert | text, `Enter` (keeps indent), `Backspace`, `Delete`, arrows, `Tab`, `Ctrl-n` completion, `Esc` |
+| Command | `:w`, `:q`, `:q!`, `:wq`, `:x`, `:format`, `:rename NAME` (variable or constraint under the cursor), `:actions` |
+
+Not supported: counts, text objects, visual mode, registers, dot-repeat, folds. Diagnostics (syntax errors at once; model analysis after a 300 ms pause) appear in the gutter as `E` / `W`. MPS files open as plain text, without language features.
+
+`:w` writes atomically (a temporary file, then a rename) and re-parses both inputs so the parsed views match the disk. With `--watch`, an on-disk change while the buffer has unsaved edits is not applied; the buffer is kept.
 
 ## Requirements
 

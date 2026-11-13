@@ -469,6 +469,8 @@ pub mod raw_diff;
 pub mod search_popup;
 pub mod sidebar;
 pub mod solve;
+#[cfg(feature = "editor")]
+pub mod source;
 pub mod status_bar;
 pub mod summary;
 pub mod what_if;

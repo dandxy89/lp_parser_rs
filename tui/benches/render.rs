@@ -22,6 +22,9 @@ mod detail_text;
 mod diagnostics;
 #[path = "../src/diff_model.rs"]
 mod diff_model;
+#[cfg(feature = "editor")]
+#[path = "../src/editor.rs"]
+mod editor;
 #[path = "../src/event.rs"]
 mod event;
 #[path = "../src/export.rs"]

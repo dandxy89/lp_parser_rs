@@ -20,6 +20,8 @@ mod detail_model;
 mod detail_text;
 mod diagnostics;
 mod diff_model;
+#[cfg(feature = "editor")]
+mod editor;
 mod event;
 mod export;
 mod format;

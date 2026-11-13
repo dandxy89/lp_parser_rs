@@ -475,3 +475,12 @@ fn solve_overlay_scroll_is_clamped_to_its_content() {
     assert!(app.solver.view.scroll[variables] < usize::MAX, "the comparison offset must be written back clamped");
     assert!(frame_contains(&terminal, "Esc:close"), "the comparison's way out is in the status bar");
 }
+
+#[cfg(feature = "editor")]
+#[test]
+fn snapshot_source_view_80x24() {
+    let mut app = inspect_app();
+    app.handle_key(crossterm::event::KeyEvent::from(crossterm::event::KeyCode::Char('3')));
+    app.handle_key(crossterm::event::KeyEvent::from(crossterm::event::KeyCode::Char('v')));
+    insta::assert_snapshot!(render(&mut app, 80, 24).backend());
+}

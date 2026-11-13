@@ -211,6 +211,12 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     if app.show_help {
         help::draw_help(frame, frame.area(), app);
     }
+
+    // The source editor owns the whole screen when open.
+    #[cfg(feature = "editor")]
+    if app.editor.is_some() {
+        crate::widgets::source::draw_source(frame, frame.area(), app);
+    }
 }
 
 /// Key hints for the topmost open overlay, in `handle_key`'s priority order —

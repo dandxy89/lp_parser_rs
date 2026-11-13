@@ -374,6 +374,10 @@ pub struct App {
     /// A diagnostics or presolve-log pane being built on a worker thread.
     pub pane_job: Option<PaneJob>,
 
+    /// The source editor, when open (`v`).
+    #[cfg(feature = "editor")]
+    pub editor: Option<Box<crate::editor::Editor>>,
+
     /// A tolerance-change diff rebuild running on a worker thread.
     pub report_job: Option<mpsc::Receiver<LpDiffReport>>,
 
@@ -767,6 +771,8 @@ impl App {
             analysis: AnalysisState::Idle,
             receive_analysis: None,
             pane_job: None,
+            #[cfg(feature = "editor")]
+            editor: None,
             report_job: None,
             presolve_cursor: None,
             presolve_rules: crate::presolve::DEFAULT_RULES,
@@ -1523,7 +1529,7 @@ impl App {
     }
 
     /// Report index of the entry named `name` in `section`, if it still exists.
-    fn entry_index_by_name(&self, section: Section, name: &str) -> Option<usize> {
+    pub(crate) fn entry_index_by_name(&self, section: Section, name: &str) -> Option<usize> {
         match section {
             Section::Variables => self.report.variables.entries.iter().position(|e| e.name == name),
             Section::Constraints => self.report.constraints.entries.iter().position(|e| e.name == name),
@@ -1607,6 +1613,12 @@ impl App {
             match receive.try_recv() {
                 Ok(Ok(parsed)) => {
                     self.watch.receive = None;
+                    #[cfg(feature = "editor")]
+                    if self.editor.as_ref().is_some_and(|editor| editor.dirty) {
+                        // The buffer is newer than the disk: keep it, and the old model.
+                        self.flash_warn("file changed on disk; unsaved editor changes kept (reload skipped)");
+                        return;
+                    }
                     self.apply_reload(*parsed);
                 }
                 Ok(Err(error)) => {
@@ -1660,7 +1672,7 @@ impl App {
     /// derived inputs, rebuild the diff report, and reset the solver session
     /// (stale solve results and diagnoses would be misleading; old `Arc`s held
     /// by finished solver threads are harmless).
-    fn apply_reload(&mut self, parsed: (ParsedFile, ParsedFile)) {
+    pub(crate) fn apply_reload(&mut self, parsed: (ParsedFile, ParsedFile)) {
         let ((problem1, analysis1, line_map1, raw_text1), (problem2, analysis2, line_map2, raw_text2)) = parsed;
 
         self.problem1 = Arc::new(problem1);
@@ -1717,7 +1729,8 @@ impl App {
     /// a running solve or diagnosis (elapsed-time display), an in-flight
     /// watch reload, or a visible yank flash. Everything else only changes
     /// in response to input, so the main loop skips idle-tick repaints.
-    pub const fn is_animating(&self) -> bool {
+    #[allow(clippy::missing_const_for_fn)] // const only without the editor feature
+    pub fn is_animating(&self) -> bool {
         self.yank.expires()
             || self.watch.is_reloading()
             || matches!(self.solver.state, SolveState::Running { .. } | SolveState::RunningBoth { .. })
@@ -1725,6 +1738,18 @@ impl App {
             || matches!(self.analysis, AnalysisState::Running { .. })
             || self.pane_job.is_some()
             || self.report_job.is_some()
+            || self.editor_is_busy()
+    }
+
+    #[cfg(feature = "editor")]
+    fn editor_is_busy(&self) -> bool {
+        self.editor.as_ref().is_some_and(|editor| editor.is_busy())
+    }
+
+    #[cfg(not(feature = "editor"))]
+    #[allow(clippy::unused_self)] // mirrors the editor build's signature
+    const fn editor_is_busy(&self) -> bool {
+        false
     }
 
     /// Poll the solver channel(s) for results, transitioning state when complete.
@@ -1738,6 +1763,10 @@ impl App {
         self.poll_analysis();
         self.poll_pane_job();
         self.poll_report_job();
+        #[cfg(feature = "editor")]
+        if let Some(editor) = &mut self.editor {
+            editor.tick();
+        }
     }
 
     /// Install a finished [`PaneJob`], or report its failure.
@@ -2124,7 +2153,7 @@ impl App {
 
     /// Switch to `section`, reset the kind filter, select `entry_index` in the
     /// name list, and focus it. Shared by search confirm and `n`/`N` repeat.
-    fn jump_to_entry(&mut self, section: Section, entry_index: usize) {
+    pub(crate) fn jump_to_entry(&mut self, section: Section, entry_index: usize) {
         // Record current position before jumping.
         self.record_jump();
 

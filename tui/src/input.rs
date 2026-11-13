@@ -45,6 +45,12 @@ impl App {
             return;
         }
 
+        #[cfg(feature = "editor")]
+        if self.editor.is_some() {
+            self.handle_editor_key(key);
+            return;
+        }
+
         if self.search_popup.visible {
             self.handle_search_popup_key(key);
             return;
@@ -127,6 +133,11 @@ impl App {
     /// Newlines never belong in a single-line query, and a trailing one (from
     /// copying a whole line) would otherwise confirm the input prematurely.
     pub fn handle_paste(&mut self, text: &str) {
+        #[cfg(feature = "editor")]
+        if let Some(editor) = &mut self.editor {
+            editor.paste_text(text);
+            return;
+        }
         let insert = |input: &mut tui_input::Input| {
             for character in text.chars().filter(|c| !c.is_control()) {
                 input.handle(tui_input::InputRequest::InsertChar(character));
@@ -394,6 +405,10 @@ impl App {
 
             // What-if: edit the selected constraint's RHS and re-solve.
             KeyCode::Char('E') => self.open_what_if(),
+            #[cfg(feature = "editor")]
+            KeyCode::Char('v') => self.open_source(false),
+            #[cfg(feature = "editor")]
+            KeyCode::Char('V') => self.open_source(true),
 
             // Rewrite: pick presolve rules, then compare original vs rewritten.
             KeyCode::Char('P') => self.open_presolve(),
@@ -1781,6 +1796,56 @@ fn iis_pane(problem: &LpProblem) -> Result<crate::state::ScrollPane, String> {
     })
 }
 
+#[cfg(feature = "editor")]
+impl App {
+    /// Open the source of file 1 (`second` = false) or file 2 in the editor,
+    /// at the selected entry. In inspect mode there is only the one file.
+    pub(crate) fn open_source(&mut self, second: bool) {
+        let (path, text) =
+            if second && self.mode == AppMode::Diff { (&self.file2_path, &self.raw_text2) } else { (&self.file1_path, &self.raw_text1) };
+        let is_lp = !path.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("mps"));
+        let selected = self.selected_entry_name().map(str::to_owned);
+        let mut editor = crate::editor::Editor::open(path, text, is_lp);
+        if let Some(name) = selected {
+            editor.goto_name(&name);
+        }
+        self.editor = Some(Box::new(editor));
+    }
+
+    fn handle_editor_key(&mut self, key: KeyEvent) {
+        use crate::editor::Outcome;
+        let Some(editor) = &mut self.editor else { return };
+        let height = editor.height;
+        let outcome = editor.handle_key(key, height);
+        let saved = std::mem::take(&mut editor.saved);
+        if saved {
+            self.reload_after_save();
+        }
+        match outcome {
+            Outcome::Stay => {}
+            Outcome::Close => self.editor = None,
+            Outcome::SelectEntry(name) => {
+                self.editor = None;
+                let found = [Section::Constraints, Section::Objectives, Section::Variables]
+                    .into_iter()
+                    .find_map(|section| self.entry_index_by_name(section, &name).map(|index| (section, index)));
+                match found {
+                    Some((section, index)) => self.jump_to_entry(section, index),
+                    None => self.flash_warn(format!("`{name}` is not an entry in the parsed model")),
+                }
+            }
+        }
+    }
+
+    /// Re-parse both files after the editor wrote one, so the parsed views match the disk.
+    fn reload_after_save(&mut self) {
+        match crate::watch::reload_files(&self.file1_path, &self.file2_path) {
+            Ok(parsed) => self.apply_reload(*parsed),
+            Err(error) => self.flash_error(format!("saved, but the model no longer parses: {error}")),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2087,5 +2152,26 @@ mod tests {
         assert!(app.presolve_rules.iter().all(|on| !*on), "a with any on turns everything off: {:?}", app.presolve_rules);
         app.handle_key(KeyEvent::from(KeyCode::Char('a')));
         assert!(app.presolve_rules.iter().all(|on| *on), "a with none on turns everything on");
+    }
+
+    #[cfg(feature = "editor")]
+    #[test]
+    fn v_opens_the_source_at_the_selection_and_enter_selects_back() {
+        let mut app = crate::snapshot_tests::inspect_app_from(crate::snapshot_tests::BASE_LP);
+        app.handle_key(KeyEvent::from(KeyCode::Char('3')));
+        app.handle_key(KeyEvent::from(KeyCode::Char('j')));
+        let selected = app.selected_entry_name().map(str::to_owned).expect("a constraint is selected");
+        app.handle_key(KeyEvent::from(KeyCode::Char('v')));
+        let editor = app.editor.as_ref().expect("v opens the editor");
+        assert!(editor.lsp, "an .lp file gets language features");
+        assert!(editor.doc.text.contains(&selected));
+        assert!(editor.doc.text[editor.cursor..].starts_with(&selected), "the cursor starts on the selected entry's label");
+
+        // Keys go to the editor, not the main view: `q` must not quit.
+        app.handle_key(KeyEvent::from(KeyCode::Char('q')));
+        assert!(!app.should_quit);
+        app.handle_key(KeyEvent::from(KeyCode::Enter));
+        assert!(app.editor.is_none(), "Enter returns to the parsed view");
+        assert_eq!(app.selected_entry_name(), Some(selected.as_str()), "on the entry under the cursor");
     }
 }
