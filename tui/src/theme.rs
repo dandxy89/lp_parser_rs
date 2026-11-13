@@ -113,8 +113,8 @@ pub const DARK_THEME: Theme = Theme {
 /// Indexed colours are used where the ANSI base colour (e.g. yellow) would be
 /// near-invisible on white.
 pub const LIGHT_THEME: Theme = Theme {
-    added: Color::Indexed(28),    // dark green
-    removed: Color::Indexed(124), // dark red
+    added: Color::Indexed(28),     // dark green
+    removed: Color::Indexed(124),  // dark red
     modified: Color::Indexed(130), // dark orange
     renamed: Color::Indexed(30),
     muted: Color::Indexed(241), // mid grey: 245 fell under 4.5:1 on white
@@ -123,7 +123,7 @@ pub const LIGHT_THEME: Theme = Theme {
     key: Color::Indexed(30),
     heading: Color::Indexed(30),
     info: Color::Indexed(30),
-    text: Color::Indexed(235), // near-black; pure black is harsh on paper
+    text: Color::Indexed(235),         // near-black; pure black is harsh on paper
     selection_bg: Color::Indexed(153), // pale blue
     selection_fg: Color::Indexed(235),
     selection_bg_dim: Color::Indexed(252),
@@ -657,7 +657,9 @@ mod tests {
     #[test]
     fn selected_rows_meet_wcag_aa() {
         for (name, theme) in BUILTIN_THEMES {
-            for (bar, bg) in [("selection_bg", theme.selection_bg), ("selection_bg_dim", theme.selection_bg_dim), ("zebra_bg", theme.zebra_bg)] {
+            for (bar, bg) in
+                [("selection_bg", theme.selection_bg), ("selection_bg_dim", theme.selection_bg_dim), ("zebra_bg", theme.zebra_bg)]
+            {
                 // Reset and named colours have no fixed value to measure.
                 let Some(ratio) = contrast(theme.selection_fg, bg) else { continue };
                 assert!(ratio >= 4.5, "{name}: selection_fg on {bar} is {ratio:.2}:1");

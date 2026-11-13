@@ -15,7 +15,7 @@ use ratatui::widgets::{Clear, List, ListItem, ListState, ScrollbarState};
 use crate::app::App;
 use crate::state::PaletteCommand;
 use crate::theme::theme;
-use crate::widgets::{SELECTION_CURSOR, draw_footer_hint, draw_junction, panel_block, selection_style, separator_rule, zebra_style};
+use crate::widgets::{draw_footer_hint, draw_junction, panel_block, selection_cursor, selection_style, separator_rule, zebra_style};
 
 /// Keys the palette itself responds to, shown on its bottom border.
 const PALETTE_HINT: &str = "type:filter  \u{2191}/\u{2193}:move  Enter:run  Esc:cancel";
@@ -98,7 +98,7 @@ fn draw_command_list(frame: &mut Frame, area: Rect, app: &App) {
         state.select(Some(app.palette.selected.min(app.palette.filtered.len() - 1)));
     }
 
-    let list = List::new(items).highlight_style(selection_style(true)).highlight_symbol(SELECTION_CURSOR);
+    let list = List::new(items).highlight_style(selection_style(true)).highlight_symbol(selection_cursor());
     frame.render_stateful_widget(list, area, &mut state);
 }
 

@@ -603,7 +603,7 @@ fn tab_count_spans(counts: &crate::diff_model::DiffCounts, filter: DiffFilter) -
         (counts.added, "+", t.added),
         (counts.removed, "-", t.removed),
         (counts.modified, "~", t.modified),
-        (counts.renamed, crate::widgets::status_bar::RENAMED, t.accent),
+        (counts.renamed, crate::glyphs::renamed(), t.renamed),
     ];
     match filter {
         DiffFilter::All => {

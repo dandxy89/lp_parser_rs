@@ -27,6 +27,7 @@ mod editor_mps;
 mod event;
 mod export;
 mod format;
+mod glyphs;
 mod highs_presolve;
 mod highs_query;
 mod input;
@@ -70,6 +71,7 @@ use crate::parse::parse_file;
 /// With one file it opens a single-model explorer; with two files it diffs them.
 #[derive(Parser)]
 #[command(name = "lp_diff", version, about)]
+#[allow(clippy::struct_excessive_bools)] // independent command-line flags
 struct Cli {
     /// Model file to inspect, or the base file when comparing two
     file1: PathBuf,
@@ -107,6 +109,14 @@ struct Cli {
     /// theme file
     #[arg(long, default_value = "auto", value_name = "NAME|PATH")]
     theme: String,
+
+    /// Draw with ASCII only (no box-drawing, braille or arrow glyphs). On by default under a non-UTF-8 locale
+    #[arg(long)]
+    ascii: bool,
+
+    /// Replace the spinner with a static marker
+    #[arg(long)]
+    reduce_motion: bool,
 }
 
 /// Resolve `--theme` to a palette reduced to the terminal's colour depth.
@@ -345,6 +355,11 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     // Fix the palette before any cached lines are built against it.
     theme::set_theme(resolve_theme(&args.theme, !args.summary)?);
+    let env = |name: &str| std::env::var(name).ok();
+    glyphs::set_ascii(
+        args.ascii || glyphs::locale_is_not_utf8(env("LC_ALL").as_deref(), env("LC_CTYPE").as_deref(), env("LANG").as_deref()),
+    );
+    glyphs::set_reduce_motion(args.reduce_motion);
 
     // Validate file existence at the CLI boundary before doing any work.
     if !args.file1.exists() {

@@ -60,6 +60,18 @@ pub fn focus_border_style(current: Focus, target: Focus) -> Style {
     }
 }
 
+/// Panel border drawn with `+ - |` when the terminal cannot show box-drawing characters.
+const ASCII_BORDER: ratatui::symbols::border::Set = ratatui::symbols::border::Set {
+    top_left: "+",
+    top_right: "+",
+    bottom_left: "+",
+    bottom_right: "+",
+    vertical_left: "|",
+    vertical_right: "|",
+    horizontal_top: "-",
+    horizontal_bottom: "-",
+};
+
 /// Standard rounded panel block used by every bordered widget.
 ///
 /// A bold border style marks the panel holding focus (see
@@ -68,7 +80,11 @@ pub fn focus_border_style(current: Focus, target: Focus) -> Style {
 /// drawn with heavy lines instead.
 pub fn panel_block(border_style: Style) -> Block<'static> {
     let focused = border_style.add_modifier.contains(Modifier::BOLD);
-    let block = Block::default().borders(Borders::ALL).border_type(border_type(focused, theme().focus_thick, theme().square)).border_style(border_style);
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(border_type(focused, theme().focus_thick, theme().square))
+        .border_style(border_style);
+    let block = if crate::glyphs::ascii() { block.border_set(ASCII_BORDER) } else { block };
     // A focused panel's title takes its border's colour too; spans that carry
     // their own colour (a diff badge) keep it.
     if focused { block.title_style(border_style) } else { block }
@@ -93,9 +109,9 @@ const fn border_type(focused: bool, focus_thick: bool, square: bool) -> BorderTy
 pub fn panel_scrollbar() -> Scrollbar<'static> {
     let t = theme();
     Scrollbar::new(ScrollbarOrientation::VerticalRight)
-        .track_symbol(Some("\u{2502}"))
+        .track_symbol(Some(if crate::glyphs::ascii() { "|" } else { "\u{2502}" }))
         .track_style(Style::new().fg(t.border))
-        .thumb_symbol("\u{2503}")
+        .thumb_symbol(if crate::glyphs::ascii() { "#" } else { "\u{2503}" })
         .thumb_style(Style::new().fg(t.muted))
         .begin_symbol(None)
         .end_symbol(None)
@@ -224,7 +240,12 @@ pub fn separator_rule(border_style: Style) -> Block<'static> {
 /// The row cursor: a solid bar in the gutter rather than an arrowhead, so the
 /// selected row reads as a marked edge instead of a pointer aimed at the text.
 /// Two columns wide, matching the `"  "` gutter of unselected rows.
-pub const SELECTION_CURSOR: &str = "\u{258d} ";
+const SELECTION_CURSOR: &str = "\u{258d} ";
+
+/// [`SELECTION_CURSOR`], or `> ` when drawing ASCII only.
+pub fn selection_cursor() -> &'static str {
+    if crate::glyphs::ascii() { "> " } else { SELECTION_CURSOR }
+}
 
 /// Style for the selected row of a list. The focused pane carries the tinted
 /// selection; an unfocused pane keeps its selection visible but neutral, so
@@ -249,8 +270,16 @@ const SPINNER_FRAMES: [&str; 10] =
 /// Pick the spinner frame for an elapsed duration. Deriving the frame from
 /// elapsed time means callers need no extra animation state — the 50ms event
 /// tick redraws often enough to animate.
-pub const fn spinner_frame(elapsed: Duration) -> &'static str {
-    SPINNER_FRAMES[(elapsed.as_millis() / 100) as usize % SPINNER_FRAMES.len()]
+pub fn spinner_frame(elapsed: Duration) -> &'static str {
+    const ASCII_FRAMES: [&str; 4] = ["-", "\\", "|", "/"];
+    let step = (elapsed.as_millis() / 100) as usize;
+    if crate::glyphs::reduce_motion() {
+        if crate::glyphs::ascii() { "*" } else { "\u{2026}" }
+    } else if crate::glyphs::ascii() {
+        ASCII_FRAMES[step % ASCII_FRAMES.len()]
+    } else {
+        SPINNER_FRAMES[step % SPINNER_FRAMES.len()]
+    }
 }
 
 /// Truncate `name` to at most `max_width` display columns, appending `…` when
@@ -444,15 +473,17 @@ pub fn gauge_bar(fraction: f64, cells: usize) -> String {
     let clamped = fraction.clamp(0.0, 1.0);
     #[expect(clippy::cast_possible_truncation, clippy::cast_sign_loss, clippy::cast_precision_loss)] // clamped to [0, cells]
     let filled = ((clamped * cells as f64).round() as usize).min(cells);
+    let (open, full, empty, close) =
+        if crate::glyphs::ascii() { ('[', '#', '.', ']') } else { ('\u{2590}', '\u{2588}', '\u{2591}', '\u{258c}') };
     let mut bar = String::with_capacity(2 + cells * 3);
-    bar.push('\u{2590}');
+    bar.push(open);
     for _ in 0..filled {
-        bar.push('\u{2588}');
+        bar.push(full);
     }
     for _ in filled..cells {
-        bar.push('\u{2591}');
+        bar.push(empty);
     }
-    bar.push('\u{258c}');
+    bar.push(close);
     bar
 }
 

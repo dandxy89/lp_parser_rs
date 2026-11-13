@@ -7,11 +7,11 @@
 
 use std::ops::Range;
 
-use serde_json::{Value, json};
 use ls_types::{
     CompletionItem, CompletionItemKind, CompletionItemLabelDetails, CompletionList, CompletionTextEdit, Documentation, InsertTextFormat,
     MarkupContent, MarkupKind, Position, TextEdit,
 };
+use serde_json::{Value, json};
 
 use super::docs;
 use crate::document::Document;

@@ -86,11 +86,12 @@ pub struct StatusBarParams<'a> {
     pub hints: &'a str,
 }
 
-/// Prefix of the renamed count, here and in the tab bar.
-pub const RENAMED: &str = "\u{21c4}";
-
 /// Muted separator between status bar segments.
-const SEPARATOR: &str = "  \u{2502}  ";
+const SEPARATOR_UNICODE: &str = "  \u{2502}  ";
+
+fn separator() -> &'static str {
+    if crate::glyphs::ascii() { "  |  " } else { SEPARATOR_UNICODE }
+}
 
 use crate::widgets::HINT_SEPARATOR;
 
@@ -134,7 +135,7 @@ fn hint_spans(hints: &str, max_width: usize) -> (Vec<Span<'_>>, usize) {
     (crate::widgets::key_hint_spans(&kept), width)
 }
 
-/// Assemble segments into one line, separated by [`SEPARATOR`], keeping only
+/// Assemble segments into one line, separated by [`separator`], keeping only
 /// those that fit in `available` columns.
 ///
 /// Segments are dropped whole from the end rather than clipped: half a label
@@ -168,7 +169,7 @@ pub fn draw_status_bar(frame: &mut Frame, area: Rect, params: &StatusBarParams<'
     }
 
     let t = theme();
-    let separator = Span::styled(SEPARATOR, Style::default().fg(t.border));
+    let separator = Span::styled(separator(), Style::default().fg(t.border));
 
     // Left: one group per fact. Inspect mode shows the filename and section
     // count; diff mode shows total/per-kind change counts and the active filter.
@@ -196,7 +197,7 @@ pub fn draw_status_bar(frame: &mut Frame, area: Rect, params: &StatusBarParams<'
         // `>0` was noise, and `>` read as a comparison.
         if counts.renamed > 0 {
             kinds.push(Span::raw(" "));
-            kinds.push(Span::styled(format!("{RENAMED}{}", counts.renamed), Style::default().fg(t.renamed)));
+            kinds.push(Span::styled(format!("{}{}", crate::glyphs::renamed(), counts.renamed), Style::default().fg(t.renamed)));
         }
         segments.push(kinds);
         segments.push(vec![
@@ -215,9 +216,12 @@ pub fn draw_status_bar(frame: &mut Frame, area: Rect, params: &StatusBarParams<'
     }
     if let Some(reloading) = params.watch_reloading {
         segments.push(vec![if reloading {
-            Span::styled("\u{25cf} reloading\u{2026}", Style::default().fg(t.modified).add_modifier(Modifier::BOLD))
+            Span::styled(
+                format!("{} reloading\u{2026}", crate::glyphs::dot()),
+                Style::default().fg(t.modified).add_modifier(Modifier::BOLD),
+            )
         } else {
-            Span::styled("\u{25cf} watch", Style::default().fg(t.secondary_accent))
+            Span::styled(format!("{} watch", crate::glyphs::dot()), Style::default().fg(t.secondary_accent))
         }]);
     }
     if let Some(position) = params.detail_position
@@ -293,7 +297,7 @@ mod tests {
         let (text, cell) = render_counts(0, 0);
         assert!(text.contains("0 changes"), "{text:?}");
         assert_eq!(cell.fg, theme().muted, "no changes is muted");
-        assert!(!text.contains(RENAMED), "no renames, no rename count: {text:?}");
+        assert!(!text.contains(crate::glyphs::renamed()), "no renames, no rename count: {text:?}");
 
         let (text, cell) = render_counts(1, 2);
         assert!(text.contains("1 change "), "singular for one: {text:?}");

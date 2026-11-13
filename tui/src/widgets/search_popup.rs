@@ -16,7 +16,7 @@ use crate::app::App;
 use crate::search;
 use crate::state::{SearchResult, Section};
 use crate::theme::theme;
-use crate::widgets::{SELECTION_CURSOR, detail, kind_prefix, kind_style, panel_block, selection_style, sidebar, summary, zebra_style};
+use crate::widgets::{detail, kind_prefix, kind_style, panel_block, selection_cursor, selection_style, sidebar, summary, zebra_style};
 
 /// Section tag prefix for display in results list.
 const fn section_tag(section: Section) -> &'static str {
@@ -75,7 +75,14 @@ pub fn draw_search_popup(frame: &mut Frame, area: Rect, app: &App) {
     ])
     .split(v_chunks[2]);
 
-    draw_results_list(frame, h_chunks[0], &app.search_popup.results, &app.search_name_buffer, app.mode.shows_diff_badges(), app.search_popup.selected);
+    draw_results_list(
+        frame,
+        h_chunks[0],
+        &app.search_popup.results,
+        &app.search_name_buffer,
+        app.mode.shows_diff_badges(),
+        app.search_popup.selected,
+    );
     draw_detail_preview(frame, h_chunks[1], app);
 
     // Bottom bar: hints
@@ -158,7 +165,7 @@ fn draw_results_list(frame: &mut Frame, area: Rect, results: &[SearchResult], na
         state.select(Some(selected - offset));
     }
 
-    let list = List::new(items).block(block).highlight_style(selection_style(true)).highlight_symbol(SELECTION_CURSOR);
+    let list = List::new(items).block(block).highlight_style(selection_style(true)).highlight_symbol(selection_cursor());
 
     frame.render_stateful_widget(list, area, &mut state);
 
@@ -336,7 +343,7 @@ mod tests {
                 let block = panel_block(Style::default().fg(theme().border)).title(" Results ");
                 let mut state = ListState::default();
                 state.select(Some(selected));
-                let list = List::new(items).block(block).highlight_style(selection_style(true)).highlight_symbol(SELECTION_CURSOR);
+                let list = List::new(items).block(block).highlight_style(selection_style(true)).highlight_symbol(selection_cursor());
                 frame.render_stateful_widget(list, area, &mut state);
                 let mut scrollbar_state = ScrollbarState::new(lines.len()).position(selected);
                 crate::widgets::render_panel_scrollbar(frame, area, &mut scrollbar_state);

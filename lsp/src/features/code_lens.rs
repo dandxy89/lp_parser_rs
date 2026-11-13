@@ -7,8 +7,8 @@
 
 use std::fmt::Write as _;
 
-use serde_json::{Value, json};
 use ls_types::{CodeLens, Command, Range};
+use serde_json::{Value, json};
 
 use crate::document::Document;
 use crate::features::navigation;

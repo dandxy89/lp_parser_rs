@@ -458,11 +458,7 @@ fn solve_overlay_scroll_is_clamped_to_its_content() {
     let terminal = render(&mut app, 80, 24);
     // 24 rows, less the status bar and the overlay's two borders.
     let visible = 24 - 1 - 2;
-    assert_eq!(
-        app.solver.view.scroll[0],
-        summary_lines.saturating_sub(visible),
-        "the clamp lands the last line on the bottom row"
-    );
+    assert_eq!(app.solver.view.scroll[0], summary_lines.saturating_sub(visible), "the clamp lands the last line on the bottom row");
     assert!(frame_contains(&terminal, "Esc:close"), "the overlay's keys are in the status bar");
 
     let diff = crate::solver::diff_results("a.lp".to_owned(), "b.lp".to_owned(), result1, result2, 0.0);

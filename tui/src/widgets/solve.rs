@@ -662,9 +662,9 @@ fn draw_running_both(frame: &mut Frame, area: Rect, sides: [(&str, bool); 2], el
     let popup = super::centred_rect(area, LABEL_POPUP_WIDTH, 8);
     let running_label = format!("solving\u{2026} ({}s)", elapsed.as_secs());
     let spinner = spinner_frame(elapsed);
-    let icon1 = if done1 { "\u{2713}" } else { spinner };
+    let icon1 = if done1 { crate::glyphs::tick() } else { spinner };
     let status1 = if done1 { "done" } else { running_label.as_str() };
-    let icon2 = if done2 { "\u{2713}" } else { spinner };
+    let icon2 = if done2 { crate::glyphs::tick() } else { spinner };
     let status2 = if done2 { "done" } else { running_label.as_str() };
     let style_done = Style::default().fg(t.added).add_modifier(Modifier::BOLD);
     let style_running = Style::default().fg(t.modified).add_modifier(Modifier::BOLD);

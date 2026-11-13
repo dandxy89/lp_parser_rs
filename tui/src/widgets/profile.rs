@@ -133,7 +133,8 @@ pub fn export_text(profile: &Profile) -> String {
 
     let mut out = String::with_capacity(profile.runs.len() * 96);
     out.push_str("Solve profile\n\n");
-    writeln!(out, "{:<18}{:<24}{:>12}{:>12}{:>12}  objective", "preset", "status", "total", "solve", "iterations").expect("writing to String is infallible");
+    writeln!(out, "{:<18}{:<24}{:>12}{:>12}{:>12}  objective", "preset", "status", "total", "solve", "iterations")
+        .expect("writing to String is infallible");
 
     for run in &profile.runs {
         match &run.outcome {
@@ -168,6 +169,7 @@ pub fn export_text(profile: &Profile) -> String {
         writeln!(out, "local presolve: {}", rewrite.headline()).expect("writing to String is infallible");
     }
     writeln!(out, "baseline objective {}", objective(profile.baseline)).expect("writing to String is infallible");
-    writeln!(out, "budget {} per preset after the baseline; sweep took {}", seconds(profile.budget), seconds(profile.duration)).expect("writing to String is infallible");
+    writeln!(out, "budget {} per preset after the baseline; sweep took {}", seconds(profile.budget), seconds(profile.duration))
+        .expect("writing to String is infallible");
     out
 }

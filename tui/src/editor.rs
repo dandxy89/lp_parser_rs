@@ -23,11 +23,12 @@ use std::sync::{Arc, mpsc};
 use std::time::{Duration, Instant};
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-use crate::editor_mps::{Kind, MpsIndex};
 use lp_lsp::config::FormatSettings;
 use lp_lsp::semantic::SemanticResult;
 use lp_lsp::{Config, Document, Encoding};
 use ls_types::{CodeActionContext, CodeActionOrCommand, Diagnostic, DiagnosticSeverity, Position, TextEdit, Uri, WorkspaceEdit};
+
+use crate::editor_mps::{Kind, MpsIndex};
 
 /// Quiet time after the last edit before the semantic pass runs.
 const SEMANTIC_DEBOUNCE: Duration = Duration::from_millis(300);
@@ -250,7 +251,8 @@ impl Editor {
 
     /// Replace `range` with `text`, recording the change for undo.
     fn apply(&mut self, range: Range<usize>, text: &str) {
-        let edit = Edit { at: range.start, removed: self.text()[range.clone()].to_owned(), inserted: text.to_owned(), cursor_before: self.cursor };
+        let edit =
+            Edit { at: range.start, removed: self.text()[range.clone()].to_owned(), inserted: text.to_owned(), cursor_before: self.cursor };
         self.version += 1;
         self.doc.replace(range, text, self.version);
         self.insert_group.push(edit);
@@ -393,7 +395,8 @@ impl Editor {
 
     fn need_lsp(&mut self) -> bool {
         if !self.lsp {
-            let hint = if self.mps { "this feature is only available for LP files" } else { "language features are only available for LP files" };
+            let hint =
+                if self.mps { "this feature is only available for LP files" } else { "language features are only available for LP files" };
             self.message = Some(hint.to_owned());
         }
         self.lsp
@@ -426,8 +429,10 @@ impl Editor {
         if self.mps {
             let cursor = self.cursor;
             let index = self.mps_index();
-            let ranges: Vec<(Range<usize>, &'static str)> =
-                index.site_at(cursor).map(|site| index.occurrences(site).into_iter().map(|s| (s.range.clone(), s.section)).collect()).unwrap_or_default();
+            let ranges: Vec<(Range<usize>, &'static str)> = index
+                .site_at(cursor)
+                .map(|site| index.occurrences(site).into_iter().map(|s| (s.range.clone(), s.section)).collect())
+                .unwrap_or_default();
             if ranges.is_empty() {
                 self.message = Some("No references found".to_owned());
                 return;
@@ -467,10 +472,19 @@ impl Editor {
             let text = index.site_at(cursor).map(|site| {
                 let uses = index.occurrences(site);
                 let defined = index.definition(site).map(|def| def.section);
-                format!("{} `{}`\ndefined in {}\n{} occurrences", site.kind.label(), site.name, defined.unwrap_or("(no definition)"), uses.len())
+                format!(
+                    "{} `{}`\ndefined in {}\n{} occurrences",
+                    site.kind.label(),
+                    site.name,
+                    defined.unwrap_or("(no definition)"),
+                    uses.len()
+                )
             });
             match text {
-                Some(text) => self.popup = Some(Popup { title: "Hover".to_owned(), lines: text.lines().map(str::to_owned).collect(), ..Popup::default() }),
+                Some(text) => {
+                    self.popup =
+                        Some(Popup { title: "Hover".to_owned(), lines: text.lines().map(str::to_owned).collect(), ..Popup::default() })
+                }
                 None => self.message = Some("Nothing to show here".to_owned()),
             }
             return;
@@ -495,7 +509,8 @@ impl Editor {
                         .collect::<Vec<_>>()
                         .join("\n"),
                 };
-                self.popup = Some(Popup { title: "Hover".to_owned(), lines: value.lines().map(str::to_owned).collect(), ..Popup::default() });
+                self.popup =
+                    Some(Popup { title: "Hover".to_owned(), lines: value.lines().map(str::to_owned).collect(), ..Popup::default() });
             }
             None => self.message = Some("Nothing to show here".to_owned()),
         }
@@ -506,7 +521,8 @@ impl Editor {
         let mut starts: Vec<usize> = self.diagnostics.iter().map(|d| self.doc.byte_range(d.range).start).collect();
         starts.sort_unstable();
         starts.dedup();
-        let target = if forward { starts.iter().copied().find(|&s| s > self.cursor) } else { starts.iter().copied().rfind(|&s| s < self.cursor) };
+        let target =
+            if forward { starts.iter().copied().find(|&s| s > self.cursor) } else { starts.iter().copied().rfind(|&s| s < self.cursor) };
         match target.or_else(|| if forward { starts.first().copied() } else { starts.last().copied() }) {
             Some(offset) => {
                 self.goto_offset(offset, height);
@@ -627,7 +643,8 @@ impl Editor {
             self.message = Some(format!("A {} named `{new_name}` already exists", site.kind.label()));
             return;
         }
-        let mut edits: Vec<(Range<usize>, String)> = index.occurrences(&site).into_iter().map(|s| (s.range.clone(), new_name.to_owned())).collect();
+        let mut edits: Vec<(Range<usize>, String)> =
+            index.occurrences(&site).into_iter().map(|s| (s.range.clone(), new_name.to_owned())).collect();
         edits.sort_by_key(|(range, _)| std::cmp::Reverse(range.start));
         let count = edits.len();
         self.apply_edits(&edits);
@@ -715,7 +732,15 @@ impl Editor {
 
     fn word_forward(&mut self) {
         let text = self.text();
-        let class = |c: char| if c.is_alphanumeric() || c == '_' { 1 } else if c.is_whitespace() { 0 } else { 2 };
+        let class = |c: char| {
+            if c.is_alphanumeric() || c == '_' {
+                1
+            } else if c.is_whitespace() {
+                0
+            } else {
+                2
+            }
+        };
         let mut offset = self.cursor;
         let start_class = text[offset..].chars().next().map_or(0, class);
         while let Some(c) = text[offset..].chars().next() {
@@ -736,7 +761,15 @@ impl Editor {
 
     fn word_backward(&mut self) {
         let text = self.text();
-        let class = |c: char| if c.is_alphanumeric() || c == '_' { 1 } else if c.is_whitespace() { 0 } else { 2 };
+        let class = |c: char| {
+            if c.is_alphanumeric() || c == '_' {
+                1
+            } else if c.is_whitespace() {
+                0
+            } else {
+                2
+            }
+        };
         let mut offset = self.cursor;
         while let Some(c) = text[..offset].chars().next_back() {
             if !c.is_whitespace() {
@@ -808,8 +841,12 @@ impl Editor {
             KeyCode::Esc | KeyCode::Char('q') => self.popup = None,
             KeyCode::Char('j') | KeyCode::Down if is_list => popup.selected = (popup.selected + 1).min(last),
             KeyCode::Char('k') | KeyCode::Up if is_list => popup.selected = popup.selected.saturating_sub(1),
-            KeyCode::Char('n') if is_list && key.modifiers.contains(KeyModifiers::CONTROL) => popup.selected = (popup.selected + 1).min(last),
-            KeyCode::Char('p') if is_list && key.modifiers.contains(KeyModifiers::CONTROL) => popup.selected = popup.selected.saturating_sub(1),
+            KeyCode::Char('n') if is_list && key.modifiers.contains(KeyModifiers::CONTROL) => {
+                popup.selected = (popup.selected + 1).min(last)
+            }
+            KeyCode::Char('p') if is_list && key.modifiers.contains(KeyModifiers::CONTROL) => {
+                popup.selected = popup.selected.saturating_sub(1)
+            }
             KeyCode::Enter if is_list => {
                 let selected = popup.selected;
                 let target = popup.targets.get(selected).copied();
@@ -1059,7 +1096,8 @@ impl Editor {
             let line = self.cursor_line();
             let at = if after { self.whole_line(line).end } else { self.doc.lines.line_start(line) };
             // Pasting after the last line, which may lack a newline.
-            let prefix = if after && at == self.text().len() && !self.text().ends_with('\n') && !self.text().is_empty() { "\n" } else { "" };
+            let prefix =
+                if after && at == self.text().len() && !self.text().ends_with('\n') && !self.text().is_empty() { "\n" } else { "" };
             let body = if prefix.is_empty() { text } else { text.trim_end_matches('\n').to_owned() };
             self.apply(at..at, &format!("{prefix}{body}"));
             self.set_cursor(self.first_non_blank(self.doc.lines.line_of(at + prefix.len())));

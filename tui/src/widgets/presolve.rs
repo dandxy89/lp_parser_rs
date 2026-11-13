@@ -44,7 +44,7 @@ pub fn draw_presolve(frame: &mut Frame, area: Rect, app: &App) {
     for (index, rule) in Rule::ALL.iter().enumerate() {
         let selected = index == cursor;
         let on = app.presolve_rules[index];
-        let marker = if selected { crate::widgets::SELECTION_CURSOR } else { "  " };
+        let marker = if selected { crate::widgets::selection_cursor() } else { "  " };
         let checkbox = if on { "[x] " } else { "[ ] " };
         let label_style = match (on, selected) {
             (true, true) => Style::default().fg(t.accent).add_modifier(Modifier::BOLD),

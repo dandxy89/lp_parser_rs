@@ -4,8 +4,8 @@
 
 use std::collections::BTreeMap;
 
-use serde_json::{Value, json};
 use ls_types::{CallHierarchyIncomingCall, CallHierarchyItem, CallHierarchyOutgoingCall, Position, SymbolKind};
+use serde_json::{Value, json};
 
 use super::symbols::entity_symbol;
 use crate::document::Document;

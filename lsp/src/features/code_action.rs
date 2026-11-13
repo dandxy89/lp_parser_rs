@@ -8,11 +8,11 @@
 use std::collections::{HashMap, HashSet};
 use std::ops::Range;
 
-use serde_json::{Value, json};
 use ls_types::{
     CodeAction, CodeActionContext, CodeActionKind, CodeActionOrCommand, Diagnostic, NumberOrString, Range as LspRange, TextEdit,
     WorkspaceEdit,
 };
+use serde_json::{Value, json};
 use tree_sitter::Node;
 
 use crate::document::Document;

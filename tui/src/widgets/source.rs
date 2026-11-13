@@ -53,12 +53,19 @@ pub fn draw_source(frame: &mut Frame, area: Rect, app: &mut App) {
             continue;
         }
         let marker = match editor.line_severity(line) {
-            Some(severity) if severity == ls_types::DiagnosticSeverity::ERROR => Span::styled("E", Style::default().fg(t.removed).add_modifier(Modifier::BOLD)),
-            Some(severity) if severity == ls_types::DiagnosticSeverity::WARNING => Span::styled("W", Style::default().fg(t.modified).add_modifier(Modifier::BOLD)),
+            Some(severity) if severity == ls_types::DiagnosticSeverity::ERROR => {
+                Span::styled("E", Style::default().fg(t.removed).add_modifier(Modifier::BOLD))
+            }
+            Some(severity) if severity == ls_types::DiagnosticSeverity::WARNING => {
+                Span::styled("W", Style::default().fg(t.modified).add_modifier(Modifier::BOLD))
+            }
             Some(_) => Span::styled("i", Style::default().fg(t.info)),
             None => Span::raw(" "),
         };
-        let number = Span::styled(format!("{:>width$} ", line + 1, width = gutter - 1), Style::default().fg(if line == cursor_line { t.text } else { t.faint }));
+        let number = Span::styled(
+            format!("{:>width$} ", line + 1, width = gutter - 1),
+            Style::default().fg(if line == cursor_line { t.text } else { t.faint }),
+        );
         let source = editor.line_text(line);
         let style = if source.trim_start().starts_with('\\') { Style::default().fg(t.muted) } else { Style::default().fg(t.text) };
         let mut text = Span::styled(slice_columns(source, hscroll, text_width), style);
@@ -103,7 +110,10 @@ fn draw_status(frame: &mut Frame, area: Rect, editor: &Editor) {
             }
             match &editor.message {
                 Some(message) => spans.push(Span::styled(format!("  {message}"), Style::default().fg(t.info))),
-                None => spans.push(Span::styled("  gd gr K ]d [d  :w :q :format :rename :actions  Enter:select entry  Esc:close", Style::default().fg(t.faint))),
+                None => spans.push(Span::styled(
+                    "  gd gr K ]d [d  :w :q :format :rename :actions  Enter:select entry  Esc:close",
+                    Style::default().fg(t.faint),
+                )),
             }
             let position = format!(" {}:{} ", editor.cursor_line() + 1, editor.cursor_column() + 1);
             let used: usize = spans.iter().map(Span::width).sum();
@@ -124,7 +134,8 @@ fn draw_popup(frame: &mut Frame, area: Rect, editor: &Editor) {
     let Some(Popup { title, lines, selected, targets, edits }) = &editor.popup else { return };
     let t = theme();
     let is_list = !targets.is_empty() || !edits.is_empty();
-    let width = (lines.iter().map(|l| unicode_width::UnicodeWidthStr::width(l.as_str())).max().unwrap_or(10) + 4).clamp(24, usize::from(area.width));
+    let width = (lines.iter().map(|l| unicode_width::UnicodeWidthStr::width(l.as_str())).max().unwrap_or(10) + 4)
+        .clamp(24, usize::from(area.width));
     let height = (lines.len() + 2).clamp(3, usize::from(area.height).saturating_sub(2).max(3));
     #[expect(clippy::cast_possible_truncation)] // clamped to the terminal size above
     let popup = crate::widgets::centred_rect(area, width as u16, height as u16);

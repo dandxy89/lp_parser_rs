@@ -1178,7 +1178,11 @@ fn render_coeff_changes(
     let (skip, take) = visible_range.unwrap_or((0, rows.len()));
     let layout = UnifiedColumns::fit(pane_width);
     let (val_w, badges) = (layout.value, layout.badges);
-    let name_w = name_column_width(rows.iter().map(|row| unicode_width::UnicodeWidthStr::width(row.variable.as_str())).max().unwrap_or(0), pane_width, layout.reserved());
+    let name_w = name_column_width(
+        rows.iter().map(|row| unicode_width::UnicodeWidthStr::width(row.variable.as_str())).max().unwrap_or(0),
+        pane_width,
+        layout.reserved(),
+    );
 
     let skipped = skip.min(rows.len());
 

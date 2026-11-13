@@ -9,7 +9,7 @@ use ratatui::widgets::{HighlightSpacing, List, ListItem, Paragraph, ScrollbarSta
 
 use crate::app::{App, Focus, Section};
 use crate::theme::theme;
-use crate::widgets::{SELECTION_CURSOR, focus_border_style, panel_block, selection_style, truncate_middle, zebra_style};
+use crate::widgets::{focus_border_style, panel_block, selection_cursor, selection_style, truncate_middle, zebra_style};
 
 /// Draw the section tab bar across the top of the frame.
 ///
@@ -326,7 +326,7 @@ fn draw_entry_name_list(frame: &mut Frame, area: Rect, params: &NameListParams<'
     let scrollable = total_items > inner_height && inner.width > 1;
     let list_area = if scrollable { Rect { width: inner.width - 1, ..inner } } else { inner };
     // Room for a row's text: the list less the selection cursor's gutter.
-    let usable = (list_area.width as usize).saturating_sub(SELECTION_CURSOR.chars().count());
+    let usable = (list_area.width as usize).saturating_sub(selection_cursor().chars().count());
 
     // Build ListItems for only the visible slice, zebra-striped on the
     // absolute index so stripes stay stable while scrolling. Names too wide
@@ -344,7 +344,7 @@ fn draw_entry_name_list(frame: &mut Frame, area: Rect, params: &NameListParams<'
     // sideways when the selection comes and goes.
     let list = List::new(items)
         .highlight_style(selection_style(params.focused))
-        .highlight_symbol(SELECTION_CURSOR)
+        .highlight_symbol(selection_cursor())
         .highlight_spacing(HighlightSpacing::Always);
 
     frame.render_widget(block, area);

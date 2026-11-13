@@ -34,6 +34,8 @@ mod event;
 mod export;
 #[path = "../src/format.rs"]
 mod format;
+#[path = "../src/glyphs.rs"]
+mod glyphs;
 #[path = "../src/highs_presolve.rs"]
 mod highs_presolve;
 #[path = "../src/highs_query.rs"]
