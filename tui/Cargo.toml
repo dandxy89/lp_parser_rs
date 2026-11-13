@@ -1,6 +1,6 @@
 [package]
 name = "lp_parser_tui"
-version = "4.1.1"
+version = "4.1.2"
 edition = "2024"
 rust-version.workspace = true
 description = "Interactive TUI model explorer and diff viewer for LP/MPS files"

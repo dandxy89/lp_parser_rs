@@ -1,5 +1,31 @@
 # Changelog
 
+## [1.0.1](https://github.com/dandxy89/lp_parser_rs/compare/lp-lsp-v1.0.0...lp-lsp-v1.0.1) (2026-11-13)
+
+
+### Build System
+
+* add cargo-binstall metadata for lp-lsp and lp_diff ([ca75e5e](https://github.com/dandxy89/lp_parser_rs/commit/ca75e5e73a452ac506f5d4cb784cb5b89b796891))
+* require lp_parser_rs 5.0.2 in lp-lsp; drop release-as now 1.0.0 is cut ([362c592](https://github.com/dandxy89/lp_parser_rs/commit/362c5928f6ece3ff9cf834b1ec860dc50026b65e))
+* **vscode:** bundle with esbuild, ship the server per platform, add icon, screenshot and release workflow ([83f573c](https://github.com/dandxy89/lp_parser_rs/commit/83f573c2828f53549f5942a8928db09c551c9b0a))
+* **vscode:** update vsce to 4.1.1 and pin minimatch &gt;=11.0.1 ([81692ac](https://github.com/dandxy89/lp_parser_rs/commit/81692ac7d0d4af0cd1eaa850c08c4a6fc07e2dd1))
+
+
+### Documentation
+
+* install lp-lsp from crates.io; tick audit items ([11a5d71](https://github.com/dandxy89/lp_parser_rs/commit/11a5d71324a1ca3d02303062a7487e02151556ce))
+* mention prebuilt lp-lsp archives; ci: optional Windows signing ([0f674d0](https://github.com/dandxy89/lp_parser_rs/commit/0f674d022f0a41142d1c72c96f848f09820fef57))
+
+
+### Bug Fixes
+
+* **lsp:** update tree-sitter-lp to 0.1.1 ([#228](https://github.com/dandxy89/lp_parser_rs/issues/228)) ([5e012b5](https://github.com/dandxy89/lp_parser_rs/commit/5e012b5d4a031e2caa96e286dd59012a8c21318e))
+
+
+### Code Refactoring
+
+* TUI updates ([#227](https://github.com/dandxy89/lp_parser_rs/issues/227)) ([b814358](https://github.com/dandxy89/lp_parser_rs/commit/b81435817112d9ded59e4e28203deaa2e1d7b21d))
+
 ## [1.0.0](https://github.com/dandxy89/lp_parser_rs/compare/lp-lsp-v0.1.0...lp-lsp-v1.0.0) (2026-11-13)
 
 
