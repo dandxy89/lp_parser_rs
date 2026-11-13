@@ -1179,7 +1179,7 @@ mod tests {
         let parsed = LpProblemParser::new().parse(Lexer::new(input)).expect("an empty named objective before `st` must parse");
         assert_eq!(parsed.objectives.len(), 1);
         assert_eq!(parsed.objectives[0].name, "obj");
-        assert!(parsed.objectives[0].coefficients.is_empty());
+        assert_eq!(parsed.objectives[0].coefficients.len(), 0);
         assert_eq!(parsed.constraints.len(), 1);
         assert_eq!(parsed.constraints[0].name(), "c1");
 
