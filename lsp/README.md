@@ -31,7 +31,7 @@ index current through file watching or, for clients without it, file-operation n
 ## Install
 
 ```bash
-cargo install --locked --path lsp
+cargo install --locked lp-lsp
 lp-lsp --version
 ```
 

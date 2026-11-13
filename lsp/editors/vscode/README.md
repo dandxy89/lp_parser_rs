@@ -7,7 +7,7 @@ VS Code client for [`lp-lsp`](https://github.com/dandxy89/lp_parser_rs/tree/main
 Install the server binary and make sure it is on your `PATH` (or set `lp.server.path`):
 
 ```sh
-cargo install --path lsp   # from a checkout of lp_parser_rs
+cargo install --locked lp-lsp
 ```
 
 ## Features

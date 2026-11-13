@@ -293,7 +293,7 @@ See [`tui/README.md`](https://github.com/dandxy89/lp_parser_rs/blob/main/tui/REA
 A Language Server Protocol implementation for `.lp` files: diagnostics, navigation, rename, hover, completion, inlay hints, code actions, formatting, semantic highlighting and more, for any LSP-capable editor (Neovim, Helix, Zed, VS Code).
 
 ```bash
-cargo install --locked --path lsp
+cargo install --locked lp-lsp
 ```
 
 See [`lsp/README.md`](https://github.com/dandxy89/lp_parser_rs/blob/main/lsp/README.md) for the feature list, configuration reference and editor setup.
