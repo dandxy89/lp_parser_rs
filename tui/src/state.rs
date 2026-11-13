@@ -731,6 +731,16 @@ impl PaletteCommand {
         (Self::Quit, "Quit", "q"),
     ];
 
+    /// The command whose direct key is the single character `key`, if any.
+    ///
+    /// The table is the only place these keys are bound: the main view
+    /// dispatches through this, and the palette shows the same hint.
+    pub fn from_key(key: char) -> Option<Self> {
+        let mut buffer = [0; 4];
+        let key = &*key.encode_utf8(&mut buffer);
+        Self::CMDS.iter().find(|(_, _, hint)| *hint == key).map(|(command, _, _)| *command)
+    }
+
     /// Number of commands offered by the palette.
     pub const COUNT: usize = Self::CMDS.len();
 
@@ -839,6 +849,26 @@ mod tests {
         ];
         for command in available {
             assert!(command.available_in_inspect(), "{command:?} must remain available in inspect mode");
+        }
+    }
+
+    /// The table is the single binding site for single-character keys: each is
+    /// bound once, and looking it up gives back the command showing that hint.
+    #[test]
+    fn every_single_key_hint_is_bound_once_and_round_trips() {
+        let mut seen = std::collections::HashSet::new();
+        for index in 0..PaletteCommand::COUNT {
+            let command = PaletteCommand::at(index);
+            let hint = command.hint();
+            let mut chars = hint.chars();
+            if let (Some(key), None) = (chars.next(), chars.next()) {
+                assert!(seen.insert(key), "key `{key}` is bound to two commands");
+                assert_eq!(PaletteCommand::from_key(key), Some(command));
+            }
+        }
+        // Keys the main view handles itself must not also be in the table.
+        for key in ['j', 'k', 'g', 'G', 'h', 'l', 'y', ':', '?', 'v', 'V'] {
+            assert!(PaletteCommand::from_key(key).is_none() || key == '?', "`{key}` would be handled in two places");
         }
     }
 }

@@ -344,39 +344,16 @@ impl App {
         }
 
         match key.code {
-            KeyCode::Char('q') => self.should_quit = true,
             // The Vim habit for "commands"; the palette is the same list.
             KeyCode::Char(':') => self.open_command_palette(),
             // With only two cycle targets, backward equals forward.
             KeyCode::Tab | KeyCode::BackTab => self.cycle_focus_forward(),
-
-            // Direct section jump.
-            KeyCode::Char('1') => self.set_section(Section::Summary),
-            KeyCode::Char('2') => self.set_section(Section::Variables),
-            KeyCode::Char('3') => self.set_section(Section::Constraints),
-            KeyCode::Char('4') => self.set_section(Section::Objectives),
-            KeyCode::Char('5') => self.set_section(Section::Numerics),
-
-            // Resize the sidebar.
-            KeyCode::Char('<') => self.resize_sidebar(false),
-            KeyCode::Char('>') => self.resize_sidebar(true),
-
-            // Hand the mouse back to the terminal for native text selection.
-            KeyCode::Char('M') => self.toggle_mouse_capture(),
-
-            // Cycle sections from any focus (lazygit-style sub-tab navigation).
-            KeyCode::Char(']') => self.cycle_section(true),
-            KeyCode::Char('[') => self.cycle_section(false),
 
             // Navigation (vi-style and arrow keys).
             KeyCode::Char('j') | KeyCode::Down => self.navigate_down(),
             KeyCode::Char('k') | KeyCode::Up => self.navigate_up(),
             KeyCode::Char('g') | KeyCode::Home => self.jump_to_top(),
             KeyCode::Char('G') | KeyCode::End => self.jump_to_bottom(),
-
-            // Repeat the last confirmed search: next / previous match.
-            KeyCode::Char('n') => self.repeat_search(true),
-            KeyCode::Char('N') => self.repeat_search(false),
 
             KeyCode::Enter => self.handle_enter(),
             KeyCode::Esc => self.handle_escape(),
@@ -385,20 +362,7 @@ impl App {
             KeyCode::Char('l') => self.focus_detail(),
             KeyCode::Char('h') => self.focus_sidebar(),
 
-            // Filter shortcuts (diff-only: no-op with a hint in inspect mode).
-            KeyCode::Char('a') => self.filter_or_hint(DiffFilter::All),
-            KeyCode::Char('+') => self.filter_or_hint(DiffFilter::Added),
-            KeyCode::Char('-') => self.filter_or_hint(DiffFilter::Removed),
-            KeyCode::Char('m') => self.filter_or_hint(DiffFilter::Modified),
-            KeyCode::Char('=') => self.filter_or_hint(DiffFilter::Renamed),
-
-            // Cycle the sidebar sort mode (delta modes are diff-only).
-            KeyCode::Char('s') => self.diff_only_or(Self::cycle_sort_mode),
-
-            // Live tolerance adjustment — rebuilds the diff in place (diff-only).
-            KeyCode::Char('t') => self.diff_only_or(Self::cycle_rel_tol),
-            KeyCode::Char('T') => self.diff_only_or(Self::cycle_abs_tol),
-
+            // Unlike the palette's "Show help", the key toggles.
             KeyCode::Char('?') => {
                 self.show_help = !self.show_help;
                 self.help_scroll = 0;
@@ -406,70 +370,34 @@ impl App {
 
             // Yank (clipboard): `y` begins a chord, `Y` yanks detail immediately.
             KeyCode::Char('y') => self.pending_yank = PendingYank::WaitingForTarget,
-            KeyCode::Char('Y') => self.yank_detail(),
 
-            // Solve: inspect solves the single file directly; diff opens the picker.
-            KeyCode::Char('S') => self.start_solve(),
-
-            // What-if: edit the selected constraint's RHS and re-solve.
-            KeyCode::Char('E') => self.open_what_if(),
             #[cfg(feature = "editor")]
             KeyCode::Char('v') => self.open_source(false),
             #[cfg(feature = "editor")]
             KeyCode::Char('V') => self.open_source(true),
 
-            // Rewrite: pick presolve rules, then compare original vs rewritten.
-            KeyCode::Char('P') => self.open_presolve(),
-
-            // Diagnostics: why is the solve slow, and which rows/vars are to blame.
-            KeyCode::Char('D') => self.open_diagnostics(),
-
-            // Solve profile: compare HiGHS configurations.
-            KeyCode::Char('B') => self.open_profile(),
-
-            // Unbounded ray: which variables run to infinity.
-            KeyCode::Char('U') => self.open_unbounded_ray(),
-
-            // IIS: the minimal conflicting set.
-            KeyCode::Char('I') => self.open_iis(),
-
-            // Ranging: how far each coefficient can move.
-            KeyCode::Char('R') => self.open_ranging(),
-
-            // Export CSV (works in both modes).
-            KeyCode::Char('w') => self.export_csv(),
-
-            // Toggle raw text side-by-side diff view (diff-only).
-            KeyCode::Char('r') => self.diff_only_or(Self::toggle_detail_view),
-
-            // Toggle hiding order-only coefficient changes (diff-only).
-            KeyCode::Char('o') => self.diff_only_or(Self::toggle_ignore_order),
-
-            // Open the search pop-up.
-            KeyCode::Char('/') => self.open_search_popup(),
+            // Every other single-character key is the command table's: the one
+            // place a key is bound to an action, shared with the palette.
+            KeyCode::Char(c) => {
+                if let Some(command) = PaletteCommand::from_key(c) {
+                    self.run_command_from_key(command);
+                }
+            }
 
             _ => {}
         }
     }
 
-    /// Apply a kind filter in diff mode; in inspect mode filters are diff-only,
-    /// so this shows a brief hint instead.
-    fn filter_or_hint(&mut self, filter: DiffFilter) {
-        if self.mode == AppMode::Inspect {
+    /// Run `command` from its direct key. Diff-only commands show a hint in
+    /// inspect mode, where the palette hides them.
+    fn run_command_from_key(&mut self, command: PaletteCommand) {
+        if self.mode == AppMode::Inspect && !command.available_in_inspect() {
             self.flash_diff_only();
         } else {
-            self.set_filter(filter);
+            self.run_palette_command(command);
         }
     }
 
-    /// Run a diff-only action, or show a brief hint when in inspect mode.
-    fn diff_only_or(&mut self, action: fn(&mut Self)) {
-        if self.mode == AppMode::Inspect {
-            self.flash_diff_only();
-        } else {
-            action(self);
-        }
-    }
 
     /// Start a solve: inspect mode solves the single file directly; diff mode
     /// opens the file picker (file 1 / file 2 / both).
