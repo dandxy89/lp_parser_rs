@@ -282,7 +282,7 @@ lp_diff base.lp modified.lp --abs-tol 1e-4 --rel-tol 1e-6
 lp_diff base.lp modified.lp --summary --rename '\[\d+\]$' '[idx]' --abs-tol 1e-6
 ```
 
-Prebuilt `lp_diff` binaries (six targets, with SHA-256 checksums in `checksums-sha256.txt`) are attached to each `lp_diff-v*` [GitHub release](https://github.com/dandxy89/lp_parser_rs/releases). Also: `--watch` reloads when an input changes and `--theme auto|dark|light` picks the colour scheme.
+Prebuilt `lp_diff` binaries (six targets, with SHA-256 checksums in `checksums-sha256.txt`) are attached to each `lp_diff-v*` [GitHub release](https://github.com/dandxy89/lp_parser_rs/releases). Also: `--watch` reloads when an input changes and `--theme` picks the colour scheme (built-in names or a theme file; see the [TUI README](tui/README.md#themes)).
 
 Highlights: three-panel layout, five sections (Summary / Variables / Constraints / Objectives / Numerics), filtering (`a`/`+`/`-`/`m`/`=`, plus `o` to ignore coefficient order), sort cycling (`s`), live tolerance cycling (`t`/`T`), telescope-style search (fuzzy, `r:` regex, `s:` substring), HiGHS solve-and-compare with infeasibility diagnosis (`S`), presolve (`P`), diagnostics (`D`), what-if RHS edits (`E`), unbounded / IIS / ranging / benchmark panes (`U` `I` `R` `B`), content search (`c:`), a command palette, vim-style navigation and jumplist, clipboard yank (`y`/`Y`), CSV export (`w`), `?` for full help.
 

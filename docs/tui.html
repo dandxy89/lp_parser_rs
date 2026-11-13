@@ -156,7 +156,9 @@ lp_diff base.lp modified.lp --summary</code></pre>
       <tr><td>--abs-tol</td><td>Absolute tolerance: equal when <code>|a - b| &lt;= abs_tol</code>. An epsilon floor always applies, so ordinary float noise never registers as a change.</td></tr>
       <tr><td>--rel-tol</td><td>Relative tolerance, scaled by magnitude: equal when <code>|a - b| &lt;= rel_tol * max(|a|, |b|)</code>.</td></tr>
       <tr><td>--rename</td><td>Regex rewrite applied to names in <em>both</em> files before matching. Repeatable; rules apply in order.</td></tr>
-      <tr><td>--theme</td><td><code>auto</code> (detects from <code>COLORFGBG</code>, then by asking the terminal for its background colour), <code>dark</code>, or <code>light</code>.</td></tr>
+      <tr><td>--theme</td><td><code>auto</code> (detects from <code>COLORFGBG</code>, then by asking the terminal for its background colour, then applies <code>lp_diff/theme.toml</code> from the config directory), a built-in (<code>dark</code>, <code>light</code>, <code>mono</code>, <code>flat-dark</code>, <code>flat-light</code>, <code>high-contrast</code>, <code>colour-blind</code>), or the path of a theme file. Switch at run time with the palette entry <em>Cycle colour theme</em>.</td></tr>
+      <tr><td>--ascii</td><td>Draw with plain ASCII instead of box-drawing, braille and arrow glyphs. On automatically under a non-UTF-8 locale.</td></tr>
+      <tr><td>--reduce-motion</td><td>Replace the spinner with a static marker.</td></tr>
     </table></div>
 
     <div class="note"><b>Why <code>--rename</code> exists.</b> Renumbering a model, for example by inserting a time period or
