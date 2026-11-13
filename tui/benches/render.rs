@@ -25,6 +25,9 @@ mod diff_model;
 #[cfg(feature = "editor")]
 #[path = "../src/editor.rs"]
 mod editor;
+#[cfg(feature = "editor")]
+#[path = "../src/editor_mps.rs"]
+mod editor_mps;
 #[path = "../src/event.rs"]
 mod event;
 #[path = "../src/export.rs"]

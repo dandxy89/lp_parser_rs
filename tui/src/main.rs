@@ -22,6 +22,8 @@ mod diagnostics;
 mod diff_model;
 #[cfg(feature = "editor")]
 mod editor;
+#[cfg(feature = "editor")]
+mod editor_mps;
 mod event;
 mod export;
 mod format;

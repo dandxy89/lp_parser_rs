@@ -23,6 +23,7 @@ use std::sync::{Arc, mpsc};
 use std::time::{Duration, Instant};
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crate::editor_mps::{Kind, MpsIndex};
 use lp_lsp::config::FormatSettings;
 use lp_lsp::semantic::SemanticResult;
 use lp_lsp::{Config, Document, Encoding};
@@ -82,6 +83,9 @@ pub struct Editor {
     pub path: PathBuf,
     /// Language features available (LP files only).
     pub lsp: bool,
+    /// An MPS file: name navigation and rename from a line-oriented index.
+    pub mps: bool,
+    mps_index: Option<(i32, MpsIndex)>,
     pub cursor: usize,
     /// Preferred display column for vertical motion.
     want_col: usize,
@@ -123,6 +127,8 @@ impl Editor {
             doc,
             path: path.to_owned(),
             lsp,
+            mps: !lsp && path.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("mps")),
+            mps_index: None,
             cursor: 0,
             want_col: 0,
             top: 0,
@@ -143,9 +149,12 @@ impl Editor {
             diagnostics: Vec::new(),
             config: Config::default(),
             version: 1,
-            stale_since: lsp.then(|| Instant::now().checked_sub(SEMANTIC_DEBOUNCE).unwrap_or_else(Instant::now)),
+            stale_since: None,
             semantic: None,
         };
+        if editor.lsp {
+            editor.stale_since = Instant::now().checked_sub(SEMANTIC_DEBOUNCE);
+        }
         editor.refresh_diagnostics();
         editor
     }
@@ -251,7 +260,7 @@ impl Editor {
     fn after_change(&mut self) {
         self.dirty = true;
         self.redo.clear();
-        self.stale_since = self.lsp.then(Instant::now);
+        self.stale_since = (self.lsp || self.mps).then(Instant::now);
         if self.lsp && self.text().len() <= LIVE_DIAGNOSTICS_LIMIT {
             self.refresh_diagnostics();
         }
@@ -295,7 +304,7 @@ impl Editor {
 
     fn finish_history_step(&mut self, cursor: usize) {
         self.dirty = true;
-        self.stale_since = self.lsp.then(Instant::now);
+        self.stale_since = (self.lsp || self.mps).then(Instant::now);
         self.refresh_diagnostics();
         self.set_cursor(cursor.min(self.text().len()));
         self.clamp_normal_cursor();
@@ -315,7 +324,26 @@ impl Editor {
     fn refresh_diagnostics(&mut self) {
         if self.lsp {
             self.diagnostics = lp_lsp::features::diagnostics::compute(&self.doc, &self.config);
+        } else if self.mps {
+            // The only diagnostic MPS gets: where the real parser stops, if it does.
+            self.diagnostics = crate::editor_mps::parse_error(self.text())
+                .map(|(offset, message)| Diagnostic {
+                    range: self.doc.range(offset..offset),
+                    severity: Some(DiagnosticSeverity::ERROR),
+                    message,
+                    ..Diagnostic::default()
+                })
+                .into_iter()
+                .collect();
         }
+    }
+
+    /// The name index for the current text, rebuilt after edits.
+    fn mps_index(&mut self) -> &MpsIndex {
+        if self.mps_index.as_ref().is_none_or(|(version, _)| *version != self.version) {
+            self.mps_index = Some((self.version, MpsIndex::build(&self.doc.text)));
+        }
+        &self.mps_index.as_ref().expect("built above").1
     }
 
     /// Start or collect the debounced semantic pass. Call on every tick.
@@ -334,6 +362,16 @@ impl Editor {
             }
         }
         let Some(since) = self.stale_since else { return };
+        if self.mps {
+            // The MPS check is a full parse, so it waits for a pause and skips huge files.
+            if since.elapsed() >= SEMANTIC_DEBOUNCE {
+                self.stale_since = None;
+                if self.text().len() <= LIVE_DIAGNOSTICS_LIMIT {
+                    self.refresh_diagnostics();
+                }
+            }
+            return;
+        }
         if self.semantic.is_some() || since.elapsed() < SEMANTIC_DEBOUNCE || self.text().len() > 20 * 1024 * 1024 {
             return;
         }
@@ -355,12 +393,23 @@ impl Editor {
 
     fn need_lsp(&mut self) -> bool {
         if !self.lsp {
-            self.message = Some("Language features are only available for LP files".to_owned());
+            let hint = if self.mps { "this feature is only available for LP files" } else { "language features are only available for LP files" };
+            self.message = Some(hint.to_owned());
         }
         self.lsp
     }
 
     fn go_definition(&mut self, height: usize) {
+        if self.mps {
+            let cursor = self.cursor;
+            let index = self.mps_index();
+            let target = index.site_at(cursor).and_then(|site| index.definition(site)).map(|def| def.range.start);
+            match target {
+                Some(offset) => self.goto_offset(offset, height),
+                None => self.message = Some("No definition found".to_owned()),
+            }
+            return;
+        }
         if !self.need_lsp() {
             return;
         }
@@ -374,6 +423,24 @@ impl Editor {
     }
 
     fn list_references(&mut self) {
+        if self.mps {
+            let cursor = self.cursor;
+            let index = self.mps_index();
+            let ranges: Vec<(Range<usize>, &'static str)> =
+                index.site_at(cursor).map(|site| index.occurrences(site).into_iter().map(|s| (s.range.clone(), s.section)).collect()).unwrap_or_default();
+            if ranges.is_empty() {
+                self.message = Some("No references found".to_owned());
+                return;
+            }
+            let mut popup = Popup { title: format!("{} references", ranges.len()), ..Popup::default() };
+            for (range, section) in ranges {
+                let line = self.doc.lines.line_of(range.start);
+                popup.lines.push(format!("{:>5}  {section:<8} {}", line + 1, self.text()[self.line_range(line)].trim()));
+                popup.targets.push(range.start);
+            }
+            self.popup = Some(popup);
+            return;
+        }
         if !self.need_lsp() {
             return;
         }
@@ -394,6 +461,20 @@ impl Editor {
     }
 
     fn hover(&mut self) {
+        if self.mps {
+            let cursor = self.cursor;
+            let index = self.mps_index();
+            let text = index.site_at(cursor).map(|site| {
+                let uses = index.occurrences(site);
+                let defined = index.definition(site).map(|def| def.section);
+                format!("{} `{}`\ndefined in {}\n{} occurrences", site.kind.label(), site.name, defined.unwrap_or("(no definition)"), uses.len())
+            });
+            match text {
+                Some(text) => self.popup = Some(Popup { title: "Hover".to_owned(), lines: text.lines().map(str::to_owned).collect(), ..Popup::default() }),
+                None => self.message = Some("Nothing to show here".to_owned()),
+            }
+            return;
+        }
         if !self.need_lsp() {
             return;
         }
@@ -507,6 +588,10 @@ impl Editor {
     }
 
     fn rename(&mut self, new_name: &str) {
+        if self.mps {
+            self.rename_mps(new_name);
+            return;
+        }
         if !self.need_lsp() {
             return;
         }
@@ -520,6 +605,33 @@ impl Editor {
             Ok(None) => self.message = Some("Name unchanged".to_owned()),
             Err(error) => self.message = Some(error),
         }
+    }
+
+    /// Rename the row or column under the cursor everywhere it occurs.
+    fn rename_mps(&mut self, new_name: &str) {
+        if new_name.is_empty() || new_name.contains(char::is_whitespace) {
+            self.message = Some("A name cannot be empty or contain blanks".to_owned());
+            return;
+        }
+        let cursor = self.cursor;
+        let index = self.mps_index();
+        let Some(site) = index.site_at(cursor).cloned() else {
+            self.message = Some("Put the cursor on a row or column name".to_owned());
+            return;
+        };
+        if site.name == new_name {
+            self.message = Some("Name unchanged".to_owned());
+            return;
+        }
+        if index.contains(site.kind, new_name) {
+            self.message = Some(format!("A {} named `{new_name}` already exists", site.kind.label()));
+            return;
+        }
+        let mut edits: Vec<(Range<usize>, String)> = index.occurrences(&site).into_iter().map(|s| (s.range.clone(), new_name.to_owned())).collect();
+        edits.sort_by_key(|(range, _)| std::cmp::Reverse(range.start));
+        let count = edits.len();
+        self.apply_edits(&edits);
+        self.message = Some(format!("Renamed in {count} places"));
     }
 
     fn format(&mut self) {
@@ -541,6 +653,17 @@ impl Editor {
     /// Put the cursor on the definition of `name`: a labelled objective or
     /// constraint, else the first whole-word occurrence (variables).
     pub fn goto_name(&mut self, name: &str) {
+        if self.mps {
+            let index = self.mps_index();
+            let found = [Kind::Row, Kind::Column].into_iter().find_map(|kind| {
+                let site = index.occurrences_of(kind, name).into_iter().find(|s| matches!(s.section, "ROWS" | "COLUMNS"))?;
+                Some(site.range.start)
+            });
+            if let Some(offset) = found {
+                self.goto_offset(offset, self.height);
+            }
+            return;
+        }
         let labelled = self.doc.index().entities.iter().find(|e| e.name.as_deref() == Some(name)).and_then(|e| e.name_range.clone());
         let found = labelled.map(|range| range.start).or_else(|| {
             let text = self.text();
@@ -558,7 +681,11 @@ impl Editor {
     }
 
     /// The name under the cursor, for jumping back to the parsed view.
-    fn entry_under_cursor(&self) -> Option<String> {
+    fn entry_under_cursor(&mut self) -> Option<String> {
+        if self.mps {
+            let cursor = self.cursor;
+            return self.mps_index().site_at(cursor).map(|site| site.name.clone());
+        }
         let index = self.doc.index();
         let offset = self.cursor;
         let from_entity = index.entities.iter().find(|e| e.range.contains(&offset)).and_then(|e| e.name.clone());
@@ -1215,7 +1342,7 @@ mod tests {
 
     #[test]
     fn plain_files_have_no_language_features() {
-        let mut e = Editor::open(Path::new("model.mps"), "NAME x\nENDATA\n", false);
+        let mut e = Editor::open(Path::new("notes.txt"), "NAME x\nENDATA\n", false);
         keys(&mut e, "K");
         assert!(e.popup.is_none());
         assert!(e.message.as_deref().is_some_and(|m| m.contains("LP files")));
@@ -1226,5 +1353,38 @@ mod tests {
         let mut e = editor(LP);
         e.set_cursor(e.text().find("c1").unwrap());
         assert_eq!(keys(&mut e, "\n"), Outcome::SelectEntry("c1".to_owned()));
+    }
+
+    const MPS: &str = "NAME          DEMO\nROWS\n N  COST\n L  LIM1\nCOLUMNS\n    X         COST         1.0   LIM1         1.0\nRHS\n    RHS       LIM1         4.0\nBOUNDS\n UP BND       X            4.0\nENDATA\n";
+
+    #[test]
+    fn mps_files_get_name_navigation_hover_and_rename() {
+        let mut e = Editor::open(Path::new("demo.mps"), MPS, false);
+        assert!(e.mps && !e.lsp);
+        e.set_cursor(e.text().find("LIM1         4.0").unwrap());
+        keys(&mut e, "gd");
+        assert!(e.text()[..e.cursor].ends_with(" L  "), "gd on an RHS use lands on the ROWS definition");
+        keys(&mut e, "gr");
+        assert_eq!(e.popup.as_ref().map(|p| p.lines.len()), Some(3), "ROWS, COLUMNS and RHS");
+        keys(&mut e, "\u{1b}K");
+        assert!(e.popup.as_ref().is_some_and(|p| p.lines[0].starts_with("row `LIM1`")));
+        keys(&mut e, "\u{1b}:rename CAP\n");
+        assert_eq!(e.text().matches("CAP").count(), 3);
+        assert!(!e.text().contains("LIM1"));
+        keys(&mut e, "u");
+        assert_eq!(e.text(), MPS, "a rename is one undo step");
+        keys(&mut e, ":rename COST\n");
+        assert!(e.message.as_deref().is_some_and(|m| m.contains("already exists")), "{:?}", e.message);
+    }
+
+    #[test]
+    fn mps_parse_errors_become_a_diagnostic() {
+        let broken = MPS.replace("4.0\nENDATA", "4.x\nENDATA");
+        let mut e = Editor::open(Path::new("demo.mps"), &broken, false);
+        assert_eq!(e.diagnostics.len(), 1, "{:?}", e.diagnostics);
+        keys(&mut e, "]d");
+        assert!(e.message.is_some());
+        let clean = Editor::open(Path::new("demo.mps"), MPS, false);
+        assert_eq!(clean.diagnostics, []);
     }
 }

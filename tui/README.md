@@ -481,7 +481,7 @@ Built with `cargo install --locked --path tui --features editor`, `v` opens the 
 | Insert | text, `Enter` (keeps indent), `Backspace`, `Delete`, arrows, `Tab`, `Ctrl-n` completion, `Esc` |
 | Command | `:w`, `:q`, `:q!`, `:wq`, `:x`, `:format`, `:rename NAME` (variable or constraint under the cursor), `:actions` |
 
-Not supported: counts, text objects, visual mode, registers, dot-repeat, folds. Diagnostics (syntax errors at once; model analysis after a 300 ms pause) appear in the gutter as `E` / `W`. MPS files open as plain text, without language features.
+Not supported: counts, text objects, visual mode, registers, dot-repeat, folds. Diagnostics (syntax errors at once; model analysis after a 300 ms pause) appear in the gutter as `E` / `W`. MPS files get a smaller set from a line-oriented index of ROWS, COLUMNS, RHS, RANGES and BOUNDS names: `gd`, `gr`, `K` and `:rename` work on rows and columns (free-format spacing is assumed, so a rename in a fixed-format file can shift columns), and the real parser's error, if any, shows as one diagnostic. `:format`, `:actions` and completion are LP only. Other files open as plain text.
 
 `:w` writes atomically (a temporary file, then a rename) and re-parses both inputs so the parsed views match the disk. With `--watch`, an on-disk change while the buffer has unsaved edits is not applied; the buffer is kept.
 

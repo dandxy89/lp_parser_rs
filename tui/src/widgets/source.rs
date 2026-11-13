@@ -96,7 +96,9 @@ fn draw_status(frame: &mut Frame, area: Rect, editor: &Editor) {
             if diagnostics > 0 {
                 spans.push(Span::styled(format!("  {diagnostics} diagnostics"), Style::default().fg(t.modified)));
             }
-            if !editor.lsp {
+            if editor.mps {
+                spans.push(Span::styled("  MPS: names only", Style::default().fg(t.muted)));
+            } else if !editor.lsp {
                 spans.push(Span::styled("  plain text", Style::default().fg(t.muted)));
             }
             match &editor.message {
