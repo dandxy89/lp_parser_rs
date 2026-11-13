@@ -4,7 +4,7 @@
 
 use std::time::Instant;
 
-use crossterm::event::KeyCode;
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::ListState;
 
@@ -57,7 +57,7 @@ pub struct ScrollPane {
     /// Pre-built display lines.
     pub lines: Vec<Line<'static>>,
     /// Scroll offset, clamped to the content height when the pane is drawn.
-    pub scroll: u16,
+    pub scroll: usize,
     /// What `w` writes, as `(filename suffix, body)`. `None` in panes with
     /// nothing to export — the pane carries its own write target so the key
     /// handler does not have to work out which report is on screen.
@@ -78,12 +78,30 @@ impl ScrollPane {
             KeyCode::Char('k') | KeyCode::Up => self.scroll = self.scroll.saturating_sub(1),
             KeyCode::Char('g') | KeyCode::Home => self.scroll = 0,
             // Clamped against the real content height when the pane is drawn.
-            KeyCode::Char('G') | KeyCode::End => self.scroll = u16::MAX,
-            KeyCode::PageDown => self.scroll = self.scroll.saturating_add(page_size),
-            KeyCode::PageUp => self.scroll = self.scroll.saturating_sub(page_size),
+            KeyCode::Char('G') | KeyCode::End => self.scroll = usize::MAX,
+            KeyCode::PageDown => self.scroll = self.scroll.saturating_add(usize::from(page_size)),
+            KeyCode::PageUp => self.scroll = self.scroll.saturating_sub(usize::from(page_size)),
             _ => return false,
         }
         true
+    }
+
+    /// Handle any key for a pane: scroll keys (including Ctrl-d/u/f/b) scroll,
+    /// Esc and `q` close, everything else is ignored. Returns `false` to close.
+    pub fn handle_key(&mut self, key: KeyEvent, page_size: u16) -> bool {
+        debug_assert!(page_size > 0, "page size must be positive");
+        if key.modifiers.contains(KeyModifiers::CONTROL) {
+            let (half, full) = (usize::from(page_size / 2).max(1), usize::from(page_size));
+            match key.code {
+                KeyCode::Char('d') => self.scroll = self.scroll.saturating_add(half),
+                KeyCode::Char('u') => self.scroll = self.scroll.saturating_sub(half),
+                KeyCode::Char('f') => self.scroll = self.scroll.saturating_add(full),
+                KeyCode::Char('b') => self.scroll = self.scroll.saturating_sub(full),
+                _ => {}
+            }
+            return true;
+        }
+        self.scroll_key(key.code, page_size) || !matches!(key.code, KeyCode::Esc | KeyCode::Char('q'))
     }
 }
 
@@ -186,7 +204,7 @@ const DEFAULT_THRESHOLD_INDEX: usize = 1;
 pub struct SolveViewState {
     pub tab: SolveTab,
     /// Per-tab scroll offsets, indexed by `SolveTab::index()`.
-    pub scroll: [u16; 5],
+    pub scroll: [usize; 5],
     /// When `true`, the Variables and Constraints tabs in diff view show only changed rows.
     pub diff_only: bool,
     /// Delta threshold for filtering insignificant differences in the diff view.
@@ -637,6 +655,13 @@ pub enum PaletteCommand {
     CycleSort,
     CycleRelTol,
     CycleAbsTol,
+    CycleTheme,
+    Messages,
+    ToggleMouse,
+    NarrowSidebar,
+    WidenSidebar,
+    PrevSection,
+    NextSection,
     OpenSearch,
     NextMatch,
     PrevMatch,
@@ -661,7 +686,7 @@ pub enum PaletteCommand {
 
 impl PaletteCommand {
     /// Every command with its palette label and direct-key hint, in display order.
-    const CMDS: [(Self, &'static str, &'static str); 35] = [
+    const CMDS: [(Self, &'static str, &'static str); 42] = [
         (Self::GoSummary, "Go to Summary", "1"),
         (Self::GoVariables, "Go to Variables", "2"),
         (Self::GoConstraints, "Go to Constraints", "3"),
@@ -677,6 +702,13 @@ impl PaletteCommand {
         (Self::CycleSort, "Cycle sort mode", "s"),
         (Self::CycleRelTol, "Cycle relative tolerance", "t"),
         (Self::CycleAbsTol, "Cycle absolute tolerance", "T"),
+        (Self::CycleTheme, "Cycle colour theme", ""),
+        (Self::Messages, "Show recent messages", ""),
+        (Self::ToggleMouse, "Mouse capture on/off", "M"),
+        (Self::NarrowSidebar, "Narrow the sidebar", "<"),
+        (Self::WidenSidebar, "Widen the sidebar", ">"),
+        (Self::PrevSection, "Previous section", "["),
+        (Self::NextSection, "Next section", "]"),
         (Self::OpenSearch, "Search entries", "/"),
         (Self::NextMatch, "Next search match", "n"),
         (Self::PrevMatch, "Previous search match", "N"),
@@ -698,6 +730,16 @@ impl PaletteCommand {
         (Self::ShowHelp, "Show help", "?"),
         (Self::Quit, "Quit", "q"),
     ];
+
+    /// The command whose direct key is the single character `key`, if any.
+    ///
+    /// The table is the only place these keys are bound: the main view
+    /// dispatches through this, and the palette shows the same hint.
+    pub fn from_key(key: char) -> Option<Self> {
+        let mut buffer = [0; 4];
+        let key = &*key.encode_utf8(&mut buffer);
+        Self::CMDS.iter().find(|(_, _, hint)| *hint == key).map(|(command, _, _)| *command)
+    }
 
     /// Number of commands offered by the palette.
     pub const COUNT: usize = Self::CMDS.len();
@@ -807,6 +849,26 @@ mod tests {
         ];
         for command in available {
             assert!(command.available_in_inspect(), "{command:?} must remain available in inspect mode");
+        }
+    }
+
+    /// The table is the single binding site for single-character keys: each is
+    /// bound once, and looking it up gives back the command showing that hint.
+    #[test]
+    fn every_single_key_hint_is_bound_once_and_round_trips() {
+        let mut seen = std::collections::HashSet::new();
+        for index in 0..PaletteCommand::COUNT {
+            let command = PaletteCommand::at(index);
+            let hint = command.hint();
+            let mut chars = hint.chars();
+            if let (Some(key), None) = (chars.next(), chars.next()) {
+                assert!(seen.insert(key), "key `{key}` is bound to two commands");
+                assert_eq!(PaletteCommand::from_key(key), Some(command));
+            }
+        }
+        // Keys the main view handles itself must not also be in the table.
+        for key in ['j', 'k', 'g', 'G', 'h', 'l', 'y', ':', '?', 'v', 'V'] {
+            assert!(PaletteCommand::from_key(key).is_none() || key == '?', "`{key}` would be handled in two places");
         }
     }
 }

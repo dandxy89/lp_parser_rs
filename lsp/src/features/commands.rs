@@ -233,7 +233,7 @@ fn model_stats(doc: &Document, config: &Config) -> Result<Output, String> {
 mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    use tower_lsp_server::ls_types::Uri;
+    use ls_types::Uri;
 
     use super::*;
     use crate::position::Encoding;

@@ -11,7 +11,9 @@
 //!
 //! - the sense keyword (`minimize`, `max`, ...) only as the first token;
 //! - `multi-objectives` only directly after the sense keyword (Gurobi);
-//! - `subject to` / `st` / `s.t.` only once, as the first token of a line;
+//! - `subject to` / `st` / `s.t.` only once, as the first token of a line
+//!   that does not continue an expression (the previous token is not a sign;
+//!   after `obj:` it is still the header, so an objective may be empty);
 //! - other section keywords (`bounds`, `generals`, `binaries`, `sos`, `end`,
 //!   ...) only as the first token of a line that does not continue an
 //!   expression (the previous token is not a sign, colon or comparison) and
@@ -548,7 +550,11 @@ impl<'input> Lexer<'input> {
             Token::SubjectTo => {
                 // Multi-word forms cannot be identifiers; leave them to the parser.
                 let multi_word = self.input[span.clone()].contains([' ', '\t']);
-                multi_word || (!self.seen_subject_to && at_line_start && !self.prev_continues_expression())
+                // A `:` before the header closes an objective with no terms
+                // (`obj:` / `st`), so unlike a sign it does not make `st` an
+                // operand.
+                let operand = self.prev_continues_expression() && !matches!(self.prev, Some(Token::Colon));
+                multi_word || (!self.seen_subject_to && at_line_start && !operand)
             }
             Token::GeneralConstraints if self.input[span.clone()].contains([' ', '\t']) => true,
             Token::Bounds
@@ -1160,6 +1166,31 @@ mod tests {
 
         // `st` is only the header once.
         assert_eq!(tokenize("st\nst: x <= 1")[..3], [Token::SubjectTo, Identifier("st"), Colon]);
+    }
+
+    #[test]
+    fn test_subject_to_after_an_empty_named_objective() {
+        use Token::{Colon, Identifier, Plus};
+
+        // `obj:` has no terms: the `st` on the next line is the header, not
+        // a variable of the objective.
+        let input = "min\n obj:\nst\n c1: x >= 1\nend";
+        assert_eq!(tokenize(input)[1..4], [Identifier("obj"), Colon, Token::SubjectTo]);
+        let parsed = LpProblemParser::new().parse(Lexer::new(input)).expect("an empty named objective before `st` must parse");
+        assert_eq!(parsed.objectives.len(), 1);
+        assert_eq!(parsed.objectives[0].name, "obj");
+        assert_eq!(parsed.objectives[0].coefficients.len(), 0);
+        assert_eq!(parsed.constraints.len(), 1);
+        assert_eq!(parsed.constraints[0].name(), "c1");
+
+        for header in ["st", "ST", "s.t.", "st:"] {
+            let input = format!("max\n obj:\n{header}\n x <= 4\nend");
+            let parsed = LpProblemParser::new().parse(Lexer::new(&input)).unwrap_or_else(|e| panic!("{header:?}: {e:?}"));
+            assert_eq!(parsed.constraints.len(), 1, "{header:?}");
+        }
+
+        // After a sign the word is still an operand, and the next `st` the header.
+        assert_eq!(tokenize("min\n obj: x +\nst\nst\n x >= 1")[4..7], [Plus, Identifier("st"), Token::SubjectTo]);
     }
 
     #[test]

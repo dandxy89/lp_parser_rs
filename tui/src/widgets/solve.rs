@@ -149,7 +149,7 @@ fn draw_done(
     view: &SolveViewState,
     cache: &SolveRenderCache,
     diagnosis: &DiagnosisState,
-) -> u16 {
+) -> usize {
     let t = theme();
     // Full screen bar the bottom row, so the status bar stays visible.
     let popup = Rect { height: area.height.saturating_sub(1), ..area };
@@ -194,7 +194,7 @@ fn draw_done(
     // Windowed render honouring vertical scroll (same idiom as `draw_summary`),
     // clipping long lines to width like the previous unwrapped `Paragraph`.
     let buf = frame.buffer_mut();
-    for (i, line) in lines.iter().skip(scroll as usize).take(inner.height as usize).enumerate() {
+    for (i, line) in lines.iter().skip(scroll).take(inner.height as usize).enumerate() {
         #[expect(clippy::cast_possible_truncation)] // i < inner.height (u16)
         let y = inner.y + i as u16;
         buf.set_line(inner.x, y, line, inner.width);
@@ -662,9 +662,9 @@ fn draw_running_both(frame: &mut Frame, area: Rect, sides: [(&str, bool); 2], el
     let popup = super::centred_rect(area, LABEL_POPUP_WIDTH, 8);
     let running_label = format!("solving\u{2026} ({}s)", elapsed.as_secs());
     let spinner = spinner_frame(elapsed);
-    let icon1 = if done1 { "\u{2713}" } else { spinner };
+    let icon1 = if done1 { crate::glyphs::tick() } else { spinner };
     let status1 = if done1 { "done" } else { running_label.as_str() };
-    let icon2 = if done2 { "\u{2713}" } else { spinner };
+    let icon2 = if done2 { crate::glyphs::tick() } else { spinner };
     let status2 = if done2 { "done" } else { running_label.as_str() };
     let style_done = Style::default().fg(t.added).add_modifier(Modifier::BOLD);
     let style_running = Style::default().fg(t.modified).add_modifier(Modifier::BOLD);
@@ -708,7 +708,7 @@ fn draw_done_both(
     view: &SolveViewState,
     cache: &SolveRenderCache,
     diagnosis: &DiagnosisState,
-) -> u16 {
+) -> usize {
     let t = theme();
     // Full screen bar the bottom row, so the status bar stays visible.
     let popup = Rect { height: area.height.saturating_sub(1), ..area };
@@ -731,17 +731,22 @@ fn draw_done_both(
     let block = panel_block(Style::default().fg(t.secondary_accent).add_modifier(Modifier::BOLD))
         .title(Span::styled(" Solve Comparison ", Style::default().fg(t.secondary_accent).add_modifier(Modifier::BOLD)));
 
-    let paragraph = Paragraph::new(lines).block(block).scroll((scroll, 0));
+    // Windowed by hand: `Paragraph::scroll` takes a `u16`, which strands rows past 65,535.
+    let inner = block.inner(popup);
     frame.render_widget(Clear, popup);
-    frame.render_widget(paragraph, popup);
+    frame.render_widget(block, popup);
+    let buf = frame.buffer_mut();
+    for (i, line) in lines.iter().skip(scroll).take(usize::from(inner.height)).enumerate() {
+        #[expect(clippy::cast_possible_truncation)] // i < inner.height (u16)
+        buf.set_line(inner.x, inner.y + i as u16, line, inner.width);
+    }
     scroll
 }
 
 /// Largest useful scroll offset for `line_count` lines in `visible` rows,
 /// applied to `scroll`.
-fn clamp_scroll(scroll: u16, line_count: usize, visible: u16) -> u16 {
-    let max = line_count.saturating_sub(visible as usize);
-    scroll.min(u16::try_from(max).unwrap_or(u16::MAX))
+fn clamp_scroll(scroll: usize, line_count: usize, visible: u16) -> usize {
+    scroll.min(line_count.saturating_sub(usize::from(visible)))
 }
 
 /// The comparison overlay's lines at `scroll`, or `None` if the render cache
@@ -751,7 +756,7 @@ fn done_both_lines(
     view: &SolveViewState,
     cache: &SolveRenderCache,
     diagnosis: &DiagnosisState,
-    scroll: u16,
+    scroll: usize,
     height: u16,
 ) -> Option<Vec<Line<'static>>> {
     let active = view.tab;
@@ -957,14 +962,13 @@ fn format_constraint_diff_line(row: &crate::solver::ConstraintDiffRow, name: &st
 
 /// Visible data-row window `(first_index, count)` for a list whose header
 /// occupies `header_count` lines, given the scroll offset and viewport height.
-const fn window_range(header_count: usize, scroll: u16, visible_height: u16) -> (usize, usize) {
-    let scroll = scroll as usize;
+const fn window_range(header_count: usize, scroll: usize, visible_height: u16) -> (usize, usize) {
     (scroll.saturating_sub(header_count), (visible_height as usize).saturating_sub(header_count.saturating_sub(scroll)))
 }
 
 /// Append windowed cached row lines: visible rows get their cached `Line`,
 /// off-screen rows a placeholder so scroll positions stay aligned.
-fn push_cached_window(lines: &mut Vec<Line<'static>>, cached_rows: &[CachedDiffRow], diff_only: bool, scroll: u16, visible_height: u16) {
+fn push_cached_window(lines: &mut Vec<Line<'static>>, cached_rows: &[CachedDiffRow], diff_only: bool, scroll: usize, visible_height: u16) {
     let (first_visible_data, visible_data_count) = window_range(lines.len(), scroll, visible_height);
     let mut data_index: usize = 0;
     for cached in cached_rows {
@@ -986,7 +990,7 @@ fn build_diff_variables_tab_cached(
     count_label: &str,
     cached_rows: &[CachedDiffRow],
     view: &SolveViewState,
-    scroll: u16,
+    scroll: usize,
     visible_height: u16,
 ) {
     let t = theme();
@@ -1019,7 +1023,7 @@ fn build_diff_constraints_tab_cached(
     count_label: &str,
     cached_rows: &[CachedDiffRow],
     view: &SolveViewState,
-    scroll: u16,
+    scroll: usize,
     visible_height: u16,
 ) {
     let t = theme();
@@ -1243,7 +1247,7 @@ fn build_diff_log_tab(lines: &mut Vec<Line<'static>>, diff: &SolveDiffResult) {
         format!("  \u{2500}\u{2500} File 1: {} \u{2500}{}", diff.file1_label, rule_str(38)),
         Style::default().fg(t.muted).add_modifier(Modifier::BOLD),
     )));
-    append_truncated_log(lines, &diff.result1.solver_log, MAX_LOG_LINES, t);
+    append_truncated_log(lines, &diff.result1.solver_log, MAX_LOG_LINES, &t);
 
     lines.push(Line::from(""));
 
@@ -1252,7 +1256,7 @@ fn build_diff_log_tab(lines: &mut Vec<Line<'static>>, diff: &SolveDiffResult) {
         format!("  \u{2500}\u{2500} File 2: {} \u{2500}{}", diff.file2_label, rule_str(38)),
         Style::default().fg(t.muted).add_modifier(Modifier::BOLD),
     )));
-    append_truncated_log(lines, &diff.result2.solver_log, MAX_LOG_LINES, t);
+    append_truncated_log(lines, &diff.result2.solver_log, MAX_LOG_LINES, &t);
 }
 
 /// Append the last `max_lines` of a log string to the output, with a truncation notice if needed.

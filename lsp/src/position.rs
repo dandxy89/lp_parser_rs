@@ -12,7 +12,7 @@
 
 use std::ops::Range;
 
-use tower_lsp_server::ls_types::{Position, PositionEncodingKind};
+use ls_types::{Position, PositionEncodingKind};
 
 /// Negotiated position encoding for a session.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -182,19 +182,19 @@ impl LineIndex {
 
     /// Convert a byte range to an LSP range.
     #[must_use]
-    pub fn range(&self, text: &str, range: Range<usize>, encoding: Encoding) -> tower_lsp_server::ls_types::Range {
+    pub fn range(&self, text: &str, range: Range<usize>, encoding: Encoding) -> ls_types::Range {
         let start = floor_char_boundary(text, range.start.min(text.len()));
         let line = self.line_of(start);
         let end = floor_char_boundary(text, range.end.min(text.len()));
         // Most ranges sit on one line: skip the second line search.
         let on_line = self.line_starts[line] <= end && self.line_starts.get(line + 1).is_none_or(|&next| end < next);
         let end = if on_line { self.position_on(text, line, end, encoding) } else { self.position(text, range.end, encoding) };
-        tower_lsp_server::ls_types::Range::new(self.position_on(text, line, start, encoding), end)
+        ls_types::Range::new(self.position_on(text, line, start, encoding), end)
     }
 
     /// Convert an LSP range to a byte range (start ≤ end guaranteed).
     #[must_use]
-    pub fn byte_range(&self, text: &str, range: tower_lsp_server::ls_types::Range, encoding: Encoding) -> Range<usize> {
+    pub fn byte_range(&self, text: &str, range: ls_types::Range, encoding: Encoding) -> Range<usize> {
         let start = self.offset(text, range.start, encoding);
         let end = self.offset(text, range.end, encoding);
         start.min(end)..end.max(start)
@@ -298,7 +298,7 @@ mod tests {
             for encoding in [Encoding::Utf8, Encoding::Utf16] {
                 for &start in &offsets {
                     for &end in &offsets {
-                        let expected = tower_lsp_server::ls_types::Range::new(
+                        let expected = ls_types::Range::new(
                             index.position(&text, start, encoding),
                             index.position(&text, end, encoding),
                         );

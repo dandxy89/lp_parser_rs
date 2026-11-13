@@ -5,11 +5,11 @@ use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{HighlightSpacing, List, ListItem, Paragraph, ScrollbarState};
+use ratatui::widgets::{HighlightSpacing, List, ListItem, Paragraph, ScrollbarState, Wrap};
 
 use crate::app::{App, Focus, Section};
 use crate::theme::theme;
-use crate::widgets::{SELECTION_CURSOR, focus_border_style, panel_block, selection_style, truncate_middle, zebra_style};
+use crate::widgets::{focus_border_style, panel_block, selection_cursor, selection_style, truncate_middle, zebra_style};
 
 /// Draw the section tab bar across the top of the frame.
 ///
@@ -288,7 +288,13 @@ fn draw_entry_name_list(frame: &mut Frame, area: Rect, params: &NameListParams<'
     let block = panel_block(params.border_style).title(title);
 
     if total_items == 0 || inner_height == 0 {
-        frame.render_widget(block, area);
+        let note = if total_items == 0 && inner_height > 0 {
+            let text = if params.total_count > 0 { "Filtered out; a clears the filter" } else { "No entries" };
+            Paragraph::new(Line::styled(text, Style::default().fg(theme().muted))).wrap(Wrap { trim: true })
+        } else {
+            Paragraph::new("")
+        };
+        frame.render_widget(note.block(block), area);
         return;
     }
 
@@ -320,7 +326,7 @@ fn draw_entry_name_list(frame: &mut Frame, area: Rect, params: &NameListParams<'
     let scrollable = total_items > inner_height && inner.width > 1;
     let list_area = if scrollable { Rect { width: inner.width - 1, ..inner } } else { inner };
     // Room for a row's text: the list less the selection cursor's gutter.
-    let usable = (list_area.width as usize).saturating_sub(SELECTION_CURSOR.chars().count());
+    let usable = (list_area.width as usize).saturating_sub(selection_cursor().chars().count());
 
     // Build ListItems for only the visible slice, zebra-striped on the
     // absolute index so stripes stay stable while scrolling. Names too wide
@@ -338,7 +344,7 @@ fn draw_entry_name_list(frame: &mut Frame, area: Rect, params: &NameListParams<'
     // sideways when the selection comes and goes.
     let list = List::new(items)
         .highlight_style(selection_style(params.focused))
-        .highlight_symbol(SELECTION_CURSOR)
+        .highlight_symbol(selection_cursor())
         .highlight_spacing(HighlightSpacing::Always);
 
     frame.render_widget(block, area);
@@ -393,7 +399,7 @@ pub fn draw_empty_detail_cheatsheet(frame: &mut Frame, area: Rect, message: &str
     }
     let t = theme();
     let muted = Style::default().fg(t.muted);
-    let key = Style::default().fg(t.accent);
+    let key = Style::default().fg(t.key);
     let hint = |keys: &'static str, action: &'static str| {
         Line::from(vec![Span::styled(format!("  {keys:<12}"), key), Span::styled(action, muted)])
     };

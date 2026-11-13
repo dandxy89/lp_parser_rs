@@ -3,7 +3,7 @@
 use std::collections::HashSet;
 use std::ops::Range;
 
-use tower_lsp_server::ls_types::{Hover, HoverContents, MarkupContent, MarkupKind, Position};
+use ls_types::{Hover, HoverContents, MarkupContent, MarkupKind, Position};
 use tree_sitter::Node;
 
 use super::docs;
@@ -364,7 +364,7 @@ fn leaves(node: Node<'_>) -> Vec<Node<'_>> {
 
 #[cfg(test)]
 mod tests {
-    use tower_lsp_server::ls_types::Uri;
+    use ls_types::Uri;
 
     use super::*;
     use crate::position::Encoding;

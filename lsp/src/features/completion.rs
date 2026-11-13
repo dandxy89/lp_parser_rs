@@ -7,11 +7,11 @@
 
 use std::ops::Range;
 
-use serde_json::{Value, json};
-use tower_lsp_server::ls_types::{
+use ls_types::{
     CompletionItem, CompletionItemKind, CompletionItemLabelDetails, CompletionList, CompletionTextEdit, Documentation, InsertTextFormat,
     MarkupContent, MarkupKind, Position, TextEdit,
 };
+use serde_json::{Value, json};
 
 use super::docs;
 use crate::document::Document;
@@ -443,7 +443,7 @@ fn lex(text: &str) -> Vec<Tok> {
 
 #[cfg(test)]
 mod tests {
-    use tower_lsp_server::ls_types::Uri;
+    use ls_types::Uri;
 
     use super::*;
     use crate::position::Encoding;

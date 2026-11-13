@@ -3,7 +3,7 @@
 
 use std::ops::Range;
 
-use tower_lsp_server::ls_types::{DocumentHighlight, DocumentHighlightKind, LinkedEditingRanges, Location, Position};
+use ls_types::{DocumentHighlight, DocumentHighlightKind, LinkedEditingRanges, Location, Position};
 
 use crate::document::Document;
 use crate::index::{Role, Symbol, Variable};

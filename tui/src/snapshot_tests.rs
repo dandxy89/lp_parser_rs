@@ -441,6 +441,19 @@ fn detail_rows_past_line_65535_are_reachable() {
     assert!(frame_contains(&render(&mut app, 100, 30), &last), "the last side-by-side row must be visible at maximum scroll");
 }
 
+/// The solve tables size their columns when built, so a resize must rebuild them.
+#[test]
+fn a_resize_refits_the_solve_tables() {
+    let mut app = diff_app();
+    let result = crate::solver::solve_problem(&app.problem1).expect("base solves");
+    app.solver.render_cache = crate::app::SolveRenderCache::Single(crate::widgets::solve::build_single_solve_cache(&result, 20));
+    app.solver.state = crate::state::SolveState::Done(Box::new(result));
+    render(&mut app, 80, 24);
+    assert_eq!(app.solver.cache_width, crate::app::App::solve_inner_width_for(80));
+    render(&mut app, 120, 40);
+    assert_eq!(app.solver.cache_width, crate::app::App::solve_inner_width_for(120), "a wider terminal rebuilds the cache");
+}
+
 /// Regression: `j` grew the solve overlay's scroll offset without bound, so
 /// over-scrolling left a blank pane that `k` had to climb back out of.
 #[test]
@@ -454,15 +467,11 @@ fn solve_overlay_scroll_is_clamped_to_its_content() {
     let summary_lines = 2 + cache[0].len();
     app.solver.render_cache = crate::app::SolveRenderCache::Single(cache);
     app.solver.state = crate::state::SolveState::Done(Box::new(result1.clone()));
-    app.solver.view.scroll = [u16::MAX; 5];
+    app.solver.view.scroll = [usize::MAX; 5];
     let terminal = render(&mut app, 80, 24);
     // 24 rows, less the status bar and the overlay's two borders.
     let visible = 24 - 1 - 2;
-    assert_eq!(
-        app.solver.view.scroll[0] as usize,
-        summary_lines.saturating_sub(visible),
-        "the clamp lands the last line on the bottom row"
-    );
+    assert_eq!(app.solver.view.scroll[0], summary_lines.saturating_sub(visible), "the clamp lands the last line on the bottom row");
     assert!(frame_contains(&terminal, "Esc:close"), "the overlay's keys are in the status bar");
 
     let diff = crate::solver::diff_results("a.lp".to_owned(), "b.lp".to_owned(), result1, result2, 0.0);
@@ -470,8 +479,17 @@ fn solve_overlay_scroll_is_clamped_to_its_content() {
     app.solver.state = crate::state::SolveState::DoneBoth(Box::new(diff));
     app.solver.view.tab = crate::state::SolveTab::Variables;
     let variables = app.solver.view.tab.index();
-    app.solver.view.scroll[variables] = u16::MAX;
+    app.solver.view.scroll[variables] = usize::MAX;
     let terminal = render(&mut app, 80, 24);
-    assert!(app.solver.view.scroll[variables] < u16::MAX, "the comparison offset must be written back clamped");
+    assert!(app.solver.view.scroll[variables] < usize::MAX, "the comparison offset must be written back clamped");
     assert!(frame_contains(&terminal, "Esc:close"), "the comparison's way out is in the status bar");
+}
+
+#[cfg(feature = "editor")]
+#[test]
+fn snapshot_source_view_80x24() {
+    let mut app = inspect_app();
+    app.handle_key(crossterm::event::KeyEvent::from(crossterm::event::KeyCode::Char('3')));
+    app.handle_key(crossterm::event::KeyEvent::from(crossterm::event::KeyCode::Char('v')));
+    insta::assert_snapshot!(render(&mut app, 80, 24).backend());
 }

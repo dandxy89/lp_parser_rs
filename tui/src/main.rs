@@ -20,9 +20,14 @@ mod detail_model;
 mod detail_text;
 mod diagnostics;
 mod diff_model;
+#[cfg(feature = "editor")]
+mod editor;
+#[cfg(feature = "editor")]
+mod editor_mps;
 mod event;
 mod export;
 mod format;
+mod glyphs;
 mod highs_presolve;
 mod highs_query;
 mod input;
@@ -66,6 +71,7 @@ use crate::parse::parse_file;
 /// With one file it opens a single-model explorer; with two files it diffs them.
 #[derive(Parser)]
 #[command(name = "lp_diff", version, about)]
+#[allow(clippy::struct_excessive_bools)] // independent command-line flags
 struct Cli {
     /// Model file to inspect, or the base file when comparing two
     file1: PathBuf,
@@ -97,44 +103,62 @@ struct Cli {
     #[arg(long, num_args = 2, value_names = ["PATTERN", "REPLACEMENT"], action = clap::ArgAction::Append)]
     rename: Vec<String>,
 
-    /// Colour palette: detect from the terminal background, or force light/dark
-    #[arg(long, value_enum, default_value_t = ThemeArg::Auto)]
-    theme: ThemeArg,
+    /// Colour palette: `auto` (detect the terminal background, then apply the
+    /// theme file in the config directory), a built-in (dark, light, mono,
+    /// flat-dark, flat-light, high-contrast, colour-blind), or the path of a
+    /// theme file
+    #[arg(long, default_value = "auto", value_name = "NAME|PATH")]
+    theme: String,
+
+    /// Draw with ASCII only (no box-drawing, braille or arrow glyphs). On by default under a non-UTF-8 locale
+    #[arg(long)]
+    ascii: bool,
+
+    /// Replace the spinner with a static marker
+    #[arg(long)]
+    reduce_motion: bool,
 }
 
-/// `--theme` argument values.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
-enum ThemeArg {
-    /// Detect from `COLORFGBG`, then by asking the terminal, falling back to dark
-    Auto,
-    Dark,
-    Light,
-}
-
-impl ThemeArg {
-    /// Resolve to a concrete theme mode, consulting the environment for `Auto`.
-    ///
-    /// `NO_COLOR` (<https://no-color.org>) forces monochrome, but only when the
-    /// user left `--theme` at its default: an explicit `--theme dark|light` is
-    /// an intentional override and wins. Without `COLORFGBG`, the terminal is
-    /// asked for its background colour (OSC 11) when `query_terminal` allows —
-    /// not for `--summary`, which draws nothing and may be piped.
-    fn resolve(self, query_terminal: bool) -> theme::ThemeMode {
-        match self {
-            Self::Dark => theme::ThemeMode::Dark,
-            Self::Light => theme::ThemeMode::Light,
-            Self::Auto => {
-                if std::env::var_os("NO_COLOR").is_some() {
-                    return theme::ThemeMode::Mono;
-                }
-                std::env::var("COLORFGBG")
-                    .ok()
-                    .and_then(|value| theme::detect_mode_from_colorfgbg(&value))
-                    .or_else(|| query_terminal.then(|| theme::query_background_mode(BACKGROUND_QUERY_TIMEOUT)).flatten())
-                    .unwrap_or(theme::ThemeMode::Dark)
-            }
+/// Resolve `--theme` to a palette reduced to the terminal's colour depth.
+///
+/// `auto` starts from the detected light/dark palette (`NO_COLOR` selects
+/// monochrome) and applies the user's theme file when one exists. An explicit
+/// name or path wins over `NO_COLOR`, as the explicit light/dark choice always
+/// did. Without `COLORFGBG`, the terminal is asked for its background colour
+/// (OSC 11) when `query_terminal` allows — not for `--summary`, which draws
+/// nothing and may be piped.
+fn resolve_theme(arg: &str, query_terminal: bool) -> Result<theme::Theme, String> {
+    let detected = || {
+        if std::env::var_os("NO_COLOR").is_some_and(|value| !value.is_empty()) {
+            return theme::ThemeMode::Mono;
         }
-    }
+        std::env::var("COLORFGBG")
+            .ok()
+            .and_then(|value| theme::detect_mode_from_colorfgbg(&value))
+            .or_else(|| query_terminal.then(|| theme::query_background_mode(BACKGROUND_QUERY_TIMEOUT)).flatten())
+            .unwrap_or(theme::ThemeMode::Dark)
+    };
+    let read = |path: &std::path::Path, base: theme::Theme| {
+        let text = std::fs::read_to_string(path).map_err(|error| format!("cannot read theme file {}: {error}", path.display()))?;
+        theme::parse_theme_file(&text, base).map_err(|error| format!("{}: {error}", path.display()))
+    };
+    let palette = if arg == "auto" {
+        let base = theme::Theme::for_mode(detected());
+        match theme::config_path().filter(|path| path.is_file()) {
+            Some(path) => read(&path, base)?,
+            None => base,
+        }
+    } else if let Some(builtin) = theme::builtin(arg) {
+        builtin
+    } else {
+        let path = std::path::Path::new(arg);
+        if !path.is_file() {
+            return Err(format!("unknown theme `{arg}`: not a built-in name or a theme file"));
+        }
+        read(path, theme::Theme::for_mode(detected()))?
+    };
+    let depth = theme::detect_depth(std::env::var("COLORTERM").ok().as_deref(), std::env::var("TERM").ok().as_deref());
+    Ok(palette.degraded(depth))
 }
 
 /// How long to wait for the terminal to report its background colour. A
@@ -227,6 +251,9 @@ fn suspend<W: io::Write>(terminal: &mut Terminal<CrosstermBackend<W>>) -> io::Re
     Ok(())
 }
 
+/// Most frames put off in a row while input is queued.
+const MAX_DEFERRED_FRAMES: u8 = 8;
+
 /// Draw/event loop, running until the user quits.
 ///
 /// Redraws only for input, resize, or active animation — `Event::Tick` fires
@@ -237,6 +264,10 @@ fn run_event_loop<W: io::Write>(
     events: &EventHandler,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut needs_redraw = true;
+    // An event read ahead while deciding whether a frame is worth drawing, and
+    // how many frames have been put off in a row (capped so a flood still paints).
+    let mut pending: Option<Event> = None;
+    let mut deferred = 0_u8;
     // The capture state the terminal is in, so a toggle is applied once.
     let mut mouse_captured = true;
     while !app.should_quit {
@@ -248,11 +279,24 @@ fn run_event_loop<W: io::Write>(
             }
             mouse_captured = app.mouse_capture;
         }
-        if needs_redraw {
+        // With input already queued (key repeat on a slow frame), handle it
+        // first: only the last state before a lull needs painting.
+        if needs_redraw && pending.is_none() && deferred < MAX_DEFERRED_FRAMES {
+            pending = events.try_next();
+        }
+        if needs_redraw && (pending.is_none() || deferred >= MAX_DEFERRED_FRAMES) {
             terminal.draw(|frame| ui::draw(frame, app))?;
+            needs_redraw = false;
+            deferred = 0;
+        } else if needs_redraw {
+            deferred += 1;
         }
 
-        match events.next()? {
+        let event = match pending.take() {
+            Some(event) => event,
+            None => events.next()?,
+        };
+        match event {
             Event::Key(key) => {
                 // Ctrl+Z: in raw mode the terminal does not generate SIGTSTP, so
                 // suspend ourselves explicitly, restoring the terminal first.
@@ -298,7 +342,7 @@ fn run_event_loop<W: io::Write>(
 
                 app.poll_solve();
                 app.poll_watch();
-                needs_redraw = was_animating || app.is_animating();
+                needs_redraw |= was_animating || app.is_animating();
             }
             Event::Error(e) => return Err(e.into()),
         }
@@ -310,7 +354,12 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let args = Cli::parse();
 
     // Fix the palette before any cached lines are built against it.
-    theme::init_theme(args.theme.resolve(!args.summary));
+    theme::set_theme(resolve_theme(&args.theme, !args.summary)?);
+    let env = |name: &str| std::env::var(name).ok();
+    glyphs::set_ascii(
+        args.ascii || glyphs::locale_is_not_utf8(env("LC_ALL").as_deref(), env("LC_CTYPE").as_deref(), env("LANG").as_deref()),
+    );
+    glyphs::set_reduce_motion(args.reduce_motion);
 
     // Validate file existence at the CLI boundary before doing any work.
     if !args.file1.exists() {

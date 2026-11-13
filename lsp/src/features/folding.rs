@@ -3,7 +3,7 @@
 
 use std::sync::OnceLock;
 
-use tower_lsp_server::ls_types::{FoldingRange, FoldingRangeKind};
+use ls_types::{FoldingRange, FoldingRangeKind};
 use tree_sitter::Node;
 
 use crate::document::Document;

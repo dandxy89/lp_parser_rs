@@ -24,8 +24,12 @@ pkg-fmt = "zip"
 [package.metadata.binstall.overrides.aarch64-pc-windows-msvc]
 pkg-fmt = "zip"
 
+[features]
+# Source view and Vim-style editor with the language server's features, in-process.
+editor = ["dep:lp-lsp", "dep:ls-types"]
+
 [dependencies]
-lp_parser_rs = { path = "../rust", version = "5", features = ["csv", "diff", "serde", "mmap"] }
+lp_parser_rs = { path = "../rust", version = "5", features = ["csv", "diff", "serde"] }
 
 arboard = "3.6.1"
 csv = "1.4.0"
@@ -39,6 +43,8 @@ regex = "1.13.1"
 tui-input = "0.15.3"
 # Already in the tree through ratatui; used directly for width-aware truncation.
 unicode-width = "0.2.2"
+lp-lsp = { path = "../lsp", version = "1.0.0", default-features = false, optional = true }
+ls-types = { version = "0.0.6", optional = true }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2.189"

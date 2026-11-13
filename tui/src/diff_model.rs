@@ -824,7 +824,6 @@ fn constraint_summary(problem: &LpProblem, constraint: &Constraint) -> String {
             format!("Standard({} coeffs, {operator}, {rhs})", coefficients.len())
         }
         Constraint::SOS { sos_type, weights, .. } => {
-            let _ = problem; // used for consistency; SOS summary doesn't need name resolution
             format!("SOS({sos_type}, {} weights)", weights.len())
         }
         Constraint::General { resultant, function, .. } => {

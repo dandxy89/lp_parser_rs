@@ -85,6 +85,9 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
         return;
     }
 
+    // The solve tables fix their column widths when built; refit them after a resize.
+    app.refit_solve_cache(full.width);
+
     // Ensure the active section's filter cache is fresh before reading it.
     app.ensure_active_section_cache();
 
@@ -211,46 +214,52 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
     if app.show_help {
         help::draw_help(frame, frame.area(), app);
     }
+
+    // The source editor owns the whole screen when open.
+    #[cfg(feature = "editor")]
+    if app.editor.is_some() {
+        crate::widgets::source::draw_source(frame, frame.area(), app);
+    }
 }
 
 /// Key hints for the topmost open overlay, in `handle_key`'s priority order —
 /// the layer that takes the keys is the one whose keys are advertised. The
 /// last pair of each is the way out, which the status bar always keeps.
 fn overlay_hints(app: &App) -> Option<&'static str> {
+    use crate::app::Overlay;
     use crate::state::SolveState;
-    if app.search_popup.visible {
-        return Some("\u{2193}/\u{2191}:move  Tab:complete  Enter:jump  Esc:cancel");
-    }
-    if app.palette.visible {
-        return Some("\u{2193}/\u{2191}:move  Enter:run  Esc:close");
-    }
-    if app.what_if.is_some() {
-        return Some("Enter:solve  Esc:cancel");
-    }
-    if app.presolve_log.is_some() {
-        return Some("j/k:scroll  w:write .txt  Esc:close");
-    }
-    if app.presolve_cursor.is_some() {
+    Some(match app.top_overlay()? {
+        #[cfg(feature = "editor")]
+        Overlay::Editor => "gd gr K ]d [d  :w :q",
+        Overlay::Search => "\u{2193}/\u{2191}:move  Tab:complete  Enter:jump  Esc:cancel",
+        Overlay::Palette => "\u{2193}/\u{2191}:move  Enter:run  Esc:close",
+        Overlay::WhatIf => "Enter:solve  Esc:cancel",
+        Overlay::PresolveLog => "j/k:scroll  w:write .txt  Esc:close",
         // The full key list sits on the picker's own border, where it fits.
-        return Some("space:toggle  Enter:solve  Esc:close");
-    }
-    if app.diagnostics.is_some() {
-        return Some("j/k:scroll  PgDn/PgUp:page  Esc:close");
-    }
-    if app.analysis.is_open() {
-        return Some(if app.analysis.pane().is_some() { "j/k:scroll  w:write .txt  Esc:close" } else { "Esc:cancel" });
-    }
-    match app.solver.state {
-        SolveState::Idle => {}
-        SolveState::Picking => return Some("1:file 1  2:file 2  3:both  Esc:cancel"),
-        SolveState::Running { .. } | SolveState::RunningBoth { .. } => {
-            return Some(if app.solver.confirm_quit { "y:quit  n:keep solving" } else { "q:quit  Esc:cancel" });
+        Overlay::PresolveCursor => "space:toggle  Enter:solve  Esc:close",
+        Overlay::Diagnostics => "j/k:scroll  PgDn/PgUp:page  Esc:close",
+        Overlay::Analysis => {
+            if app.analysis.pane().is_some() {
+                "j/k:scroll  w:write .txt  Esc:close"
+            } else {
+                "Esc:cancel"
+            }
         }
-        SolveState::Done(_) => return Some("1-5:tabs  j/k:scroll  e:diagnose  I:IIS  w:csv  y:yank  Esc:close"),
-        SolveState::DoneBoth(_) => return Some("1-5:tabs  j/k:scroll  d:diff only  t/T:threshold  w:csv  y:yank  Esc:close"),
-        SolveState::Failed(_) => return Some("Esc:close"),
-    }
-    app.show_help.then_some("j/k:scroll  any key:close")
+        Overlay::Solve => match app.solver.state {
+            SolveState::Picking => "1:file 1  2:file 2  3:both  Esc:cancel",
+            SolveState::Running { .. } | SolveState::RunningBoth { .. } => {
+                if app.solver.confirm_quit {
+                    "y:quit  n:keep solving"
+                } else {
+                    "q:quit  Esc:cancel"
+                }
+            }
+            SolveState::Done(_) => "1-5:tabs  j/k:scroll  e:diagnose  I:IIS  w:csv  y:yank  Esc:close",
+            SolveState::DoneBoth(_) => "1-5:tabs  j/k:scroll  d:diff only  t/T:threshold  w:csv  y:yank  Esc:close",
+            SolveState::Failed(_) | SolveState::Idle => "Esc:close",
+        },
+        Overlay::Help => "j/k:scroll  Esc:close",
+    })
 }
 
 /// Pick the context-sensitive key hints for the status bar's right segment:
@@ -408,6 +417,7 @@ fn draw_too_small(frame: &mut Frame, area: Rect) {
     let lines = vec![
         Line::from(Span::styled("Terminal too small", Style::default().fg(t.removed).add_modifier(Modifier::BOLD))),
         Line::from(Span::styled(format!("Need at least {MIN_WIDTH}×{MIN_HEIGHT}"), Style::default().fg(t.muted))),
+        Line::from(Span::styled(format!("Now {}×{}", area.width, area.height), Style::default().fg(t.muted))),
     ];
     #[expect(clippy::cast_possible_truncation)] // tiny fixed message
     let popup = centred_rect(area, 24.min(area.width), (lines.len() as u16).min(area.height));
@@ -541,7 +551,7 @@ mod tests {
         app.show_help = true;
         assert!(context_hints(&app).ends_with("Esc:cancel"), "help sits below the solve overlay");
         app.solver.state = crate::state::SolveState::Idle;
-        assert_eq!(context_hints(&app), "j/k:scroll  any key:close");
+        assert_eq!(context_hints(&app), "j/k:scroll  Esc:close");
     }
 
     #[test]

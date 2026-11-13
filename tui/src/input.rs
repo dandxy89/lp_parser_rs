@@ -14,7 +14,7 @@ use crossterm::event::{Event as CrosstermEvent, KeyCode, KeyEvent, KeyEventKind,
 use lp_parser_rs::problem::LpProblem;
 use tui_input::backend::crossterm::EventHandler as _;
 
-use crate::app::{App, SolveRenderCache};
+use crate::app::{App, Overlay, PaneTarget, SolveRenderCache};
 use crate::detail_text::{format_solve_diff_result, format_solve_result};
 use crate::presolve::{Rule, Scaling, presolve};
 use crate::state::{
@@ -23,7 +23,7 @@ use crate::state::{
 };
 
 /// Lines an overlay moves per mouse-wheel notch, matching the detail panel.
-const MOUSE_SCROLL_LINES: u16 = 3;
+const MOUSE_SCROLL_LINES: usize = 3;
 
 impl App {
     pub fn handle_key(&mut self, key: KeyEvent) {
@@ -45,69 +45,40 @@ impl App {
             return;
         }
 
-        if self.search_popup.visible {
-            self.handle_search_popup_key(key);
-            return;
+        match self.top_overlay() {
+            #[cfg(feature = "editor")]
+            Some(Overlay::Editor) => self.handle_editor_key(key),
+            Some(Overlay::Search) => self.handle_search_popup_key(key),
+            Some(Overlay::Palette) => self.handle_palette_key(key),
+            Some(Overlay::WhatIf) => self.handle_what_if_key(key),
+            Some(Overlay::PresolveLog) => self.handle_presolve_log_key(key),
+            Some(Overlay::PresolveCursor) => self.handle_presolve_key(key),
+            Some(Overlay::Diagnostics) => self.handle_diagnostics_key(key),
+            Some(Overlay::Analysis) => self.handle_analysis_key(key),
+            Some(Overlay::Solve) => self.handle_solve_key(key),
+            Some(Overlay::Help) => self.handle_help_key(key),
+            None => self.handle_normal_key(key),
         }
-
-        if self.palette.visible {
-            self.handle_palette_key(key);
-            return;
-        }
-
-        if self.what_if.is_some() {
-            self.handle_what_if_key(key);
-            return;
-        }
-
-        if self.presolve_log.is_some() {
-            self.handle_presolve_log_key(key);
-            return;
-        }
-
-        if self.presolve_cursor.is_some() {
-            self.handle_presolve_key(key);
-            return;
-        }
-
-        if self.diagnostics.is_some() {
-            self.handle_diagnostics_key(key);
-            return;
-        }
-
-        if self.analysis.is_open() {
-            self.handle_analysis_key(key);
-            return;
-        }
-
-        if !matches!(self.solver.state, SolveState::Idle) {
-            self.handle_solve_key(key);
-            return;
-        }
-
-        if self.show_help {
-            self.handle_help_key(key);
-            return;
-        }
-
-        self.handle_normal_key(key);
     }
 
     /// Handle a key event while the help overlay is visible.
     ///
     /// Navigation keys scroll the help text (it can exceed the screen on small
-    /// terminals); any other key dismisses the overlay. `G`'s `u16::MAX` is
+    /// terminals); Esc, `q` or `?` dismisses it. `G`'s `usize::MAX` is
     /// clamped to the real content height when the overlay is drawn.
-    const fn handle_help_key(&mut self, key: KeyEvent) {
+    fn handle_help_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Char('j') | KeyCode::Down => self.help_scroll = self.help_scroll.saturating_add(1),
             KeyCode::Char('k') | KeyCode::Up => self.help_scroll = self.help_scroll.saturating_sub(1),
             KeyCode::Char('g') | KeyCode::Home => self.help_scroll = 0,
-            KeyCode::Char('G') | KeyCode::End => self.help_scroll = u16::MAX,
-            _ => {
+            KeyCode::Char('G') | KeyCode::End => self.help_scroll = usize::MAX,
+            KeyCode::PageDown => self.help_scroll = self.help_scroll.saturating_add(usize::from(self.layout.detail_height.max(1))),
+            KeyCode::PageUp => self.help_scroll = self.help_scroll.saturating_sub(usize::from(self.layout.detail_height.max(1))),
+            KeyCode::Esc | KeyCode::Char('q' | '?') => {
                 self.show_help = false;
                 self.help_scroll = 0;
             }
+            _ => {}
         }
     }
 
@@ -124,6 +95,11 @@ impl App {
     /// Newlines never belong in a single-line query, and a trailing one (from
     /// copying a whole line) would otherwise confirm the input prematurely.
     pub fn handle_paste(&mut self, text: &str) {
+        #[cfg(feature = "editor")]
+        if let Some(editor) = &mut self.editor {
+            editor.paste_text(text);
+            return;
+        }
         let insert = |input: &mut tui_input::Input| {
             for character in text.chars().filter(|c| !c.is_control()) {
                 input.handle(tui_input::InputRequest::InsertChar(character));
@@ -220,6 +196,13 @@ impl App {
             PaletteCommand::ToggleRawView => self.toggle_detail_view(),
             PaletteCommand::ToggleIgnoreOrder => self.toggle_ignore_order(),
             PaletteCommand::CycleSort => self.cycle_sort_mode(),
+            PaletteCommand::CycleTheme => self.cycle_theme(),
+            PaletteCommand::Messages => self.show_messages(),
+            PaletteCommand::ToggleMouse => self.toggle_mouse_capture(),
+            PaletteCommand::NarrowSidebar => self.resize_sidebar(false),
+            PaletteCommand::WidenSidebar => self.resize_sidebar(true),
+            PaletteCommand::PrevSection => self.cycle_section(false),
+            PaletteCommand::NextSection => self.cycle_section(true),
             PaletteCommand::CycleRelTol => self.cycle_rel_tol(),
             PaletteCommand::CycleAbsTol => self.cycle_abs_tol(),
             PaletteCommand::OpenSearch => self.open_search_popup(),
@@ -323,37 +306,16 @@ impl App {
         }
 
         match key.code {
-            KeyCode::Char('q') => self.should_quit = true,
+            // The Vim habit for "commands"; the palette is the same list.
+            KeyCode::Char(':') => self.open_command_palette(),
             // With only two cycle targets, backward equals forward.
             KeyCode::Tab | KeyCode::BackTab => self.cycle_focus_forward(),
-
-            // Direct section jump.
-            KeyCode::Char('1') => self.set_section(Section::Summary),
-            KeyCode::Char('2') => self.set_section(Section::Variables),
-            KeyCode::Char('3') => self.set_section(Section::Constraints),
-            KeyCode::Char('4') => self.set_section(Section::Objectives),
-            KeyCode::Char('5') => self.set_section(Section::Numerics),
-
-            // Resize the sidebar.
-            KeyCode::Char('<') => self.resize_sidebar(false),
-            KeyCode::Char('>') => self.resize_sidebar(true),
-
-            // Hand the mouse back to the terminal for native text selection.
-            KeyCode::Char('M') => self.toggle_mouse_capture(),
-
-            // Cycle sections from any focus (lazygit-style sub-tab navigation).
-            KeyCode::Char(']') => self.cycle_section(true),
-            KeyCode::Char('[') => self.cycle_section(false),
 
             // Navigation (vi-style and arrow keys).
             KeyCode::Char('j') | KeyCode::Down => self.navigate_down(),
             KeyCode::Char('k') | KeyCode::Up => self.navigate_up(),
             KeyCode::Char('g') | KeyCode::Home => self.jump_to_top(),
             KeyCode::Char('G') | KeyCode::End => self.jump_to_bottom(),
-
-            // Repeat the last confirmed search: next / previous match.
-            KeyCode::Char('n') => self.repeat_search(true),
-            KeyCode::Char('N') => self.repeat_search(false),
 
             KeyCode::Enter => self.handle_enter(),
             KeyCode::Esc => self.handle_escape(),
@@ -362,20 +324,7 @@ impl App {
             KeyCode::Char('l') => self.focus_detail(),
             KeyCode::Char('h') => self.focus_sidebar(),
 
-            // Filter shortcuts (diff-only: no-op with a hint in inspect mode).
-            KeyCode::Char('a') => self.filter_or_hint(DiffFilter::All),
-            KeyCode::Char('+') => self.filter_or_hint(DiffFilter::Added),
-            KeyCode::Char('-') => self.filter_or_hint(DiffFilter::Removed),
-            KeyCode::Char('m') => self.filter_or_hint(DiffFilter::Modified),
-            KeyCode::Char('=') => self.filter_or_hint(DiffFilter::Renamed),
-
-            // Cycle the sidebar sort mode (delta modes are diff-only).
-            KeyCode::Char('s') => self.diff_only_or(Self::cycle_sort_mode),
-
-            // Live tolerance adjustment — rebuilds the diff in place (diff-only).
-            KeyCode::Char('t') => self.diff_only_or(Self::cycle_rel_tol),
-            KeyCode::Char('T') => self.diff_only_or(Self::cycle_abs_tol),
-
+            // Unlike the palette's "Show help", the key toggles.
             KeyCode::Char('?') => {
                 self.show_help = !self.show_help;
                 self.help_scroll = 0;
@@ -383,64 +332,31 @@ impl App {
 
             // Yank (clipboard): `y` begins a chord, `Y` yanks detail immediately.
             KeyCode::Char('y') => self.pending_yank = PendingYank::WaitingForTarget,
-            KeyCode::Char('Y') => self.yank_detail(),
 
-            // Solve: inspect solves the single file directly; diff opens the picker.
-            KeyCode::Char('S') => self.start_solve(),
+            #[cfg(feature = "editor")]
+            KeyCode::Char('v') => self.open_source(false),
+            #[cfg(feature = "editor")]
+            KeyCode::Char('V') => self.open_source(true),
 
-            // What-if: edit the selected constraint's RHS and re-solve.
-            KeyCode::Char('E') => self.open_what_if(),
-
-            // Rewrite: pick presolve rules, then compare original vs rewritten.
-            KeyCode::Char('P') => self.open_presolve(),
-
-            // Diagnostics: why is the solve slow, and which rows/vars are to blame.
-            KeyCode::Char('D') => self.open_diagnostics(),
-
-            // Solve profile: compare HiGHS configurations.
-            KeyCode::Char('B') => self.open_profile(),
-
-            // Unbounded ray: which variables run to infinity.
-            KeyCode::Char('U') => self.open_unbounded_ray(),
-
-            // IIS: the minimal conflicting set.
-            KeyCode::Char('I') => self.open_iis(),
-
-            // Ranging: how far each coefficient can move.
-            KeyCode::Char('R') => self.open_ranging(),
-
-            // Export CSV (works in both modes).
-            KeyCode::Char('w') => self.export_csv(),
-
-            // Toggle raw text side-by-side diff view (diff-only).
-            KeyCode::Char('r') => self.diff_only_or(Self::toggle_detail_view),
-
-            // Toggle hiding order-only coefficient changes (diff-only).
-            KeyCode::Char('o') => self.diff_only_or(Self::toggle_ignore_order),
-
-            // Open the search pop-up.
-            KeyCode::Char('/') => self.open_search_popup(),
+            // Every other single-character key is the command table's: the one
+            // place a key is bound to an action, shared with the palette.
+            KeyCode::Char(c) => {
+                if let Some(command) = PaletteCommand::from_key(c) {
+                    self.run_command_from_key(command);
+                }
+            }
 
             _ => {}
         }
     }
 
-    /// Apply a kind filter in diff mode; in inspect mode filters are diff-only,
-    /// so this shows a brief hint instead.
-    fn filter_or_hint(&mut self, filter: DiffFilter) {
-        if self.mode == AppMode::Inspect {
+    /// Run `command` from its direct key. Diff-only commands show a hint in
+    /// inspect mode, where the palette hides them.
+    fn run_command_from_key(&mut self, command: PaletteCommand) {
+        if self.mode == AppMode::Inspect && !command.available_in_inspect() {
             self.flash_diff_only();
         } else {
-            self.set_filter(filter);
-        }
-    }
-
-    /// Run a diff-only action, or show a brief hint when in inspect mode.
-    fn diff_only_or(&mut self, action: fn(&mut Self)) {
-        if self.mode == AppMode::Inspect {
-            self.flash_diff_only();
-        } else {
-            action(self);
+            self.run_palette_command(command);
         }
     }
 
@@ -751,7 +667,7 @@ impl App {
     /// Returns `true` if the key was consumed by shared navigation.
     fn handle_solve_results_nav(&mut self, key: KeyEvent) -> bool {
         match key.code {
-            KeyCode::Esc => self.solver.close_overlay(),
+            KeyCode::Esc | KeyCode::Char('q') => self.solver.close_overlay(),
             KeyCode::Char('1') => self.switch_solve_tab(SolveTab::Summary),
             KeyCode::Char('2') => self.switch_solve_tab(SolveTab::Variables),
             KeyCode::Char('3') => self.switch_solve_tab(SolveTab::Constraints),
@@ -766,6 +682,14 @@ impl App {
             KeyCode::Char('k') | KeyCode::Up => {
                 let tab_index = self.solver.view.tab.index();
                 self.solver.view.scroll[tab_index] = self.solver.view.scroll[tab_index].saturating_sub(1);
+            }
+            KeyCode::Char('g') | KeyCode::Home => self.solver.view.scroll[self.solver.view.tab.index()] = 0,
+            // Clamped against the real content height when the overlay is drawn.
+            KeyCode::Char('G') | KeyCode::End => self.solver.view.scroll[self.solver.view.tab.index()] = usize::MAX,
+            KeyCode::PageDown | KeyCode::PageUp => {
+                let page = usize::from(self.layout.detail_height.max(1));
+                let scroll = &mut self.solver.view.scroll[self.solver.view.tab.index()];
+                *scroll = if key.code == KeyCode::PageDown { scroll.saturating_add(page) } else { scroll.saturating_sub(page) };
             }
             _ => return false,
         }
@@ -1170,30 +1094,48 @@ impl App {
             self.open_highs_presolve_log();
             return;
         }
-        let (_, stats) = presolve(&self.problem1, self.presolve_rules);
-        let lines = crate::widgets::presolve::log_lines(&stats);
-        let export = ("presolve_log.txt", stats.log_text());
-        self.last_presolve = Some(stats);
-        self.presolve_cursor = None;
-        self.presolve_log = Some(crate::state::ScrollPane { lines, scroll: 0, export: Some(export) });
+        let (problem, rules) = (Arc::clone(&self.problem1), self.presolve_rules);
+        self.spawn_pane(PaneTarget::PresolveLog, "Presolve log", move || {
+            let (_, stats) = presolve(&problem, rules);
+            let lines = crate::widgets::presolve::log_lines(&stats);
+            let export = ("presolve_log.txt", stats.log_text());
+            Ok((crate::state::ScrollPane { lines, scroll: 0, export: Some(export) }, Some(stats)))
+        });
     }
 
     /// Open the `HiGHS` presolve report (`H` from the picker): which rows and
     /// columns the *solver* throws away before it starts, on the file as
     /// written, with none of our rewrites applied.
     ///
-    /// Runs on this thread like the rewrite does. `HiGHS` presolve is a
-    /// fraction of a solve, and the picker is already a modal moment.
+    /// Runs on a worker thread: the presolve is a fraction of a solve, but on a
+    /// large model that is still long enough to freeze the UI.
     fn open_highs_presolve_log(&mut self) {
-        match crate::highs_presolve::highs_presolve(&self.problem1) {
-            Ok(report) => {
-                let lines = crate::widgets::presolve::highs_log_lines(&report);
-                let export = ("highs_presolve.txt", report.log_text());
-                self.presolve_cursor = None;
-                self.presolve_log = Some(crate::state::ScrollPane { lines, scroll: 0, export: Some(export) });
-            }
-            Err(error) => self.flash_error(format!("HiGHS presolve: {error}")),
+        let problem = Arc::clone(&self.problem1);
+        self.spawn_pane(PaneTarget::PresolveLog, "HiGHS presolve", move || {
+            let report = crate::highs_presolve::highs_presolve(&problem)?;
+            let lines = crate::widgets::presolve::highs_log_lines(&report);
+            let export = ("highs_presolve.txt", report.log_text());
+            Ok((crate::state::ScrollPane { lines, scroll: 0, export: Some(export) }, None))
+        });
+    }
+
+    /// Run `build` on a worker thread and install its pane when it finishes.
+    fn spawn_pane<F>(&mut self, target: PaneTarget, label: &'static str, build: F)
+    where
+        F: FnOnce() -> crate::app::PaneResult + Send + 'static,
+    {
+        if self.pane_job.is_some() {
+            self.flash_warn(format!("{label}: another pane is still building"));
+            return;
         }
+        let (sender, receiver) = mpsc::channel();
+        self.pane_job = Some(crate::app::PaneJob { target, label, receiver });
+        self.flash_status(format!("{label}: working\u{2026}"));
+        std::thread::spawn(move || {
+            // A dropped receiver (the model was reloaded meanwhile) is expected, and
+            // stderr is the alternate screen, so a failed send stays silent.
+            drop(sender.send(build()));
+        });
     }
 
     /// Handle a key event while the presolve log pane is open.
@@ -1208,7 +1150,7 @@ impl App {
             debug_assert!(false, "handle_presolve_log_key called with the pane closed");
             return;
         };
-        if !pane.scroll_key(key.code, page_size) {
+        if !pane.handle_key(key, page_size) {
             self.presolve_log = None;
         }
     }
@@ -1326,12 +1268,16 @@ impl App {
     /// Open the diagnostics pane, analysing the baseline problem against the
     /// most recent solve.
     ///
-    /// The analysis runs here rather than per frame: it is a full pass over the
-    /// matrix, and the result only changes when the model or the solve does.
-    fn open_diagnostics(&mut self) {
-        let diagnostics = crate::diagnostics::analyse(&self.problem1, self.latest_solve_result());
-        let lines = crate::widgets::diagnostics::build_lines(&diagnostics);
-        self.diagnostics = Some(crate::state::ScrollPane { lines, scroll: 0, export: None });
+    /// The analysis runs once on a worker thread rather than per frame: it is a
+    /// full pass over the matrix, and the result only changes when the model or
+    /// the solve does.
+    pub(crate) fn open_diagnostics(&mut self) {
+        let (problem, solve) = (Arc::clone(&self.problem1), self.latest_solve_result().cloned());
+        self.spawn_pane(PaneTarget::Diagnostics, "Diagnostics", move || {
+            let diagnostics = crate::diagnostics::analyse(&problem, solve.as_ref());
+            let lines = crate::widgets::diagnostics::build_lines(&diagnostics);
+            Ok((crate::state::ScrollPane { lines, scroll: 0, export: None }, None))
+        });
     }
 
     /// Handle a key event while the diagnostics pane is open.
@@ -1341,15 +1287,15 @@ impl App {
             debug_assert!(false, "handle_diagnostics_key called with the pane closed");
             return;
         };
-        if !pane.scroll_key(key.code, page_size) {
+        if !pane.handle_key(key, page_size) {
             self.diagnostics = None;
         }
     }
 
     /// Handle a key event while the analysis pane is open.
     ///
-    /// `w` writes the report; any non-scroll key closes the pane, including
-    /// while it is still running — the worker's send then fails harmlessly.
+    /// `w` writes the report; Esc/`q` close the pane (any key while it is
+    /// running or failed, where there is nothing to scroll) — the worker's send then fails harmlessly.
     fn handle_analysis_key(&mut self, key: KeyEvent) {
         let page_size = self.layout.detail_height.max(1);
         if matches!(key.code, KeyCode::Char('w')) {
@@ -1359,7 +1305,7 @@ impl App {
             return;
         }
         let scrolled = match &mut self.analysis {
-            AnalysisState::Done { pane, .. } => pane.scroll_key(key.code, page_size),
+            AnalysisState::Done { pane, .. } => pane.handle_key(key, page_size),
             // Nothing to scroll while it runs or after it failed: any key closes.
             _ => false,
         };
@@ -1530,7 +1476,7 @@ impl App {
     fn select_section_via_selector(&mut self, new_section: Section) {
         if self.active_section != new_section {
             self.set_active_section(new_section);
-            self.invalidate_cache();
+            self.coeff_row_cache = None;
             self.ensure_active_section_cache();
             self.reselect_entry(None);
             self.detail_scroll = 0;
@@ -1540,7 +1486,9 @@ impl App {
     pub(crate) fn set_section(&mut self, section: Section) {
         self.record_jump();
         self.set_active_section(section);
-        self.invalidate_cache();
+        // Section caches depend on filter, sort and report only; each is
+        // invalidated when one of those changes, so a plain switch keeps them.
+        self.coeff_row_cache = None;
         self.ensure_active_section_cache();
         self.reselect_entry(None);
         self.detail_scroll = 0;
@@ -1603,34 +1551,24 @@ impl App {
     /// The scroll offset of the topmost open overlay, taken in `handle_key`'s
     /// priority order, or `None` when that overlay does not scroll (a prompt,
     /// a picker, a running solve or analysis).
-    fn overlay_scroll_mut(&mut self) -> Option<&mut u16> {
-        if self.search_popup.visible || self.palette.visible || self.what_if.is_some() {
-            return None;
-        }
-        if let Some(pane) = &mut self.presolve_log {
-            return Some(&mut pane.scroll);
-        }
-        if self.presolve_cursor.is_some() {
-            return None;
-        }
-        if let Some(pane) = &mut self.diagnostics {
-            return Some(&mut pane.scroll);
-        }
-        if self.analysis.is_open() {
-            return match &mut self.analysis {
+    fn overlay_scroll_mut(&mut self) -> Option<&mut usize> {
+        match self.top_overlay()? {
+            Overlay::PresolveLog => self.presolve_log.as_mut().map(|pane| &mut pane.scroll),
+            Overlay::Diagnostics => self.diagnostics.as_mut().map(|pane| &mut pane.scroll),
+            Overlay::Analysis => match &mut self.analysis {
                 AnalysisState::Done { pane, .. } => Some(&mut pane.scroll),
                 _ => None,
-            };
+            },
+            Overlay::Solve => match self.solver.state {
+                SolveState::Done(_) | SolveState::DoneBoth(_) => {
+                    let tab = self.solver.view.tab.index();
+                    Some(&mut self.solver.view.scroll[tab])
+                }
+                _ => None,
+            },
+            Overlay::Help => Some(&mut self.help_scroll),
+            _ => None,
         }
-        match self.solver.state {
-            SolveState::Done(_) | SolveState::DoneBoth(_) => {
-                let tab = self.solver.view.tab.index();
-                return Some(&mut self.solver.view.scroll[tab]);
-            }
-            SolveState::Idle => {}
-            _ => return None,
-        }
-        self.show_help.then_some(&mut self.help_scroll)
     }
 
     /// Scroll the name list by one step without touching focus.
@@ -1743,6 +1681,56 @@ fn iis_pane(problem: &LpProblem) -> Result<crate::state::ScrollPane, String> {
         scroll: 0,
         export: Some(("iis.txt", crate::widgets::highs_query::iis_export(&report))),
     })
+}
+
+#[cfg(feature = "editor")]
+impl App {
+    /// Open the source of file 1 (`second` = false) or file 2 in the editor,
+    /// at the selected entry. In inspect mode there is only the one file.
+    pub(crate) fn open_source(&mut self, second: bool) {
+        let (path, text) =
+            if second && self.mode == AppMode::Diff { (&self.file2_path, &self.raw_text2) } else { (&self.file1_path, &self.raw_text1) };
+        let is_lp = !path.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("mps"));
+        let selected = self.selected_entry_name().map(str::to_owned);
+        let mut editor = crate::editor::Editor::open(path, text, is_lp);
+        if let Some(name) = selected {
+            editor.goto_name(&name);
+        }
+        self.editor = Some(Box::new(editor));
+    }
+
+    fn handle_editor_key(&mut self, key: KeyEvent) {
+        use crate::editor::Outcome;
+        let Some(editor) = &mut self.editor else { return };
+        let height = editor.height;
+        let outcome = editor.handle_key(key, height);
+        let saved = std::mem::take(&mut editor.saved);
+        if saved {
+            self.reload_after_save();
+        }
+        match outcome {
+            Outcome::Stay => {}
+            Outcome::Close => self.editor = None,
+            Outcome::SelectEntry(name) => {
+                self.editor = None;
+                let found = [Section::Constraints, Section::Objectives, Section::Variables]
+                    .into_iter()
+                    .find_map(|section| self.entry_index_by_name(section, &name).map(|index| (section, index)));
+                match found {
+                    Some((section, index)) => self.jump_to_entry(section, index),
+                    None => self.flash_warn(format!("`{name}` is not an entry in the parsed model")),
+                }
+            }
+        }
+    }
+
+    /// Re-parse both files after the editor wrote one, so the parsed views match the disk.
+    fn reload_after_save(&mut self) {
+        match crate::watch::reload_files(&self.file1_path, &self.file2_path) {
+            Ok(parsed) => self.apply_reload(*parsed),
+            Err(error) => self.flash_error(format!("saved, but the model no longer parses: {error}")),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -2025,6 +2013,12 @@ mod tests {
         assert!(app.presolve_cursor.is_some(), "P opens the picker");
 
         app.handle_key(KeyEvent::from(KeyCode::Char('l')));
+        let deadline = Instant::now() + std::time::Duration::from_secs(10);
+        while app.pane_job.is_some() {
+            assert!(Instant::now() < deadline, "the worker never finished");
+            app.poll_solve();
+            std::thread::yield_now();
+        }
         let pane = app.presolve_log.as_ref().expect("l opens the log pane");
         assert!(!pane.lines.is_empty(), "the pane is built with the run's lines");
         assert!(app.presolve_cursor.is_none(), "the picker closes behind it");
@@ -2045,5 +2039,26 @@ mod tests {
         assert!(app.presolve_rules.iter().all(|on| !*on), "a with any on turns everything off: {:?}", app.presolve_rules);
         app.handle_key(KeyEvent::from(KeyCode::Char('a')));
         assert!(app.presolve_rules.iter().all(|on| *on), "a with none on turns everything on");
+    }
+
+    #[cfg(feature = "editor")]
+    #[test]
+    fn v_opens_the_source_at_the_selection_and_enter_selects_back() {
+        let mut app = crate::snapshot_tests::inspect_app_from(crate::snapshot_tests::BASE_LP);
+        app.handle_key(KeyEvent::from(KeyCode::Char('3')));
+        app.handle_key(KeyEvent::from(KeyCode::Char('j')));
+        let selected = app.selected_entry_name().map(str::to_owned).expect("a constraint is selected");
+        app.handle_key(KeyEvent::from(KeyCode::Char('v')));
+        let editor = app.editor.as_ref().expect("v opens the editor");
+        assert!(editor.lsp, "an .lp file gets language features");
+        assert!(editor.doc.text.contains(&selected));
+        assert!(editor.doc.text[editor.cursor..].starts_with(&selected), "the cursor starts on the selected entry's label");
+
+        // Keys go to the editor, not the main view: `q` must not quit.
+        app.handle_key(KeyEvent::from(KeyCode::Char('q')));
+        assert!(!app.should_quit);
+        app.handle_key(KeyEvent::from(KeyCode::Enter));
+        assert!(app.editor.is_none(), "Enter returns to the parsed view");
+        assert_eq!(app.selected_entry_name(), Some(selected.as_str()), "on the entry under the cursor");
     }
 }

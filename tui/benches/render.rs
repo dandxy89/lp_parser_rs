@@ -22,12 +22,20 @@ mod detail_text;
 mod diagnostics;
 #[path = "../src/diff_model.rs"]
 mod diff_model;
+#[cfg(feature = "editor")]
+#[path = "../src/editor.rs"]
+mod editor;
+#[cfg(feature = "editor")]
+#[path = "../src/editor_mps.rs"]
+mod editor_mps;
 #[path = "../src/event.rs"]
 mod event;
 #[path = "../src/export.rs"]
 mod export;
 #[path = "../src/format.rs"]
 mod format;
+#[path = "../src/glyphs.rs"]
+mod glyphs;
 #[path = "../src/highs_presolve.rs"]
 mod highs_presolve;
 #[path = "../src/highs_query.rs"]

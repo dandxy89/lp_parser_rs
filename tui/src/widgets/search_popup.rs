@@ -16,7 +16,7 @@ use crate::app::App;
 use crate::search;
 use crate::state::{SearchResult, Section};
 use crate::theme::theme;
-use crate::widgets::{SELECTION_CURSOR, detail, kind_prefix, kind_style, panel_block, selection_style, sidebar, summary, zebra_style};
+use crate::widgets::{detail, kind_prefix, kind_style, panel_block, selection_cursor, selection_style, sidebar, summary, zebra_style};
 
 /// Section tag prefix for display in results list.
 const fn section_tag(section: Section) -> &'static str {
@@ -75,7 +75,14 @@ pub fn draw_search_popup(frame: &mut Frame, area: Rect, app: &App) {
     ])
     .split(v_chunks[2]);
 
-    draw_results_list(frame, h_chunks[0], &app.search_popup.cached_result_lines, app.search_popup.results.len(), app.search_popup.selected);
+    draw_results_list(
+        frame,
+        h_chunks[0],
+        &app.search_popup.results,
+        &app.search_name_buffer,
+        app.mode.shows_diff_badges(),
+        app.search_popup.selected,
+    );
     draw_detail_preview(frame, h_chunks[1], app);
 
     // Bottom bar: hints
@@ -103,9 +110,10 @@ fn draw_search_input(frame: &mut Frame, area: Rect, query: &tui_input::Input, mo
     frame.render_widget(Paragraph::new(Span::styled(right_text, Style::default().fg(t.muted))), chunks[1]);
 }
 
-/// Build pre-styled `Line`s for all search results, to be cached on `SearchPopupState`.
+/// Build styled `Line`s for `results`.
 ///
-/// Called once per query change rather than every frame. `show_badges` gates the
+/// The popup calls this only for the rows in view, so the cost per frame is
+/// the window height, not the result count. `show_badges` gates the
 /// `[+]/[-]/[~]` diff prefix and its colour (mirroring the sidebar): diff mode
 /// passes `true`; inspect mode passes `false` so results render as plain,
 /// neutrally-coloured names with only the section tag.
@@ -136,19 +144,18 @@ pub fn build_result_lines(results: &[SearchResult], names: &[String], show_badge
         .collect()
 }
 
-/// Draw the ranked results list on the left side using pre-built cached lines.
+/// Draw the ranked results list on the left side.
 ///
-/// Only the rows in view are handed to the `List`: the window is the one a
-/// fresh `ListState` would scroll to (the selection on the last row once it
-/// is past the first screenful), so cloning every cached line per frame buys
-/// nothing.
-fn draw_results_list(frame: &mut Frame, area: Rect, cached_lines: &[Line<'static>], result_count: usize, selected: usize) {
+/// Only the rows in view are styled and handed to the `List`: the window is the
+/// one a fresh `ListState` would scroll to (the selection on the last row once
+/// it is past the first screenful).
+fn draw_results_list(frame: &mut Frame, area: Rect, results: &[SearchResult], names: &[String], show_badges: bool, selected: usize) {
     let t = theme();
+    let result_count = results.len();
     let visible = area.height.saturating_sub(2) as usize;
-    let offset = selected.saturating_sub(visible.saturating_sub(1)).min(cached_lines.len());
-    let window = &cached_lines[offset..(offset + visible).min(cached_lines.len())];
-    let items: Vec<ListItem> =
-        window.iter().enumerate().map(|(i, line)| ListItem::new(line.clone()).style(zebra_style(offset + i))).collect();
+    let offset = selected.saturating_sub(visible.saturating_sub(1)).min(result_count);
+    let window = build_result_lines(&results[offset..(offset + visible).min(result_count)], names, show_badges);
+    let items: Vec<ListItem> = window.into_iter().enumerate().map(|(i, line)| ListItem::new(line).style(zebra_style(offset + i))).collect();
 
     let block = panel_block(Style::default().fg(t.border)).title(" Results ");
 
@@ -158,7 +165,7 @@ fn draw_results_list(frame: &mut Frame, area: Rect, cached_lines: &[Line<'static
         state.select(Some(selected - offset));
     }
 
-    let list = List::new(items).block(block).highlight_style(selection_style(true)).highlight_symbol(SELECTION_CURSOR);
+    let list = List::new(items).block(block).highlight_style(selection_style(true)).highlight_symbol(selection_cursor());
 
     frame.render_stateful_widget(list, area, &mut state);
 
@@ -319,7 +326,9 @@ mod tests {
         use ratatui::Terminal;
         use ratatui::backend::TestBackend;
 
-        let lines: Vec<Line<'static>> = (0..100).map(|i| Line::from(format!("result {i}"))).collect();
+        let names: Vec<String> = (0..100).map(|i| format!("result{i}")).collect();
+        let results: Vec<SearchResult> = (0..100).map(|i| result(i, DiffKind::Added)).collect();
+        let lines = build_result_lines(&results, &names, true);
         let area = Rect::new(0, 0, 30, 12);
         let draw = |f: &dyn Fn(&mut Frame)| {
             let mut terminal = Terminal::new(TestBackend::new(area.width, area.height)).expect("test terminal must build");
@@ -327,14 +336,14 @@ mod tests {
             terminal.backend().buffer().clone()
         };
         for selected in [0, 1, 9, 10, 11, 57, 99] {
-            let windowed = draw(&|frame| draw_results_list(frame, area, &lines, lines.len(), selected));
+            let windowed = draw(&|frame| draw_results_list(frame, area, &results, &names, true, selected));
             let full = draw(&|frame| {
                 let items: Vec<ListItem> =
                     lines.iter().enumerate().map(|(i, line)| ListItem::new(line.clone()).style(zebra_style(i))).collect();
                 let block = panel_block(Style::default().fg(theme().border)).title(" Results ");
                 let mut state = ListState::default();
                 state.select(Some(selected));
-                let list = List::new(items).block(block).highlight_style(selection_style(true)).highlight_symbol(SELECTION_CURSOR);
+                let list = List::new(items).block(block).highlight_style(selection_style(true)).highlight_symbol(selection_cursor());
                 frame.render_stateful_widget(list, area, &mut state);
                 let mut scrollbar_state = ScrollbarState::new(lines.len()).position(selected);
                 crate::widgets::render_panel_scrollbar(frame, area, &mut scrollbar_state);

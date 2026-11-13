@@ -68,7 +68,9 @@ impl EventHandler {
                     // Focus and other crossterm events are intentionally ignored.
                     let forwarded = match read_result {
                         CrosstermEvent::Key(key) => Some(Event::Key(key)),
-                        CrosstermEvent::Mouse(mouse) => Some(Event::Mouse(mouse)),
+                        // Motion nothing reacts to is dropped here, so a moving pointer
+                        // cannot keep the loop busy and starve the tick.
+                        CrosstermEvent::Mouse(mouse) if crate::input::mouse_event_is_actionable(mouse.kind) => Some(Event::Mouse(mouse)),
                         CrosstermEvent::Paste(text) => Some(Event::Paste(text)),
                         CrosstermEvent::Resize(_, _) => Some(Event::Resize),
                         _ => None,
@@ -85,6 +87,11 @@ impl EventHandler {
         });
 
         Self { rx }
+    }
+
+    /// The next event if one is already queued.
+    pub fn try_next(&self) -> Option<Event> {
+        self.rx.try_recv().ok() // ponytail: Empty and Disconnected both end the drain; `next` reports a dead channel
     }
 
     /// Block until the next event is available.

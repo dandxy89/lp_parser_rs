@@ -19,7 +19,7 @@ const HELP_TEXT: &[&str] = &[
     "  Navigation              Filters             Other",
     "  ─────────               ───────             ─────",
     "  j / ↓     Down          a   All             /       Search",
-    "  k / ↑     Up            +   Added           Ctrl-p  Command palette",
+    "  k / ↑     Up            +   Added           Ctrl-p  Commands (or :)",
     "  g / Home  Top           -   Removed         ?       This help",
     "  G / End   Bottom        m   Modified        q       Quit",
     "  [ / ]     Prev/next     =   Renamed         Ctrl-C  Force quit",
@@ -49,8 +49,7 @@ const HELP_TEXT: &[&str] = &[
     "  U       Unbounded: which variables run away?",
     "  I       Infeasible: minimal conflicting set",
     "  R       Ranging: how far can a coefficient move?",
-    "  Tab     Next panel",
-    "  ⇧Tab    Prev panel",
+    "  Tab     Next panel (⇧Tab too)",
     "  Enter   Go to detail",
     "  h / l   Sidebar / Detail",
     "  1–5     Jump to section (5: Numerics)",
@@ -102,7 +101,7 @@ const INSPECT_HELP_TEXT: &[&str] = &[
     "  Navigation                                      Other",
     "  ─────────                                       ─────",
     "  j / ↓            Down                           /       Search",
-    "  k / ↑            Up                             Ctrl-p  Command palette",
+    "  k / ↑            Up                             Ctrl-p  Commands (or :)",
     "  g / Home         Top                            ?       This help",
     "  G / End          Bottom                         q       Quit",
     "  [ / ]            Prev/next section              Ctrl-C  Force quit",
@@ -110,7 +109,7 @@ const INSPECT_HELP_TEXT: &[&str] = &[
     "  Ctrl-d / Ctrl-u  Half page ↓ / ↑                Clipboard",
     "  Ctrl-f / Ctrl-b  Full page ↓ / ↑                ─────────",
     "  Ctrl-o / Ctrl-i  Jump back / forward            yy      Yank name",
-    "  Tab / ⇧Tab       Next / prev panel              Y       Yank detail",
+    "  Tab / ⇧Tab       Next panel (cycles)            Y       Yank detail",
     "  Enter            Go to detail                   w       Export CSV",
     "  h / l            Sidebar / Detail",
     "  1–5              Jump to section (5: Numerics)",
@@ -245,7 +244,7 @@ fn style_help<S: AsRef<str>>(text: &[S]) -> Vec<Line<'static>> {
     let t = theme();
     let body = Style::default().fg(t.text);
     let rule = Style::default().fg(t.muted);
-    let heading = Style::default().fg(t.accent).add_modifier(Modifier::BOLD);
+    let heading = Style::default().fg(t.heading).add_modifier(Modifier::BOLD);
     let is_rule = |line: &str| {
         let trimmed = line.trim();
         !trimmed.is_empty() && trimmed.chars().all(|c| c == '\u{2500}' || c == ' ')
@@ -266,24 +265,16 @@ fn style_help<S: AsRef<str>>(text: &[S]) -> Vec<Line<'static>> {
         .collect()
 }
 
-/// Pre-built diff help text lines, cached to avoid per-frame allocation.
-static HELP_LINES: LazyLock<Vec<Line<'static>>> = LazyLock::new(|| style_help(HELP_TEXT));
-
-/// Pre-built inspect help text lines, cached to avoid per-frame allocation.
-static INSPECT_HELP_LINES: LazyLock<Vec<Line<'static>>> = LazyLock::new(|| style_help(INSPECT_HELP_TEXT));
-
 /// The diff help with its key tables stacked, for narrow terminals.
 static NARROW_HELP_TEXT: LazyLock<Vec<String>> = LazyLock::new(|| stack_columns(HELP_TEXT, &HELP_COLUMNS));
-static NARROW_HELP_LINES: LazyLock<Vec<Line<'static>>> = LazyLock::new(|| style_help(&NARROW_HELP_TEXT));
 
 /// The inspect help with its key tables stacked, for narrow terminals.
 static NARROW_INSPECT_HELP_TEXT: LazyLock<Vec<String>> = LazyLock::new(|| stack_columns(INSPECT_HELP_TEXT, &INSPECT_HELP_COLUMNS));
-static NARROW_INSPECT_HELP_LINES: LazyLock<Vec<Line<'static>>> = LazyLock::new(|| style_help(&NARROW_INSPECT_HELP_TEXT));
 
 /// Draw a centred help pop-up overlay on top of the current frame.
 ///
 /// Takes `&mut App` so the scroll offset can be clamped to the real content
-/// height: `G`/End sets `help_scroll` to `u16::MAX`, which is corrected here
+/// height: `G`/End sets `help_scroll` to `usize::MAX`, which is corrected here
 /// once the visible window is known.
 ///
 /// Below the width the side-by-side key tables need, the stacked layout is
@@ -297,18 +288,18 @@ pub fn draw_help(frame: &mut Frame, area: Rect, app: &mut App) {
     let inspect = app.mode == crate::state::AppMode::Inspect;
     let wide_text = if inspect { INSPECT_HELP_TEXT } else { HELP_TEXT };
     let narrow = area.width < desired_width(wide_text);
-    let (width, help_lines): (u16, &[Line<'static>]) = match (inspect, narrow) {
-        (false, false) => (desired_width(HELP_TEXT), &HELP_LINES),
-        (true, false) => (desired_width(INSPECT_HELP_TEXT), &INSPECT_HELP_LINES),
-        (false, true) => (desired_width(&NARROW_HELP_TEXT), &NARROW_HELP_LINES),
-        (true, true) => (desired_width(&NARROW_INSPECT_HELP_TEXT), &NARROW_INSPECT_HELP_LINES),
+    // Styled per draw, not cached: the lines carry theme colours, and the theme can change.
+    let (width, help_lines): (u16, Vec<Line<'static>>) = match (inspect, narrow) {
+        (false, false) => (desired_width(HELP_TEXT), style_help(HELP_TEXT)),
+        (true, false) => (desired_width(INSPECT_HELP_TEXT), style_help(INSPECT_HELP_TEXT)),
+        (false, true) => (desired_width(&NARROW_HELP_TEXT), style_help(&NARROW_HELP_TEXT)),
+        (true, true) => (desired_width(&NARROW_INSPECT_HELP_TEXT), style_help(&NARROW_INSPECT_HELP_TEXT)),
     };
 
     let popup = super::centred_rect(area, width, desired_height(help_lines.len()));
 
     let inner_height = popup.height.saturating_sub(2) as usize;
-    #[expect(clippy::cast_possible_truncation)] // help text is a few dozen lines
-    let max_scroll = help_lines.len().saturating_sub(inner_height) as u16;
+    let max_scroll = help_lines.len().saturating_sub(inner_height);
     app.help_scroll = app.help_scroll.min(max_scroll);
 
     let t = theme();
@@ -320,7 +311,7 @@ pub fn draw_help(frame: &mut Frame, area: Rect, app: &mut App) {
     };
     let block = panel_block(border_style).title(title);
 
-    let paragraph = Paragraph::new(help_lines.to_vec()).block(block).scroll((app.help_scroll, 0));
+    let paragraph = Paragraph::new(help_lines).block(block).scroll((u16::try_from(app.help_scroll).unwrap_or(u16::MAX), 0));
 
     frame.render_widget(Clear, popup);
     frame.render_widget(paragraph, popup);
@@ -335,7 +326,7 @@ mod tests {
         for (text, block) in [(HELP_TEXT, &HELP_COLUMNS), (INSPECT_HELP_TEXT, &INSPECT_HELP_COLUMNS)] {
             let stacked = stack_columns(text, block);
             assert!(desired_width(&stacked) <= 64, "the stacked help must fit 64 columns: {}", desired_width(&stacked));
-            for key in ["Ctrl-p  Command palette", "yy      Yank name", "Ctrl-C  Force quit", "Search Modes"] {
+            for key in ["Ctrl-p  Commands (or :)", "yy      Yank name", "Ctrl-C  Force quit", "Search Modes"] {
                 assert!(stacked.iter().any(|line| line.contains(key)), "{key:?} must survive the re-flow");
             }
         }

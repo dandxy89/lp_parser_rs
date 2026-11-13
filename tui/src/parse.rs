@@ -43,8 +43,9 @@ pub fn parse_text(content: &str, is_mps: bool, label: &str) -> Result<ParsedFile
 /// Parse an LP or MPS file, returning the problem, analysis, and a constraint→line-number map.
 ///
 /// Format is detected by file extension: `.mps` (case-insensitive) uses the MPS parser,
-/// everything else uses the LP parser. The file is memory-mapped for parsing; the text
-/// is copied once, into the returned `String`, because the raw view outlives the map.
+/// everything else uses the LP parser. The file is read in full (not memory-mapped:
+/// `--watch` re-parses while the file is being rewritten) and the text is kept in
+/// the returned `String` for the raw view.
 pub fn parse_file(path: &Path) -> Result<ParsedFile, Box<dyn std::error::Error + Send + Sync>> {
     debug_assert!(path.exists(), "parse_file called with non-existent path: {}", path.display());
 

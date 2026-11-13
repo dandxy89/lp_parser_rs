@@ -30,7 +30,7 @@ pub fn bold_text() -> Style {
 
 /// Style for the sidebar delta column shown under the delta sorts.
 pub fn delta_column() -> Style {
-    Style::new().fg(theme().accent)
+    Style::new().fg(theme().info)
 }
 
 /// Arrow separator used between old → new values.
@@ -60,6 +60,18 @@ pub fn focus_border_style(current: Focus, target: Focus) -> Style {
     }
 }
 
+/// Panel border drawn with `+ - |` when the terminal cannot show box-drawing characters.
+const ASCII_BORDER: ratatui::symbols::border::Set = ratatui::symbols::border::Set {
+    top_left: "+",
+    top_right: "+",
+    bottom_left: "+",
+    bottom_right: "+",
+    vertical_left: "|",
+    vertical_right: "|",
+    horizontal_top: "-",
+    horizontal_bottom: "-",
+};
+
 /// Standard rounded panel block used by every bordered widget.
 ///
 /// A bold border style marks the panel holding focus (see
@@ -68,16 +80,26 @@ pub fn focus_border_style(current: Focus, target: Focus) -> Style {
 /// drawn with heavy lines instead.
 pub fn panel_block(border_style: Style) -> Block<'static> {
     let focused = border_style.add_modifier.contains(Modifier::BOLD);
-    let block = Block::default().borders(Borders::ALL).border_type(border_type(focused, theme().focus_thick)).border_style(border_style);
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(border_type(focused, theme().focus_thick, theme().square))
+        .border_style(border_style);
+    let block = if crate::glyphs::ascii() { block.border_set(ASCII_BORDER) } else { block };
     // A focused panel's title takes its border's colour too; spans that carry
     // their own colour (a diff badge) keep it.
     if focused { block.title_style(border_style) } else { block }
 }
 
 /// Line style of a panel border: heavy for the focused panel when the palette
-/// marks focus by weight rather than colour, rounded otherwise.
-const fn border_type(focused: bool, focus_thick: bool) -> BorderType {
-    if focused && focus_thick { BorderType::Thick } else { BorderType::Rounded }
+/// marks focus by weight rather than colour, then square or rounded corners.
+const fn border_type(focused: bool, focus_thick: bool, square: bool) -> BorderType {
+    if focused && focus_thick {
+        BorderType::Thick
+    } else if square {
+        BorderType::Plain
+    } else {
+        BorderType::Rounded
+    }
 }
 
 /// Standard vertical scrollbar: a hairline track and a hairline thumb, no end
@@ -87,9 +109,9 @@ const fn border_type(focused: bool, focus_thick: bool) -> BorderType {
 pub fn panel_scrollbar() -> Scrollbar<'static> {
     let t = theme();
     Scrollbar::new(ScrollbarOrientation::VerticalRight)
-        .track_symbol(Some("\u{2502}"))
+        .track_symbol(Some(if crate::glyphs::ascii() { "|" } else { "\u{2502}" }))
         .track_style(Style::new().fg(t.border))
-        .thumb_symbol("\u{2503}")
+        .thumb_symbol(if crate::glyphs::ascii() { "#" } else { "\u{2503}" })
         .thumb_style(Style::new().fg(t.muted))
         .begin_symbol(None)
         .end_symbol(None)
@@ -117,12 +139,12 @@ pub const HINT_SEPARATOR: &str = " \u{b7} ";
 /// without a colon (the `y →` chord prefix) is drawn muted as it stands.
 pub fn key_hint_spans<'a>(pairs: &[&'a str]) -> Vec<Span<'a>> {
     let t = theme();
-    let key_style = Style::default().fg(t.accent);
+    let key_style = Style::default().fg(t.key);
     let label_style = Style::default().fg(t.muted);
     let mut spans = Vec::with_capacity(pairs.len() * 3);
     for (i, pair) in pairs.iter().enumerate() {
         if i > 0 {
-            spans.push(Span::styled(HINT_SEPARATOR, Style::default().fg(t.border)));
+            spans.push(Span::styled(HINT_SEPARATOR, Style::default().fg(t.faint)));
         }
         match pair.split_once(':') {
             Some((key, action)) => {
@@ -218,14 +240,21 @@ pub fn separator_rule(border_style: Style) -> Block<'static> {
 /// The row cursor: a solid bar in the gutter rather than an arrowhead, so the
 /// selected row reads as a marked edge instead of a pointer aimed at the text.
 /// Two columns wide, matching the `"  "` gutter of unselected rows.
-pub const SELECTION_CURSOR: &str = "\u{258d} ";
+const SELECTION_CURSOR: &str = "\u{258d} ";
+
+/// [`SELECTION_CURSOR`], or `> ` when drawing ASCII only.
+pub fn selection_cursor() -> &'static str {
+    if crate::glyphs::ascii() { "> " } else { SELECTION_CURSOR }
+}
 
 /// Style for the selected row of a list. The focused pane carries the tinted
 /// selection; an unfocused pane keeps its selection visible but neutral, so
 /// only one list at a time looks live.
 pub fn selection_style(focused: bool) -> Style {
     let t = theme();
-    Style::new().bg(if focused { t.selection_bg } else { t.selection_bg_dim }).add_modifier(Modifier::BOLD)
+    // `selection_fg` is forced as the foreground: rows keep their kind colour otherwise,
+    // and red or teal on the selection bar fell well under readable contrast.
+    Style::new().fg(t.selection_fg).bg(if focused { t.selection_bg } else { t.selection_bg_dim }).add_modifier(Modifier::BOLD)
 }
 
 /// Background style for alternating rows, keyed on the absolute item index so
@@ -241,19 +270,37 @@ const SPINNER_FRAMES: [&str; 10] =
 /// Pick the spinner frame for an elapsed duration. Deriving the frame from
 /// elapsed time means callers need no extra animation state — the 50ms event
 /// tick redraws often enough to animate.
-pub const fn spinner_frame(elapsed: Duration) -> &'static str {
-    SPINNER_FRAMES[(elapsed.as_millis() / 100) as usize % SPINNER_FRAMES.len()]
+pub fn spinner_frame(elapsed: Duration) -> &'static str {
+    const ASCII_FRAMES: [&str; 4] = ["-", "\\", "|", "/"];
+    let step = (elapsed.as_millis() / 100) as usize;
+    if crate::glyphs::reduce_motion() {
+        if crate::glyphs::ascii() { "*" } else { "\u{2026}" }
+    } else if crate::glyphs::ascii() {
+        ASCII_FRAMES[step % ASCII_FRAMES.len()]
+    } else {
+        SPINNER_FRAMES[step % SPINNER_FRAMES.len()]
+    }
 }
 
 /// Truncate `name` to at most `max_width` display columns, appending `…` when
 /// it does not fit. Names in LP files are ASCII in practice, but truncation is
 /// performed on a char boundary so multibyte input cannot panic.
 pub fn truncate_with_ellipsis(name: &str, max_width: usize) -> Cow<'_, str> {
+    use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
     debug_assert!(max_width >= 2, "truncate_with_ellipsis needs room for at least one char plus ellipsis");
-    if name.chars().count() <= max_width || max_width < 2 {
+    if name.width() <= max_width || max_width < 2 {
         return Cow::Borrowed(name);
     }
-    let mut truncated: String = name.chars().take(max_width - 1).collect();
+    let mut used = 0;
+    let mut truncated = String::new();
+    for c in name.chars() {
+        let width = c.width().unwrap_or(0);
+        if used + width > max_width - 1 {
+            break;
+        }
+        used += width;
+        truncated.push(c);
+    }
     truncated.push('\u{2026}');
     Cow::Owned(truncated)
 }
@@ -358,7 +405,7 @@ pub fn heading_line(title: &str) -> Line<'static> {
     let t = theme();
     let used = title.chars().count() + 3;
     Line::from(vec![
-        Span::styled(format!("  {title} "), Style::default().fg(t.accent).add_modifier(Modifier::BOLD)),
+        Span::styled(format!("  {title} "), Style::default().fg(t.heading).add_modifier(Modifier::BOLD)),
         Span::styled(rule_str(HEADING_WIDTH.saturating_sub(used)), Style::default().fg(t.border)),
     ])
 }
@@ -403,17 +450,17 @@ pub fn report_rect(area: Rect, content_lines: usize) -> Rect {
 /// Draw a scrollable report pane: `lines` inside `block` at `popup`, from
 /// `scroll`, with the shared scrollbar down the right edge when the content
 /// is taller than the pane.
-pub fn draw_scroll_pane(frame: &mut ratatui::Frame, popup: Rect, lines: &[Line<'static>], scroll: u16, block: Block<'static>) {
+pub fn draw_scroll_pane(frame: &mut ratatui::Frame, popup: Rect, lines: &[Line<'static>], scroll: usize, block: Block<'static>) {
     frame.render_widget(ratatui::widgets::Clear, popup);
     let inner_height = popup.height.saturating_sub(2) as usize;
     // Only the rows in view are cloned: the lines never wrap, so row `scroll`
     // of the content is `lines[scroll]`.
-    let first = usize::from(scroll).min(lines.len());
+    let first = scroll.min(lines.len());
     let window = &lines[first..(first + inner_height).min(lines.len())];
     frame.render_widget(ratatui::widgets::Paragraph::new(window.to_vec()).block(block), popup);
     if lines.len() > inner_height {
         let max_scroll = lines.len() - inner_height;
-        let mut state = ratatui::widgets::ScrollbarState::new(max_scroll + 1).position(scroll as usize);
+        let mut state = ratatui::widgets::ScrollbarState::new(max_scroll + 1).position(scroll);
         render_panel_scrollbar(frame, popup, &mut state);
     }
 }
@@ -426,15 +473,17 @@ pub fn gauge_bar(fraction: f64, cells: usize) -> String {
     let clamped = fraction.clamp(0.0, 1.0);
     #[expect(clippy::cast_possible_truncation, clippy::cast_sign_loss, clippy::cast_precision_loss)] // clamped to [0, cells]
     let filled = ((clamped * cells as f64).round() as usize).min(cells);
+    let (open, full, empty, close) =
+        if crate::glyphs::ascii() { ('[', '#', '.', ']') } else { ('\u{2590}', '\u{2588}', '\u{2591}', '\u{258c}') };
     let mut bar = String::with_capacity(2 + cells * 3);
-    bar.push('\u{2590}');
+    bar.push(open);
     for _ in 0..filled {
-        bar.push('\u{2588}');
+        bar.push(full);
     }
     for _ in filled..cells {
-        bar.push('\u{2591}');
+        bar.push(empty);
     }
-    bar.push('\u{258c}');
+    bar.push(close);
     bar
 }
 
@@ -451,6 +500,8 @@ pub mod raw_diff;
 pub mod search_popup;
 pub mod sidebar;
 pub mod solve;
+#[cfg(feature = "editor")]
+pub mod source;
 pub mod status_bar;
 pub mod summary;
 pub mod what_if;
@@ -462,7 +513,7 @@ pub fn kind_colour(kind: DiffKind) -> Color {
         DiffKind::Added => t.added,
         DiffKind::Removed => t.removed,
         DiffKind::Modified => t.modified,
-        DiffKind::Renamed => t.accent,
+        DiffKind::Renamed => t.renamed,
     }
 }
 
@@ -487,7 +538,7 @@ pub fn severity_colour(severity: IssueSeverity) -> Color {
     match severity {
         IssueSeverity::Error => t.removed,
         IssueSeverity::Warning => t.modified,
-        IssueSeverity::Info => t.accent,
+        IssueSeverity::Info => t.info,
     }
 }
 
@@ -562,7 +613,7 @@ mod tests {
             terminal.backend().buffer().clone()
         };
         for scroll in [0_u16, 1, 50, 90, 99, 100, 150] {
-            let windowed = draw(&|frame| draw_scroll_pane(frame, popup, &lines, scroll, Block::bordered()));
+            let windowed = draw(&|frame| draw_scroll_pane(frame, popup, &lines, usize::from(scroll), Block::bordered()));
             let full = draw(&|frame| {
                 frame.render_widget(ratatui::widgets::Paragraph::new(lines.clone()).block(Block::bordered()).scroll((scroll, 0)), popup);
                 let mut state = ratatui::widgets::ScrollbarState::new(lines.len() - 10 + 1).position(usize::from(scroll));
@@ -573,9 +624,29 @@ mod tests {
     }
 
     #[test]
+    fn scroll_pane_reaches_rows_past_u16_max() {
+        use ratatui::Terminal;
+        use ratatui::backend::TestBackend;
+
+        let lines: Vec<Line<'static>> = (0..70_000).map(|i| Line::from(format!("row {i}"))).collect();
+        let popup = Rect::new(0, 0, 20, 6);
+        let mut terminal = Terminal::new(TestBackend::new(popup.width, popup.height)).expect("test terminal must build");
+        terminal.draw(|frame| draw_scroll_pane(frame, popup, &lines, 69_996, Block::bordered())).expect("draw must succeed");
+        let text: String = terminal.backend().buffer().content().iter().map(ratatui::buffer::Cell::symbol).collect();
+        assert!(text.contains("row 69999"), "the last row must be reachable: {text}");
+    }
+
+    #[test]
     fn test_truncate_fits_unchanged() {
         assert_eq!(truncate_with_ellipsis("short", 10), "short");
         assert_eq!(truncate_with_ellipsis("exact", 5), "exact");
+    }
+
+    #[test]
+    fn truncation_counts_columns_not_chars() {
+        // Each CJK char is two columns wide.
+        assert_eq!(truncate_with_ellipsis("\u{65e5}\u{672c}\u{8a9e}\u{540d}\u{524d}", 6), "\u{65e5}\u{672c}\u{2026}");
+        assert_eq!(truncate_with_ellipsis("\u{65e5}\u{672c}", 4), "\u{65e5}\u{672c}");
     }
 
     #[test]
@@ -593,11 +664,17 @@ mod tests {
 
     #[test]
     fn focus_is_marked_by_colour_or_by_line_weight() {
-        assert_eq!(border_type(true, true), BorderType::Thick, "monochrome marks focus with heavy lines");
-        assert_eq!(border_type(false, true), BorderType::Rounded);
-        assert_eq!(border_type(true, false), BorderType::Rounded, "colour palettes keep the rounded border");
+        assert_eq!(border_type(true, true, false), BorderType::Thick, "monochrome marks focus with heavy lines");
+        assert_eq!(border_type(false, true, false), BorderType::Rounded);
+        assert_eq!(border_type(true, false, false), BorderType::Rounded, "colour palettes keep the rounded border");
         let focused = focus_border_style(Focus::Detail, Focus::Detail);
-        assert_eq!(focused.fg, Some(theme().accent), "a focused border takes the accent");
+        assert_eq!(focused.fg, Some(theme().border_focus), "a focused border takes the focus colour");
+    }
+
+    #[test]
+    fn square_palettes_draw_plain_corners_unless_focused() {
+        assert_eq!(border_type(false, true, true), BorderType::Plain);
+        assert_eq!(border_type(true, true, true), BorderType::Thick, "weight still marks focus");
     }
 
     #[test]
@@ -606,7 +683,7 @@ mod tests {
         let text: String = spans.iter().map(|span| span.content.as_ref()).collect();
         assert_eq!(text, "j/k:scroll \u{b7} Esc:close");
         assert_eq!(key_hint_width("j/k:scroll  Esc:close"), text.chars().count());
-        let keys: Vec<&str> = spans.iter().filter(|span| span.style.fg == Some(theme().accent)).map(|span| span.content.as_ref()).collect();
+        let keys: Vec<&str> = spans.iter().filter(|span| span.style.fg == Some(theme().key)).map(|span| span.content.as_ref()).collect();
         assert_eq!(keys, ["j/k", "Esc"], "only the keys take the accent");
     }
 

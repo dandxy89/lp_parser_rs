@@ -34,12 +34,23 @@ fn flash_style(level: crate::app::FlashLevel) -> Style {
     use crate::app::FlashLevel;
     let t = theme();
     let colour = match level {
-        FlashLevel::Info => t.accent,
+        FlashLevel::Info => t.info,
         FlashLevel::Ok => t.added,
         FlashLevel::Warn => t.modified,
         FlashLevel::Err => t.removed,
     };
     Style::default().fg(colour).add_modifier(Modifier::BOLD)
+}
+
+/// Flash text with a severity word for warnings and errors, so the level
+/// survives `NO_COLOR` and colour-blind palettes.
+fn flash_label(level: crate::app::FlashLevel, message: &str) -> String {
+    use crate::app::FlashLevel;
+    match level {
+        FlashLevel::Warn => format!("warn: {message}"),
+        FlashLevel::Err => format!("error: {message}"),
+        FlashLevel::Info | FlashLevel::Ok => message.to_owned(),
+    }
 }
 
 /// Inspect-mode left segment: the single filename and current section counts.
@@ -75,11 +86,12 @@ pub struct StatusBarParams<'a> {
     pub hints: &'a str,
 }
 
-/// Prefix of the renamed count, here and in the tab bar.
-pub const RENAMED: &str = "\u{21c4}";
-
 /// Muted separator between status bar segments.
-const SEPARATOR: &str = "  \u{2502}  ";
+const SEPARATOR_UNICODE: &str = "  \u{2502}  ";
+
+fn separator() -> &'static str {
+    if crate::glyphs::ascii() { "  |  " } else { SEPARATOR_UNICODE }
+}
 
 use crate::widgets::HINT_SEPARATOR;
 
@@ -123,7 +135,7 @@ fn hint_spans(hints: &str, max_width: usize) -> (Vec<Span<'_>>, usize) {
     (crate::widgets::key_hint_spans(&kept), width)
 }
 
-/// Assemble segments into one line, separated by [`SEPARATOR`], keeping only
+/// Assemble segments into one line, separated by [`separator`], keeping only
 /// those that fit in `available` columns.
 ///
 /// Segments are dropped whole from the end rather than clipped: half a label
@@ -157,7 +169,7 @@ pub fn draw_status_bar(frame: &mut Frame, area: Rect, params: &StatusBarParams<'
     }
 
     let t = theme();
-    let separator = Span::styled(SEPARATOR, Style::default().fg(t.border));
+    let separator = Span::styled(separator(), Style::default().fg(t.border));
 
     // Left: one group per fact. Inspect mode shows the filename and section
     // count; diff mode shows total/per-kind change counts and the active filter.
@@ -185,7 +197,7 @@ pub fn draw_status_bar(frame: &mut Frame, area: Rect, params: &StatusBarParams<'
         // `>0` was noise, and `>` read as a comparison.
         if counts.renamed > 0 {
             kinds.push(Span::raw(" "));
-            kinds.push(Span::styled(format!("{RENAMED}{}", counts.renamed), Style::default().fg(t.accent)));
+            kinds.push(Span::styled(format!("{}{}", crate::glyphs::renamed(), counts.renamed), Style::default().fg(t.renamed)));
         }
         segments.push(kinds);
         segments.push(vec![
@@ -204,9 +216,12 @@ pub fn draw_status_bar(frame: &mut Frame, area: Rect, params: &StatusBarParams<'
     }
     if let Some(reloading) = params.watch_reloading {
         segments.push(vec![if reloading {
-            Span::styled("\u{25cf} reloading\u{2026}", Style::default().fg(t.modified).add_modifier(Modifier::BOLD))
+            Span::styled(
+                format!("{} reloading\u{2026}", crate::glyphs::dot()),
+                Style::default().fg(t.modified).add_modifier(Modifier::BOLD),
+            )
         } else {
-            Span::styled("\u{25cf} watch", Style::default().fg(t.secondary_accent))
+            Span::styled(format!("{} watch", crate::glyphs::dot()), Style::default().fg(t.secondary_accent))
         }]);
     }
     if let Some(position) = params.detail_position
@@ -222,13 +237,17 @@ pub fn draw_status_bar(frame: &mut Frame, area: Rect, params: &StatusBarParams<'
     // A flash is transient and is the thing the user is waiting to read, so
     // it keeps its full width instead.
     let available = area.width as usize;
-    let right_floor = params.yank_flash.map_or_else(|| last_hint_width(params.hints), |flash| flash.message.chars().count()) + 2;
+    let flash_text = params.yank_flash.map(|flash| flash_label(flash.level, flash.message));
+    let right_floor = flash_text.as_ref().map_or_else(|| last_hint_width(params.hints), |text| text.chars().count()) + 2;
     let (left_spans, left_width) = fit_segments(segments, &separator, available.saturating_sub(right_floor));
 
-    let (mut right_spans, right_width) = params.yank_flash.map_or_else(
-        || hint_spans(params.hints, available.saturating_sub(left_width + 2)),
-        |flash| (vec![Span::styled(flash.message, flash_style(flash.level))], flash.message.chars().count()),
-    );
+    let (mut right_spans, right_width) = match (params.yank_flash, flash_text) {
+        (Some(flash), Some(text)) => {
+            let width = text.chars().count();
+            (vec![Span::styled(text, flash_style(flash.level))], width)
+        }
+        _ => hint_spans(params.hints, available.saturating_sub(left_width + 2)),
+    };
     // A leading space keeps a visible gap between the two halves.
     right_spans.insert(0, Span::raw(" "));
 
@@ -278,7 +297,7 @@ mod tests {
         let (text, cell) = render_counts(0, 0);
         assert!(text.contains("0 changes"), "{text:?}");
         assert_eq!(cell.fg, theme().muted, "no changes is muted");
-        assert!(!text.contains(RENAMED), "no renames, no rename count: {text:?}");
+        assert!(!text.contains(crate::glyphs::renamed()), "no renames, no rename count: {text:?}");
 
         let (text, cell) = render_counts(1, 2);
         assert!(text.contains("1 change "), "singular for one: {text:?}");

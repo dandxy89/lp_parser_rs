@@ -56,9 +56,6 @@ pub struct SearchPopupState {
     pub selected: usize,
     /// Scroll offset for the detail preview pane inside the pop-up.
     pub scroll: u16,
-    /// Pre-built styled lines for each search result, avoiding per-frame
-    /// `format!` allocations. Rebuilt in `recompute_search_popup`.
-    pub cached_result_lines: Vec<Line<'static>>,
     /// Compact regex compilation error for the current query, if any.
     /// Shown under the query input so an invalid pattern is not mistaken
     /// for a query that simply matches nothing.
@@ -187,6 +184,8 @@ pub struct SolverSession {
     pub receive2: Option<mpsc::Receiver<Result<SolveResult, String>>>,
     /// Cached formatted lines for the solve overlay.
     pub render_cache: SolveRenderCache,
+    /// Inner width the render cache was built for; a resize that changes it triggers a rebuild.
+    pub cache_width: u16,
     /// Infeasibility diagnosis state for the current result (key `e`).
     pub diagnosis: DiagnosisState,
     /// Channel for receiving the elastic-relaxation diagnosis from its background thread.
@@ -228,6 +227,7 @@ impl SolverSession {
             receive: None,
             receive2: None,
             render_cache: SolveRenderCache::Empty,
+            cache_width: 0,
             diagnosis: DiagnosisState::Idle,
             receive_diagnosis: None,
             solved_problem: None,
@@ -322,6 +322,46 @@ impl SolverSession {
     }
 }
 
+/// The layer that currently takes the keys, topmost first.
+///
+/// [`App::top_overlay`] is the one place the priority order is written down;
+/// key routing, scrolling and the status-bar hints all match on it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Overlay {
+    #[cfg(feature = "editor")]
+    Editor,
+    Search,
+    Palette,
+    WhatIf,
+    PresolveLog,
+    PresolveCursor,
+    Diagnostics,
+    Analysis,
+    Solve,
+    Help,
+}
+
+/// Status messages kept for the messages pane.
+const FLASH_LOG_CAPACITY: usize = 200;
+
+/// Which pane a [`PaneJob`] fills when it finishes.
+#[derive(Debug, Clone, Copy)]
+pub enum PaneTarget {
+    Diagnostics,
+    PresolveLog,
+}
+
+/// What a pane worker hands back: the pane, and the presolve stats when it ran our rewrite.
+pub type PaneResult = Result<(ScrollPane, Option<crate::presolve::PresolveStats>), String>;
+
+/// A pane under construction on a worker thread.
+#[derive(Debug)]
+pub struct PaneJob {
+    pub target: PaneTarget,
+    pub label: &'static str,
+    pub receiver: mpsc::Receiver<PaneResult>,
+}
+
 #[expect(clippy::struct_excessive_bools)] // independent toggles (help, ignore-order, mouse capture, quit), not a hidden state machine
 pub struct App {
     /// Diff (two files) or Inspect (single file). Fixed at startup.
@@ -336,7 +376,7 @@ pub struct App {
     pub show_help: bool,
 
     /// Scroll offset for the help overlay (clamped to content height at draw time).
-    pub help_scroll: u16,
+    pub help_scroll: usize,
 
     /// `Ctrl+P` command palette state.
     pub palette: CommandPaletteState,
@@ -355,6 +395,19 @@ pub struct App {
     /// The worker builds the lines, so the UI thread never formats a large
     /// report.
     pub receive_analysis: Option<mpsc::Receiver<Result<ScrollPane, String>>>,
+
+    /// A diagnostics or presolve-log pane being built on a worker thread.
+    pub pane_job: Option<PaneJob>,
+
+    /// Recent status messages, oldest first, for the messages pane.
+    pub flash_log: Vec<(FlashLevel, String)>,
+
+    /// The source editor, when open (`v`).
+    #[cfg(feature = "editor")]
+    pub editor: Option<Box<crate::editor::Editor>>,
+
+    /// A tolerance-change diff rebuild running on a worker thread.
+    pub report_job: Option<mpsc::Receiver<LpDiffReport>>,
 
     /// Presolve rule picker overlay (`P`): the highlighted rule when open.
     pub presolve_cursor: Option<usize>,
@@ -578,7 +631,7 @@ fn tab_count_spans(counts: &crate::diff_model::DiffCounts, filter: DiffFilter) -
         (counts.added, "+", t.added),
         (counts.removed, "-", t.removed),
         (counts.modified, "~", t.modified),
-        (counts.renamed, crate::widgets::status_bar::RENAMED, t.accent),
+        (counts.renamed, crate::glyphs::renamed(), t.renamed),
     ];
     match filter {
         DiffFilter::All => {
@@ -745,6 +798,11 @@ impl App {
             diagnostics: None,
             analysis: AnalysisState::Idle,
             receive_analysis: None,
+            pane_job: None,
+            flash_log: Vec::new(),
+            #[cfg(feature = "editor")]
+            editor: None,
+            report_job: None,
             presolve_cursor: None,
             presolve_rules: crate::presolve::DEFAULT_RULES,
             last_presolve: None,
@@ -769,7 +827,6 @@ impl App {
                 results: Vec::new(),
                 selected: 0,
                 scroll: 0,
-                cached_result_lines: Vec::new(),
                 regex_error: None,
             },
             last_search: Vec::new(),
@@ -810,7 +867,12 @@ impl App {
 
     /// Flash a status-bar message at the given severity.
     pub(crate) fn flash(&mut self, level: FlashLevel, message: impl Into<String>) {
-        self.yank.message = message.into();
+        let message = message.into();
+        if self.flash_log.len() == FLASH_LOG_CAPACITY {
+            self.flash_log.remove(0);
+        }
+        self.flash_log.push((level, message.clone()));
+        self.yank.message = message;
         self.yank.level = level;
         self.yank.flash = Some(Instant::now());
     }
@@ -893,7 +955,7 @@ impl App {
     pub fn cycle_rel_tol(&mut self) {
         let value = next_tolerance_preset(self.diff_options.rel_tol);
         self.diff_options.rel_tol = value;
-        self.rebuild_report_inner(false);
+        self.rebuild_for_tolerance();
         self.flash_status(format!("rel_tol = {}", format_tolerance(value)));
     }
 
@@ -901,8 +963,60 @@ impl App {
     pub fn cycle_abs_tol(&mut self) {
         let value = next_tolerance_preset(self.diff_options.abs_tol);
         self.diff_options.abs_tol = value;
-        self.rebuild_report_inner(false);
+        self.rebuild_for_tolerance();
         self.flash_status(format!("abs_tol = {}", format_tolerance(value)));
+    }
+
+    /// Rebuild the report after a tolerance change on a worker thread, so a
+    /// large model does not freeze the UI. A newer request replaces an older
+    /// one still running: the old result is never installed.
+    fn rebuild_for_tolerance(&mut self) {
+        if self.mode != AppMode::Diff {
+            self.rebuild_report_inner(false);
+            return;
+        }
+        let (problem1, problem2) = (Arc::clone(&self.problem1), Arc::clone(&self.problem2));
+        let (line_map1, line_map2) = (self.line_map1.clone(), self.line_map2.clone());
+        let (analysis1, analysis2) = (self.report.analysis1.clone(), self.report.analysis2.clone());
+        let options = self.diff_options.clone();
+        let (file1, file2) = (self.file1_path.display().to_string(), self.file2_path.display().to_string());
+        let (sender, receiver) = mpsc::channel();
+        self.report_job = Some(receiver);
+        std::thread::spawn(move || {
+            let report = build_diff_report(&DiffInput {
+                file1: &file1,
+                file2: &file2,
+                p1: &problem1,
+                p2: &problem2,
+                line_map1: &line_map1,
+                line_map2: &line_map2,
+                analysis1,
+                analysis2,
+                options,
+            });
+            // A dropped receiver means a newer request or a reload superseded this one.
+            drop(sender.send(report));
+        });
+    }
+
+    /// Install a finished tolerance rebuild.
+    fn poll_report_job(&mut self) {
+        let Some(receiver) = &self.report_job else {
+            return;
+        };
+        match receiver.try_recv() {
+            Ok(report) => {
+                self.report_job = None;
+                let selected_name = self.selected_entry_name().map(str::to_owned);
+                self.report = report;
+                self.install_report(false, selected_name.as_deref());
+            }
+            Err(mpsc::TryRecvError::Empty) => {}
+            Err(mpsc::TryRecvError::Disconnected) => {
+                self.report_job = None;
+                self.flash_error(crate::disconnected("Diff rebuild"));
+            }
+        }
     }
 
     /// Rebuild the diff report from the stored problems with the current
@@ -950,6 +1064,12 @@ impl App {
             }
         }
 
+        self.install_report(analyses_changed, selected_name.as_deref());
+    }
+
+    /// Refresh every cache derived from `self.report`, then restore the selection
+    /// to `selected_name`. Shared by the synchronous rebuild and the worker's result.
+    fn install_report(&mut self, analyses_changed: bool, selected_name: Option<&str>) {
         // Report-derived caches: search haystack + name buffer. The content
         // buffer is lazy — clear it and let the next `c:` query rebuild it.
         let (haystack, names) = build_haystack(&self.report);
@@ -977,7 +1097,7 @@ impl App {
         self.detail_scroll = 0;
         self.ensure_active_section_cache();
         self.clamp_active_selection();
-        self.reselect_by_name(selected_name.as_deref());
+        self.reselect_by_name(selected_name);
 
         // The search pop-up references haystack indices — refresh if it is open.
         if self.search_popup.visible {
@@ -1058,6 +1178,79 @@ impl App {
         Some(crate::widgets::raw_diff::extract_entry_text(raw_text, offset))
     }
 
+    /// Switch the active palette and rebuild everything that cached styled text.
+    ///
+    /// Open reports (diagnostics, presolve log, analysis results) hold lines
+    /// styled at build time and cannot be restyled, so they are closed.
+    pub fn apply_theme(&mut self, theme: crate::theme::Theme) {
+        crate::theme::set_theme(theme);
+        self.invalidate_cache();
+        self.ensure_active_section_cache();
+        self.rebuild_summary();
+        self.numerics_lines = build_mode_numerics_lines(self.mode, &self.report, &self.problem1);
+        self.rebuild_solve_cache();
+        let closed_reports = self.diagnostics.is_some() || self.presolve_log.is_some() || self.analysis.pane().is_some();
+        self.diagnostics = None;
+        self.presolve_log = None;
+        if self.analysis.pane().is_some() {
+            self.analysis = AnalysisState::Idle;
+        }
+        if self.search_popup.visible {
+            self.recompute_search_popup();
+        }
+        let name = crate::theme::builtin_name(&theme).unwrap_or("custom");
+        self.flash_status(if closed_reports { format!("Theme: {name} (open reports closed)") } else { format!("Theme: {name}") });
+    }
+
+    /// Rebuild the solve overlay's cached lines for the current width and palette.
+    /// The tables size their columns when built, so a resize needs this too.
+    pub fn rebuild_solve_cache(&mut self) {
+        self.rebuild_solve_cache_at(self.solve_popup_inner_width());
+    }
+
+    fn rebuild_solve_cache_at(&mut self, width: u16) {
+        self.solver.cache_width = width;
+        let cache = match &self.solver.state {
+            SolveState::Done(result) => SolveRenderCache::Single(crate::widgets::solve::build_single_solve_cache(result, width)),
+            SolveState::DoneBoth(diff) => crate::widgets::solve::build_diff_solve_cache(diff, width),
+            _ => return,
+        };
+        self.solver.render_cache = cache;
+    }
+
+    /// Show the recent status messages (the flash line keeps only the last, and clips it).
+    pub fn show_messages(&mut self) {
+        let lines: Vec<Line<'static>> = if self.flash_log.is_empty() {
+            vec![Line::from("  No messages yet.")]
+        } else {
+            self.flash_log
+                .iter()
+                .rev()
+                .map(|(level, message)| {
+                    let tag = match level {
+                        FlashLevel::Err => "error",
+                        FlashLevel::Warn => "warn ",
+                        FlashLevel::Ok => "ok   ",
+                        FlashLevel::Info => "info ",
+                    };
+                    Line::from(format!("  {tag}  {message}"))
+                })
+                .collect()
+        };
+        let text = self.flash_log.iter().map(|(_, message)| message.as_str()).collect::<Vec<_>>().join("\n");
+        self.analysis =
+            AnalysisState::Done { label: "Messages", pane: ScrollPane { lines, scroll: 0, export: Some(("messages.txt", text)) } };
+    }
+
+    /// Switch to the next built-in palette (the palette's `Cycle theme`).
+    pub fn cycle_theme(&mut self) {
+        let current = crate::theme::theme();
+        let names = ["dark", "light", "flat-dark", "flat-light", "high-contrast", "colour-blind", "mono"];
+        let position = crate::theme::builtin_name(&current).and_then(|name| names.iter().position(|candidate| *candidate == name));
+        let next = names[position.map_or(0, |index| (index + 1) % names.len())];
+        self.apply_theme(crate::theme::builtin(next).expect("every cycle entry is a built-in"));
+    }
+
     /// Invalidate cached filtered indices for all sections and the coefficient row cache.
     pub(crate) fn invalidate_cache(&mut self) {
         for state in &mut self.section_states {
@@ -1089,21 +1282,43 @@ impl App {
 
     /// Whether any modal overlay is open — a pop-up, a prompt, or one of the
     /// analysis panes. The draw dispatcher dims the screen behind them.
-    pub const fn has_overlay(&self) -> bool {
-        self.overlay_above_help() || self.show_help
+    pub fn has_overlay(&self) -> bool {
+        self.top_overlay().is_some()
     }
 
     /// Whether an overlay other than help is open. Help sits lowest in the
     /// key and mouse priority order, so any of these covers it.
-    pub(crate) const fn overlay_above_help(&self) -> bool {
-        self.search_popup.visible
-            || self.palette.visible
-            || !matches!(self.solver.state, crate::state::SolveState::Idle)
-            || self.what_if.is_some()
-            || self.presolve_cursor.is_some()
-            || self.presolve_log.is_some()
-            || self.diagnostics.is_some()
-            || self.analysis.is_open()
+    pub(crate) fn overlay_above_help(&self) -> bool {
+        !matches!(self.top_overlay(), None | Some(Overlay::Help))
+    }
+
+    /// The topmost open overlay, in the order keys and mouse events reach them.
+    pub(crate) fn top_overlay(&self) -> Option<Overlay> {
+        #[cfg(feature = "editor")]
+        if self.editor.is_some() {
+            return Some(Overlay::Editor);
+        }
+        Some(if self.search_popup.visible {
+            Overlay::Search
+        } else if self.palette.visible {
+            Overlay::Palette
+        } else if self.what_if.is_some() {
+            Overlay::WhatIf
+        } else if self.presolve_log.is_some() {
+            Overlay::PresolveLog
+        } else if self.presolve_cursor.is_some() {
+            Overlay::PresolveCursor
+        } else if self.diagnostics.is_some() {
+            Overlay::Diagnostics
+        } else if self.analysis.is_open() {
+            Overlay::Analysis
+        } else if !matches!(self.solver.state, crate::state::SolveState::Idle) {
+            Overlay::Solve
+        } else if self.show_help {
+            Overlay::Help
+        } else {
+            return None;
+        })
     }
 
     /// Ensure the active section's cache is fresh. Call once per frame before drawing.
@@ -1401,7 +1616,7 @@ impl App {
     }
 
     /// Report index of the entry named `name` in `section`, if it still exists.
-    fn entry_index_by_name(&self, section: Section, name: &str) -> Option<usize> {
+    pub(crate) fn entry_index_by_name(&self, section: Section, name: &str) -> Option<usize> {
         match section {
             Section::Variables => self.report.variables.entries.iter().position(|e| e.name == name),
             Section::Constraints => self.report.constraints.entries.iter().position(|e| e.name == name),
@@ -1441,8 +1656,12 @@ impl App {
     /// selected instead.
     pub(crate) fn restore_jump(&mut self, entry: &JumpEntry) {
         self.set_active_section(entry.section);
-        self.apply_filter(entry.filter);
-        self.invalidate_cache();
+        if self.filter == entry.filter {
+            self.coeff_row_cache = None;
+        } else {
+            self.apply_filter(entry.filter);
+            self.invalidate_cache();
+        }
         self.ensure_active_section_cache();
         self.detail_scroll = entry.detail_scroll;
 
@@ -1481,6 +1700,12 @@ impl App {
             match receive.try_recv() {
                 Ok(Ok(parsed)) => {
                     self.watch.receive = None;
+                    #[cfg(feature = "editor")]
+                    if self.editor.as_ref().is_some_and(|editor| editor.dirty) {
+                        // The buffer is newer than the disk: keep it, and the old model.
+                        self.flash_warn("file changed on disk; unsaved editor changes kept (reload skipped)");
+                        return;
+                    }
                     self.apply_reload(*parsed);
                 }
                 Ok(Err(error)) => {
@@ -1534,7 +1759,7 @@ impl App {
     /// derived inputs, rebuild the diff report, and reset the solver session
     /// (stale solve results and diagnoses would be misleading; old `Arc`s held
     /// by finished solver threads are harmless).
-    fn apply_reload(&mut self, parsed: (ParsedFile, ParsedFile)) {
+    pub(crate) fn apply_reload(&mut self, parsed: (ParsedFile, ParsedFile)) {
         let ((problem1, analysis1, line_map1, raw_text1), (problem2, analysis2, line_map2, raw_text2)) = parsed;
 
         self.problem1 = Arc::new(problem1);
@@ -1574,6 +1799,8 @@ impl App {
     fn discard_model_derived_state(&mut self) {
         self.analysis = AnalysisState::Idle;
         self.receive_analysis = None;
+        self.pane_job = None;
+        self.report_job = None;
         self.diagnostics = None;
         self.presolve_log = None;
         self.last_presolve = None;
@@ -1589,12 +1816,27 @@ impl App {
     /// a running solve or diagnosis (elapsed-time display), an in-flight
     /// watch reload, or a visible yank flash. Everything else only changes
     /// in response to input, so the main loop skips idle-tick repaints.
-    pub const fn is_animating(&self) -> bool {
+    #[allow(clippy::missing_const_for_fn)] // const only without the editor feature
+    pub fn is_animating(&self) -> bool {
         self.yank.expires()
             || self.watch.is_reloading()
             || matches!(self.solver.state, SolveState::Running { .. } | SolveState::RunningBoth { .. })
             || matches!(self.solver.diagnosis, DiagnosisState::Running { .. })
             || matches!(self.analysis, AnalysisState::Running { .. })
+            || self.pane_job.is_some()
+            || self.report_job.is_some()
+            || self.editor_is_busy()
+    }
+
+    #[cfg(feature = "editor")]
+    fn editor_is_busy(&self) -> bool {
+        self.editor.as_ref().is_some_and(|editor| editor.is_busy())
+    }
+
+    #[cfg(not(feature = "editor"))]
+    #[allow(clippy::unused_self)] // mirrors the editor build's signature
+    const fn editor_is_busy(&self) -> bool {
+        false
     }
 
     /// Poll the solver channel(s) for results, transitioning state when complete.
@@ -1606,6 +1848,35 @@ impl App {
         }
         self.poll_diagnosis();
         self.poll_analysis();
+        self.poll_pane_job();
+        self.poll_report_job();
+        #[cfg(feature = "editor")]
+        if let Some(editor) = &mut self.editor {
+            editor.tick();
+        }
+    }
+
+    /// Install a finished [`PaneJob`], or report its failure.
+    fn poll_pane_job(&mut self) {
+        let Some(job) = &self.pane_job else {
+            return;
+        };
+        let (target, label) = (job.target, job.label);
+        let outcome = match job.receiver.try_recv() {
+            Ok(outcome) => outcome,
+            Err(mpsc::TryRecvError::Empty) => return, // still running
+            Err(mpsc::TryRecvError::Disconnected) => Err(crate::disconnected(label)),
+        };
+        self.pane_job = None;
+        match (outcome, target) {
+            (Ok((pane, _)), PaneTarget::Diagnostics) => self.diagnostics = Some(pane),
+            (Ok((pane, stats)), PaneTarget::PresolveLog) => {
+                self.last_presolve = stats.or(self.last_presolve.take());
+                self.presolve_cursor = None;
+                self.presolve_log = Some(pane);
+            }
+            (Err(error), _) => self.flash_error(format!("{label}: {error}")),
+        }
     }
 
     /// Poll the analysis channel (`AnalysisState::Running`).
@@ -1662,8 +1933,22 @@ impl App {
     /// layout. Mirrors the popup sizing in `widgets::solve` (4/5 of the frame
     /// width, at least 60 columns, minus the borders).
     pub(crate) fn solve_popup_inner_width(&self) -> u16 {
-        let frame_width = self.layout.detail.x + self.layout.detail.width;
+        Self::solve_inner_width_for(self.layout.detail.x + self.layout.detail.width)
+    }
+
+    /// The solve overlay's inner width on a terminal `frame_width` columns wide.
+    pub(crate) fn solve_inner_width_for(frame_width: u16) -> u16 {
         (frame_width * 4 / 5).max(60).min(frame_width).saturating_sub(2)
+    }
+
+    /// Rebuild the solve tables when the terminal width changed since they were built.
+    /// Called at the start of each draw, before the layout is recomputed.
+    pub fn refit_solve_cache(&mut self, frame_width: u16) {
+        let width = Self::solve_inner_width_for(frame_width);
+        if self.solver.cache_width != width && matches!(self.solver.state, SolveState::Done(_) | SolveState::DoneBoth(_)) {
+            self.solver.cache_width = width;
+            self.rebuild_solve_cache_at(width);
+        }
     }
 
     /// Poll a single solver channel (`Running` state).
@@ -1792,7 +2077,6 @@ impl App {
 
         if self.search_popup.query.value().is_empty() {
             self.populate_all_search_results();
-            self.rebuild_search_result_lines();
             return;
         }
 
@@ -1809,17 +2093,6 @@ impl App {
             SearchMode::Regex | SearchMode::Substring => self.populate_filtered_results(),
             SearchMode::Content => self.populate_content_results(),
         }
-
-        self.rebuild_search_result_lines();
-    }
-
-    /// Rebuild the cached styled lines for the current search results.
-    fn rebuild_search_result_lines(&mut self) {
-        self.search_popup.cached_result_lines = crate::widgets::search_popup::build_result_lines(
-            &self.search_popup.results,
-            &self.search_name_buffer,
-            self.mode.shows_diff_badges(),
-        );
     }
 
     /// Populate search results with all entries (no query filter).
@@ -1981,16 +2254,20 @@ impl App {
 
     /// Switch to `section`, reset the kind filter, select `entry_index` in the
     /// name list, and focus it. Shared by search confirm and `n`/`N` repeat.
-    fn jump_to_entry(&mut self, section: Section, entry_index: usize) {
+    pub(crate) fn jump_to_entry(&mut self, section: Section, entry_index: usize) {
         // Record current position before jumping.
         self.record_jump();
 
         // Switch to the target section.
         self.set_active_section(section);
 
-        // Reset filter and recompute caches.
-        self.apply_filter(DiffFilter::All);
-        self.invalidate_cache();
+        // Reset the filter; caches only go stale if it actually changed.
+        if self.filter == DiffFilter::All {
+            self.coeff_row_cache = None;
+        } else {
+            self.apply_filter(DiffFilter::All);
+            self.invalidate_cache();
+        }
         self.ensure_active_section_cache();
 
         // Find the position of `entry_index` within the filtered indices and select it.
@@ -2054,6 +2331,52 @@ mod tests {
 
     /// Regression: a watch reload reset only the solver session, so analyses,
     /// panes and presolve results of the old files were shown as current.
+    #[test]
+    fn messages_are_logged_and_shown_newest_first() {
+        let mut app = crate::snapshot_tests::diff_app_from(crate::snapshot_tests::BASE_LP, crate::snapshot_tests::BASE_LP);
+        app.flash_status("first");
+        app.flash_error("second");
+        app.show_messages();
+        let pane = app.analysis.pane().expect("the messages pane is open");
+        let text: Vec<String> = pane.lines.iter().map(|line| line.spans.iter().map(|s| s.content.as_ref()).collect()).collect();
+        assert!(text[0].contains("error") && text[0].contains("second"), "{text:?}");
+        assert!(text[1].contains("first"));
+        for n in 0..FLASH_LOG_CAPACITY + 5 {
+            app.flash_status(format!("m{n}"));
+        }
+        assert_eq!(app.flash_log.len(), FLASH_LOG_CAPACITY, "the log is bounded");
+    }
+
+    #[test]
+    fn a_tolerance_change_rebuilds_the_report_off_thread() {
+        let mut app = crate::snapshot_tests::diff_app_from(crate::snapshot_tests::BASE_LP, crate::snapshot_tests::BASE_LP);
+        let before = app.diff_options.rel_tol;
+        app.cycle_rel_tol();
+        assert_ne!(app.diff_options.rel_tol, before, "the option changes at once");
+        assert!(app.report_job.is_some() && app.is_animating(), "the rebuild is pending");
+        let deadline = Instant::now() + std::time::Duration::from_secs(10);
+        while app.report_job.is_some() {
+            assert!(Instant::now() < deadline, "the worker never finished");
+            app.poll_solve();
+            std::thread::yield_now();
+        }
+    }
+
+    #[test]
+    fn diagnostics_are_built_off_thread_and_installed_by_polling() {
+        let mut app = crate::snapshot_tests::diff_app_from(crate::snapshot_tests::BASE_LP, crate::snapshot_tests::BASE_LP);
+        app.open_diagnostics();
+        assert!(app.diagnostics.is_none() && app.pane_job.is_some(), "the pane is pending, not built on this thread");
+        assert!(app.is_animating(), "ticks must keep polling while the job runs");
+        let deadline = Instant::now() + std::time::Duration::from_secs(10);
+        while app.pane_job.is_some() {
+            assert!(Instant::now() < deadline, "the worker never finished");
+            app.poll_solve();
+            std::thread::yield_now();
+        }
+        assert!(app.diagnostics.is_some(), "the finished pane is installed");
+    }
+
     #[test]
     fn a_reload_discards_results_computed_from_the_old_models() {
         let mut app = crate::snapshot_tests::diff_app_from(crate::snapshot_tests::BASE_LP, crate::snapshot_tests::BASE_LP);

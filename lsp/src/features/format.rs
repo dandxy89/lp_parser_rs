@@ -19,7 +19,7 @@
 
 use std::ops::Range;
 
-use tower_lsp_server::ls_types::{Position, Range as LspRange, TextEdit};
+use ls_types::{Position, Range as LspRange, TextEdit};
 use tree_sitter::{Node, Tree};
 
 use crate::config::{FormatSettings, KeywordCase};

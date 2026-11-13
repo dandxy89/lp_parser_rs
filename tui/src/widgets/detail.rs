@@ -81,7 +81,7 @@ fn name_cell(name: &str, width: usize) -> String {
 
 /// Longest name among `coefficients`, for [`name_column_width`].
 fn longest_coefficient_name(coefficients: &[ResolvedCoefficient], interner: &NameInterner) -> usize {
-    coefficients.iter().map(|coeff| interner.resolve(coeff.name).chars().count()).max().unwrap_or(0)
+    coefficients.iter().map(|coeff| unicode_width::UnicodeWidthStr::width(interner.resolve(coeff.name))).max().unwrap_or(0)
 }
 
 /// Build the header line for a yanked detail panel: entity label, name, kind
@@ -231,6 +231,10 @@ enum ConstraintBody<'a> {
     /// Coefficient (or SOS weight) rows to append. `side_by_side` requests the
     /// two-column old/new comparison, which only the styled renderer can honour.
     Rows { changes: &'a [CoefficientChange], old: &'a [ResolvedCoefficient], new: &'a [ResolvedCoefficient], side_by_side: bool },
+    /// A plain `name  value` list of an added or removed constraint's
+    /// coefficients (or SOS weights), drawn in `style`. Left out of the header
+    /// so the styled renderer can build only the rows in view.
+    Listing { rows: &'a [ResolvedCoefficient], style: Style },
     /// The header block is the entire panel.
     Complete,
 }
@@ -241,11 +245,7 @@ enum ConstraintBody<'a> {
 /// viewport, or splits them into two columns) and by the plain-text builder
 /// (which appends all of them unified).
 #[expect(clippy::too_many_lines)]
-fn constraint_detail_parts<'a>(
-    entry: &'a ConstraintDiffEntry,
-    interner: &NameInterner,
-    pane_width: Option<u16>,
-) -> (Vec<Line<'static>>, ConstraintBody<'a>) {
+fn constraint_detail_parts(entry: &ConstraintDiffEntry) -> (Vec<Line<'static>>, ConstraintBody<'_>) {
     let mut lines: Vec<Line<'static>> = Vec::new();
 
     let t = theme();
@@ -286,7 +286,7 @@ fn constraint_detail_parts<'a>(
     // Order-only badge.
     if entry.order_only {
         lines.push(Line::from(Span::styled(
-            "  \u{26a0} Order Changed \u{2014} coefficients are identical but appear in a different order",
+            "  ! Order Changed \u{2014} coefficients are identical but appear in a different order",
             Style::default().fg(t.modified),
         )));
     }
@@ -391,14 +391,7 @@ fn constraint_detail_parts<'a>(
                     ]));
                     lines.push(Line::from(""));
                     lines.push(Line::from(Span::styled("  Coefficients:", muted().add_modifier(Modifier::BOLD))));
-                    let name_w = name_column_width(longest_coefficient_name(coefficients, interner), pane_width, VALUE_COLUMN);
-                    for coeff in coefficients {
-                        let name = interner.resolve(coeff.name);
-                        lines.push(Line::from(vec![
-                            Span::styled(name_cell(name, name_w), Style::default().fg(entry_colour)),
-                            Span::styled(format!("{}", coeff.value), Style::default().fg(entry_colour)),
-                        ]));
-                    }
+                    return (lines, ConstraintBody::Listing { rows: coefficients, style: Style::default().fg(entry_colour) });
                 }
                 ResolvedConstraint::Sos { sos_type, weights } => {
                     lines.push(Line::from(vec![
@@ -407,14 +400,7 @@ fn constraint_detail_parts<'a>(
                     ]));
                     lines.push(Line::from(""));
                     lines.push(Line::from(Span::styled("  Weights:", muted().add_modifier(Modifier::BOLD))));
-                    let name_w = name_column_width(longest_coefficient_name(weights, interner), pane_width, VALUE_COLUMN);
-                    for w in weights {
-                        let name = interner.resolve(w.name);
-                        lines.push(Line::from(vec![
-                            Span::styled(name_cell(name, name_w), Style::default().fg(entry_colour)),
-                            Span::styled(format!("{}", w.value), Style::default().fg(entry_colour)),
-                        ]));
-                    }
+                    return (lines, ConstraintBody::Listing { rows: weights, style: Style::default().fg(entry_colour) });
                 }
             }
         }
@@ -430,10 +416,17 @@ pub fn build_constraint_detail(
     cached_rows: Option<&[crate::detail_model::CoefficientRow]>,
     interner: &NameInterner,
 ) -> Vec<Line<'static>> {
-    let (mut lines, body) = constraint_detail_parts(entry, interner, None);
-    if let ConstraintBody::Rows { changes, old, new, .. } = body {
-        let (skipped, _) = render_coeff_changes(&mut lines, changes, old, new, cached_rows, None, None, interner);
-        debug_assert_eq!(skipped, 0, "an unwindowed render leaves nothing out");
+    let (mut lines, body) = constraint_detail_parts(entry);
+    match body {
+        ConstraintBody::Rows { changes, old, new, .. } => {
+            let (skipped, _) = render_coeff_changes(&mut lines, changes, old, new, cached_rows, None, None, interner);
+            debug_assert_eq!(skipped, 0, "an unwindowed render leaves nothing out");
+        }
+        ConstraintBody::Listing { rows, style } => {
+            let skipped = push_coefficient_rows(&mut lines, rows, interner, None, style, None);
+            debug_assert_eq!(skipped, 0, "an unwindowed render leaves nothing out");
+        }
+        ConstraintBody::Complete => {}
     }
     lines
 }
@@ -456,7 +449,7 @@ pub fn render_constraint_detail(
     if area.width == 0 || area.height == 0 {
         return 0;
     }
-    let (mut lines, body) = constraint_detail_parts(entry, interner, Some(area.width));
+    let (mut lines, body) = constraint_detail_parts(entry);
     if let ConstraintBody::Rows { changes, old, new, side_by_side } = body {
         if side_by_side {
             return render_constraint_side_by_side(
@@ -486,7 +479,14 @@ pub fn render_constraint_detail(
             scroll,
         );
     }
-    let content = PanelLines::whole(lines);
+    let content = if let ConstraintBody::Listing { rows, style } = body {
+        let visible = coeff_visible_range(scroll, area, lines.len());
+        let header = lines.len();
+        let skipped = push_coefficient_rows(&mut lines, rows, interner, Some(area.width), style, Some(visible));
+        PanelLines { lines, skipped, total: header + rows.len() }
+    } else {
+        PanelLines::whole(lines)
+    };
     render_windowed_panel(
         frame,
         area,
@@ -523,7 +523,7 @@ fn objective_detail_lines(
 
     if entry.order_only {
         lines.push(Line::from(Span::styled(
-            "  \u{26a0} Order Changed \u{2014} coefficients are identical but appear in a different order",
+            "  ! Order Changed \u{2014} coefficients are identical but appear in a different order",
             Style::default().fg(t.modified),
         )));
     } else if entry.order_changed {
@@ -923,7 +923,7 @@ fn render_constraint_side_by_side(
     // The column header scrolls away with the first data row.
     let mut lines: Vec<Line<'_>> = if coefficient_scroll == 0 { vec![Line::from(header)] } else { Vec::new() };
 
-    let dim = Style::default().fg(t.border);
+    let dim = Style::default().fg(t.faint);
     let change = Style::default().fg(t.accent);
     for (index, row) in window.iter().enumerate() {
         let (name_style, old_style, new_style, badge) = match row.change_kind {
@@ -1178,7 +1178,11 @@ fn render_coeff_changes(
     let (skip, take) = visible_range.unwrap_or((0, rows.len()));
     let layout = UnifiedColumns::fit(pane_width);
     let (val_w, badges) = (layout.value, layout.badges);
-    let name_w = name_column_width(rows.iter().map(|row| row.variable.chars().count()).max().unwrap_or(0), pane_width, layout.reserved());
+    let name_w = name_column_width(
+        rows.iter().map(|row| unicode_width::UnicodeWidthStr::width(row.variable.as_str())).max().unwrap_or(0),
+        pane_width,
+        layout.reserved(),
+    );
 
     let skipped = skip.min(rows.len());
 
@@ -1261,6 +1265,33 @@ mod tests {
 
     /// The windowed renderers must draw exactly what rendering every line and
     /// scrolling the paragraph would, at every scroll offset.
+    #[test]
+    fn a_removed_constraint_windows_to_the_same_rows_as_the_full_render() {
+        let terms: Vec<String> = (0..300).map(|i| format!("{} x{i:03}", i + 1)).collect();
+        let source = format!("min\nobj: x000\nst\nc1: {} >= 2\nend\n", terms.join(" + "));
+        let other = "min\nobj: x000\nst\nc2: x000 >= 1\nend\n";
+        let diff = crate::snapshot_tests::diff_app_from(&source, other);
+        let interner = &diff.report.interner;
+        let removed = diff.report.constraints.entries.iter().find(|e| e.kind == DiffKind::Removed).expect("c1 is removed");
+        let area = Rect::new(0, 0, 60, 20);
+        let draw = |f: &dyn Fn(&mut Frame)| {
+            let mut terminal = Terminal::new(TestBackend::new(area.width, area.height)).expect("test terminal must build");
+            terminal.draw(|frame| f(frame)).expect("draw must succeed");
+            terminal.backend().buffer().clone()
+        };
+        let style = Style::default();
+        for scroll in [0_u16, 1, 3, 100, 290, 310] {
+            let windowed = draw(&|frame| {
+                render_constraint_detail(frame, area, removed, style, usize::from(scroll), None, interner);
+            });
+            let full = draw(&|frame| {
+                let title = detail_title("Constraint", &removed.name, Some(removed.kind), true, area.width);
+                render_panel(frame, area, title, build_constraint_detail(removed, None, interner), style, scroll);
+            });
+            assert_eq!(windowed, full, "removed constraint differs at scroll {scroll}");
+        }
+    }
+
     #[test]
     fn windowed_panels_match_the_full_render_at_every_scroll() {
         let terms: Vec<String> = (0..300).map(|i| format!("{} x{i:03}", i + 1)).collect();
