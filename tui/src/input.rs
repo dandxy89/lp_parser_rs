@@ -14,7 +14,7 @@ use crossterm::event::{Event as CrosstermEvent, KeyCode, KeyEvent, KeyEventKind,
 use lp_parser_rs::problem::LpProblem;
 use tui_input::backend::crossterm::EventHandler as _;
 
-use crate::app::{App, SolveRenderCache};
+use crate::app::{App, PaneTarget, SolveRenderCache};
 use crate::detail_text::{format_solve_diff_result, format_solve_result};
 use crate::presolve::{Rule, Scaling, presolve};
 use crate::state::{
@@ -1181,30 +1181,48 @@ impl App {
             self.open_highs_presolve_log();
             return;
         }
-        let (_, stats) = presolve(&self.problem1, self.presolve_rules);
-        let lines = crate::widgets::presolve::log_lines(&stats);
-        let export = ("presolve_log.txt", stats.log_text());
-        self.last_presolve = Some(stats);
-        self.presolve_cursor = None;
-        self.presolve_log = Some(crate::state::ScrollPane { lines, scroll: 0, export: Some(export) });
+        let (problem, rules) = (Arc::clone(&self.problem1), self.presolve_rules);
+        self.spawn_pane(PaneTarget::PresolveLog, "Presolve log", move || {
+            let (_, stats) = presolve(&problem, rules);
+            let lines = crate::widgets::presolve::log_lines(&stats);
+            let export = ("presolve_log.txt", stats.log_text());
+            Ok((crate::state::ScrollPane { lines, scroll: 0, export: Some(export) }, Some(stats)))
+        });
     }
 
     /// Open the `HiGHS` presolve report (`H` from the picker): which rows and
     /// columns the *solver* throws away before it starts, on the file as
     /// written, with none of our rewrites applied.
     ///
-    /// Runs on this thread like the rewrite does. `HiGHS` presolve is a
-    /// fraction of a solve, and the picker is already a modal moment.
+    /// Runs on a worker thread: the presolve is a fraction of a solve, but on a
+    /// large model that is still long enough to freeze the UI.
     fn open_highs_presolve_log(&mut self) {
-        match crate::highs_presolve::highs_presolve(&self.problem1) {
-            Ok(report) => {
-                let lines = crate::widgets::presolve::highs_log_lines(&report);
-                let export = ("highs_presolve.txt", report.log_text());
-                self.presolve_cursor = None;
-                self.presolve_log = Some(crate::state::ScrollPane { lines, scroll: 0, export: Some(export) });
-            }
-            Err(error) => self.flash_error(format!("HiGHS presolve: {error}")),
+        let problem = Arc::clone(&self.problem1);
+        self.spawn_pane(PaneTarget::PresolveLog, "HiGHS presolve", move || {
+            let report = crate::highs_presolve::highs_presolve(&problem)?;
+            let lines = crate::widgets::presolve::highs_log_lines(&report);
+            let export = ("highs_presolve.txt", report.log_text());
+            Ok((crate::state::ScrollPane { lines, scroll: 0, export: Some(export) }, None))
+        });
+    }
+
+    /// Run `build` on a worker thread and install its pane when it finishes.
+    fn spawn_pane<F>(&mut self, target: PaneTarget, label: &'static str, build: F)
+    where
+        F: FnOnce() -> crate::app::PaneResult + Send + 'static,
+    {
+        if self.pane_job.is_some() {
+            self.flash_warn(format!("{label}: another pane is still building"));
+            return;
         }
+        let (sender, receiver) = mpsc::channel();
+        self.pane_job = Some(crate::app::PaneJob { target, label, receiver });
+        self.flash_status(format!("{label}: working\u{2026}"));
+        std::thread::spawn(move || {
+            // A dropped receiver (the model was reloaded meanwhile) is expected, and
+            // stderr is the alternate screen, so a failed send stays silent.
+            drop(sender.send(build()));
+        });
     }
 
     /// Handle a key event while the presolve log pane is open.
@@ -1337,12 +1355,16 @@ impl App {
     /// Open the diagnostics pane, analysing the baseline problem against the
     /// most recent solve.
     ///
-    /// The analysis runs here rather than per frame: it is a full pass over the
-    /// matrix, and the result only changes when the model or the solve does.
-    fn open_diagnostics(&mut self) {
-        let diagnostics = crate::diagnostics::analyse(&self.problem1, self.latest_solve_result());
-        let lines = crate::widgets::diagnostics::build_lines(&diagnostics);
-        self.diagnostics = Some(crate::state::ScrollPane { lines, scroll: 0, export: None });
+    /// The analysis runs once on a worker thread rather than per frame: it is a
+    /// full pass over the matrix, and the result only changes when the model or
+    /// the solve does.
+    pub(crate) fn open_diagnostics(&mut self) {
+        let (problem, solve) = (Arc::clone(&self.problem1), self.latest_solve_result().cloned());
+        self.spawn_pane(PaneTarget::Diagnostics, "Diagnostics", move || {
+            let diagnostics = crate::diagnostics::analyse(&problem, solve.as_ref());
+            let lines = crate::widgets::diagnostics::build_lines(&diagnostics);
+            Ok((crate::state::ScrollPane { lines, scroll: 0, export: None }, None))
+        });
     }
 
     /// Handle a key event while the diagnostics pane is open.
@@ -2038,6 +2060,12 @@ mod tests {
         assert!(app.presolve_cursor.is_some(), "P opens the picker");
 
         app.handle_key(KeyEvent::from(KeyCode::Char('l')));
+        let deadline = Instant::now() + std::time::Duration::from_secs(10);
+        while app.pane_job.is_some() {
+            assert!(Instant::now() < deadline, "the worker never finished");
+            app.poll_solve();
+            std::thread::yield_now();
+        }
         let pane = app.presolve_log.as_ref().expect("l opens the log pane");
         assert!(!pane.lines.is_empty(), "the pane is built with the run's lines");
         assert!(app.presolve_cursor.is_none(), "the picker closes behind it");

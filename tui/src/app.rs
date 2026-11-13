@@ -322,6 +322,24 @@ impl SolverSession {
     }
 }
 
+/// Which pane a [`PaneJob`] fills when it finishes.
+#[derive(Debug, Clone, Copy)]
+pub enum PaneTarget {
+    Diagnostics,
+    PresolveLog,
+}
+
+/// What a pane worker hands back: the pane, and the presolve stats when it ran our rewrite.
+pub type PaneResult = Result<(ScrollPane, Option<crate::presolve::PresolveStats>), String>;
+
+/// A pane under construction on a worker thread.
+#[derive(Debug)]
+pub struct PaneJob {
+    pub target: PaneTarget,
+    pub label: &'static str,
+    pub receiver: mpsc::Receiver<PaneResult>,
+}
+
 #[expect(clippy::struct_excessive_bools)] // independent toggles (help, ignore-order, mouse capture, quit), not a hidden state machine
 pub struct App {
     /// Diff (two files) or Inspect (single file). Fixed at startup.
@@ -355,6 +373,12 @@ pub struct App {
     /// The worker builds the lines, so the UI thread never formats a large
     /// report.
     pub receive_analysis: Option<mpsc::Receiver<Result<ScrollPane, String>>>,
+
+    /// A diagnostics or presolve-log pane being built on a worker thread.
+    pub pane_job: Option<PaneJob>,
+
+    /// A tolerance-change diff rebuild running on a worker thread.
+    pub report_job: Option<mpsc::Receiver<LpDiffReport>>,
 
     /// Presolve rule picker overlay (`P`): the highlighted rule when open.
     pub presolve_cursor: Option<usize>,
@@ -745,6 +769,8 @@ impl App {
             diagnostics: None,
             analysis: AnalysisState::Idle,
             receive_analysis: None,
+            pane_job: None,
+            report_job: None,
             presolve_cursor: None,
             presolve_rules: crate::presolve::DEFAULT_RULES,
             last_presolve: None,
@@ -893,7 +919,7 @@ impl App {
     pub fn cycle_rel_tol(&mut self) {
         let value = next_tolerance_preset(self.diff_options.rel_tol);
         self.diff_options.rel_tol = value;
-        self.rebuild_report_inner(false);
+        self.rebuild_for_tolerance();
         self.flash_status(format!("rel_tol = {}", format_tolerance(value)));
     }
 
@@ -901,8 +927,60 @@ impl App {
     pub fn cycle_abs_tol(&mut self) {
         let value = next_tolerance_preset(self.diff_options.abs_tol);
         self.diff_options.abs_tol = value;
-        self.rebuild_report_inner(false);
+        self.rebuild_for_tolerance();
         self.flash_status(format!("abs_tol = {}", format_tolerance(value)));
+    }
+
+    /// Rebuild the report after a tolerance change on a worker thread, so a
+    /// large model does not freeze the UI. A newer request replaces an older
+    /// one still running: the old result is never installed.
+    fn rebuild_for_tolerance(&mut self) {
+        if self.mode != AppMode::Diff {
+            self.rebuild_report_inner(false);
+            return;
+        }
+        let (problem1, problem2) = (Arc::clone(&self.problem1), Arc::clone(&self.problem2));
+        let (line_map1, line_map2) = (self.line_map1.clone(), self.line_map2.clone());
+        let (analysis1, analysis2) = (self.report.analysis1.clone(), self.report.analysis2.clone());
+        let options = self.diff_options.clone();
+        let (file1, file2) = (self.file1_path.display().to_string(), self.file2_path.display().to_string());
+        let (sender, receiver) = mpsc::channel();
+        self.report_job = Some(receiver);
+        std::thread::spawn(move || {
+            let report = build_diff_report(&DiffInput {
+                file1: &file1,
+                file2: &file2,
+                p1: &problem1,
+                p2: &problem2,
+                line_map1: &line_map1,
+                line_map2: &line_map2,
+                analysis1,
+                analysis2,
+                options,
+            });
+            // A dropped receiver means a newer request or a reload superseded this one.
+            drop(sender.send(report));
+        });
+    }
+
+    /// Install a finished tolerance rebuild.
+    fn poll_report_job(&mut self) {
+        let Some(receiver) = &self.report_job else {
+            return;
+        };
+        match receiver.try_recv() {
+            Ok(report) => {
+                self.report_job = None;
+                let selected_name = self.selected_entry_name().map(str::to_owned);
+                self.report = report;
+                self.install_report(false, selected_name.as_deref());
+            }
+            Err(mpsc::TryRecvError::Empty) => {}
+            Err(mpsc::TryRecvError::Disconnected) => {
+                self.report_job = None;
+                self.flash_error(crate::disconnected("Diff rebuild"));
+            }
+        }
     }
 
     /// Rebuild the diff report from the stored problems with the current
@@ -950,6 +1028,12 @@ impl App {
             }
         }
 
+        self.install_report(analyses_changed, selected_name.as_deref());
+    }
+
+    /// Refresh every cache derived from `self.report`, then restore the selection
+    /// to `selected_name`. Shared by the synchronous rebuild and the worker's result.
+    fn install_report(&mut self, analyses_changed: bool, selected_name: Option<&str>) {
         // Report-derived caches: search haystack + name buffer. The content
         // buffer is lazy — clear it and let the next `c:` query rebuild it.
         let (haystack, names) = build_haystack(&self.report);
@@ -977,7 +1061,7 @@ impl App {
         self.detail_scroll = 0;
         self.ensure_active_section_cache();
         self.clamp_active_selection();
-        self.reselect_by_name(selected_name.as_deref());
+        self.reselect_by_name(selected_name);
 
         // The search pop-up references haystack indices — refresh if it is open.
         if self.search_popup.visible {
@@ -1578,6 +1662,8 @@ impl App {
     fn discard_model_derived_state(&mut self) {
         self.analysis = AnalysisState::Idle;
         self.receive_analysis = None;
+        self.pane_job = None;
+        self.report_job = None;
         self.diagnostics = None;
         self.presolve_log = None;
         self.last_presolve = None;
@@ -1599,6 +1685,8 @@ impl App {
             || matches!(self.solver.state, SolveState::Running { .. } | SolveState::RunningBoth { .. })
             || matches!(self.solver.diagnosis, DiagnosisState::Running { .. })
             || matches!(self.analysis, AnalysisState::Running { .. })
+            || self.pane_job.is_some()
+            || self.report_job.is_some()
     }
 
     /// Poll the solver channel(s) for results, transitioning state when complete.
@@ -1610,6 +1698,31 @@ impl App {
         }
         self.poll_diagnosis();
         self.poll_analysis();
+        self.poll_pane_job();
+        self.poll_report_job();
+    }
+
+    /// Install a finished [`PaneJob`], or report its failure.
+    fn poll_pane_job(&mut self) {
+        let Some(job) = &self.pane_job else {
+            return;
+        };
+        let (target, label) = (job.target, job.label);
+        let outcome = match job.receiver.try_recv() {
+            Ok(outcome) => outcome,
+            Err(mpsc::TryRecvError::Empty) => return, // still running
+            Err(mpsc::TryRecvError::Disconnected) => Err(crate::disconnected(label)),
+        };
+        self.pane_job = None;
+        match (outcome, target) {
+            (Ok((pane, _)), PaneTarget::Diagnostics) => self.diagnostics = Some(pane),
+            (Ok((pane, stats)), PaneTarget::PresolveLog) => {
+                self.last_presolve = stats.or(self.last_presolve.take());
+                self.presolve_cursor = None;
+                self.presolve_log = Some(pane);
+            }
+            (Err(error), _) => self.flash_error(format!("{label}: {error}")),
+        }
     }
 
     /// Poll the analysis channel (`AnalysisState::Running`).
@@ -2062,6 +2175,36 @@ mod tests {
 
     /// Regression: a watch reload reset only the solver session, so analyses,
     /// panes and presolve results of the old files were shown as current.
+    #[test]
+    fn a_tolerance_change_rebuilds_the_report_off_thread() {
+        let mut app = crate::snapshot_tests::diff_app_from(crate::snapshot_tests::BASE_LP, crate::snapshot_tests::BASE_LP);
+        let before = app.diff_options.rel_tol;
+        app.cycle_rel_tol();
+        assert_ne!(app.diff_options.rel_tol, before, "the option changes at once");
+        assert!(app.report_job.is_some() && app.is_animating(), "the rebuild is pending");
+        let deadline = Instant::now() + std::time::Duration::from_secs(10);
+        while app.report_job.is_some() {
+            assert!(Instant::now() < deadline, "the worker never finished");
+            app.poll_solve();
+            std::thread::yield_now();
+        }
+    }
+
+    #[test]
+    fn diagnostics_are_built_off_thread_and_installed_by_polling() {
+        let mut app = crate::snapshot_tests::diff_app_from(crate::snapshot_tests::BASE_LP, crate::snapshot_tests::BASE_LP);
+        app.open_diagnostics();
+        assert!(app.diagnostics.is_none() && app.pane_job.is_some(), "the pane is pending, not built on this thread");
+        assert!(app.is_animating(), "ticks must keep polling while the job runs");
+        let deadline = Instant::now() + std::time::Duration::from_secs(10);
+        while app.pane_job.is_some() {
+            assert!(Instant::now() < deadline, "the worker never finished");
+            app.poll_solve();
+            std::thread::yield_now();
+        }
+        assert!(app.diagnostics.is_some(), "the finished pane is installed");
+    }
+
     #[test]
     fn a_reload_discards_results_computed_from_the_old_models() {
         let mut app = crate::snapshot_tests::diff_app_from(crate::snapshot_tests::BASE_LP, crate::snapshot_tests::BASE_LP);
