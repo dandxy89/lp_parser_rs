@@ -8,7 +8,7 @@
 use std::fmt::Write as _;
 
 use serde_json::{Value, json};
-use tower_lsp_server::ls_types::{CodeLens, Command, Range};
+use ls_types::{CodeLens, Command, Range};
 
 use crate::document::Document;
 use crate::features::navigation;
@@ -113,7 +113,7 @@ fn count(n: usize, template: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use tower_lsp_server::ls_types::Location;
+    use ls_types::Location;
 
     use super::*;
     use crate::position::Encoding;

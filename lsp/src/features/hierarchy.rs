@@ -5,7 +5,7 @@
 use std::collections::BTreeMap;
 
 use serde_json::{Value, json};
-use tower_lsp_server::ls_types::{CallHierarchyIncomingCall, CallHierarchyItem, CallHierarchyOutgoingCall, Position, SymbolKind};
+use ls_types::{CallHierarchyIncomingCall, CallHierarchyItem, CallHierarchyOutgoingCall, Position, SymbolKind};
 
 use super::symbols::entity_symbol;
 use crate::document::Document;
@@ -86,7 +86,7 @@ fn entity_item(doc: &Document, entity: usize) -> CallHierarchyItem {
 
 #[cfg(test)]
 mod tests {
-    use tower_lsp_server::ls_types::Uri;
+    use ls_types::Uri;
 
     use super::*;
     use crate::position::Encoding;
@@ -109,7 +109,7 @@ mod tests {
         assert_eq!(x.name, "x");
         let callers: Vec<String> = incoming(&d, &x).into_iter().map(|c| c.from.name).collect();
         assert_eq!(callers, ["obj", "c1", "c2"]);
-        assert_eq!(outgoing(&d, &x), [] as [tower_lsp_server::ls_types::CallHierarchyOutgoingCall; 0]);
+        assert_eq!(outgoing(&d, &x), [] as [ls_types::CallHierarchyOutgoingCall; 0]);
     }
 
     #[test]
@@ -118,6 +118,6 @@ mod tests {
         let c1 = at(&d, "c1");
         let callees: Vec<(String, usize)> = outgoing(&d, &c1).into_iter().map(|c| (c.to.name, c.from_ranges.len())).collect();
         assert_eq!(callees, [("x".to_owned(), 1), ("y".to_owned(), 1)]);
-        assert_eq!(incoming(&d, &c1), [] as [tower_lsp_server::ls_types::CallHierarchyIncomingCall; 0]);
+        assert_eq!(incoming(&d, &c1), [] as [ls_types::CallHierarchyIncomingCall; 0]);
     }
 }

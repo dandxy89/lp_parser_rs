@@ -30,7 +30,7 @@
 use std::ops::Range;
 use std::sync::OnceLock;
 
-use tower_lsp_server::ls_types::{SemanticToken, SemanticTokenModifier, SemanticTokenType, SemanticTokensEdit, SemanticTokensLegend};
+use ls_types::{SemanticToken, SemanticTokenModifier, SemanticTokenType, SemanticTokensEdit, SemanticTokensLegend};
 
 use crate::document::Document;
 use crate::position::Encoding;
@@ -421,7 +421,7 @@ pub fn delta(old: &[SemanticToken], new: &[SemanticToken]) -> Vec<SemanticTokens
 
 #[cfg(test)]
 mod tests {
-    use tower_lsp_server::ls_types::Uri;
+    use ls_types::Uri;
 
     use super::*;
     use crate::syntax::kind;
@@ -451,8 +451,8 @@ mod tests {
         absolute(tokens)
             .into_iter()
             .map(|(line, column, length, ty, mods)| {
-                let start = doc.offset(tower_lsp_server::ls_types::Position::new(line, column));
-                let end = doc.offset(tower_lsp_server::ls_types::Position::new(line, column + length));
+                let start = doc.offset(ls_types::Position::new(line, column));
+                let end = doc.offset(ls_types::Position::new(line, column + length));
                 (doc.text[start..end].to_owned(), ty, mods)
             })
             .collect()

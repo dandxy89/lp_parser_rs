@@ -6,7 +6,7 @@ use std::ops::Range;
 
 use lp_parser_rs::analysis::{AnalysisIssue, IssueCategory, IssueSeverity, IssueSubject};
 use lp_parser_rs::{EntityKind as UpstreamKind, LpParseError, VariableBounds};
-use tower_lsp_server::ls_types::{Diagnostic, DiagnosticRelatedInformation, DiagnosticSeverity, DiagnosticTag, NumberOrString};
+use ls_types::{Diagnostic, DiagnosticRelatedInformation, DiagnosticSeverity, DiagnosticTag, NumberOrString};
 use tree_sitter::Node;
 
 use crate::config::Config;

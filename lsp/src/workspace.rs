@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::SystemTime;
 
-use tower_lsp_server::ls_types::Uri;
+use ls_types::Uri;
 
 use crate::document::Document;
 use crate::position::Encoding;

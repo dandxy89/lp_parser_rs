@@ -13,6 +13,7 @@ pub mod features;
 pub mod index;
 pub mod position;
 pub mod semantic;
+#[cfg(feature = "server")]
 pub mod server;
 pub mod syntax;
 pub mod workspace;
@@ -21,4 +22,5 @@ pub use config::Config;
 pub use document::Document;
 pub use index::SymbolIndex;
 pub use position::{Encoding, LineIndex};
+#[cfg(feature = "server")]
 pub use server::Backend;

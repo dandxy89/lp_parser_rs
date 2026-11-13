@@ -9,7 +9,7 @@ use std::collections::{HashMap, HashSet};
 use std::ops::Range;
 
 use serde_json::{Value, json};
-use tower_lsp_server::ls_types::{
+use ls_types::{
     CodeAction, CodeActionContext, CodeActionKind, CodeActionOrCommand, Diagnostic, NumberOrString, Range as LspRange, TextEdit,
     WorkspaceEdit,
 };
@@ -827,7 +827,7 @@ fn trim_edit(original: &str, mut range: Range<usize>, mut text: String) -> Edit 
 mod tests {
     use lp_parser_rs::LpProblem;
     use lp_parser_rs::diff::DiffOptions;
-    use tower_lsp_server::ls_types::{DiagnosticSeverity, Uri};
+    use ls_types::{DiagnosticSeverity, Uri};
 
     use super::*;
     use crate::position::Encoding;

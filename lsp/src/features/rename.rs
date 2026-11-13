@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use std::ops::Range;
 use std::sync::Arc;
 
-use tower_lsp_server::ls_types::{Position, PrepareRenameResponse, TextEdit, WorkspaceEdit};
+use ls_types::{Position, PrepareRenameResponse, TextEdit, WorkspaceEdit};
 use tree_sitter::Tree;
 
 use crate::document::Document;
@@ -347,7 +347,7 @@ fn check_reparse(doc: &Document, ranges: &[Range<usize>], old_name: &str, new_na
 
 #[cfg(test)]
 mod tests {
-    use tower_lsp_server::ls_types::Uri;
+    use ls_types::Uri;
 
     use super::*;
     use crate::position::Encoding;

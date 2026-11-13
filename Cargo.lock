@@ -1448,6 +1448,7 @@ dependencies = [
  "futures",
  "insta",
  "lp_parser_rs",
+ "ls-types",
  "proptest",
  "rustc-hash",
  "serde",

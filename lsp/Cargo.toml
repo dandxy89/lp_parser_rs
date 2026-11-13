@@ -12,6 +12,7 @@ categories = ["development-tools", "mathematics"]
 [[bin]]
 name = "lp-lsp"
 path = "src/main.rs"
+required-features = ["server"]
 
 [package.metadata.binstall]
 pkg-url = "{ repo }/releases/download/lp-lsp-v{ version }/lp-lsp-{ version }-{ target }{ archive-suffix }"
@@ -27,14 +28,21 @@ pkg-fmt = "zip"
 [lints]
 workspace = true
 
+[features]
+default = ["server"]
+# The stdio language server (tokio + tower-lsp-server). Without it the crate is the
+# synchronous language-feature library only, for in-process use such as the TUI editor.
+server = ["dep:tokio", "dep:tower-lsp-server"]
+
 [dependencies]
 lp_parser_rs = { version = "5.0.2", path = "../rust", features = ["diff", "serde"] }
 rustc-hash = "2.1.3"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
 streaming-iterator = "0.1.9"
-tokio = { version = "1.53.1", features = ["rt-multi-thread", "macros", "io-std", "sync", "time"] }
-tower-lsp-server = "0.23.0"
+ls-types = "0.0.6"
+tokio = { version = "1.53.1", features = ["rt-multi-thread", "macros", "io-std", "sync", "time"], optional = true }
+tower-lsp-server = { version = "0.23.0", optional = true }
 tree-sitter = "0.27.0"
 tree-sitter-lp = "0.1"
 
@@ -44,6 +52,10 @@ futures = { version = "0.3.34", default-features = false, features = ["std", "as
 insta = "1.48.0"
 proptest = "1.11.0"
 tower = { version = "0.5.3", features = ["util"] }
+
+[[test]]
+name = "e2e"
+required-features = ["server"]
 
 [[bench]]
 name = "lsp"

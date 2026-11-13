@@ -4,7 +4,7 @@
 use std::ops::Range;
 use std::sync::{Arc, OnceLock};
 
-use tower_lsp_server::ls_types::{self as lsp, TextDocumentContentChangeEvent, Uri};
+use ls_types::{self as lsp, TextDocumentContentChangeEvent, Uri};
 use tree_sitter::{InputEdit, Node, Tree};
 
 use crate::index::SymbolIndex;
@@ -58,6 +58,15 @@ impl Document {
         }
         self.tree = syntax::parse(&self.text, incremental.then_some(&self.tree));
         // Typing only pays for the reparse; the index is rebuilt when a feature needs it.
+        self.index = OnceLock::new();
+        self.version = version;
+    }
+
+    /// Replace the byte `range` with `new_text` and reparse incrementally,
+    /// without going through LSP change events. For in-process editors.
+    pub fn replace(&mut self, range: Range<usize>, new_text: &str, version: i32) {
+        self.edit(range, new_text);
+        self.tree = syntax::parse(&self.text, Some(&self.tree));
         self.index = OnceLock::new();
         self.version = version;
     }
@@ -195,6 +204,17 @@ mod tests {
         assert_eq!(doc.version, 2);
         assert!(doc.text.contains("limit: x - y"));
         assert!(doc.index().entities.iter().any(|e| e.name.as_deref() == Some("limit")));
+        assert_eq!(doc.tree.root_node().to_sexp(), syntax::parse(&doc.text, None).root_node().to_sexp());
+    }
+
+    #[test]
+    fn replace_reparses_and_resets_the_index() {
+        let mut doc = Document::new(uri(), BASE.to_owned(), 1, Encoding::Utf8);
+        assert!(doc.index().entities.iter().all(|e| e.name.as_deref() != Some("limit")), "builds the index first");
+        let at = BASE.find("c2").unwrap();
+        doc.replace(at..at + 2, "limit", 2);
+        assert_eq!(doc.version, 2);
+        assert!(doc.index().entities.iter().any(|e| e.name.as_deref() == Some("limit")), "the stale index is not reused");
         assert_eq!(doc.tree.root_node().to_sexp(), syntax::parse(&doc.text, None).root_node().to_sexp());
     }
 

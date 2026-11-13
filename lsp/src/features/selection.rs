@@ -2,7 +2,7 @@
 
 use std::ops::Range;
 
-use tower_lsp_server::ls_types::{Position, SelectionRange};
+use ls_types::{Position, SelectionRange};
 
 use crate::document::Document;
 use crate::syntax;

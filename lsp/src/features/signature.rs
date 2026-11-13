@@ -1,6 +1,6 @@
 //! Signature help for `MAX`/`MIN`/`ABS`/`AND`/`OR`.
 
-use tower_lsp_server::ls_types::{
+use ls_types::{
     Documentation, MarkupContent, MarkupKind, ParameterInformation, ParameterLabel, Position, SignatureHelp, SignatureInformation,
 };
 
@@ -92,7 +92,7 @@ fn tokens_before(text: &str, end: usize) -> impl Iterator<Item = (usize, &str)> 
 
 #[cfg(test)]
 mod tests {
-    use tower_lsp_server::ls_types::Uri;
+    use ls_types::Uri;
 
     use super::*;
     use crate::position::Encoding;

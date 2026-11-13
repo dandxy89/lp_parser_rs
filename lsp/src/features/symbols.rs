@@ -3,7 +3,7 @@
 use std::ops::Range;
 use std::sync::Arc;
 
-use tower_lsp_server::ls_types::{DocumentSymbol, OneOf, SymbolKind, WorkspaceSymbol};
+use ls_types::{DocumentSymbol, OneOf, SymbolKind, WorkspaceSymbol};
 
 use crate::document::Document;
 use crate::features::folding;

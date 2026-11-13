@@ -9,7 +9,7 @@
 use std::ops::Range;
 
 use lp_parser_rs::VariableBounds;
-use tower_lsp_server::ls_types::{InlayHint, InlayHintKind, InlayHintLabel, InlayHintTooltip, Range as LspRange};
+use ls_types::{InlayHint, InlayHintKind, InlayHintLabel, InlayHintTooltip, Range as LspRange};
 use tree_sitter::Node;
 
 use crate::config::InlayHintSettings;
@@ -307,7 +307,7 @@ mod tests {
     use std::sync::Arc;
 
     use lp_parser_rs::analysis::AnalysisConfig;
-    use tower_lsp_server::ls_types::Position;
+    use ls_types::Position;
 
     use super::*;
     use crate::position::Encoding;
