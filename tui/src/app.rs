@@ -322,6 +322,25 @@ impl SolverSession {
     }
 }
 
+/// The layer that currently takes the keys, topmost first.
+///
+/// [`App::top_overlay`] is the one place the priority order is written down;
+/// key routing, scrolling and the status-bar hints all match on it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Overlay {
+    #[cfg(feature = "editor")]
+    Editor,
+    Search,
+    Palette,
+    WhatIf,
+    PresolveLog,
+    PresolveCursor,
+    Diagnostics,
+    Analysis,
+    Solve,
+    Help,
+}
+
 /// Status messages kept for the messages pane.
 const FLASH_LOG_CAPACITY: usize = 200;
 
@@ -1263,21 +1282,43 @@ impl App {
 
     /// Whether any modal overlay is open — a pop-up, a prompt, or one of the
     /// analysis panes. The draw dispatcher dims the screen behind them.
-    pub const fn has_overlay(&self) -> bool {
-        self.overlay_above_help() || self.show_help
+    pub fn has_overlay(&self) -> bool {
+        self.top_overlay().is_some()
     }
 
     /// Whether an overlay other than help is open. Help sits lowest in the
     /// key and mouse priority order, so any of these covers it.
-    pub(crate) const fn overlay_above_help(&self) -> bool {
-        self.search_popup.visible
-            || self.palette.visible
-            || !matches!(self.solver.state, crate::state::SolveState::Idle)
-            || self.what_if.is_some()
-            || self.presolve_cursor.is_some()
-            || self.presolve_log.is_some()
-            || self.diagnostics.is_some()
-            || self.analysis.is_open()
+    pub(crate) fn overlay_above_help(&self) -> bool {
+        !matches!(self.top_overlay(), None | Some(Overlay::Help))
+    }
+
+    /// The topmost open overlay, in the order keys and mouse events reach them.
+    pub(crate) fn top_overlay(&self) -> Option<Overlay> {
+        #[cfg(feature = "editor")]
+        if self.editor.is_some() {
+            return Some(Overlay::Editor);
+        }
+        Some(if self.search_popup.visible {
+            Overlay::Search
+        } else if self.palette.visible {
+            Overlay::Palette
+        } else if self.what_if.is_some() {
+            Overlay::WhatIf
+        } else if self.presolve_log.is_some() {
+            Overlay::PresolveLog
+        } else if self.presolve_cursor.is_some() {
+            Overlay::PresolveCursor
+        } else if self.diagnostics.is_some() {
+            Overlay::Diagnostics
+        } else if self.analysis.is_open() {
+            Overlay::Analysis
+        } else if !matches!(self.solver.state, crate::state::SolveState::Idle) {
+            Overlay::Solve
+        } else if self.show_help {
+            Overlay::Help
+        } else {
+            return None;
+        })
     }
 
     /// Ensure the active section's cache is fresh. Call once per frame before drawing.

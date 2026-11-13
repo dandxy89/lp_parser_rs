@@ -14,7 +14,7 @@ use crossterm::event::{Event as CrosstermEvent, KeyCode, KeyEvent, KeyEventKind,
 use lp_parser_rs::problem::LpProblem;
 use tui_input::backend::crossterm::EventHandler as _;
 
-use crate::app::{App, PaneTarget, SolveRenderCache};
+use crate::app::{App, Overlay, PaneTarget, SolveRenderCache};
 use crate::detail_text::{format_solve_diff_result, format_solve_result};
 use crate::presolve::{Rule, Scaling, presolve};
 use crate::state::{
@@ -45,58 +45,20 @@ impl App {
             return;
         }
 
-        #[cfg(feature = "editor")]
-        if self.editor.is_some() {
-            self.handle_editor_key(key);
-            return;
+        match self.top_overlay() {
+            #[cfg(feature = "editor")]
+            Some(Overlay::Editor) => self.handle_editor_key(key),
+            Some(Overlay::Search) => self.handle_search_popup_key(key),
+            Some(Overlay::Palette) => self.handle_palette_key(key),
+            Some(Overlay::WhatIf) => self.handle_what_if_key(key),
+            Some(Overlay::PresolveLog) => self.handle_presolve_log_key(key),
+            Some(Overlay::PresolveCursor) => self.handle_presolve_key(key),
+            Some(Overlay::Diagnostics) => self.handle_diagnostics_key(key),
+            Some(Overlay::Analysis) => self.handle_analysis_key(key),
+            Some(Overlay::Solve) => self.handle_solve_key(key),
+            Some(Overlay::Help) => self.handle_help_key(key),
+            None => self.handle_normal_key(key),
         }
-
-        if self.search_popup.visible {
-            self.handle_search_popup_key(key);
-            return;
-        }
-
-        if self.palette.visible {
-            self.handle_palette_key(key);
-            return;
-        }
-
-        if self.what_if.is_some() {
-            self.handle_what_if_key(key);
-            return;
-        }
-
-        if self.presolve_log.is_some() {
-            self.handle_presolve_log_key(key);
-            return;
-        }
-
-        if self.presolve_cursor.is_some() {
-            self.handle_presolve_key(key);
-            return;
-        }
-
-        if self.diagnostics.is_some() {
-            self.handle_diagnostics_key(key);
-            return;
-        }
-
-        if self.analysis.is_open() {
-            self.handle_analysis_key(key);
-            return;
-        }
-
-        if !matches!(self.solver.state, SolveState::Idle) {
-            self.handle_solve_key(key);
-            return;
-        }
-
-        if self.show_help {
-            self.handle_help_key(key);
-            return;
-        }
-
-        self.handle_normal_key(key);
     }
 
     /// Handle a key event while the help overlay is visible.
@@ -397,7 +359,6 @@ impl App {
             self.run_palette_command(command);
         }
     }
-
 
     /// Start a solve: inspect mode solves the single file directly; diff mode
     /// opens the file picker (file 1 / file 2 / both).
@@ -1591,33 +1552,23 @@ impl App {
     /// priority order, or `None` when that overlay does not scroll (a prompt,
     /// a picker, a running solve or analysis).
     fn overlay_scroll_mut(&mut self) -> Option<&mut usize> {
-        if self.search_popup.visible || self.palette.visible || self.what_if.is_some() {
-            return None;
-        }
-        if let Some(pane) = &mut self.presolve_log {
-            return Some(&mut pane.scroll);
-        }
-        if self.presolve_cursor.is_some() {
-            return None;
-        }
-        if let Some(pane) = &mut self.diagnostics {
-            return Some(&mut pane.scroll);
-        }
-        if self.analysis.is_open() {
-            return match &mut self.analysis {
+        match self.top_overlay()? {
+            Overlay::PresolveLog => self.presolve_log.as_mut().map(|pane| &mut pane.scroll),
+            Overlay::Diagnostics => self.diagnostics.as_mut().map(|pane| &mut pane.scroll),
+            Overlay::Analysis => match &mut self.analysis {
                 AnalysisState::Done { pane, .. } => Some(&mut pane.scroll),
                 _ => None,
-            };
+            },
+            Overlay::Solve => match self.solver.state {
+                SolveState::Done(_) | SolveState::DoneBoth(_) => {
+                    let tab = self.solver.view.tab.index();
+                    Some(&mut self.solver.view.scroll[tab])
+                }
+                _ => None,
+            },
+            Overlay::Help => Some(&mut self.help_scroll),
+            _ => None,
         }
-        match self.solver.state {
-            SolveState::Done(_) | SolveState::DoneBoth(_) => {
-                let tab = self.solver.view.tab.index();
-                return Some(&mut self.solver.view.scroll[tab]);
-            }
-            SolveState::Idle => {}
-            _ => return None,
-        }
-        self.show_help.then_some(&mut self.help_scroll)
     }
 
     /// Scroll the name list by one step without touching focus.
