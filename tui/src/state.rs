@@ -656,6 +656,7 @@ pub enum PaletteCommand {
     CycleRelTol,
     CycleAbsTol,
     CycleTheme,
+    Messages,
     ToggleMouse,
     NarrowSidebar,
     WidenSidebar,
@@ -685,7 +686,7 @@ pub enum PaletteCommand {
 
 impl PaletteCommand {
     /// Every command with its palette label and direct-key hint, in display order.
-    const CMDS: [(Self, &'static str, &'static str); 41] = [
+    const CMDS: [(Self, &'static str, &'static str); 42] = [
         (Self::GoSummary, "Go to Summary", "1"),
         (Self::GoVariables, "Go to Variables", "2"),
         (Self::GoConstraints, "Go to Constraints", "3"),
@@ -702,6 +703,7 @@ impl PaletteCommand {
         (Self::CycleRelTol, "Cycle relative tolerance", "t"),
         (Self::CycleAbsTol, "Cycle absolute tolerance", "T"),
         (Self::CycleTheme, "Cycle colour theme", ""),
+        (Self::Messages, "Show recent messages", ""),
         (Self::ToggleMouse, "Mouse capture on/off", "M"),
         (Self::NarrowSidebar, "Narrow the sidebar", "<"),
         (Self::WidenSidebar, "Widen the sidebar", ">"),

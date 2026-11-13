@@ -235,6 +235,7 @@ impl App {
             PaletteCommand::ToggleIgnoreOrder => self.toggle_ignore_order(),
             PaletteCommand::CycleSort => self.cycle_sort_mode(),
             PaletteCommand::CycleTheme => self.cycle_theme(),
+            PaletteCommand::Messages => self.show_messages(),
             PaletteCommand::ToggleMouse => self.toggle_mouse_capture(),
             PaletteCommand::NarrowSidebar => self.resize_sidebar(false),
             PaletteCommand::WidenSidebar => self.resize_sidebar(true),

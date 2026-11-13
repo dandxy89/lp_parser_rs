@@ -322,6 +322,9 @@ impl SolverSession {
     }
 }
 
+/// Status messages kept for the messages pane.
+const FLASH_LOG_CAPACITY: usize = 200;
+
 /// Which pane a [`PaneJob`] fills when it finishes.
 #[derive(Debug, Clone, Copy)]
 pub enum PaneTarget {
@@ -376,6 +379,9 @@ pub struct App {
 
     /// A diagnostics or presolve-log pane being built on a worker thread.
     pub pane_job: Option<PaneJob>,
+
+    /// Recent status messages, oldest first, for the messages pane.
+    pub flash_log: Vec<(FlashLevel, String)>,
 
     /// The source editor, when open (`v`).
     #[cfg(feature = "editor")]
@@ -774,6 +780,7 @@ impl App {
             analysis: AnalysisState::Idle,
             receive_analysis: None,
             pane_job: None,
+            flash_log: Vec::new(),
             #[cfg(feature = "editor")]
             editor: None,
             report_job: None,
@@ -841,7 +848,12 @@ impl App {
 
     /// Flash a status-bar message at the given severity.
     pub(crate) fn flash(&mut self, level: FlashLevel, message: impl Into<String>) {
-        self.yank.message = message.into();
+        let message = message.into();
+        if self.flash_log.len() == FLASH_LOG_CAPACITY {
+            self.flash_log.remove(0);
+        }
+        self.flash_log.push((level, message.clone()));
+        self.yank.message = message;
         self.yank.level = level;
         self.yank.flash = Some(Instant::now());
     }
@@ -1185,6 +1197,30 @@ impl App {
             _ => return,
         };
         self.solver.render_cache = cache;
+    }
+
+    /// Show the recent status messages (the flash line keeps only the last, and clips it).
+    pub fn show_messages(&mut self) {
+        let lines: Vec<Line<'static>> = if self.flash_log.is_empty() {
+            vec![Line::from("  No messages yet.")]
+        } else {
+            self.flash_log
+                .iter()
+                .rev()
+                .map(|(level, message)| {
+                    let tag = match level {
+                        FlashLevel::Err => "error",
+                        FlashLevel::Warn => "warn ",
+                        FlashLevel::Ok => "ok   ",
+                        FlashLevel::Info => "info ",
+                    };
+                    Line::from(format!("  {tag}  {message}"))
+                })
+                .collect()
+        };
+        let text = self.flash_log.iter().map(|(_, message)| message.as_str()).collect::<Vec<_>>().join("\n");
+        self.analysis =
+            AnalysisState::Done { label: "Messages", pane: ScrollPane { lines, scroll: 0, export: Some(("messages.txt", text)) } };
     }
 
     /// Switch to the next built-in palette (the palette's `Cycle theme`).
@@ -2254,6 +2290,22 @@ mod tests {
 
     /// Regression: a watch reload reset only the solver session, so analyses,
     /// panes and presolve results of the old files were shown as current.
+    #[test]
+    fn messages_are_logged_and_shown_newest_first() {
+        let mut app = crate::snapshot_tests::diff_app_from(crate::snapshot_tests::BASE_LP, crate::snapshot_tests::BASE_LP);
+        app.flash_status("first");
+        app.flash_error("second");
+        app.show_messages();
+        let pane = app.analysis.pane().expect("the messages pane is open");
+        let text: Vec<String> = pane.lines.iter().map(|line| line.spans.iter().map(|s| s.content.as_ref()).collect()).collect();
+        assert!(text[0].contains("error") && text[0].contains("second"), "{text:?}");
+        assert!(text[1].contains("first"));
+        for n in 0..FLASH_LOG_CAPACITY + 5 {
+            app.flash_status(format!("m{n}"));
+        }
+        assert_eq!(app.flash_log.len(), FLASH_LOG_CAPACITY, "the log is bounded");
+    }
+
     #[test]
     fn a_tolerance_change_rebuilds_the_report_off_thread() {
         let mut app = crate::snapshot_tests::diff_app_from(crate::snapshot_tests::BASE_LP, crate::snapshot_tests::BASE_LP);
