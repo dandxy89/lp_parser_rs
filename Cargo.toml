@@ -15,7 +15,11 @@ codegen-units = 1
 strip = "debuginfo"
 
 [profile.dev.package]
+"*".debug = false
 insta.opt-level = 3
 ratatui.opt-level = 3
 tree-sitter.opt-level = 3
 tree-sitter-lp.opt-level = 3
+
+[profile.dev]
+debug = "line-tables-only"
