@@ -42,7 +42,7 @@ jobs:
         if: matrix.target == 'x86_64-apple-darwin'
         shell: bash
         run: echo "CARGO_TARGET_X86_64_APPLE_DARWIN_LINKER=clang" >> "$GITHUB_ENV"
-      - run: cargo build --release --locked --target ${{ matrix.target }} -p lp-lsp
+      - run: cargo build --release --target ${{ matrix.target }} -p lp-lsp
       - uses: actions/upload-artifact@v7
         with:
           name: server-${{ matrix.vsce }}
