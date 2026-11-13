@@ -135,7 +135,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
-          name: binary-${{ matrix.target }}
+          name: lp_diff-binary-${{ matrix.target }}
           path: |
             ${{ env.ASSET }}
             ${{ env.CHECKSUM }}
@@ -148,7 +148,7 @@ jobs:
       - name: Download all artifacts
         uses: actions/download-artifact@v8
         with:
-          pattern: binary-*
+          pattern: lp_diff-binary-*
           merge-multiple: true
 
       - name: Generate combined checksums
