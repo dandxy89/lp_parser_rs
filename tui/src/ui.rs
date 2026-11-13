@@ -85,6 +85,9 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
         return;
     }
 
+    // The solve tables fix their column widths when built; refit them after a resize.
+    app.refit_solve_cache(full.width);
+
     // Ensure the active section's filter cache is fresh before reading it.
     app.ensure_active_section_cache();
 

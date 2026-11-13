@@ -339,6 +339,8 @@ impl App {
 
         match key.code {
             KeyCode::Char('q') => self.should_quit = true,
+            // The Vim habit for "commands"; the palette is the same list.
+            KeyCode::Char(':') => self.open_command_palette(),
             // With only two cycle targets, backward equals forward.
             KeyCode::Tab | KeyCode::BackTab => self.cycle_focus_forward(),
 

@@ -441,6 +441,19 @@ fn detail_rows_past_line_65535_are_reachable() {
     assert!(frame_contains(&render(&mut app, 100, 30), &last), "the last side-by-side row must be visible at maximum scroll");
 }
 
+/// The solve tables size their columns when built, so a resize must rebuild them.
+#[test]
+fn a_resize_refits_the_solve_tables() {
+    let mut app = diff_app();
+    let result = crate::solver::solve_problem(&app.problem1).expect("base solves");
+    app.solver.render_cache = crate::app::SolveRenderCache::Single(crate::widgets::solve::build_single_solve_cache(&result, 20));
+    app.solver.state = crate::state::SolveState::Done(Box::new(result));
+    render(&mut app, 80, 24);
+    assert_eq!(app.solver.cache_width, crate::app::App::solve_inner_width_for(80));
+    render(&mut app, 120, 40);
+    assert_eq!(app.solver.cache_width, crate::app::App::solve_inner_width_for(120), "a wider terminal rebuilds the cache");
+}
+
 /// Regression: `j` grew the solve overlay's scroll offset without bound, so
 /// over-scrolling left a blank pane that `k` had to climb back out of.
 #[test]

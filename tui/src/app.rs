@@ -184,6 +184,8 @@ pub struct SolverSession {
     pub receive2: Option<mpsc::Receiver<Result<SolveResult, String>>>,
     /// Cached formatted lines for the solve overlay.
     pub render_cache: SolveRenderCache,
+    /// Inner width the render cache was built for; a resize that changes it triggers a rebuild.
+    pub cache_width: u16,
     /// Infeasibility diagnosis state for the current result (key `e`).
     pub diagnosis: DiagnosisState,
     /// Channel for receiving the elastic-relaxation diagnosis from its background thread.
@@ -225,6 +227,7 @@ impl SolverSession {
             receive: None,
             receive2: None,
             render_cache: SolveRenderCache::Empty,
+            cache_width: 0,
             diagnosis: DiagnosisState::Idle,
             receive_diagnosis: None,
             solved_problem: None,
@@ -1154,16 +1157,7 @@ impl App {
         self.ensure_active_section_cache();
         self.rebuild_summary();
         self.numerics_lines = build_mode_numerics_lines(self.mode, &self.report, &self.problem1);
-        match &self.solver.state {
-            SolveState::Done(result) => {
-                let cache = crate::widgets::solve::build_single_solve_cache(result, self.solve_popup_inner_width());
-                self.solver.render_cache = SolveRenderCache::Single(cache);
-            }
-            SolveState::DoneBoth(diff) => {
-                self.solver.render_cache = crate::widgets::solve::build_diff_solve_cache(diff, self.solve_popup_inner_width());
-            }
-            _ => {}
-        }
+        self.rebuild_solve_cache();
         let closed_reports = self.diagnostics.is_some() || self.presolve_log.is_some() || self.analysis.pane().is_some();
         self.diagnostics = None;
         self.presolve_log = None;
@@ -1175,6 +1169,23 @@ impl App {
         }
         let name = crate::theme::builtin_name(&theme).unwrap_or("custom");
         self.flash_status(if closed_reports { format!("Theme: {name} (open reports closed)") } else { format!("Theme: {name}") });
+    }
+
+    /// Rebuild the solve overlay's cached lines for the current width and palette.
+    /// The tables size their columns when built, so a resize needs this too.
+    pub fn rebuild_solve_cache(&mut self) {
+        self.rebuild_solve_cache_at(self.solve_popup_inner_width());
+    }
+
+    fn rebuild_solve_cache_at(&mut self, width: u16) {
+        self.solver.cache_width = width;
+        match &self.solver.state {
+            SolveState::Done(result) => {
+                self.solver.render_cache = SolveRenderCache::Single(crate::widgets::solve::build_single_solve_cache(result, width))
+            }
+            SolveState::DoneBoth(diff) => self.solver.render_cache = crate::widgets::solve::build_diff_solve_cache(diff, width),
+            _ => {}
+        }
     }
 
     /// Switch to the next built-in palette (the palette's `Cycle theme`).
@@ -1846,8 +1857,22 @@ impl App {
     /// layout. Mirrors the popup sizing in `widgets::solve` (4/5 of the frame
     /// width, at least 60 columns, minus the borders).
     pub(crate) fn solve_popup_inner_width(&self) -> u16 {
-        let frame_width = self.layout.detail.x + self.layout.detail.width;
+        Self::solve_inner_width_for(self.layout.detail.x + self.layout.detail.width)
+    }
+
+    /// The solve overlay's inner width on a terminal `frame_width` columns wide.
+    pub(crate) fn solve_inner_width_for(frame_width: u16) -> u16 {
         (frame_width * 4 / 5).max(60).min(frame_width).saturating_sub(2)
+    }
+
+    /// Rebuild the solve tables when the terminal width changed since they were built.
+    /// Called at the start of each draw, before the layout is recomputed.
+    pub fn refit_solve_cache(&mut self, frame_width: u16) {
+        let width = Self::solve_inner_width_for(frame_width);
+        if self.solver.cache_width != width && matches!(self.solver.state, SolveState::Done(_) | SolveState::DoneBoth(_)) {
+            self.solver.cache_width = width;
+            self.rebuild_solve_cache_at(width);
+        }
     }
 
     /// Poll a single solver channel (`Running` state).
