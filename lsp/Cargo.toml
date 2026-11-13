@@ -44,7 +44,7 @@ ls-types = "0.0.6"
 tokio = { version = "1.53.1", features = ["rt-multi-thread", "macros", "io-std", "sync", "time"], optional = true }
 tower-lsp-server = { version = "0.23.0", optional = true }
 tree-sitter = "0.27.0"
-tree-sitter-lp = "0.1"
+tree-sitter-lp = "0.1.1"
 
 [dev-dependencies]
 criterion = "0.8.2"
