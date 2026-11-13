@@ -19,6 +19,8 @@ jobs:
       python--tag_name: ${{ steps.release.outputs['python--tag_name'] }}
       tui--release_created: ${{ steps.release.outputs['tui--release_created'] }}
       tui--tag_name: ${{ steps.release.outputs['tui--tag_name'] }}
+      lsp--release_created: ${{ steps.release.outputs['lsp--release_created'] }}
+      lsp--tag_name: ${{ steps.release.outputs['lsp--tag_name'] }}
     steps:
       - uses: googleapis/release-please-action@v5
         id: release
@@ -126,5 +128,28 @@ jobs:
     uses: ./.github/workflows/tui-release.yml
     with:
       tag_name: ${{ needs.release-please.outputs.tui--tag_name }}
+    permissions:
+      contents: write
+
+  publish-lsp-crate:
+    needs: [release-please, publish-crate]
+    # always(): publish-crate is skipped when only the server was released.
+    if: ${{ always() && needs.release-please.outputs.lsp--release_created && needs.publish-crate.result != 'failure' }}
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Publish to crates.io
+        run: cargo publish -p lp-lsp
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+  build-lsp-binaries:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.lsp--release_created }}
+    uses: ./.github/workflows/lsp-release.yml
+    with:
+      tag_name: ${{ needs.release-please.outputs.lsp--tag_name }}
     permissions:
       contents: write
