@@ -136,12 +136,14 @@ jobs:
         run: |
           cat *.sha256 > checksums-sha256.txt
 
+      # `gh release upload` only adds assets. action-gh-release also updates
+      # the release itself, which GitHub refuses on a manual run from a
+      # commit newer than the tag ("Resource not accessible by integration").
       - name: Upload to GitHub Release
-        uses: softprops/action-gh-release@v3
-        with:
-          tag_name: ${{ inputs.tag_name }}
-          files: |
-            *.tar.gz
-            *.zip
-            *.sha256
-            checksums-sha256.txt
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ inputs.tag_name }}
+        run: |
+          gh release upload "$TAG_NAME" --repo "$GITHUB_REPOSITORY" --clobber \
+            *.tar.gz *.zip *.sha256 checksums-sha256.txt
