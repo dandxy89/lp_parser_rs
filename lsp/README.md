@@ -30,6 +30,10 @@ index current through file watching or, for clients without it, file-operation n
 
 ## Install
 
+Prebuilt `lp-lsp` archives for Linux, macOS and Windows (x86_64 and aarch64), with SHA-256 checksums, are attached to each [`lp-lsp-v*` GitHub release](https://github.com/dandxy89/lp_parser_rs/releases).
+
+Or build from crates.io:
+
 ```bash
 cargo install --locked lp-lsp
 lp-lsp --version

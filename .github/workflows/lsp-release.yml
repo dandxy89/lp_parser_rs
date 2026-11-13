@@ -42,6 +42,8 @@ jobs:
             runner: windows-latest
             archive: zip
     runs-on: ${{ matrix.runner }}
+    env:
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
     steps:
       - uses: actions/checkout@v7
 
@@ -79,6 +81,24 @@ jobs:
           echo "ASSET=${ARCHIVE_NAME}.tar.gz" >> "$GITHUB_ENV"
           echo "CHECKSUM=${ARCHIVE_NAME}.tar.gz.sha256" >> "$GITHUB_ENV"
 
+      # Optional: signs only when the Azure Trusted Signing secrets are configured;
+      # unsigned builds are produced otherwise. Inputs follow azure/trusted-signing-action.
+      - name: Sign binary (Windows)
+        if: contains(matrix.target, 'windows') && env.AZURE_TENANT_ID != ''
+        uses: azure/trusted-signing-action@v0.5.1
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          endpoint: ${{ secrets.AZURE_SIGNING_ENDPOINT }}
+          trusted-signing-account-name: ${{ secrets.AZURE_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ secrets.AZURE_SIGNING_PROFILE }}
+          files-folder: target/${{ matrix.target }}/release
+          files-folder-filter: exe
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+
       - name: Package (Windows)
         if: matrix.archive == 'zip'
         shell: pwsh
@@ -91,11 +111,6 @@ jobs:
           "$hash  $ArchiveName.zip" | Out-File -Encoding ascii "$ArchiveName.zip.sha256"
           echo "ASSET=$ArchiveName.zip" >> $env:GITHUB_ENV
           echo "CHECKSUM=$ArchiveName.zip.sha256" >> $env:GITHUB_ENV
-
-      # TODO: Windows code signing step
-      # - name: Sign binary (Windows)
-      #   if: contains(matrix.target, 'windows')
-      #   ...
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7

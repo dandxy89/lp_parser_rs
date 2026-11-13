@@ -296,6 +296,8 @@ A Language Server Protocol implementation for `.lp` files: diagnostics, navigati
 cargo install --locked lp-lsp
 ```
 
+Prebuilt `lp-lsp` archives for Linux, macOS and Windows (x86_64 and aarch64), with SHA-256 checksums, are attached to each [`lp-lsp-v*` GitHub release](https://github.com/dandxy89/lp_parser_rs/releases).
+
 See [`lsp/README.md`](https://github.com/dandxy89/lp_parser_rs/blob/main/lsp/README.md) for the feature list, configuration reference and editor setup.
 
 ## Development

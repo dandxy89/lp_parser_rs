@@ -10,6 +10,8 @@ Install the server binary and make sure it is on your `PATH` (or set `lp.server.
 cargo install --locked lp-lsp
 ```
 
+Prebuilt binaries are on the [releases page](https://github.com/dandxy89/lp_parser_rs/releases).
+
 ## Features
 
 - Syntax highlighting, comment toggling and bracket matching
