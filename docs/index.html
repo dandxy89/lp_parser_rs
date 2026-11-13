@@ -137,8 +137,7 @@
 <div class="strip" aria-label="Latest releases">
   <div class="wrap">
     <span class="lbl">Latest</span>
-    <a class="stat" href="https://github.com/dandxy89/lp_parser_rs/releases/tag/lp_parser_rs-v5.0.1"><b>lp_parser_rs 5.0.1</b>10 Sep 2026</a>
-    <a class="stat" href="https://github.com/dandxy89/lp_parser_rs/releases/tag/lp_diff-v4.1.0"><b>lp_diff 4.1.0</b>10 Sep 2026</a>
+    <a class="stat" href="https://github.com/dandxy89/lp_parser_rs/releases/latest"><b>Latest release ↗</b></a>
     <a class="stat" href="https://github.com/dandxy89/lp_parser_rs/releases"><b>All releases ↗</b></a>
   </div>
 </div>
@@ -211,7 +210,7 @@ problem.rename_variable(<span class="g">"x1"</span>, <span class="g">"production
 problem.update_variable_type(<span class="g">"production_a"</span>, VariableType::Integer)?;
 
 std::fs::write(<span class="g">"modified.lp"</span>, write_lp_string(&amp;problem)?)?; <span class="c">// errors on names LP cannot represent</span></code></pre>
-    <p>Modification methods on <code>LpProblem</code>: <code>update_objective_coefficient</code>, <code>rename_objective</code>, <code>remove_objective</code>, <code>update_constraint_coefficient</code>, <code>update_constraint_rhs</code>, <code>rename_constraint</code>, <code>remove_constraint</code>, <code>rename_variable</code>, <code>update_variable_type</code>, <code>remove_variable</code>.
+    <p>Modification methods on <code>LpProblem</code>: <code>update_objective_coefficient</code>, <code>rename_objective</code>, <code>remove_objective</code>, <code>update_constraint_coefficient</code>, <code>update_constraint_rhs</code>, <code>rename_constraint</code>, <code>remove_constraint</code>, <code>set_constraint_class</code>, <code>add_variable</code>, <code>add_constraint</code>, <code>add_objective</code>, <code>set_name</code>, <code>rename_variable</code>, <code>update_variable_type</code>, <code>remove_variable</code>.
     Writer options live on <code>LpWriterOptions</code> (<code>include_problem_name</code>, <code>max_line_length</code>, <code>decimal_precision</code>, <code>include_section_spacing</code>) and are passed to <code>write_lp_string_with_options</code>. <code>decimal_precision</code> defaults to <code>None</code>, which writes each number in its shortest exact form.</p>
 
     <h3>Cargo features</h3>
@@ -286,7 +285,7 @@ lp_parser convert problem.lp --format csv --output ./out</code></pre>
   <div class="wrap">
     <p class="sec-label">The terminal UI</p>
     <h2>TUI:<span class="dim"> <code>lp_diff</code></span></h2>
-    <p class="lead">A <a href="https://ratatui.rs">ratatui</a> explorer and diff viewer for LP and MPS files. One file opens a single-model explorer; two files are diffed, in any mix of formats (<code>lp_diff model.lp model.mps</code>). It also solves with HiGHS, re-solves after an RHS edit, applies presolve-style rewrites and compares the result, and ranks the rows and columns most likely to be slowing a solve down.</p>
+    <p class="lead">A <a href="https://ratatui.rs">ratatui</a> explorer and diff viewer for LP and MPS files. One file opens a single-model explorer; two files are diffed, in any mix of formats (<code>lp_diff model.lp model.mps</code>). MPS has one integer marker, so a general-integer or [0,1]-integer variable read back from MPS differs in kind from the LP original and is reported as a type change. It also solves with HiGHS, re-solves after an RHS edit, applies presolve-style rewrites and compares the result, and ranks the rows and columns most likely to be slowing a solve down.</p>
     <video class="demo" width="1280" height="800" loop muted playsinline controls
            preload="none" poster="assets/demo-poster.jpg" aria-label="Diffing an MPS file against an LP file: a coefficient-level constraint diff, raw text view, fuzzy search and a HiGHS solve of both files, then a single model with presolve rewrites and the diagnostics pane.">
       <source src="assets/demo.webm" type="video/webm">
@@ -313,10 +312,10 @@ lp_parser convert problem.lp --format csv --output ./out</code></pre>
   <div class="wrap">
     <p class="sec-label">Editor support</p>
     <h2>Language server:<span class="dim"> <code>lp-lsp</code></span></h2>
-    <p class="lead">A language server for <code>.lp</code> files. It understands the CPLEX LP format and the Gurobi extensions the parser supports, and keeps working while a file is half-written. It talks LSP over stdio and takes no arguments, so any editor that can run a language server can use it.</p>
+    <p class="lead">A language server for <code>.lp</code> files. It understands the CPLEX LP format and the Gurobi extensions the parser supports, and keeps working while a file is half-written. It talks LSP over stdio and takes no arguments other than <code>--version</code>, so any editor that can run a language server can use it.</p>
     <ul class="constraints">
       <li><span class="cname">Diagnostics</span><span class="cbody">Syntax errors as you type, plus model checks such as duplicate names, conflicting bounds, unused declarations and badly scaled coefficients, with configurable thresholds.</span></li>
-      <li><span class="cname">Navigation</span><span class="cbody">Go to definition, find references, highlights, document and workspace symbols, call hierarchy (which constraints use a variable), and a "used in N constraints" code lens.</span></li>
+      <li><span class="cname">Navigation</span><span class="cbody">Go to definition, declaration and type definition, find references, linked editing, selection ranges, highlights, document and workspace symbols, call hierarchy (which constraints use a variable), and a "used in N constraints" code lens.</span></li>
       <li><span class="cname">Rename</span><span class="cbody">Variables and constraint names across the workspace. It refuses names that would change how the file parses.</span></li>
       <li><span class="cname">Hover and completion</span><span class="cbody">Details on variables, constraints, and keywords; suggestions that fit where the cursor is; signature help for <code>MAX</code>, <code>MIN</code>, <code>ABS</code>, <code>AND</code>, and <code>OR</code>.</span></li>
       <li><span class="cname">Formatting</span><span class="cbody">Whole document, a selection, or on Enter, preserving comments. It never touches a file with syntax errors.</span></li>
@@ -370,9 +369,9 @@ print(analysis[<span class="g">"summary"</span>][<span class="g">"density"</span
     <div class="tablewrap"><table>
       <tr><th>Where</th><th>Command</th></tr>
       <tr><td>Rust crate</td><td><code>lp_parser_rs = { version = "5.0.1", features = ["serde", "diff"] }</code></td></tr> <!-- x-release-please-version -->
-      <tr><td>CLI</td><td><code>cargo install lp_parser_rs --features cli,csv,diff,serde,lp-solvers</code></td></tr>
-      <tr><td>TUI</td><td><code>cargo install --path tui</code> (from a clone)</td></tr>
-      <tr><td>Language server</td><td><code>cargo install --path lsp</code> (from a clone)</td></tr>
+      <tr><td>CLI</td><td><code>cargo install --locked lp_parser_rs --features cli,csv,diff,serde,lp-solvers</code></td></tr>
+      <tr><td>TUI</td><td><code>cargo install --locked --path tui</code> (from a clone)</td></tr>
+      <tr><td>Language server</td><td><code>cargo install --locked --path lsp</code> (from a clone)</td></tr>
       <tr><td>Python</td><td><code>pip install parse_lp</code></td></tr>
     </table></div>
     <p style="margin-top:1.25rem;">Develop with <code>cargo insta test --all-features</code> and review snapshot changes with <code>cargo insta review</code>. Pull requests are welcome on <a href="https://github.com/dandxy89/lp_parser_rs">GitHub</a>.</p>

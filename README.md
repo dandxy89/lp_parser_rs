@@ -17,6 +17,8 @@ Supported specifications: [IBM CPLEX v22.1.1](https://www.ibm.com/docs/en/icos/2
 - Variable types: continuous, integer, general, binary, semi-continuous and semi-integer, with lower, upper, double or free bounds.
 - Analysis: statistics, density, sparsity, coefficient ranges, and issue detection with configurable thresholds.
 - Diff (`diff` feature): structural and numeric comparison of two problems, via `LpProblem::diff` or `diff::compare`.
+- SOS1/SOS2 sets are read, written, diffed and analysed (LP `SOS` section, MPS `SOS` section); external solver adapters may not support them.
+- Python bindings: the `parse_lp` package on PyPI wraps the parser, writers, mutation API and diff; see [`python/README.md`](https://github.com/dandxy89/lp_parser_rs/blob/main/python/README.md).
 - Serialisation (`serde` feature): serde support for the model; the CLI uses it for JSON and YAML output.
 - CSV export (`csv` feature): `LpProblem::to_csv` writes one file per section.
 - Memory-mapped input (`mmap` feature): `parser::MappedFile` maps a file instead of reading it into a `String`.
@@ -78,7 +80,7 @@ problem.update_variable_type("production_a", VariableType::Integer)?;
 std::fs::write("modified.lp", write_lp_string(&problem)?)?; // errors on names LP cannot represent
 ```
 
-Available modification methods on `LpProblem`: `update_objective_coefficient`, `rename_objective`, `remove_objective`, `update_constraint_coefficient`, `update_constraint_rhs`, `rename_constraint`, `remove_constraint`, `set_constraint_class`, `rename_variable`, `update_variable_type`, `remove_variable`. Setting a coefficient to zero removes the term.
+Available modification methods on `LpProblem`: `update_objective_coefficient`, `rename_objective`, `remove_objective`, `update_constraint_coefficient`, `update_constraint_rhs`, `rename_constraint`, `remove_constraint`, `set_constraint_class`, `rename_variable`, `update_variable_type`, `remove_variable`. The update methods remove a term whose coefficient has magnitude below `1e-10`; the parser itself keeps such coefficients. Also public: `add_variable`, `add_constraint`, `add_objective`, `set_name`. Removing a variable also removes any SOS set it empties.
 
 Writer options: `write_lp_string_with_options(&problem, &LpWriterOptions { include_problem_name, max_line_length, decimal_precision, include_section_spacing })`. `decimal_precision` defaults to `None`, which writes every number in its shortest exact (round-trip) form; `Some(n)` rounds to `n` decimal places.
 
@@ -87,7 +89,7 @@ Writer options: `write_lp_string_with_options(&problem, &LpWriterOptions { inclu
 ### Install
 
 ```bash
-cargo install lp_parser_rs --features cli,csv,diff,serde,lp-solvers
+cargo install --locked lp_parser_rs --features cli,csv,diff,serde,lp-solvers
 # Or from source
 git clone https://github.com/dandxy89/lp_parser_rs.git
 cd lp_parser_rs/rust && cargo build --release --features cli,csv,diff,serde,lp-solvers
@@ -252,7 +254,7 @@ A terminal UI for exploring a single LP/MPS model or comparing two, with coeffic
 *The demo diffs an MPS file against an LP file: side-by-side constraint diffs, filters, sort and live tolerance cycling, fuzzy search, Numerics, the keybindings pop-up, and a HiGHS solve of both files with a solution diff.*
 
 ```bash
-cargo install --path tui
+cargo install --locked --path tui
 lp_diff model.lp                       # inspect a single model
 lp_diff base.lp modified.lp            # diff two files
 lp_diff model.lp --summary             # non-interactive single-model summary
@@ -280,7 +282,9 @@ lp_diff base.lp modified.lp --abs-tol 1e-4 --rel-tol 1e-6
 lp_diff base.lp modified.lp --summary --rename '\[\d+\]$' '[idx]' --abs-tol 1e-6
 ```
 
-Highlights: three-panel layout, five sections (Summary / Variables / Constraints / Objectives / Numerics), filtering (`a`/`+`/`-`/`m`/`=`, plus `o` to ignore coefficient order), sort cycling (`s`), live tolerance cycling (`t`/`T`), telescope-style search (fuzzy, `r:` regex, `s:` substring), HiGHS solve-and-compare with infeasibility diagnosis (`S`), vim-style navigation and jumplist, clipboard yank (`y`/`Y`), CSV export (`w`), `?` for full help.
+Prebuilt `lp_diff` binaries (six targets, with SHA-256 checksums in `checksums-sha256.txt`) are attached to each `lp_diff-v*` [GitHub release](https://github.com/dandxy89/lp_parser_rs/releases). Also: `--watch` reloads when an input changes and `--theme auto|dark|light` picks the colour scheme.
+
+Highlights: three-panel layout, five sections (Summary / Variables / Constraints / Objectives / Numerics), filtering (`a`/`+`/`-`/`m`/`=`, plus `o` to ignore coefficient order), sort cycling (`s`), live tolerance cycling (`t`/`T`), telescope-style search (fuzzy, `r:` regex, `s:` substring), HiGHS solve-and-compare with infeasibility diagnosis (`S`), presolve (`P`), diagnostics (`D`), what-if RHS edits (`E`), unbounded / IIS / ranging / benchmark panes (`U` `I` `R` `B`), content search (`c:`), a command palette, vim-style navigation and jumplist, clipboard yank (`y`/`Y`), CSV export (`w`), `?` for full help.
 
 See [`tui/README.md`](https://github.com/dandxy89/lp_parser_rs/blob/main/tui/README.md) for the complete reference.
 
@@ -289,7 +293,7 @@ See [`tui/README.md`](https://github.com/dandxy89/lp_parser_rs/blob/main/tui/REA
 A Language Server Protocol implementation for `.lp` files: diagnostics, navigation, rename, hover, completion, inlay hints, code actions, formatting, semantic highlighting and more, for any LSP-capable editor (Neovim, Helix, Zed, VS Code).
 
 ```bash
-cargo install --path lsp
+cargo install --locked --path lsp
 ```
 
 See [`lsp/README.md`](https://github.com/dandxy89/lp_parser_rs/blob/main/lsp/README.md) for the feature list, configuration reference and editor setup.

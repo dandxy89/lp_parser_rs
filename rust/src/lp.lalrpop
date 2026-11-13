@@ -112,7 +112,7 @@ pub BoxedLpProblem: Box<ParseResult<'input>> = {
         let user_cuts: Vec<RawConstraint<'input>> = assembled.flatten().collect();
 
         Ok(Box::new(ParseResult {
-            sense, objectives, constraints, bounds, generals, integers, binaries, semi_continuous, sos, lazy_constraints, user_cuts,
+            sense, objectives, constraints, bounds, generals, integers, binaries, semi_continuous, sos, lazy_constraints, user_cuts, warnings: Vec::new(),
         }))
     }
 };

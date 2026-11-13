@@ -1,0 +1,28 @@
+name: vscode_build
+
+on:
+  pull_request:
+    paths:
+      - 'lsp/editors/vscode/**'
+      - '.github/workflows/vscode_build.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'lsp/editors/vscode/**'
+
+permissions:
+  contents: read
+
+jobs:
+  compile:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: lsp/editors/vscode
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npx tsc -p . --noEmit

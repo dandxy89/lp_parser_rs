@@ -1877,7 +1877,7 @@ dependencies = [
 
 [[package]]
 name = "parse_lp"
-version = "4.0.0"
+version = "4.0.2"
 dependencies = [
  "csv",
  "lp_parser_rs",
@@ -3200,7 +3200,8 @@ checksum = "d0af592be68c579aa78a16846bd19422978c3c52e438523d45ff5d1bff1f9d4a"
 [[package]]
 name = "tree-sitter-lp"
 version = "0.1.0"
-source = "git+https://github.com/dandxy89/treesitter-lp?branch=main#7b212e7c585fc4208d0371d4338afd1f8fb61ef1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ca13a13ed4e21d7223c25d9ccac9a58b77d6ee7ef1e9300523c037a4d3a64531"
 dependencies = [
  "cc",
  "tree-sitter-language",

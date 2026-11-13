@@ -11,7 +11,7 @@ Regenerate it with `vhs tui/scripts/demo.tape && gifsicle -O3 --batch tui/assets
 ## Installation
 
 ```sh
-cargo install --path tui
+cargo install --locked --path tui
 ```
 
 Or run directly from the workspace:

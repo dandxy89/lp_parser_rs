@@ -200,6 +200,11 @@ fn validate_mps_names(problem: &LpProblem, obj_row_name: &str) -> LpResult<()> {
     }
     for constraint in problem.constraints.values() {
         check_mps_name(problem.resolve(constraint.name()), "constraint")?;
+        if problem.resolve(constraint.name()) == obj_row_name {
+            return Err(LpParseError::validation_error(format!(
+                "constraint '{obj_row_name}' shares its name with the objective row; MPS row names must be unique, rename one of them"
+            )));
+        }
         if let Constraint::Indicator { variable, .. } = constraint {
             check_mps_name(problem.resolve(*variable), "variable")?;
         }
@@ -1872,5 +1877,12 @@ ENDATA
         let problem = build_problem_with_bounds_and_sos();
         let output = write_mps_string(&problem).unwrap();
         insta::assert_snapshot!(output);
+    }
+
+    #[test]
+    fn objective_and_constraint_sharing_a_name_is_rejected() {
+        let problem = LpProblem::parse("Minimize\n c1: x + y\nSubject To\n c1: x + y >= 1\nEnd\n").unwrap();
+        let err = write_mps_string(&problem).unwrap_err();
+        assert!(err.to_string().contains("shares its name"), "{err}");
     }
 }

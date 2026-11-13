@@ -118,7 +118,7 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           command: upload
-          args: --non-interactive --skip-existing dist/*
+          args: --non-interactive  dist/*
 
   build-tui-binaries:
     needs: release-please

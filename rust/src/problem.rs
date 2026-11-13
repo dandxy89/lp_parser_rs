@@ -318,6 +318,9 @@ pub struct LpProblem {
     pub constraint_classes: IndexMap<NameId, ConstraintClass>,
     /// The name interner holding all interned strings.
     pub interner: NameInterner,
+    /// Non-fatal problems found while reading the input (for example MPS
+    /// sections that were skipped). Empty for problems built in code.
+    pub parse_warnings: Vec<String>,
 }
 
 impl LpProblem {
@@ -853,6 +856,8 @@ impl LpProblem {
     /// exist, or it is the indicator variable of an indicator constraint or
     /// appears in a general constraint (remove the constraint first: dropping
     /// only part of it would change what it means).
+    ///
+    /// An SOS set left with no members is removed too.
     pub fn remove_variable(&mut self, variable_name: &str) -> LpResult<()> {
         Self::check_name(variable_name, "variable_name")?;
         let var_id = self
@@ -913,6 +918,18 @@ impl LpProblem {
                 // Refused above when it references the variable.
                 Constraint::General { .. } => {}
             }
+        }
+
+        // An SOS set with no members cannot be written validly, so it goes with its last member.
+        let emptied: Vec<NameId> = self
+            .constraints
+            .iter()
+            .filter(|(_, c)| matches!(c, Constraint::SOS { weights, .. } if weights.is_empty()))
+            .map(|(id, _)| *id)
+            .collect();
+        for id in emptied {
+            self.constraints.shift_remove(&id);
+            self.constraint_classes.shift_remove(&id);
         }
 
         debug_assert!(!self.variables.contains_key(&var_id), "postcondition: variable must be removed");
@@ -1327,7 +1344,16 @@ mod serde_support {
                 })
                 .collect();
 
-            Ok(Self { name: proxy.name, sense: proxy.sense, objectives, constraints, variables, constraint_classes, interner })
+            Ok(Self {
+                name: proxy.name,
+                sense: proxy.sense,
+                objectives,
+                constraints,
+                variables,
+                constraint_classes,
+                interner,
+                parse_warnings: Vec::new(),
+            })
         }
     }
 }
@@ -1350,7 +1376,7 @@ impl Display for LpProblem {
 /// # Errors
 ///
 /// Returns an error when summing the repeated terms of an entry overflows.
-fn from_parse_result(parsed: ParseResult<'_>, problem_name: Option<String>) -> LpResult<LpProblem> {
+fn from_parse_result(mut parsed: ParseResult<'_>, problem_name: Option<String>) -> LpResult<LpProblem> {
     // An empty objective section with no constraints is degenerate but valid LP.
     debug_assert!(parsed.objectives.iter().all(|o| !o.name.is_empty()), "all objectives must have non-empty names");
 
@@ -1400,10 +1426,28 @@ fn from_parse_result(parsed: ParseResult<'_>, problem_name: Option<String>) -> L
 
     process_bounds(&mut interner, &parsed.bounds, &mut variables);
     process_variable_types(&mut interner, &parsed, &mut variables);
-    intern_sos_constraints(&mut interner, &parsed.sos, &mut variables, &mut constraints, &mut constraint_counter, &reserved)?;
+    let mut parse_warnings = std::mem::take(&mut parsed.warnings);
+    intern_sos_constraints(
+        &mut interner,
+        &parsed.sos,
+        &mut variables,
+        &mut constraints,
+        &mut constraint_counter,
+        &reserved,
+        &mut parse_warnings,
+    )?;
 
     debug_assert!(constraint_classes.keys().all(|id| constraints.contains_key(id)), "every classed constraint must exist");
-    Ok(LpProblem { name: problem_name, sense: parsed.sense, objectives, constraints, variables, constraint_classes, interner })
+    Ok(LpProblem {
+        name: problem_name,
+        sense: parsed.sense,
+        objectives,
+        constraints,
+        variables,
+        constraint_classes,
+        interner,
+        parse_warnings,
+    })
 }
 
 impl TryFrom<&str> for LpProblem {
@@ -1570,6 +1614,7 @@ fn intern_sos_constraints(
     constraints: &mut IndexMap<NameId, Constraint>,
     constraint_counter: &mut u32,
     reserved: &FxHashSet<&str>,
+    warnings: &mut Vec<String>,
 ) -> LpResult<()> {
     let mut name_buf = String::with_capacity(16);
     for raw_sos_con in raw_sos {
@@ -1581,7 +1626,8 @@ fn intern_sos_constraints(
         if constraints.contains_key(&final_id) {
             // An SOS entry sharing a name with an existing constraint would
             // delete that constraint outright; rename the SOS entry instead.
-            eprintln!("SOS constraint name '{}' is already in use: the SOS entry has been renamed", interner.resolve(final_id));
+            warnings
+                .push(format!("SOS constraint name '{}' is already in use: the SOS entry has been renamed", interner.resolve(final_id)));
             final_id = generate_constraint_name(interner, constraints, reserved, constraint_counter, "SOS", &mut name_buf);
             set_constraint_name(&mut sos, final_id);
         }
@@ -2729,5 +2775,13 @@ mod modification_tests {
         let written = crate::writer::write_lp_string(&p).expect("valid names must write");
         assert!(!written.contains("NaN"), "a rejected NaN must never reach the output: {written}");
         LpProblem::parse(&written).expect("the model must still round-trip after the rejected mutations");
+    }
+
+    #[test]
+    fn removing_the_last_sos_member_removes_the_set() {
+        let mut p = LpProblem::parse("Minimize\n obj: x + y\nSubject To\n c1: x + y >= 1\nSOS\n s1: S1:: x:1\nEnd\n").unwrap();
+        p.remove_variable("x").unwrap();
+        assert!(p.constraints.keys().all(|id| p.resolve(*id) != "s1"));
+        LpProblem::parse(&crate::writer::write_lp_string(&p).unwrap()).unwrap();
     }
 }

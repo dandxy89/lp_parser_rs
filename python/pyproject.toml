@@ -28,7 +28,7 @@ requires = ["maturin>=1.16.0,<2"]
 build-backend = "maturin"
 
 [tool.maturin]
-include = ["README.md", "LICENSE-APACHE", "parse_lp/py.typed", "parse_lp/*.pyi"]
+include = ["README.md", "LICENSE-APACHE", "LICENSE-MIT", "parse_lp/py.typed", "parse_lp/*.pyi"]
 
 [dependency-groups]
 dev = [

@@ -31,11 +31,20 @@ index current through file watching or, for clients without it, file-operation n
 ## Install
 
 ```bash
-cargo install --path lsp
+cargo install --locked --path lsp
 lp-lsp --version
 ```
 
 The server talks LSP over stdio. It takes no arguments other than `--version`.
+
+Notes:
+
+- Positions use UTF-8 when the client offers it, otherwise UTF-16.
+- Files over 1 MiB get syntax diagnostics only after the debounce.
+- Pull diagnostics are advertised only when the client declares support; in pull mode push is disabled.
+- Indexing does not follow symlinked directories and warns on non-UTF-8 files.
+- Unknown settings keys are ignored; an invalid value rejects the whole new configuration, keeps the previous one and shows an error.
+- A lone `\r` is not treated as a line break.
 
 ## Settings
 
@@ -49,7 +58,7 @@ Everything lives under `lp` and is optional.
 | `analysis.largeRhsThreshold` | `1e9` | Flag larger right-hand sides. |
 | `analysis.coefficientRatioThreshold` | `1e6` | Flag a larger max/min coefficient ratio. |
 | `semantic.debounceMs` | `300` | Wait this long after typing before the full check. |
-| `semantic.maxFileSizeMb` | `20` | Above this size, run the full check on save only. |
+| `semantic.maxFileSizeMb` | `20` | Above this size, skip the keystroke-time full check; the semantic pass still runs on open, save and configuration change. |
 | `format.indent` | `2` | Indent in spaces (0–16). |
 | `format.lineWidth` | `100` | Wrap long lines (at least 20). |
 | `format.alignOperators` | `false` | Line up comparison operators. |

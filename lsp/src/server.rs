@@ -410,7 +410,7 @@ impl Backend {
             return;
         }
         let options = DidChangeWatchedFilesRegistrationOptions {
-            watchers: vec![FileSystemWatcher { glob_pattern: GlobPattern::String("**/*.lp".to_owned()), kind: None }],
+            watchers: vec![FileSystemWatcher { glob_pattern: GlobPattern::String("**/*.{lp,LP,Lp,lP}".to_owned()), kind: None }],
         };
         let register_options = match serde_json::to_value(options) {
             Ok(value) => value,

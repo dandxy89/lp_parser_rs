@@ -6,6 +6,7 @@ authors = ["Dan Dixey", "Dan Dixey <dan@functorml.co.uk>"]
 rust-version.workspace = true
 license = "MIT OR Apache-2.0"
 readme = "../README.md"
+exclude = ["tests/", "resources/", "fuzz/"]
 description = "Parser and writer for LP and MPS linear programming files, with analysis and diff tools."
 keywords = [
     "linear-programming",

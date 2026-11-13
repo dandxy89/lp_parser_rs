@@ -21,6 +21,7 @@ pub(super) fn parse_rows_line<'input>(
     objective_rows: &mut Vec<&'input str>,
     row_types: &mut FxHashMap<&'input str, RowType>,
     row_order: &mut Vec<&'input str>,
+    warnings: &mut Vec<String>,
 ) -> LpResult<()> {
     debug_assert!(!line.is_empty(), "parse_rows_line called with empty line");
     debug_assert!(line_num > 0, "line_num must be 1-based");
@@ -55,10 +56,10 @@ pub(super) fn parse_rows_line<'input>(
 
     if row_type == RowType::N {
         if fields.len() > 2 {
-            eprintln!(
+            warnings.push(format!(
                 "Line {line_num}: N-row '{row_name}' has extra fields (priority/weight/tolerance) \
                  which are not supported and will be ignored"
-            );
+            ));
         }
         objective_rows.push(row_name);
     } else {
@@ -565,6 +566,7 @@ pub(super) fn parse_sos_line<'input>(
     current_name: &mut Option<&'input str>,
     current_type: &mut Option<SOSType>,
     current_weights: &mut Vec<RawCoefficient<'input>>,
+    warnings: &mut Vec<String>,
 ) -> LpResult<()> {
     debug_assert!(!line.is_empty(), "parse_sos_line called with empty line");
     debug_assert!(line_num > 0, "line_num must be 1-based");
@@ -581,7 +583,7 @@ pub(super) fn parse_sos_line<'input>(
     let upper = type_token.to_ascii_uppercase();
     if upper == "S1" || upper == "S2" {
         // Flush previous SOS constraint
-        flush_sos_constraint(sos_constraints, current_name, current_type, current_weights);
+        flush_sos_constraint(sos_constraints, current_name, current_type, current_weights, warnings);
 
         let sos_type = if upper == "S1" { SOSType::S1 } else { SOSType::S2 };
         // The rest of the header might contain a name; the fields borrow from
@@ -615,10 +617,11 @@ pub(super) fn flush_sos_constraint<'input>(
     current_name: &mut Option<&'input str>,
     current_type: &mut Option<SOSType>,
     current_weights: &mut Vec<RawCoefficient<'input>>,
+    warnings: &mut Vec<String>,
 ) {
     if let (Some(name), Some(sos_type)) = (*current_name, *current_type) {
         if current_weights.is_empty() {
-            eprintln!("SOS set '{name}' declares no weight entries and will be dropped");
+            warnings.push(format!("SOS set '{name}' declares no weight entries and will be dropped"));
         } else {
             sos_constraints.push(RawConstraint::SOS {
                 name: Cow::Borrowed(name),
@@ -632,7 +635,7 @@ pub(super) fn flush_sos_constraint<'input>(
     } else if !current_weights.is_empty() {
         // Weight entries seen before any set header cannot belong to a set;
         // clearing them stops them bleeding into the next declared set.
-        eprintln!("{} SOS weight entr(ies) with no preceding SOS set header were ignored", current_weights.len());
+        warnings.push(format!("{} SOS weight entr(ies) with no preceding SOS set header were ignored", current_weights.len()));
         current_weights.clear();
     }
 

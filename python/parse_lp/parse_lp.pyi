@@ -300,7 +300,9 @@ class LpParser:
     ) -> str:
         """Serialise the current problem, including any edits, to LP text.
 
-        With the defaults the output parses back to the same problem.
+        With the defaults the output parses back to the same problem, except
+        that objectives and constraints with no coefficients cannot be written
+        to LP: each omitted one raises a `UserWarning`.
         `include_problem_name` writes a `\\Problem name:` comment at the top.
         `max_line_length` is where long expressions wrap. `decimal_precision`
         rounds every number to that many decimal places, which loses
@@ -373,7 +375,7 @@ class LpParser:
 
         Replaces the coefficient if the variable is already in the objective
         and adds the term if not; a variable not yet in the problem is
-        declared as continuous. A coefficient of 0 removes the term.
+        declared as continuous. A coefficient with magnitude below 1e-10 removes the term.
 
         Raises `LpObjectNotFoundError` if the objective does not exist and
         `LpInvalidValueError` if `variable_name` is empty or `coefficient` is
@@ -406,7 +408,7 @@ class LpParser:
         Works on the linear part of standard, indicator and quadratic
         constraints. Replaces the coefficient if the variable is already
         present and adds the term if not; a variable not yet in the problem is
-        declared as continuous. A coefficient of 0 removes the term.
+        declared as continuous. A coefficient with magnitude below 1e-10 removes the term.
 
         Raises `LpObjectNotFoundError` if the constraint does not exist and
         `LpInvalidValueError` for an SOS or general constraint, an empty
@@ -451,7 +453,8 @@ class LpParser:
         - `"binary"`, `"integer"`, `"general"`, `"semicontinuous"` and
           `"semiinteger"` set the kind and clear declared bounds, so the
           format default applies (LP: lower 0, upper +inf). `"integer"` and
-          `"general"` both mean a general integer variable.
+          `"general"` are distinct kinds (written as `Integers` and `Generals`
+          in LP, and reported as a type change by `diff`) that solvers treat alike.
         - `"free"` is a bound rather than a kind: the variable becomes
           continuous with bounds `(-inf, +inf)`.
 

@@ -42,6 +42,8 @@ pub(super) struct MpsParseState<'input> {
 
     // SOS section data
     sos_constraints: Vec<RawConstraint<'input>>,
+    /// Non-fatal problems found while reading, returned to the caller.
+    warnings: Vec<String>,
     current_sos_name: Option<&'input str>,
     current_sos_type: Option<SOSType>,
     current_sos_weights: Vec<RawCoefficient<'input>>,
@@ -77,6 +79,7 @@ impl<'input> MpsParseState<'input> {
             bounds_state: BoundsState::default(),
             bounds_vector_label: None,
             sos_constraints: Vec::new(),
+            warnings: Vec::new(),
             current_sos_name: None,
             current_sos_type: None,
             current_sos_weights: Vec::new(),
@@ -178,11 +181,12 @@ impl<'input> MpsParseState<'input> {
                     &mut self.current_sos_name,
                     &mut self.current_sos_type,
                     &mut self.current_sos_weights,
+                    &mut self.warnings,
                 );
                 return Ok(true);
             }
             "PWLOBJ" | "GENCONS" | "SCENARIOS" => {
-                eprintln!("Line {line_num}: unsupported section '{header}' will be skipped");
+                self.warnings.push(format!("Line {line_num}: unsupported section '{header}' will be skipped"));
                 self.section = Some(MpsSection::Unsupported);
             }
             _ => {
@@ -204,13 +208,13 @@ impl<'input> MpsParseState<'input> {
                 self.sense = parse_objsense_value(line.trim(), line_num)?;
             }
             MpsSection::Rows => {
-                parse_rows_line(line, line_num, &mut self.objective_rows, &mut self.row_types, &mut self.row_order)?;
+                parse_rows_line(line, line_num, &mut self.objective_rows, &mut self.row_types, &mut self.row_order, &mut self.warnings)?;
             }
             MpsSection::LazyCons | MpsSection::UserCuts => {
                 let class = if current_section == MpsSection::LazyCons { ConstraintClass::Lazy } else { ConstraintClass::UserCut };
                 let objective_count = self.objective_rows.len();
                 let row_count = self.row_order.len();
-                parse_rows_line(line, line_num, &mut self.objective_rows, &mut self.row_types, &mut self.row_order)?;
+                parse_rows_line(line, line_num, &mut self.objective_rows, &mut self.row_types, &mut self.row_order, &mut self.warnings)?;
                 if self.objective_rows.len() != objective_count {
                     return Err(LpParseError::parse_error(line_num, "an objective (N) row cannot be a lazy constraint or user cut"));
                 }
@@ -254,6 +258,7 @@ impl<'input> MpsParseState<'input> {
                     &mut self.current_sos_name,
                     &mut self.current_sos_type,
                     &mut self.current_sos_weights,
+                    &mut self.warnings,
                 )?;
             }
         }
@@ -337,11 +342,12 @@ impl<'input> MpsParseState<'input> {
             &mut self.current_sos_name,
             &mut self.current_sos_type,
             &mut self.current_sos_weights,
+            &mut self.warnings,
         );
         debug_assert!(self.current_sos_weights.is_empty(), "all SOS weights must be flushed before building the result");
 
         if self.columns.in_integer_block {
-            eprintln!("unclosed INTORG marker block at end of MPS input; trailing columns treated as integer");
+            self.warnings.push("unclosed INTORG marker block at end of MPS input; trailing columns treated as integer".to_string());
         }
 
         if !self.has_rows {
@@ -407,6 +413,7 @@ impl<'input> MpsParseState<'input> {
             sos: self.sos_constraints,
             lazy_constraints: constraints.lazy,
             user_cuts: constraints.user_cuts,
+            warnings: self.warnings,
         })
     }
 }

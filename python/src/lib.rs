@@ -8,10 +8,10 @@ use lp_parser_rs::diff::DiffOptions;
 use lp_parser_rs::model::{Constraint, QuadraticTerm, Sense, Variable, VariableType};
 use lp_parser_rs::mps::writer::{MpsWriterOptions, write_mps_string_with_options};
 use lp_parser_rs::problem::LpProblem;
-use lp_parser_rs::writer::{LpWriterOptions, write_lp_string_with_options};
+use lp_parser_rs::writer::{LpWriterOptions, write_lp_string_with_warnings};
 use lp_parser_rs::{ConstraintClass, EntityKind, LpParseError as CoreError, NameId, VariableKind};
 use pyo3::create_exception;
-use pyo3::exceptions::{PyNotADirectoryError, PyOSError, PyRuntimeError};
+use pyo3::exceptions::{PyNotADirectoryError, PyOSError, PyRuntimeError, PyUserWarning};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
 
@@ -295,7 +295,9 @@ impl LpParser {
 
     /// Serialise the current problem, including any edits, to LP text.
     ///
-    /// With the defaults the output parses back to the same problem.
+    /// With the defaults the output parses back to the same problem, except
+    /// that objectives and constraints with no coefficients cannot be written
+    /// to LP: each omitted one raises a `UserWarning`.
     /// `include_problem_name` writes a `\Problem name:` comment at the top.
     /// `max_line_length` is where long expressions wrap. `decimal_precision`
     /// rounds every number to that many decimal places, which loses
@@ -321,7 +323,10 @@ impl LpParser {
         let options = LpWriterOptions { include_problem_name, max_line_length, decimal_precision, include_section_spacing };
         // Release the GIL: writing is pure Rust and can take a while on large
         // problems.
-        py.detach(|| write_lp_string_with_options(problem, &options)).map_err(|err| to_py_err("Unable to write LP", err))
+        let (output, warnings) =
+            py.detach(|| write_lp_string_with_warnings(problem, &options)).map_err(|err| to_py_err("Unable to write LP", err))?;
+        emit_warnings(py, &warnings)?;
+        Ok(output)
     }
 
     /// Write the current problem, including any edits, to an LP file.
@@ -335,11 +340,13 @@ impl LpParser {
     /// `LpInvalidValueError` as `to_lp_string` does.
     fn save_to_file(&self, py: Python, filepath: PathBuf) -> PyResult<()> {
         let problem = &self.problem;
-        py.detach(|| {
-            let lp_content =
-                write_lp_string_with_options(problem, &LpWriterOptions::default()).map_err(|err| to_py_err("Unable to write LP", err))?;
-            std::fs::write(&filepath, lp_content).map_err(|err| io_err(&filepath, &err))
-        })
+        let warnings = py.detach(|| {
+            let (lp_content, warnings) =
+                write_lp_string_with_warnings(problem, &LpWriterOptions::default()).map_err(|err| to_py_err("Unable to write LP", err))?;
+            std::fs::write(&filepath, lp_content).map_err(|err| io_err(&filepath, &err))?;
+            Ok::<_, PyErr>(warnings)
+        })?;
+        emit_warnings(py, &warnings)
     }
 
     /// Serialise the current problem, including any edits, to MPS text.
@@ -418,7 +425,7 @@ impl LpParser {
     ///
     /// Replaces the coefficient if the variable is already in the objective
     /// and adds the term if not; a variable not yet in the problem is
-    /// declared as continuous. A coefficient of 0 removes the term.
+    /// declared as continuous. A coefficient with magnitude below 1e-10 removes the term.
     ///
     /// Raises `LpObjectNotFoundError` if the objective does not exist and
     /// `LpInvalidValueError` if `variable_name` is empty or `coefficient` is
@@ -460,7 +467,7 @@ impl LpParser {
     /// Works on the linear part of standard, indicator and quadratic
     /// constraints. Replaces the coefficient if the variable is already
     /// present and adds the term if not; a variable not yet in the problem is
-    /// declared as continuous. A coefficient of 0 removes the term.
+    /// declared as continuous. A coefficient with magnitude below 1e-10 removes the term.
     ///
     /// Raises `LpObjectNotFoundError` if the constraint does not exist and
     /// `LpInvalidValueError` for an SOS or general constraint, an empty
@@ -531,7 +538,8 @@ impl LpParser {
     /// - `"binary"`, `"integer"`, `"general"`, `"semicontinuous"` and
     ///   `"semiinteger"` set the kind and clear declared bounds, so the
     ///   format default applies (LP: lower 0, upper +inf). `"integer"` and
-    ///   `"general"` both mean a general integer variable.
+    ///   `"general"` are distinct kinds (written as `Integers` and `Generals`
+    ///   in LP, and reported as a type change by `diff`) that solvers treat alike.
     /// - `"free"` is a bound rather than a kind: the variable becomes
     ///   continuous with bounds `(-inf, +inf)`.
     ///
@@ -588,7 +596,13 @@ impl LpParser {
     }
 
     /// Set the problem name written by `to_lp_string` and `to_mps_string`.
+    ///
+    /// Raises `LpInvalidValueError` if `name` contains a line break, which
+    /// neither format can write.
     fn set_problem_name(&mut self, name: String) -> PyResult<()> {
+        if name.contains(['\n', '\r']) {
+            return Err(LpInvalidValueError::new_err("problem name must not contain a line break"));
+        }
         let problem = &mut self.problem;
         problem.name = Some(name);
 
@@ -757,6 +771,16 @@ fn csv_err(base_directory: &Path, err: Box<dyn std::error::Error>) -> PyErr {
     }
 }
 
+/// Raise each message as a Python `UserWarning`, so callers can capture or
+/// silence it through the `warnings` module.
+fn emit_warnings(py: Python, messages: &[String]) -> PyResult<()> {
+    for message in messages {
+        let text = std::ffi::CString::new(message.replace('\0', "")).map_err(|err| LpInvalidValueError::new_err(err.to_string()))?;
+        PyErr::warn(py, &py.get_type::<PyUserWarning>(), &text, 1)?;
+    }
+    Ok(())
+}
+
 /// Normalise a user-supplied format name (`"lp"` or `"mps"`, case-insensitive).
 fn normalise_format(format: &str) -> PyResult<&'static str> {
     match format.to_lowercase().as_str() {
@@ -770,11 +794,13 @@ fn normalise_format(format: &str) -> PyResult<&'static str> {
 /// a format already passed through [`normalise_format`].
 fn parse_source(text: &str, format: &'static str) -> PyResult<LpProblem> {
     debug_assert!(format == "lp" || format == "mps", "format must be normalised");
-    if format == "mps" {
-        LpProblem::parse_mps(text).map_err(|err| LpParseError::new_err(format!("Unable to parse MPS: {err}")))
+    let problem = if format == "mps" {
+        LpProblem::parse_mps(text).map_err(|err| LpParseError::new_err(format!("Unable to parse MPS: {err}")))?
     } else {
-        LpProblem::parse(text).map_err(|err| LpParseError::new_err(format!("Unable to parse LpProblem: {err}")))
-    }
+        LpProblem::parse(text).map_err(|err| LpParseError::new_err(format!("Unable to parse LpProblem: {err}")))?
+    };
+    Python::attach(|py| emit_warnings(py, &problem.parse_warnings))?;
+    Ok(problem)
 }
 
 /// Serialise a [`ProblemAnalysis`](lp_parser_rs::analysis::ProblemAnalysis) to a Python dict.

@@ -251,6 +251,8 @@ pub struct ParseResult<'input> {
     /// Raw constraints from `User Cuts` sections (LP) or the `USERCUTS`
     /// section (MPS).
     pub user_cuts: Vec<RawConstraint<'input>>,
+    /// Non-fatal problems found while reading (MPS only; empty for LP).
+    pub warnings: Vec<String>,
 }
 
 impl Display for LexerError {

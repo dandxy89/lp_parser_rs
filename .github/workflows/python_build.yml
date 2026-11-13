@@ -5,12 +5,20 @@ on:
     branches: [main]
     paths:
       - '**/*.py'
+      - '**/*.pyi'
+      - 'python/Makefile'
+      - 'python/uv.lock'
+      - '.github/workflows/python_build.yml'
       - '**/*.toml'
       - '**/*.rs'
   pull_request:
     branches: [main]
     paths:
       - '**/*.py'
+      - '**/*.pyi'
+      - 'python/Makefile'
+      - 'python/uv.lock'
+      - '.github/workflows/python_build.yml'
       - '**/*.toml'
       - '**/*.rs'
 

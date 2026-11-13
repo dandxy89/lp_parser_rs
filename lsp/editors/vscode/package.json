@@ -4,7 +4,7 @@
   "description": "Language support for LP (linear programming) files, powered by the lp-lsp language server.",
   "version": "0.1.0",
   "publisher": "dandxy89",
-  "license": "MIT",
+  "license": "MIT OR Apache-2.0",
   "repository": {
     "type": "git",
     "url": "https://github.com/dandxy89/lp_parser_rs",

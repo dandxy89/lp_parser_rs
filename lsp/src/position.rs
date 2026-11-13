@@ -5,6 +5,10 @@
 //! same index serves both LSP positions and tree-sitter `Point`s. A `\r`
 //! before `\n` is treated as part of the line terminator: columns are clamped
 //! so a position never lands between `\r` and `\n`.
+//!
+//! Known limitation: a lone `\r` (classic Mac line ending) is not a line
+//! break here, although the LSP specification counts it as one. Supporting it
+//! would need tree-sitter's row counting to agree, which it does not.
 
 use std::ops::Range;
 

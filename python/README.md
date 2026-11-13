@@ -156,10 +156,10 @@ parser.set_sense("minimize")
 
 | Method | Notes |
 | --- | --- |
-| `update_objective_coefficient(objective_name, variable_name, coefficient)` | Adds the term if missing; 0 removes it |
+| `update_objective_coefficient(objective_name, variable_name, coefficient)` | Adds the term if missing; a magnitude below `1e-10` removes it |
 | `rename_objective(old_name, new_name)` | |
 | `remove_objective(objective_name)` | |
-| `update_constraint_coefficient(constraint_name, variable_name, coefficient)` | Adds the term if missing; 0 removes it. Not for SOS or general constraints |
+| `update_constraint_coefficient(constraint_name, variable_name, coefficient)` | Adds the term if missing; a magnitude below `1e-10` removes it. Not for SOS or general constraints |
 | `update_constraint_rhs(constraint_name, new_rhs)` | Not for SOS or general constraints |
 | `rename_constraint(old_name, new_name)` | |
 | `remove_constraint(constraint_name)` | |
@@ -174,11 +174,13 @@ parser.set_sense("minimize")
 - `"continuous"`: changes only the kind and keeps declared bounds.
 - `"binary"`, `"integer"`, `"general"`, `"semicontinuous"`, `"semiinteger"`:
   set the kind and clear declared bounds, so the format default applies (LP:
-  lower bound 0). `"integer"` and `"general"` are the same.
+  lower bound 0). `"integer"` and `"general"` are distinct kinds (LP `Integers` vs `Generals`; `diff` reports a change) that solvers treat alike.
 - `"free"`: a bound rather than a kind. The variable becomes continuous with
   bounds `(-inf, +inf)`.
 
 ## Errors
+
+Edge cases: an empty name passed to an `update_*_coefficient` method raises `LpObjectNotFoundError`; a negative `decimal_precision` or `max_line_length` raises `OverflowError` and a float raises `TypeError`. MPS reader notices and LP-writer omissions are raised as `UserWarning`.
 
 A missing name raises `LpObjectNotFoundError`. An invalid argument, or an
 edit the model cannot take (renaming onto an existing name, setting the
@@ -290,6 +292,10 @@ os.makedirs("output", exist_ok=True)  # the directory must exist
 parser.to_csv("output")
 # output/objectives.csv, output/constraints.csv, output/variables.csv
 ```
+
+## Platforms
+
+One `cp39-abi3` wheel per platform serves Python 3.9 onwards: Linux (x86_64, x86, aarch64, armv7; manylinux), Windows x64, and macOS x86_64 and arm64. There are no musllinux, Windows arm64 or free-threaded wheels; those users build from the sdist and need a Rust toolchain.
 
 ## Supported format features
 

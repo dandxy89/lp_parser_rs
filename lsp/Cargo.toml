@@ -25,7 +25,7 @@ streaming-iterator = "0.1.9"
 tokio = { version = "1.53.1", features = ["rt-multi-thread", "macros", "io-std", "sync", "time"] }
 tower-lsp-server = "0.23.0"
 tree-sitter = "0.27.0"
-tree-sitter-lp = { git = "https://github.com/dandxy89/treesitter-lp", branch = "main" }
+tree-sitter-lp = "0.1"
 
 [dev-dependencies]
 criterion = "0.8.2"

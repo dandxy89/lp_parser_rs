@@ -497,7 +497,11 @@ fn cmd_diff(args: &DiffArgs, verbose: bool) -> Result<ExitCode, BoxError> {
 fn read_problem(path: &std::path::Path) -> Result<LpProblem, BoxError> {
     let content = parse_file(path)?;
     let is_mps = path.extension().and_then(|ext| ext.to_str()).is_some_and(|ext| ext.eq_ignore_ascii_case("mps"));
-    if is_mps { Ok(LpProblem::parse_mps(&content)?) } else { Ok(LpProblem::parse(&content)?) }
+    let problem = if is_mps { LpProblem::parse_mps(&content)? } else { LpProblem::parse(&content)? };
+    for warning in &problem.parse_warnings {
+        eprintln!("Warning: {warning}");
+    }
+    Ok(problem)
 }
 
 fn cmd_convert(args: ConvertArgs, verbose: bool, quiet: bool) -> Result<(), BoxError> {
