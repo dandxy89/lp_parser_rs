@@ -482,8 +482,8 @@ impl Editor {
             });
             match text {
                 Some(text) => {
-                    self.popup =
-                        Some(Popup { title: "Hover".to_owned(), lines: text.lines().map(str::to_owned).collect(), ..Popup::default() })
+                    let lines = text.lines().map(str::to_owned).collect();
+                    self.popup = Some(Popup { title: "Hover".to_owned(), lines, ..Popup::default() });
                 }
                 None => self.message = Some("Nothing to show here".to_owned()),
             }
