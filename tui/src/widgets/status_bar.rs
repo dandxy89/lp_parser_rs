@@ -34,7 +34,7 @@ fn flash_style(level: crate::app::FlashLevel) -> Style {
     use crate::app::FlashLevel;
     let t = theme();
     let colour = match level {
-        FlashLevel::Info => t.accent,
+        FlashLevel::Info => t.info,
         FlashLevel::Ok => t.added,
         FlashLevel::Warn => t.modified,
         FlashLevel::Err => t.removed,
@@ -196,7 +196,7 @@ pub fn draw_status_bar(frame: &mut Frame, area: Rect, params: &StatusBarParams<'
         // `>0` was noise, and `>` read as a comparison.
         if counts.renamed > 0 {
             kinds.push(Span::raw(" "));
-            kinds.push(Span::styled(format!("{RENAMED}{}", counts.renamed), Style::default().fg(t.accent)));
+            kinds.push(Span::styled(format!("{RENAMED}{}", counts.renamed), Style::default().fg(t.renamed)));
         }
         segments.push(kinds);
         segments.push(vec![

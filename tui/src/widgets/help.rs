@@ -244,7 +244,7 @@ fn style_help<S: AsRef<str>>(text: &[S]) -> Vec<Line<'static>> {
     let t = theme();
     let body = Style::default().fg(t.text);
     let rule = Style::default().fg(t.muted);
-    let heading = Style::default().fg(t.accent).add_modifier(Modifier::BOLD);
+    let heading = Style::default().fg(t.heading).add_modifier(Modifier::BOLD);
     let is_rule = |line: &str| {
         let trimmed = line.trim();
         !trimmed.is_empty() && trimmed.chars().all(|c| c == '\u{2500}' || c == ' ')
@@ -265,19 +265,11 @@ fn style_help<S: AsRef<str>>(text: &[S]) -> Vec<Line<'static>> {
         .collect()
 }
 
-/// Pre-built diff help text lines, cached to avoid per-frame allocation.
-static HELP_LINES: LazyLock<Vec<Line<'static>>> = LazyLock::new(|| style_help(HELP_TEXT));
-
-/// Pre-built inspect help text lines, cached to avoid per-frame allocation.
-static INSPECT_HELP_LINES: LazyLock<Vec<Line<'static>>> = LazyLock::new(|| style_help(INSPECT_HELP_TEXT));
-
 /// The diff help with its key tables stacked, for narrow terminals.
 static NARROW_HELP_TEXT: LazyLock<Vec<String>> = LazyLock::new(|| stack_columns(HELP_TEXT, &HELP_COLUMNS));
-static NARROW_HELP_LINES: LazyLock<Vec<Line<'static>>> = LazyLock::new(|| style_help(&NARROW_HELP_TEXT));
 
 /// The inspect help with its key tables stacked, for narrow terminals.
 static NARROW_INSPECT_HELP_TEXT: LazyLock<Vec<String>> = LazyLock::new(|| stack_columns(INSPECT_HELP_TEXT, &INSPECT_HELP_COLUMNS));
-static NARROW_INSPECT_HELP_LINES: LazyLock<Vec<Line<'static>>> = LazyLock::new(|| style_help(&NARROW_INSPECT_HELP_TEXT));
 
 /// Draw a centred help pop-up overlay on top of the current frame.
 ///
@@ -296,11 +288,12 @@ pub fn draw_help(frame: &mut Frame, area: Rect, app: &mut App) {
     let inspect = app.mode == crate::state::AppMode::Inspect;
     let wide_text = if inspect { INSPECT_HELP_TEXT } else { HELP_TEXT };
     let narrow = area.width < desired_width(wide_text);
-    let (width, help_lines): (u16, &[Line<'static>]) = match (inspect, narrow) {
-        (false, false) => (desired_width(HELP_TEXT), &HELP_LINES),
-        (true, false) => (desired_width(INSPECT_HELP_TEXT), &INSPECT_HELP_LINES),
-        (false, true) => (desired_width(&NARROW_HELP_TEXT), &NARROW_HELP_LINES),
-        (true, true) => (desired_width(&NARROW_INSPECT_HELP_TEXT), &NARROW_INSPECT_HELP_LINES),
+    // Styled per draw, not cached: the lines carry theme colours, and the theme can change.
+    let (width, help_lines): (u16, Vec<Line<'static>>) = match (inspect, narrow) {
+        (false, false) => (desired_width(HELP_TEXT), style_help(HELP_TEXT)),
+        (true, false) => (desired_width(INSPECT_HELP_TEXT), style_help(INSPECT_HELP_TEXT)),
+        (false, true) => (desired_width(&NARROW_HELP_TEXT), style_help(&NARROW_HELP_TEXT)),
+        (true, true) => (desired_width(&NARROW_INSPECT_HELP_TEXT), style_help(&NARROW_INSPECT_HELP_TEXT)),
     };
 
     let popup = super::centred_rect(area, width, desired_height(help_lines.len()));
@@ -318,7 +311,7 @@ pub fn draw_help(frame: &mut Frame, area: Rect, app: &mut App) {
     };
     let block = panel_block(border_style).title(title);
 
-    let paragraph = Paragraph::new(help_lines.to_vec()).block(block).scroll((u16::try_from(app.help_scroll).unwrap_or(u16::MAX), 0));
+    let paragraph = Paragraph::new(help_lines).block(block).scroll((u16::try_from(app.help_scroll).unwrap_or(u16::MAX), 0));
 
     frame.render_widget(Clear, popup);
     frame.render_widget(paragraph, popup);

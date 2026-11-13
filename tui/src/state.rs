@@ -655,6 +655,7 @@ pub enum PaletteCommand {
     CycleSort,
     CycleRelTol,
     CycleAbsTol,
+    CycleTheme,
     OpenSearch,
     NextMatch,
     PrevMatch,
@@ -679,7 +680,7 @@ pub enum PaletteCommand {
 
 impl PaletteCommand {
     /// Every command with its palette label and direct-key hint, in display order.
-    const CMDS: [(Self, &'static str, &'static str); 35] = [
+    const CMDS: [(Self, &'static str, &'static str); 36] = [
         (Self::GoSummary, "Go to Summary", "1"),
         (Self::GoVariables, "Go to Variables", "2"),
         (Self::GoConstraints, "Go to Constraints", "3"),
@@ -695,6 +696,7 @@ impl PaletteCommand {
         (Self::CycleSort, "Cycle sort mode", "s"),
         (Self::CycleRelTol, "Cycle relative tolerance", "t"),
         (Self::CycleAbsTol, "Cycle absolute tolerance", "T"),
+        (Self::CycleTheme, "Cycle colour theme", ""),
         (Self::OpenSearch, "Search entries", "/"),
         (Self::NextMatch, "Next search match", "n"),
         (Self::PrevMatch, "Previous search match", "N"),

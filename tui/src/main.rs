@@ -97,44 +97,54 @@ struct Cli {
     #[arg(long, num_args = 2, value_names = ["PATTERN", "REPLACEMENT"], action = clap::ArgAction::Append)]
     rename: Vec<String>,
 
-    /// Colour palette: detect from the terminal background, or force light/dark
-    #[arg(long, value_enum, default_value_t = ThemeArg::Auto)]
-    theme: ThemeArg,
+    /// Colour palette: `auto` (detect the terminal background, then apply the
+    /// theme file in the config directory), a built-in (dark, light, mono,
+    /// flat-dark, flat-light, high-contrast, colour-blind), or the path of a
+    /// theme file
+    #[arg(long, default_value = "auto", value_name = "NAME|PATH")]
+    theme: String,
 }
 
-/// `--theme` argument values.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
-enum ThemeArg {
-    /// Detect from `COLORFGBG`, then by asking the terminal, falling back to dark
-    Auto,
-    Dark,
-    Light,
-}
-
-impl ThemeArg {
-    /// Resolve to a concrete theme mode, consulting the environment for `Auto`.
-    ///
-    /// `NO_COLOR` (<https://no-color.org>) forces monochrome, but only when the
-    /// user left `--theme` at its default: an explicit `--theme dark|light` is
-    /// an intentional override and wins. Without `COLORFGBG`, the terminal is
-    /// asked for its background colour (OSC 11) when `query_terminal` allows —
-    /// not for `--summary`, which draws nothing and may be piped.
-    fn resolve(self, query_terminal: bool) -> theme::ThemeMode {
-        match self {
-            Self::Dark => theme::ThemeMode::Dark,
-            Self::Light => theme::ThemeMode::Light,
-            Self::Auto => {
-                if std::env::var_os("NO_COLOR").is_some_and(|value| !value.is_empty()) {
-                    return theme::ThemeMode::Mono;
-                }
-                std::env::var("COLORFGBG")
-                    .ok()
-                    .and_then(|value| theme::detect_mode_from_colorfgbg(&value))
-                    .or_else(|| query_terminal.then(|| theme::query_background_mode(BACKGROUND_QUERY_TIMEOUT)).flatten())
-                    .unwrap_or(theme::ThemeMode::Dark)
-            }
+/// Resolve `--theme` to a palette reduced to the terminal's colour depth.
+///
+/// `auto` starts from the detected light/dark palette (`NO_COLOR` selects
+/// monochrome) and applies the user's theme file when one exists. An explicit
+/// name or path wins over `NO_COLOR`, as the explicit light/dark choice always
+/// did. Without `COLORFGBG`, the terminal is asked for its background colour
+/// (OSC 11) when `query_terminal` allows — not for `--summary`, which draws
+/// nothing and may be piped.
+fn resolve_theme(arg: &str, query_terminal: bool) -> Result<theme::Theme, String> {
+    let detected = || {
+        if std::env::var_os("NO_COLOR").is_some_and(|value| !value.is_empty()) {
+            return theme::ThemeMode::Mono;
         }
-    }
+        std::env::var("COLORFGBG")
+            .ok()
+            .and_then(|value| theme::detect_mode_from_colorfgbg(&value))
+            .or_else(|| query_terminal.then(|| theme::query_background_mode(BACKGROUND_QUERY_TIMEOUT)).flatten())
+            .unwrap_or(theme::ThemeMode::Dark)
+    };
+    let read = |path: &std::path::Path, base: theme::Theme| {
+        let text = std::fs::read_to_string(path).map_err(|error| format!("cannot read theme file {}: {error}", path.display()))?;
+        theme::parse_theme_file(&text, base).map_err(|error| format!("{}: {error}", path.display()))
+    };
+    let palette = if arg == "auto" {
+        let base = theme::Theme::for_mode(detected());
+        match theme::config_path().filter(|path| path.is_file()) {
+            Some(path) => read(&path, base)?,
+            None => base,
+        }
+    } else if let Some(builtin) = theme::builtin(arg) {
+        builtin
+    } else {
+        let path = std::path::Path::new(arg);
+        if !path.is_file() {
+            return Err(format!("unknown theme `{arg}`: not a built-in name or a theme file"));
+        }
+        read(path, theme::Theme::for_mode(detected()))?
+    };
+    let depth = theme::detect_depth(std::env::var("COLORTERM").ok().as_deref(), std::env::var("TERM").ok().as_deref());
+    Ok(palette.degraded(depth))
 }
 
 /// How long to wait for the terminal to report its background colour. A
@@ -330,7 +340,7 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let args = Cli::parse();
 
     // Fix the palette before any cached lines are built against it.
-    theme::init_theme(args.theme.resolve(!args.summary));
+    theme::set_theme(resolve_theme(&args.theme, !args.summary)?);
 
     // Validate file existence at the CLI boundary before doing any work.
     if !args.file1.exists() {

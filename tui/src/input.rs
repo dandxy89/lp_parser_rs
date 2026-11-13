@@ -223,6 +223,7 @@ impl App {
             PaletteCommand::ToggleRawView => self.toggle_detail_view(),
             PaletteCommand::ToggleIgnoreOrder => self.toggle_ignore_order(),
             PaletteCommand::CycleSort => self.cycle_sort_mode(),
+            PaletteCommand::CycleTheme => self.cycle_theme(),
             PaletteCommand::CycleRelTol => self.cycle_rel_tol(),
             PaletteCommand::CycleAbsTol => self.cycle_abs_tol(),
             PaletteCommand::OpenSearch => self.open_search_popup(),

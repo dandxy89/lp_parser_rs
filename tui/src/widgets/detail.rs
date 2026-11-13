@@ -923,7 +923,7 @@ fn render_constraint_side_by_side(
     // The column header scrolls away with the first data row.
     let mut lines: Vec<Line<'_>> = if coefficient_scroll == 0 { vec![Line::from(header)] } else { Vec::new() };
 
-    let dim = Style::default().fg(t.border);
+    let dim = Style::default().fg(t.faint);
     let change = Style::default().fg(t.accent);
     for (index, row) in window.iter().enumerate() {
         let (name_style, old_style, new_style, badge) = match row.change_kind {

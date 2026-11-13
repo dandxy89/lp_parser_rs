@@ -145,7 +145,7 @@ pub fn build_inspect_summary_lines(
         Span::styled(", ", muted()),
         issue_count_span(warnings, "warning", t.modified),
         Span::styled(", ", muted()),
-        issue_count_span(infos, "info", t.accent),
+        issue_count_span(infos, "info", t.info),
     ]));
     if analysis.issues.is_empty() {
         lines.push(Line::from(vec![Span::styled("  No issues detected", muted())]));
@@ -302,7 +302,7 @@ fn format_count_row(label: &str, counts: &DiffCounts, is_total: bool, show_renam
             0 => (counts.added, Style::default().fg(t.added)),
             1 => (counts.removed, Style::default().fg(t.removed)),
             2 => (counts.modified, Style::default().fg(t.modified)),
-            3 => (counts.renamed, Style::default().fg(t.accent)),
+            3 => (counts.renamed, Style::default().fg(t.renamed)),
             _ => (counts.total(), entries_style),
         };
         spans.push(Span::styled(format!("{value:>width$}"), style));
@@ -400,7 +400,7 @@ fn delta_colour(sign: std::cmp::Ordering) -> Color {
     let t = theme();
     match sign {
         std::cmp::Ordering::Equal => t.muted,
-        std::cmp::Ordering::Greater => t.accent,
+        std::cmp::Ordering::Greater => t.info,
         std::cmp::Ordering::Less => t.secondary_accent,
     }
 }
@@ -504,14 +504,14 @@ fn build_issues_section(lines: &mut Vec<Line<'static>>, report: &LpDiffReport, a
         Span::styled(", ", Style::default().fg(t.muted)),
         issue_count_span(warn1, "warning", t.modified),
         Span::styled(", ", Style::default().fg(t.muted)),
-        issue_count_span(info1, "info", t.accent),
+        issue_count_span(info1, "info", t.info),
         Span::styled("  \u{2502}  ", Style::default().fg(t.muted)),
         Span::styled("File B: ", Style::default().fg(t.muted)),
         issue_count_span(err2, "error", t.removed),
         Span::styled(", ", Style::default().fg(t.muted)),
         issue_count_span(warn2, "warning", t.modified),
         Span::styled(", ", Style::default().fg(t.muted)),
-        issue_count_span(info2, "info", t.accent),
+        issue_count_span(info2, "info", t.info),
     ]));
 
     if analysis1.issues.is_empty() && analysis2.issues.is_empty() {
@@ -573,7 +573,7 @@ mod tests {
     #[test]
     fn dimension_deltas_are_coloured_neutrally() {
         let t = theme();
-        assert_eq!(delta_colour_i64(3), t.accent);
+        assert_eq!(delta_colour_i64(3), t.info);
         assert_eq!(delta_colour_i64(-3), t.secondary_accent);
         assert_eq!(delta_colour_i64(0), t.muted);
         assert_ne!(delta_colour_i64(3), t.added, "a rise is not a verdict");

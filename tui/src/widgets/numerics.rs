@@ -392,7 +392,7 @@ fn issue_count_row(lines: &mut Vec<Line<'static>>, label: &str, (errors, warning
         Span::styled(", ", Style::default().fg(t.muted)),
         Span::styled(format!("{warnings} warning{}", plural(warnings)), count_style(warnings, t.modified)),
         Span::styled(", ", Style::default().fg(t.muted)),
-        Span::styled(format!("{infos} info{}", plural(infos)), count_style(infos, t.accent)),
+        Span::styled(format!("{infos} info{}", plural(infos)), count_style(infos, t.info)),
     ]));
 }
 

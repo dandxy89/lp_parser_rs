@@ -87,7 +87,7 @@ fn draw_command_list(frame: &mut Frame, area: Rect, app: &App) {
             let line = Line::from(vec![
                 Span::styled(label.to_owned(), Style::default().fg(t.text)),
                 Span::raw(" ".repeat(pad)),
-                Span::styled(hint.to_owned(), Style::default().fg(t.accent)),
+                Span::styled(hint.to_owned(), Style::default().fg(t.key)),
             ]);
             ListItem::new(line).style(zebra_style(row))
         })

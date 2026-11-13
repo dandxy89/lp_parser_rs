@@ -399,7 +399,7 @@ pub fn draw_empty_detail_cheatsheet(frame: &mut Frame, area: Rect, message: &str
     }
     let t = theme();
     let muted = Style::default().fg(t.muted);
-    let key = Style::default().fg(t.accent);
+    let key = Style::default().fg(t.key);
     let hint = |keys: &'static str, action: &'static str| {
         Line::from(vec![Span::styled(format!("  {keys:<12}"), key), Span::styled(action, muted)])
     };

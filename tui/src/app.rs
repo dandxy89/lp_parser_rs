@@ -1138,6 +1138,48 @@ impl App {
         Some(crate::widgets::raw_diff::extract_entry_text(raw_text, offset))
     }
 
+    /// Switch the active palette and rebuild everything that cached styled text.
+    ///
+    /// Open reports (diagnostics, presolve log, analysis results) hold lines
+    /// styled at build time and cannot be restyled, so they are closed.
+    pub fn apply_theme(&mut self, theme: crate::theme::Theme) {
+        crate::theme::set_theme(theme);
+        self.invalidate_cache();
+        self.ensure_active_section_cache();
+        self.rebuild_summary();
+        self.numerics_lines = build_mode_numerics_lines(self.mode, &self.report, &self.problem1);
+        match &self.solver.state {
+            SolveState::Done(result) => {
+                let cache = crate::widgets::solve::build_single_solve_cache(result, self.solve_popup_inner_width());
+                self.solver.render_cache = SolveRenderCache::Single(cache);
+            }
+            SolveState::DoneBoth(diff) => {
+                self.solver.render_cache = crate::widgets::solve::build_diff_solve_cache(diff, self.solve_popup_inner_width());
+            }
+            _ => {}
+        }
+        let closed_reports = self.diagnostics.is_some() || self.presolve_log.is_some() || self.analysis.pane().is_some();
+        self.diagnostics = None;
+        self.presolve_log = None;
+        if self.analysis.pane().is_some() {
+            self.analysis = AnalysisState::Idle;
+        }
+        if self.search_popup.visible {
+            self.recompute_search_popup();
+        }
+        let name = crate::theme::builtin_name(&theme).unwrap_or("custom");
+        self.flash_status(if closed_reports { format!("Theme: {name} (open reports closed)") } else { format!("Theme: {name}") });
+    }
+
+    /// Switch to the next built-in palette (the palette's `Cycle theme`).
+    pub fn cycle_theme(&mut self) {
+        let current = crate::theme::theme();
+        let names = ["dark", "light", "flat-dark", "flat-light", "high-contrast", "colour-blind", "mono"];
+        let position = crate::theme::builtin_name(&current).and_then(|name| names.iter().position(|candidate| *candidate == name));
+        let next = names[position.map_or(0, |index| (index + 1) % names.len())];
+        self.apply_theme(crate::theme::builtin(next).expect("every cycle entry is a built-in"));
+    }
+
     /// Invalidate cached filtered indices for all sections and the coefficient row cache.
     pub(crate) fn invalidate_cache(&mut self) {
         for state in &mut self.section_states {

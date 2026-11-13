@@ -30,7 +30,7 @@ pub fn bold_text() -> Style {
 
 /// Style for the sidebar delta column shown under the delta sorts.
 pub fn delta_column() -> Style {
-    Style::new().fg(theme().accent)
+    Style::new().fg(theme().info)
 }
 
 /// Arrow separator used between old → new values.
@@ -68,16 +68,22 @@ pub fn focus_border_style(current: Focus, target: Focus) -> Style {
 /// drawn with heavy lines instead.
 pub fn panel_block(border_style: Style) -> Block<'static> {
     let focused = border_style.add_modifier.contains(Modifier::BOLD);
-    let block = Block::default().borders(Borders::ALL).border_type(border_type(focused, theme().focus_thick)).border_style(border_style);
+    let block = Block::default().borders(Borders::ALL).border_type(border_type(focused, theme().focus_thick, theme().square)).border_style(border_style);
     // A focused panel's title takes its border's colour too; spans that carry
     // their own colour (a diff badge) keep it.
     if focused { block.title_style(border_style) } else { block }
 }
 
 /// Line style of a panel border: heavy for the focused panel when the palette
-/// marks focus by weight rather than colour, rounded otherwise.
-const fn border_type(focused: bool, focus_thick: bool) -> BorderType {
-    if focused && focus_thick { BorderType::Thick } else { BorderType::Rounded }
+/// marks focus by weight rather than colour, then square or rounded corners.
+const fn border_type(focused: bool, focus_thick: bool, square: bool) -> BorderType {
+    if focused && focus_thick {
+        BorderType::Thick
+    } else if square {
+        BorderType::Plain
+    } else {
+        BorderType::Rounded
+    }
 }
 
 /// Standard vertical scrollbar: a hairline track and a hairline thumb, no end
@@ -117,12 +123,12 @@ pub const HINT_SEPARATOR: &str = " \u{b7} ";
 /// without a colon (the `y →` chord prefix) is drawn muted as it stands.
 pub fn key_hint_spans<'a>(pairs: &[&'a str]) -> Vec<Span<'a>> {
     let t = theme();
-    let key_style = Style::default().fg(t.accent);
+    let key_style = Style::default().fg(t.key);
     let label_style = Style::default().fg(t.muted);
     let mut spans = Vec::with_capacity(pairs.len() * 3);
     for (i, pair) in pairs.iter().enumerate() {
         if i > 0 {
-            spans.push(Span::styled(HINT_SEPARATOR, Style::default().fg(t.border)));
+            spans.push(Span::styled(HINT_SEPARATOR, Style::default().fg(t.faint)));
         }
         match pair.split_once(':') {
             Some((key, action)) => {
@@ -225,9 +231,9 @@ pub const SELECTION_CURSOR: &str = "\u{258d} ";
 /// only one list at a time looks live.
 pub fn selection_style(focused: bool) -> Style {
     let t = theme();
-    // `text` is forced as the foreground: rows keep their kind colour otherwise,
+    // `selection_fg` is forced as the foreground: rows keep their kind colour otherwise,
     // and red or teal on the selection bar fell well under readable contrast.
-    Style::new().fg(t.text).bg(if focused { t.selection_bg } else { t.selection_bg_dim }).add_modifier(Modifier::BOLD)
+    Style::new().fg(t.selection_fg).bg(if focused { t.selection_bg } else { t.selection_bg_dim }).add_modifier(Modifier::BOLD)
 }
 
 /// Background style for alternating rows, keyed on the absolute item index so
@@ -370,7 +376,7 @@ pub fn heading_line(title: &str) -> Line<'static> {
     let t = theme();
     let used = title.chars().count() + 3;
     Line::from(vec![
-        Span::styled(format!("  {title} "), Style::default().fg(t.accent).add_modifier(Modifier::BOLD)),
+        Span::styled(format!("  {title} "), Style::default().fg(t.heading).add_modifier(Modifier::BOLD)),
         Span::styled(rule_str(HEADING_WIDTH.saturating_sub(used)), Style::default().fg(t.border)),
     ])
 }
@@ -474,7 +480,7 @@ pub fn kind_colour(kind: DiffKind) -> Color {
         DiffKind::Added => t.added,
         DiffKind::Removed => t.removed,
         DiffKind::Modified => t.modified,
-        DiffKind::Renamed => t.accent,
+        DiffKind::Renamed => t.renamed,
     }
 }
 
@@ -499,7 +505,7 @@ pub fn severity_colour(severity: IssueSeverity) -> Color {
     match severity {
         IssueSeverity::Error => t.removed,
         IssueSeverity::Warning => t.modified,
-        IssueSeverity::Info => t.accent,
+        IssueSeverity::Info => t.info,
     }
 }
 
@@ -625,11 +631,17 @@ mod tests {
 
     #[test]
     fn focus_is_marked_by_colour_or_by_line_weight() {
-        assert_eq!(border_type(true, true), BorderType::Thick, "monochrome marks focus with heavy lines");
-        assert_eq!(border_type(false, true), BorderType::Rounded);
-        assert_eq!(border_type(true, false), BorderType::Rounded, "colour palettes keep the rounded border");
+        assert_eq!(border_type(true, true, false), BorderType::Thick, "monochrome marks focus with heavy lines");
+        assert_eq!(border_type(false, true, false), BorderType::Rounded);
+        assert_eq!(border_type(true, false, false), BorderType::Rounded, "colour palettes keep the rounded border");
         let focused = focus_border_style(Focus::Detail, Focus::Detail);
-        assert_eq!(focused.fg, Some(theme().accent), "a focused border takes the accent");
+        assert_eq!(focused.fg, Some(theme().border_focus), "a focused border takes the focus colour");
+    }
+
+    #[test]
+    fn square_palettes_draw_plain_corners_unless_focused() {
+        assert_eq!(border_type(false, true, true), BorderType::Plain);
+        assert_eq!(border_type(true, true, true), BorderType::Thick, "weight still marks focus");
     }
 
     #[test]
@@ -638,7 +650,7 @@ mod tests {
         let text: String = spans.iter().map(|span| span.content.as_ref()).collect();
         assert_eq!(text, "j/k:scroll \u{b7} Esc:close");
         assert_eq!(key_hint_width("j/k:scroll  Esc:close"), text.chars().count());
-        let keys: Vec<&str> = spans.iter().filter(|span| span.style.fg == Some(theme().accent)).map(|span| span.content.as_ref()).collect();
+        let keys: Vec<&str> = spans.iter().filter(|span| span.style.fg == Some(theme().key)).map(|span| span.content.as_ref()).collect();
         assert_eq!(keys, ["j/k", "Esc"], "only the keys take the accent");
     }
 

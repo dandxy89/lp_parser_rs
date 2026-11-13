@@ -1247,7 +1247,7 @@ fn build_diff_log_tab(lines: &mut Vec<Line<'static>>, diff: &SolveDiffResult) {
         format!("  \u{2500}\u{2500} File 1: {} \u{2500}{}", diff.file1_label, rule_str(38)),
         Style::default().fg(t.muted).add_modifier(Modifier::BOLD),
     )));
-    append_truncated_log(lines, &diff.result1.solver_log, MAX_LOG_LINES, t);
+    append_truncated_log(lines, &diff.result1.solver_log, MAX_LOG_LINES, &t);
 
     lines.push(Line::from(""));
 
@@ -1256,7 +1256,7 @@ fn build_diff_log_tab(lines: &mut Vec<Line<'static>>, diff: &SolveDiffResult) {
         format!("  \u{2500}\u{2500} File 2: {} \u{2500}{}", diff.file2_label, rule_str(38)),
         Style::default().fg(t.muted).add_modifier(Modifier::BOLD),
     )));
-    append_truncated_log(lines, &diff.result2.solver_log, MAX_LOG_LINES, t);
+    append_truncated_log(lines, &diff.result2.solver_log, MAX_LOG_LINES, &t);
 }
 
 /// Append the last `max_lines` of a log string to the output, with a truncation notice if needed.
