@@ -1,0 +1,96 @@
+name: Release VS Code extension
+
+on:
+  workflow_call:
+    inputs:
+      tag_name:
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Release tag (e.g. lp-lsp-v1.0.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Server ${{ matrix.vsce }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { vsce: linux-x64, target: x86_64-unknown-linux-musl, runner: ubuntu-latest }
+          - { vsce: linux-arm64, target: aarch64-unknown-linux-musl, runner: ubuntu-24.04-arm }
+          - { vsce: darwin-x64, target: x86_64-apple-darwin, runner: macos-latest }
+          - { vsce: darwin-arm64, target: aarch64-apple-darwin, runner: macos-latest }
+          - { vsce: win32-x64, target: x86_64-pc-windows-msvc, runner: windows-latest }
+          - { vsce: win32-arm64, target: aarch64-pc-windows-msvc, runner: windows-latest }
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: Install musl tools
+        if: contains(matrix.target, 'musl')
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - name: Set cross-compile env (macOS x86_64)
+        if: matrix.target == 'x86_64-apple-darwin'
+        shell: bash
+        run: echo "CARGO_TARGET_X86_64_APPLE_DARWIN_LINKER=clang" >> "$GITHUB_ENV"
+      - run: cargo build --release --locked --target ${{ matrix.target }} -p lp-lsp
+      - uses: actions/upload-artifact@v7
+        with:
+          name: server-${{ matrix.vsce }}
+          path: target/${{ matrix.target }}/release/lp-lsp${{ contains(matrix.target, 'windows') && '.exe' || '' }}
+
+  package:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write # Marketplace trusted publishing
+      contents: write # attach the VSIX files to the release
+    defaults:
+      run:
+        working-directory: lsp/editors/vscode
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: server-*
+          path: ${{ github.workspace }}/servers
+      - run: npm ci
+      - name: Package one VSIX per target
+        run: |
+          for dir in "$GITHUB_WORKSPACE"/servers/server-*; do
+            target="${dir##*/server-}"
+            rm -rf server && mkdir server && cp "$dir"/* server/ && chmod +x server/*
+            npx vsce package --target "$target" --out "lp-lsp-$target.vsix"
+            # one static musl build serves the Alpine targets too
+            case "$target" in
+              linux-x64)   npx vsce package --target alpine-x64   --out lp-lsp-alpine-x64.vsix ;;
+              linux-arm64) npx vsce package --target alpine-arm64 --out lp-lsp-alpine-arm64.vsix ;;
+            esac
+          done
+          ls -l *.vsix
+      - name: Attach to the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ inputs.tag_name }}" *.vsix --clobber
+      # Publishing is opt-in: set the repository variable PUBLISH_EXTENSION=true once the
+      # Marketplace publisher (trusted publishing) and Open VSX namespace exist.
+      - name: Publish to the VS Code Marketplace
+        if: ${{ vars.PUBLISH_EXTENSION == 'true' }}
+        run: npx vsce publish --oidc --packagePath *.vsix
+      - name: Publish to Open VSX
+        if: ${{ vars.PUBLISH_EXTENSION == 'true' }}
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: for f in *.vsix; do npx ovsx publish "$f" -p "$OVSX_PAT"; done

@@ -106,6 +106,13 @@
       "release-type": "rust",
       "component": "lp-lsp",
       "path": "lsp",
+      "extra-files": [
+        {
+          "type": "json",
+          "path": "editors/vscode/package.json",
+          "jsonpath": "$.version"
+        }
+      ],
       "bump-minor-pre-major": false,
       "bump-patch-for-minor-pre-major": false,
       "draft": false,

@@ -1,6 +1,9 @@
 .vscode/**
+node_modules/**
 src/**
-out/**/*.map
+out/**
+dist/**/*.map
 tsconfig.json
 .gitignore
 *.vsix
+images/screenshot.png

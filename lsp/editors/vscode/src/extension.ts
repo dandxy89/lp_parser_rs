@@ -1,3 +1,5 @@
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import * as vscode from 'vscode';
 import {
   LanguageClient,
@@ -10,18 +12,20 @@ import {
 
 const CLIENT_ID = 'lp';
 const CLIENT_NAME = 'LP Language Server';
-const INSTALL_HINT = 'Install it with `cargo install --path lsp` (from the lp_parser_rs repository) or set `lp.server.path`.';
+const INSTALL_HINT = 'Install it with `cargo install --locked lp-lsp` or set `lp.server.path`.';
 
 /** Server commands whose result is `{ markdown }`. */
 const REPORT_COMMANDS = new Set(['lp.analyze', 'lp.showModelStats']);
 /** Server commands that take the active document's URI as their first argument. */
 const DOCUMENT_COMMANDS = new Set(['lp.analyze', 'lp.convertToMps', 'lp.showModelStats']);
 
+let extensionContext: vscode.ExtensionContext;
 let client: LanguageClient | undefined;
 let outputChannel: vscode.OutputChannel | undefined;
 let lpFileWatcher: vscode.FileSystemWatcher | undefined;
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
+  extensionContext = context;
   outputChannel = vscode.window.createOutputChannel(CLIENT_NAME);
   lpFileWatcher = vscode.workspace.createFileSystemWatcher('**/*.lp');
   context.subscriptions.push(outputChannel, lpFileWatcher);
@@ -49,9 +53,16 @@ export async function deactivate(): Promise<void> {
   }
 }
 
+/** The server to run: the `lp.server.path` setting, then the binary bundled in the extension, then `PATH`. */
 function serverPath(): string {
-  const configured = vscode.workspace.getConfiguration('lp').get<string>('server.path', 'lp-lsp').trim();
-  return configured.length > 0 ? configured : 'lp-lsp';
+  const context = extensionContext;
+  const configured = vscode.workspace.getConfiguration('lp').get<string>('server.path', '').trim();
+  if (configured.length > 0) {
+    return configured;
+  }
+  const exe = process.platform === 'win32' ? 'lp-lsp.exe' : 'lp-lsp';
+  const bundled = context.asAbsolutePath(path.join('server', exe));
+  return fs.existsSync(bundled) ? bundled : 'lp-lsp';
 }
 
 function createClient(): LanguageClient {

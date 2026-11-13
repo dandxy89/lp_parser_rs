@@ -4,6 +4,7 @@
   "description": "Language support for LP (linear programming) files, powered by the lp-lsp language server.",
   "version": "0.1.0",
   "publisher": "dandxy89",
+  "icon": "images/icon.png",
   "license": "MIT OR Apache-2.0",
   "repository": {
     "type": "git",
@@ -21,6 +22,7 @@
     "Linters",
     "Formatters"
   ],
+  "homepage": "https://github.com/dandxy89/lp_parser_rs/tree/main/lsp",
   "keywords": [
     "lp",
     "linear programming",
@@ -28,7 +30,7 @@
     "cplex",
     "gurobi"
   ],
-  "main": "./out/extension.js",
+  "main": "./dist/extension.js",
   "activationEvents": [
     "onLanguage:lp"
   ],
@@ -99,8 +101,8 @@
       "properties": {
         "lp.server.path": {
           "type": "string",
-          "default": "lp-lsp",
-          "markdownDescription": "Path to the `lp-lsp` binary. A bare name is resolved from `PATH`. Install with `cargo install --path lsp`.",
+          "default": "",
+          "markdownDescription": "Path to the `lp-lsp` binary. Empty: use the server bundled with the extension, falling back to `PATH`. Install separately with `cargo install --locked lp-lsp`.",
           "scope": "machine-overridable"
         },
         "lp.trace.server": {
@@ -209,9 +211,10 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./",
+    "check-types": "tsc --noEmit -p ./",
+    "compile": "npm run check-types && esbuild src/extension.ts --bundle --format=cjs --platform=node --external:vscode --outfile=dist/extension.js --sourcemap",
+    "watch": "esbuild src/extension.ts --bundle --format=cjs --platform=node --external:vscode --outfile=dist/extension.js --sourcemap --watch",
+    "vscode:prepublish": "npm run check-types && esbuild src/extension.ts --bundle --format=cjs --platform=node --external:vscode --outfile=dist/extension.js --minify",
     "package": "vsce package"
   },
   "dependencies": {
@@ -221,6 +224,7 @@
     "@types/node": "^20.19.0",
     "@types/vscode": "^1.90.0",
     "@vscode/vsce": "^3.9.2",
+    "esbuild": "^0.25.0",
     "typescript": "^5.9.3"
   }
 }
