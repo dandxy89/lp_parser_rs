@@ -19,7 +19,7 @@ const HELP_TEXT: &[&str] = &[
     "  Navigation              Filters             Other",
     "  ─────────               ───────             ─────",
     "  j / ↓     Down          a   All             /       Search",
-    "  k / ↑     Up            +   Added           Ctrl-p  Command palette",
+    "  k / ↑     Up            +   Added           Ctrl-p  Commands (or :)",
     "  g / Home  Top           -   Removed         ?       This help",
     "  G / End   Bottom        m   Modified        q       Quit",
     "  [ / ]     Prev/next     =   Renamed         Ctrl-C  Force quit",
@@ -101,7 +101,7 @@ const INSPECT_HELP_TEXT: &[&str] = &[
     "  Navigation                                      Other",
     "  ─────────                                       ─────",
     "  j / ↓            Down                           /       Search",
-    "  k / ↑            Up                             Ctrl-p  Command palette",
+    "  k / ↑            Up                             Ctrl-p  Commands (or :)",
     "  g / Home         Top                            ?       This help",
     "  G / End          Bottom                         q       Quit",
     "  [ / ]            Prev/next section              Ctrl-C  Force quit",
@@ -326,7 +326,7 @@ mod tests {
         for (text, block) in [(HELP_TEXT, &HELP_COLUMNS), (INSPECT_HELP_TEXT, &INSPECT_HELP_COLUMNS)] {
             let stacked = stack_columns(text, block);
             assert!(desired_width(&stacked) <= 64, "the stacked help must fit 64 columns: {}", desired_width(&stacked));
-            for key in ["Ctrl-p  Command palette", "yy      Yank name", "Ctrl-C  Force quit", "Search Modes"] {
+            for key in ["Ctrl-p  Commands (or :)", "yy      Yank name", "Ctrl-C  Force quit", "Search Modes"] {
                 assert!(stacked.iter().any(|line| line.contains(key)), "{key:?} must survive the re-flow");
             }
         }
