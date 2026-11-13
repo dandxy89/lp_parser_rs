@@ -13,6 +13,17 @@ categories = ["development-tools", "mathematics"]
 name = "lp-lsp"
 path = "src/main.rs"
 
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/lp-lsp-v{ version }/lp-lsp-{ version }-{ target }{ archive-suffix }"
+bin-dir = "lp-lsp-{ version }-{ target }/{ bin }{ binary-ext }"
+pkg-fmt = "tgz"
+
+[package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
+pkg-fmt = "zip"
+
+[package.metadata.binstall.overrides.aarch64-pc-windows-msvc]
+pkg-fmt = "zip"
+
 [lints]
 workspace = true
 

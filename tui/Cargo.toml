@@ -13,6 +13,17 @@ categories = ["command-line-utilities"]
 name = "lp_diff"
 path = "src/main.rs"
 
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/lp_diff-v{ version }/lp_diff-{ version }-{ target }{ archive-suffix }"
+bin-dir = "lp_diff-{ version }-{ target }/{ bin }{ binary-ext }"
+pkg-fmt = "tgz"
+
+[package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
+pkg-fmt = "zip"
+
+[package.metadata.binstall.overrides.aarch64-pc-windows-msvc]
+pkg-fmt = "zip"
+
 [dependencies]
 lp_parser_rs = { path = "../rust", version = "5", features = ["csv", "diff", "serde", "mmap"] }
 
