@@ -81,7 +81,7 @@ fn name_cell(name: &str, width: usize) -> String {
 
 /// Longest name among `coefficients`, for [`name_column_width`].
 fn longest_coefficient_name(coefficients: &[ResolvedCoefficient], interner: &NameInterner) -> usize {
-    coefficients.iter().map(|coeff| interner.resolve(coeff.name).chars().count()).max().unwrap_or(0)
+    coefficients.iter().map(|coeff| unicode_width::UnicodeWidthStr::width(interner.resolve(coeff.name))).max().unwrap_or(0)
 }
 
 /// Build the header line for a yanked detail panel: entity label, name, kind
@@ -1178,7 +1178,7 @@ fn render_coeff_changes(
     let (skip, take) = visible_range.unwrap_or((0, rows.len()));
     let layout = UnifiedColumns::fit(pane_width);
     let (val_w, badges) = (layout.value, layout.badges);
-    let name_w = name_column_width(rows.iter().map(|row| row.variable.chars().count()).max().unwrap_or(0), pane_width, layout.reserved());
+    let name_w = name_column_width(rows.iter().map(|row| unicode_width::UnicodeWidthStr::width(row.variable.as_str())).max().unwrap_or(0), pane_width, layout.reserved());
 
     let skipped = skip.min(rows.len());
 
