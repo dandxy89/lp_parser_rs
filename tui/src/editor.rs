@@ -842,10 +842,10 @@ impl Editor {
             KeyCode::Char('j') | KeyCode::Down if is_list => popup.selected = (popup.selected + 1).min(last),
             KeyCode::Char('k') | KeyCode::Up if is_list => popup.selected = popup.selected.saturating_sub(1),
             KeyCode::Char('n') if is_list && key.modifiers.contains(KeyModifiers::CONTROL) => {
-                popup.selected = (popup.selected + 1).min(last)
+                popup.selected = (popup.selected + 1).min(last);
             }
             KeyCode::Char('p') if is_list && key.modifiers.contains(KeyModifiers::CONTROL) => {
-                popup.selected = popup.selected.saturating_sub(1)
+                popup.selected = popup.selected.saturating_sub(1);
             }
             KeyCode::Enter if is_list => {
                 let selected = popup.selected;
