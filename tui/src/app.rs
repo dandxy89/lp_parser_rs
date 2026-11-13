@@ -1179,13 +1179,12 @@ impl App {
 
     fn rebuild_solve_cache_at(&mut self, width: u16) {
         self.solver.cache_width = width;
-        match &self.solver.state {
-            SolveState::Done(result) => {
-                self.solver.render_cache = SolveRenderCache::Single(crate::widgets::solve::build_single_solve_cache(result, width))
-            }
-            SolveState::DoneBoth(diff) => self.solver.render_cache = crate::widgets::solve::build_diff_solve_cache(diff, width),
-            _ => {}
-        }
+        let cache = match &self.solver.state {
+            SolveState::Done(result) => SolveRenderCache::Single(crate::widgets::solve::build_single_solve_cache(result, width)),
+            SolveState::DoneBoth(diff) => crate::widgets::solve::build_diff_solve_cache(diff, width),
+            _ => return,
+        };
+        self.solver.render_cache = cache;
     }
 
     /// Switch to the next built-in palette (the palette's `Cycle theme`).
