@@ -1,8 +1,7 @@
 import tempfile
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from contextlib import AbstractContextManager, contextmanager
 from pathlib import Path
-from typing import Callable
 
 import pytest
 

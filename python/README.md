@@ -21,7 +21,7 @@ Type stubs are included, so editors and type checkers know the shape of every re
 pip install parse_lp
 ```
 
-Requires Python 3.9 or later.
+Requires Python 3.10 or later.
 
 ## Quick start
 
@@ -295,7 +295,7 @@ parser.to_csv("output")
 
 ## Platforms
 
-One `cp39-abi3` wheel per platform serves Python 3.9 onwards: Linux (x86_64, x86, aarch64, armv7; manylinux), Windows x64, and macOS x86_64 and arm64. There are no musllinux, Windows arm64 or free-threaded wheels; those users build from the sdist and need a Rust toolchain.
+One `cp310-abi3` wheel per platform serves Python 3.10 onwards: Linux (x86_64, x86, aarch64, armv7; manylinux), Windows x64, and macOS x86_64 and arm64. There are no musllinux, Windows arm64 or free-threaded wheels; those users build from the sdist and need a Rust toolchain.
 
 ## Supported format features
 

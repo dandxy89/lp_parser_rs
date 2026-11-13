@@ -1,7 +1,5 @@
 import os
-from typing import Any, Literal, TypedDict
-
-from typing_extensions import TypeAlias
+from typing import Any, Literal, TypeAlias, TypedDict
 
 # All three subclass RuntimeError, so existing `except RuntimeError` handlers
 # keep working.

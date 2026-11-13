@@ -3,7 +3,7 @@ name = "parse_lp"
 readme = "README.md"
 description = "Read, edit and write LP and MPS optimisation models; the parser is written in Rust"
 license = { text = "MIT OR Apache-2.0" }
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 keywords = [
     "linear-programming",
     "optimization",
@@ -14,7 +14,6 @@ keywords = [
 classifiers = [
     "License :: OSI Approved :: Apache Software License",
     "License :: OSI Approved :: MIT License",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
