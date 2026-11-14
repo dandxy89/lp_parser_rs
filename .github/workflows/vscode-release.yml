@@ -32,6 +32,8 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag_name }}
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
@@ -43,6 +45,11 @@ jobs:
         shell: bash
         run: echo "CARGO_TARGET_X86_64_APPLE_DARWIN_LINKER=clang" >> "$GITHUB_ENV"
       - run: cargo build --release --target ${{ matrix.target }} -p lp-lsp
+      # win32-arm64 is cross-compiled on x64 and cannot run here
+      - name: Smoke test
+        if: matrix.vsce != 'win32-arm64'
+        shell: bash
+        run: target/${{ matrix.target }}/release/lp-lsp${{ contains(matrix.target, 'windows') && '.exe' || '' }} --version
       - uses: actions/upload-artifact@v7
         with:
           name: server-${{ matrix.vsce }}
@@ -59,6 +66,8 @@ jobs:
         working-directory: lsp/editors/vscode
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag_name }}
       - uses: actions/setup-node@v6
         with:
           node-version: 22
@@ -67,6 +76,8 @@ jobs:
           pattern: server-*
           path: ${{ github.workspace }}/servers
       - run: npm ci
+      - name: Use the released changelog
+        run: cp ../../CHANGELOG.md CHANGELOG.md
       - name: Package one VSIX per target
         run: |
           for dir in "$GITHUB_WORKSPACE"/servers/server-*; do
@@ -79,18 +90,33 @@ jobs:
               linux-arm64) npx vsce package --target alpine-arm64 --out lp-lsp-alpine-arm64.vsix ;;
             esac
           done
+          # fallback for platforms with no specific package; relies on PATH or lp.server.path
+          rm -rf server
+          npx vsce package --out lp-lsp-universal.vsix
           ls -l *.vsix
+      - name: Check the packages
+        shell: bash
+        run: |
+          want="$(basename "${{ inputs.tag_name }}")"; want="${want##*-v}"
+          for f in *.vsix; do
+            unzip -p "$f" extension/package.json | grep -q "\"version\": \"$want\"" \
+              || { echo "$f: version is not $want"; exit 1; }
+            [ "$f" = lp-lsp-universal.vsix ] && continue
+            unzip -l "$f" | grep -Eq 'extension/server/lp-lsp(\.exe)?$' \
+              || { echo "$f: no bundled server"; exit 1; }
+          done
       - name: Attach to the GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "${{ inputs.tag_name }}" *.vsix --clobber
-      # Publishing is opt-in: set the repository variable PUBLISH_EXTENSION=true once the
-      # Marketplace publisher (trusted publishing) and Open VSX namespace exist.
+      # Publishing is opt-in per registry: set PUBLISH_VSCE / PUBLISH_OVSX to `true` once the
+      # Marketplace publisher (trusted publishing) / Open VSX namespace exist.
+      # One call: the OIDC token can be exchanged only once. --skip-duplicate makes re-runs safe.
       - name: Publish to the VS Code Marketplace
-        if: ${{ vars.PUBLISH_EXTENSION == 'true' }}
-        run: npx vsce publish --oidc --packagePath *.vsix
+        if: ${{ vars.PUBLISH_VSCE == 'true' }}
+        run: npx vsce publish --oidc --skip-duplicate --packagePath *.vsix
       - name: Publish to Open VSX
-        if: ${{ vars.PUBLISH_EXTENSION == 'true' }}
+        if: ${{ vars.PUBLISH_OVSX == 'true' }}
         env:
           OVSX_PAT: ${{ secrets.OVSX_PAT }}
-        run: for f in *.vsix; do npx ovsx publish "$f" -p "$OVSX_PAT"; done
+        run: for f in *.vsix; do npx ovsx publish "$f" --skip-duplicate -p "$OVSX_PAT"; done
