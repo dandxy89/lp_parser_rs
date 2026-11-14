@@ -76,6 +76,8 @@ jobs:
           pattern: server-*
           path: ${{ github.workspace }}/servers
       - run: npm ci
+      - name: Use the released changelog
+        run: cp ../../CHANGELOG.md CHANGELOG.md
       - name: Package one VSIX per target
         run: |
           for dir in "$GITHUB_WORKSPACE"/servers/server-*; do

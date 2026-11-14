@@ -53,20 +53,23 @@ export async function deactivate(): Promise<void> {
   }
 }
 
+type ServerSource = 'setting' | 'bundled' | 'PATH';
+
 /** The server to run: the `lp.server.path` setting, then the binary bundled in the extension, then `PATH`. */
-function serverPath(): string {
+function serverPath(): { command: string; source: ServerSource } {
   const context = extensionContext;
   const configured = vscode.workspace.getConfiguration('lp').get<string>('server.path', '').trim();
   if (configured.length > 0) {
-    return configured;
+    return { command: configured, source: 'setting' };
   }
   const exe = process.platform === 'win32' ? 'lp-lsp.exe' : 'lp-lsp';
   const bundled = context.asAbsolutePath(path.join('server', exe));
-  return fs.existsSync(bundled) ? bundled : 'lp-lsp';
+  return fs.existsSync(bundled) ? { command: bundled, source: 'bundled' } : { command: 'lp-lsp', source: 'PATH' };
 }
 
 function createClient(): LanguageClient {
-  const command = serverPath();
+  const { command, source } = serverPath();
+  outputChannel?.appendLine(`${process.platform}-${process.arch}; server: ${command} (${source})`);
   const serverOptions: ServerOptions = {
     run: { command, transport: TransportKind.stdio },
     debug: { command, transport: TransportKind.stdio },
@@ -106,10 +109,12 @@ function createClient(): LanguageClient {
 async function startClient(languageClient: LanguageClient): Promise<void> {
   try {
     await languageClient.start();
+    const info = languageClient.initializeResult?.serverInfo;
+    outputChannel?.appendLine(`Server started: ${info?.name ?? 'unknown'} ${info?.version ?? 'unknown version'}`);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    outputChannel?.appendLine(`Failed to start '${serverPath()}': ${message}`);
-    void vscode.window.showErrorMessage(`Could not start the LP language server '${serverPath()}': ${message}. ${INSTALL_HINT}`);
+    outputChannel?.appendLine(`Failed to start '${serverPath().command}': ${message}`);
+    void vscode.window.showErrorMessage(`Could not start the LP language server '${serverPath().command}': ${message}. ${INSTALL_HINT}`);
   }
 }
 
