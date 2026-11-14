@@ -26,3 +26,4 @@ jobs:
           node-version: 22
       - run: npm ci
       - run: npm run compile
+      - run: npx vsce package --out /tmp/lp-lsp-check.vsix

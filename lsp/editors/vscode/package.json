@@ -103,7 +103,7 @@
           "type": "string",
           "default": "",
           "markdownDescription": "Path to the `lp-lsp` binary. Empty: use the server bundled with the extension, falling back to `PATH`. Install separately with `cargo install --locked lp-lsp`.",
-          "scope": "machine-overridable"
+          "scope": "machine"
         },
         "lp.trace.server": {
           "type": "string",
@@ -225,6 +225,7 @@
     "@types/vscode": "^1.90.0",
     "@vscode/vsce": "^4.1.1",
     "esbuild": "^0.25.0",
+    "ovsx": "1.4.0",
     "typescript": "^5.9.3"
   },
   "overrides": {
