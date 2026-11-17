@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.0.2](https://github.com/dandxy89/lp_parser_rs/compare/lp-lsp-v1.0.1...lp-lsp-v1.0.2) (2026-11-17)
+
+
+### Continuous Integration
+
+* vscode release hardening ([#233](https://github.com/dandxy89/lp_parser_rs/issues/233)) ([81b95dc](https://github.com/dandxy89/lp_parser_rs/commit/81b95dcfcd93567706a11869c57393301a5bd571))
+
+
+### Bug Fixes
+
+* **vscode:** rename display name to LP & MPS Language Server ([#235](https://github.com/dandxy89/lp_parser_rs/issues/235)) ([5a7fc36](https://github.com/dandxy89/lp_parser_rs/commit/5a7fc362b8bff1d13f1182af3606dc6976355a66))
+
 ## [1.0.1](https://github.com/dandxy89/lp_parser_rs/compare/lp-lsp-v1.0.0...lp-lsp-v1.0.1) (2026-11-13)
 
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.0.4](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v5.0.3...lp_parser_rs-v5.0.4) (2026-11-17)
+
+
+### Bug Fixes
+
+* **vscode:** rename display name to LP & MPS Language Server ([#235](https://github.com/dandxy89/lp_parser_rs/issues/235)) ([5a7fc36](https://github.com/dandxy89/lp_parser_rs/commit/5a7fc362b8bff1d13f1182af3606dc6976355a66))
+
 ## [5.0.3](https://github.com/dandxy89/lp_parser_rs/compare/lp_parser_rs-v5.0.2...lp_parser_rs-v5.0.3) (2026-11-13)
 
 
