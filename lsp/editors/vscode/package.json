@@ -1,6 +1,6 @@
 {
   "name": "lp-lsp",
-  "displayName": "LP Language Support",
+  "displayName": "LP & MPS Language Server",
   "description": "Language support for LP (linear programming) files, powered by the lp-lsp language server.",
   "version": "1.0.1",
   "publisher": "dandxy89",

@@ -1,4 +1,4 @@
-# LP Language Support
+# LP & MPS Language Server
 
 VS Code client for [`lp-lsp`](https://github.com/dandxy89/lp_parser_rs/tree/main/lsp), a language server for LP (linear programming) files in the CPLEX LP format with Gurobi extensions.
 
