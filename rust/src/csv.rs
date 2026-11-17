@@ -213,10 +213,10 @@ End
         // sos_type column; SOS rows carry the sos_type with empty operator/rhs.
         let con_lines = read_lines(&dir.join("constraints.csv"));
         assert_eq!(con_lines[0], "constraint_name,constraint_type,variable_name,coefficient,operator,rhs,sos_type");
-        assert!(con_lines.contains(&"c1,Standard,x,1,<=,10,".to_string()), "got: {con_lines:?}");
-        assert!(con_lines.contains(&"c1,Standard,y,1,<=,10,".to_string()), "got: {con_lines:?}");
-        assert!(con_lines.contains(&"sos_a,SOS,x,1,,,S1".to_string()), "got: {con_lines:?}");
-        assert!(con_lines.contains(&"sos_a,SOS,y,2.5,,,S1".to_string()), "got: {con_lines:?}");
+        assert!(con_lines.iter().any(|l| l == "c1,Standard,x,1,<=,10,"), "got: {con_lines:?}");
+        assert!(con_lines.iter().any(|l| l == "c1,Standard,y,1,<=,10,"), "got: {con_lines:?}");
+        assert!(con_lines.iter().any(|l| l == "sos_a,SOS,x,1,,,S1"), "got: {con_lines:?}");
+        assert!(con_lines.iter().any(|l| l == "sos_a,SOS,y,2.5,,,S1"), "got: {con_lines:?}");
         assert_eq!(con_lines.len(), 5);
 
         // Variables: the `type` column reports the variable kind; bound shape
@@ -228,10 +228,10 @@ End
         // the export distinguishes the two, because the model does.
         let var_lines = read_lines(&dir.join("variables.csv"));
         assert_eq!(var_lines[0], "variable_name,type,lower_bound,upper_bound");
-        assert!(var_lines.contains(&"x,Continuous,1,".to_string()), "got: {var_lines:?}");
-        assert!(var_lines.contains(&"y,Continuous,,5".to_string()), "got: {var_lines:?}");
-        assert!(var_lines.contains(&"z,Continuous,2,8".to_string()), "got: {var_lines:?}");
-        assert!(var_lines.contains(&"w,Continuous,-inf,inf".to_string()), "got: {var_lines:?}");
+        assert!(var_lines.iter().any(|l| l == "x,Continuous,1,"), "got: {var_lines:?}");
+        assert!(var_lines.iter().any(|l| l == "y,Continuous,,5"), "got: {var_lines:?}");
+        assert!(var_lines.iter().any(|l| l == "z,Continuous,2,8"), "got: {var_lines:?}");
+        assert!(var_lines.iter().any(|l| l == "w,Continuous,-inf,inf"), "got: {var_lines:?}");
         assert_eq!(var_lines.len(), 5);
 
         fs::remove_dir_all(&dir).expect("cleanup failed");
