@@ -2,7 +2,7 @@
 
 A self-contained HTML presentation on why LP files deserve a grammar, and what `lp_parser_rs` builds on one.
 
-Open `index.html` in a browser (no build step, no dependencies beyond Google Fonts).
+Published on the docs site at <https://dandxy89.github.io/lp_parser_rs/showcase/>. Locally, open `index.html` in a browser (no build step, no dependencies beyond Google Fonts).
 
 | Key | Action |
 | --- | --- |
@@ -19,7 +19,7 @@ Interactive slides: hover the annotated LP file (3), click the architecture boxe
 `demo/` holds the sample models; `tapes/` holds the VHS scenes. With `vhs`, `gifsicle`, `lp_parser` (built with `--features cli,csv,diff,serde,lp-solvers`), `lp-lsp` and `nvim` on `PATH`:
 
 ```bash
-showcase/tapes/render.sh
+docs/showcase/tapes/render.sh
 ```
 
 `assets/tui.gif` is a copy of `tui/assets/demo.gif`; `assets/vscode.png` is a copy of `lsp/editors/vscode/images/screenshot.png`.

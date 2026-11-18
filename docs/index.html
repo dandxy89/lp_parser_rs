@@ -82,6 +82,7 @@
       <a href="#lsp">LSP</a>
       <a href="#python">Python</a>
       <a href="#install">Install</a>
+      <a href="showcase/">Showcase</a>
       <a href="https://github.com/dandxy89/lp_parser_rs">GitHub ↗</a>
     </div>
     <button class="theme-toggle" type="button" aria-label="Switch between light and dark">theme</button>
@@ -332,7 +333,7 @@ lp_parser convert problem.lp --format csv --output ./out</code></pre>
 <span class="c">-- init.lua</span>
 vim.filetype.add({ extension = { lp = <span class="g">'lp'</span> } })
 vim.lsp.enable(<span class="g">'lp_lsp'</span>)</code></pre>
-    <p>A VS Code extension lives in <a href="https://github.com/dandxy89/lp_parser_rs/tree/main/lsp/editors/vscode"><code>lsp/editors/vscode</code></a> (build it from source). Helix needs a <code>languages.toml</code> entry, and Zed a small dev extension to register the language; the README has both.</p>
+    <p>The VS Code extension, <a href="https://marketplace.visualstudio.com/items?itemName=dandxy89.lp-lsp">LP &amp; MPS Language Server</a>, is on the Marketplace and bundles the server (source in <a href="https://github.com/dandxy89/lp_parser_rs/tree/main/lsp/editors/vscode"><code>lsp/editors/vscode</code></a>). Helix needs a <code>languages.toml</code> entry, and Zed a small dev extension to register the language; the README has both.</p>
     <div class="cta" style="justify-content:flex-start;margin-top:2.5rem;">
       <a class="primary" href="https://github.com/dandxy89/lp_parser_rs/blob/main/lsp/README.md">lsp README: settings and editor setup</a>
     </div>
