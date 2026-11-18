@@ -36,15 +36,16 @@ jobs:
       - name: Ping IndexNow
         # best effort: a 4xx or 429 from IndexNow must not fail a deploy that has already succeeded
         continue-on-error: true
+        # every page in the sitemap, so new pages are submitted without editing this step
         run: |
+          grep -o '<loc>[^<]*</loc>' docs/sitemap.xml | sed -e 's/<loc>//' -e 's#</loc>##' \
+            | jq -R . | jq -s '{
+                host: "dandxy89.github.io",
+                key: "40f03b6cfc141f4ff79e06e0f2b09600",
+                keyLocation: "https://dandxy89.github.io/lp_parser_rs/40f03b6cfc141f4ff79e06e0f2b09600.txt",
+                urlList: .
+              }' > indexnow.json
+          cat indexnow.json
           curl -sS -f -X POST https://api.indexnow.org/IndexNow \
             -H 'Content-Type: application/json; charset=utf-8' \
-            -d '{
-              "host": "dandxy89.github.io",
-              "key": "40f03b6cfc141f4ff79e06e0f2b09600",
-              "keyLocation": "https://dandxy89.github.io/lp_parser_rs/40f03b6cfc141f4ff79e06e0f2b09600.txt",
-              "urlList": [
-                "https://dandxy89.github.io/lp_parser_rs/",
-                "https://dandxy89.github.io/lp_parser_rs/tui.html"
-              ]
-            }'
+            --data-binary @indexnow.json
