@@ -32,7 +32,7 @@ ul.ticks { list-style: none; padding: 0; margin: 0; display: grid; gap: .45em; }
 ul.ticks li::before { content: "▸ "; color: var(--accent); }
 pre { margin: 0; background: #0c0f13; border: 1px solid var(--rule); border-radius: 10px; padding: 1em 1.2em; font-size: .78em; line-height: 1.55; overflow: auto; color: #d6dde4; }
 .c { color: var(--muted); } .k { color: #c792ea; } .n { color: #f78c6c; } .s { color: #c3e88d; } .v { color: var(--blue); }
-.term { display: block; width: auto; max-width: 100%; max-height: 62vh; align-self: flex-start; border-radius: 10px; border: 1px solid var(--rule); background: #1e1e2e; }
+.term { display: block; width: auto; height: auto; max-width: 100%; max-height: 62vh; align-self: flex-start; border-radius: 10px; border: 1px solid var(--rule); background: #1e1e2e; }
 .big { font: 700 2.6em/1 var(--sans); color: var(--ink); }
 .stat p { font-size: .85em; margin-top: .3em; }
 .pill { display: inline-block; font: 500 .75em var(--mono); padding: .4em .9em; border: 1px solid var(--rule); border-radius: 99px; color: var(--body); margin: .15em .2em .15em 0; }
@@ -77,8 +77,10 @@ pre { margin: 0; background: #0c0f13; border: 1px solid var(--rule); border-radi
 aside.notes { display: none; }
 body.notes .slide.on aside.notes { display: block; position: fixed; left: 0; right: 0; bottom: 0; max-height: 28vh; overflow: auto; background: #0c0f13ee; border-top: 1px solid var(--accent); padding: 1em 6vw 2.5em; font-size: .8em; color: var(--body); z-index: 4; }
 body.overview { overflow: auto; }
-body.overview .slide { display: flex; position: relative; inset: auto; height: 50vh; transform: scale(.5); transform-origin: top left; width: 200%; margin-bottom: -50vh; border-bottom: 2px solid var(--rule); cursor: pointer; animation: none; }
-body.overview #deck { display: grid; grid-template-columns: repeat(2, 1fr); }
+body.overview .slide { display: flex; position: relative; inset: auto; zoom: .3; height: 100vh; overflow: hidden; border: 3px solid var(--rule); border-radius: 12px; cursor: pointer; animation: none; }
+body.overview .slide:hover { border-color: var(--accent); }
+body.overview .slide aside.notes { display: none !important; }
+body.overview #deck { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; padding: 16px; }
 body.overview .ctrl, body.overview #bar { display: none; }
 @media (max-width: 760px) {
   html, body { overflow: auto; }
@@ -97,7 +99,7 @@ body.overview .ctrl, body.overview #bar { display: none; }
 <section class="slide">
   <div class="kicker">Open source · Rust · Python · LSP</div>
   <h1>lp_parser_rs<br><span style="color:var(--accent)">a real grammar for optimisation models</span></h1>
-  <p class="lede">Parse, analyse, diff, convert and edit LP and MPS files, from the terminal, from Python, and inside your editor.</p>
+  <p class="lede">Parse, analyse, diff and convert LP and MPS files from the terminal and Python, and edit LP files with full editor support.</p>
   <p class="mono" style="font-size:.8em;color:var(--muted)">Press → or Space to advance · S speaker notes · O overview · F fullscreen</p>
   <aside class="notes">Set the scene: every optimisation team ships LP/MPS files between modelling code and solvers, yet nobody treats them as a language. This project does.</aside>
 </section>
@@ -129,7 +131,7 @@ body.overview .ctrl, body.overview #bar { display: none; }
  <span data-tip="Indicator constraint (CPLEX, Gurobi): enforced only when the binary build_b equals 1."><span class="v">open_b:</span> build_b = <span class="n">1</span> -&gt; tables + desks &gt;= <span class="n">10</span></span>
 <span data-tip="Bounds section: lower, upper, double-sided or free. The default is 0 <= x <= +inf." class="k">Bounds</span>
  <span class="n">0</span> &lt;= overtime &lt;= <span class="n">40</span>
-<span data-tip="Variable type sections: Generals/Integers, Binaries, Semi-Continuous, SOS. A variable in Generals and Semi-Continuous is semi-integer." class="k">Generals</span>
+<span data-tip="Variable type sections: Generals/Integers, Binaries, Semi-Continuous. A variable in Generals and Semi-Continuous is semi-integer. (An SOS section defines sets, not types.)" class="k">Generals</span>
  chairs tables desks
 <span class="k">Binaries</span>
  build_b
@@ -168,10 +170,13 @@ body.overview .ctrl, body.overview #bar { display: none; }
   </div>
   <pre><span class="c">// rust/src/lp.lalrpop (excerpt): every bound form, declared once</span>
 <span class="k">BoundSpec</span>: (&amp;'input str, VariableType) = {
-    <span class="c">// Double bound: "0 &lt;= x1 &lt;= 5"</span>
-    &lt;lb:NumericValue&gt; Le &lt;var:<span class="s">"identifier"</span>&gt; Le &lt;ub:NumericValue&gt; =&gt; (var, VariableType::DoubleBound(lb, ub)),
     <span class="c">// Free variable: "x1 free"</span>
     &lt;var:<span class="s">"identifier"</span>&gt; <span class="s">"free"</span> =&gt; (var, VariableType::Free),
+
+    <span class="c">// Double bound: "0 &lt;= x1 &lt;= 5"</span>
+    &lt;lb:NumericValue&gt; Le &lt;var:<span class="s">"identifier"</span>&gt; Le &lt;ub:NumericValue&gt; =&gt; {
+        (var, VariableType::DoubleBound(lb, ub))
+    },
     …
 };</pre>
   <aside class="notes">The core move: stop treating LP files as strings, start treating them as a language with a grammar. Everything else in this talk is built on that one decision.</aside>
@@ -182,9 +187,9 @@ body.overview .ctrl, body.overview #bar { display: none; }
   <div class="kicker">Architecture</div>
   <h2>One model, many front ends</h2>
   <div class="flow">
-    <div class="node" data-say="Logos generates a fast DFA lexer from token definitions: numbers, names, operators, case-insensitive keywords.">.lp / .mps<small>input text</small></div>
+    <div class="node" data-say="LP text, or free-format MPS (fixed-format MPS works when names contain no spaces). The format is chosen by file extension.">.lp / .mps<small>input text</small></div>
     <div class="arrow">→</div>
-    <div class="node" data-say="Logos lexer + LALRPOP LR(1) grammar for LP; a dedicated reader for fixed and free MPS. Strict, with precise errors.">Logos + LALRPOP<small>lexer &amp; grammar</small></div>
+    <div class="node" data-say="LP: a Logos-generated lexer (numbers, names, operators, case-insensitive keywords) feeding a LALRPOP LR(1) grammar. MPS has its own reader. Strict, with precise errors.">Logos + LALRPOP<small>lexer &amp; grammar</small></div>
     <div class="arrow">→</div>
     <div class="node" data-say="LpProblem: the typed model. Mutation API, ProblemBuilder, serde, CSV export, memory-mapped input.">LpProblem<small>typed model</small></div>
   </div>
@@ -204,14 +209,14 @@ body.overview .ctrl, body.overview #bar { display: none; }
   <h2>A complete toolchain, not a weekend parser</h2>
   <div class="grid" style="--cols:4">
     <div class="card stat"><div class="big">4</div><p>front ends on one core: CLI, Python, TUI and language server</p></div>
-    <div class="card stat"><div class="big">~58k</div><p>lines of Rust across library, LSP and TUI</p></div>
-    <div class="card stat"><div class="big">880+</div><p>unit and integration tests, plus snapshot tests and benchmarks</p></div>
+    <div class="card stat"><div class="big">~60k</div><p>lines of Rust across library, LSP and TUI</p></div>
+    <div class="card stat"><div class="big">880+</div><p>Rust tests (unit, integration, snapshot), plus Python tests and benchmarks</p></div>
     <div class="card stat"><div class="big">4</div><p>dialects: CPLEX, Gurobi, FICO Xpress, Mosek</p></div>
   </div>
   <div>
     <span class="pill">indicator constraints</span><span class="pill">quadratic objectives &amp; constraints</span><span class="pill">SOS1 / SOS2</span><span class="pill">semi-continuous &amp; semi-integer</span><span class="pill">lazy constraints &amp; user cuts</span><span class="pill">general constraints MAX/MIN/ABS/AND/OR</span><span class="pill">multi-objective</span><span class="pill">LP ↔ MPS</span><span class="pill">JSON / YAML / CSV</span>
   </div>
-  <aside class="notes">Emphasise maturity: versioned releases, release-please, prebuilt binaries for Linux, macOS and Windows.</aside>
+  <aside class="notes">Emphasise maturity: versioned releases via release-please; prebuilt Linux, macOS and Windows binaries for lp_diff and lp-lsp, Python wheels on PyPI. The lp_parser CLI installs via cargo. The parser accepts one superset of the four dialects rather than switching modes.</aside>
 </section>
 
 <!-- 7 -->
@@ -219,14 +224,14 @@ body.overview .ctrl, body.overview #bar { display: none; }
   <div class="kicker">Demo · lp_parser CLI</div>
   <h2>Ask your model questions</h2>
   <div class="tabs" role="tablist">
-    <button role="tab" data-gif="info" data-cap="Counts by type in milliseconds, even for very large files." aria-selected="true">info</button>
+    <button role="tab" data-gif="info" data-cap="Counts of objectives, constraints and variables by type." aria-selected="true">info</button>
     <button role="tab" data-gif="analyze" data-cap="Catch numerical trouble before the solver does: a 1e-10 coefficient and a 2.5e14 scaling ratio.">analyze</button>
     <button role="tab" data-gif="diff" data-cap="A structural diff: which constraints were added, removed or changed, not which lines moved. Exit code 1 when models differ.">diff</button>
     <button role="tab" data-gif="convert" data-cap="LP in, MPS out (or LP, JSON, YAML, CSV). Indicators and integrality markers preserved.">convert</button>
     <button role="tab" data-gif="errors" data-cap="Errors point at the exact line and column.">errors</button>
   </div>
-  <img class="term" alt="Terminal recording of lp_parser" src="assets/info.gif">
-  <p id="cap">Counts by type in milliseconds, even for very large files.</p>
+  <img class="term" loading="lazy" width="1400" height="760" alt="Terminal recording of lp_parser" src="assets/info.gif">
+  <p id="cap">Counts of objectives, constraints and variables by type.</p>
   <aside class="notes">Click through the tabs, or press 1 to 5. The diff tab is the one to dwell on: an edit by finance changed a price, a capacity and swapped a constraint.</aside>
 </section>
 
@@ -236,22 +241,29 @@ body.overview .ctrl, body.overview #bar { display: none; }
   <h2>Model changes as reviewable pull requests</h2>
   <div class="grid">
     <pre><span class="c"># .github/workflows/model.yml</span>
+- <span class="k">name</span>: Install lp_parser
+  <span class="k">run</span>: |
+    cargo install --locked lp_parser_rs \
+      --features cli,diff,serde
+
 - <span class="k">name</span>: Generate model
   <span class="k">run</span>: python build_model.py -o candidate.lp
 
-- <span class="k">name</span>: Fail on numerical issues
+- <span class="k">name</span>: Fail on structural errors <span class="c"># warnings do not fail</span>
   <span class="k">run</span>: lp_parser analyze candidate.lp --issues-only
 
-- <span class="k">name</span>: Show what changed
+- <span class="k">name</span>: Show what changed <span class="c"># 2 = failure</span>
   <span class="k">run</span>: |
+    rc=0
     lp_parser diff baseline.lp candidate.lp \
       --abs-tol 1e-6 --rename <span class="s">'\[\d+\]$'</span> <span class="s">'[N]'</span> \
-      --format json --pretty &gt; model_diff.json \
-      || echo <span class="s">"::notice::model changed"</span></pre>
+      --format json --pretty &gt; model_diff.json || rc=$?
+    [ "$rc" -eq 1 ] &amp;&amp; echo <span class="s">"::notice::model changed"</span>
+    [ "$rc" -le 1 ]</pre>
     <ul class="ticks">
       <li><strong>Exit codes</strong> follow GNU <code>diff</code>: 0 same, 1 different, 2 failure</li>
       <li><strong>Tolerances</strong> ignore float noise from regeneration</li>
-      <li><strong>Regex renames</strong> match <code>x[17]</code> to <code>x[18]</code> so re-indexing is not a "change"</li>
+      <li><strong>Regex renames</strong> strip volatile index suffixes so re-indexing is not a "change" (distinct names can merge, so choose patterns carefully)</li>
       <li><strong>JSON output</strong> becomes a PR comment or an audit record</li>
       <li>Refactor the generator with confidence: <em>"model identical"</em> is a passing test</li>
     </ul>
@@ -264,7 +276,7 @@ body.overview .ctrl, body.overview #bar { display: none; }
   <div class="kicker">Demo · lp_diff TUI</div>
   <h2>Explore and diff interactively</h2>
   <div class="grid" style="grid-template-columns:2fr 1fr">
-    <img class="term" alt="Terminal recording of the lp_diff TUI" src="assets/tui.gif">
+    <img class="term" loading="lazy" width="1280" height="800" alt="Terminal recording of the lp_diff TUI" src="assets/tui.gif">
     <ul class="ticks">
       <li>Coefficient-level side-by-side diff, LP vs MPS</li>
       <li>Raw source view of both files</li>
@@ -283,13 +295,13 @@ body.overview .ctrl, body.overview #bar { display: none; }
   <div class="kicker">Demo · lp-lsp</div>
   <h2>Why a language server?</h2>
   <div class="grid" style="grid-template-columns:2fr 1fr">
-    <img class="term" alt="Neovim editing an LP file with lp-lsp diagnostics and hover" src="assets/lsp.gif">
+    <img class="term" loading="lazy" width="1400" height="760" alt="Neovim editing an LP file with lp-lsp diagnostics and hover" src="assets/lsp.gif">
     <div>
       <p style="margin-bottom:.8em">The <strong>Language Server Protocol</strong> lets one server power every editor: VS Code, Neovim, Helix, Zed, Emacs.</p>
       <ul class="ticks">
         <li>Diagnostics as you type, solver-free</li>
         <li>Hover: type, bounds and every use of a variable</li>
-        <li>Go to definition, references, rename across files</li>
+        <li>Go to definition, references; rename (constraints and objectives across files)</li>
         <li>Formatting, quick fixes, inlay hints</li>
         <li>Commands: analyse, convert to MPS, stats</li>
       </ul>
@@ -303,9 +315,9 @@ body.overview .ctrl, body.overview #bar { display: none; }
   <div class="kicker">VS Code extension</div>
   <h2>One click for the whole team</h2>
   <div class="grid" style="grid-template-columns:3fr 2fr">
-    <img class="term" alt="VS Code showing an LP file with inlay hints, code lenses and analysis warnings in the Problems panel" src="assets/vscode.png">
+    <img class="term" loading="lazy" width="1600" height="1000" alt="VS Code showing an LP file with inlay hints, code lenses and analysis warnings in the Problems panel" src="assets/vscode.png">
     <div>
-      <p style="margin-bottom:.8em"><strong>LP &amp; MPS Language Server</strong> on the <a href="https://marketplace.visualstudio.com/items?itemName=dandxy89.lp-lsp" target="_blank" rel="noopener" style="color:var(--accent)">VS Code Marketplace</a>. The build bundles <code>lp-lsp</code> for your platform: nothing else to install.</p>
+      <p style="margin-bottom:.8em"><strong>LP &amp; MPS Language Server</strong> (editor support for <code>.lp</code> files) on the <a href="https://marketplace.visualstudio.com/items?itemName=dandxy89.lp-lsp" target="_blank" rel="noopener" style="color:var(--accent)">VS Code Marketplace</a>. The build bundles <code>lp-lsp</code> for your platform: nothing else to install.</p>
       <ul class="ticks">
         <li>Highlighting, comment toggling, bracket matching</li>
         <li>Analysis warnings in the <strong>Problems</strong> panel</li>
@@ -329,18 +341,18 @@ body.overview .ctrl, body.overview #bar { display: none; }
  profit: 12 chairs + 18 tables
 Subject To
  wood: 2 chairs + 5 tables =&lt; 400
- labour: chairs + 2 tabels &lt;=
+ labour: chairs + 2 tables &lt;=
  tiny: 0.0000000001 chairs &lt;= 1
 Generals
- chairs tables
+ chairs tables desks
 End</textarea></div>
     <div>
       <h3>Diagnostics</h3>
       <ul id="diags"></ul>
-      <p style="font-size:.85em;margin-top:1em;color:var(--muted)">A toy in-browser checker (about 40 lines of JavaScript) to convey the experience. The real server runs the tree-sitter and LALRPOP grammars plus full numerical analysis. Try fixing the errors.</p>
+      <p style="font-size:.85em;margin-top:1em;color:var(--muted)">A toy in-browser checker (about 40 lines of JavaScript) imitating four real lp-lsp diagnostics. The real server runs the tree-sitter and LALRPOP grammars plus full numerical analysis. Try fixing the problems.</p>
     </div>
   </div>
-  <aside class="notes">Hand the keyboard to someone. Fix "tabels", add a number after the "&lt;=", delete the tiny coefficient and watch the list empty.</aside>
+  <aside class="notes">Hand the keyboard to someone. Add a number after the "&lt;=", delete the tiny coefficient, use or remove "desks", and watch the list empty. All four checks mirror real lp-lsp diagnostics.</aside>
 </section>
 
 <!-- 12 -->
@@ -370,12 +382,36 @@ changes = model.diff(LpParser(<span class="s">"plan_v2.lp"</span>))   <span clas
   <div class="grid" style="--cols:3">
     <div class="card"><h3>Review</h3><p>Diff generated models in PRs; catch unintended constraint changes before deployment.</p></div>
     <div class="card"><h3>Debug</h3><p>Find bad scaling, empty or singleton rows, conflicting bounds and unused variables, before a long solve.</p></div>
-    <div class="card"><h3>Migrate</h3><p>Move between solvers and formats: LP ↔ MPS, dialect quirks handled in one place.</p></div>
+    <div class="card"><h3>Migrate</h3><p>Move between solvers and formats: LP ↔ MPS, dialect quirks handled in one place (general constraints and multi-objective attributes are LP-only).</p></div>
     <div class="card"><h3>Author</h3><p>Hand-edit test models with an editor that understands them.</p></div>
     <div class="card"><h3>Audit</h3><p>JSON/CSV snapshots of what was solved, and when.</p></div>
     <div class="card"><h3>Onboard</h3><p>Hover and navigation make an unfamiliar model explorable.</p></div>
   </div>
   <aside class="notes">Tailor this slide to the audience: pick the two use cases closest to the team's pain.</aside>
+</section>
+
+<!-- limits -->
+<section class="slide">
+  <div class="kicker">Honest limits · next step</div>
+  <h2>What it doesn't do (yet), and the ask</h2>
+  <div class="grid">
+    <div class="card"><h3>Limits</h3>
+      <ul class="ticks">
+        <li>Editor support is LP only; MPS is CLI, Python and TUI</li>
+        <li>No piecewise-linear (<code>PWL</code>) constraints or <code>&lt;-&gt;</code> indicators</li>
+        <li>General constraints and multi-objective attributes cannot be written to MPS</li>
+        <li>Fixed-format MPS with spaces in names is not supported</li>
+        <li>Analysis warnings do not fail <code>analyze</code>; only errors (invalid bounds) do</li>
+      </ul></div>
+    <div class="card"><h3>Proposed pilot</h3>
+      <ul class="ticks">
+        <li>Pick one model pipeline</li>
+        <li>Add <code>lp_parser diff</code> against a baseline in CI</li>
+        <li>Install the VS Code extension for the modellers</li>
+        <li>Review after a month: caught regressions, time saved</li>
+      </ul></div>
+  </div>
+  <aside class="notes">Tailor the pilot to the team in the room. Expect questions on maintenance (open source, MIT/Apache-2.0, versioned releases) and performance (benchmarks live in rust/benches and lsp/benches).</aside>
 </section>
 
 <!-- 14 -->
@@ -384,8 +420,7 @@ changes = model.diff(LpParser(<span class="s">"plan_v2.lp"</span>))   <span clas
   <h2>Install in a minute</h2>
   <pre><span class="c"># CLI (Rust)</span>
 cargo install --locked lp_parser_rs --features cli,csv,diff,serde,lp-solvers
-<span class="c"># TUI</span>
-cargo install --locked --git https://github.com/dandxy89/lp_parser_rs lp_parser_tui
+<span class="c"># TUI: prebuilt lp_diff binaries on GitHub releases</span>
 <span class="c"># VS Code extension (bundles the language server)</span>
 code --install-extension dandxy89.lp-lsp
 <span class="c"># Language server for other editors (or prebuilt binaries on GitHub releases)</span>
@@ -410,7 +445,7 @@ const show = (i) => {
   cur = Math.max(0, Math.min(slides.length - 1, i));
   slides.forEach((s, j) => s.classList.toggle('on', j === cur));
   // restart any GIF on entry so demos play from the start
-  slides[cur].querySelectorAll('img.term').forEach((img) => { const s = img.src; img.src = ''; img.src = s; });
+  slides[cur].querySelectorAll('img.term[src$=".gif"]').forEach((img) => { const s = img.src; img.src = ''; img.src = s; });
   document.getElementById('bar').style.transform = `scaleX(${(cur + 1) / slides.length})`;
   document.getElementById('count').textContent = `${cur + 1} / ${slides.length}`;
   history.replaceState(null, '', `#${cur + 1}`);
@@ -422,14 +457,15 @@ const overview = () => {
 };
 document.addEventListener('keydown', (e) => {
   if (e.target.matches('textarea')) { if (e.key === 'Escape') e.target.blur(); return; }
+  if (e.target.closest('button, a') && [' ', 'Enter'].includes(e.key)) return; // let focused controls activate
   const k = e.key;
   if (['ArrowRight', 'PageDown', ' '].includes(k)) { e.preventDefault(); show(cur + 1); }
   else if (['ArrowLeft', 'PageUp'].includes(k)) show(cur - 1);
   else if (k === 'Home') show(0);
   else if (k === 'End') show(slides.length - 1);
   else if (k === 's' || k === 'S') document.body.classList.toggle('notes');
-  else if (k === 'o' || k === 'O' || k === 'Escape') overview();
-  else if (k === 'f' || k === 'F') document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
+  else if (k === 'o' || k === 'O' || (k === 'Escape' && document.body.classList.contains('overview'))) overview();
+  else if (k === 'f' || k === 'F') (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen()).catch((err) => console.warn('fullscreen unavailable:', err.message));
   else if (/^[1-5]$/.test(k) && slides[cur].id === 'cli') tabs[+k - 1].click();
 });
 document.getElementById('prev').onclick = () => show(cur - 1);
@@ -451,7 +487,7 @@ tabs.forEach((t) => t.onclick = () => {
 // annotated LP hover
 const tip = document.getElementById('tip');
 document.querySelectorAll('#anat [data-tip]').forEach((el) => {
-  el.addEventListener('mouseenter', () => { tip.innerHTML = `<h3>${el.textContent.trim().split(/\s/)[0]}</h3><p></p>`; tip.querySelector('p').textContent = el.dataset.tip; });
+  el.addEventListener('mouseenter', () => { tip.innerHTML = '<h3></h3><p></p>'; tip.querySelector('h3').textContent = el.textContent.trim().split(/\s/)[0]; tip.querySelector('p').textContent = el.dataset.tip; });
 });
 
 // architecture boxes
@@ -466,20 +502,24 @@ const esc = (s) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>':
 const KW = /^(maximi[sz]e|minimi[sz]e|max|min|subject to|such that|st|s\.t\.|bounds|generals?|integers|binar(y|ies)|end)$/i;
 function check() {
   const lines = src.value.split('\n'), diags = [], marks = {};
-  const declared = new Set(), used = new Map();
+  const declared = new Map(), used = new Set(); // declared: name -> line
   let section = '';
   lines.forEach((raw, i) => {
     const t = raw.trim();
     if (KW.test(t)) { section = t.toLowerCase(); return; }
     if (!t || t.startsWith('\\')) return;
-    if (/^generals?|integers|binar/.test(section)) { t.split(/\s+/).forEach((v) => declared.add(v)); return; }
-    const body = t.replace(/^[\w.\[\]]+:\s*/, '');
+    if (/^(generals?|integers|binar)/.test(section)) { t.split(/\s+/).forEach((v) => declared.set(v, i)); return; }
+        const body = t.replace(/^[\w.\[\]]+:\s*/, '');
     if (/=</.test(body) || /=>/.test(body)) { diags.push(['w', i, '`=<` / `=>` is a non-standard spelling']); marks[i] = 'w'; }
     if (/(<=|>=|=<|=>|=)\s*$/.test(body)) { diags.push(['e', i, 'missing number after comparison']); marks[i] = 'e'; }
     (body.match(/-?\d*\.?\d+(e-?\d+)?/gi) || []).forEach((n) => { const v = Math.abs(+n); if (v && v < 1e-9) { diags.push(['w', i, `small coefficient ${n} may cause numerical issues`]); marks[i] ||= 'w'; } });
-    (body.split(/<=|>=|=<|=>|=/)[0].match(/[A-Za-z_][\w.\[\]]*/g) || []).forEach((v) => used.set(v, used.has(v) ? used.get(v) : i));
+    // strip numbers (incl. 1e-10) first so exponents are not read as names
+    (body.replace(/(^|[^\w.])\d*\.?\d+(e[+-]?\d+)?/gi, '$1 ').match(/[A-Za-z_][\w.\[\]]*/g) || [])
+      .filter((v) => !/^(free|inf|infinity)$/i.test(v))
+      .forEach((v) => used.add(v));
   });
-  if (declared.size) used.forEach((line, v) => { if (!declared.has(v)) { diags.push(['w', line, `'${v}' is not declared in Generals: did you mean ${[...declared].find((d) => d[0] === v[0]) || 'a typo'}?`]); marks[line] ||= 'w'; } });
+  // ponytail: one structural check; the real server runs the full grammar and analysis
+  declared.forEach((line, v) => { if (!used.has(v)) { diags.push(['w', line, `'${v}' is declared but not used in any objective or constraint`]); marks[line] ||= 'w'; } });
   hl.innerHTML = lines.map((l, i) => {
     let h = esc(l).replace(/\b(\d*\.?\d+(e-?\d+)?)\b/gi, '<span class="n">$1</span>');
     if (KW.test(l.trim())) h = `<span class="k">${h}</span>`; else h = h.replace(/^(\s*[\w.\[\]]+:)/, '<span class="v">$1</span>');
@@ -492,7 +532,9 @@ src.addEventListener('input', check);
 src.addEventListener('scroll', () => { hl.scrollTop = src.scrollTop; hl.scrollLeft = src.scrollLeft; });
 check();
 
-show((parseInt(location.hash.slice(1), 10) || 1) - 1);
+const fromHash = () => show((parseInt(location.hash.slice(1), 10) || 1) - 1);
+addEventListener('hashchange', fromHash);
+fromHash();
 </script>
 </body>
 </html>

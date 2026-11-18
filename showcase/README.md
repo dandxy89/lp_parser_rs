@@ -12,7 +12,7 @@ Open `index.html` in a browser (no build step, no dependencies beyond Google Fon
 | `F` | Fullscreen |
 | `1`–`5` | Switch CLI demo tab (slide 7) |
 
-Interactive slides: hover the annotated LP file (3), click the architecture boxes (5), switch CLI demos (7), and edit the model in the playground (12). Slide 11 covers the VS Code extension.
+Interactive slides: hover the annotated LP file (3), click the architecture boxes (5), switch CLI demos (7), and edit the model in the playground (12). Slide 11 covers the VS Code extension; slide 15 lists limits and a proposed pilot.
 
 ## Regenerating the demos
 
