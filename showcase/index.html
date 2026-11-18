@@ -1,0 +1,474 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>lp_parser_rs Showcase</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #12161b; --panel: #1b2027; --rule: #2c333b; --ink: #eef1f4; --body: #aab4bf; --muted: #8f9aa6;
+  --accent: #15b757; --hot: #ff7a3d; --warn: #f2c94c; --err: #ff5c5c; --blue: #6cb6ff;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace; --sans: "IBM Plex Sans", system-ui, sans-serif;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); font: 400 clamp(15px, 1.35vw, 22px)/1.45 var(--sans); overflow: hidden; }
+code, pre, .mono { font-family: var(--mono); }
+.slide { position: absolute; inset: 0; padding: 5vh 6vw 8vh; display: none; flex-direction: column; justify-content: center; gap: 2.2vh; }
+.slide.on { display: flex; animation: in .35s ease; }
+@keyframes in { from { opacity: 0; transform: translateY(8px); } }
+h1 { font-size: 3.4em; line-height: 1.05; margin: 0; letter-spacing: -.02em; }
+h2 { font-size: 2.1em; margin: 0; letter-spacing: -.01em; }
+h3 { font-size: 1.05em; margin: 0 0 .4em; color: var(--accent); text-transform: uppercase; letter-spacing: .08em; }
+p, li { color: var(--body); margin: 0; }
+strong { color: var(--ink); }
+.kicker { font: 600 .8em var(--mono); color: var(--accent); letter-spacing: .12em; text-transform: uppercase; }
+.lede { font-size: 1.3em; max-width: 46ch; }
+.grid { display: grid; gap: 1.4em; grid-template-columns: repeat(var(--cols, 2), minmax(0, 1fr)); align-items: start; }
+.card { background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; padding: 1em 1.2em; }
+.card p + p { margin-top: .5em; }
+ul.ticks { list-style: none; padding: 0; margin: 0; display: grid; gap: .45em; }
+ul.ticks li::before { content: "▸ "; color: var(--accent); }
+pre { margin: 0; background: #0c0f13; border: 1px solid var(--rule); border-radius: 10px; padding: 1em 1.2em; font-size: .78em; line-height: 1.55; overflow: auto; color: #d6dde4; }
+.c { color: var(--muted); } .k { color: #c792ea; } .n { color: #f78c6c; } .s { color: #c3e88d; } .v { color: var(--blue); }
+.term { display: block; width: auto; max-width: 100%; max-height: 62vh; align-self: flex-start; border-radius: 10px; border: 1px solid var(--rule); background: #1e1e2e; }
+.big { font: 700 2.6em/1 var(--sans); color: var(--ink); }
+.stat p { font-size: .85em; margin-top: .3em; }
+.pill { display: inline-block; font: 500 .75em var(--mono); padding: .2em .7em; border: 1px solid var(--rule); border-radius: 99px; color: var(--body); margin: .15em .2em .15em 0; }
+
+/* tabs */
+.tabs { display: flex; gap: .5em; flex-wrap: wrap; }
+.tabs button { font: 500 .85em var(--mono); background: var(--panel); color: var(--body); border: 1px solid var(--rule); border-radius: 8px; padding: .45em .9em; cursor: pointer; }
+.tabs button[aria-selected="true"] { background: var(--accent); color: #06210f; border-color: var(--accent); }
+.tabs button:focus-visible, .ctrl button:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+
+/* annotated LP */
+.lp { font: .9em/1.75 var(--mono); }
+.lp span[data-tip] { border-bottom: 2px dotted var(--accent); cursor: help; }
+.lp span[data-tip]:hover, .lp span[data-tip].hl { background: #15b75722; }
+#tip { min-height: 6.5em; }
+
+/* pipeline diagram */
+.flow { display: grid; grid-template-columns: repeat(5, auto); align-items: center; gap: .6em; justify-content: start; }
+.node { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: .6em .9em; font: .8em var(--mono); text-align: center; cursor: pointer; transition: border-color .2s; }
+.node small { display: block; color: var(--muted); font-family: var(--sans); }
+.node:hover, .node.hl { border-color: var(--accent); }
+.arrow { color: var(--muted); }
+.outs { display: grid; gap: .5em; }
+
+/* playground */
+.play { display: grid; grid-template-columns: 1.2fr 1fr; gap: 1.2em; }
+.editor { position: relative; font: .85em/1.6 var(--mono); }
+.editor textarea, .editor pre { margin: 0; padding: 1em; width: 100%; height: 46vh; font: inherit; border-radius: 10px; white-space: pre; overflow: auto; tab-size: 2; }
+.editor pre { position: absolute; inset: 0; pointer-events: none; border-color: transparent; background: #0c0f13; }
+.editor textarea { position: relative; background: transparent; color: transparent; caret-color: var(--ink); border: 1px solid var(--rule); resize: none; outline: none; }
+.editor textarea:focus { border-color: var(--accent); }
+.squig-e { text-decoration: underline wavy var(--err); } .squig-w { text-decoration: underline wavy var(--warn); }
+#diags { list-style: none; padding: 0; margin: 0; display: grid; gap: .4em; font: .8em var(--mono); }
+#diags li { padding: .5em .7em; border-radius: 6px; background: var(--panel); color: var(--body); }
+#diags li::before { content: "● "; color: var(--accent); }
+#diags li.e::before { color: var(--err); } #diags li.w::before { color: var(--warn); }
+
+/* chrome */
+#bar { position: fixed; left: 0; right: 0; bottom: 0; height: 3px; background: var(--accent); transform-origin: left; transition: transform .3s; }
+.ctrl { position: fixed; right: 1.2vw; bottom: 1.4vh; display: flex; gap: .4em; align-items: center; font: .7em var(--mono); color: var(--muted); z-index: 5; }
+.ctrl button { background: var(--panel); color: var(--body); border: 1px solid var(--rule); border-radius: 6px; padding: .3em .6em; cursor: pointer; font: inherit; }
+aside.notes { display: none; }
+body.notes .slide.on aside.notes { display: block; position: fixed; left: 0; right: 0; bottom: 0; max-height: 28vh; overflow: auto; background: #0c0f13ee; border-top: 1px solid var(--accent); padding: 1em 6vw 2.5em; font-size: .8em; color: var(--body); z-index: 4; }
+body.overview { overflow: auto; }
+body.overview .slide { display: flex; position: relative; inset: auto; height: 50vh; transform: scale(.5); transform-origin: top left; width: 200%; margin-bottom: -50vh; border-bottom: 2px solid var(--rule); cursor: pointer; animation: none; }
+body.overview #deck { display: grid; grid-template-columns: repeat(2, 1fr); }
+body.overview .ctrl, body.overview #bar { display: none; }
+@media (max-width: 760px) {
+  html, body { overflow: auto; }
+  .slide { position: relative; padding: 6vh 16px 10vh; min-height: 100vh; }
+  .grid, .play { grid-template-columns: 1fr; }
+  .flow { grid-template-columns: 1fr; } .arrow { transform: rotate(90deg); justify-self: center; }
+  h1 { font-size: 2.3em; }
+}
+@media (prefers-reduced-motion: reduce) { .slide.on { animation: none; } }
+</style>
+</head>
+<body>
+<main id="deck">
+
+<!-- 1 -->
+<section class="slide">
+  <div class="kicker">Open source · Rust · Python · LSP</div>
+  <h1>lp_parser_rs<br><span style="color:var(--accent)">a real grammar for optimisation models</span></h1>
+  <p class="lede">Parse, analyse, diff, convert and edit LP and MPS files, from the terminal, from Python, and inside your editor.</p>
+  <p class="mono" style="font-size:.8em;color:var(--muted)">Press → or Space to advance · S speaker notes · O overview · F fullscreen</p>
+  <aside class="notes">Set the scene: every optimisation team ships LP/MPS files between modelling code and solvers, yet nobody treats them as a language. This project does.</aside>
+</section>
+
+<!-- 2 -->
+<section class="slide">
+  <div class="kicker">The problem</div>
+  <h2>Optimisation models are code we can't read</h2>
+  <div class="grid" style="--cols:3">
+    <div class="card"><h3>Everywhere</h3><p>PuLP, Pyomo, JuMP, OR-Tools and in-house generators all emit <strong>LP or MPS</strong> files. CPLEX, Gurobi, Xpress, HiGHS and CBC all read them.</p></div>
+    <div class="card"><h3>Opaque</h3><p>Files run to millions of lines. Review means <code>less</code> and <code>grep</code>. Plain <code>diff</code> drowns in reordering noise.</p></div>
+    <div class="card"><h3>Late feedback</h3><p>A typo or a badly scaled coefficient surfaces only when the <strong>solver</strong> rejects it, or quietly solves the wrong problem.</p></div>
+  </div>
+  <p class="lede" style="font-size:1.05em">We have linters, formatters, diff tools and language servers for every language we write, <strong>except the one that encodes our business decisions</strong>.</p>
+  <aside class="notes">Ask the room: when did you last open an LP file? How did you know a model change was the one you intended? The answer is usually "we ran it and compared the objective".</aside>
+</section>
+
+<!-- 3 -->
+<section class="slide">
+  <div class="kicker">Anatomy of an LP file</div>
+  <h2>Small language, many dialects</h2>
+  <div class="grid">
+    <pre class="lp" id="anat"><span data-tip="Comments start with a backslash and run to the end of the line." class="c">\ Weekly production plan for two plants</span>
+<span data-tip="Objective sense. Also Minimise, Max, Min… spellings vary by solver." class="k">Maximize</span>
+ <span data-tip="Named objective: a linear expression of coefficients and variables. Gurobi adds multi-objective attributes; CPLEX adds quadratic terms in [ ] / 2."><span class="v">profit:</span> <span class="n">12</span> chairs + <span class="n">18</span> tables + <span class="n">30</span> desks - <span class="n">4</span> overtime</span>
+<span data-tip="Constraint section. Also 'Such That', 'st', 's.t.'. Lazy Constraints and User Cuts sections may follow." class="k">Subject To</span>
+ <span data-tip="Named linear constraint with a sense (<=, >=, =) and a right-hand side. '=<' is accepted by some solvers, not others."><span class="v">wood:</span>   <span class="n">2</span> chairs + <span class="n">5</span> tables + <span class="n">8</span> desks &lt;= <span class="n">400</span></span>
+ <span data-tip="Variables are declared implicitly by use. Names may contain . _ [ ] , and more, which is why naive tokenisers break."><span class="v">labour:</span> chairs + <span class="n">2</span> tables + <span class="n">3</span> desks - overtime &lt;= <span class="n">160</span></span>
+ <span data-tip="Indicator constraint (CPLEX, Gurobi): enforced only when the binary build_b equals 1."><span class="v">open_b:</span> build_b = <span class="n">1</span> -&gt; tables + desks &gt;= <span class="n">10</span></span>
+<span data-tip="Bounds section: lower, upper, double-sided or free. The default is 0 <= x <= +inf." class="k">Bounds</span>
+ <span class="n">0</span> &lt;= overtime &lt;= <span class="n">40</span>
+<span data-tip="Variable type sections: Generals/Integers, Binaries, Semi-Continuous, SOS. A variable in Generals and Semi-Continuous is semi-integer." class="k">Generals</span>
+ chairs tables desks
+<span class="k">Binaries</span>
+ build_b
+<span class="k">End</span></pre>
+    <div>
+      <div class="card" id="tip"><h3>Hover a line</h3><p>Each construct has rules that differ subtly between CPLEX, Gurobi, Xpress and Mosek.</p></div>
+      <ul class="ticks" style="margin-top:1em">
+        <li>Context-sensitive: <code>x[1]</code> is a name, <code>[ x ^ 2 ]</code> is a quadratic term</li>
+        <li>Keywords are case-insensitive and have many spellings</li>
+        <li>Implicit declaration: typos create new variables silently</li>
+      </ul>
+    </div>
+  </div>
+  <aside class="notes">Hover each line live. Point out the indicator constraint and the naming rules: these are why regex-based scripts eventually fail.</aside>
+</section>
+
+<!-- 4 -->
+<section class="slide">
+  <div class="kicker">Why a grammar?</div>
+  <h2>Regex works until it doesn't</h2>
+  <div class="grid">
+    <div class="card"><h3>Ad-hoc scripts</h3>
+      <ul class="ticks">
+        <li>Split on whitespace, hope for the best</li>
+        <li>Break on line continuations, comments, odd names</li>
+        <li>No error positions: "something is wrong somewhere"</li>
+        <li>Every team rewrites one, each slightly differently</li>
+      </ul></div>
+    <div class="card"><h3>A formal grammar</h3>
+      <ul class="ticks">
+        <li><strong>One specification</strong> of the language, reviewed and tested</li>
+        <li>Exact <strong>line and column</strong> errors with a caret</li>
+        <li>A typed <strong>model</strong> (objectives, constraints, bounds, types) every tool shares</li>
+        <li>Round-trip: parse → modify → write → parse gives back the same model</li>
+      </ul></div>
+  </div>
+  <pre><span class="c">// rust/src/lp.lalrpop (excerpt): every bound form, declared once</span>
+<span class="k">BoundSpec</span>: (&amp;'input str, VariableType) = {
+    <span class="c">// Double bound: "0 &lt;= x1 &lt;= 5"</span>
+    &lt;lb:NumericValue&gt; Le &lt;var:<span class="s">"identifier"</span>&gt; Le &lt;ub:NumericValue&gt; =&gt; (var, VariableType::DoubleBound(lb, ub)),
+    <span class="c">// Free variable: "x1 free"</span>
+    &lt;var:<span class="s">"identifier"</span>&gt; <span class="s">"free"</span> =&gt; (var, VariableType::Free),
+    …
+};</pre>
+  <aside class="notes">The core move: stop treating LP files as strings, start treating them as a language with a grammar. Everything else in this talk is built on that one decision.</aside>
+</section>
+
+<!-- 5 -->
+<section class="slide">
+  <div class="kicker">Architecture</div>
+  <h2>One model, many front ends</h2>
+  <div class="flow">
+    <div class="node" data-say="Logos generates a fast DFA lexer from token definitions: numbers, names, operators, case-insensitive keywords.">.lp / .mps<small>input text</small></div>
+    <div class="arrow">→</div>
+    <div class="node" data-say="Logos lexer + LALRPOP LR(1) grammar for LP; a dedicated reader for fixed and free MPS. Strict, with precise errors.">Logos + LALRPOP<small>lexer &amp; grammar</small></div>
+    <div class="arrow">→</div>
+    <div class="node" data-say="LpProblem: the typed model. Mutation API, ProblemBuilder, serde, CSV export, memory-mapped input.">LpProblem<small>typed model</small></div>
+  </div>
+  <div class="grid" style="--cols:4">
+    <div class="node" data-say="lp_parser: parse, info, analyze, diff, convert, solve. GNU diff exit codes for CI gating.">CLI<small>lp_parser</small></div>
+    <div class="node" data-say="parse_lp on PyPI: parser, writers, mutation API and diff from Python, at Rust speed.">Python<small>parse_lp</small></div>
+    <div class="node" data-say="lp_diff: ratatui explorer and diff viewer; tolerances, regex renames, HiGHS solve and solution diff, presolve, diagnostics.">TUI<small>lp_diff</small></div>
+    <div class="node" data-say="lp-lsp: tree-sitter-lp for error-tolerant parsing as you type, the full LALRPOP parse plus analysis after a short pause.">LSP<small>lp-lsp</small></div>
+  </div>
+  <div class="card" id="say"><p>Click a box to see what it does.</p></div>
+  <aside class="notes">Two grammars on purpose: LALRPOP is strict and exact for the library; tree-sitter is error-tolerant so the editor keeps working while a file is half-written.</aside>
+</section>
+
+<!-- 6 -->
+<section class="slide">
+  <div class="kicker">At a glance</div>
+  <h2>A complete toolchain, not a weekend parser</h2>
+  <div class="grid" style="--cols:4">
+    <div class="card stat"><div class="big">4</div><p>front ends on one core: CLI, Python, TUI and language server</p></div>
+    <div class="card stat"><div class="big">~58k</div><p>lines of Rust across library, LSP and TUI</p></div>
+    <div class="card stat"><div class="big">880+</div><p>unit and integration tests, plus snapshot tests and benchmarks</p></div>
+    <div class="card stat"><div class="big">4</div><p>dialects: CPLEX, Gurobi, FICO Xpress, Mosek</p></div>
+  </div>
+  <div>
+    <span class="pill">indicator constraints</span><span class="pill">quadratic objectives &amp; constraints</span><span class="pill">SOS1 / SOS2</span><span class="pill">semi-continuous &amp; semi-integer</span><span class="pill">lazy constraints &amp; user cuts</span><span class="pill">general constraints MAX/MIN/ABS/AND/OR</span><span class="pill">multi-objective</span><span class="pill">LP ↔ MPS</span><span class="pill">JSON / YAML / CSV</span>
+  </div>
+  <aside class="notes">Emphasise maturity: versioned releases, release-please, prebuilt binaries for Linux, macOS and Windows.</aside>
+</section>
+
+<!-- 7 -->
+<section class="slide" id="cli">
+  <div class="kicker">Demo · lp_parser CLI</div>
+  <h2>Ask your model questions</h2>
+  <div class="tabs" role="tablist">
+    <button role="tab" data-gif="info" data-cap="Counts by type in milliseconds, even for very large files." aria-selected="true">info</button>
+    <button role="tab" data-gif="analyze" data-cap="Catch numerical trouble before the solver does: a 1e-10 coefficient and a 2.5e14 scaling ratio.">analyze</button>
+    <button role="tab" data-gif="diff" data-cap="A structural diff: which constraints were added, removed or changed, not which lines moved. Exit code 1 when models differ.">diff</button>
+    <button role="tab" data-gif="convert" data-cap="LP in, MPS out (or LP, JSON, YAML, CSV). Indicators and integrality markers preserved.">convert</button>
+    <button role="tab" data-gif="errors" data-cap="Errors point at the exact line and column.">errors</button>
+  </div>
+  <img class="term" alt="Terminal recording of lp_parser" src="assets/info.gif">
+  <p id="cap">Counts by type in milliseconds, even for very large files.</p>
+  <aside class="notes">Click through the tabs, or press 1 to 5. The diff tab is the one to dwell on: an edit by finance changed a price, a capacity and swapped a constraint.</aside>
+</section>
+
+<!-- 8 -->
+<section class="slide">
+  <div class="kicker">Use case · CI</div>
+  <h2>Model changes as reviewable pull requests</h2>
+  <div class="grid">
+    <pre><span class="c"># .github/workflows/model.yml</span>
+- <span class="k">name</span>: Generate model
+  <span class="k">run</span>: python build_model.py -o candidate.lp
+
+- <span class="k">name</span>: Fail on numerical issues
+  <span class="k">run</span>: lp_parser analyze candidate.lp --issues-only
+
+- <span class="k">name</span>: Show what changed
+  <span class="k">run</span>: |
+    lp_parser diff baseline.lp candidate.lp \
+      --abs-tol 1e-6 --rename <span class="s">'\[\d+\]$'</span> <span class="s">'[N]'</span> \
+      --format json --pretty &gt; model_diff.json \
+      || echo <span class="s">"::notice::model changed"</span></pre>
+    <ul class="ticks">
+      <li><strong>Exit codes</strong> follow GNU <code>diff</code>: 0 same, 1 different, 2 failure</li>
+      <li><strong>Tolerances</strong> ignore float noise from regeneration</li>
+      <li><strong>Regex renames</strong> match <code>x[17]</code> to <code>x[18]</code> so re-indexing is not a "change"</li>
+      <li><strong>JSON output</strong> becomes a PR comment or an audit record</li>
+      <li>Refactor the generator with confidence: <em>"model identical"</em> is a passing test</li>
+    </ul>
+  </div>
+  <aside class="notes">This is the slide for engineering managers: model regressions become as visible as code regressions.</aside>
+</section>
+
+<!-- 9 -->
+<section class="slide">
+  <div class="kicker">Demo · lp_diff TUI</div>
+  <h2>Explore and diff interactively</h2>
+  <div class="grid" style="grid-template-columns:2fr 1fr">
+    <img class="term" alt="Terminal recording of the lp_diff TUI" src="assets/tui.gif">
+    <ul class="ticks">
+      <li>Coefficient-level side-by-side diff, LP vs MPS</li>
+      <li>Raw source view of both files</li>
+      <li>Live tolerance cycling and fuzzy search</li>
+      <li>Numerical conditioning per file</li>
+      <li>Solve both with HiGHS and <strong>diff the solutions</strong></li>
+      <li>Presolve rewrites and diagnostics</li>
+      <li><code>--watch</code> re-diffs as files change</li>
+    </ul>
+  </div>
+  <aside class="notes">The terminal app for when a JSON diff is not enough: drill into a single constraint and see both sides of the change.</aside>
+</section>
+
+<!-- 10 -->
+<section class="slide">
+  <div class="kicker">Demo · lp-lsp</div>
+  <h2>Why a language server?</h2>
+  <div class="grid" style="grid-template-columns:2fr 1fr">
+    <img class="term" alt="Neovim editing an LP file with lp-lsp diagnostics and hover" src="assets/lsp.gif">
+    <div>
+      <p style="margin-bottom:.8em">The <strong>Language Server Protocol</strong> lets one server power every editor: VS Code, Neovim, Helix, Zed, Emacs.</p>
+      <ul class="ticks">
+        <li>Diagnostics as you type, solver-free</li>
+        <li>Hover: type, bounds and every use of a variable</li>
+        <li>Go to definition, references, rename across files</li>
+        <li>Formatting, quick fixes, inlay hints</li>
+        <li>Commands: analyse, convert to MPS, stats</li>
+      </ul>
+    </div>
+  </div>
+  <aside class="notes">Shown in Neovim; the VS Code extension "LP &amp; MPS Language Server" gives the same features. The feedback loop moves from minutes (solver run) to milliseconds (keystroke).</aside>
+</section>
+
+<!-- 11 -->
+<section class="slide">
+  <div class="kicker">Try it</div>
+  <h2>Feel the feedback loop</h2>
+  <div class="play">
+    <div class="editor"><pre id="hl" aria-hidden="true"></pre><textarea id="src" spellcheck="false" aria-label="LP model editor">Maximize
+ profit: 12 chairs + 18 tables
+Subject To
+ wood: 2 chairs + 5 tables =&lt; 400
+ labour: chairs + 2 tabels &lt;=
+ tiny: 0.0000000001 chairs &lt;= 1
+Generals
+ chairs tables
+End</textarea></div>
+    <div>
+      <h3>Diagnostics</h3>
+      <ul id="diags"></ul>
+      <p style="font-size:.75em;margin-top:1em;color:var(--muted)">A toy in-browser checker (about 40 lines of JavaScript) to convey the experience. The real server runs the tree-sitter and LALRPOP grammars plus full numerical analysis. Try fixing the errors.</p>
+    </div>
+  </div>
+  <aside class="notes">Hand the keyboard to someone. Fix "tabels", add a number after the "&lt;=", delete the tiny coefficient and watch the list empty.</aside>
+</section>
+
+<!-- 12 -->
+<section class="slide">
+  <div class="kicker">Python</div>
+  <h2>Same engine, from a notebook</h2>
+  <pre style="font-size:.9em"><span class="k">from</span> parse_lp <span class="k">import</span> LpParser
+
+model = LpParser(<span class="s">"plan.lp"</span>)                      <span class="c"># .mps works too</span>
+print(model.num_constraints, model.num_variables)
+
+model.update_constraint_rhs(<span class="s">"wood"</span>, <span class="n">450.0</span>)      <span class="c"># scenario analysis</span>
+model.rename_variable(<span class="s">"chairs"</span>, <span class="s">"chairs_plant_a"</span>)
+model.save_to_mps(<span class="s">"plan_scenario.mps"</span>)
+
+changes = model.diff(LpParser(<span class="s">"plan_v2.lp"</span>))   <span class="c"># structured diff</span>
+<span class="k">if not</span> changes[<span class="s">"is_empty"</span>]:
+    print(<span class="s">"added:"</span>, changes[<span class="s">"cons_added"</span>])</pre>
+  <p><code>pip install parse-lp</code> · Rust speed, no solver licence required.</p>
+  <aside class="notes">Same Rust core via PyO3: parsing, mutation, LP and MPS writers, diff. Useful for scenario generation in notebooks.</aside>
+</section>
+
+<!-- 13 -->
+<section class="slide">
+  <div class="kicker">Where it helps us</div>
+  <h2>Use cases at work</h2>
+  <div class="grid" style="--cols:3">
+    <div class="card"><h3>Review</h3><p>Diff generated models in PRs; catch unintended constraint changes before deployment.</p></div>
+    <div class="card"><h3>Debug</h3><p>Find bad scaling, empty or singleton rows, conflicting bounds and unused variables, before a long solve.</p></div>
+    <div class="card"><h3>Migrate</h3><p>Move between solvers and formats: LP ↔ MPS, dialect quirks handled in one place.</p></div>
+    <div class="card"><h3>Author</h3><p>Hand-edit test models with an editor that understands them.</p></div>
+    <div class="card"><h3>Audit</h3><p>JSON/CSV snapshots of what was solved, and when.</p></div>
+    <div class="card"><h3>Onboard</h3><p>Hover and navigation make an unfamiliar model explorable.</p></div>
+  </div>
+  <aside class="notes">Tailor this slide to the audience: pick the two use cases closest to the team's pain.</aside>
+</section>
+
+<!-- 14 -->
+<section class="slide">
+  <div class="kicker">Get started</div>
+  <h2>Install in a minute</h2>
+  <pre><span class="c"># CLI (Rust)</span>
+cargo install --locked lp_parser_rs --features cli,csv,diff,serde,lp-solvers
+<span class="c"># TUI</span>
+cargo install --locked --git https://github.com/dandxy89/lp_parser_rs lp_parser_tui
+<span class="c"># Language server (or prebuilt binaries on GitHub releases)</span>
+cargo install --locked lp-lsp
+<span class="c"># Python</span>
+pip install parse-lp</pre>
+  <p class="lede">github.com/dandxy89/lp_parser_rs · MIT / Apache-2.0</p>
+  <h1 style="font-size:2.2em;color:var(--accent)">Questions?</h1>
+  <aside class="notes">Point people at the VS Code extension for the quickest win.</aside>
+</section>
+
+</main>
+<div id="bar"></div>
+<nav class="ctrl" aria-label="Slide controls">
+  <button id="prev" aria-label="Previous slide">←</button><span id="count"></span><button id="next" aria-label="Next slide">→</button>
+  <button id="notesBtn" aria-label="Toggle speaker notes">notes</button>
+</nav>
+<script>
+const slides = [...document.querySelectorAll('.slide')];
+let cur = 0;
+const show = (i) => {
+  cur = Math.max(0, Math.min(slides.length - 1, i));
+  slides.forEach((s, j) => s.classList.toggle('on', j === cur));
+  // restart any GIF on entry so demos play from the start
+  slides[cur].querySelectorAll('img.term').forEach((img) => { const s = img.src; img.src = ''; img.src = s; });
+  document.getElementById('bar').style.transform = `scaleX(${(cur + 1) / slides.length})`;
+  document.getElementById('count').textContent = `${cur + 1} / ${slides.length}`;
+  history.replaceState(null, '', `#${cur + 1}`);
+};
+const overview = () => {
+  document.body.classList.toggle('overview');
+  if (document.body.classList.contains('overview')) slides.forEach((s, j) => { s.onclick = () => { document.body.classList.remove('overview'); show(j); }; });
+  else { slides.forEach((s) => { s.onclick = null; }); show(cur); }
+};
+document.addEventListener('keydown', (e) => {
+  if (e.target.matches('textarea')) { if (e.key === 'Escape') e.target.blur(); return; }
+  const k = e.key;
+  if (['ArrowRight', 'PageDown', ' '].includes(k)) { e.preventDefault(); show(cur + 1); }
+  else if (['ArrowLeft', 'PageUp'].includes(k)) show(cur - 1);
+  else if (k === 'Home') show(0);
+  else if (k === 'End') show(slides.length - 1);
+  else if (k === 's' || k === 'S') document.body.classList.toggle('notes');
+  else if (k === 'o' || k === 'O' || k === 'Escape') overview();
+  else if (k === 'f' || k === 'F') document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
+  else if (/^[1-5]$/.test(k) && slides[cur].id === 'cli') tabs[+k - 1].click();
+});
+document.getElementById('prev').onclick = () => show(cur - 1);
+document.getElementById('next').onclick = () => show(cur + 1);
+document.getElementById('notesBtn').onclick = () => document.body.classList.toggle('notes');
+let touchX = null;
+document.addEventListener('touchstart', (e) => { touchX = e.touches[0].clientX; }, { passive: true });
+document.addEventListener('touchend', (e) => { if (touchX === null) return; const d = e.changedTouches[0].clientX - touchX; if (Math.abs(d) > 60) show(cur + (d < 0 ? 1 : -1)); touchX = null; });
+
+// CLI tabs
+const tabs = [...document.querySelectorAll('#cli [role=tab]')];
+const cliImg = document.querySelector('#cli img');
+tabs.forEach((t) => t.onclick = () => {
+  tabs.forEach((x) => x.setAttribute('aria-selected', x === t));
+  cliImg.src = `assets/${t.dataset.gif}.gif`;
+  document.getElementById('cap').textContent = t.dataset.cap;
+});
+
+// annotated LP hover
+const tip = document.getElementById('tip');
+document.querySelectorAll('#anat [data-tip]').forEach((el) => {
+  el.addEventListener('mouseenter', () => { tip.innerHTML = `<h3>${el.textContent.trim().split(/\s/)[0]}</h3><p></p>`; tip.querySelector('p').textContent = el.dataset.tip; });
+});
+
+// architecture boxes
+document.querySelectorAll('[data-say]').forEach((n) => n.onclick = () => {
+  document.querySelectorAll('[data-say]').forEach((x) => x.classList.toggle('hl', x === n));
+  document.querySelector('#say p').textContent = n.dataset.say;
+});
+
+// toy checker. ponytail: regex line checks only, the real grammar lives in lp-lsp
+const src = document.getElementById('src'), hl = document.getElementById('hl'), list = document.getElementById('diags');
+const esc = (s) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
+const KW = /^(maximi[sz]e|minimi[sz]e|max|min|subject to|such that|st|s\.t\.|bounds|generals?|integers|binar(y|ies)|end)$/i;
+function check() {
+  const lines = src.value.split('\n'), diags = [], marks = {};
+  const declared = new Set(), used = new Map();
+  let section = '';
+  lines.forEach((raw, i) => {
+    const t = raw.trim();
+    if (KW.test(t)) { section = t.toLowerCase(); return; }
+    if (!t || t.startsWith('\\')) return;
+    if (/^generals?|integers|binar/.test(section)) { t.split(/\s+/).forEach((v) => declared.add(v)); return; }
+    const body = t.replace(/^[\w.\[\]]+:\s*/, '');
+    if (/=</.test(body) || /=>/.test(body)) { diags.push(['w', i, '`=<` / `=>` is a non-standard spelling']); marks[i] = 'w'; }
+    if (/(<=|>=|=<|=>|=)\s*$/.test(body)) { diags.push(['e', i, 'missing number after comparison']); marks[i] = 'e'; }
+    (body.match(/-?\d*\.?\d+(e-?\d+)?/gi) || []).forEach((n) => { const v = Math.abs(+n); if (v && v < 1e-9) { diags.push(['w', i, `small coefficient ${n} may cause numerical issues`]); marks[i] ||= 'w'; } });
+    (body.split(/<=|>=|=<|=>|=/)[0].match(/[A-Za-z_][\w.\[\]]*/g) || []).forEach((v) => used.set(v, used.has(v) ? used.get(v) : i));
+  });
+  if (declared.size) used.forEach((line, v) => { if (!declared.has(v)) { diags.push(['w', line, `'${v}' is not declared in Generals: did you mean ${[...declared].find((d) => d[0] === v[0]) || 'a typo'}?`]); marks[line] ||= 'w'; } });
+  hl.innerHTML = lines.map((l, i) => {
+    let h = esc(l).replace(/\b(\d*\.?\d+(e-?\d+)?)\b/gi, '<span class="n">$1</span>');
+    if (KW.test(l.trim())) h = `<span class="k">${h}</span>`; else h = h.replace(/^(\s*[\w.\[\]]+:)/, '<span class="v">$1</span>');
+    return marks[i] ? `<span class="squig-${marks[i]}">${h || ' '}</span>` : h;
+  }).join('\n') + '\n';
+  list.innerHTML = diags.length ? '' : '<li>No problems found ✓</li>';
+  diags.sort((a, b) => a[1] - b[1]).forEach(([s, i, m]) => { const li = document.createElement('li'); li.className = s; li.textContent = `${i + 1}: ${m}`; list.appendChild(li); });
+}
+src.addEventListener('input', check);
+src.addEventListener('scroll', () => { hl.scrollTop = src.scrollTop; hl.scrollLeft = src.scrollLeft; });
+check();
+
+show((parseInt(location.hash.slice(1), 10) || 1) - 1);
+</script>
+</body>
+</html>
