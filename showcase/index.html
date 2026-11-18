@@ -72,7 +72,7 @@ pre { margin: 0; background: #0c0f13; border: 1px solid var(--rule); border-radi
 
 /* chrome */
 #bar { position: fixed; left: 0; right: 0; bottom: 0; height: 3px; background: var(--accent); transform-origin: left; transition: transform .3s; }
-.ctrl { position: fixed; right: 1.2vw; bottom: 1.4vh; display: flex; gap: .4em; align-items: center; font: .7em var(--mono); color: var(--muted); z-index: 5; }
+.ctrl { position: fixed; right: 1.2vw; bottom: 1.4vh; display: flex; gap: .4em; align-items: center; font: .85em var(--mono); color: var(--muted); z-index: 5; }
 .ctrl button { background: var(--panel); color: var(--body); border: 1px solid var(--rule); border-radius: 6px; padding: .5em .8em; cursor: pointer; font: inherit; }
 aside.notes { display: none; }
 body.notes .slide.on aside.notes { display: block; position: fixed; left: 0; right: 0; bottom: 0; max-height: 28vh; overflow: auto; background: #0c0f13ee; border-top: 1px solid var(--accent); padding: 1em 6vw 2.5em; font-size: .8em; color: var(--body); z-index: 4; }
@@ -314,7 +314,7 @@ body.overview .ctrl, body.overview #bar { display: none; }
         <li>Thresholds and formatting under <code>lp.*</code> settings</li>
       </ul>
       <pre style="margin-top:1em">code --install-extension dandxy89.lp-lsp</pre>
-      <p class="mono" style="font-size:.7em;margin-top:.6em">marketplace.visualstudio.com/items?itemName=dandxy89.lp-lsp</p>
+      <p class="mono" style="font-size:.85em;margin-top:.6em">marketplace.visualstudio.com/items?itemName=dandxy89.lp-lsp</p>
     </div>
   </div>
   <aside class="notes">The quickest win for analysts: no Rust toolchain, no PATH setup. If an ASP/clingo extension also claims .lp, pin "files.associations": { "*.lp": "lp" }.</aside>
@@ -337,7 +337,7 @@ End</textarea></div>
     <div>
       <h3>Diagnostics</h3>
       <ul id="diags"></ul>
-      <p style="font-size:.75em;margin-top:1em;color:var(--muted)">A toy in-browser checker (about 40 lines of JavaScript) to convey the experience. The real server runs the tree-sitter and LALRPOP grammars plus full numerical analysis. Try fixing the errors.</p>
+      <p style="font-size:.85em;margin-top:1em;color:var(--muted)">A toy in-browser checker (about 40 lines of JavaScript) to convey the experience. The real server runs the tree-sitter and LALRPOP grammars plus full numerical analysis. Try fixing the errors.</p>
     </div>
   </div>
   <aside class="notes">Hand the keyboard to someone. Fix "tabels", add a number after the "&lt;=", delete the tiny coefficient and watch the list empty.</aside>
