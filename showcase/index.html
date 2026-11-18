@@ -305,7 +305,7 @@ body.overview .ctrl, body.overview #bar { display: none; }
   <div class="grid" style="grid-template-columns:3fr 2fr">
     <img class="term" alt="VS Code showing an LP file with inlay hints, code lenses and analysis warnings in the Problems panel" src="assets/vscode.png">
     <div>
-      <p style="margin-bottom:.8em"><strong>LP &amp; MPS Language Server</strong> on the VS Code Marketplace. The build bundles <code>lp-lsp</code> for your platform: nothing else to install.</p>
+      <p style="margin-bottom:.8em"><strong>LP &amp; MPS Language Server</strong> on the <a href="https://marketplace.visualstudio.com/items?itemName=dandxy89.lp-lsp" target="_blank" rel="noopener" style="color:var(--accent)">VS Code Marketplace</a>. The build bundles <code>lp-lsp</code> for your platform: nothing else to install.</p>
       <ul class="ticks">
         <li>Highlighting, comment toggling, bracket matching</li>
         <li>Analysis warnings in the <strong>Problems</strong> panel</li>
@@ -314,6 +314,7 @@ body.overview .ctrl, body.overview #bar { display: none; }
         <li>Thresholds and formatting under <code>lp.*</code> settings</li>
       </ul>
       <pre style="margin-top:1em">code --install-extension dandxy89.lp-lsp</pre>
+      <p class="mono" style="font-size:.7em;margin-top:.6em">marketplace.visualstudio.com/items?itemName=dandxy89.lp-lsp</p>
     </div>
   </div>
   <aside class="notes">The quickest win for analysts: no Rust toolchain, no PATH setup. If an ASP/clingo extension also claims .lp, pin "files.associations": { "*.lp": "lp" }.</aside>
@@ -391,7 +392,7 @@ code --install-extension dandxy89.lp-lsp
 cargo install --locked lp-lsp
 <span class="c"># Python</span>
 pip install parse-lp</pre>
-  <p class="lede">github.com/dandxy89/lp_parser_rs · MIT / Apache-2.0</p>
+  <p class="lede">github.com/dandxy89/lp_parser_rs · VS Code: <span class="mono">dandxy89.lp-lsp</span> · MIT / Apache-2.0</p>
   <h1 style="font-size:2.2em;color:var(--accent)">Questions?</h1>
   <aside class="notes">Point people at the VS Code extension for the quickest win.</aside>
 </section>
