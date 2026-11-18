@@ -12,7 +12,7 @@ Open `index.html` in a browser (no build step, no dependencies beyond Google Fon
 | `F` | Fullscreen |
 | `1`–`5` | Switch CLI demo tab (slide 7) |
 
-Interactive slides: hover the annotated LP file (3), click the architecture boxes (5), switch CLI demos (7), and edit the model in the playground (11).
+Interactive slides: hover the annotated LP file (3), click the architecture boxes (5), switch CLI demos (7), and edit the model in the playground (12). Slide 11 covers the VS Code extension.
 
 ## Regenerating the demos
 
@@ -22,4 +22,4 @@ Interactive slides: hover the annotated LP file (3), click the architecture boxe
 showcase/tapes/render.sh
 ```
 
-`assets/tui.gif` is a copy of `tui/assets/demo.gif`.
+`assets/tui.gif` is a copy of `tui/assets/demo.gif`; `assets/vscode.png` is a copy of `lsp/editors/vscode/images/screenshot.png`.

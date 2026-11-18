@@ -295,7 +295,28 @@ body.overview .ctrl, body.overview #bar { display: none; }
       </ul>
     </div>
   </div>
-  <aside class="notes">Shown in Neovim; the VS Code extension "LP &amp; MPS Language Server" gives the same features. The feedback loop moves from minutes (solver run) to milliseconds (keystroke).</aside>
+  <aside class="notes">Shown in Neovim; the next slide shows the same server in VS Code. The feedback loop moves from minutes (solver run) to milliseconds (keystroke).</aside>
+</section>
+
+<!-- 10b -->
+<section class="slide">
+  <div class="kicker">VS Code extension</div>
+  <h2>One click for the whole team</h2>
+  <div class="grid" style="grid-template-columns:3fr 2fr">
+    <img class="term" alt="VS Code showing an LP file with inlay hints, code lenses and analysis warnings in the Problems panel" src="assets/vscode.png">
+    <div>
+      <p style="margin-bottom:.8em"><strong>LP &amp; MPS Language Server</strong> on the VS Code Marketplace. The build bundles <code>lp-lsp</code> for your platform: nothing else to install.</p>
+      <ul class="ticks">
+        <li>Highlighting, comment toggling, bracket matching</li>
+        <li>Analysis warnings in the <strong>Problems</strong> panel</li>
+        <li>Code lenses: variable counts, "used in N constraints"</li>
+        <li>Command palette: <em>Analyse Model</em>, <em>Convert to MPS</em>, <em>Show Model Statistics</em></li>
+        <li>Thresholds and formatting under <code>lp.*</code> settings</li>
+      </ul>
+      <pre style="margin-top:1em">code --install-extension dandxy89.lp-lsp</pre>
+    </div>
+  </div>
+  <aside class="notes">The quickest win for analysts: no Rust toolchain, no PATH setup. If an ASP/clingo extension also claims .lp, pin "files.associations": { "*.lp": "lp" }.</aside>
 </section>
 
 <!-- 11 -->
@@ -364,7 +385,9 @@ changes = model.diff(LpParser(<span class="s">"plan_v2.lp"</span>))   <span clas
 cargo install --locked lp_parser_rs --features cli,csv,diff,serde,lp-solvers
 <span class="c"># TUI</span>
 cargo install --locked --git https://github.com/dandxy89/lp_parser_rs lp_parser_tui
-<span class="c"># Language server (or prebuilt binaries on GitHub releases)</span>
+<span class="c"># VS Code extension (bundles the language server)</span>
+code --install-extension dandxy89.lp-lsp
+<span class="c"># Language server for other editors (or prebuilt binaries on GitHub releases)</span>
 cargo install --locked lp-lsp
 <span class="c"># Python</span>
 pip install parse-lp</pre>
