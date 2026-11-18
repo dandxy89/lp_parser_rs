@@ -1442,7 +1442,7 @@ dependencies = [
 
 [[package]]
 name = "lp-lsp"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "criterion",
  "futures",
@@ -1473,7 +1473,7 @@ dependencies = [
 
 [[package]]
 name = "lp_parser_rs"
-version = "5.0.3"
+version = "5.0.4"
 dependencies = [
  "clap",
  "criterion",
