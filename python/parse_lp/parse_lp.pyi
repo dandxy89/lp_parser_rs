@@ -139,6 +139,44 @@ Constraint: TypeAlias = (
 # Nested dict returned by analyze(); see its docstring for the keys.
 ProblemAnalysis: TypeAlias = dict[str, Any]
 
+DiagnosticSeverity: TypeAlias = Literal["error", "warning", "info"]
+DiagnosticCategory: TypeAlias = Literal["structural", "numerical", "mathematical", "performance"]
+DiagnosticCertainty: TypeAlias = Literal["proven", "heuristic"]
+# Where to anchor a subject in the source.
+DiagnosticSite: TypeAlias = Literal["definition", "bound", "type-declaration"]
+
+class DiagnosticSubject(TypedDict):
+    kind: Literal["objective", "constraint", "variable"]
+    name: str
+    variable: str | None
+    site: DiagnosticSite
+
+class RelatedDiagnosticSubject(DiagnosticSubject):
+    note: str
+
+class ModelDiagnostic(TypedDict):
+    code: str
+    severity: DiagnosticSeverity
+    category: DiagnosticCategory
+    certainty: DiagnosticCertainty
+    message: str
+    explanation: str | None
+    subject: DiagnosticSubject | None
+    related: list[RelatedDiagnosticSubject]
+
+class DiagnosticThresholds(TypedDict, total=False):
+    largeCoefficientThreshold: float
+    smallCoefficientThreshold: float
+    largeRhsThreshold: float
+    coefficientRatioThreshold: float
+
+class DiagnosticsConfig(TypedDict, total=False):
+    thresholds: DiagnosticThresholds
+    feasibilityTolerance: float
+    equalityTolerance: float
+    rhsCoefficientRatioThreshold: float
+    maxPerCode: int
+
 class LpParser:
     """A parsed LP or MPS problem that can be inspected, edited and written back out.
 
@@ -478,6 +516,24 @@ class LpParser:
 
         Accepts `"maximize"`, `"max"`, `"minimize"` or `"min"`, in any case.
         Raises `LpInvalidValueError` for anything else.
+        """
+
+    def diagnostics(self, config: DiagnosticsConfig | None = None) -> list[ModelDiagnostic]:
+        """Run the model checks and return one dict per finding, most severe first.
+
+        Each finding has a stable kebab-case `code` (for example
+        `"duplicate-row"` or `"no-effective-bound"`), a `severity`, a
+        `category`, a `certainty` (`"proven"` follows from the model as
+        written, `"heuristic"` is a smell), a `message`, an optional
+        `explanation`, a `subject` naming the entity concerned (`None` for
+        problem-wide findings) and `related` entities. Positions are not
+        reported: names only.
+
+        `config` uses the camelCase names of the Rust `DiagnosticsConfig`;
+        omitted keys keep their defaults.
+
+        Raises `LpInvalidValueError` for an unknown key or an invalid value
+        (a negative or non-finite tolerance, or `maxPerCode` of 0).
         """
 
     def analyze(
