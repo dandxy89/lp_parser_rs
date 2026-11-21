@@ -6,13 +6,17 @@ Published on the docs site at <https://dandxy89.github.io/lp_parser_rs/showcase/
 
 | Key | Action |
 | --- | --- |
-| `→` / `Space` / `←` | Next / previous slide |
+| `→` / `←` | Next / previous topic |
+| `↓` / `↑` | Next / previous slide within a topic (the dots on the right show where you are) |
+| `Space` / `PageDown` / `PageUp` | Step through every slide in order, sub-slides included |
 | `S` | Speaker notes |
 | `O` / `Esc` | Overview grid |
 | `F` | Fullscreen |
-| `1`–`5` | Switch CLI demo tab (slide 7) |
+| `1`–`5` | Switch CLI demo tab (CLI topic) |
 
-Interactive slides: hover the annotated LP file (3), click the architecture boxes (5), switch CLI demos (7), and edit the model in the playground (12). Slide 11 covers the VS Code extension; slide 15 lists limits and a proposed pilot.
+Links take the form `#8` (topic 8) or `#8.2` (its second sub-slide). Topics: CLI (every command, CI), the `lp_diff` TUI (diffing, solving, rewrite, analysis panes), the language server (diagnostics, navigation, any editor, `lp/*` requests), the VS Code extension (explorer, model views, solve and explain, extras), `lp-highs` (and its protocol), the playground, Python (diagnostics), use cases, limits and install.
+
+Interactive slides: hover the annotated LP file, click the architecture boxes, switch CLI demos, and edit the model in the playground.
 
 ## Regenerating the demos
 

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>lp_parser_rs Showcase</title>
-<meta name="description" content="An interactive slide deck on why LP files deserve a real grammar, and the parser, CLI, TUI, Python package and language server built on one.">
+<meta name="description" content="An interactive slide deck on why LP files deserve a real grammar, and the parser, CLI, TUI, Python package, language server, VS Code extension and HiGHS solver built on one.">
 <link rel="canonical" href="https://dandxy89.github.io/lp_parser_rs/showcase/">
 <link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
 <meta property="og:type" content="website">
@@ -98,6 +98,18 @@ body.overview .ctrl, body.overview #bar { display: none; }
   h1 { font-size: 2.3em; }
 }
 @media (prefers-reduced-motion: reduce) { .slide.on { animation: none; } }
+
+/* sub-slides and navigation */
+.slide { overflow: auto; }
+table.keys { border-collapse: collapse; font-size: .85em; width: 100%; }
+table.keys td { padding: .35em .8em; border-bottom: 1px solid var(--rule); color: var(--body); vertical-align: top; }
+table.keys td:first-child { font-family: var(--mono); color: var(--accent); white-space: nowrap; }
+#dots { position: fixed; right: 1vw; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: .7em; z-index: 5; }
+#dots button { width: .7em; height: .7em; padding: 0; border-radius: 50%; border: 1px solid var(--muted); background: none; cursor: pointer; }
+#dots button.on { background: var(--accent); border-color: var(--accent); }
+#more { position: fixed; left: 50%; bottom: 1.6vh; transform: translateX(-50%); font: .75em var(--mono); color: var(--muted); z-index: 5; cursor: pointer; background: none; border: 0; }
+body.overview #dots, body.overview #more { display: none; }
+@media (max-width: 760px) { #dots, #more { display: none; } .slide.sub { border-top: 1px solid var(--rule); } }
 </style>
 </head>
 <body>
@@ -105,11 +117,11 @@ body.overview .ctrl, body.overview #bar { display: none; }
 
 <!-- 1 -->
 <section class="slide">
-  <div class="kicker">Open source · Rust · Python · LSP</div>
+  <div class="kicker">Open source · Rust · Python · LSP · HiGHS</div>
   <h1>lp_parser_rs<br><span style="color:var(--accent)">a real grammar for optimisation models</span></h1>
-  <p class="lede">Parse, analyse, diff and convert LP and MPS files from the terminal and Python, and edit LP files with full editor support.</p>
-  <p class="mono" style="font-size:.8em;color:var(--muted)">Press → or Space to advance · S speaker notes · O overview · F fullscreen · <a href="../" style="color:var(--accent)">docs site</a></p>
-  <aside class="notes">Set the scene: every optimisation team ships LP/MPS files between modelling code and solvers, yet nobody treats them as a language. This project does.</aside>
+  <p class="lede">Parse, analyse, diff, convert and solve LP and MPS files from the terminal, Python and your editor, all on one typed model.</p>
+  <p class="mono" style="font-size:.8em;color:var(--muted)">← → topics · ↓ ↑ go deeper within a topic · Space steps through everything · S notes · O overview · F fullscreen · <a href="../" style="color:var(--accent)">docs site</a></p>
+  <aside class="notes">Set the scene: every optimisation team ships LP/MPS files between modelling code and solvers, yet nobody treats them as a language. This project does. Navigation: left and right move between topics; down and up open the extra slides under a topic (the dots on the right show where you are). Space walks through every slide in order.</aside>
 </section>
 
 <!-- 2 -->
@@ -191,7 +203,7 @@ body.overview .ctrl, body.overview #bar { display: none; }
 </section>
 
 <!-- 5 -->
-<section class="slide">
+<section class="slide" data-more="model diagnostics">
   <div class="kicker">Architecture</div>
   <h2>One model, many front ends</h2>
   <div class="flow">
@@ -199,16 +211,37 @@ body.overview .ctrl, body.overview #bar { display: none; }
     <div class="arrow">→</div>
     <div class="node" data-say="LP: a Logos-generated lexer (numbers, names, operators, case-insensitive keywords) feeding a LALRPOP LR(1) grammar. MPS has its own reader. Strict, with precise errors.">Logos + LALRPOP<small>lexer &amp; grammar</small></div>
     <div class="arrow">→</div>
-    <div class="node" data-say="LpProblem: the typed model. Mutation API, ProblemBuilder, serde, CSV export, memory-mapped input.">LpProblem<small>typed model</small></div>
+    <div class="node" data-say="LpProblem: the typed model. Mutation API, ProblemBuilder, structural diff, analysis and coded diagnostics, LP and MPS writers, serde, CSV export, memory-mapped input.">LpProblem<small>typed model</small></div>
   </div>
-  <div class="grid" style="--cols:4">
-    <div class="node" data-say="lp_parser: parse, info, analyze, diff, convert, solve. GNU diff exit codes for CI gating.">CLI<small>lp_parser</small></div>
-    <div class="node" data-say="parse_lp on PyPI: parser, writers, mutation API and diff from Python, at Rust speed.">Python<small>parse_lp</small></div>
-    <div class="node" data-say="lp_diff: ratatui explorer and diff viewer; tolerances, regex renames, HiGHS solve and solution diff, presolve, diagnostics.">TUI<small>lp_diff</small></div>
-    <div class="node" data-say="lp-lsp: tree-sitter-lp for error-tolerant parsing as you type, the full LALRPOP parse plus analysis after a short pause.">LSP<small>lp-lsp</small></div>
+  <div class="grid" style="--cols:5">
+    <div class="node" data-say="lp_parser: parse, info, analyze, diff, convert and solve (CBC or GLPK through lp-solvers). GNU diff exit codes for CI gating.">CLI<small>lp_parser</small></div>
+    <div class="node" data-say="parse_lp on PyPI: parser, writers, mutation API, diff, analysis and coded diagnostics from Python, at Rust speed.">Python<small>parse_lp</small></div>
+    <div class="node" data-say="lp_diff: ratatui explorer and diff viewer. Tolerances, regex renames, HiGHS solve and solution diff, what-if, presolve rewrites, conditioning diagnostics, unbounded ray, IIS and ranging.">TUI<small>lp_diff</small></div>
+    <div class="node" data-say="lp-lsp: tree-sitter-lp for error-tolerant parsing as you type, the full LALRPOP parse plus analysis after a short pause. Standard LSP features plus custom lp/* requests. The VS Code extension adds model views on top.">LSP + VS Code<small>lp-lsp</small></div>
+    <div class="node" data-say="lp-highs: HiGHS solve, infeasibility diagnosis, IIS, unbounded rays and ranging, behind a JSON protocol. The TUI links it; the language server runs it as a separate process so a solver crash cannot take the editor down.">Solver<small>lp-highs</small></div>
   </div>
-  <div class="card" id="say"><p>Click a box to see what it does.</p></div>
-  <aside class="notes">Two grammars on purpose: LALRPOP is strict and exact for the library; tree-sitter is error-tolerant so the editor keeps working while a file is half-written.</aside>
+  <div class="card" id="say"><p>Click a box to see what it does. Press ↓ for the diagnostics engine every front end shares.</p></div>
+  <aside class="notes">Two grammars on purpose: LALRPOP is strict and exact for the library; tree-sitter is error-tolerant so the editor keeps working while a file is half-written. Press down for the diagnostics engine.</aside>
+</section>
+
+<!-- 5b -->
+<section class="slide sub">
+  <div class="kicker">Architecture · model diagnostics</div>
+  <h2>Findings with a code, a certainty and a category</h2>
+  <div class="grid" style="--cols:3">
+    <div class="card"><h3>Proven</h3><p>Exact. A lower bound above its upper bound, an integer with no integer in its bounds, two rows that contradict each other. Always published.</p>
+      <p style="margin-top:.6em"><span class="pill">invalid-bounds</span><span class="pill">contradictory-rows</span><span class="pill">row-infeasible-by-bounds</span><span class="pill">integer-no-feasible-values</span></p></div>
+    <div class="card"><h3>Heuristic</h3><p>Smells that are sometimes intended: badly scaled rows, huge coefficients, more equalities than variables. Tunable, or off with one setting.</p>
+      <p style="margin-top:.6em"><span class="pill">large-coefficient</span><span class="pill">row-coefficient-range</span><span class="pill">rhs-coefficient-ratio</span><span class="pill">equalities-exceed-variables</span></p></div>
+    <div class="card"><h3>Rows and structure</h3><p>Duplicate, proportional and dominated rows, unused and fixed variables, empty rows, opposed objectives, indicator variables that are not binary, trivial SOS sets.</p>
+      <p style="margin-top:.6em"><span class="pill">duplicate-row</span><span class="pill">dominated-row</span><span class="pill">unused-variable</span><span class="pill">indicator-not-binary</span></p></div>
+  </div>
+  <ul class="ticks">
+    <li><strong>40+ stable codes</strong> in four categories: structural, numerical, mathematical, performance. A stable code means CI filters and editor settings keep working across releases</li>
+    <li>One call: <code>problem.diagnostics()</code> in Rust, <code>parser.diagnostics()</code> in Python; the language server publishes the same findings as editor diagnostics</li>
+    <li>Per-code severity overrides, thresholds and a per-code cap, so one noisy check cannot bury the rest</li>
+  </ul>
+  <aside class="notes">This is the engine behind the Problems panel and the VS Code Analysis view. The CLI analyze command uses the original issue detector; lp_diff's D pane is a separate conditioning analysis tied to a solve (see the TUI slides).</aside>
 </section>
 
 <!-- 6 -->
@@ -216,19 +249,19 @@ body.overview .ctrl, body.overview #bar { display: none; }
   <div class="kicker">At a glance</div>
   <h2>A complete toolchain, not a weekend parser</h2>
   <div class="grid" style="--cols:4">
-    <div class="card stat"><div class="big">4</div><p>front ends on one core: CLI, Python, TUI and language server</p></div>
-    <div class="card stat"><div class="big">~60k</div><p>lines of Rust across library, LSP and TUI</p></div>
-    <div class="card stat"><div class="big">880+</div><p>Rust tests (unit, integration, snapshot), plus Python tests and benchmarks</p></div>
-    <div class="card stat"><div class="big">4</div><p>dialects: CPLEX, Gurobi, FICO Xpress, Mosek</p></div>
+    <div class="card stat"><div class="big">5</div><p>tools on one core: CLI, Python, TUI, language server (with VS Code) and a HiGHS helper</p></div>
+    <div class="card stat"><div class="big">40+</div><p>coded model diagnostics, most of them proven rather than guessed</p></div>
+    <div class="card stat"><div class="big">~75k</div><p>lines of Rust across library, LSP, TUI, solver and Python bindings</p></div>
+    <div class="card stat"><div class="big">1,200+</div><p>Rust tests (unit, integration, snapshot), plus Python, VS Code and end-to-end LSP tests</p></div>
   </div>
   <div>
-    <span class="pill">indicator constraints</span><span class="pill">quadratic objectives &amp; constraints</span><span class="pill">SOS1 / SOS2</span><span class="pill">semi-continuous &amp; semi-integer</span><span class="pill">lazy constraints &amp; user cuts</span><span class="pill">general constraints MAX/MIN/ABS/AND/OR</span><span class="pill">multi-objective</span><span class="pill">LP ↔ MPS</span><span class="pill">JSON / YAML / CSV</span>
+    <span class="pill">CPLEX · Gurobi · Xpress · Mosek</span><span class="pill">indicator constraints</span><span class="pill">quadratic objectives &amp; constraints</span><span class="pill">SOS1 / SOS2</span><span class="pill">semi-continuous &amp; semi-integer</span><span class="pill">lazy constraints &amp; user cuts</span><span class="pill">general constraints MAX/MIN/ABS/AND/OR</span><span class="pill">multi-objective</span><span class="pill">LP ↔ MPS</span><span class="pill">JSON / YAML / CSV</span><span class="pill">HiGHS solve, IIS, ranging</span><span class="pill">presolve rewrites</span>
   </div>
-  <aside class="notes">Emphasise maturity: versioned releases via release-please; prebuilt Linux, macOS and Windows binaries for lp_diff and lp-lsp, Python wheels on PyPI. The lp_parser CLI installs via cargo. The parser accepts one superset of the four dialects rather than switching modes.</aside>
+  <aside class="notes">Emphasise maturity: versioned releases via release-please; prebuilt Linux, macOS and Windows binaries for lp_diff, lp-lsp and lp-highs, Python wheels on PyPI, a VS Code Marketplace extension that bundles the server and the solver helper. The lp_parser CLI installs via cargo. The parser accepts one superset of the four dialects rather than switching modes.</aside>
 </section>
 
 <!-- 7 -->
-<section class="slide" id="cli">
+<section class="slide" id="cli" data-more="every command, CI">
   <div class="kicker">Demo · lp_parser CLI</div>
   <h2>Ask your model questions</h2>
   <div class="tabs" role="tablist">
@@ -240,12 +273,41 @@ body.overview .ctrl, body.overview #bar { display: none; }
   </div>
   <img class="term" loading="lazy" width="1400" height="760" alt="Terminal recording of lp_parser" src="assets/info.gif">
   <p id="cap">Counts of objectives, constraints and variables by type.</p>
-  <aside class="notes">Click through the tabs, or press 1 to 5. The diff tab is the one to dwell on: an edit by finance changed a price, a capacity and swapped a constraint.</aside>
+  <aside class="notes">Click through the tabs, or press 1 to 5. The diff tab is the one to dwell on: an edit by finance changed a price, a capacity and swapped a constraint. Press down for the full command list, then again for the CI recipe.</aside>
+</section>
+
+<!-- 7b -->
+<section class="slide sub">
+  <div class="kicker">lp_parser CLI · every command</div>
+  <h2>Six subcommands, LP or MPS in</h2>
+  <div class="grid">
+    <table class="keys">
+      <tr><td>parse</td><td>Show the file's structure; <code>--format text|json|yaml</code>, <code>--pretty</code>, <code>-o</code></td></tr>
+      <tr><td>info</td><td>Counts and statistics; <code>--variables --constraints --objectives</code> list every entry</td></tr>
+      <tr><td>analyze</td><td>Density, sparsity, coefficient ranges and issues; <code>--issues-only</code> and four tunable thresholds</td></tr>
+      <tr><td>diff</td><td>Structural and numeric comparison; <code>--abs-tol</code>, <code>--rel-tol</code>, repeatable <code>--rename</code></td></tr>
+      <tr><td>convert</td><td><code>lp</code>, <code>mps</code>, <code>csv</code>, <code>json</code>, <code>yaml</code>; <code>--precision</code>, <code>--max-line-length</code>, <code>--compact</code></td></tr>
+      <tr><td>solve</td><td>CBC or GLPK through <code>lp-solvers</code> (binary on <code>PATH</code>); <code>text</code>, <code>json</code>, <code>yaml</code></td></tr>
+    </table>
+    <div>
+      <ul class="ticks">
+        <li>Format chosen by extension: <code>.mps</code> reads MPS, anything else LP</li>
+        <li><code>-v</code> / <code>-q</code> for progress or silence</li>
+        <li>CSV export writes <code>objectives.csv</code>, <code>constraints.csv</code>, <code>variables.csv</code></li>
+        <li>Feature flags keep the binary small: <code>cli, csv, diff, serde, lp-solvers</code></li>
+        <li><code>solve</code> refuses what it cannot represent (several objectives, strict inequalities) rather than dropping it silently</li>
+      </ul>
+      <pre style="margin-top:1em">lp_parser convert plan.lp -f mps -o plan.mps
+lp_parser convert plan.lp -f csv -o ./out
+lp_parser analyze plan.lp --ratio-threshold 1e5</pre>
+    </div>
+  </div>
+  <aside class="notes">The CLI is the scripting surface. For the in-editor and interactive equivalents, carry on to the TUI and language server topics.</aside>
 </section>
 
 <!-- 8 -->
-<section class="slide">
-  <div class="kicker">Use case · CI</div>
+<section class="slide sub">
+  <div class="kicker">lp_parser CLI · use case: CI</div>
   <h2>Model changes as reviewable pull requests</h2>
   <div class="grid">
     <pre><span class="c"># .github/workflows/model.yml</span>
@@ -276,30 +338,128 @@ body.overview .ctrl, body.overview #bar { display: none; }
       <li>Refactor the generator with confidence: <em>"model identical"</em> is a passing test</li>
     </ul>
   </div>
-  <aside class="notes">This is the slide for engineering managers: model regressions become as visible as code regressions.</aside>
+  <aside class="notes">This is the slide for engineering managers: model regressions become as visible as code regressions. The same tolerance and rename flags exist in lp_diff, so what you see interactively matches what CI says.</aside>
 </section>
 
 <!-- 9 -->
-<section class="slide">
+<section class="slide" data-more="diff, solve, rewrite, analyses">
   <div class="kicker">Demo · lp_diff TUI</div>
-  <h2>Explore and diff interactively</h2>
+  <h2>Explore, diff and solve interactively</h2>
   <div class="grid" style="grid-template-columns:2fr 1fr">
     <img class="term" loading="lazy" width="1280" height="800" alt="Terminal recording of the lp_diff TUI" src="assets/tui.gif">
     <ul class="ticks">
-      <li>Coefficient-level side-by-side diff, LP vs MPS</li>
-      <li>Raw source view of both files</li>
+      <li>One file explores; two files diff, LP against MPS if you like</li>
+      <li>Coefficient-level side-by-side diff with Δ and %Δ</li>
       <li>Live tolerance cycling and fuzzy search</li>
       <li>Numerical conditioning per file</li>
-      <li>Solve both with HiGHS and <strong>diff the solutions</strong></li>
-      <li>Presolve rewrites and diagnostics</li>
+      <li>Solve with HiGHS and <strong>diff the solutions</strong></li>
+      <li>Presolve rewrites and conditioning diagnostics</li>
       <li><code>--watch</code> re-diffs as files change</li>
     </ul>
   </div>
-  <aside class="notes">The terminal app for when a JSON diff is not enough: drill into a single constraint and see both sides of the change.</aside>
+  <aside class="notes">The terminal app for when a JSON diff is not enough: drill into a single constraint and see both sides of the change. Press down four times for diffing, solving, rewrites and the analysis panes.</aside>
+</section>
+
+<!-- 9b -->
+<section class="slide sub">
+  <div class="kicker">lp_diff · diffing and finding</div>
+  <h2>From "something changed" to the exact coefficient</h2>
+  <div class="grid">
+    <table class="keys">
+      <tr><td>1–5, [ ]</td><td>Summary · Variables · Constraints · Objectives · Numerics</td></tr>
+      <tr><td>a + - m =</td><td>Filter: all, added, removed, modified, renamed</td></tr>
+      <tr><td>o</td><td>Ignore coefficient order when matching</td></tr>
+      <tr><td>s</td><td>Sort by name, |Δ| or relative Δ</td></tr>
+      <tr><td>t / T</td><td>Cycle relative / absolute tolerance (0, 1e-9 … 1e-2): the diff rebuilds live</td></tr>
+      <tr><td>r</td><td>Raw source lines of both files, side by side</td></tr>
+      <tr><td>/</td><td>Search: fuzzy, <code>r:</code> regex, <code>s:</code> substring, <code>c:</code> content</td></tr>
+      <tr><td>Ctrl+p</td><td>Command palette; <code>Ctrl+o</code> / <code>Ctrl+i</code> jumplist</td></tr>
+    </table>
+    <div>
+      <ul class="ticks">
+        <li>Modified constraints align old and new coefficients on the decimal point</li>
+        <li>Renames (<code>--rename</code>) count once, not as add plus remove</li>
+        <li><code>y</code> / <code>Y</code> yank to the clipboard, over SSH and tmux too (OSC 52)</li>
+        <li><code>w</code> writes a CSV report of the diff</li>
+        <li><code>--summary</code> prints counts and exits: scriptable</li>
+        <li>Seven themes, including <code>high-contrast</code> and <code>colour-blind</code>; <code>NO_COLOR</code> respected</li>
+      </ul>
+      <pre style="margin-top:1em">lp_diff base.lp new.lp --rename '\[\d+\]$' '[i]' \
+  --abs-tol 1e-6 --watch</pre>
+    </div>
+  </div>
+  <aside class="notes">Inspect mode (one file) keeps search, palette, solver and analyses; diff-only keys just show a status-bar hint.</aside>
+</section>
+
+<!-- 9c -->
+<section class="slide sub">
+  <div class="kicker">lp_diff · solving</div>
+  <h2>Solve, compare, ask "what if"</h2>
+  <div class="grid">
+    <div>
+      <ul class="ticks">
+        <li><strong><code>S</code> solves with HiGHS</strong> on a background thread: Summary, Variables, Constraints, Log and Duals tabs</li>
+        <li><strong>Both files</strong>: solve each and diff the solutions, with a delta threshold (<code>t</code> / <code>T</code>) and a changed-only filter (<code>d</code>)</li>
+        <li><strong><code>E</code> what-if</strong>: edit one constraint's right-hand side and re-solve; the comparison is labelled <code>capacity rhs 200 -&gt; 260</code> and nothing touches disk</li>
+        <li><strong><code>e</code> infeasible?</strong> an elastic relaxation shows which rows to relax</li>
+        <li><strong><code>I</code> IIS</strong>: a minimal conflicting set of rows and bounds</li>
+        <li><code>Esc</code> interrupts a running solve; a <code>highs.opt</code> file in the working directory sets HiGHS options</li>
+      </ul>
+    </div>
+    <div class="card"><h3>Why it matters</h3>
+      <p>A shadow price tells you the marginal value of a constraint at the current solution, but not how far that holds. Moving the bound and re-solving does.</p>
+      <p>Paired solves run one at a time so the timings are comparable, and the result is cached until an input changes.</p></div>
+  </div>
+  <aside class="notes">Demonstrate: open a model, press S, then E on a binding constraint. The infeasibility and IIS keys are most useful on a model that does not solve.</aside>
+</section>
+
+<!-- 9d -->
+<section class="slide sub">
+  <div class="kicker">lp_diff · rewrite (P)</div>
+  <h2>Presolve rules you can try one at a time</h2>
+  <div class="grid">
+    <table class="keys">
+      <tr><td>Fixed columns → rhs</td><td>A fixed variable's term moves to the right-hand side</td></tr>
+      <tr><td>Singleton rows → bounds</td><td><code>3x &lt;= 12</code> becomes <code>x &lt;= 4</code></td></tr>
+      <tr><td>Bound propagation</td><td>Implied bounds from row activity</td></tr>
+      <tr><td>Integer rounding</td><td><code>x &lt;= 3.7</code> becomes <code>x &lt;= 3</code></td></tr>
+      <tr><td>Redundant &amp; forcing rows</td><td>Drop rows that never bind; fix pinned variables</td></tr>
+      <tr><td>Empty rows &amp; columns</td><td>Dropped or fixed at a preferred bound</td></tr>
+      <tr><td>Row / column scaling</td><td>Powers of two, so no rounding error is added</td></tr>
+      <tr><td>Split dense rows <em>what-if</em></td><td>About √n partial sums for an n-term row. Off by default</td></tr>
+      <tr><td>Relax integrality <em>what-if</em></td><td>The LP relaxation: the gap is what optimality costs. Off by default</td></tr>
+    </table>
+    <div>
+      <ul class="ticks">
+        <li>Rules feed each other, so they run to a fixpoint (at most 10 passes)</li>
+        <li><code>Enter</code> rewrites file 1 and runs <strong>original versus rewritten</strong>; <code>w</code> writes <code>&lt;stem&gt;_presolved.lp</code></li>
+        <li><code>l</code> logs what the rewrite removed; <code>H</code> logs what HiGHS's own presolve does</li>
+        <li>All but the two what-ifs preserve the set of optimal solutions</li>
+        <li>The honest result is the comparison: some rewrites help a solver, some are neutral, some hurt</li>
+      </ul>
+    </div>
+  </div>
+  <aside class="notes">The point is measurement, not folklore: does scaling help on this model with this solver? Run both sides and read the timings.</aside>
+</section>
+
+<!-- 9e -->
+<section class="slide sub">
+  <div class="kicker">lp_diff · analysis panes</div>
+  <h2>Why is this model slow, unbounded or infeasible?</h2>
+  <div class="grid" style="--cols:3">
+    <div class="card"><h3><code>D</code> Diagnostics</h3><p>Joins the model's structure with the last solve. Three signals: <strong>conditioning</strong>, <strong>density</strong> and <strong>degeneracy</strong>, ranked per row and variable so the log's "200k iterations" points at a constraint.</p></div>
+    <div class="card"><h3><code>B</code> Solve profile</h3><p>The same model under several HiGHS configurations, side by side.</p></div>
+    <div class="card"><h3><code>R</code> Ranging</h3><p>How far each objective coefficient and row activity can move before the basis changes.</p></div>
+    <div class="card"><h3><code>U</code> Unbounded ray</h3><p>Which variables run away, and in what direction.</p></div>
+    <div class="card"><h3><code>I</code> IIS</h3><p>An irreducible infeasible subsystem: a minimal set of conflicting rows and bounds.</p></div>
+    <div class="card"><h3><code>w</code> Report</h3><p>Write any finished pane to <code>&lt;stem&gt;_iis.txt</code>, <code>_ranging.txt</code>, <code>_unbounded_ray.txt</code> or <code>_solve_profile.txt</code>.</p></div>
+  </div>
+  <p>The panes run on a background thread; any key closes one and cancels a run in progress. They use the <code>lp-highs</code> query layer (next topic but one) and refuse quadratic models.</p>
+  <aside class="notes">This is the "model health" half of the TUI. Conditioning is a different question from the coded diagnostics in the editor: the TUI looks at behaviour in a solve, the editor looks at the file as you type.</aside>
 </section>
 
 <!-- 10 -->
-<section class="slide">
+<section class="slide" data-more="diagnostics, navigation, any editor, requests">
   <div class="kicker">Demo · lp-lsp</div>
   <h2>Why a language server?</h2>
   <div class="grid" style="grid-template-columns:2fr 1fr">
@@ -311,33 +471,256 @@ body.overview .ctrl, body.overview #bar { display: none; }
         <li>Hover: type, bounds and every use of a variable</li>
         <li>Go to definition, references; rename (constraints and objectives across files)</li>
         <li>Formatting, quick fixes, inlay hints</li>
-        <li>Commands: analyse, convert to MPS, stats</li>
+        <li>Solve and explain through custom <code>lp/*</code> requests</li>
       </ul>
     </div>
   </div>
-  <aside class="notes">Shown in Neovim; the next slide shows the same server in VS Code. The feedback loop moves from minutes (solver run) to milliseconds (keystroke).</aside>
+  <aside class="notes">Shown in Neovim; the VS Code topic shows the same server with model views on top. The feedback loop moves from minutes (solver run) to milliseconds (keystroke). Press down for each capability in turn.</aside>
+</section>
+
+<!-- 10a -->
+<section class="slide sub">
+  <div class="kicker">lp-lsp · diagnostics</div>
+  <h2>Two passes: instant syntax, then the full model</h2>
+  <div class="grid">
+    <div>
+      <ul class="ticks">
+        <li><strong>As you type</strong>: tree-sitter syntax errors and structural checks (duplicate names, a variable in two type sections, conflicting bounds, unused declarations, <code>=&lt;</code> spellings)</li>
+        <li><strong>After a short pause</strong> (<code>semantic.debounceMs</code>): the full LALRPOP parse plus the 40+ coded model diagnostics</li>
+        <li><strong>Solver findings</strong> appear once a solve has run, including IIS rows</li>
+        <li>Push and pull diagnostics, and workspace diagnostics for <code>*.lp</code> files that are not open</li>
+        <li>Large files (over 1 MiB) get syntax diagnostics only after the debounce</li>
+      </ul>
+    </div>
+    <div class="card"><h3>Make it fit your team</h3>
+<pre style="font-size:.9em;margin:0;border:0;padding:0;background:none">"lp.analysis.heuristics": false,
+"lp.analysis.categories.numerical": true,
+"lp.analysis.severityOverrides": {
+  "large-coefficient": "hint",
+  "singleton-row": "off"
+},
+"lp.analysis.coefficientRatioThreshold": 1e5</pre>
+      <p style="margin-top:.6em">Proven findings stay on unless you override that code. Heuristics, categories, thresholds and severities are all settings.</p></div>
+  </div>
+  <aside class="notes">Unknown settings keys are ignored; an invalid value rejects the new configuration, keeps the old one and shows an error.</aside>
 </section>
 
 <!-- 10b -->
-<section class="slide">
+<section class="slide sub">
+  <div class="kicker">lp-lsp · navigate and edit</div>
+  <h2>Treat the model like code</h2>
+  <div class="grid" style="--cols:3">
+    <div class="card"><h3>Navigate</h3>
+      <ul class="ticks"><li>Definition, declaration, type definition</li><li>References and highlights</li><li>Call hierarchy: which rows use a variable, which variables a row uses</li><li>Document and workspace symbols</li><li>Linked editing of a name</li></ul></div>
+    <div class="card"><h3>Change safely</h3>
+      <ul class="ticks"><li>Rename a variable in its file, or a constraint, objective or SOS name across every <code>*.lp</code> in the workspace</li><li>Refuses names that would change how the file parses</li><li>Formatting: document, selection or on Enter; never touches a file with syntax errors</li><li>Quick fixes, add a bound, move a variable between type sections, reorder sections</li></ul></div>
+    <div class="card"><h3>Read</h3>
+      <ul class="ticks"><li>Hover and completion that fit the cursor</li><li>Inlay hints: generated names, <code>_rng</code> partners, variable types, normalised RHS</li><li>Semantic highlighting, folding, selection ranges</li><li>Code lenses: counts on rows and "used in N constraints"</li><li>Signature help for <code>MAX</code>, <code>MIN</code>, <code>ABS</code>, <code>AND</code>, <code>OR</code></li></ul></div>
+  </div>
+  <pre><span class="c">\ @description Capacity of the north plant   &lt;- shown on hover, in the explorer and in explain</span>
+c1: x + y &lt;= 10</pre>
+  <aside class="notes">Descriptions are plain comments, so the file stays valid LP for every other tool. Control characters are stripped and hover escapes Markdown.</aside>
+</section>
+
+<!-- 10c -->
+<section class="slide sub">
+  <div class="kicker">lp-lsp · any editor</div>
+  <h2>Run <code>lp-lsp</code> for <code>*.lp</code>, done</h2>
+  <div class="grid">
+<pre><span class="c">-- Neovim 0.11+: ~/.config/nvim/lsp/lp_lsp.lua</span>
+<span class="k">return</span> {
+  cmd = { <span class="s">'lp-lsp'</span> },
+  filetypes = { <span class="s">'lp'</span> },
+  root_markers = { <span class="s">'.git'</span> },
+}
+
+<span class="c"># Helix: languages.toml</span>
+[language-server.lp-lsp]
+command = <span class="s">"lp-lsp"</span></pre>
+    <div>
+      <ul class="ticks">
+        <li>Speaks LSP over stdio; the only argument is <code>--version</code></li>
+        <li><strong>Indexes the workspace</strong> at start-up (<code>*.lp</code> files, up to 256 MB) and stays current through file watching</li>
+        <li>UTF-8 positions when the client offers them, else UTF-16</li>
+        <li>Prebuilt archives for Linux, macOS and Windows, x86_64 and aarch64, with SHA-256 checksums; or <code>cargo install --locked lp-lsp</code></li>
+        <li>Documented setups for VS Code, Neovim, Helix and Zed</li>
+        <li>Restricted workspaces only run the server and solver bundled with the extension</li>
+      </ul>
+    </div>
+  </div>
+  <aside class="notes">The VS Code extension is the one-click route; this slide is for everyone else on the team.</aside>
+</section>
+
+<!-- 10d -->
+<section class="slide sub">
+  <div class="kicker">lp-lsp · beyond standard LSP</div>
+  <h2>Custom <code>lp/*</code> requests power the model views</h2>
+  <div class="grid">
+    <table class="keys">
+      <tr><td>lp/model</td><td>Objectives, constraints, variables by type, special rows, counts, source ranges</td></tr>
+      <tr><td>lp/explain</td><td>Terms, bounds, activity range, related rows and diagnostics</td></tr>
+      <tr><td>lp/graph</td><td>The bipartite row/variable dependency graph</td></tr>
+      <tr><td>lp/matrix</td><td>Sparse coefficient matrix, exact or a density raster for big models</td></tr>
+      <tr><td>lp/diff</td><td>Mathematical difference against another copy of the model</td></tr>
+      <tr><td>lp/solve</td><td>Solve through <code>lp-highs</code>; cancellable, with progress</td></tr>
+      <tr><td>lp/solverInfo</td><td>Helper availability, helper version, HiGHS version</td></tr>
+    </table>
+    <div>
+      <ul class="ticks">
+        <li>Advertised under <code>experimental.lp</code> with a protocol version; clients that do not know them ignore them and standard features still work</li>
+        <li><code>lp/solutionChanged</code> notifies clients when a solution changes</li>
+        <li>Solving runs <code>lp-highs</code> as a <strong>separate process</strong>: a solver crash cannot take the server down, and cancelling kills the process</li>
+        <li>HiGHS is the only editor solver; CPLEX, Gurobi, CBC and GLPK are deliberately not supported</li>
+      </ul>
+    </div>
+  </div>
+  <aside class="notes">Any editor can build its own model views on these. VS Code is the reference client.</aside>
+</section>
+
+<!-- 10v -->
+<section class="slide" data-more="explorer, views, solve, extras">
   <div class="kicker">VS Code extension</div>
   <h2>One click for the whole team</h2>
   <div class="grid" style="grid-template-columns:3fr 2fr">
     <img class="term" loading="lazy" width="1600" height="1000" alt="VS Code showing an LP file with inlay hints, code lenses and analysis warnings in the Problems panel" src="assets/vscode.png">
     <div>
-      <p style="margin-bottom:.8em"><strong>LP &amp; MPS Language Server</strong> (editor support for <code>.lp</code> files) on the <a href="https://marketplace.visualstudio.com/items?itemName=dandxy89.lp-lsp" target="_blank" rel="noopener" style="color:var(--accent)">VS Code Marketplace</a>. The build bundles <code>lp-lsp</code> for your platform: nothing else to install.</p>
+      <p style="margin-bottom:.8em"><strong>LP &amp; MPS Language Server</strong> on the <a href="https://marketplace.visualstudio.com/items?itemName=dandxy89.lp-lsp" target="_blank" rel="noopener" style="color:var(--accent)">VS Code Marketplace</a>. The build bundles <code>lp-lsp</code> and the <code>lp-highs</code> solver helper for your platform: nothing else to install.</p>
       <ul class="ticks">
-        <li>Highlighting, comment toggling, bracket matching</li>
+        <li>Highlighting, comment toggling, bracket matching, MPS highlighting</li>
         <li>Analysis warnings in the <strong>Problems</strong> panel</li>
-        <li>Code lenses: variable counts, "used in N constraints"</li>
-        <li>Command palette: <em>Analyse Model</em>, <em>Convert to MPS</em>, <em>Show Model Statistics</em></li>
-        <li>Thresholds and formatting under <code>lp.*</code> settings</li>
+        <li>Code lenses, inlay hints, status-bar model size</li>
+        <li>An <strong>LP activity bar</strong> with a model explorer and analysis view</li>
+        <li>Solve, explain, compare, matrix and graph views</li>
       </ul>
       <pre style="margin-top:1em">code --install-extension dandxy89.lp-lsp</pre>
-      <p class="mono" style="font-size:.85em;margin-top:.6em">marketplace.visualstudio.com/items?itemName=dandxy89.lp-lsp</p>
     </div>
   </div>
-  <aside class="notes">The quickest win for analysts: no Rust toolchain, no PATH setup. If an ASP/clingo extension also claims .lp, pin "files.associations": { "*.lp": "lp" }.</aside>
+  <aside class="notes">The quickest win for analysts: no Rust toolchain, no PATH setup. If an ASP/clingo extension also claims .lp, pin "files.associations": { "*.lp": "lp" }. Press down for the views.</aside>
+</section>
+
+<!-- 10v1 -->
+<section class="slide sub">
+  <div class="kicker">VS Code · LP activity bar</div>
+  <h2>Browse the model, not the file</h2>
+  <div class="grid">
+    <div class="card"><h3>Model Explorer</h3>
+      <ul class="ticks"><li>Objectives, constraints, variables grouped by type, and special rows: indicator, quadratic, SOS, lazy, user cuts</li><li>Expand a constraint for its coefficients, a variable for the rows that use it</li><li>Click anything to jump to its source; filter by name from the toolbar</li><li>Tooltips show <code>\ @description</code> comments</li></ul></div>
+    <div class="card"><h3>Analysis</h3>
+      <ul class="ticks"><li>Every diagnostic grouped by category, then by code</li><li><strong>Find Similar Constraints</strong>: duplicate and proportional rows for the one under the cursor, or the whole model</li><li>Heuristics, categories and thresholds are <code>lp.analysis.*</code> settings</li><li>Status bar: variables, constraints and whether there are errors</li></ul></div>
+  </div>
+  <aside class="notes">Open a model with a few hundred rows and show how quickly you get from "what uses this variable" to the line that does.</aside>
+</section>
+
+<!-- 10v2 -->
+<section class="slide sub">
+  <div class="kicker">VS Code · model views</div>
+  <h2>See the structure</h2>
+  <div class="grid" style="--cols:3">
+    <div class="card"><h3>Coefficient matrix</h3><p>The sparse matrix on a canvas; a density overview for large models. Click a cell to open its row, Shift-click for the column.</p></div>
+    <div class="card"><h3>Dependency graph</h3><p>Bipartite constraint/variable graph with search, component filter, neighbour highlighting and focus. Disconnected components stand out.</p></div>
+    <div class="card"><h3>Compare models</h3><p>A mathematical diff against Git <code>HEAD</code>, the last saved file or another file. Click a row to open it.</p></div>
+  </div>
+  <ul class="ticks">
+    <li><strong>Export Model Report</strong>: a Markdown report (statistics, objectives, constraints, bounds, variable types, warnings by category) written to a file you pick and opened in preview</li>
+    <li>Views load no remote resources and run under a strict content security policy</li>
+    <li>Each view appears only when the server advertises the matching <code>lp/*</code> request</li>
+  </ul>
+  <aside class="notes">Compare models against HEAD is the in-editor cousin of lp_parser diff in CI.</aside>
+</section>
+
+<!-- 10v3 -->
+<section class="slide sub">
+  <div class="kicker">VS Code · solve and explain</div>
+  <h2>Solve it, then ask why</h2>
+  <div class="grid">
+    <div>
+      <ul class="ticks">
+        <li><strong>Solve Model</strong> (<code>Cmd/Ctrl+Alt+Enter</code>): status, objective, activities, slack, duals and binding rows in a results panel</li>
+        <li>Solution values appear as <strong>hover text and inlay hints</strong> on the variables themselves</li>
+        <li><strong>Diagnose Infeasibility</strong>: an infeasibility tree pointing at the rows and bounds in conflict</li>
+        <li><strong>Explain Constraint / Variable</strong> (<code>Cmd/Ctrl+Alt+E</code>): terms, bounds, activity range, related rows and diagnostics in the model's own terms</li>
+        <li><em>Solve</em> on the objective and <em>Explain</em> on each named constraint as code lenses</li>
+      </ul>
+    </div>
+    <div class="card"><h3>Behind the button</h3>
+      <p>The extension asks <code>lp-lsp</code>, which runs <code>lp-highs</code> as a separate process with a time limit (<code>lp.solver.timeLimit</code>, 60 s by default). Cancelling kills it.</p>
+      <p>Stale solutions are hidden once you edit the document, unless <code>lp.solution.showStale</code> is on.</p></div>
+  </div>
+  <aside class="notes">Live demo: solve the sample model, hover a variable, then break a bound and run Diagnose Infeasibility.</aside>
+</section>
+
+<!-- 10v4 -->
+<section class="slide sub">
+  <div class="kicker">VS Code · the rest</div>
+  <h2>Small things that add up</h2>
+  <div class="grid">
+    <ul class="ticks">
+      <li><strong>15 snippets</strong>: <code>lp-model</code>, <code>lp-constraint</code>, <code>lp-indicator</code>, <code>lp-sos1</code>, <code>lp-quad-objective</code>, <code>lp-multi-obj</code>, <code>lp-lazy</code> and more</li>
+      <li><strong>Walkthrough</strong>: Help → Get Started → "Get started with LP files" in six steps</li>
+      <li><strong>Convert to MPS</strong> and <strong>Convert from MPS</strong>, the latter into an unsaved LP editor</li>
+      <li>Keybindings for solve, explain and the explorer (LP editors only)</li>
+    </ul>
+    <ul class="ticks">
+      <li><strong>Workspace trust</strong>: in Restricted Mode only the bundled server and solver run; <code>lp.server.path</code>, <code>lp.solver.path</code> and <code>PATH</code> are ignored</li>
+      <li>Settings under <code>lp.*</code>: analysis, solver, formatting, inlay hints, code lenses</li>
+      <li>Bundles the solver helper for every platform except Alpine</li>
+      <li>Extension and server have integration tests that run in CI</li>
+    </ul>
+  </div>
+  <aside class="notes">The workspace-trust story matters for security reviewers: opening an untrusted repo never executes a binary named by that repo.</aside>
+</section>
+
+<!-- 10s -->
+<section class="slide" data-more="the protocol">
+  <div class="kicker">lp-highs · solver helper</div>
+  <h2>Solving, isolated and scriptable</h2>
+  <div class="grid">
+    <div>
+      <ul class="ticks">
+        <li><strong>HiGHS</strong> solve of any parsed LP or MPS model, with <code>highs.opt</code> support</li>
+        <li><strong>Infeasibility</strong>: elastic relaxation shows what to relax; an IIS gives the minimal conflicting set</li>
+        <li><strong>Queries</strong>: unbounded rays and ranging</li>
+        <li>Progress as JSON lines on stderr: <code>parsing</code>, <code>building</code>, <code>solving</code>, <code>extracting</code>, <code>diagnosing</code></li>
+        <li>Killing the process cancels the solve entirely</li>
+        <li>A <code>protocol</code> module with no C++ and no parser, for clients that only need the wire format</li>
+      </ul>
+    </div>
+    <div class="card"><h3>Who uses it</h3>
+      <p><strong>lp_diff</strong> links it for <code>S</code>, <code>E</code>, <code>e</code>, <code>I</code>, <code>U</code> and <code>R</code>.</p>
+      <p><strong>lp-lsp</strong> spawns the helper for <code>lp/solve</code>, so the editor survives a solver crash.</p>
+      <p><strong>You</strong> can pipe JSON to it from any language.</p>
+      <pre style="margin-top:.8em">cargo install --locked lp-highs
+lp-highs info
+lp-highs solve &lt; request.json</pre></div>
+  </div>
+  <aside class="notes">Splitting the solver into its own process was a deliberate safety choice: HiGHS is C++, and an editor should never crash because a model was nasty.</aside>
+</section>
+
+<!-- 10s2 -->
+<section class="slide sub">
+  <div class="kicker">lp-highs · the protocol</div>
+  <h2>One JSON request in, one response out</h2>
+  <div class="grid">
+    <pre><span class="c">// stdin</span>
+{ <span class="s">"protocol"</span>: 1, <span class="s">"format"</span>: <span class="s">"lp"</span>,
+  <span class="s">"text"</span>: <span class="s">"min\nobj: x\nst\nc1: x &gt;= 1\nend"</span>,
+  <span class="s">"options"</span>: { <span class="s">"timeLimit"</span>: 60, <span class="s">"mipRelGap"</span>: 0.01,
+               <span class="s">"presolve"</span>: <span class="s">"choose"</span>, <span class="s">"threads"</span>: 4 },
+  <span class="s">"diagnose"</span>: <span class="s">"auto"</span>, <span class="s">"includeLog"</span>: false }</pre>
+    <pre><span class="c">// stdout (abridged)</span>
+{ <span class="s">"ok"</span>: true, <span class="s">"result"</span>: {
+  <span class="s">"status"</span>: <span class="s">"Optimal"</span>, <span class="s">"objectiveValue"</span>: 12450.0,
+  <span class="s">"timings"</span>: { <span class="s">"buildMs"</span>: 3, <span class="s">"solveMs"</span>: 420 },
+  <span class="s">"variables"</span>:   [{ <span class="s">"name"</span>: <span class="s">"x1"</span>, <span class="s">"value"</span>: 25.0, <span class="s">"reducedCost"</span>: 0.0 }],
+  <span class="s">"constraints"</span>: [{ <span class="s">"name"</span>: <span class="s">"capacity"</span>, <span class="s">"activity"</span>: 100.0,
+                    <span class="s">"dual"</span>: 4.25, <span class="s">"slack"</span>: 0.0, <span class="s">"binding"</span>: true }],
+  <span class="s">"skipped"</span>: { <span class="s">"sos"</span>: 0 } } }</pre>
+  </div>
+  <ul class="ticks">
+    <li>Exit code 0 whenever a response was written (infeasible models included), 2 for usage and protocol errors, 1 for an internal failure</li>
+    <li>HiGHS only. Indicator, quadratic-constraint and general-constraint models are refused; SOS sets are skipped and counted; a quadratic objective must be continuous</li>
+  </ul>
+  <aside class="notes">The fixtures in solver/tests/fixtures/protocol are the contract: full request, optimal, MIP, infeasible with elastic relaxation, infeasible with IIS, and the error shapes.</aside>
 </section>
 
 <!-- 11 -->
@@ -364,7 +747,7 @@ End</textarea></div>
 </section>
 
 <!-- 12 -->
-<section class="slide">
+<section class="slide" data-more="diagnostics and analysis">
   <div class="kicker">Python</div>
   <h2>Same engine, from a notebook</h2>
   <pre style="font-size:.9em"><span class="k">from</span> parse_lp <span class="k">import</span> LpParser
@@ -379,8 +762,38 @@ model.save_to_mps(<span class="s">"plan_scenario.mps"</span>)
 changes = model.diff(LpParser(<span class="s">"plan_v2.lp"</span>))   <span class="c"># structured diff</span>
 <span class="k">if not</span> changes[<span class="s">"is_empty"</span>]:
     print(<span class="s">"added:"</span>, changes[<span class="s">"cons_added"</span>])</pre>
-  <p><code>pip install parse-lp</code> · Rust speed, no solver licence required.</p>
-  <aside class="notes">Same Rust core via PyO3: parsing, mutation, LP and MPS writers, diff. Useful for scenario generation in notebooks.</aside>
+  <p><code>pip install parse-lp</code> · Rust speed, no solver licence required · typed dicts with bundled stubs.</p>
+  <aside class="notes">Same Rust core via PyO3: parsing, mutation, LP and MPS writers, diff, analysis and diagnostics. Useful for scenario generation in notebooks. Press down for diagnostics.</aside>
+</section>
+
+<!-- 12b -->
+<section class="slide sub">
+  <div class="kicker">Python · check before you solve</div>
+  <h2>Lint the model your generator just built</h2>
+  <div class="grid">
+    <pre><span class="k">model</span> = LpParser.from_string(text)   <span class="c"># or format="mps"</span>
+
+<span class="k">for</span> f <span class="k">in</span> model.diagnostics():
+    print(f[<span class="s">"severity"</span>], f[<span class="s">"code"</span>],
+          f[<span class="s">"certainty"</span>], f[<span class="s">"message"</span>])
+
+<span class="c"># tune thresholds, cap noisy codes</span>
+model.diagnostics({
+    <span class="s">"maxPerCode"</span>: 50,
+    <span class="s">"thresholds"</span>: {<span class="s">"largeRhsThreshold"</span>: 1e6},
+})
+
+report = model.analyze(ratio_threshold=1e5)
+model.to_csv(<span class="s">"output"</span>)   <span class="c"># directory must exist</span></pre>
+    <ul class="ticks">
+      <li><code>diagnostics()</code>: stable <code>code</code>, <code>severity</code>, <code>certainty</code> (<em>proven</em> or <em>heuristic</em>), message and the entities involved</li>
+      <li>Fail a test suite on any <em>proven</em> error; log heuristics as warnings</li>
+      <li><code>analyze()</code>: statistics, ranges and issues with the same thresholds as the CLI</li>
+      <li>Edits cover coefficients, right-hand sides, names, types, sense, and removals; write LP or MPS back</li>
+      <li>Typed errors: <code>LpParseError</code>, <code>LpObjectNotFoundError</code>, <code>LpInvalidValueError</code></li>
+    </ul>
+  </div>
+  <aside class="notes">Properties like objectives and constraints build a fresh copy on each access: bind them once rather than reading in a loop.</aside>
 </section>
 
 <!-- 13 -->
@@ -405,21 +818,22 @@ changes = model.diff(LpParser(<span class="s">"plan_v2.lp"</span>))   <span clas
   <div class="grid">
     <div class="card"><h3>Limits</h3>
       <ul class="ticks">
-        <li>Editor support is LP only; MPS is CLI, Python and TUI</li>
+        <li>Editor language features are LP only; for MPS, VS Code gives highlighting and <em>Convert from MPS</em>, while the CLI, Python and TUI read it fully</li>
+        <li>Solving is HiGHS only (TUI, editor). It refuses indicator, quadratic and general-constraint models, skips SOS sets, and takes a quadratic objective only if continuous. CLI <code>solve</code> uses CBC or GLPK</li>
         <li>No piecewise-linear (<code>PWL</code>) constraints or <code>&lt;-&gt;</code> indicators</li>
-        <li>General constraints and multi-objective attributes cannot be written to MPS</li>
-        <li>Fixed-format MPS with spaces in names is not supported</li>
-        <li>Analysis warnings do not fail <code>analyze</code>; only errors (invalid bounds) do</li>
+        <li>General constraints and multi-objective attributes cannot be written to MPS; fixed-format MPS with spaces in names is not supported</li>
+        <li>Heuristic diagnostics are smells, not proofs: tune or switch them off. CLI <code>analyze</code> warnings do not fail the run; only errors do</li>
       </ul></div>
     <div class="card"><h3>Proposed pilot</h3>
       <ul class="ticks">
         <li>Pick one model pipeline</li>
         <li>Add <code>lp_parser diff</code> against a baseline in CI</li>
-        <li>Install the VS Code extension for the modellers</li>
+        <li>Install the VS Code extension for the modellers; leave the model diagnostics on</li>
+        <li>Use <code>lp_diff</code> when a regression needs explaining</li>
         <li>Review after a month: caught regressions, time saved</li>
       </ul></div>
   </div>
-  <aside class="notes">Tailor the pilot to the team in the room. Expect questions on maintenance (open source, MIT/Apache-2.0, versioned releases) and performance (benchmarks live in rust/benches and lsp/benches).</aside>
+  <aside class="notes">Tailor the pilot to the team in the room. Expect questions on maintenance (open source, MIT/Apache-2.0, versioned releases) and performance (benchmarks live in rust/benches, lsp/benches and tui/benches).</aside>
 </section>
 
 <!-- 14 -->
@@ -429,10 +843,10 @@ changes = model.diff(LpParser(<span class="s">"plan_v2.lp"</span>))   <span clas
   <pre><span class="c"># CLI (Rust)</span>
 cargo install --locked lp_parser_rs --features cli,csv,diff,serde,lp-solvers
 <span class="c"># TUI: prebuilt lp_diff binaries on GitHub releases</span>
-<span class="c"># VS Code extension (bundles the language server)</span>
+<span class="c"># VS Code extension (bundles the language server and the solver helper)</span>
 code --install-extension dandxy89.lp-lsp
-<span class="c"># Language server for other editors (or prebuilt binaries on GitHub releases)</span>
-cargo install --locked lp-lsp
+<span class="c"># Language server and solver helper for other editors (or prebuilt binaries on GitHub releases)</span>
+cargo install --locked lp-lsp lp-highs
 <span class="c"># Python</span>
 pip install parse-lp</pre>
   <p class="lede">github.com/dandxy89/lp_parser_rs · VS Code: <span class="mono">dandxy89.lp-lsp</span> · MIT / Apache-2.0</p>
@@ -442,22 +856,34 @@ pip install parse-lp</pre>
 
 </main>
 <div id="bar"></div>
+<div id="dots" aria-label="Slides in this topic"></div>
+<button id="more" aria-label="Next slide in topic"></button>
 <nav class="ctrl" aria-label="Slide controls">
-  <button id="prev" aria-label="Previous slide">←</button><span id="count"></span><button id="next" aria-label="Next slide">→</button>
+  <button id="prev" aria-label="Previous topic">←</button><button id="up" aria-label="Previous slide in topic">↑</button><button id="down" aria-label="Next slide in topic">↓</button><span id="count"></span><button id="next" aria-label="Next topic">→</button>
   <button id="notesBtn" aria-label="Toggle speaker notes">notes</button>
 </nav>
 <script>
 const slides = [...document.querySelectorAll('.slide')];
+const mainOf = slides.map((s, i) => slides.slice(0, i + 1).filter((x) => !x.classList.contains('sub')).length - 1);
+const mains = mainOf[mainOf.length - 1] + 1;
+const stackOf = (m) => slides.map((_, i) => i).filter((i) => mainOf[i] === m);
 let cur = 0;
 const show = (i) => {
   cur = Math.max(0, Math.min(slides.length - 1, i));
   slides.forEach((s, j) => s.classList.toggle('on', j === cur));
   // restart any GIF on entry so demos play from the start
   slides[cur].querySelectorAll('img.term[src$=".gif"]').forEach((img) => { const s = img.src; img.src = ''; img.src = s; });
-  document.getElementById('bar').style.transform = `scaleX(${(cur + 1) / slides.length})`;
-  document.getElementById('count').textContent = `${cur + 1} / ${slides.length}`;
-  history.replaceState(null, '', `#${cur + 1}`);
+  const st = stackOf(mainOf[cur]), p = st.indexOf(cur);
+  const dots = document.getElementById('dots');
+  dots.replaceChildren(...(st.length > 1 ? st.map((j, n) => { const b = document.createElement('button'); b.className = j === cur ? 'on' : ''; b.setAttribute('aria-label', n ? `Sub-slide ${n}` : 'Topic'); b.onclick = () => show(j); return b; }) : []));
+  const more = slides[st[0]].dataset.more;
+  document.getElementById('more').textContent = st.length > 1 && p === 0 ? `↓ ${st.length - 1} more${more ? ': ' + more : ''}` : '';
+  document.getElementById('bar').style.transform = `scaleX(${(mainOf[cur] + 1) / mains})`;
+  document.getElementById('count').textContent = `${mainOf[cur] + 1} / ${mains}` + (p ? ` · ${p}/${st.length - 1}` : '');
+  history.replaceState(null, '', `#${mainOf[cur] + 1}${p ? '.' + p : ''}`);
 };
+const stepMain = (d) => { const m = mainOf[cur] + d; if (m >= 0 && m < mains) show(stackOf(m)[0]); };
+const stepSub = (d) => { const st = stackOf(mainOf[cur]); show(st[Math.max(0, Math.min(st.length - 1, st.indexOf(cur) + d))]); };
 const overview = () => {
   document.body.classList.toggle('overview');
   if (document.body.classList.contains('overview')) slides.forEach((s, j) => { s.onclick = () => { document.body.classList.remove('overview'); show(j); }; });
@@ -467,8 +893,12 @@ document.addEventListener('keydown', (e) => {
   if (e.target.matches('textarea')) { if (e.key === 'Escape') e.target.blur(); return; }
   if (e.target.closest('button, a') && [' ', 'Enter'].includes(e.key)) return; // let focused controls activate
   const k = e.key;
-  if (['ArrowRight', 'PageDown', ' '].includes(k)) { e.preventDefault(); show(cur + 1); }
-  else if (['ArrowLeft', 'PageUp'].includes(k)) show(cur - 1);
+  if (['PageDown', ' '].includes(k)) { e.preventDefault(); show(cur + 1); }
+  else if (k === 'PageUp') show(cur - 1);
+  else if (k === 'ArrowRight') stepMain(1);
+  else if (k === 'ArrowLeft') stepMain(-1);
+  else if (k === 'ArrowDown') { e.preventDefault(); stepSub(1); }
+  else if (k === 'ArrowUp') { e.preventDefault(); stepSub(-1); }
   else if (k === 'Home') show(0);
   else if (k === 'End') show(slides.length - 1);
   else if (k === 's' || k === 'S') document.body.classList.toggle('notes');
@@ -476,12 +906,14 @@ document.addEventListener('keydown', (e) => {
   else if (k === 'f' || k === 'F') (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen()).catch((err) => console.warn('fullscreen unavailable:', err.message));
   else if (/^[1-5]$/.test(k) && slides[cur].id === 'cli') tabs[+k - 1].click();
 });
-document.getElementById('prev').onclick = () => show(cur - 1);
-document.getElementById('next').onclick = () => show(cur + 1);
+document.getElementById('up').onclick = () => stepSub(-1);
+document.getElementById('down').onclick = document.getElementById('more').onclick = () => stepSub(1);
+document.getElementById('prev').onclick = () => stepMain(-1);
+document.getElementById('next').onclick = () => stepMain(1);
 document.getElementById('notesBtn').onclick = () => document.body.classList.toggle('notes');
-let touchX = null;
-document.addEventListener('touchstart', (e) => { touchX = e.touches[0].clientX; }, { passive: true });
-document.addEventListener('touchend', (e) => { if (touchX === null) return; const d = e.changedTouches[0].clientX - touchX; if (Math.abs(d) > 60) show(cur + (d < 0 ? 1 : -1)); touchX = null; });
+let touchX = null, touchY = null;
+document.addEventListener('touchstart', (e) => { touchX = e.touches[0].clientX; touchY = e.touches[0].clientY; }, { passive: true });
+document.addEventListener('touchend', (e) => { if (touchX === null) return; const d = e.changedTouches[0].clientX - touchX; const dy = e.changedTouches[0].clientY - touchY; if (Math.abs(d) > 60 && Math.abs(d) > Math.abs(dy)) stepMain(d < 0 ? 1 : -1); touchX = null; });
 
 // CLI tabs
 const tabs = [...document.querySelectorAll('#cli [role=tab]')];
@@ -540,7 +972,7 @@ src.addEventListener('input', check);
 src.addEventListener('scroll', () => { hl.scrollTop = src.scrollTop; hl.scrollLeft = src.scrollLeft; });
 check();
 
-const fromHash = () => show((parseInt(location.hash.slice(1), 10) || 1) - 1);
+const fromHash = () => { const [m, s] = location.hash.slice(1).split('.').map((x) => parseInt(x, 10) || 0); const st = stackOf(Math.max(0, Math.min(mains - 1, (m || 1) - 1))); show(st[Math.min(s || 0, st.length - 1)]); };
 addEventListener('hashchange', fromHash);
 fromHash();
 </script>
