@@ -27,6 +27,7 @@ extensions that [`lp_parser_rs`](../rust) supports, and it keeps working while a
   Explain on each named constraint) and signature help for `MAX`, `MIN`, `ABS`, `AND` and `OR`.
 - **Commands** (`workspace/executeCommand`): `lp.analyze` (analysis report), `lp.convertToMps` (writes
   `<name>.mps` next to the file, replacing any existing one) and `lp.showModelStats`.
+- **MPS conversion**: `lp.convertFromMps` (arguments: URI and the MPS text, since MPS buffers are not synchronised) returns `{ lp, omitted }` without writing a file; `omitted` lists empty rows that LP syntax cannot hold.
 - **Model and solver requests**: custom `lp/*` requests for editor views (model explorer, coefficient matrix,
   dependency graph, mathematical diff, explanations) and for solving with HiGHS. See
   [Custom requests](#custom-requests).

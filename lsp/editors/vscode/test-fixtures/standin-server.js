@@ -130,7 +130,7 @@ function handle(message) {
   switch (method) {
     case 'initialize':
       return reply({
-        capabilities: { textDocumentSync: 1, experimental: { lp: { requests: REQUESTS } } },
+        capabilities: { textDocumentSync: 1, executeCommandProvider: { commands: ['lp.convertFromMps'] }, experimental: { lp: { requests: REQUESTS } } },
         serverInfo: { name: 'lp-lsp-standin', version: '0.0.0' },
       });
     case 'textDocument/didOpen':
@@ -149,6 +149,11 @@ function handle(message) {
       return reply(explain(params));
     case 'lp/solve':
       return reply(solve(params));
+    case 'workspace/executeCommand':
+      if (params.command === 'lp.convertFromMps' && typeof params.arguments?.[1] === 'string') {
+        return reply({ lp: 'Minimize\n obj: x\nSubject To\n c1: x >= 1\nEnd\n', omitted: [] });
+      }
+      return id !== undefined && send({ id, error: { code: -32601, message: `method not found: ${params.command}` } });
     case 'shutdown':
       return reply(null);
     case 'exit':

@@ -20,7 +20,8 @@ Prebuilt binaries are on the [releases page](https://github.com/dandxy89/lp_pars
 - Diagnostics (syntax errors and model analysis), hover, completion, signature help
 - Go to definition, declaration and type definition, references, highlights, rename, linked editing, call hierarchy, document and workspace symbols
 - Formatting, folding, selection ranges, semantic tokens, inlay hints, code lenses and quick fixes
-- Commands (palette category LP): *Analyse Model*, *Convert to MPS*, *Show Model Statistics*, *Find Similar Constraints*, *Restart Language Server*
+- MPS files (`.mps`): syntax highlighting and comment toggling; *Convert from MPS* opens the LP text in a new unsaved editor
+- Commands (palette category LP): *Analyse Model*, *Convert to MPS*, *Convert from MPS*, *Show Model Statistics*, *Find Similar Constraints*, *Export Model Report*, *Restart Language Server*
 - **LP activity bar view** (needs a server that advertises `lp/model`):
   - *Model Explorer*: objectives, constraints, variables grouped by type, and special rows (indicator, quadratic, SOS, lazy and user cuts), each with counts. Expand a constraint for its coefficients or a variable for the rows that use it; click any entry to jump to its source. The toolbar filters by name.
   - *Analysis*: model diagnostics grouped by category, then by code.
@@ -36,6 +37,21 @@ Prebuilt binaries are on the [releases page](https://github.com/dandxy89/lp_pars
   - *Compare Models*: mathematical diff against Git HEAD, the last saved file or another file; click a row to open it
   - *Solve Model* and *Diagnose Infeasibility*: results panel (status, objective, activities, slack, duals, binding) and an infeasibility tree; needs the `lp-highs` helper (`lp.solver.path`). Solution values also appear as hover text and inlay hints (`lp.solution.inlayHints`)
   - *Explain Constraint* / *Explain Variable*: terms, bounds, activity range, related rows and diagnostics (also in the editor context menu)
+  - *Export Model Report*: writes a Markdown report to a file you choose and opens its preview. It covers statistics, objectives, constraints, bounds, variable types and warnings (diagnostics grouped by category)
+
+## Keybindings
+
+These apply in LP editors only.
+
+| Command | Windows and Linux | macOS |
+| --- | --- | --- |
+| *Solve Model* | `Ctrl+Alt+Enter` | `Cmd+Alt+Enter` |
+| *Explain Constraint* | `Shift+Alt+E` | `Cmd+Alt+E` |
+| *Show Model Explorer* | `Shift+Alt+M` | `Cmd+Alt+M` |
+
+Rebind them with *Preferences: Open Keyboard Shortcuts*.
+
+New to LP files? Open *Help: Get Started* and choose "Get started with LP files".
 
 ## Settings
 

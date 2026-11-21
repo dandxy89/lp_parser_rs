@@ -584,7 +584,7 @@ fn capabilities(pull_diagnostics: bool, encoding: Encoding, solver_available: bo
         call_hierarchy_provider: Some(CallHierarchyServerCapability::Simple(true)),
         linked_editing_range_provider: Some(LinkedEditingRangeServerCapabilities::Simple(true)),
         execute_command_provider: Some(ExecuteCommandOptions {
-            commands: commands::ALL.iter().map(|c| (*c).to_owned()).collect(),
+            commands: advertised_commands(),
             work_done_progress_options: WorkDoneProgressOptions::default(),
         }),
         diagnostic_provider: pull_diagnostics.then(|| {
@@ -1078,6 +1078,11 @@ impl LanguageServer for Backend {
     }
 
     async fn execute_command(&self, params: ExecuteCommandParams) -> Result<Option<LSPAny>> {
+        if params.command == commands::CONVERT_FROM_MPS {
+            let (name, text) = text_command_arguments(&params.command, &params.arguments)?;
+            let result = self.run(move || commands::convert_from_mps(&name, &text)).await?;
+            return self.finish_command(result).await;
+        }
         let uri: Uri = params
             .arguments
             .first()
@@ -1088,7 +1093,15 @@ impl LanguageServer for Backend {
         let doc = self.document_or_error(&uri)?;
         let config = self.config();
         // Commands parse the whole model; keep them off the async workers.
-        match self.run(move || commands::execute(&params.command, &doc, &config)).await? {
+        let result = self.run(move || commands::execute(&params.command, &doc, &config)).await?;
+        self.finish_command(result).await
+    }
+}
+
+impl Backend {
+    /// Show the command's message and turn its outcome into the LSP response.
+    async fn finish_command(&self, result: std::result::Result<commands::Output, String>) -> Result<Option<LSPAny>> {
+        match result {
             Ok(output) => {
                 self.client.show_message(MessageType::INFO, &output.message).await;
                 Ok(Some(output.value))
@@ -1099,6 +1112,20 @@ impl LanguageServer for Backend {
             }
         }
     }
+}
+
+/// Every command the server advertises, including those that take text instead of a synchronised document.
+fn advertised_commands() -> Vec<String> {
+    commands::ALL.iter().chain(commands::TEXT_COMMANDS).map(|c| (*c).to_owned()).collect()
+}
+
+/// Validate `[uri, text]` arguments; returns the file name for messages and the text.
+fn text_command_arguments(command: &str, arguments: &[Value]) -> Result<(String, String)> {
+    let invalid = || Error::invalid_params(format!("{command} expects [uri, text] arguments"));
+    let uri = arguments.first().and_then(Value::as_str).ok_or_else(invalid)?;
+    let text = arguments.get(1).and_then(Value::as_str).ok_or_else(invalid)?;
+    let uri: Uri = uri.parse().map_err(|_| invalid())?;
+    Ok((commands::file_name(uri.as_str()), text.to_owned()))
 }
 
 #[cfg(test)]
@@ -1124,6 +1151,26 @@ mod tests {
         }
         for untrusted in [json!({ "workspaceTrusted": false }), json!({ "workspaceTrusted": "no" })] {
             assert!(Backend::restricted_mode(Some(&untrusted)), "{untrusted}");
+        }
+    }
+
+    #[test]
+    fn text_command_arguments_validates_shape() {
+        let uri = json!("file:///tmp/model.mps");
+        let ok = text_command_arguments(commands::CONVERT_FROM_MPS, &[uri.clone(), json!("text")]).unwrap();
+        assert_eq!(ok, ("model.mps".to_owned(), "text".to_owned()));
+        for bad in [vec![], vec![uri.clone()], vec![uri, json!(1)], vec![json!("::not a uri"), json!("t")]] {
+            let err = text_command_arguments(commands::CONVERT_FROM_MPS, &bad).unwrap_err();
+            assert_eq!(err.code, tower_lsp_server::jsonrpc::ErrorCode::InvalidParams, "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn advertised_commands_include_text_commands() {
+        let advertised = advertised_commands();
+        assert!(advertised.iter().any(|c| c == "lp.convertFromMps"));
+        for command in commands::ALL {
+            assert!(advertised.iter().any(|c| c == command), "{command}");
         }
     }
 }

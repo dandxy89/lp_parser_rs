@@ -15,5 +15,6 @@ export const FEATURE_COMMANDS: readonly FeatureCommand[] = [
   { command: 'lp.compareModels', title: 'Compare Models', request: 'lp/diff' },
   { command: 'lp.explainConstraint', title: 'Explain Constraint', request: 'lp/explain' },
   { command: 'lp.explainVariable', title: 'Explain Variable', request: 'lp/explain' },
+  { command: 'lp.exportReport', title: 'Export Model Report', request: 'lp/model' },
   { command: 'lp.diagnoseInfeasibility', title: 'Diagnose Infeasibility', request: 'lp/solve' },
 ];

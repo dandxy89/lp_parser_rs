@@ -90,7 +90,7 @@ class AnalysisProvider implements vscode.TreeDataProvider<AnalysisNode> {
   }
 }
 
-function collectDiagnostics(uri: vscode.Uri): AnalysisDiagnostic[] {
+export function collectDiagnostics(uri: vscode.Uri): AnalysisDiagnostic[] {
   const out: AnalysisDiagnostic[] = [];
   for (const diagnostic of vscode.languages.getDiagnostics(uri)) {
     // Only server findings carry a code; syntax errors and other sources are not analysis findings.

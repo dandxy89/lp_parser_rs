@@ -32,6 +32,7 @@
   ],
   "main": "./dist/extension.js",
   "activationEvents": [
+    "onLanguage:mps",
     "onLanguage:lp"
   ],
   "capabilities": {
@@ -56,6 +57,18 @@
           ".Lp"
         ],
         "configuration": "./language-configuration.json"
+      },
+      {
+        "id": "mps",
+        "aliases": [
+          "MPS",
+          "mps"
+        ],
+        "extensions": [
+          ".mps",
+          ".MPS"
+        ],
+        "configuration": "./language-configuration-mps.json"
       }
     ],
     "grammars": [
@@ -63,6 +76,11 @@
         "language": "lp",
         "scopeName": "source.lp",
         "path": "./syntaxes/lp.tmLanguage.json"
+      },
+      {
+        "language": "mps",
+        "scopeName": "source.mps",
+        "path": "./syntaxes/mps.tmLanguage.json"
       }
     ],
     "snippets": [
@@ -144,9 +162,20 @@
         "category": "LP"
       },
       {
+        "command": "lp.convertFromMps",
+        "title": "Convert from MPS",
+        "category": "LP"
+      },
+      {
         "command": "lp.showModelStats",
         "title": "Show Model Statistics",
         "category": "LP"
+      },
+      {
+        "command": "lp.exportReport",
+        "title": "Export Model Report",
+        "category": "LP",
+        "enablement": "lp.supports.model"
       },
       {
         "command": "lp.restartServer",
@@ -251,7 +280,15 @@
           "when": "editorLangId == lp"
         },
         {
+          "command": "lp.convertFromMps",
+          "when": "editorLangId == mps"
+        },
+        {
           "command": "lp.showModelStats",
+          "when": "editorLangId == lp"
+        },
+        {
+          "command": "lp.exportReport",
           "when": "editorLangId == lp"
         },
         {
@@ -309,6 +346,80 @@
         }
       ]
     },
+    "keybindings": [
+      {
+        "command": "lp.solve",
+        "key": "ctrl+alt+enter",
+        "mac": "cmd+alt+enter",
+        "when": "editorTextFocus && editorLangId == lp"
+      },
+      {
+        "command": "lp.explainConstraint",
+        "key": "shift+alt+e",
+        "mac": "cmd+alt+e",
+        "when": "editorTextFocus && editorLangId == lp"
+      },
+      {
+        "command": "lp.showModelExplorer",
+        "key": "shift+alt+m",
+        "mac": "cmd+alt+m",
+        "when": "editorTextFocus && editorLangId == lp"
+      }
+    ],
+    "walkthroughs": [
+      {
+        "id": "lp.gettingStarted",
+        "title": "Get started with LP files",
+        "description": "Write, inspect, analyse and solve linear programmes.",
+        "featuredFor": [
+          "**/*.lp"
+        ],
+        "steps": [
+          {
+            "id": "lp.open",
+            "title": "Open or create an LP file",
+            "description": "Open a .lp file, or start a new one.\n[New LP File](command:workbench.action.files.newUntitledFile?%7B%22languageId%22%3A%22lp%22%7D)",
+            "media": { "markdown": "media/walkthrough/open.md" },
+            "completionEvents": ["onLanguage:lp"]
+          },
+          {
+            "id": "lp.explorer",
+            "title": "Browse the model",
+            "description": "See objectives, constraints and variables at a glance.\n[Show Model Explorer](command:lp.showModelExplorer)",
+            "media": { "markdown": "media/walkthrough/explorer.md" },
+            "completionEvents": ["onView:lp.modelExplorer"]
+          },
+          {
+            "id": "lp.analysis",
+            "title": "Review the diagnostics",
+            "description": "Findings are grouped by category and code.\n[Open Analysis](command:lp.analysis.focus)",
+            "media": { "markdown": "media/walkthrough/analysis.md" },
+            "completionEvents": ["onView:lp.analysis"]
+          },
+          {
+            "id": "lp.solve",
+            "title": "Solve with HiGHS",
+            "description": "Solve the model and see values inline.\n[Solve Model](command:lp.solve)",
+            "media": { "markdown": "media/walkthrough/solve.md" },
+            "completionEvents": ["onCommand:lp.solve"]
+          },
+          {
+            "id": "lp.explain",
+            "title": "Explain a constraint",
+            "description": "Read a constraint in the model's own terms.\n[Explain Constraint](command:lp.explainConstraint)",
+            "media": { "markdown": "media/walkthrough/explain.md" },
+            "completionEvents": ["onCommand:lp.explainConstraint"]
+          },
+          {
+            "id": "lp.share",
+            "title": "Export a report or convert formats",
+            "description": "Write a Markdown report, or convert between LP and MPS.\n[Export Model Report](command:lp.exportReport)",
+            "media": { "markdown": "media/walkthrough/share.md" },
+            "completionEvents": ["onCommand:lp.exportReport", "onCommand:lp.convertToMps", "onCommand:lp.convertFromMps"]
+          }
+        ]
+      }
+    ],
     "configuration": {
       "title": "LP",
       "properties": {

@@ -12,8 +12,11 @@ import {
 import { publishCapabilities } from './commands';
 import { LpRequest, parseLpCapabilities } from './pure/capabilities';
 import { chooseServer, RESTRICTED_NO_SERVER, ServerChoice } from './pure/serverPath';
+import { CONVERT_FROM_MPS } from './pure/mps';
 import { createModelClient } from './modelClient';
+import { activeMpsArgs, openConvertedLp } from './mps';
 import { ModelViews, registerModelViews } from './modelViews';
+import { registerReport } from './report';
 import { LpStatusBar } from './statusBar';
 import { setClientProvider } from './views/lpClient';
 import { registerViews } from './views';
@@ -53,6 +56,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<LpExte
   modelViews = registerModelViews(context, createModelClient(() => client), statusBar, (message) => outputChannel?.appendLine(message));
   setClientProvider(() => client);
   registerViews(context);
+  registerReport(context, createModelClient(() => client), (message) => outputChannel?.appendLine(message));
 
   context.subscriptions.push(
     vscode.commands.registerCommand('lp.restartServer', restartServer),
@@ -131,13 +135,17 @@ function createClient(): { client: LanguageClient; command: string } | undefined
       // supplies the active document when a command is run from the palette
       // and presents markdown reports.
       executeCommand: async (command, args, next) => {
-        const fullArgs = DOCUMENT_COMMANDS.has(command) && args.length === 0 ? activeDocumentArgs() : args;
+        const fullArgs =
+          args.length > 0 ? args : command === CONVERT_FROM_MPS ? activeMpsArgs() : DOCUMENT_COMMANDS.has(command) ? activeDocumentArgs() : args;
         if (fullArgs === undefined) {
           return undefined;
         }
         const result: unknown = await next(command, fullArgs);
         if (REPORT_COMMANDS.has(command)) {
           await showMarkdownReport(result);
+        }
+        if (command === CONVERT_FROM_MPS) {
+          await openConvertedLp(result, (message) => outputChannel?.appendLine(message));
         }
         return result;
       },

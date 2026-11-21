@@ -6,6 +6,7 @@ import type { PanelEvent } from '../../views/panel';
 
 const EXTENSION_ID = 'dandxy89.lp-lsp';
 const FIXTURE = path.resolve(__dirname, '..', '..', '..', 'test-fixtures', 'workspace', 'model.lp');
+const MPS_FIXTURE = path.resolve(__dirname, '..', '..', '..', 'test-fixtures', 'workspace', 'model.mps');
 
 async function waitFor<T>(what: string, probe: () => Promise<T | undefined> | T | undefined, timeoutMs = 20_000): Promise<T> {
   const deadline = Date.now() + timeoutMs;
@@ -58,6 +59,8 @@ suite('LP extension host', () => {
       'lp.findSimilarConstraints',
       'lp.explainEntity',
       'lp.restartServer',
+      'lp.convertFromMps',
+      'lp.exportReport',
     ];
     const registered = new Set(await vscode.commands.getCommands(true));
     const missing = wanted.filter((id) => !registered.has(id));
@@ -164,5 +167,16 @@ suite('LP extension host', () => {
     await vscode.commands.executeCommand('lp.explainConstraint', editor.document.uri.toString(), { line: 3, character: 1 });
     // The panel from the earlier test is reused, so only the data is posted again.
     await waitFor('explain data', () => events.find((e) => e.view === 'explain' && e.direction === 'out' && e.type === 'data'));
+  });
+
+  test('converting an MPS file opens the LP text', async () => {
+    const mps = await vscode.workspace.openTextDocument(MPS_FIXTURE);
+    await vscode.window.showTextDocument(mps);
+    assert.strictEqual(mps.languageId, 'mps');
+    await vscode.commands.executeCommand('lp.convertFromMps');
+    await waitFor('the converted LP editor', () => {
+      const active = vscode.window.activeTextEditor;
+      return active?.document.languageId === 'lp' && active.document.getText().includes('obj: x') ? active : undefined;
+    });
   });
 });
