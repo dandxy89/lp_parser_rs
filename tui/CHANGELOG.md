@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.2.0](https://github.com/dandxy89/lp_parser_rs/compare/lp_diff-v4.1.2...lp_diff-v4.2.0) (2026-11-21)
+
+
+### Features
+
+* model diagnostics, lp-highs solver and VS Code model tooling ([#239](https://github.com/dandxy89/lp_parser_rs/issues/239)) ([31f9ef3](https://github.com/dandxy89/lp_parser_rs/commit/31f9ef3c0218d3b8f655e6dc908cad2191a21059))
+
 ## [4.1.2](https://github.com/dandxy89/lp_parser_rs/compare/lp_diff-v4.1.1...lp_diff-v4.1.2) (2026-11-13)
 
 

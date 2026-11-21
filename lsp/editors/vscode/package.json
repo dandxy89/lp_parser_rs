@@ -2,7 +2,7 @@
   "name": "lp-lsp",
   "displayName": "LP & MPS Language Server",
   "description": "Language support for LP (linear programming) files, powered by the lp-lsp language server.",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "publisher": "dandxy89",
   "icon": "images/icon.png",
   "license": "MIT OR Apache-2.0",
@@ -39,7 +39,10 @@
     "untrustedWorkspaces": {
       "supported": "limited",
       "description": "In Restricted Mode only the language server and solver helper bundled with the extension run; `lp.server.path`, `lp.solver.path` and `PATH` are not used.",
-      "restrictedConfigurations": ["lp.server.path", "lp.solver.path"]
+      "restrictedConfigurations": [
+        "lp.server.path",
+        "lp.solver.path"
+      ]
     }
   },
   "contributes": {
@@ -379,43 +382,69 @@
             "id": "lp.open",
             "title": "Open or create an LP file",
             "description": "Open a .lp file, or start a new one.\n[New LP File](command:workbench.action.files.newUntitledFile?%7B%22languageId%22%3A%22lp%22%7D)",
-            "media": { "markdown": "media/walkthrough/open.md" },
-            "completionEvents": ["onLanguage:lp"]
+            "media": {
+              "markdown": "media/walkthrough/open.md"
+            },
+            "completionEvents": [
+              "onLanguage:lp"
+            ]
           },
           {
             "id": "lp.explorer",
             "title": "Browse the model",
             "description": "See objectives, constraints and variables at a glance.\n[Show Model Explorer](command:lp.showModelExplorer)",
-            "media": { "markdown": "media/walkthrough/explorer.md" },
-            "completionEvents": ["onView:lp.modelExplorer"]
+            "media": {
+              "markdown": "media/walkthrough/explorer.md"
+            },
+            "completionEvents": [
+              "onView:lp.modelExplorer"
+            ]
           },
           {
             "id": "lp.analysis",
             "title": "Review the diagnostics",
             "description": "Findings are grouped by category and code.\n[Open Analysis](command:lp.analysis.focus)",
-            "media": { "markdown": "media/walkthrough/analysis.md" },
-            "completionEvents": ["onView:lp.analysis"]
+            "media": {
+              "markdown": "media/walkthrough/analysis.md"
+            },
+            "completionEvents": [
+              "onView:lp.analysis"
+            ]
           },
           {
             "id": "lp.solve",
             "title": "Solve with HiGHS",
             "description": "Solve the model and see values inline.\n[Solve Model](command:lp.solve)",
-            "media": { "markdown": "media/walkthrough/solve.md" },
-            "completionEvents": ["onCommand:lp.solve"]
+            "media": {
+              "markdown": "media/walkthrough/solve.md"
+            },
+            "completionEvents": [
+              "onCommand:lp.solve"
+            ]
           },
           {
             "id": "lp.explain",
             "title": "Explain a constraint",
             "description": "Read a constraint in the model's own terms.\n[Explain Constraint](command:lp.explainConstraint)",
-            "media": { "markdown": "media/walkthrough/explain.md" },
-            "completionEvents": ["onCommand:lp.explainConstraint"]
+            "media": {
+              "markdown": "media/walkthrough/explain.md"
+            },
+            "completionEvents": [
+              "onCommand:lp.explainConstraint"
+            ]
           },
           {
             "id": "lp.share",
             "title": "Export a report or convert formats",
             "description": "Write a Markdown report, or convert between LP and MPS.\n[Export Model Report](command:lp.exportReport)",
-            "media": { "markdown": "media/walkthrough/share.md" },
-            "completionEvents": ["onCommand:lp.exportReport", "onCommand:lp.convertToMps", "onCommand:lp.convertFromMps"]
+            "media": {
+              "markdown": "media/walkthrough/share.md"
+            },
+            "completionEvents": [
+              "onCommand:lp.exportReport",
+              "onCommand:lp.convertToMps",
+              "onCommand:lp.convertFromMps"
+            ]
           }
         ]
       }
@@ -451,7 +480,7 @@
         },
         "lp.analysis.smallCoefficientThreshold": {
           "type": "number",
-          "default": 1e-09,
+          "default": 1e-9,
           "description": "Non-zero coefficients below this magnitude are flagged."
         },
         "lp.analysis.largeRhsThreshold": {
@@ -509,184 +538,436 @@
           "properties": {
             "invalid-bounds": {
               "type": "string",
-              "enum": ["error", "warning", "information", "hint", "off"]
+              "enum": [
+                "error",
+                "warning",
+                "information",
+                "hint",
+                "off"
+              ]
             },
             "negative-upper-default-lower": {
               "type": "string",
-              "enum": ["error", "warning", "information", "hint", "off"]
+              "enum": [
+                "error",
+                "warning",
+                "information",
+                "hint",
+                "off"
+              ]
             },
             "integer-no-feasible-values": {
               "type": "string",
-              "enum": ["error", "warning", "information", "hint", "off"]
+              "enum": [
+                "error",
+                "warning",
+                "information",
+                "hint",
+                "off"
+              ]
             },
             "integer-fractional-bound": {
               "type": "string",
-              "enum": ["error", "warning", "information", "hint", "off"]
+              "enum": [
+                "error",
+                "warning",
+                "information",
+                "hint",
+                "off"
+              ]
             },
             "semi-integer-only-zero": {
               "type": "string",
-              "enum": ["error", "warning", "information", "hint", "off"]
+              "enum": [
+                "error",
+                "warning",
+                "information",
+                "hint",
+                "off"
+              ]
             },
             "binary-bound-outside-unit": {
               "type": "string",
-              "enum": ["error", "warning", "information", "hint", "off"]
+              "enum": [
+                "error",
+                "warning",
+                "information",
+                "hint",
+                "off"
+              ]
             },
             "binary-redundant-bounds": {
               "type": "string",
-              "enum": ["error", "warning", "information", "hint", "off"]
+              "enum": [
+                "error",
+                "warning",
+                "information",
+                "hint",
+                "off"
+              ]
             },
             "integer-is-binary": {
               "type": "string",
-              "enum": ["error", "warning", "information", "hint", "off"]
+              "enum": [
+                "error",
+                "warning",
+                "information",
+                "hint",
+                "off"
+              ]
             },
             "semicontinuous-infinite-upper": {
               "type": "string",
-              "enum": ["error", "warning", "information", "hint", "off"]
+              "enum": [
+                "error",
+                "warning",
+                "information",
+                "hint",
+                "off"
+              ]
             },
             "fixed-variable": {
               "type": "string",
-              "enum": ["error", "warning", "information", "hint", "off"]
+              "enum": [
+                "error",
+                "warning",
+                "information",
+                "hint",
+                "off"
+              ]
             },
             "unused-variable": {
               "type": "string",
-              "enum": ["error", "warning", "information", "hint", "off"]
+              "enum": [
+                "error",
+                "warning",
+                "information",
+                "hint",
+                "off"
+              ]
             },
             "objective-only-variable": {
               "type": "string",
-              "enum": ["error", "warning", "information", "hint", "off"]
+              "enum": [
+                "error",
+                "warning",
+                "information",
+                "hint",
+                "off"
+              ]
             },
             "no-effective-bound": {
               "type": "string",
-              "enum": ["error", "warning", "information", "hint", "off"]
+              "enum": [
+                "error",
+                "warning",
+                "information",
+                "hint",
+                "off"
+              ]
             },
             "nonconvex-objective": {
               "type": "string",
-              "enum": ["error", "warning", "information", "hint", "off"]
+              "enum": [
+                "error",
+                "warning",
+                "information",
+                "hint",
+                "off"
+              ]
             },
             "empty-objective": {
               "type": "string",
-              "enum": ["error", "warning", "information", "hint", "off"]
+              "enum": [
+                "error",
+                "warning",
+                "information",
+                "hint",
+                "off"
+              ]
             },
             "duplicate-objective": {
               "type": "string",
-              "enum": ["error", "warning", "information", "hint", "off"]
+              "enum": [
+                "error",
+                "warning",
+                "information",
+                "hint",
+                "off"
+              ]
             },
             "opposed-objectives": {
               "type": "string",
-              "enum": ["error", "warning", "information", "hint", "off"]
+              "enum": [
+                "error",
+                "warning",
+                "information",
+                "hint",
+                "off"
+              ]
             },
             "empty-row-infeasible": {
               "type": "string",
-              "enum": ["error", "warning", "information", "hint", "off"]
+              "enum": [
+                "error",
+                "warning",
+                "information",
+                "hint",
+                "off"
+              ]
             },
             "empty-row": {
               "type": "string",
-              "enum": ["error", "warning", "information", "hint", "off"]
+              "enum": [
+                "error",
+                "warning",
+                "information",
+                "hint",
+                "off"
+              ]
             },
             "explicit-zero-coefficient": {
               "type": "string",
-              "enum": ["error", "warning", "information", "hint", "off"]
+              "enum": [
+                "error",
+                "warning",
+                "information",
+                "hint",
+                "off"
+              ]
             },
             "repeated-variable-in-row": {
               "type": "string",
-              "enum": ["error", "warning", "information", "hint", "off"]
+              "enum": [
+                "error",
+                "warning",
+                "information",
+                "hint",
+                "off"
+              ]
             },
             "singleton-row": {
               "type": "string",
-              "enum": ["error", "warning", "information", "hint", "off"]
+              "enum": [
+                "error",
+                "warning",
+                "information",
+                "hint",
+                "off"
+              ]
             },
             "row-infeasible-by-bounds": {
               "type": "string",
-              "enum": ["error", "warning", "information", "hint", "off"]
+              "enum": [
+                "error",
+                "warning",
+                "information",
+                "hint",
+                "off"
+              ]
             },
             "row-redundant-by-bounds": {
               "type": "string",
-              "enum": ["error", "warning", "information", "hint", "off"]
+              "enum": [
+                "error",
+                "warning",
+                "information",
+                "hint",
+                "off"
+              ]
             },
             "duplicate-row": {
               "type": "string",
-              "enum": ["error", "warning", "information", "hint", "off"]
+              "enum": [
+                "error",
+                "warning",
+                "information",
+                "hint",
+                "off"
+              ]
             },
             "proportional-row": {
               "type": "string",
-              "enum": ["error", "warning", "information", "hint", "off"]
+              "enum": [
+                "error",
+                "warning",
+                "information",
+                "hint",
+                "off"
+              ]
             },
             "dominated-row": {
               "type": "string",
-              "enum": ["error", "warning", "information", "hint", "off"]
+              "enum": [
+                "error",
+                "warning",
+                "information",
+                "hint",
+                "off"
+              ]
             },
             "contradictory-rows": {
               "type": "string",
-              "enum": ["error", "warning", "information", "hint", "off"]
+              "enum": [
+                "error",
+                "warning",
+                "information",
+                "hint",
+                "off"
+              ]
             },
             "rows-form-range": {
               "type": "string",
-              "enum": ["error", "warning", "information", "hint", "off"]
+              "enum": [
+                "error",
+                "warning",
+                "information",
+                "hint",
+                "off"
+              ]
             },
             "equalities-exceed-variables": {
               "type": "string",
-              "enum": ["error", "warning", "information", "hint", "off"]
+              "enum": [
+                "error",
+                "warning",
+                "information",
+                "hint",
+                "off"
+              ]
             },
             "large-coefficient": {
               "type": "string",
-              "enum": ["error", "warning", "information", "hint", "off"]
+              "enum": [
+                "error",
+                "warning",
+                "information",
+                "hint",
+                "off"
+              ]
             },
             "small-coefficient": {
               "type": "string",
-              "enum": ["error", "warning", "information", "hint", "off"]
+              "enum": [
+                "error",
+                "warning",
+                "information",
+                "hint",
+                "off"
+              ]
             },
             "large-rhs": {
               "type": "string",
-              "enum": ["error", "warning", "information", "hint", "off"]
+              "enum": [
+                "error",
+                "warning",
+                "information",
+                "hint",
+                "off"
+              ]
             },
             "row-coefficient-range": {
               "type": "string",
-              "enum": ["error", "warning", "information", "hint", "off"]
+              "enum": [
+                "error",
+                "warning",
+                "information",
+                "hint",
+                "off"
+              ]
             },
             "column-coefficient-range": {
               "type": "string",
-              "enum": ["error", "warning", "information", "hint", "off"]
+              "enum": [
+                "error",
+                "warning",
+                "information",
+                "hint",
+                "off"
+              ]
             },
             "objective-coefficient-range": {
               "type": "string",
-              "enum": ["error", "warning", "information", "hint", "off"]
+              "enum": [
+                "error",
+                "warning",
+                "information",
+                "hint",
+                "off"
+              ]
             },
             "coefficient-range": {
               "type": "string",
-              "enum": ["error", "warning", "information", "hint", "off"]
+              "enum": [
+                "error",
+                "warning",
+                "information",
+                "hint",
+                "off"
+              ]
             },
             "rhs-coefficient-ratio": {
               "type": "string",
-              "enum": ["error", "warning", "information", "hint", "off"]
+              "enum": [
+                "error",
+                "warning",
+                "information",
+                "hint",
+                "off"
+              ]
             },
             "indicator-not-binary": {
               "type": "string",
-              "enum": ["error", "warning", "information", "hint", "off"]
+              "enum": [
+                "error",
+                "warning",
+                "information",
+                "hint",
+                "off"
+              ]
             },
             "sos-duplicate-weights": {
               "type": "string",
-              "enum": ["error", "warning", "information", "hint", "off"]
+              "enum": [
+                "error",
+                "warning",
+                "information",
+                "hint",
+                "off"
+              ]
             },
             "sos-trivial": {
               "type": "string",
-              "enum": ["error", "warning", "information", "hint", "off"]
+              "enum": [
+                "error",
+                "warning",
+                "information",
+                "hint",
+                "off"
+              ]
             },
             "diagnostics-truncated": {
               "type": "string",
-              "enum": ["error", "warning", "information", "hint", "off"]
+              "enum": [
+                "error",
+                "warning",
+                "information",
+                "hint",
+                "off"
+              ]
             }
           },
           "markdownDescription": "Severity per model diagnostic code, or `off` to hide it. An entry other than `off` also overrides `lp.analysis.heuristics` and `lp.analysis.categories` for that code."
         },
         "lp.analysis.feasibilityTolerance": {
           "type": "number",
-          "default": 1e-06,
+          "default": 0.000001,
           "minimum": 0,
           "description": "Slack before a bound or row violation is reported as proven."
         },
         "lp.analysis.equalityTolerance": {
           "type": "number",
-          "default": 1e-09,
+          "default": 1e-9,
           "minimum": 0,
           "description": "Relative tolerance for two normalised coefficients to count as equal."
         },
