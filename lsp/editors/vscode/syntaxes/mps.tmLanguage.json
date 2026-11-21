@@ -1,0 +1,83 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "MPS",
+  "scopeName": "source.mps",
+  "patterns": [
+    { "include": "#comment" },
+    { "include": "#name" },
+    { "include": "#rows" },
+    { "include": "#bounds" },
+    { "include": "#section" },
+    { "include": "#marker" },
+    { "include": "#sense" },
+    { "include": "#sos" },
+    { "include": "#infinity" },
+    { "include": "#number" }
+  ],
+  "repository": {
+    "comment": {
+      "name": "comment.line.asterisk.mps",
+      "match": "^\\*.*$"
+    },
+    "name": {
+      "match": "^(NAME)\\b(.*)$",
+      "captures": {
+        "1": { "name": "keyword.control.section.mps" },
+        "2": { "name": "entity.name.section.mps" }
+      }
+    },
+    "section": {
+      "name": "keyword.control.section.mps",
+      "match": "^(NAME|ROWS|COLUMNS|RHS|RANGES|BOUNDS|SOS|ENDATA|OBJSENSE|OBJNAME|QUADOBJ|QMATRIX|QSECTION|QCMATRIX|INDICATORS|LAZYCONS|USERCUTS)\\b"
+    },
+    "rows": {
+      "begin": "^ROWS\\b",
+      "beginCaptures": { "0": { "name": "keyword.control.section.mps" } },
+      "end": "(?=^\\S)",
+      "patterns": [
+        { "include": "#comment" },
+        {
+          "match": "^\\s+([NELG])\\s+(\\S+)",
+          "captures": {
+            "1": { "name": "storage.type.row.mps" },
+            "2": { "name": "entity.name.function.row.mps" }
+          }
+        }
+      ]
+    },
+    "bounds": {
+      "begin": "^BOUNDS\\b",
+      "beginCaptures": { "0": { "name": "keyword.control.section.mps" } },
+      "end": "(?=^\\S)",
+      "patterns": [
+        { "include": "#comment" },
+        {
+          "match": "^\\s+(UP|LO|FX|FR|MI|PL|BV|LI|UI|SC|SI)\\b",
+          "captures": { "1": { "name": "storage.modifier.bound.mps" } }
+        },
+        { "include": "#infinity" },
+        { "include": "#number" }
+      ]
+    },
+    "sense": {
+      "name": "constant.language.mps",
+      "match": "\\b(MAX|MIN|MAXIMIZE|MINIMIZE)\\b"
+    },
+    "sos": {
+      "name": "storage.type.sos.mps",
+      "match": "\\b(S1|S2)\\b"
+    },
+    "marker": {
+      "name": "keyword.other.marker.mps",
+      "match": "'(MARKER|INTORG|INTEND)'"
+    },
+    "number": {
+      "name": "constant.numeric.mps",
+      "match": "(?<![\\w.])[-+]?(\\d+\\.?\\d*|\\.\\d+)([eE][-+]?\\d+)?(?![\\w.])"
+    },
+    "infinity": {
+      "name": "constant.numeric.infinity.mps",
+      "match": "(?i)[-+]?inf(inity)?\\b"
+    }
+  }
+}

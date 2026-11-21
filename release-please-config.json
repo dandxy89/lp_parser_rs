@@ -101,6 +101,17 @@
       "draft": false,
       "prerelease": false
     },
+    "solver": {
+      "changelog-path": "CHANGELOG.md",
+      "release-type": "rust",
+      "component": "lp-highs",
+      "path": "solver",
+      "release-as": "0.1.0",
+      "bump-minor-pre-major": false,
+      "bump-patch-for-minor-pre-major": false,
+      "draft": false,
+      "prerelease": false
+    },
     "lsp": {
       "changelog-path": "CHANGELOG.md",
       "release-type": "rust",

@@ -1,0 +1,5 @@
+---
+source: rust/tests/test_diagnostics.rs
+expression: text
+---
+[WARNING] no-effective-bound: Variable 'x' can be decreased without limit and improves the objective each time, so the objective is unbounded if the model is feasible

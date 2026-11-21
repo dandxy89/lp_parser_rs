@@ -1441,12 +1441,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "lp-highs"
+version = "0.1.0"
+dependencies = [
+ "highs",
+ "highs-sys",
+ "lp_parser_rs",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "lp-lsp"
 version = "1.0.2"
 dependencies = [
  "criterion",
  "futures",
  "insta",
+ "lp-highs",
  "lp_parser_rs",
  "ls-types",
  "proptest",
@@ -1473,7 +1485,7 @@ dependencies = [
 
 [[package]]
 name = "lp_parser_rs"
-version = "5.0.4"
+version = "5.1.0"
 dependencies = [
  "clap",
  "criterion",
@@ -1485,6 +1497,7 @@ dependencies = [
  "logos",
  "lp-solvers",
  "memmap2",
+ "proptest",
  "regex",
  "rustc-hash",
  "serde",
@@ -1504,10 +1517,10 @@ dependencies = [
  "crossterm",
  "csv",
  "frizbee",
- "highs",
  "highs-sys",
  "insta",
  "libc",
+ "lp-highs",
  "lp-lsp",
  "lp_parser_rs",
  "ls-types",
@@ -3045,8 +3058,13 @@ version = "1.54.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b52fd3255258d26fac7264ab5a76b53c13367136dc011d3d6ad4f8ed070396a3"
 dependencies = [
+ "bytes",
+ "libc",
+ "mio",
  "pin-project-lite",
+ "signal-hook-registry",
  "tokio-macros",
+ "windows-sys",
 ]
 
 [[package]]
@@ -3202,9 +3220,9 @@ checksum = "d0af592be68c579aa78a16846bd19422978c3c52e438523d45ff5d1bff1f9d4a"
 
 [[package]]
 name = "tree-sitter-lp"
-version = "0.1.1"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2280f21a79097c7774e42c8c806a924b906c4ef174f996cd91c5acbd90a76383"
+checksum = "14f63b59a4b5c3c415af694c6339f71e7852006516faae73e40023fb8f4c0862"
 dependencies = [
  "cc",
  "tree-sitter-language",

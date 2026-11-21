@@ -1,0 +1,45 @@
+---
+source: lsp/tests/diagnostics.rs
+expression: rendered
+---
+5:28-5:29 warning large-coefficient `x`
+  | Coefficient 1.0000e12 of 'x' in constraint 'capacity_42' is large
+  | Very large or tiny coefficients lose precision. Rescale the variable or the row.
+  data {"category":"numerical","certainty":"heuristic"}
+6:24-6:25 warning small-coefficient `y`
+  | Coefficient 1.0000e-12 of 'y' in constraint 'c2' is small
+  | Very large or tiny coefficients lose precision. Rescale the variable or the row.
+  data {"category":"numerical","certainty":"heuristic"}
+7:1-7:3 warning large-rhs `c3`
+  | Constraint 'c3' has a large right-hand side (1.0000e13)
+  | A huge right-hand side loses precision. Rescale the row or change units.
+  data {"category":"numerical","certainty":"heuristic"}
+5:1-5:12 warning row-coefficient-range `capacity_42`
+  | Constraint 'capacity_42' has coefficients spanning about 12 orders of magnitude
+  | Rescale the variables or the row so its coefficients are of similar size.
+  data {"category":"numerical","certainty":"heuristic"}
+6:1-6:3 warning row-coefficient-range `c2`
+  | Constraint 'c2' has coefficients spanning about 12 orders of magnitude
+  | Rescale the variables or the row so its coefficients are of similar size.
+  data {"category":"numerical","certainty":"heuristic"}
+3:6-3:7 warning column-coefficient-range `x`
+  | Variable 'x' has coefficients spanning about 12 orders of magnitude across the constraints
+  | Rescale the variable so its coefficients are of similar size.
+  data {"category":"numerical","certainty":"heuristic"}
+3:10-3:11 warning column-coefficient-range `y`
+  | Variable 'y' has coefficients spanning about 12 orders of magnitude across the constraints
+  | Rescale the variable so its coefficients are of similar size.
+  data {"category":"numerical","certainty":"heuristic"}
+5:1-5:12 information dominated-row tags=1 `capacity_42`
+  | Constraint 'capacity_42' is implied by constraint 'c2' and is redundant
+  | The other row is at least as tight on the same terms; remove this one.
+  = 6:1 `c2`: the tighter row
+  data {"category":"mathematical","certainty":"proven"}
+2:0-2:8 hint coefficient-range `Minimize`
+  | Coefficients across the model span about 24 orders of magnitude
+  | Rescale the model; the per-row, per-column and per-objective diagnostics show where.
+  data {"category":"numerical","certainty":"heuristic"}
+7:1-7:3 hint rhs-coefficient-ratio `c3`
+  | Constraint 'c3' has a right-hand side 1.0000e13 times its largest coefficient
+  | A right-hand side far larger than the coefficients suggests a unit mismatch.
+  data {"category":"numerical","certainty":"heuristic"}

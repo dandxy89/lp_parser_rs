@@ -8,13 +8,16 @@
 #![allow(clippy::struct_excessive_bools, clippy::unused_async, clippy::unused_async_trait_impl)]
 
 pub mod config;
+pub mod description;
 pub mod document;
 pub mod features;
 pub mod index;
 pub mod position;
+pub mod requests;
 pub mod semantic;
 #[cfg(feature = "server")]
 pub mod server;
+pub mod solution;
 pub mod syntax;
 pub mod workspace;
 
@@ -23,4 +26,4 @@ pub use document::Document;
 pub use index::SymbolIndex;
 pub use position::{Encoding, LineIndex};
 #[cfg(feature = "server")]
-pub use server::Backend;
+pub use server::{Backend, service};

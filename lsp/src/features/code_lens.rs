@@ -1,4 +1,5 @@
-//! Code lenses: variable counts on labels, usage counts on variable definitions.
+//! Code lenses: variable counts on labels, usage counts on variable definitions
+//! and, when enabled, Solve and Explain actions.
 //!
 //! Usage lenses are resolved lazily: `textDocument/codeLens` returns only
 //! their range and the variable name, and `codeLens/resolve` fills in the
@@ -18,20 +19,43 @@ use crate::index::EntityKind;
 /// the position and the reference locations.
 pub const SHOW_REFERENCES: &str = "lp.showReferences";
 
+/// Client-side command the Solve lens runs: the argument is the document URI.
+pub const SOLVE: &str = "lp.solve";
+
+/// Client-side command the Explain lens runs: arguments are the document URI
+/// and the position of the constraint's label.
+pub const EXPLAIN_CONSTRAINT: &str = "lp.explainConstraint";
+
+/// What to add besides the count and usage lenses.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Actions {
+    /// Explain on each labelled constraint.
+    pub explain: bool,
+    /// Solve on the first objective.
+    pub solve: bool,
+}
+
 /// Lenses for `doc`. Usage lenses are unresolved (see [`resolve`]).
+///
+/// # Panics
+/// Never in practice: serialising `Position` to JSON cannot fail.
 #[must_use]
-pub fn lenses(doc: &Document) -> Vec<CodeLens> {
+pub fn lenses(doc: &Document, actions: Actions) -> Vec<CodeLens> {
     let index = doc.index();
 
     // Distinct variables per entity, in one pass over the occurrences.
     // `Variable::entities` is deduplicated: an entity's occurrences of one
     // variable are contiguous because entities are disjoint and in order.
     let mut variable_counts = vec![0usize; index.entities.len()];
-    // Each lens's range and source (variable `i`, or entity `i - variables`),
-    // sorted by start with ties in source order before any lens is built, so
-    // the sort moves small keys rather than whole lenses.
+    // Each lens's range, rank and source (variable `i`, entity `i - variables`,
+    // or action `i - variables - entities`), sorted by start with ties actions
+    // first, then in source order, before any lens is built, so the sort moves
+    // small keys rather than whole lenses.
     let variables = index.variables.len();
-    let mut anchors: Vec<(Range, usize)> = Vec::with_capacity(variables + index.entities.len());
+    let entities = index.entities.len();
+    let mut anchors: Vec<(Range, u8, usize)> = Vec::with_capacity(variables + entities);
+    let mut commands: Vec<Command> = Vec::new();
+    let uri = doc.uri.as_str();
     for (i, variable) in index.variables.iter().enumerate() {
         let mut previous = None;
         for entity in variable.occurrences.iter().filter_map(|o| o.entity) {
@@ -40,24 +64,44 @@ pub fn lenses(doc: &Document) -> Vec<CodeLens> {
                 previous = Some(entity);
             }
         }
-        anchors.push((doc.range(variable.definition().range.clone()), i));
+        anchors.push((doc.range(variable.definition().range.clone()), 1, i));
     }
     for (i, entity) in index.entities.iter().enumerate() {
         let anchor = entity.name_range.clone().unwrap_or(entity.range.start..entity.range.start);
-        anchors.push((doc.range(anchor), variables + i));
+        anchors.push((doc.range(anchor), 1, variables + i));
     }
-    anchors.sort_unstable_by_key(|(range, i)| (range.start.line, range.start.character, *i));
+    let mut solve_pending = actions.solve;
+    for entity in &index.entities {
+        let (command, anchor) = match entity.kind {
+            EntityKind::Objective if solve_pending => {
+                solve_pending = false;
+                let anchor = entity.name_range.clone().unwrap_or(entity.range.start..entity.range.start);
+                (Command::new("Solve".to_owned(), SOLVE.to_owned(), Some(vec![json!(uri)])), anchor)
+            }
+            EntityKind::Constraint if actions.explain => {
+                let Some(anchor) = entity.name_range.clone() else { continue };
+                debug_assert!(entity.range.start <= anchor.start && anchor.end <= entity.range.end, "label inside its constraint");
+                // Plain data type: serialisation cannot fail.
+                let position = serde_json::to_value(doc.position(anchor.start)).expect("Position serialises");
+                (Command::new("Explain".to_owned(), EXPLAIN_CONSTRAINT.to_owned(), Some(vec![json!(uri), position])), anchor)
+            }
+            _ => continue,
+        };
+        anchors.push((doc.range(anchor), 0, variables + entities + commands.len()));
+        commands.push(command);
+    }
+    anchors.sort_unstable_by_key(|(range, rank, i)| (range.start.line, range.start.character, *rank, *i));
 
-    let uri = doc.uri.as_str();
     anchors
         .into_iter()
-        .map(|(range, i)| match index.variables.get(i) {
+        .map(|(range, _, i)| match index.variables.get(i) {
             Some(variable) => CodeLens { range, command: None, data: Some(json!({ "uri": uri, "variable": variable.name })) },
-            None => CodeLens {
+            None if i < variables + entities => CodeLens {
                 range,
                 command: Some(Command::new(count(variable_counts[i - variables], "{} variable"), String::new(), None)),
                 data: None,
             },
+            None => CodeLens { range, command: Some(commands[i - variables - entities].clone()), data: None },
         })
         .collect()
 }
@@ -119,7 +163,7 @@ mod tests {
     use crate::position::Encoding;
 
     fn resolved(doc: &Document) -> Vec<CodeLens> {
-        lenses(doc).into_iter().map(|l| resolve(doc, l).unwrap()).collect()
+        lenses(doc, Actions::default()).into_iter().map(|l| resolve(doc, l).unwrap()).collect()
     }
 
     fn titles(text: &str) -> Vec<(u32, String)> {
@@ -159,13 +203,63 @@ mod tests {
     fn usage_lenses_defer_locations_to_resolve() {
         let text = "min\n obj: x\nst\n c1: x >= 1\nBounds\n x <= 1\nEnd\n";
         let doc = Document::new("file:///t.lp".parse().unwrap(), text.to_owned(), 0, Encoding::Utf16);
-        let lens = lenses(&doc).into_iter().find(|l| l.range.start.line == 5).unwrap();
+        let lens = lenses(&doc, Actions::default()).into_iter().find(|l| l.range.start.line == 5).unwrap();
         assert!(lens.command.is_none(), "usage lens is unresolved");
         assert_eq!(uri(&lens), Ok("file:///t.lp"));
 
         // Resolved against a newer version where the variable is gone.
         let edited = Document::new(doc.uri.clone(), "min\n obj: y\nEnd\n".to_owned(), 1, Encoding::Utf16);
         assert!(resolve(&edited, lens).unwrap_err().contains("`x`"));
+    }
+
+    fn doc(text: &str) -> Document {
+        Document::new("file:///t.lp".parse().unwrap(), text.to_owned(), 0, Encoding::Utf16)
+    }
+
+    fn action_titles(doc: &Document, actions: Actions) -> Vec<(u32, String)> {
+        lenses(doc, actions).into_iter().filter_map(|l| l.command.map(|c| (l.range.start.line, c.title))).collect()
+    }
+
+    #[test]
+    fn action_lenses_solve_the_first_objective_and_explain_named_constraints() {
+        let doc = doc("min\n obj: x + y\nst\n c1: x + y >= 1\n c2: x >= 0\nEnd\n");
+        let lenses = lenses(&doc, Actions { explain: true, solve: true });
+        let at = |line: u32| -> Vec<&CodeLens> { lenses.iter().filter(|l| l.command.is_some() && l.range.start.line == line).collect() };
+        let command = |lens: &CodeLens| lens.command.clone().unwrap();
+
+        let [solve, count] = at(1)[..] else { panic!("Solve and count on line 1") };
+        assert_eq!((command(solve).command.as_str(), command(solve).title.as_str()), (SOLVE, "Solve"));
+        assert_eq!(command(solve).arguments, Some(vec![json!("file:///t.lp")]));
+        assert_eq!(command(count).title, "2 variables");
+
+        for (line, explain_at) in [(3, 3), (4, 4)] {
+            let [explain, count] = at(line)[..] else { panic!("Explain and count on line {line}") };
+            assert_eq!(command(explain).command, EXPLAIN_CONSTRAINT);
+            assert_eq!(command(explain).title, "Explain");
+            assert_eq!(command(explain).arguments, Some(vec![json!("file:///t.lp"), json!({ "line": explain_at, "character": 1 })]));
+            assert!(command(count).title.ends_with("variable") || command(count).title.ends_with("variables"));
+        }
+    }
+
+    #[test]
+    fn no_action_lenses_by_default() {
+        let doc = doc("min\n obj: x\nst\n c1: x >= 1\nEnd\n");
+        let titles = action_titles(&doc, Actions::default());
+        assert_eq!(titles, [(1, "1 variable".to_owned()), (3, "1 variable".to_owned())]);
+    }
+
+    #[test]
+    fn no_solve_lens_without_solver_and_no_explain_on_unnamed_or_special_rows() {
+        let named = doc("min\n obj: x\nst\n c1: x >= 1\nEnd\n");
+        assert!(!action_titles(&named, Actions { explain: true, solve: false }).iter().any(|(_, t)| t == "Solve"));
+
+        let other = doc("min\n obj: x + y\nst\n x + y >= 1\nSOS\n s1: S1:: x:1 y:2\nEnd\n");
+        let titles = action_titles(&other, Actions { explain: true, solve: false });
+        assert!(!titles.iter().any(|(_, t)| t == "Explain" || t == "Solve"), "{titles:?}");
+
+        let general = doc("min\n obj: x\nst\n g1: y = abs(x)\nEnd\n");
+        let titles = action_titles(&general, Actions { explain: true, solve: true });
+        assert_eq!(titles.iter().filter(|(_, t)| t == "Explain").count(), 0, "{titles:?}");
     }
 
     #[test]

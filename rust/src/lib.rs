@@ -87,6 +87,7 @@ pub mod writer;
 
 // Crate-root re-exports of the primary public API, so downstream users do not
 // need deep module paths for the most common types and entry points.
+pub use analysis::{DiagnosticCode, DiagnosticsConfig, ModelDiagnostic, ModelDiagnostics};
 pub use builder::ProblemBuilder;
 #[cfg(feature = "diff")]
 pub use diff::{DiffOptions, DiffTol, LpDiff, Normaliser};

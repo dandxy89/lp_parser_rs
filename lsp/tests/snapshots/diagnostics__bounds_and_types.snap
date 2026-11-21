@@ -1,0 +1,23 @@
+---
+source: lsp/tests/diagnostics.rs
+expression: rendered
+---
+10:1-10:7 warning conflicting-bounds `d <= 2`
+  | `d` has lower bound 4 above upper bound 2
+  = 9:1 `d >= 4`: also bounded here
+8:8-8:9 error integer-no-feasible-values `c`
+  | Integer variable 'c' has no integer between its bounds 0.2 and 0.8
+  | The model is infeasible. Widen the bounds so they contain an integer.
+  data {"category":"mathematical","certainty":"proven"}
+7:1-7:2 warning binary-bound-outside-unit `b`
+  | Binary variable 'b' has a declared bound outside [0, 1]; it is clamped to [0, 1]
+  | A binary variable always lies in [0, 1]. Remove the bound or declare the variable as an integer.
+  data {"category":"mathematical","certainty":"proven"}
+3:6-3:7 warning semicontinuous-infinite-upper `a`
+  | Semi-continuous variable 'a' has no finite upper bound
+  | HiGHS and CPLEX reject a semi-continuous variable without an upper bound. Declare one.
+  data {"category":"mathematical","certainty":"proven"}
+11:1-11:2 information integer-fractional-bound `e`
+  | Integer variable 'e': upper bound 3.5 acts as 3
+  | An integer variable can never sit on a fractional bound. Write the rounded bound to say what you mean.
+  data {"category":"mathematical","certainty":"proven"}

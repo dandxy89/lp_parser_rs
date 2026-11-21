@@ -1,0 +1,10 @@
+---
+source: rust/tests/test_diagnostics.rs
+expression: text
+---
+[INFO] integer-fractional-bound: Integer variable 'V4': lower bound 5.5 acts as 6
+[INFO] binary-redundant-bounds: Binary variable 'V8' declares bounds that its type already implies
+[INFO] unused-variable: Variable 'V8' is declared but appears in no objective or constraint
+[INFO] singleton-row: Constraint 'CON1' has one term and is really the bound V1 >= 0
+[INFO] singleton-row: Constraint 'CON2' has one term and is really the bound V2 >= 2
+[INFO] singleton-row: Constraint 'CON3' has one term and is really the bound V3 <= 2.5

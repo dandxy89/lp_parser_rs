@@ -1,0 +1,5 @@
+---
+source: rust/tests/test_diagnostics.rs
+expression: text
+---
+[INFO] row-redundant-by-bounds: Constraint 'Steel_Flow_Conservation_in_Node_Pittsburgh' always holds given the variable bounds

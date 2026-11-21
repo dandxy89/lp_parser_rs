@@ -1,0 +1,12 @@
+---
+source: rust/tests/test_diagnostics.rs
+expression: text
+---
+[ERROR] integer-no-feasible-values: Integer variable 'b_5829890_x1' has no integer between its bounds 10 and 1
+[WARNING] binary-bound-outside-unit: Binary variable 'b_5829890_x1' has a declared bound outside [0, 1]; it is clamped to [10, 1]
+[WARNING] semicontinuous-infinite-upper: Semi-continuous variable 'x1' has no finite upper bound
+[WARNING] semicontinuous-infinite-upper: Semi-continuous variable 'x2' has no finite upper bound
+[WARNING] semicontinuous-infinite-upper: Semi-continuous variable 'x3' has no finite upper bound
+[INFO] unused-variable: Variable 'x1' is declared but appears in no objective or constraint
+[INFO] unused-variable: Variable 'x2' is declared but appears in no objective or constraint
+[INFO] unused-variable: Variable 'x3' is declared but appears in no objective or constraint

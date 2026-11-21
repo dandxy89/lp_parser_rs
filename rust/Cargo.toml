@@ -1,6 +1,6 @@
 [package]
 name = "lp_parser_rs"
-version = "5.0.4"
+version = "5.1.0"
 edition = "2024"
 authors = ["Dan Dixey", "Dan Dixey <dan@functorml.co.uk>"]
 rust-version.workspace = true
@@ -50,6 +50,7 @@ lalrpop = { version = "0.23.1" }
 
 [dev-dependencies]
 criterion = "0.8.2"
+proptest = "1.11"
 insta = { version = "1.48.0", features = ["yaml", "redactions"] }
 serde_json = "1.0.150"
 test-case = "3.3.1"

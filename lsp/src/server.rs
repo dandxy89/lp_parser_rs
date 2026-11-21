@@ -3,8 +3,8 @@
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, PoisonError, RwLock};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, PoisonError, RwLock};
 use std::time::Duration;
 
 use serde_json::Value;
@@ -21,7 +21,13 @@ use crate::features::{
     semantic_tokens, signature, symbols,
 };
 use crate::position::Encoding;
+use crate::requests::{self, SolverSettings, SolverStatus};
+use crate::solution::{Solution, SolutionSettings};
 use crate::{semantic, workspace};
+
+mod custom;
+
+pub use custom::{SolutionChanged, SolutionChangedParams, service};
 
 /// Client capabilities the server adapts to.
 #[derive(Debug, Clone, Copy, Default)]
@@ -34,6 +40,7 @@ struct ClientCaps {
     inlay_hint_refresh: bool,
     /// `codeAction/resolve` may fill in edits.
     code_action_resolve: bool,
+    code_lens_refresh: bool,
 }
 
 /// Result id and data of the semantic tokens last sent for a document.
@@ -66,6 +73,21 @@ struct State {
     /// Bumped on every configuration change; part of workspace diagnostic
     /// result ids, since settings change the diagnostics.
     config_epoch: AtomicU64,
+    /// `lp.solver` settings.
+    solver_settings: RwLock<SolverSettings>,
+    /// `lp.solution` settings.
+    solution_settings: RwLock<SolutionSettings>,
+    /// The client's workspace is untrusted: only the helper next to this
+    /// executable may run. Unrestricted unless the client says otherwise.
+    restricted: AtomicBool,
+    /// The solver helper found at the last probe.
+    solver: RwLock<SolverStatus>,
+    /// Last solve result per document.
+    solutions: RwLock<HashMap<Uri, Arc<Solution>>>,
+    /// Running solve per document; a new solve cancels the old one.
+    solves: Mutex<HashMap<Uri, requests::Cancel>>,
+    /// Cancellation of running requests by `workDoneToken`.
+    progress_cancels: Mutex<HashMap<ProgressToken, requests::Cancel>>,
 }
 
 fn read<T>(lock: &RwLock<T>) -> std::sync::RwLockReadGuard<'_, T> {
@@ -149,6 +171,23 @@ impl Backend {
         self.client.log_message(typ, message).await;
     }
 
+    /// The stored solve result of `uri`, if any.
+    fn solution(&self, uri: &Uri) -> Option<Arc<Solution>> {
+        read(&self.state.solutions).get(&workspace::key(uri)).cloned()
+    }
+
+    /// The stored solution of `uri` when its values may be shown: fresh, or
+    /// stale with `lp.solution.showStale`. Inlay hints also need
+    /// `lp.solution.inlayHints`.
+    fn visible_solution(&self, uri: &Uri, inlay: bool) -> Option<Arc<Solution>> {
+        let settings = *read(&self.state.solution_settings);
+        if inlay && !settings.inlay_hints {
+            return None;
+        }
+        let current = read(&self.state.open).get(uri).map(|doc| doc.version);
+        self.solution(uri).filter(|s| s.is_visible(current, &settings))
+    }
+
     /// Whether `uri` is open at `version`.
     fn is_current(&self, uri: &Uri, version: i32) -> bool {
         read(&self.state.open).get(uri).is_some_and(|doc| doc.version == version)
@@ -171,7 +210,8 @@ impl Backend {
         let Some(doc) = read(&self.state.open).get(uri).cloned() else { return };
         let config = self.config();
         let version = doc.version;
-        match self.run(move || diagnostics::compute(&doc, &config)).await {
+        let solution = self.solution(uri);
+        match self.run(move || diagnostics::compute_with(&doc, &config, solution.as_deref())).await {
             Ok(diagnostics) => {
                 // A newer edit or a close may have landed meanwhile; clients do
                 // not all check the version, so never publish stale results.
@@ -219,16 +259,19 @@ impl Backend {
                 return;
             }
             let version = doc.version;
-            let analysis = config.analysis.thresholds.clone();
-            let result = tokio::task::spawn_blocking(move || semantic::run(&doc.text, version, &analysis)).await;
-            let result = match result {
-                Ok(result) => Arc::new(result),
-                Err(e) => {
-                    this.log(MessageType::ERROR, format!("semantic pass failed for {}: {e}", uri.as_str())).await;
-                    return;
-                }
-            };
-            {
+            let analysis = config.analysis.diagnostics_config();
+            // The analysis is cached per document version: a configuration change
+            // that does not feed it (severities, categories, heuristics) only
+            // re-filters the cached result instead of re-parsing the model.
+            if !doc.semantic_result.as_deref().is_some_and(|cached| cached.is_current(version, &analysis)) {
+                let result = tokio::task::spawn_blocking(move || semantic::run_with(&doc.text, version, &analysis)).await;
+                let result = match result {
+                    Ok(result) => Arc::new(result),
+                    Err(e) => {
+                        this.log(MessageType::ERROR, format!("semantic pass failed for {}: {e}", uri.as_str())).await;
+                        return;
+                    }
+                };
                 let mut open = write(&this.state.open);
                 let Some(doc) = open.get_mut(&uri) else { return };
                 // A newer edit, reopen or configuration change scheduled another
@@ -237,6 +280,7 @@ impl Backend {
                     return;
                 }
                 Arc::make_mut(doc).semantic_result = Some(result);
+                drop(open);
             }
             this.publish(&uri).await;
             this.refresh_diagnostics().await;
@@ -254,6 +298,27 @@ impl Backend {
         }
     }
 
+    /// Ask the client to refresh code lenses, which depend on the settings.
+    async fn refresh_code_lenses(&self) {
+        if !self.caps().code_lens_refresh {
+            return;
+        }
+        if let Err(e) = self.client.code_lens_refresh().await {
+            self.log(MessageType::LOG, format!("code lens refresh unsupported: {e}")).await;
+        }
+    }
+
+    /// Whether `initializationOptions` put the server in restricted mode: only
+    /// `workspaceTrusted: true` or no such key leaves it off, so anything
+    /// unexpected fails safe.
+    fn restricted_mode(options: Option<&Value>) -> bool {
+        match options.and_then(|o| o.get("workspaceTrusted")) {
+            None => false,
+            Some(Value::Bool(trusted)) => !trusted,
+            Some(_) => true,
+        }
+    }
+
     async fn load_config(&self) {
         if !self.caps().configuration {
             return;
@@ -268,7 +333,7 @@ impl Backend {
     /// The `lp` section of client settings: `{"lp": {...}}`, or the section
     /// itself as some clients send it. `None` when the settings hold neither.
     fn lp_section(settings: Value) -> Option<Value> {
-        const SECTIONS: [&str; 4] = ["analysis", "semantic", "format", "inlayHints"];
+        const SECTIONS: [&str; 7] = ["analysis", "semantic", "format", "inlayHints", "solver", "solution", "codeLens"];
         match settings.get("lp") {
             Some(lp) => Some(lp.clone()),
             None if settings.is_null() || SECTIONS.iter().any(|k| settings.get(k).is_some()) => Some(settings),
@@ -277,6 +342,10 @@ impl Backend {
     }
 
     async fn apply_config(&self, value: Value) {
+        if let Err(message) = self.apply_solver_settings(&value) {
+            self.log(MessageType::ERROR, &message).await;
+            self.client.show_message(MessageType::ERROR, message).await;
+        }
         match Config::from_value(value) {
             Ok(config) => {
                 *write(&self.state.config) = config;
@@ -454,8 +523,9 @@ fn lp_file_operations() -> FileOperationRegistrationOptions {
     }
 }
 
-fn capabilities(pull_diagnostics: bool, encoding: Encoding) -> ServerCapabilities {
+fn capabilities(pull_diagnostics: bool, encoding: Encoding, solver_available: bool) -> ServerCapabilities {
     ServerCapabilities {
+        experimental: Some(requests::experimental_capabilities(solver_available)),
         position_encoding: Some(encoding.kind()),
         text_document_sync: Some(TextDocumentSyncCapability::Options(TextDocumentSyncOptions {
             open_close: Some(true),
@@ -514,7 +584,7 @@ fn capabilities(pull_diagnostics: bool, encoding: Encoding) -> ServerCapabilitie
         call_hierarchy_provider: Some(CallHierarchyServerCapability::Simple(true)),
         linked_editing_range_provider: Some(LinkedEditingRangeServerCapabilities::Simple(true)),
         execute_command_provider: Some(ExecuteCommandOptions {
-            commands: commands::ALL.iter().map(|c| (*c).to_owned()).collect(),
+            commands: advertised_commands(),
             work_done_progress_options: WorkDoneProgressOptions::default(),
         }),
         diagnostic_provider: pull_diagnostics.then(|| {
@@ -563,6 +633,7 @@ impl LanguageServer for Backend {
                 .and_then(|t| t.code_action.as_ref())
                 .and_then(|c| c.resolve_support.as_ref())
                 .is_some_and(|r| r.properties.iter().any(|p| p == "edit")),
+            code_lens_refresh: workspace.and_then(|w| w.code_lens.as_ref()).and_then(|c| c.refresh_support).unwrap_or(false),
         };
         *write(&self.state.encoding) = encoding;
         *write(&self.state.caps) = client_caps;
@@ -581,14 +652,39 @@ impl LanguageServer for Backend {
         }
         *write(&self.state.roots) = roots;
 
-        match params.initialization_options.map(Self::lp_section) {
+        let mut options = params.initialization_options;
+        let restricted = Self::restricted_mode(options.as_ref());
+        if let Some(trusted) = options.as_ref().and_then(|o| o.get("workspaceTrusted")) {
+            if !trusted.is_boolean() {
+                self.log(
+                    MessageType::WARNING,
+                    format!("workspaceTrusted must be a boolean, got {trusted}: treating the workspace as untrusted"),
+                )
+                .await;
+            }
+            // Not an `lp` setting: keep it out of the section check below.
+            if let Some(object) = options.as_mut().and_then(Value::as_object_mut) {
+                object.remove("workspaceTrusted");
+                if object.is_empty() {
+                    options = None;
+                }
+            }
+        }
+        self.state.restricted.store(restricted, Ordering::Relaxed);
+        if restricted {
+            self.log(MessageType::INFO, "restricted mode: lp.solver.path and PATH are ignored for lp-highs").await;
+        }
+        match options.map(Self::lp_section) {
             Some(Some(options)) => self.apply_config(options).await,
             Some(None) => self.log(MessageType::LOG, "initializationOptions without an `lp` section ignored").await,
             None => {}
         }
 
+        // Probe for the solver helper so the extension knows at startup whether
+        // `lp/solve` can work; `lp/solverInfo` refreshes the answer later.
+        self.refresh_solver().await;
         Ok(InitializeResult {
-            capabilities: capabilities(client_caps.pull_diagnostics, encoding),
+            capabilities: capabilities(client_caps.pull_diagnostics, encoding, self.solver_available()),
             server_info: Some(ServerInfo { name: "lp-lsp".to_owned(), version: Some(env!("CARGO_PKG_VERSION").to_owned()) }),
             offset_encoding: None,
         })
@@ -596,6 +692,8 @@ impl LanguageServer for Backend {
 
     async fn initialized(&self, _: InitializedParams) {
         self.load_config().await;
+        self.refresh_solver().await;
+        self.refresh_code_lenses().await;
         self.register_watchers().await;
         let this = self.clone();
         tokio::spawn(async move { this.index_workspace().await });
@@ -650,6 +748,7 @@ impl LanguageServer for Backend {
         write(&self.state.open).remove(&uri);
         write(&self.state.generations).remove(&uri);
         write(&self.state.tokens).remove(&uri);
+        self.forget_solves(&uri);
         // The buffer may hold unsaved edits: index what is on disk instead.
         write(&self.state.indexed).remove(&workspace::key(&uri));
         if let Some(path) = uri.to_file_path().map(std::borrow::Cow::into_owned).filter(|p| p.exists())
@@ -678,6 +777,7 @@ impl LanguageServer for Backend {
         for uri in uris {
             self.schedule_semantic(uri, Trigger::Save);
         }
+        self.refresh_code_lenses().await;
     }
 
     async fn did_change_watched_files(&self, params: DidChangeWatchedFilesParams) {
@@ -770,7 +870,8 @@ impl LanguageServer for Backend {
     async fn diagnostic(&self, params: DocumentDiagnosticParams) -> Result<DocumentDiagnosticReportResult> {
         let doc = self.document_or_error(&params.text_document.uri)?;
         let config = self.config();
-        let items = self.run(move || diagnostics::compute(&doc, &config)).await?;
+        let solution = self.solution(&params.text_document.uri);
+        let items = self.run(move || diagnostics::compute_with(&doc, &config, solution.as_deref())).await?;
         Ok(DocumentDiagnosticReportResult::Report(DocumentDiagnosticReport::Full(RelatedFullDocumentDiagnosticReport {
             related_documents: None,
             full_document_diagnostic_report: FullDocumentDiagnosticReport { result_id: None, items },
@@ -846,8 +947,10 @@ impl LanguageServer for Backend {
     }
 
     async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {
+        let uri = params.text_document_position_params.text_document.uri.clone();
         let (doc, position) = self.position_params(&params.text_document_position_params)?;
-        self.run(move || hover::hover(&doc, position)).await
+        let solution = self.visible_solution(&uri, false);
+        self.run(move || hover::hover_with(&doc, position, solution.as_deref())).await
     }
 
     async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
@@ -867,7 +970,8 @@ impl LanguageServer for Backend {
     async fn inlay_hint(&self, params: InlayHintParams) -> Result<Option<Vec<InlayHint>>> {
         let doc = self.document_or_error(&params.text_document.uri)?;
         let settings = self.config().inlay_hints;
-        self.run(move || Some(inlay::hints(&doc, params.range, &settings))).await
+        let solution = self.visible_solution(&params.text_document.uri, true);
+        self.run(move || Some(inlay::hints_with(&doc, params.range, &settings, solution.as_deref()))).await
     }
 
     async fn code_action(&self, params: CodeActionParams) -> Result<Option<CodeActionResponse>> {
@@ -891,7 +995,9 @@ impl LanguageServer for Backend {
 
     async fn code_lens(&self, params: CodeLensParams) -> Result<Option<Vec<CodeLens>>> {
         let doc = self.document_or_error(&params.text_document.uri)?;
-        self.run(move || Some(code_lens::lenses(&doc))).await
+        let actions = read(&self.state.config).code_lens.actions;
+        let actions = code_lens::Actions { explain: actions, solve: actions && self.solver_available() };
+        self.run(move || Some(code_lens::lenses(&doc, actions))).await
     }
 
     async fn code_lens_resolve(&self, lens: CodeLens) -> Result<CodeLens> {
@@ -972,6 +1078,11 @@ impl LanguageServer for Backend {
     }
 
     async fn execute_command(&self, params: ExecuteCommandParams) -> Result<Option<LSPAny>> {
+        if params.command == commands::CONVERT_FROM_MPS {
+            let (name, text) = text_command_arguments(&params.command, &params.arguments)?;
+            let result = self.run(move || commands::convert_from_mps(&name, &text)).await?;
+            return self.finish_command(result).await;
+        }
         let uri: Uri = params
             .arguments
             .first()
@@ -982,7 +1093,15 @@ impl LanguageServer for Backend {
         let doc = self.document_or_error(&uri)?;
         let config = self.config();
         // Commands parse the whole model; keep them off the async workers.
-        match self.run(move || commands::execute(&params.command, &doc, &config)).await? {
+        let result = self.run(move || commands::execute(&params.command, &doc, &config)).await?;
+        self.finish_command(result).await
+    }
+}
+
+impl Backend {
+    /// Show the command's message and turn its outcome into the LSP response.
+    async fn finish_command(&self, result: std::result::Result<commands::Output, String>) -> Result<Option<LSPAny>> {
+        match result {
             Ok(output) => {
                 self.client.show_message(MessageType::INFO, &output.message).await;
                 Ok(Some(output.value))
@@ -993,6 +1112,20 @@ impl LanguageServer for Backend {
             }
         }
     }
+}
+
+/// Every command the server advertises, including those that take text instead of a synchronised document.
+fn advertised_commands() -> Vec<String> {
+    commands::ALL.iter().chain(commands::TEXT_COMMANDS).map(|c| (*c).to_owned()).collect()
+}
+
+/// Validate `[uri, text]` arguments; returns the file name for messages and the text.
+fn text_command_arguments(command: &str, arguments: &[Value]) -> Result<(String, String)> {
+    let invalid = || Error::invalid_params(format!("{command} expects [uri, text] arguments"));
+    let uri = arguments.first().and_then(Value::as_str).ok_or_else(invalid)?;
+    let text = arguments.get(1).and_then(Value::as_str).ok_or_else(invalid)?;
+    let uri: Uri = uri.parse().map_err(|_| invalid())?;
+    Ok((commands::file_name(uri.as_str()), text.to_owned()))
 }
 
 #[cfg(test)]
@@ -1006,7 +1139,38 @@ mod tests {
         let section = json!({ "format": { "indent": 4 } });
         assert_eq!(Backend::lp_section(json!({ "lp": section.clone() })), Some(section.clone()));
         assert_eq!(Backend::lp_section(section.clone()), Some(section));
+        assert_eq!(Backend::lp_section(json!({ "codeLens": { "actions": true } })), Some(json!({ "codeLens": { "actions": true } })));
         assert_eq!(Backend::lp_section(Value::Null), Some(Value::Null));
         assert_eq!(Backend::lp_section(json!({ "python": { "x": 1 } })), None);
+    }
+
+    #[test]
+    fn restricted_mode_comes_from_initialization_options() {
+        for trusted in [None, Some(json!({})), Some(json!({ "workspaceTrusted": true }))] {
+            assert!(!Backend::restricted_mode(trusted.as_ref()), "{trusted:?}");
+        }
+        for untrusted in [json!({ "workspaceTrusted": false }), json!({ "workspaceTrusted": "no" })] {
+            assert!(Backend::restricted_mode(Some(&untrusted)), "{untrusted}");
+        }
+    }
+
+    #[test]
+    fn text_command_arguments_validates_shape() {
+        let uri = json!("file:///tmp/model.mps");
+        let ok = text_command_arguments(commands::CONVERT_FROM_MPS, &[uri.clone(), json!("text")]).unwrap();
+        assert_eq!(ok, ("model.mps".to_owned(), "text".to_owned()));
+        for bad in [vec![], vec![uri.clone()], vec![uri, json!(1)], vec![json!("::not a uri"), json!("t")]] {
+            let err = text_command_arguments(commands::CONVERT_FROM_MPS, &bad).unwrap_err();
+            assert_eq!(err.code, tower_lsp_server::jsonrpc::ErrorCode::InvalidParams, "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn advertised_commands_include_text_commands() {
+        let advertised = advertised_commands();
+        assert!(advertised.iter().any(|c| c == "lp.convertFromMps"));
+        for command in commands::ALL {
+            assert!(advertised.iter().any(|c| c == command), "{command}");
+        }
     }
 }

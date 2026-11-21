@@ -95,6 +95,15 @@ jobs:
       # Ensure Rust is installed and set up the active toolchain
       - name: Setup Rust
         run: rustup show active-toolchain || rustup toolchain install
+      # Grammar fixtures for lsp/tests/grammar_fixtures.rs (fails under CI if absent)
+      - name: Check out tree-sitter-lp fixtures
+        uses: actions/checkout@v7
+        with:
+          repository: dandxy89/treesitter-lp
+          ref: v0.2.0
+          path: tree-sitter-lp
+      - name: Point grammar fixtures at the checkout
+        run: echo "TREE_SITTER_LP_DIR=$GITHUB_WORKSPACE/tree-sitter-lp" >> "$GITHUB_ENV"
       # Install CBC solver for lp-solvers integration tests
       - name: Install CBC solver
         run: sudo apt-get update && sudo apt-get install -y coinor-cbc

@@ -163,7 +163,7 @@ fn long_line(c: &mut Criterion) {
     group.bench_function("code_lens_40k_term_objective", |b| {
         let doc = long_objective(40_000);
         doc.build_index();
-        b.iter(|| code_lens::lenses(black_box(&doc)));
+        b.iter(|| code_lens::lenses(black_box(&doc), code_lens::Actions::default()));
     });
 
     group.finish();
@@ -226,9 +226,12 @@ fn many(c: &mut Criterion) {
         let doc = constraints_200k();
         doc.build_index();
         SIZE.call_once(|| {
-            eprintln!("codeLens response: {} bytes", serde_json::to_vec(&code_lens::lenses(doc)).expect("lenses serialise").len());
+            eprintln!(
+                "codeLens response: {} bytes",
+                serde_json::to_vec(&code_lens::lenses(doc, code_lens::Actions::default())).expect("lenses serialise").len()
+            );
         });
-        b.iter(|| serde_json::to_vec(&code_lens::lenses(black_box(doc))).expect("lenses serialise"));
+        b.iter(|| serde_json::to_vec(&code_lens::lenses(black_box(doc), code_lens::Actions::default())).expect("lenses serialise"));
     });
 
     group.bench_function("completion_after_label_serialised", |b| {

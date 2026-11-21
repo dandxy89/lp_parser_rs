@@ -283,6 +283,20 @@ small coefficients, large right-hand sides, a high coefficient ratio), empty
 constraints, unused variables, fixed variables (lower = upper), singleton
 constraints, and other warnings such as a model that looks over-constrained.
 
+### Model diagnostics
+
+`diagnostics()` runs a larger set of checks and returns one dict per finding.
+Each has a stable `code`, a `severity`, a `certainty` (`"proven"` or
+`"heuristic"`), a `message` and the entities involved.
+
+```python
+for finding in parser.diagnostics():
+    print(finding["severity"], finding["code"], finding["message"])
+
+# Tolerances use camelCase keys; unknown keys raise LpInvalidValueError.
+parser.diagnostics({"maxPerCode": 50, "thresholds": {"largeRhsThreshold": 1e6}})
+```
+
 ## CSV export
 
 ```python

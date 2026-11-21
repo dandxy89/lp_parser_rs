@@ -1,0 +1,17 @@
+---
+source: lsp/tests/diagnostics.rs
+expression: rendered
+---
+6:6-6:7 error indicator-not-binary `i`
+  | Indicator variable 'i' of constraint 'ind' is not binary
+  | CPLEX, Gurobi and HiGHS require an indicator variable to be binary. Declare it in the Binary section.
+  = 6:1 `ind`: uses it as an indicator
+  data {"category":"structural","certainty":"proven"}
+8:1-8:3 warning sos-duplicate-weights `s1`
+  | SOS 's1' gives 'x' and 'y' the same weight 1
+  | The order of members is defined by their weights, so equal weights leave it undefined. CPLEX rejects this.
+  data {"category":"structural","certainty":"proven"}
+9:1-9:3 information sos-trivial `s2`
+  | S2 set 's2' has 2 member(s) and is always satisfied
+  | An SOS1 needs at least two members and an SOS2 at least three to restrict anything.
+  data {"category":"structural","certainty":"proven"}

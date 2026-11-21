@@ -1,0 +1,11 @@
+---
+source: rust/tests/test_diagnostics.rs
+expression: text
+---
+[INFO] unused-variable: Variable 'x7' is declared but appears in no objective or constraint
+[INFO] objective-only-variable: Variable 'x1' appears only in the objective, so it will sit at its lower bound 0
+[INFO] objective-only-variable: Variable 'x2' appears only in the objective, so it will sit at its lower bound 0
+[INFO] objective-only-variable: Variable 'x3' appears only in the objective, so it will sit at its lower bound 0
+[INFO] objective-only-variable: Variable 'x4' appears only in the objective, so it will sit at its lower bound 0
+[INFO] objective-only-variable: Variable 'x5' appears only in the objective, so it will sit at its lower bound 0
+[INFO] objective-only-variable: Variable 'x6' appears only in the objective, so it will sit at its lower bound 0

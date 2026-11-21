@@ -32,8 +32,16 @@
   ],
   "main": "./dist/extension.js",
   "activationEvents": [
+    "onLanguage:mps",
     "onLanguage:lp"
   ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "In Restricted Mode only the language server and solver helper bundled with the extension run; `lp.server.path`, `lp.solver.path` and `PATH` are not used.",
+      "restrictedConfigurations": ["lp.server.path", "lp.solver.path"]
+    }
+  },
   "contributes": {
     "languages": [
       {
@@ -49,6 +57,18 @@
           ".Lp"
         ],
         "configuration": "./language-configuration.json"
+      },
+      {
+        "id": "mps",
+        "aliases": [
+          "MPS",
+          "mps"
+        ],
+        "extensions": [
+          ".mps",
+          ".MPS"
+        ],
+        "configuration": "./language-configuration-mps.json"
       }
     ],
     "grammars": [
@@ -56,9 +76,81 @@
         "language": "lp",
         "scopeName": "source.lp",
         "path": "./syntaxes/lp.tmLanguage.json"
+      },
+      {
+        "language": "mps",
+        "scopeName": "source.mps",
+        "path": "./syntaxes/mps.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "lp",
+        "path": "./snippets/lp.json"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "lp",
+          "title": "LP",
+          "icon": "images/lp-activity.svg"
+        }
+      ]
+    },
+    "views": {
+      "lp": [
+        {
+          "id": "lp.modelExplorer",
+          "name": "Model Explorer",
+          "contextualTitle": "LP Model Explorer"
+        },
+        {
+          "id": "lp.analysis",
+          "name": "Analysis",
+          "contextualTitle": "LP Analysis"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "lp.modelExplorer",
+        "contents": "The language server does not advertise `lp/model`. Update `lp-lsp` and restart the server.\n[Restart Language Server](command:lp.restartServer)",
+        "when": "!lp.supports.model"
+      },
+      {
+        "view": "lp.analysis",
+        "contents": "Open an LP file to see its analysis findings grouped by category.",
+        "when": "activeEditor == null || editorLangId != lp"
       }
     ],
     "commands": [
+      {
+        "command": "lp.explorer.refresh",
+        "title": "Refresh Model Explorer",
+        "category": "LP",
+        "icon": "$(refresh)",
+        "enablement": "lp.supports.model"
+      },
+      {
+        "command": "lp.explorer.filter",
+        "title": "Filter Model Explorer",
+        "category": "LP",
+        "icon": "$(filter)",
+        "enablement": "lp.supports.model"
+      },
+      {
+        "command": "lp.explorer.clearFilter",
+        "title": "Clear Model Explorer Filter",
+        "category": "LP",
+        "icon": "$(clear-all)",
+        "enablement": "lp.supports.model"
+      },
+      {
+        "command": "lp.revealRange",
+        "title": "Go to Source",
+        "category": "LP"
+      },
       {
         "command": "lp.analyze",
         "title": "Analyse Model",
@@ -70,18 +162,115 @@
         "category": "LP"
       },
       {
+        "command": "lp.convertFromMps",
+        "title": "Convert from MPS",
+        "category": "LP"
+      },
+      {
         "command": "lp.showModelStats",
         "title": "Show Model Statistics",
         "category": "LP"
       },
       {
+        "command": "lp.exportReport",
+        "title": "Export Model Report",
+        "category": "LP",
+        "enablement": "lp.supports.model"
+      },
+      {
         "command": "lp.restartServer",
         "title": "Restart Language Server",
         "category": "LP"
+      },
+      {
+        "command": "lp.solve",
+        "title": "Solve Model",
+        "category": "LP",
+        "enablement": "lp.supports.solve"
+      },
+      {
+        "command": "lp.showModelExplorer",
+        "title": "Show Model Explorer",
+        "category": "LP",
+        "enablement": "lp.supports.model"
+      },
+      {
+        "command": "lp.showMatrix",
+        "title": "Show Coefficient Matrix",
+        "category": "LP",
+        "enablement": "lp.supports.matrix"
+      },
+      {
+        "command": "lp.showDependencyGraph",
+        "title": "Show Dependency Graph",
+        "category": "LP",
+        "enablement": "lp.supports.graph"
+      },
+      {
+        "command": "lp.compareModels",
+        "title": "Compare Models",
+        "category": "LP",
+        "enablement": "lp.supports.diff"
+      },
+      {
+        "command": "lp.explainConstraint",
+        "title": "Explain Constraint",
+        "category": "LP",
+        "enablement": "lp.supports.explain"
+      },
+      {
+        "command": "lp.explainVariable",
+        "title": "Explain Variable",
+        "category": "LP",
+        "enablement": "lp.supports.explain"
+      },
+      {
+        "command": "lp.findSimilarConstraints",
+        "title": "Find Similar Constraints",
+        "category": "LP"
+      },
+      {
+        "command": "lp.diagnoseInfeasibility",
+        "title": "Diagnose Infeasibility",
+        "category": "LP",
+        "enablement": "lp.supports.solve"
       }
     ],
     "menus": {
+      "view/title": [
+        {
+          "command": "lp.explorer.filter",
+          "when": "view == lp.modelExplorer",
+          "group": "navigation@1"
+        },
+        {
+          "command": "lp.explorer.clearFilter",
+          "when": "view == lp.modelExplorer",
+          "group": "navigation@2"
+        },
+        {
+          "command": "lp.explorer.refresh",
+          "when": "view == lp.modelExplorer",
+          "group": "navigation@3"
+        }
+      ],
       "commandPalette": [
+        {
+          "command": "lp.revealRange",
+          "when": "false"
+        },
+        {
+          "command": "lp.explorer.refresh",
+          "when": "editorLangId == lp"
+        },
+        {
+          "command": "lp.explorer.filter",
+          "when": "editorLangId == lp"
+        },
+        {
+          "command": "lp.explorer.clearFilter",
+          "when": "editorLangId == lp"
+        },
         {
           "command": "lp.analyze",
           "when": "editorLangId == lp"
@@ -91,11 +280,146 @@
           "when": "editorLangId == lp"
         },
         {
+          "command": "lp.convertFromMps",
+          "when": "editorLangId == mps"
+        },
+        {
           "command": "lp.showModelStats",
           "when": "editorLangId == lp"
+        },
+        {
+          "command": "lp.exportReport",
+          "when": "editorLangId == lp"
+        },
+        {
+          "command": "lp.solve",
+          "when": "editorLangId == lp"
+        },
+        {
+          "command": "lp.showModelExplorer",
+          "when": "editorLangId == lp"
+        },
+        {
+          "command": "lp.showMatrix",
+          "when": "editorLangId == lp"
+        },
+        {
+          "command": "lp.showDependencyGraph",
+          "when": "editorLangId == lp"
+        },
+        {
+          "command": "lp.compareModels",
+          "when": "editorLangId == lp"
+        },
+        {
+          "command": "lp.explainConstraint",
+          "when": "editorLangId == lp"
+        },
+        {
+          "command": "lp.explainVariable",
+          "when": "editorLangId == lp"
+        },
+        {
+          "command": "lp.findSimilarConstraints",
+          "when": "editorLangId == lp"
+        },
+        {
+          "command": "lp.diagnoseInfeasibility",
+          "when": "editorLangId == lp"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "lp.explainConstraint",
+          "when": "editorLangId == lp && lp.supports.explain",
+          "group": "lp@1"
+        },
+        {
+          "command": "lp.explainVariable",
+          "when": "editorLangId == lp && lp.supports.explain",
+          "group": "lp@2"
+        },
+        {
+          "command": "lp.findSimilarConstraints",
+          "when": "editorLangId == lp",
+          "group": "lp@3"
         }
       ]
     },
+    "keybindings": [
+      {
+        "command": "lp.solve",
+        "key": "ctrl+alt+enter",
+        "mac": "cmd+alt+enter",
+        "when": "editorTextFocus && editorLangId == lp"
+      },
+      {
+        "command": "lp.explainConstraint",
+        "key": "shift+alt+e",
+        "mac": "cmd+alt+e",
+        "when": "editorTextFocus && editorLangId == lp"
+      },
+      {
+        "command": "lp.showModelExplorer",
+        "key": "shift+alt+m",
+        "mac": "cmd+alt+m",
+        "when": "editorTextFocus && editorLangId == lp"
+      }
+    ],
+    "walkthroughs": [
+      {
+        "id": "lp.gettingStarted",
+        "title": "Get started with LP files",
+        "description": "Write, inspect, analyse and solve linear programmes.",
+        "featuredFor": [
+          "**/*.lp"
+        ],
+        "steps": [
+          {
+            "id": "lp.open",
+            "title": "Open or create an LP file",
+            "description": "Open a .lp file, or start a new one.\n[New LP File](command:workbench.action.files.newUntitledFile?%7B%22languageId%22%3A%22lp%22%7D)",
+            "media": { "markdown": "media/walkthrough/open.md" },
+            "completionEvents": ["onLanguage:lp"]
+          },
+          {
+            "id": "lp.explorer",
+            "title": "Browse the model",
+            "description": "See objectives, constraints and variables at a glance.\n[Show Model Explorer](command:lp.showModelExplorer)",
+            "media": { "markdown": "media/walkthrough/explorer.md" },
+            "completionEvents": ["onView:lp.modelExplorer"]
+          },
+          {
+            "id": "lp.analysis",
+            "title": "Review the diagnostics",
+            "description": "Findings are grouped by category and code.\n[Open Analysis](command:lp.analysis.focus)",
+            "media": { "markdown": "media/walkthrough/analysis.md" },
+            "completionEvents": ["onView:lp.analysis"]
+          },
+          {
+            "id": "lp.solve",
+            "title": "Solve with HiGHS",
+            "description": "Solve the model and see values inline.\n[Solve Model](command:lp.solve)",
+            "media": { "markdown": "media/walkthrough/solve.md" },
+            "completionEvents": ["onCommand:lp.solve"]
+          },
+          {
+            "id": "lp.explain",
+            "title": "Explain a constraint",
+            "description": "Read a constraint in the model's own terms.\n[Explain Constraint](command:lp.explainConstraint)",
+            "media": { "markdown": "media/walkthrough/explain.md" },
+            "completionEvents": ["onCommand:lp.explainConstraint"]
+          },
+          {
+            "id": "lp.share",
+            "title": "Export a report or convert formats",
+            "description": "Write a Markdown report, or convert between LP and MPS.\n[Export Model Report](command:lp.exportReport)",
+            "media": { "markdown": "media/walkthrough/share.md" },
+            "completionEvents": ["onCommand:lp.exportReport", "onCommand:lp.convertToMps", "onCommand:lp.convertFromMps"]
+          }
+        ]
+      }
+    ],
     "configuration": {
       "title": "LP",
       "properties": {
@@ -127,7 +451,7 @@
         },
         "lp.analysis.smallCoefficientThreshold": {
           "type": "number",
-          "default": 1e-9,
+          "default": 1e-09,
           "description": "Non-zero coefficients below this magnitude are flagged."
         },
         "lp.analysis.largeRhsThreshold": {
@@ -139,6 +463,266 @@
           "type": "number",
           "default": 1000000,
           "description": "Max/min coefficient ratio above which scaling is flagged."
+        },
+        "lp.analysis.heuristics": {
+          "type": "boolean",
+          "default": true,
+          "description": "Publish heuristic findings: smells that are often mistakes but sometimes intended (for example badly scaled coefficients). Proven findings are unaffected. A code listed in lp.analysis.severityOverrides is published regardless."
+        },
+        "lp.analysis.categories": {
+          "type": "object",
+          "default": {
+            "structural": true,
+            "numerical": true,
+            "mathematical": true,
+            "performance": true
+          },
+          "additionalProperties": false,
+          "properties": {
+            "structural": {
+              "type": "boolean",
+              "default": true,
+              "description": "Redundant, duplicate and unused model elements."
+            },
+            "numerical": {
+              "type": "boolean",
+              "default": true,
+              "description": "Badly scaled coefficients and right-hand sides."
+            },
+            "mathematical": {
+              "type": "boolean",
+              "default": true,
+              "description": "Infeasible, contradictory or unbounded formulations."
+            },
+            "performance": {
+              "type": "boolean",
+              "default": true,
+              "description": "Notes about the analysis itself, such as truncation."
+            }
+          },
+          "markdownDescription": "Which categories of model diagnostics are published. A code listed in `lp.analysis.severityOverrides` is published regardless."
+        },
+        "lp.analysis.severityOverrides": {
+          "type": "object",
+          "default": {},
+          "additionalProperties": false,
+          "properties": {
+            "invalid-bounds": {
+              "type": "string",
+              "enum": ["error", "warning", "information", "hint", "off"]
+            },
+            "negative-upper-default-lower": {
+              "type": "string",
+              "enum": ["error", "warning", "information", "hint", "off"]
+            },
+            "integer-no-feasible-values": {
+              "type": "string",
+              "enum": ["error", "warning", "information", "hint", "off"]
+            },
+            "integer-fractional-bound": {
+              "type": "string",
+              "enum": ["error", "warning", "information", "hint", "off"]
+            },
+            "semi-integer-only-zero": {
+              "type": "string",
+              "enum": ["error", "warning", "information", "hint", "off"]
+            },
+            "binary-bound-outside-unit": {
+              "type": "string",
+              "enum": ["error", "warning", "information", "hint", "off"]
+            },
+            "binary-redundant-bounds": {
+              "type": "string",
+              "enum": ["error", "warning", "information", "hint", "off"]
+            },
+            "integer-is-binary": {
+              "type": "string",
+              "enum": ["error", "warning", "information", "hint", "off"]
+            },
+            "semicontinuous-infinite-upper": {
+              "type": "string",
+              "enum": ["error", "warning", "information", "hint", "off"]
+            },
+            "fixed-variable": {
+              "type": "string",
+              "enum": ["error", "warning", "information", "hint", "off"]
+            },
+            "unused-variable": {
+              "type": "string",
+              "enum": ["error", "warning", "information", "hint", "off"]
+            },
+            "objective-only-variable": {
+              "type": "string",
+              "enum": ["error", "warning", "information", "hint", "off"]
+            },
+            "no-effective-bound": {
+              "type": "string",
+              "enum": ["error", "warning", "information", "hint", "off"]
+            },
+            "nonconvex-objective": {
+              "type": "string",
+              "enum": ["error", "warning", "information", "hint", "off"]
+            },
+            "empty-objective": {
+              "type": "string",
+              "enum": ["error", "warning", "information", "hint", "off"]
+            },
+            "duplicate-objective": {
+              "type": "string",
+              "enum": ["error", "warning", "information", "hint", "off"]
+            },
+            "opposed-objectives": {
+              "type": "string",
+              "enum": ["error", "warning", "information", "hint", "off"]
+            },
+            "empty-row-infeasible": {
+              "type": "string",
+              "enum": ["error", "warning", "information", "hint", "off"]
+            },
+            "empty-row": {
+              "type": "string",
+              "enum": ["error", "warning", "information", "hint", "off"]
+            },
+            "explicit-zero-coefficient": {
+              "type": "string",
+              "enum": ["error", "warning", "information", "hint", "off"]
+            },
+            "repeated-variable-in-row": {
+              "type": "string",
+              "enum": ["error", "warning", "information", "hint", "off"]
+            },
+            "singleton-row": {
+              "type": "string",
+              "enum": ["error", "warning", "information", "hint", "off"]
+            },
+            "row-infeasible-by-bounds": {
+              "type": "string",
+              "enum": ["error", "warning", "information", "hint", "off"]
+            },
+            "row-redundant-by-bounds": {
+              "type": "string",
+              "enum": ["error", "warning", "information", "hint", "off"]
+            },
+            "duplicate-row": {
+              "type": "string",
+              "enum": ["error", "warning", "information", "hint", "off"]
+            },
+            "proportional-row": {
+              "type": "string",
+              "enum": ["error", "warning", "information", "hint", "off"]
+            },
+            "dominated-row": {
+              "type": "string",
+              "enum": ["error", "warning", "information", "hint", "off"]
+            },
+            "contradictory-rows": {
+              "type": "string",
+              "enum": ["error", "warning", "information", "hint", "off"]
+            },
+            "rows-form-range": {
+              "type": "string",
+              "enum": ["error", "warning", "information", "hint", "off"]
+            },
+            "equalities-exceed-variables": {
+              "type": "string",
+              "enum": ["error", "warning", "information", "hint", "off"]
+            },
+            "large-coefficient": {
+              "type": "string",
+              "enum": ["error", "warning", "information", "hint", "off"]
+            },
+            "small-coefficient": {
+              "type": "string",
+              "enum": ["error", "warning", "information", "hint", "off"]
+            },
+            "large-rhs": {
+              "type": "string",
+              "enum": ["error", "warning", "information", "hint", "off"]
+            },
+            "row-coefficient-range": {
+              "type": "string",
+              "enum": ["error", "warning", "information", "hint", "off"]
+            },
+            "column-coefficient-range": {
+              "type": "string",
+              "enum": ["error", "warning", "information", "hint", "off"]
+            },
+            "objective-coefficient-range": {
+              "type": "string",
+              "enum": ["error", "warning", "information", "hint", "off"]
+            },
+            "coefficient-range": {
+              "type": "string",
+              "enum": ["error", "warning", "information", "hint", "off"]
+            },
+            "rhs-coefficient-ratio": {
+              "type": "string",
+              "enum": ["error", "warning", "information", "hint", "off"]
+            },
+            "indicator-not-binary": {
+              "type": "string",
+              "enum": ["error", "warning", "information", "hint", "off"]
+            },
+            "sos-duplicate-weights": {
+              "type": "string",
+              "enum": ["error", "warning", "information", "hint", "off"]
+            },
+            "sos-trivial": {
+              "type": "string",
+              "enum": ["error", "warning", "information", "hint", "off"]
+            },
+            "diagnostics-truncated": {
+              "type": "string",
+              "enum": ["error", "warning", "information", "hint", "off"]
+            }
+          },
+          "markdownDescription": "Severity per model diagnostic code, or `off` to hide it. An entry other than `off` also overrides `lp.analysis.heuristics` and `lp.analysis.categories` for that code."
+        },
+        "lp.analysis.feasibilityTolerance": {
+          "type": "number",
+          "default": 1e-06,
+          "minimum": 0,
+          "description": "Slack before a bound or row violation is reported as proven."
+        },
+        "lp.analysis.equalityTolerance": {
+          "type": "number",
+          "default": 1e-09,
+          "minimum": 0,
+          "description": "Relative tolerance for two normalised coefficients to count as equal."
+        },
+        "lp.analysis.rhsCoefficientRatioThreshold": {
+          "type": "number",
+          "default": 1000000000,
+          "exclusiveMinimum": 0,
+          "description": "|rhs| / largest |coefficient| in a row above which the ratio is flagged."
+        },
+        "lp.analysis.maxPerCode": {
+          "type": "integer",
+          "default": 1000,
+          "minimum": 1,
+          "description": "Diagnostics published per code before the rest are summarised."
+        },
+        "lp.solver.path": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Path of the lp-highs solver helper. Empty searches next to the language server, then PATH."
+        },
+        "lp.solver.timeLimit": {
+          "type": "number",
+          "default": 60,
+          "exclusiveMinimum": 0,
+          "description": "Wall-clock limit for one solve, in seconds."
+        },
+        "lp.solution.inlayHints": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show solution values as inlay hints after a solve."
+        },
+        "lp.solution.showStale": {
+          "type": "boolean",
+          "default": false,
+          "description": "Keep showing a solution after the document has changed."
         },
         "lp.semantic.maxFileSizeMb": {
           "type": "integer",
@@ -187,6 +771,11 @@
           "default": "preserve",
           "description": "Keyword casing."
         },
+        "lp.codeLens.actions": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Show **Solve** on the objective and **Explain** on each named constraint as code lenses."
+        },
         "lp.inlayHints.generatedNames": {
           "type": "boolean",
           "default": true,
@@ -211,20 +800,26 @@
     }
   },
   "scripts": {
-    "check-types": "tsc --noEmit -p ./",
-    "compile": "npm run check-types && esbuild src/extension.ts --bundle --format=cjs --platform=node --external:vscode --outfile=dist/extension.js --sourcemap",
+    "check-types": "tsc --noEmit -p ./ && tsc --noEmit -p tsconfig.webviews.json",
+    "build:webviews": "esbuild src/webviews/matrix.ts src/webviews/graph.ts src/webviews/diff.ts src/webviews/solution.ts src/webviews/explain.ts --bundle --format=iife --target=es2022 --platform=browser --outdir=dist/webviews",
+    "compile": "npm run check-types && esbuild src/extension.ts --bundle --format=cjs --platform=node --external:vscode --outfile=dist/extension.js --sourcemap && npm run build:webviews",
     "watch": "esbuild src/extension.ts --bundle --format=cjs --platform=node --external:vscode --outfile=dist/extension.js --sourcemap --watch",
-    "vscode:prepublish": "npm run check-types && esbuild src/extension.ts --bundle --format=cjs --platform=node --external:vscode --outfile=dist/extension.js --minify",
-    "package": "vsce package"
+    "vscode:prepublish": "npm run check-types && esbuild src/extension.ts --bundle --format=cjs --platform=node --external:vscode --outfile=dist/extension.js --minify && npm run build:webviews -- --minify",
+    "package": "vsce package",
+    "test": "tsc -p tsconfig.test.json && node --test \"out/test/*.test.js\"",
+    "test:integration": "npm run compile && tsc -p tsconfig.integration.json && node out/integration/runTest.js"
   },
   "dependencies": {
     "vscode-languageclient": "^9.0.1"
   },
   "devDependencies": {
+    "@types/mocha": "^10.0.10",
     "@types/node": "^20.19.0",
     "@types/vscode": "^1.90.0",
+    "@vscode/test-electron": "^3.1.0",
     "@vscode/vsce": "^4.1.1",
     "esbuild": "^0.25.0",
+    "mocha": "^12.0.3",
     "ovsx": "1.4.0",
     "typescript": "^5.9.3"
   },

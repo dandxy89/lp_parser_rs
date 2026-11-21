@@ -1,6 +1,8 @@
 //! Client configuration (section `lp`).
 
-use lp_parser_rs::analysis::AnalysisConfig;
+use std::collections::BTreeMap;
+
+use lp_parser_rs::analysis::{AnalysisConfig, Certainty, DiagnosticCategory, DiagnosticCode, DiagnosticsConfig};
 use serde::Deserialize;
 
 /// All `lp.*` settings. Missing fields take their defaults.
@@ -15,6 +17,17 @@ pub struct Config {
     pub format: FormatSettings,
     /// `lp.inlayHints`: per-hint toggles.
     pub inlay_hints: InlayHintSettings,
+    /// `lp.codeLens`: action lenses.
+    pub code_lens: CodeLensSettings,
+}
+
+/// `lp.codeLens`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct CodeLensSettings {
+    /// Solve and Explain lenses. They run the VS Code extension's commands, so
+    /// the server default is off; VS Code sends its own default (on).
+    pub actions: bool,
 }
 
 /// `lp.analysis`.
@@ -23,6 +36,22 @@ pub struct Config {
 pub struct AnalysisSettings {
     /// Publish analysis issues as diagnostics.
     pub enabled: bool,
+    /// Publish heuristic findings (smells that are sometimes intended). Proven
+    /// findings are unaffected.
+    pub heuristics: bool,
+    /// Which diagnostic categories are published.
+    pub categories: CategorySettings,
+    /// Per-code severity, keyed by diagnostic code. An entry other than
+    /// `off` also overrides `heuristics` and `categories` for that code.
+    pub severity_overrides: BTreeMap<String, SeverityOverride>,
+    /// `DiagnosticsConfig::feasibility_tolerance`.
+    pub feasibility_tolerance: f64,
+    /// `DiagnosticsConfig::equality_tolerance`.
+    pub equality_tolerance: f64,
+    /// `DiagnosticsConfig::rhs_coefficient_ratio_threshold`.
+    pub rhs_coefficient_ratio_threshold: f64,
+    /// `DiagnosticsConfig::max_per_code`.
+    pub max_per_code: usize,
     /// Upstream thresholds (`largeCoefficientThreshold`, ...).
     #[serde(flatten)]
     pub thresholds: AnalysisConfig,
@@ -30,8 +59,102 @@ pub struct AnalysisSettings {
 
 impl Default for AnalysisSettings {
     fn default() -> Self {
-        Self { enabled: true, thresholds: AnalysisConfig::default() }
+        let upstream = DiagnosticsConfig::default();
+        Self {
+            enabled: true,
+            heuristics: true,
+            categories: CategorySettings::default(),
+            severity_overrides: BTreeMap::new(),
+            feasibility_tolerance: upstream.feasibility_tolerance,
+            equality_tolerance: upstream.equality_tolerance,
+            rhs_coefficient_ratio_threshold: upstream.rhs_coefficient_ratio_threshold,
+            max_per_code: upstream.max_per_code,
+            thresholds: upstream.thresholds,
+        }
     }
+}
+
+impl AnalysisSettings {
+    /// The library configuration these settings describe.
+    #[must_use]
+    pub fn diagnostics_config(&self) -> DiagnosticsConfig {
+        let mut config = DiagnosticsConfig::default();
+        config.thresholds = self.thresholds.clone();
+        config.feasibility_tolerance = self.feasibility_tolerance;
+        config.equality_tolerance = self.equality_tolerance;
+        config.rhs_coefficient_ratio_threshold = self.rhs_coefficient_ratio_threshold;
+        config.max_per_code = self.max_per_code;
+        config
+    }
+
+    /// Whether a diagnostic with `code` is published. An explicit severity
+    /// override is the most specific setting: `off` hides the code, any other
+    /// value shows it whatever `heuristics` and `categories` say.
+    #[must_use]
+    pub fn publishes(&self, code: DiagnosticCode) -> bool {
+        match self.severity_override(code) {
+            Some(SeverityOverride::Off) => false,
+            Some(_) => true,
+            None => self.categories.contains(code.category()) && (self.heuristics || code.certainty() != Certainty::Heuristic),
+        }
+    }
+
+    /// The configured severity override for `code`, if any.
+    #[must_use]
+    pub fn severity_override(&self, code: DiagnosticCode) -> Option<SeverityOverride> {
+        self.severity_overrides.get(code.as_str()).copied()
+    }
+}
+
+/// `lp.analysis.categories`: one switch per [`DiagnosticCategory`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct CategorySettings {
+    /// Redundant, duplicate and unused model elements.
+    pub structural: bool,
+    /// Badly scaled coefficients and right-hand sides.
+    pub numerical: bool,
+    /// Infeasible, contradictory or unbounded formulations.
+    pub mathematical: bool,
+    /// Findings about the analysis itself, such as truncation.
+    pub performance: bool,
+}
+
+impl Default for CategorySettings {
+    fn default() -> Self {
+        Self { structural: true, numerical: true, mathematical: true, performance: true }
+    }
+}
+
+impl CategorySettings {
+    /// Whether `category` is switched on.
+    #[must_use]
+    pub fn contains(&self, category: DiagnosticCategory) -> bool {
+        match category {
+            DiagnosticCategory::Structural => self.structural,
+            DiagnosticCategory::Numerical => self.numerical,
+            DiagnosticCategory::Mathematical => self.mathematical,
+            DiagnosticCategory::Performance => self.performance,
+            // A category added upstream is shown until a setting for it exists.
+            _ => true,
+        }
+    }
+}
+
+/// A `lp.analysis.severityOverrides` value.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SeverityOverride {
+    /// Publish as an error.
+    Error,
+    /// Publish as a warning.
+    Warning,
+    /// Publish as information.
+    Information,
+    /// Publish as a hint.
+    Hint,
+    /// Do not publish.
+    Off,
 }
 
 /// `lp.semantic`.
@@ -137,6 +260,10 @@ impl Config {
                 t.small_coefficient_threshold, t.large_coefficient_threshold
             ));
         }
+        self.analysis.diagnostics_config().validate().map_err(|e| format!("invalid lp.analysis setting: {e}"))?;
+        for code in self.analysis.severity_overrides.keys() {
+            code.parse::<DiagnosticCode>().map_err(|_| format!("lp.analysis.severityOverrides: unknown diagnostic code `{code}`"))?;
+        }
         if self.format.indent > 16 {
             return Err(format!("lp.format.indent must be at most 16, got {}", self.format.indent));
         }
@@ -180,5 +307,101 @@ mod tests {
         assert!(Config::from_value(serde_json::json!({ "format": { "lineWidth": 5 } })).is_err());
         assert!(Config::from_value(serde_json::json!({ "analysis": { "smallCoefficientThreshold": 1e12 } })).is_err());
         assert!(Config::from_value(serde_json::json!({ "analysis": { "largeRhsThreshold": -1.0 } })).is_err());
+        for bad in [
+            serde_json::json!({ "analysis": { "feasibilityTolerance": -1.0 } }),
+            serde_json::json!({ "analysis": { "equalityTolerance": -1e-9 } }),
+            serde_json::json!({ "analysis": { "maxPerCode": 0 } }),
+            serde_json::json!({ "analysis": { "severityOverrides": { "no-such-code": "off" } } }),
+            serde_json::json!({ "analysis": { "severityOverrides": { "duplicate-row": "loud" } } }),
+        ] {
+            assert!(Config::from_value(bad.clone()).is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn diagnostics_settings_map_to_the_library_config() {
+        let config = Config::from_value(serde_json::json!({
+            "analysis": { "feasibilityTolerance": 1e-4, "maxPerCode": 7, "largeRhsThreshold": 5.0 }
+        }))
+        .unwrap();
+        let mapped = config.analysis.diagnostics_config();
+        assert!((mapped.feasibility_tolerance - 1e-4).abs() < f64::EPSILON);
+        assert_eq!(mapped.max_per_code, 7);
+        assert!((mapped.thresholds.large_rhs_threshold - 5.0).abs() < f64::EPSILON);
+        assert_eq!(Config::default().analysis.diagnostics_config(), DiagnosticsConfig::default());
+    }
+
+    #[test]
+    fn categories_heuristics_and_overrides_decide_what_is_published() {
+        let settings = |value: serde_json::Value| Config::from_value(serde_json::json!({ "analysis": value })).unwrap().analysis;
+        let all = settings(serde_json::json!({}));
+        assert!(DiagnosticCode::ALL.iter().all(|&code| all.publishes(code)), "everything is on by default");
+
+        let no_numerical = settings(serde_json::json!({ "categories": { "numerical": false } }));
+        assert!(!no_numerical.publishes(DiagnosticCode::LargeCoefficient));
+        assert!(no_numerical.publishes(DiagnosticCode::DuplicateRow));
+
+        let no_heuristics = settings(serde_json::json!({ "heuristics": false }));
+        assert!(!no_heuristics.publishes(DiagnosticCode::IntegerIsBinary));
+        assert!(no_heuristics.publishes(DiagnosticCode::InvalidBounds), "proven findings stay");
+
+        let overridden = settings(serde_json::json!({
+            "heuristics": false,
+            "categories": { "mathematical": false },
+            "severityOverrides": { "integer-is-binary": "hint", "invalid-bounds": "warning", "duplicate-row": "off" }
+        }));
+        assert!(overridden.publishes(DiagnosticCode::IntegerIsBinary), "an explicit severity beats `heuristics`");
+        assert!(overridden.publishes(DiagnosticCode::InvalidBounds), "an explicit severity beats `categories`");
+        assert!(!overridden.publishes(DiagnosticCode::DuplicateRow), "`off` hides the code");
+        assert_eq!(overridden.severity_override(DiagnosticCode::InvalidBounds), Some(SeverityOverride::Warning));
+    }
+
+    #[test]
+    fn solver_and_solution_sections_are_not_this_parsers_business() {
+        // `lp.solver` / `lp.solution` are read by `requests::SolverSettings::from_value`;
+        // a bad value there must not discard the settings this parser owns.
+        let value = serde_json::json!({
+            "analysis": { "heuristics": false },
+            "solver": { "timeLimit": 0, "path": null },
+            "solution": { "showStale": "yes" }
+        });
+        let config = Config::from_value(value.clone()).expect("solver and solution sections are ignored here");
+        assert!(!config.analysis.heuristics);
+        assert!(crate::requests::SolverSettings::from_value(&value).is_err());
+    }
+
+    #[test]
+    fn package_json_settings_match_the_server() {
+        let manifest: serde_json::Value = serde_json::from_str(include_str!("../editors/vscode/package.json")).unwrap();
+        let properties = &manifest["contributes"]["configuration"]["properties"];
+        let overrides: Vec<&str> =
+            properties["lp.analysis.severityOverrides"]["properties"].as_object().unwrap().keys().map(String::as_str).collect();
+        let mut codes: Vec<&str> = DiagnosticCode::ALL.iter().map(|c| c.as_str()).collect();
+        codes.sort_unstable();
+        assert_eq!(overrides, codes, "every diagnostic code is an allowed override key");
+
+        // The declared defaults are the server's defaults.
+        let defaults = Config::default();
+        assert_eq!(properties["lp.analysis.heuristics"]["default"], defaults.analysis.heuristics);
+        assert_eq!(properties["lp.analysis.maxPerCode"]["default"], defaults.analysis.max_per_code);
+        assert_eq!(properties["lp.analysis.feasibilityTolerance"]["default"], defaults.analysis.feasibility_tolerance);
+        assert_eq!(properties["lp.analysis.equalityTolerance"]["default"], defaults.analysis.equality_tolerance);
+        assert_eq!(properties["lp.analysis.rhsCoefficientRatioThreshold"]["default"], defaults.analysis.rhs_coefficient_ratio_threshold);
+        assert_eq!(properties["lp.solver.timeLimit"]["default"], crate::requests::SolverSettings::default().time_limit);
+        assert_eq!(properties["lp.solution.inlayHints"]["default"], crate::solution::SolutionSettings::default().inlay_hints);
+        assert_eq!(properties["lp.solution.showStale"]["default"], crate::solution::SolutionSettings::default().show_stale);
+        assert_eq!(properties["lp.solver.path"]["scope"], "machine");
+        // Intentional difference: other clients must opt in to the VS Code-only lens commands.
+        assert_eq!(properties["lp.codeLens.actions"]["default"], true);
+        assert!(!defaults.code_lens.actions);
+        for category in ["structural", "numerical", "mathematical", "performance"] {
+            assert_eq!(properties["lp.analysis.categories"]["default"][category], true, "{category}");
+        }
+    }
+
+    #[test]
+    fn code_lens_actions_are_opt_in_on_the_server() {
+        assert!(!Config::default().code_lens.actions);
+        assert!(Config::from_value(serde_json::json!({ "codeLens": { "actions": true } })).unwrap().code_lens.actions);
     }
 }

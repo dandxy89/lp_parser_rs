@@ -1,7 +1,7 @@
 //! Semantic pass: a full `lp_parser_rs` parse plus analysis. Expensive, so the
 //! server runs it debounced on a blocking task and discards stale results.
 
-use lp_parser_rs::analysis::{AnalysisConfig, ProblemAnalysis};
+use lp_parser_rs::analysis::{AnalysisConfig, DiagnosticsConfig, ModelDiagnostics};
 use lp_parser_rs::{LpParseError, LpProblem, NameId};
 
 /// Outcome of the semantic pass for one document version.
@@ -18,8 +18,12 @@ pub struct SemanticResult {
 pub struct Model {
     /// The upstream model.
     pub problem: LpProblem,
-    /// Its analysis.
-    pub analysis: ProblemAnalysis,
+    /// Coded model diagnostics, computed once per document version. Positions
+    /// are not stored: the diagnostics feature maps names to ranges.
+    pub diagnostics: ModelDiagnostics,
+    /// The settings [`Self::diagnostics`] were computed under. A result is
+    /// only reused for a document version while these are unchanged.
+    pub config: DiagnosticsConfig,
     /// Objective and constraint names with a source offset, sorted by offset
     /// (ties in model order), so a range of the document is found by binary
     /// search instead of a scan of the whole model.
@@ -43,6 +47,15 @@ impl SemanticResult {
     pub fn model(&self) -> Option<&Model> {
         self.outcome.as_ref().ok()
     }
+
+    /// Whether this result still holds for `version` under `config`: the
+    /// cached diagnostics are reused until the text changes (a new version) or
+    /// a setting that feeds the analysis does. A parse error does not depend
+    /// on the analysis settings.
+    #[must_use]
+    pub fn is_current(&self, version: i32, config: &DiagnosticsConfig) -> bool {
+        self.version == version && self.model().is_none_or(|model| model.config == *config)
+    }
 }
 
 impl Model {
@@ -55,13 +68,23 @@ impl Model {
     }
 }
 
-/// Parse and analyse `text`.
+/// Parse and analyse `text` with the default analysis settings except for the
+/// magnitude `thresholds`.
 #[must_use]
-pub fn run(text: &str, version: i32, config: &AnalysisConfig) -> SemanticResult {
-    let outcome = LpProblem::parse(text).map(|problem| {
-        let analysis = problem.analyze_with_config(config);
+pub fn run(text: &str, version: i32, thresholds: &AnalysisConfig) -> SemanticResult {
+    let mut config = DiagnosticsConfig::default();
+    config.thresholds = thresholds.clone();
+    run_with(text, version, &config)
+}
+
+/// Parse `text` and compute its model diagnostics under `config`. A `config`
+/// that fails validation is reported as the outcome's error, never ignored.
+#[must_use]
+pub fn run_with(text: &str, version: i32, config: &DiagnosticsConfig) -> SemanticResult {
+    let outcome = LpProblem::parse(text).and_then(|problem| {
+        let diagnostics = problem.diagnostics_with_config(config)?;
         let name_sites = name_sites(&problem);
-        Model { problem, analysis, name_sites }
+        Ok(Model { problem, diagnostics, config: config.clone(), name_sites })
     });
     SemanticResult { version, outcome }
 }

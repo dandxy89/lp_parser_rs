@@ -3,7 +3,7 @@
 
 use std::path::{Path, PathBuf};
 
-use lp_parser_rs::analysis::AnalysisConfig;
+use lp_parser_rs::analysis::{AnalysisConfig, DiagnosticSubject, DiagnosticsConfig, ModelDiagnostic};
 use lp_parser_rs::diff::DiffOptions;
 use lp_parser_rs::model::{Constraint, QuadraticTerm, Sense, Variable, VariableType};
 use lp_parser_rs::mps::writer::{MpsWriterOptions, write_mps_string_with_options};
@@ -686,6 +686,40 @@ impl LpParser {
         analysis_to_dict(py, &analysis)
     }
 
+    /// Run the model checks and return one dict per finding.
+    ///
+    /// Each dict has `code` (a stable kebab-case string such as
+    /// `"duplicate-row"`), `severity` (`"error"`, `"warning"` or `"info"`),
+    /// `category`, `certainty` (`"proven"` or `"heuristic"`), `message`,
+    /// `explanation` (a string or `None`), `subject` (`{kind, name, variable,
+    /// site}` or `None` for problem-wide findings) and `related` (a list of
+    /// `{kind, name, variable, site, note}`). The list is sorted: errors first,
+    /// then warnings, then info.
+    ///
+    /// `config` is an optional dict using the camelCase names of
+    /// `DiagnosticsConfig`: `feasibilityTolerance`, `equalityTolerance`,
+    /// `rhsCoefficientRatioThreshold`, `maxPerCode` and `thresholds` (a dict
+    /// with `largeCoefficientThreshold`, `smallCoefficientThreshold`,
+    /// `largeRhsThreshold` and `coefficientRatioThreshold`).
+    ///
+    /// Raises `LpInvalidValueError` for an unknown key or an invalid value.
+    #[pyo3(signature = (config=None))]
+    fn diagnostics(&self, py: Python, config: Option<Bound<'_, PyDict>>) -> PyResult<Py<PyAny>> {
+        let config = match config {
+            Some(dict) => diagnostics_config(&dict)?,
+            None => DiagnosticsConfig::default(),
+        };
+        let problem = &self.problem;
+        let result = py
+            .detach(|| problem.diagnostics_with_config(&config))
+            .map_err(|err| LpInvalidValueError::new_err(format!("Invalid diagnostics config: {err}")))?;
+        let list = PyList::empty(py);
+        for diagnostic in &result.diagnostics {
+            list.append(diagnostic_to_dict(py, diagnostic)?)?;
+        }
+        Ok(list.into_any().unbind())
+    }
+
     fn __repr__(&self) -> String {
         format!("LpParser(lp_file='{}', format='{}')", self.lp_file, self.format)
     }
@@ -929,6 +963,72 @@ fn issues_to_list<'py>(py: Python<'py>, issues: &[lp_parser_rs::analysis::Analys
         list.append(issue_dict)?;
     }
     Ok(list)
+}
+
+/// Keys accepted in the `config` dict of `LpParser.diagnostics`.
+const DIAGNOSTICS_KEYS: [&str; 5] =
+    ["thresholds", "feasibilityTolerance", "equalityTolerance", "rhsCoefficientRatioThreshold", "maxPerCode"];
+const THRESHOLD_KEYS: [&str; 4] =
+    ["largeCoefficientThreshold", "smallCoefficientThreshold", "largeRhsThreshold", "coefficientRatioThreshold"];
+
+/// Build a [`DiagnosticsConfig`] from a Python dict, rejecting unknown keys so
+/// a typo is an error, not a silently ignored setting.
+fn diagnostics_config(dict: &Bound<'_, PyDict>) -> PyResult<DiagnosticsConfig> {
+    for (key, value) in dict {
+        let key: String = key.extract().map_err(|_| LpInvalidValueError::new_err("diagnostics config keys must be strings"))?;
+        if !DIAGNOSTICS_KEYS.contains(&key.as_str()) {
+            return Err(LpInvalidValueError::new_err(format!("unknown diagnostics config key '{key}'")));
+        }
+        if key == "thresholds" {
+            let thresholds = value.cast::<PyDict>().map_err(|_| LpInvalidValueError::new_err("'thresholds' must be a dict"))?;
+            for inner in thresholds.keys() {
+                let inner: String = inner.extract().map_err(|_| LpInvalidValueError::new_err("threshold keys must be strings"))?;
+                if !THRESHOLD_KEYS.contains(&inner.as_str()) {
+                    return Err(LpInvalidValueError::new_err(format!("unknown diagnostics threshold '{inner}'")));
+                }
+            }
+        }
+    }
+    pythonize::depythonize(dict).map_err(|err| LpInvalidValueError::new_err(format!("Invalid diagnostics config: {err}")))
+}
+
+const fn entity_kind_name(kind: EntityKind) -> &'static str {
+    match kind {
+        EntityKind::Objective => "objective",
+        EntityKind::Constraint => "constraint",
+        EntityKind::Variable => "variable",
+    }
+}
+
+fn subject_to_dict<'py>(py: Python<'py>, subject: &DiagnosticSubject) -> PyResult<Bound<'py, PyDict>> {
+    let dict = PyDict::new(py);
+    dict.set_item("kind", entity_kind_name(subject.kind))?;
+    dict.set_item("name", &subject.name)?;
+    dict.set_item("variable", &subject.variable)?;
+    dict.set_item("site", subject.site.as_str())?;
+    Ok(dict)
+}
+
+fn diagnostic_to_dict<'py>(py: Python<'py>, diagnostic: &ModelDiagnostic) -> PyResult<Bound<'py, PyDict>> {
+    let dict = PyDict::new(py);
+    dict.set_item("code", diagnostic.code.as_str())?;
+    dict.set_item("severity", diagnostic.severity.to_string().to_lowercase())?;
+    dict.set_item("category", diagnostic.category.as_str())?;
+    dict.set_item("certainty", diagnostic.certainty.as_str())?;
+    dict.set_item("message", &diagnostic.message)?;
+    dict.set_item("explanation", &diagnostic.explanation)?;
+    match &diagnostic.subject {
+        Some(subject) => dict.set_item("subject", subject_to_dict(py, subject)?)?,
+        None => dict.set_item("subject", py.None())?,
+    }
+    let related = PyList::empty(py);
+    for item in &diagnostic.related {
+        let entry = subject_to_dict(py, &item.subject)?;
+        entry.set_item("note", &item.note)?;
+        related.append(entry)?;
+    }
+    dict.set_item("related", related)?;
+    Ok(dict)
 }
 
 #[pymodule]

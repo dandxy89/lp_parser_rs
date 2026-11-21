@@ -1,0 +1,15 @@
+---
+source: rust/tests/test_diagnostics.rs
+expression: text
+---
+[INFO] unused-variable: Variable 'EF_0_E_Hub_Albania_Demand_Albania' is declared but appears in no objective or constraint
+[INFO] unused-variable: Variable 'EF_1_E_Hub_Albania_Demand_Albania' is declared but appears in no objective or constraint
+[INFO] objective-only-variable: Variable 'Gen_001d01h03' appears only in the objective, so it will sit at its lower bound 0
+[INFO] objective-only-variable: Variable 'Gen_001d01h04' appears only in the objective, so it will sit at its lower bound 0
+[INFO] objective-only-variable: Variable 'Gen_001d01h05' appears only in the objective, so it will sit at its lower bound 0
+[INFO] objective-only-variable: Variable 'Gen_001d01h06' appears only in the objective, so it will sit at its lower bound 0
+[INFO] objective-only-variable: Variable 'Gen_001d01h07' appears only in the objective, so it will sit at its lower bound 0
+[INFO] objective-only-variable: Variable 'Gen_001d01h08' appears only in the objective, so it will sit at its lower bound 0
+[INFO] objective-only-variable: Variable 'Gen_001d01h09' appears only in the objective, so it will sit at its lower bound 0
+[INFO] objective-only-variable: Variable 'Gen_001d01h10' appears only in the objective, so it will sit at its lower bound 0
+[INFO] objective-only-variable: Variable 'Gen_001d01h11' appears only in the objective, so it will sit at its lower bound 0

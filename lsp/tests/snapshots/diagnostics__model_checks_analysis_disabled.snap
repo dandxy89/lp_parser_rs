@@ -1,0 +1,5 @@
+---
+source: lsp/tests/diagnostics.rs
+expression: "render(&doc, &compute(&doc, &config))"
+---
+

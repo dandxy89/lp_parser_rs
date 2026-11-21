@@ -1,0 +1,12 @@
+---
+source: lsp/tests/diagnostics.rs
+expression: rendered
+---
+7:1-7:14 information explicit-zero-coefficient tags=1 `0 x + y >= -1`
+  | 'C2' has explicit zero coefficients for x
+  | A zero term has no effect. It may be left over from generated code; remove it or check the intended coefficient.
+  data {"category":"structural","certainty":"proven"}
+7:1-7:14 information row-redundant-by-bounds tags=1 `0 x + y >= -1`
+  | Constraint 'C2' always holds given the variable bounds
+  | The bounds on its variables already guarantee it; it can be removed.
+  data {"category":"mathematical","certainty":"proven"}

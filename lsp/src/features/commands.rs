@@ -5,10 +5,12 @@ use std::fmt::Write as _;
 use lp_parser_rs::LpProblem;
 use lp_parser_rs::analysis::{AnalysisIssue, IssueSeverity, ProblemAnalysis};
 use lp_parser_rs::mps::writer::write_mps_string;
+use lp_parser_rs::writer::{LpWriterOptions, write_lp_string_with_warnings};
 use serde_json::json;
 
 use crate::config::Config;
 use crate::document::Document;
+use crate::requests::diff::MAX_AGAINST_BYTES;
 
 /// Run the full analysis and return a markdown report.
 pub const ANALYZE: &str = "lp.analyze";
@@ -17,7 +19,12 @@ pub const CONVERT_TO_MPS: &str = "lp.convertToMps";
 /// Summarise variables, constraints, nonzeros and types.
 pub const SHOW_MODEL_STATS: &str = "lp.showModelStats";
 
-/// Every server-side command.
+/// Convert MPS text sent by the client to LP text; nothing is written to disk.
+pub const CONVERT_FROM_MPS: &str = "lp.convertFromMps";
+/// Commands whose arguments are `[uri, text]`: the document is not synchronised with the server.
+pub const TEXT_COMMANDS: &[&str] = &[CONVERT_FROM_MPS];
+
+/// Every server-side command that operates on a synchronised document.
 pub const ALL: &[&str] = &[ANALYZE, CONVERT_TO_MPS, SHOW_MODEL_STATS];
 
 /// Result of a command: a JSON value for the caller and a message to show.
@@ -44,7 +51,11 @@ pub fn execute(command: &str, doc: &Document, config: &Config) -> Result<Output,
 
 /// Short name of the document for messages: the file name, else the URI.
 fn display_name(doc: &Document) -> String {
-    let uri = doc.uri.as_str();
+    file_name(doc.uri.as_str())
+}
+
+/// Last path segment of `uri`, else the whole URI.
+pub(crate) fn file_name(uri: &str) -> String {
     uri.rsplit('/').next().filter(|n| !n.is_empty()).unwrap_or(uri).to_owned()
 }
 
@@ -209,6 +220,25 @@ fn convert_to_mps(doc: &Document) -> Result<Output, String> {
     Ok(Output { value: json!({ "path": path }), message: format!("Wrote {path}") })
 }
 
+/// Convert MPS `mps` (named `name` in messages) to LP text without touching the disk.
+///
+/// # Errors
+/// A user-facing message when the input is too large, is not valid MPS, or holds names LP cannot express.
+pub fn convert_from_mps(name: &str, mps: &str) -> Result<Output, String> {
+    debug_assert_ne!(name, "");
+    if mps.len() > MAX_AGAINST_BYTES {
+        return Err(format!("{name} is {} bytes; the limit is {MAX_AGAINST_BYTES}", mps.len()));
+    }
+    let problem = LpProblem::parse_mps(mps).map_err(|e| format!("cannot parse {name}: {e}"))?;
+    let (lp, omitted) =
+        write_lp_string_with_warnings(&problem, &LpWriterOptions::default()).map_err(|e| format!("cannot convert {name} to LP: {e}"))?;
+    let mut message = format!("Converted {name} to LP");
+    if !omitted.is_empty() {
+        write!(message, " ({} empty row(s) omitted)", omitted.len()).expect("writing to a String cannot fail");
+    }
+    Ok(Output { value: json!({ "lp": lp, "omitted": omitted }), message })
+}
+
 fn model_stats(doc: &Document, config: &Config) -> Result<Output, String> {
     let analysis = parse(doc)?.analyze_with_config(&config.analysis.thresholds);
     let summary = &analysis.summary;
@@ -327,5 +357,40 @@ mod tests {
         let uri = Uri::from_file_path(&missing).unwrap();
         let err = execute(CONVERT_TO_MPS, &doc_at(uri.as_str(), MODEL), &Config::default()).unwrap_err();
         assert!(err.starts_with("cannot write"), "{err}");
+    }
+
+    const MPS: &str = "NAME          TINY\nROWS\n N  obj\n L  c1\n G  c2\nCOLUMNS\n    MARKER                 'MARKER'                 'INTORG'\n    x         obj                  1.0   c1                   1.0\n    x         c2                   1.0\n    MARKER                 'MARKER'                 'INTEND'\n    y         obj                  2.0   c1                   1.0\nRHS\n    RHS       c1                   4.0   c2                   1.0\nBOUNDS\n UP BND       y                    3.0\nENDATA\n";
+
+    #[test]
+    fn convert_from_mps_returns_lp_text() {
+        let out = convert_from_mps("model.mps", MPS).unwrap();
+        let reparsed = LpProblem::parse(out.value["lp"].as_str().unwrap()).unwrap();
+        let original = LpProblem::parse_mps(MPS).unwrap();
+        assert_eq!(reparsed.constraint_count(), original.constraint_count());
+        assert_eq!(reparsed.variable_count(), original.variable_count());
+        assert_eq!(out.value["omitted"], json!([]));
+        assert_eq!(out.message, "Converted model.mps to LP");
+    }
+
+    #[test]
+    fn convert_from_mps_reports_omitted_rows() {
+        let mps = MPS.replace(" G  c2\n", " G  c2\n L  c3\n");
+        let out = convert_from_mps("model.mps", &mps).unwrap();
+        assert_ne!(out.value["omitted"], json!([]));
+        assert!(out.message.contains("empty row(s) omitted"), "{}", out.message);
+    }
+
+    #[test]
+    fn convert_from_mps_errors_are_readable() {
+        let err = convert_from_mps("model.mps", "this is not MPS").unwrap_err();
+        assert!(err.starts_with("cannot parse model.mps"), "{err}");
+        let err = convert_from_mps("model.mps", &MPS.replace("c1", "c:1")).unwrap_err();
+        assert!(err.starts_with("cannot convert model.mps to LP"), "{err}");
+    }
+
+    #[test]
+    fn convert_from_mps_rejects_oversized_input() {
+        let err = convert_from_mps("model.mps", &"*".repeat(MAX_AGAINST_BYTES + 1)).unwrap_err();
+        assert!(err.contains("the limit is"), "{err}");
     }
 }
