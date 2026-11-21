@@ -24,6 +24,7 @@ Prebuilt binaries are on the [releases page](https://github.com/dandxy89/lp_pars
 - **LP activity bar view** (needs a server that advertises `lp/model`):
   - *Model Explorer*: objectives, constraints, variables grouped by type, and special rows (indicator, quadratic, SOS, lazy and user cuts), each with counts. Expand a constraint for its coefficients or a variable for the rows that use it; click any entry to jump to its source. The toolbar filters by name.
   - *Analysis*: model diagnostics grouped by category, then by code.
+- Hover, the Model Explorer tooltips and the explain view show `\ @description` comments written above an entry.
 - The status bar shows model size (variables, constraints) and validity (no errors) for the active LP file.
 - The "used in N constraints" code lens opens the references peek view
 - *Solve* (on the objective) and *Explain* (on each named constraint) code lenses, switched by `lp.codeLens.actions`

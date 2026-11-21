@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use super::sites::Sites;
 use super::{Analysis, Cancel, DocumentRef, RequestError, Source, Target, check_limit, constraint_class, finite, operator, variable_kind};
 use crate::config::AnalysisSettings;
+use crate::description;
 use crate::document::Document;
 
 /// Default page size of each list.
@@ -115,6 +116,8 @@ pub struct ObjectiveItem {
     pub quadratic_terms: usize,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub attributes: Option<Attributes>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
 }
 
 /// Multi-objective attributes that are set.
@@ -147,6 +150,8 @@ pub struct ConstraintItem {
     pub range_partner: Option<String>,
     pub range: Option<lsp::Range>,
     pub selection_range: Option<lsp::Range>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
 }
 
 /// One variable.
@@ -160,6 +165,8 @@ pub struct VariableItem {
     pub unused: bool,
     pub free: bool,
     pub range: Option<lsp::Range>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
 }
 
 /// Effective bounds: `null` is unbounded on that side.
@@ -238,6 +245,7 @@ pub fn handle(
                 terms: objective.coefficients.len(),
                 quadratic_terms: objective.quadratic.len(),
                 attributes,
+                description: site.as_ref().and_then(|s| description::entity(doc, s.entity)),
             });
         }
         Some(items)
@@ -252,7 +260,7 @@ pub fn handle(
         let mut items = Vec::with_capacity(range.len());
         for (i, constraint) in problem.constraints.values().enumerate().skip(range.start).take(range.len()) {
             cancel.tick(i)?;
-            items.push(constraint_item(problem, &sites, constraint, &partners));
+            items.push(constraint_item(doc, problem, &sites, constraint, &partners));
         }
         Some(items)
     } else {
@@ -275,6 +283,7 @@ pub fn handle(
                 unused: usage == Usage::default(),
                 free: variable.bounds.is_free(),
                 range: sites.variable(problem.resolve(variable.name)),
+                description: doc.index().variable(problem.resolve(variable.name)).and_then(|v| description::variable(doc, v)),
             });
         }
         Some(items)
@@ -345,7 +354,7 @@ fn range_partners(problem: &LpProblem) -> FxHashMap<NameId, NameId> {
     partners
 }
 
-fn constraint_item(problem: &LpProblem, sites: &Sites, constraint: &Constraint, partners: &FxHashMap<NameId, NameId>) -> ConstraintItem {
+fn constraint_item(doc: &Document, problem: &LpProblem, sites: &Sites, constraint: &Constraint, partners: &FxHashMap<NameId, NameId>) -> ConstraintItem {
     let id = constraint.name();
     let site = sites.constraint(id);
     let relation = relation(constraint);
@@ -360,6 +369,7 @@ fn constraint_item(problem: &LpProblem, sites: &Sites, constraint: &Constraint, 
         range_partner: partners.get(&id).map(|&p| problem.resolve(p).to_owned()),
         range: site.as_ref().map(|s| s.range),
         selection_range: site.as_ref().map(|s| s.selection),
+        description: site.as_ref().and_then(|s| description::entity(doc, s.entity)),
     }
 }
 
@@ -512,6 +522,17 @@ mod tests {
         assert_eq!(x["usage"], json!({ "objectives": 1, "constraints": 3, "quadratic": 0 }));
         assert_eq!((x["unused"].clone(), x["free"].clone()), (json!(false), json!(false)));
         assert_eq!(result["truncated"], json!({ "objectives": false, "constraints": false, "variables": false }));
+    }
+
+    #[test]
+    fn descriptions_come_from_comments_above_entries() {
+        let text = "Minimize\n \\ @description Total cost\n obj: x + y\nSubject To\n \\ @description Plant cap\n c1: x + y <= 4\n c2: x >= 1\nBounds\n \\ @description Width\n x <= 4\nEnd\n";
+        let result = run(text, &params());
+        assert_eq!(result["objectives"][0]["description"], "Total cost");
+        assert_eq!(result["constraints"][0]["description"], "Plant cap");
+        assert!(result["constraints"][1].get("description").is_none());
+        assert_eq!(result["variables"][0]["description"], "Width");
+        assert!(result["variables"][1].get("description").is_none());
     }
 
     #[test]

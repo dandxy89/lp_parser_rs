@@ -29,6 +29,7 @@ export interface ObjectiveItem {
   readonly selectionRange: LspRange | null;
   readonly terms: number;
   readonly quadraticTerms: number;
+  readonly description?: string;
 }
 
 export interface ConstraintItem {
@@ -44,6 +45,7 @@ export interface ConstraintItem {
   readonly rangePartner: string | null;
   readonly range: LspRange | null;
   readonly selectionRange: LspRange | null;
+  readonly description?: string;
 }
 
 export interface VariableItem {
@@ -58,6 +60,7 @@ export interface VariableItem {
   readonly unused: boolean;
   readonly free: boolean;
   readonly range: LspRange | null;
+  readonly description?: string;
 }
 
 export interface ModelResult {

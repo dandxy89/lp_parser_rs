@@ -16,6 +16,7 @@ use super::sites::Sites;
 use super::structure::{RowKind, Scope, Structure};
 use super::{Analysis, Cancel, DocumentRef, RequestError, Source, Target, constraint_class, finite, variable_kind};
 use crate::config::AnalysisSettings;
+use crate::description;
 use crate::document::Document;
 use crate::index::{EntityKind as IndexKind, Role, Symbol};
 use crate::solution::Solution;
@@ -83,6 +84,8 @@ pub struct Result {
     pub document: DocumentRef,
     pub kind: &'static str,
     pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
     pub range: Option<lsp::Range>,
     pub markdown: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -553,6 +556,7 @@ fn constraint(
         document,
         kind: "constraint",
         name: name.to_owned(),
+        description: site.as_ref().and_then(|s| description::entity(doc, s.entity)),
         range: site.as_ref().map(|s| s.range),
         markdown: md.trim_end().to_owned(),
         terms: Some(term_list(problem, shown, &ranges, cancel)?),
@@ -608,6 +612,7 @@ fn objective(
         document,
         kind: "objective",
         name: name.to_owned(),
+        description: site.as_ref().and_then(|s| description::entity(doc, s.entity)),
         range: site.as_ref().map(|s| s.range),
         markdown: md.trim_end().to_owned(),
         terms: Some(term_list(problem, shown, &ranges, cancel)?),
@@ -701,6 +706,7 @@ fn variable(
         document,
         kind: "variable",
         name: name.to_owned(),
+        description: index.variable(name).and_then(|v| description::variable(doc, v)),
         range: sites.variable(name),
         markdown: md,
         terms: None,
@@ -788,6 +794,19 @@ mod tests {
             &params(Kind::Constraint, "c1"),
         );
         assert_eq!(all_finite["activity"], json!({ "min": 1.0, "max": 7.0 }));
+    }
+
+    #[test]
+    fn explain_includes_the_description() {
+        let text = "Minimize\n \\ @description Total cost\n obj: x + y\nSubject To\n \\ @description Plant cap\n c1: x + y <= 4\n c2: x >= 1\nBounds\n \\ @description Width\n x <= 4\nEnd\n";
+        let described = [(Kind::Constraint, "c1", "Plant cap"), (Kind::Objective, "obj", "Total cost"), (Kind::Variable, "x", "Width")];
+        for (kind, name, want) in described {
+            let result = run(text, &params(kind, name));
+            assert_eq!(result["description"], want, "{name}");
+            assert!(!result["markdown"].as_str().unwrap().contains(want), "markdown is unchanged");
+        }
+        assert!(run(text, &params(Kind::Constraint, "c2")).get("description").is_none());
+        assert!(run(text, &params(Kind::Variable, "y")).get("description").is_none());
     }
 
     #[test]

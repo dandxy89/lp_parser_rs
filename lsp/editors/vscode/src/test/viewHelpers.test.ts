@@ -58,6 +58,11 @@ describe('explainFacts', () => {
     const variable = parseExplainResult({ kind: 'variable', name: 'x', bounds: { lower: 0, upper: null, variableKind: 'integer' } }) as ExplainResult;
     assert.deepEqual(explainFacts(variable), ['Bounds: 0 .. +inf (integer)']);
   });
+
+  it('lists the description first when present', () => {
+    const constraint = parseExplainResult({ kind: 'constraint', name: 'c', description: 'Plant cap', operator: '<=', rhs: 5 }) as ExplainResult;
+    assert.deepEqual(explainFacts(constraint), ['Description: Plant cap', '<= 5']);
+  });
 });
 
 describe('describeRequestError', () => {

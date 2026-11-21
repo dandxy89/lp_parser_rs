@@ -9,6 +9,9 @@ export function formatBounds(lower: number | null, upper: number | null): string
 /** Plain-text facts about the entity: operator and right-hand side, activity range, bounds. */
 export function explainFacts(result: ExplainResult): string[] {
   const facts: string[] = [];
+  if (result.description !== undefined) {
+    facts.push(`Description: ${result.description}`);
+  }
   if (result.operator !== undefined && result.rhs !== undefined) {
     facts.push(`${result.operator} ${formatNumber(result.rhs)}`);
   }

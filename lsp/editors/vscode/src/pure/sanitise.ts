@@ -13,6 +13,8 @@ export const LIMITS = {
   bins: 512,
   /** Rows kept per list in a table (diff sections, solution tables). */
   listRows: 5_000,
+  /** Longest entry description kept (the server cuts at 1000 characters). */
+  description: 1_000,
   terms: 10_000,
   related: 100,
   components: 50,

@@ -8,6 +8,7 @@
 #![allow(clippy::struct_excessive_bools, clippy::unused_async, clippy::unused_async_trait_impl)]
 
 pub mod config;
+pub mod description;
 pub mod document;
 pub mod features;
 pub mod index;

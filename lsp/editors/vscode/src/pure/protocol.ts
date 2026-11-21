@@ -474,6 +474,7 @@ export interface ExplainTerm {
 export interface ExplainResult {
   readonly kind: EntityKind;
   readonly name: string;
+  readonly description?: string;
   readonly range?: LspRange;
   readonly markdown: string;
   readonly terms: readonly ExplainTerm[];
@@ -515,6 +516,7 @@ export function parseExplainResult(raw: unknown): ExplainResult | undefined {
   return {
     kind,
     name: cleanName(raw.name),
+    ...(typeof raw.description === 'string' && raw.description.length > 0 ? { description: cleanText(raw.description, LIMITS.description) } : {}),
     ...(range !== undefined ? { range } : {}),
     markdown: cleanTextKeepNewlines(raw.markdown, LIMITS.text),
     terms,
@@ -584,6 +586,7 @@ export interface ModelEntry {
   readonly rhs?: number;
   readonly bounds?: { readonly lower: number | null; readonly upper: number | null };
   readonly unused: boolean;
+  readonly description?: string;
   readonly range?: LspRange;
 }
 
@@ -625,6 +628,9 @@ function parseModelEntries(value: unknown, kindDefault: string): ModelEntry[] {
         ...(rhs !== undefined ? { rhs } : {}),
         ...(bounds !== undefined ? { bounds } : {}),
         unused: asBool(item.unused),
+        ...(typeof item.description === 'string' && item.description.length > 0
+          ? { description: cleanText(item.description, LIMITS.description) }
+          : {}),
         ...(range !== undefined ? { range } : {}),
       },
     ];

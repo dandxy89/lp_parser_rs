@@ -1,6 +1,6 @@
 import * as assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { ModelExplorer, formatCoefficient, isSpecial } from '../pure/explorer';
+import { type ExplorerNode, ModelExplorer, formatCoefficient, isSpecial } from '../pure/explorer';
 import type { ConstraintItem, EntityKind, ExplainResult, ModelClient, ModelResult, VariableItem } from '../pure/modelTypes';
 
 const r = (line: number) => ({ start: { line, character: 0 }, end: { line, character: 5 } });
@@ -191,6 +191,30 @@ describe('ModelExplorer children', () => {
     );
     const integer = await explorer.children(groups[1]);
     assert.equal(integer[0].description, 'free · 3');
+  });
+
+  it('adds entry descriptions to the tooltips and leaves other tooltips alone', async () => {
+    const client = new MockClient();
+    client.model = () =>
+      Promise.resolve({
+        ...MODEL,
+        objectives: [{ name: 'obj', range: r(1), selectionRange: r(1), terms: 3, quadraticTerms: 0, description: 'Total cost' }],
+        constraints: [constraint('c1', { description: 'Plant\u202E cap' }), constraint('c2')],
+        variables: [variable('x', 'continuous', { description: 'Width' }), variable('z', 'continuous')],
+      });
+    const explorer = new ModelExplorer(client);
+    explorer.setDocument(MODEL.uri);
+    const roots = await explorer.roots();
+    const section = (label: string) => roots.find((n) => n.label === label) as ExplorerNode;
+    const [obj] = await explorer.children(section('Objectives'));
+    assert.equal(obj.tooltip, 'Total cost');
+    const [c1, c2] = await explorer.children(section('Constraints'));
+    assert.equal(c1.tooltip, 'linear constraint, 2 terms\n\nPlant cap');
+    assert.equal(c2.tooltip, 'linear constraint, 2 terms');
+    const [group] = await explorer.children(section('Variables'));
+    const [x, z] = await explorer.children(group);
+    assert.equal(x.tooltip, 'continuous; 2 constraints, 1 objectives\n\nWidth');
+    assert.equal(z.tooltip, 'continuous; 2 constraints, 1 objectives');
   });
 
   it('lists constraints with operator, rhs, range partner and source range', async () => {

@@ -6,6 +6,7 @@ import {
   parseGraphResult,
   parseMatrixResult,
   parseModelNames,
+  parseModelResult,
   parseSolveResult,
 } from '../pure/protocol';
 import { LIMITS } from '../pure/sanitise';
@@ -275,6 +276,33 @@ describe('parseExplainResult', () => {
 
   it('rejects an unknown kind', () => {
     assert.equal(parseExplainResult({ ...explain, kind: 'sos' }), undefined);
+  });
+
+  it('keeps a cleaned, capped description and drops non-strings and empty ones', () => {
+    assert.equal(parseExplainResult({ ...explain, description: 'Plant\u202E cap' })?.description, 'Plant cap');
+    const long = parseExplainResult({ ...explain, description: 'a'.repeat(LIMITS.description + 50) })?.description;
+    assert.equal(long?.length, LIMITS.description);
+    assert.ok(long?.endsWith('…'));
+    for (const bad of [7, '', null, ['x']]) {
+      assert.equal('description' in (parseExplainResult({ ...explain, description: bad }) ?? {}), false);
+    }
+    assert.equal('description' in (parseExplainResult(explain) ?? {}), false);
+  });
+});
+
+describe('parseModelResult descriptions', () => {
+  it('keeps entry descriptions', () => {
+    const parsed = parseModelResult({
+      summary: {},
+      objectives: [{ name: 'o', description: 'Cost' }],
+      constraints: [{ name: 'c', description: 'Cap\u202E' }, { name: 'd', description: 3 }],
+      variables: [{ name: 'x', description: 'Width' }],
+      truncated: {},
+    });
+    assert.equal(parsed?.objectives[0].description, 'Cost');
+    assert.equal(parsed?.constraints[0].description, 'Cap');
+    assert.equal('description' in (parsed?.constraints[1] ?? {}), false);
+    assert.equal(parsed?.variables[0].description, 'Width');
   });
 });
 

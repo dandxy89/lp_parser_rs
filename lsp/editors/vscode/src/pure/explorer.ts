@@ -1,3 +1,4 @@
+import { LIMITS, cleanText } from './sanitise';
 import type { ConstraintItem, EntityKind, LspRange, ModelClient, ModelResult, VariableItem } from './modelTypes';
 
 /** Icon names are codicon ids, mapped to `ThemeIcon` by the view. */
@@ -20,7 +21,7 @@ export interface ExplorerNode {
   readonly members?: readonly ModelMember[];
 }
 
-export type ModelMember = ConstraintItem | VariableItem | { readonly name: string; readonly range: LspRange | null; readonly terms: number };
+export type ModelMember = ConstraintItem | VariableItem | { readonly name: string; readonly range: LspRange | null; readonly terms: number; readonly description?: string };
 
 const VARIABLE_KIND_ORDER = ['continuous', 'integer', 'general', 'binary', 'semiContinuous', 'semiInteger', 'sos'];
 
@@ -246,6 +247,7 @@ export class ModelExplorer {
         kind: 'objective' as const,
         label: m.name,
         description: `${(m as { terms: number }).terms} terms`,
+        ...withDescription(undefined, m.description),
         icon: 'target',
         expandable: true,
         range: m.range ?? undefined,
@@ -287,6 +289,13 @@ function rank(kind: string): number {
   return index === -1 ? VARIABLE_KIND_ORDER.length : index;
 }
 
+/** Tooltip = `base` then the entry's description (plain text, re-cleaned here), or nothing when both are absent. */
+function withDescription(base: string | undefined, description: string | undefined): { tooltip?: string } {
+  const text = typeof description === 'string' && description.length > 0 ? cleanText(description, LIMITS.description) : undefined;
+  const tooltip = base !== undefined && text !== undefined ? `${base}\n\n${text}` : (base ?? text);
+  return tooltip === undefined ? {} : { tooltip };
+}
+
 function constraintNode(c: ConstraintItem): ExplorerNode {
   const relation = c.operator === undefined ? c.kind : `${c.operator} ${c.rhs === null || c.rhs === undefined ? '' : c.rhs}`.trim();
   const flags = [c.class !== 'normal' ? c.class : '', c.rangePartner !== null ? `range with ${c.rangePartner}` : ''].filter((f) => f.length > 0);
@@ -295,7 +304,7 @@ function constraintNode(c: ConstraintItem): ExplorerNode {
     kind: 'constraint',
     label: c.name,
     description: [relation, ...flags].join(' · '),
-    tooltip: `${c.kind} constraint, ${c.terms} terms${c.generated ? ' (generated name)' : ''}`,
+    ...withDescription(`${c.kind} constraint, ${c.terms} terms${c.generated ? ' (generated name)' : ''}`, c.description),
     icon: c.kind === 'linear' ? 'symbol-operator' : 'star',
     expandable: true,
     range: c.selectionRange ?? c.range ?? undefined,
@@ -311,7 +320,10 @@ function variableNode(v: VariableItem): ExplorerNode {
     kind: 'variable',
     label: v.name,
     description: v.unused ? 'unused' : `${bounds} · ${used}`,
-    tooltip: `${v.kind}; ${v.usage.constraints} constraints, ${v.usage.objectives} objectives${v.usage.quadratic > 0 ? `, ${v.usage.quadratic} quadratic` : ''}`,
+    ...withDescription(
+      `${v.kind}; ${v.usage.constraints} constraints, ${v.usage.objectives} objectives${v.usage.quadratic > 0 ? `, ${v.usage.quadratic} quadratic` : ''}`,
+      v.description,
+    ),
     icon: v.unused ? 'warning' : 'symbol-variable',
     expandable: !v.unused,
     range: v.range ?? undefined,

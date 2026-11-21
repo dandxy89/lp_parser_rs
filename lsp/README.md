@@ -17,8 +17,8 @@ extensions that [`lp_parser_rs`](../rust) supports, and it keeps working while a
   variables a constraint uses), and document and workspace symbols.
 - **Rename**: a variable within its file, or a constraint, objective or SOS name across every `*.lp` file in the
   workspace. It refuses names that would change how the file parses.
-- **Hover and completion**: details on variables, constraints and keywords, and suggestions that fit where
-  the cursor is.
+- **Hover and completion**: details on variables, constraints and keywords (with any `\ @description` comment
+  written directly above the entry), and suggestions that fit where the cursor is.
 - **Formatting**: whole document, a selection, or on Enter. It never touches a file with syntax errors.
 - **Code actions**: quick fixes for the problems it reports, plus refactors such as adding a bound, moving a
   variable between type sections and reordering sections.
@@ -34,6 +34,27 @@ extensions that [`lp_parser_rs`](../rust) supports, and it keeps working while a
 The server indexes every `*.lp` file under the workspace folders at start-up, skipping `.git`, `target`,
 `node_modules`, `.venv`, `venv` and `__pycache__`, and stopping once the indexed text reaches 256 MB. It keeps the
 index current through file watching or, for clients without it, file-operation notifications.
+
+### Descriptions
+
+A `\ @description` comment directly above an entry documents it. Hover shows it, and `lp/model` and `lp/explain`
+return it as `description`.
+
+```lp
+Subject To
+ \ @description Capacity of the north plant
+ c1: x + y <= 10
+```
+
+- A description line is `\`, optional blanks, `@description` (case-sensitive), then blanks and text. It must be a
+  real line comment, not inside a `\* ... *\` block. CRLF is fine.
+- Consecutive description lines directly above the entry join with single spaces (at most 16 lines, the nearest
+  are kept). A blank line or a plain comment between them and the entry detaches the description.
+- It attaches to an objective, constraint, general constraint or SOS set that starts its line, and to a variable's
+  first `Bounds` or type-section entry on its line (`b1` of `b1 b2 b3`). A description above a constraint is not
+  passed to the variables it uses, and a trailing comment on the entry's own line is never a description.
+- Control and bidirectional-control characters are removed and the text is cut at 1000 characters (`…`).
+  Hover escapes Markdown, so a description cannot add links, images or HTML.
 
 ## Install
 
@@ -99,8 +120,8 @@ ignore them, and the standard features work without them.
 
 | Request | Purpose |
 | --- | --- |
-| `lp/model` | Model Explorer data: objectives, constraints, variables grouped by type, and special rows, with counts and source ranges. |
-| `lp/explain` | What an objective, constraint or variable means in the model's own terms: terms, bounds, activity range, related rows and diagnostics. |
+| `lp/model` | Model Explorer data: objectives, constraints, variables grouped by type, and special rows, with counts and source ranges, and each entry's `description`. |
+| `lp/explain` | What an objective, constraint or variable means in the model's own terms: terms, bounds, activity range, related rows and diagnostics, and each entry's `description`. |
 | `lp/graph` | The bipartite row/variable dependency graph. |
 | `lp/matrix` | The sparse coefficient matrix, as exact entries or a density raster for large models. |
 | `lp/diff` | The mathematical difference between the buffer and another copy of the model. |

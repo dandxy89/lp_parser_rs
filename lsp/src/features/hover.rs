@@ -7,6 +7,7 @@ use ls_types::{Hover, HoverContents, MarkupContent, MarkupKind, Position};
 use tree_sitter::Node;
 
 use super::docs;
+use crate::description;
 use crate::document::Document;
 use crate::index::{Entity, EntityKind, Namespace, Role, Symbol, Variable};
 use crate::solution::Solution;
@@ -63,6 +64,13 @@ pub fn hover_with(doc: &Document, position: Position, solution: Option<&Solution
     Some(Hover { contents: HoverContents::Markup(MarkupContent { kind: MarkupKind::Markdown, value }), range: Some(doc.range(range)) })
 }
 
+fn push_description(out: &mut String, description: Option<String>) {
+    if let Some(d) = description {
+        out.push_str(&description::escape_markdown(&d));
+        out.push_str("\n\n");
+    }
+}
+
 fn append_solution(text: &mut String, line: Option<String>) {
     if let Some(line) = line {
         if !text.ends_with('\n') {
@@ -108,7 +116,9 @@ fn variable(doc: &Document, var: &Variable) -> String {
         _ => "continuous",
     };
 
-    let mut out = format!("**{}** (variable)\n\n- **Type:** {var_type}\n", var.name);
+    let mut out = format!("**{}** (variable)\n\n", var.name);
+    push_description(&mut out, description::variable(doc, var));
+    push_line!(out, "- **Type:** {var_type}");
     if bounds.is_empty() {
         let default = if var_type == "binary" { "0 <= x <= 1" } else { "0 <= x <= +inf" };
         push_line!(out, "- **Bounds:** none declared (default `{}`)", default.replacen('x', &var.name, 1));
@@ -187,6 +197,7 @@ fn entity_hover(doc: &Document, id: usize) -> Option<String> {
     let node = doc.node(entity.range.clone(), entity.node_kind);
     let name = entity.name.as_deref().unwrap_or("(unnamed)");
     let mut out = format!("**{name}** ({})\n\n", entity.kind.label());
+    push_description(&mut out, description::entity(doc, id));
     match entity.kind {
         EntityKind::Objective => {
             let sense = doc.tree.root_node().child(0).filter(|n| n.kind() == kind::SENSE);
@@ -477,6 +488,18 @@ End
         assert!(g1.contains("r = MAX ( x , y , 3 )") && g1.contains("general constraints"), "{g1}");
         let s1 = hover_at(&d, "s1", 0).unwrap();
         assert!(s1.contains("s1 : S1 :: x : 1 y : -2"), "{s1}");
+    }
+
+    #[test]
+    fn hover_shows_descriptions() {
+        let text = "Minimize\n obj: x\nSubject To\n \\ @description Plant cap\n c1: x <= 4\n c2: x >= 1\nBounds\n \\ @description *x* width\n x <= 4\nEnd\n";
+        let d = doc(text);
+        let c1 = hover_at(&d, "c1", 0).unwrap();
+        assert!(c1.starts_with("**c1** (constraint)\n\nPlant cap\n\n"), "{c1}");
+        let x = hover_at(&d, "x <= 4", 0).unwrap();
+        assert!(x.starts_with("**x** (variable)\n\n\\*x\\* width\n\n- **Type:**"), "{x}");
+        let c2 = hover_at(&d, "c2", 0).unwrap();
+        assert!(c2.starts_with("**c2** (constraint)\n\n```lp"), "{c2}");
     }
 
     #[test]
