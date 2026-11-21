@@ -1,6 +1,6 @@
 [package]
 name = "lp-lsp"
-version = "1.0.2"
+version = "1.1.0"
 edition = "2024"
 rust-version.workspace = true
 description = "Language server for LP (linear programming) files"

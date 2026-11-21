@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.0](https://github.com/dandxy89/lp_parser_rs/compare/lp-lsp-v1.0.2...lp-lsp-v1.1.0) (2026-11-21)
+
+
+### Features
+
+* model diagnostics, lp-highs solver and VS Code model tooling ([#239](https://github.com/dandxy89/lp_parser_rs/issues/239)) ([31f9ef3](https://github.com/dandxy89/lp_parser_rs/commit/31f9ef3c0218d3b8f655e6dc908cad2191a21059))
+
 ## [1.0.2](https://github.com/dandxy89/lp_parser_rs/compare/lp-lsp-v1.0.1...lp-lsp-v1.0.2) (2026-11-17)
 
 
