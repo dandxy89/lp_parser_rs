@@ -1,9 +1,21 @@
 #!/bin/sh
-# Pre-push checks: format, lint, test. Abort push on any failure.
+# Full CI mirror. Checks the working tree, so it refuses to run unless that is exactly what is being pushed.
 set -e
+while read -r _ local_sha _ _; do
+    case "$local_sha" in 0000000*) continue ;; esac
+    if [ "$local_sha" != "$(git rev-parse HEAD)" ] || ! git diff --quiet HEAD; then
+        echo "pre-push: check out the branch you are pushing, with a clean tree (checks run on the working tree)." >&2
+        exit 1
+    fi
+done
 
 cargo fmt --all -- --check
 cargo clippy --locked --all-targets --all-features -- -D warnings
+for features in cli cli,diff cli,csv cli,diff,csv; do
+    cargo clippy --locked --package lp_parser_rs --no-default-features --features "$features" --all-targets -- -D warnings
+done
+cargo clippy --locked --package lp_parser_rs --no-default-features --lib -- -D warnings
 cargo test --locked --all-features
 cargo doc --locked --workspace --no-deps --all-features
-cd python && make pre_commit
+(cd python && make pre_commit)
+(cd lsp/editors/vscode && npx tsc --noEmit && npm test)

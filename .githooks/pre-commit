@@ -1,0 +1,16 @@
+#!/bin/sh
+# Fast CI mirror on what is being committed. Enable once per clone: git config core.hooksPath .githooks
+set -e
+staged=$(git diff --cached --name-only --diff-filter=ACMR)
+has() { printf '%s\n' "$staged" | grep -qE "$1"; }
+
+if has '\.rs$|(^|/)Cargo\.(toml|lock)$'; then
+    cargo fmt --all -- --check
+    cargo clippy --locked --all-targets --all-features -- -D warnings
+fi
+if has '^python/'; then
+    (cd python && uv run --no-sync ruff format --check . && uv run --no-sync ruff check . && uv run --no-sync ty check)
+fi
+if has '^lsp/editors/vscode/'; then
+    (cd lsp/editors/vscode && npx tsc --noEmit)
+fi

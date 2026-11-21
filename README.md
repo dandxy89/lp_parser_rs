@@ -318,6 +318,7 @@ See [`lsp/README.md`](https://github.com/dandxy89/lp_parser_rs/blob/main/lsp/REA
 ```bash
 cargo insta test --all-features   # run tests
 cargo insta review                # review snapshot changes
+git config core.hooksPath .githooks   # once per clone: format, lint and test checks on commit and push
 ```
 
 Test data sources: [Jplex](https://github.com/asbestian/jplex/blob/main/instances/afiro.lp), [LPWriter.jl](https://github.com/odow/LPWriter.jl/blob/master/test/model2.lp), [Lp-Parser](https://github.com/aphi/Lp-Parser).
