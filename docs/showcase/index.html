@@ -972,7 +972,7 @@ src.addEventListener('input', check);
 src.addEventListener('scroll', () => { hl.scrollTop = src.scrollTop; hl.scrollLeft = src.scrollLeft; });
 check();
 
-const fromHash = () => { const [m, s] = location.hash.slice(1).split('.').map((x) => parseInt(x, 10) || 0); const st = stackOf(Math.max(0, Math.min(mains - 1, (m || 1) - 1))); show(st[Math.min(s, st.length - 1)]); };
+const fromHash = () => { const [m, s] = location.hash.slice(1).split('.').map((x) => parseInt(x, 10) || 0); const st = stackOf(Math.max(0, Math.min(mains - 1, (m || 1) - 1))); show(st[Math.min(s || 0, st.length - 1)]); };
 addEventListener('hashchange', fromHash);
 fromHash();
 </script>
