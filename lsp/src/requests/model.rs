@@ -354,7 +354,13 @@ fn range_partners(problem: &LpProblem) -> FxHashMap<NameId, NameId> {
     partners
 }
 
-fn constraint_item(doc: &Document, problem: &LpProblem, sites: &Sites, constraint: &Constraint, partners: &FxHashMap<NameId, NameId>) -> ConstraintItem {
+fn constraint_item(
+    doc: &Document,
+    problem: &LpProblem,
+    sites: &Sites,
+    constraint: &Constraint,
+    partners: &FxHashMap<NameId, NameId>,
+) -> ConstraintItem {
     let id = constraint.name();
     let site = sites.constraint(id);
     let relation = relation(constraint);

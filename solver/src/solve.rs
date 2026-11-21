@@ -527,7 +527,7 @@ fn register_cancel(model: &mut highs::Model, cancel: &AtomicBool) -> Result<(), 
 ///
 /// `extra` is applied *after* `highs.opt`, so a caller-supplied preset wins over
 /// a stale options file in the working directory. Keys reserved by the solve
-/// itself (see [`RESERVED_OPTIONS`]) are ignored, as they are for the file.
+/// itself (see `RESERVED_OPTIONS`) are ignored, as they are for the file.
 ///
 /// # Errors
 ///

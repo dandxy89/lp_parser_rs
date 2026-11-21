@@ -60,7 +60,7 @@ pub struct UnboundedRay {
     /// The rate the objective improves along the ray, per unit of it.
     pub objective_rate: f64,
     /// Candidates found by inspection, populated only when `HiGHS` returned no
-    /// ray. Not a proof — see [`suspects`].
+    /// ray. Not a proof — see `suspects`.
     pub suspects: Vec<Suspect>,
     /// Columns whose integrality was dropped to make the question an LP one.
     pub relaxed_integrality: usize,

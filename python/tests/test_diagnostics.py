@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import pytest
 
 from parse_lp import LpInvalidValueError, LpParser
+
+if TYPE_CHECKING:
+    from parse_lp.parse_lp import DiagnosticsConfig, DiagnosticSubject, ModelDiagnostic
 
 CODES = {
     "invalid-bounds",
@@ -14,11 +19,17 @@ CODES = {
 }
 
 
-def diagnose(text: str, config: dict | None = None) -> list[dict]:
+def diagnose(text: str, config: DiagnosticsConfig | None = None) -> list[ModelDiagnostic]:
     return LpParser.from_string(text).diagnostics(config)
 
 
-def codes(findings: list[dict]) -> list[str]:
+def subject_of(finding: ModelDiagnostic) -> DiagnosticSubject:
+    subject = finding["subject"]
+    assert subject is not None
+    return subject
+
+
+def codes(findings: list[ModelDiagnostic]) -> list[str]:
     return [finding["code"] for finding in findings]
 
 
@@ -85,20 +96,20 @@ class TestChecks:
     def test_invalid_bounds_subject_site(self) -> None:
         lp = "Minimize\n obj: x\nSubject To\n c1: x >= 0\nBounds\n x >= 5\n x <= 3\nEnd\n"
         (finding,) = [f for f in diagnose(lp) if f["code"] == "invalid-bounds"]
-        assert finding["subject"]["site"] == "bound"
-        assert finding["subject"]["kind"] == "variable"
+        assert subject_of(finding)["site"] == "bound"
+        assert subject_of(finding)["kind"] == "variable"
         assert finding["severity"] == "error"
 
     def test_no_effective_bound_is_conditional(self) -> None:
         lp = "Maximize\n obj: x + w\nSubject To\n c1: x <= 1\nEnd\n"
         (finding,) = [f for f in diagnose(lp) if f["code"] == "no-effective-bound"]
-        assert finding["subject"]["name"] == "w"
+        assert subject_of(finding)["name"] == "w"
         assert "if the model is feasible" in finding["message"]
 
     def test_contradictory_rows(self) -> None:
         lp = "Minimize\n obj: x + y\nSubject To\n c1: x + y <= 1\n c2: x + y >= 5\nEnd\n"
         (finding,) = [f for f in diagnose(lp) if f["code"] == "contradictory-rows"]
-        assert finding["subject"]["name"] == "c2"
+        assert subject_of(finding)["name"] == "c2"
         assert finding["related"][0]["name"] == "c1"
 
     def test_coefficient_level_subject_names_variable(self) -> None:
@@ -109,8 +120,8 @@ class TestChecks:
     def test_objective_subject_kind(self) -> None:
         lp = "Minimize multi-objectives\n a: x + y\n b: 2 x + 2 y\nSubject To\n c1: x + y >= 1\nEnd\n"
         (finding,) = [f for f in diagnose(lp) if f["code"] == "duplicate-objective"]
-        assert finding["subject"]["kind"] == "objective"
-        assert finding["subject"]["name"] == "b"
+        assert subject_of(finding)["kind"] == "objective"
+        assert subject_of(finding)["name"] == "b"
 
     def test_mps_input(self) -> None:
         mps = (
@@ -165,16 +176,16 @@ class TestConfig:
     )
     def test_invalid_values_raise(self, config: dict) -> None:
         with pytest.raises(LpInvalidValueError):
-            diagnose(self.LP, config)
+            diagnose(self.LP, config)  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
 
     @pytest.mark.parametrize("config", [{"nope": 1}, {"thresholds": {"bogus": 1.0}}, {"thresholds": 3}])
     def test_unknown_keys_raise(self, config: dict) -> None:
         with pytest.raises(LpInvalidValueError):
-            diagnose(self.LP, config)
+            diagnose(self.LP, config)  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
 
     def test_wrong_value_type_raises(self) -> None:
         with pytest.raises(LpInvalidValueError):
-            diagnose(self.LP, {"maxPerCode": "many"})
+            diagnose(self.LP, {"maxPerCode": "many"})  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
 
     def test_empty_config_equals_default(self) -> None:
         assert diagnose(self.LP, {}) == diagnose(self.LP)

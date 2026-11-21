@@ -93,7 +93,8 @@ pub fn variable(doc: &Document, variable: &Variable) -> Option<String> {
     })
 }
 
-/// Backslash-escapes CommonMark punctuation: `` \ ` * _ { } [ ] ( ) # + - . ! | < > ~ & ``
+/// Backslash-escapes `CommonMark` punctuation (backslash, backtick, `*`, `_`, braces, brackets, parentheses,
+/// `#`, `+`, `-`, `.`, `!`, `|`, `<`, `>`, `~` and `&`).
 #[must_use]
 pub fn escape_markdown(text: &str) -> String {
     let mut out = String::with_capacity(text.len());

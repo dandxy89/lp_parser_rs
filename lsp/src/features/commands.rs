@@ -230,8 +230,8 @@ pub fn convert_from_mps(name: &str, mps: &str) -> Result<Output, String> {
         return Err(format!("{name} is {} bytes; the limit is {MAX_AGAINST_BYTES}", mps.len()));
     }
     let problem = LpProblem::parse_mps(mps).map_err(|e| format!("cannot parse {name}: {e}"))?;
-    let (lp, omitted) = write_lp_string_with_warnings(&problem, &LpWriterOptions::default())
-        .map_err(|e| format!("cannot convert {name} to LP: {e}"))?;
+    let (lp, omitted) =
+        write_lp_string_with_warnings(&problem, &LpWriterOptions::default()).map_err(|e| format!("cannot convert {name} to LP: {e}"))?;
     let mut message = format!("Converted {name} to LP");
     if !omitted.is_empty() {
         write!(message, " ({} empty row(s) omitted)", omitted.len()).expect("writing to a String cannot fail");
