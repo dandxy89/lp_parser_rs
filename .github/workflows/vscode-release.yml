@@ -40,23 +40,80 @@ jobs:
       - name: Install musl tools
         if: contains(matrix.target, 'musl')
         run: sudo apt-get update && sudo apt-get install -y musl-tools
+      # The solver helper (HiGHS, C++) is built here for macOS and Windows only; the
+      # static musl Linux targets have no C++ toolchain, so the Linux helper is built
+      # by `build-linux-helper` below.
+      - name: Install cmake (macOS)
+        if: contains(matrix.target, 'apple')
+        run: brew install cmake
+      - name: Install cmake (Windows)
+        if: contains(matrix.target, 'windows')
+        uses: lukka/get-cmake@latest
       - name: Set cross-compile env (macOS x86_64)
         if: matrix.target == 'x86_64-apple-darwin'
         shell: bash
-        run: echo "CARGO_TARGET_X86_64_APPLE_DARWIN_LINKER=clang" >> "$GITHUB_ENV"
-      - run: cargo build --release --target ${{ matrix.target }} -p lp-lsp
+        run: |
+          echo "CARGO_TARGET_X86_64_APPLE_DARWIN_LINKER=clang" >> "$GITHUB_ENV"
+          echo "CMAKE_OSX_ARCHITECTURES=x86_64" >> "$GITHUB_ENV"
+      - name: Set cross-compile env (Windows aarch64)
+        if: matrix.target == 'aarch64-pc-windows-msvc'
+        shell: bash
+        run: echo "CMAKE_GENERATOR_PLATFORM=ARM64" >> "$GITHUB_ENV"
+      - name: Build server
+        run: cargo build --release --target ${{ matrix.target }} -p lp-lsp
+      - name: Build solver helper
+        if: ${{ !contains(matrix.target, 'musl') }}
+        run: cargo build --release --target ${{ matrix.target }} -p lp-highs
       # win32-arm64 is cross-compiled on x64 and cannot run here
       - name: Smoke test
         if: matrix.vsce != 'win32-arm64'
         shell: bash
         run: target/${{ matrix.target }}/release/lp-lsp${{ contains(matrix.target, 'windows') && '.exe' || '' }} --version
+      - name: Smoke test the solver helper
+        if: ${{ !contains(matrix.target, 'musl') && matrix.vsce != 'win32-arm64' }}
+        shell: bash
+        run: target/${{ matrix.target }}/release/lp-highs${{ contains(matrix.target, 'windows') && '.exe' || '' }} info
       - uses: actions/upload-artifact@v7
         with:
           name: server-${{ matrix.vsce }}
-          path: target/${{ matrix.target }}/release/lp-lsp${{ contains(matrix.target, 'windows') && '.exe' || '' }}
+          path: |
+            target/${{ matrix.target }}/release/lp-lsp${{ contains(matrix.target, 'windows') && '.exe' || '' }}
+            target/${{ matrix.target }}/release/lp-highs${{ contains(matrix.target, 'windows') && '.exe' || '' }}
+          # musl targets have no helper; the pattern above then matches only the server.
+          if-no-files-found: warn
+
+  # glibc 2.28 is the VS Code floor, so the Linux helper is built in a manylinux_2_28
+  # container (the static musl server cannot link HiGHS: musl-tools has no C++ compiler).
+  build-linux-helper:
+    name: Helper ${{ matrix.vsce }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { vsce: linux-x64, runner: ubuntu-latest, image: "quay.io/pypa/manylinux_2_28_x86_64" }
+          - { vsce: linux-arm64, runner: ubuntu-24.04-arm, image: "quay.io/pypa/manylinux_2_28_aarch64" }
+    runs-on: ${{ matrix.runner }}
+    container: ${{ matrix.image }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag_name }}
+      - name: Install build dependencies
+        run: dnf install -y clang-devel cmake
+      - name: Install Rust toolchain
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - run: cargo build --release -p lp-highs
+      - name: Smoke test
+        run: target/release/lp-highs info
+      - uses: actions/upload-artifact@v7
+        with:
+          name: helper-${{ matrix.vsce }}
+          path: target/release/lp-highs
 
   package:
-    needs: build
+    needs: [build, build-linux-helper]
     runs-on: ubuntu-latest
     permissions:
       id-token: write # Marketplace trusted publishing
@@ -73,7 +130,7 @@ jobs:
           node-version: 22
       - uses: actions/download-artifact@v8
         with:
-          pattern: server-*
+          pattern: "*-*"
           path: ${{ github.workspace }}/servers
       - run: npm ci
       - name: Use the released changelog
@@ -82,12 +139,16 @@ jobs:
         run: |
           for dir in "$GITHUB_WORKSPACE"/servers/server-*; do
             target="${dir##*/server-}"
-            rm -rf server && mkdir server && cp "$dir"/* server/ && chmod +x server/*
+            rm -rf server && mkdir server && cp "$dir"/* server/
+            # Linux ships a manylinux-built helper next to the musl server
+            [ -d "$GITHUB_WORKSPACE/servers/helper-$target" ] && cp "$GITHUB_WORKSPACE/servers/helper-$target"/* server/
+            chmod +x server/*
             npx vsce package --target "$target" --out "lp-lsp-$target.vsix"
-            # one static musl build serves the Alpine targets too
+            # one static musl build serves the Alpine targets too, without the glibc-only
+            # solver helper (the language server then reports the solver as unavailable)
             case "$target" in
-              linux-x64)   npx vsce package --target alpine-x64   --out lp-lsp-alpine-x64.vsix ;;
-              linux-arm64) npx vsce package --target alpine-arm64 --out lp-lsp-alpine-arm64.vsix ;;
+              linux-x64)   rm -f server/lp-highs; npx vsce package --target alpine-x64   --out lp-lsp-alpine-x64.vsix ;;
+              linux-arm64) rm -f server/lp-highs; npx vsce package --target alpine-arm64 --out lp-lsp-alpine-arm64.vsix ;;
             esac
           done
           # fallback for platforms with no specific package; relies on PATH or lp.server.path
@@ -104,6 +165,12 @@ jobs:
             [ "$f" = lp-lsp-universal.vsix ] && continue
             unzip -l "$f" | grep -Eq 'extension/server/lp-lsp(\.exe)?$' \
               || { echo "$f: no bundled server"; exit 1; }
+            # every platform package except Alpine bundles the solver helper
+            case "$f" in
+              *alpine*) unzip -l "$f" | grep -Eq 'extension/server/lp-highs' && { echo "$f: unexpected solver helper"; exit 1; } ;;
+              *) unzip -l "$f" | grep -Eq 'extension/server/lp-highs(\.exe)?$' \
+                   || { echo "$f: no bundled solver helper"; exit 1; } ;;
+            esac
           done
       - name: Attach to the GitHub release
         env:

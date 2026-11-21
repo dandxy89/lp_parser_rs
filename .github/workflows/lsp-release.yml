@@ -52,6 +52,19 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
+      # lp-highs builds HiGHS from source (cmake, a C++ compiler, libclang for bindgen).
+      - name: Install dependencies (Linux)
+        if: contains(matrix.target, 'linux')
+        run: sudo apt-get update && sudo apt-get install -y cmake build-essential libclang-dev
+
+      - name: Install dependencies (macOS)
+        if: contains(matrix.target, 'apple')
+        run: brew install cmake
+
+      - name: Install dependencies (Windows)
+        if: contains(matrix.target, 'windows')
+        uses: lukka/get-cmake@latest
+
       - name: Extract version from tag
         id: version
         shell: bash
@@ -64,10 +77,18 @@ jobs:
       - name: Set cross-compile env (macOS x86_64)
         if: matrix.target == 'x86_64-apple-darwin'
         shell: bash
-        run: echo "CARGO_TARGET_X86_64_APPLE_DARWIN_LINKER=clang" >> "$GITHUB_ENV"
+        run: |
+          echo "CARGO_TARGET_X86_64_APPLE_DARWIN_LINKER=clang" >> "$GITHUB_ENV"
+          echo "CMAKE_OSX_ARCHITECTURES=x86_64" >> "$GITHUB_ENV"
 
-      - name: Build binary
-        run: cargo build --release --target ${{ matrix.target }} --package lp-lsp
+      - name: Set cross-compile env (Windows aarch64)
+        if: matrix.target == 'aarch64-pc-windows-msvc'
+        shell: bash
+        run: echo "CMAKE_GENERATOR_PLATFORM=ARM64" >> "$GITHUB_ENV"
+
+      # The server and its solver helper ship together in every archive.
+      - name: Build binaries
+        run: cargo build --release --target ${{ matrix.target }} --package lp-lsp --package lp-highs
 
       - name: Package (Unix)
         if: matrix.archive == 'tar.gz'
@@ -75,7 +96,7 @@ jobs:
         run: |
           ARCHIVE_NAME="lp-lsp-${{ steps.version.outputs.version }}-${{ matrix.target }}"
           mkdir -p "${ARCHIVE_NAME}"
-          cp "target/${{ matrix.target }}/release/lp-lsp" "${ARCHIVE_NAME}/"
+          cp "target/${{ matrix.target }}/release/lp-lsp" "target/${{ matrix.target }}/release/lp-highs" "${ARCHIVE_NAME}/"
           tar czf "${ARCHIVE_NAME}.tar.gz" "${ARCHIVE_NAME}"
           shasum -a 256 "${ARCHIVE_NAME}.tar.gz" > "${ARCHIVE_NAME}.tar.gz.sha256"
           echo "ASSET=${ARCHIVE_NAME}.tar.gz" >> "$GITHUB_ENV"
@@ -106,6 +127,7 @@ jobs:
           $ArchiveName = "lp-lsp-${{ steps.version.outputs.version }}-${{ matrix.target }}"
           New-Item -ItemType Directory -Path $ArchiveName -Force
           Copy-Item "target/${{ matrix.target }}/release/lp-lsp.exe" "$ArchiveName/"
+          Copy-Item "target/${{ matrix.target }}/release/lp-highs.exe" "$ArchiveName/"
           Compress-Archive -Path "$ArchiveName/*" -DestinationPath "$ArchiveName.zip"
           $hash = (Get-FileHash "$ArchiveName.zip" -Algorithm SHA256).Hash.ToLower()
           "$hash  $ArchiveName.zip" | Out-File -Encoding ascii "$ArchiveName.zip.sha256"

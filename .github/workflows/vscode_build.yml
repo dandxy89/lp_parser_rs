@@ -26,4 +26,26 @@ jobs:
           node-version: 22
       - run: npm ci
       - run: npm run compile
+      - run: npm test
       - run: npx vsce package --out /tmp/lp-lsp-check.vsix
+
+  extension-host:
+    name: Extension host tests
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: lsp/editors/vscode
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - run: npm ci
+      - uses: actions/cache@v4
+        with:
+          path: lsp/editors/vscode/.vscode-test
+          key: vscode-test-${{ runner.os }}-${{ hashFiles('lsp/editors/vscode/package-lock.json') }}
+      # VS Code needs a display: the extension host tests run under xvfb.
+      - name: Install xvfb
+        run: sudo apt-get update && sudo apt-get install -y xvfb libgbm1 libasound2t64
+      - run: xvfb-run -a npm run test:integration
