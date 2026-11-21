@@ -3,18 +3,18 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>lp_parser_rs — Rust LP file parser, writer &amp; diff toolkit</title>
+<title>lp_parser_rs: Rust LP file parser, writer &amp; diff toolkit</title>
 <meta name="description" content="A Rust library for reading, editing and writing LP and MPS files, with a command-line tool, a terminal diff viewer, a language server and Python bindings built on it.">
 <link rel="canonical" href="https://dandxy89.github.io/lp_parser_rs/">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="lp_parser_rs">
 <meta property="og:url" content="https://dandxy89.github.io/lp_parser_rs/">
-<meta property="og:title" content="lp_parser_rs — Rust LP file parser, writer &amp; diff toolkit">
+<meta property="og:title" content="lp_parser_rs: Rust LP file parser, writer &amp; diff toolkit">
 <meta property="og:description" content="A Rust library for reading, editing and writing LP and MPS files, with a command-line tool, a terminal diff viewer, a language server and Python bindings built on it.">
 <meta property="og:image" content="https://dandxy89.github.io/lp_parser_rs/assets/demo-poster.jpg">
 <meta property="og:image:alt" content="The lp_diff terminal UI diffing two models: section tabs for Summary, Variables, Constraints, Objectives and Numerics, with counts of removed and changed entries.">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="lp_parser_rs — Rust LP file parser, writer &amp; diff toolkit">
+<meta name="twitter:title" content="lp_parser_rs: Rust LP file parser, writer &amp; diff toolkit">
 <meta name="twitter:description" content="A Rust library for reading, editing and writing LP and MPS files, with a command-line tool, a terminal diff viewer, a language server and Python bindings built on it.">
 <meta name="twitter:image" content="https://dandxy89.github.io/lp_parser_rs/assets/demo-poster.jpg">
 <meta name="twitter:image:alt" content="The lp_diff terminal UI diffing two models: section tabs for Summary, Variables, Constraints, Objectives and Numerics, with counts of removed and changed entries.">
@@ -149,24 +149,24 @@
     <h2>The crate<span class="dim"> and its tools</span></h2>
     <div class="cards">
       <div class="card">
-        <h3><a href="#library">lp_parser_rs — Rust crate</a></h3>
+        <h3><a href="#library">lp_parser_rs: Rust crate</a></h3>
         <p>Parse, inspect, modify and write LP and MPS problems from Rust. Diff, serde and external solvers are optional features.</p>
       </div>
       <div class="card">
-        <h3><a href="#cli">lp_parser — CLI</a></h3>
+        <h3><a href="#cli">lp_parser: CLI</a></h3>
         <p>Six subcommands: <code>parse</code>, <code>info</code>, <code>analyze</code>, <code>diff</code>, <code>convert</code>, <code>solve</code>. LP or MPS in; text, JSON or YAML out.</p>
       </div>
       <div class="card">
-        <h3><a href="#tui">lp_diff — interactive TUI</a></h3>
+        <h3><a href="#tui">lp_diff: interactive TUI</a></h3>
         <p>Explore one LP or MPS model, or diff two down to the coefficient. Solves with HiGHS in the background.</p>
       </div>
       <div class="card">
-        <h3><a href="#python">parse_lp — Python package</a></h3>
+        <h3><a href="#python">parse_lp: Python package</a></h3>
         <p>The Rust parser and writer from Python, with type stubs. <code>pip install parse_lp</code>.</p>
       </div>
       <div class="card">
-        <h3><a href="#lsp">lp-lsp — language server</a></h3>
-        <p>Diagnostics, navigation, rename, completion, formatting, and code actions for <code>.lp</code> files in VS Code, Neovim, Helix, Zed, or any LSP client.</p>
+        <h3><a href="#lsp">lp-lsp: language server</a></h3>
+        <p>Diagnostics, navigation, rename, completion, formatting, and code actions for <code>.lp</code> files, plus model views and HiGHS solving, in VS Code, Neovim, Helix, Zed, or any LSP client.</p>
       </div>
     </div>
   </div>
@@ -184,6 +184,7 @@
       <li><span class="cname">Writing</span><span class="cbody">Round-trip safe LP output with configurable problem-name comment, line length, decimal precision, and section spacing.</span></li>
       <li><span class="cname">Modification</span><span class="cbody">Rename, update or remove objectives, constraints, variables, coefficients and RHS values in place, or build a problem from scratch with <code>ProblemBuilder</code>.</span></li>
       <li><span class="cname">Analysis</span><span class="cbody">Counts, matrix density, coefficient and RHS ranges, and warnings for badly scaled or inconsistent models, with configurable thresholds.</span></li>
+      <li><span class="cname">Model diagnostics</span><span class="cbody"><code>LpProblem::diagnostics()</code> and <code>diagnostics_with_config()</code> return coded findings with a stable <code>DiagnosticCode</code>, a severity, a category and a certainty: <em>proven</em> findings are exact, <em>heuristic</em> ones are smells that are sometimes intended. The language server, <code>lp_diff</code> and <code>parse_lp</code> report the same findings.</span></li>
       <li><span class="cname">Diff</span><span class="cbody">Compare two problems (<code>diff</code> feature) with absolute and relative tolerances and an optional name normaliser. The CLI and TUI build the normaliser from regex rules.</span></li>
       <li><span class="cname">Serialisation</span><span class="cbody"><code>Serialize</code> and <code>Deserialize</code> on the model (<code>serde</code> feature), so any serde format works. The CLI writes JSON and YAML.</span></li>
       <li><span class="cname">Solving</span><span class="cbody">Hand a single-objective linear problem to CBC, GLPK, Gurobi or CPLEX through the <a href="https://crates.io/crates/lp-solvers">lp-solvers</a> crate (<code>lp-solvers</code> feature). Quadratic, indicator and general constraints are refused rather than dropped.</span></li>
@@ -233,16 +234,16 @@ std::fs::write(<span class="g">"modified.lp"</span>, write_lp_string(&amp;proble
     <h2>CLI:<span class="dim"> <code>lp_parser</code></span></h2>
     <p class="lead">Every subcommand reads LP or MPS (a <code>.mps</code> extension reads MPS) and writes to stdout or a file (<code>-o</code>). <code>-f</code> picks text, JSON or YAML, and <code>--pretty</code> indents JSON. Global flags: <code>-v/--verbose</code>, <code>-q/--quiet</code>.</p>
 
-    <h3>parse — display file structure</h3>
+    <h3>parse: display file structure</h3>
 <pre><code>lp_parser parse problem.lp
 lp_parser parse problem.lp --format yaml -o problem.yaml</code></pre>
 
-    <h3>info — summary statistics</h3>
+    <h3>info: summary statistics</h3>
     <p>Counts plus optional full listings via <code>--variables</code>, <code>--constraints</code>, <code>--objectives</code>.</p>
 <pre><code>lp_parser info problem.lp --variables --constraints --objectives
 lp_parser info problem.lp --format json --pretty</code></pre>
 
-    <h3>analyze — structural analysis and warnings</h3>
+    <h3>analyze: structural analysis and warnings</h3>
     <div class="tablewrap"><table>
       <tr><th>Option</th><th>Default</th><th>Description</th></tr>
       <tr><td>--issues-only</td><td>off</td><td>Skip full analysis; show warnings/errors only</td></tr>
@@ -260,7 +261,7 @@ lp_parser analyze problem.lp --large-coeff-threshold 1e8 --ratio-threshold 1e5</
 <span class="n">coefficients</span>: { constraint_coeff_range: { min: <span class="v">0.1</span>, max: <span class="v">3055.2</span> }, coefficient_ratio: <span class="v">101840.0</span> }
 <span class="n">issues</span>: []</code></pre>
 
-    <h3>diff — compare two LP or MPS files</h3>
+    <h3>diff: compare two LP or MPS files</h3>
     <div class="tablewrap"><table>
       <tr><th>Option</th><th>Default</th><th>Description</th></tr>
       <tr><td>--abs-tol</td><td>0.0</td><td>Absolute tolerance for numeric comparisons</td></tr>
@@ -271,12 +272,12 @@ lp_parser analyze problem.lp --large-coeff-threshold 1e8 --ratio-threshold 1e5</
 lp_parser diff old.lp new.lp --rename <span class="g">'\[\d+\]$'</span> <span class="g">'[N]'</span> --format json --pretty</code></pre>
     <p>Both <code>diff</code> and <code>analyze</code> follow GNU <code>diff</code>'s exit codes, so CI can gate on them: <code>diff</code> exits 0 when the problems match, 1 when they differ and 2 on failure; <code>analyze</code> exits 0 when clean, 1 on an error-severity issue and 2 on failure.</p>
 
-    <h3>convert — translate to another format</h3>
+    <h3>convert: translate to another format</h3>
     <p>Targets: <code>lp</code>, <code>mps</code>, <code>csv</code>, <code>json</code>, <code>yaml</code>. Without <code>--precision</code>, numbers are written in their shortest exact form. LP output honours <code>--precision</code>, <code>--max-line-length</code>, <code>--no-problem-name</code>, and <code>--compact</code>; MPS output honours <code>--precision</code>; CSV writes <code>constraints.csv</code>, <code>objectives.csv</code>, and <code>variables.csv</code> to a directory.</p>
 <pre><code>lp_parser convert problem.lp --format lp --precision 4 --compact
 lp_parser convert problem.lp --format csv --output ./out</code></pre>
 
-    <h3>solve — run an external solver</h3>
+    <h3>solve: run an external solver</h3>
     <p>Solves with CBC (default) or GLPK, which must be on your <code>PATH</code> (<code>-s/--solver</code>). Multiple objectives, strict inequalities, quadratic terms, and indicator or general constraints are errors; SOS constraints are dropped with a warning.</p>
 <pre><code>lp_parser solve problem.lp --solver glpk --format json --pretty</code></pre>
   </div>
@@ -315,13 +316,15 @@ lp_parser convert problem.lp --format csv --output ./out</code></pre>
     <h2>Language server:<span class="dim"> <code>lp-lsp</code></span></h2>
     <p class="lead">A language server for <code>.lp</code> files. It understands the CPLEX LP format and the Gurobi extensions the parser supports, and keeps working while a file is half-written. It talks LSP over stdio and takes no arguments other than <code>--version</code>, so any editor that can run a language server can use it.</p>
     <ul class="constraints">
-      <li><span class="cname">Diagnostics</span><span class="cbody">Syntax errors as you type, plus model checks such as duplicate names, conflicting bounds, unused declarations and badly scaled coefficients, with configurable thresholds.</span></li>
+      <li><span class="cname">Diagnostics</span><span class="cbody">Syntax errors as you type, plus model checks: duplicate names, conflicting bounds, unused declarations, and coded analysis findings in four categories (structural, numerical, mathematical, performance). Proven findings are always published; heuristic ones can be switched off, re-graded per code with <code>lp.analysis.severityOverrides</code>, or tuned with thresholds. Solver and IIS findings appear once a solve has run.</span></li>
       <li><span class="cname">Navigation</span><span class="cbody">Go to definition, declaration and type definition, find references, linked editing, selection ranges, highlights, document and workspace symbols, call hierarchy (which constraints use a variable), and a "used in N constraints" code lens.</span></li>
       <li><span class="cname">Rename</span><span class="cbody">Variables and constraint names across the workspace. It refuses names that would change how the file parses.</span></li>
       <li><span class="cname">Hover and completion</span><span class="cbody">Details on variables, constraints, and keywords; suggestions that fit where the cursor is; signature help for <code>MAX</code>, <code>MIN</code>, <code>ABS</code>, <code>AND</code>, and <code>OR</code>.</span></li>
       <li><span class="cname">Formatting</span><span class="cbody">Whole document, a selection, or on Enter, preserving comments. It never touches a file with syntax errors.</span></li>
       <li><span class="cname">Code actions</span><span class="cbody">Quick fixes for the problems it reports, plus refactors such as adding a bound, moving a variable between type sections, and reordering sections.</span></li>
-      <li><span class="cname">Extras</span><span class="cbody">Inlay hints, semantic highlighting, folding, and the commands <code>lp.analyze</code>, <code>lp.convertToMps</code>, and <code>lp.showModelStats</code>.</span></li>
+      <li><span class="cname">Extras</span><span class="cbody">Inlay hints, semantic highlighting, folding, <code>\ @description</code> comments shown on hover, and the commands <code>lp.analyze</code>, <code>lp.convertToMps</code>, <code>lp.convertFromMps</code> and <code>lp.showModelStats</code>.</span></li>
+      <li><span class="cname">Model views</span><span class="cbody">Custom <code>lp/*</code> requests serve a model explorer, coefficient matrix, dependency graph, mathematical diff and constraint explanations. Clients that do not know them ignore them.</span></li>
+      <li><span class="cname">Solving</span><span class="cbody"><code>lp/solve</code> runs HiGHS through the separate <code>lp-highs</code> helper (<code>cargo install --locked lp-highs</code>), so a solver crash cannot take the server down. It is cancellable, reports progress and can diagnose infeasibility. HiGHS is the only solver the editor supports.</span></li>
     </ul>
 <pre><code><span class="c">-- Neovim 0.11+: ~/.config/nvim/lsp/lp_lsp.lua</span>
 <span class="k">return</span> {
@@ -333,7 +336,7 @@ lp_parser convert problem.lp --format csv --output ./out</code></pre>
 <span class="c">-- init.lua</span>
 vim.filetype.add({ extension = { lp = <span class="g">'lp'</span> } })
 vim.lsp.enable(<span class="g">'lp_lsp'</span>)</code></pre>
-    <p>The VS Code extension, <a href="https://marketplace.visualstudio.com/items?itemName=dandxy89.lp-lsp">LP &amp; MPS Language Server</a>, is on the Marketplace and bundles the server (source in <a href="https://github.com/dandxy89/lp_parser_rs/tree/main/lsp/editors/vscode"><code>lsp/editors/vscode</code></a>). Helix needs a <code>languages.toml</code> entry, and Zed a small dev extension to register the language; the README has both.</p>
+    <p>The VS Code extension, <a href="https://marketplace.visualstudio.com/items?itemName=dandxy89.lp-lsp">LP &amp; MPS Language Server</a>, is on the Marketplace and bundles the server and the <code>lp-highs</code> solver helper on every platform except Alpine. It adds an LP activity bar (Model Explorer and Analysis), a coefficient matrix, a dependency graph, <em>Compare Models</em>, <em>Solve Model</em>, <em>Diagnose Infeasibility</em>, <em>Explain Constraint</em>, <em>Find Similar Constraints</em> and <em>Export Model Report</em>, plus MPS highlighting and <em>Convert from MPS</em>. Restricted Mode runs only the bundled binaries (source in <a href="https://github.com/dandxy89/lp_parser_rs/tree/main/lsp/editors/vscode"><code>lsp/editors/vscode</code></a>). Helix needs a <code>languages.toml</code> entry, and Zed a small dev extension to register the language; the README has both.</p>
     <div class="cta" style="justify-content:flex-start;margin-top:2.5rem;">
       <a class="primary" href="https://github.com/dandxy89/lp_parser_rs/blob/main/lsp/README.md">lsp README: settings and editor setup</a>
     </div>
@@ -344,7 +347,7 @@ vim.lsp.enable(<span class="g">'lp_lsp'</span>)</code></pre>
   <div class="wrap">
     <p class="sec-label">Python bindings</p>
     <h2>Python:<span class="dim"> <code>parse_lp</code></span></h2>
-    <p class="lead">Python bindings to the Rust library, with type stubs (Python 3.10+). They cover parsing, data access, modification, LP and MPS writing, analysis with configurable thresholds, CSV export and <code>diff</code> between two problems.</p>
+    <p class="lead">Python bindings to the Rust library, with type stubs (Python 3.10+). They cover parsing, data access, modification, LP and MPS writing, analysis with configurable thresholds, model diagnostics, CSV export and <code>diff</code> between two problems.</p>
 <pre><code><span class="k">from</span> parse_lp <span class="k">import</span> LpParser
 
 parser = LpParser(<span class="g">"problem.lp"</span>)
@@ -358,7 +361,10 @@ parser.update_constraint_rhs(<span class="g">"C1"</span>, <span class="v">100.0<
 parser.save_to_file(<span class="g">"modified_problem.lp"</span>)
 
 analysis = parser.analyze()
-print(analysis[<span class="g">"summary"</span>][<span class="g">"density"</span>])</code></pre>
+print(analysis[<span class="g">"summary"</span>][<span class="g">"density"</span>])
+
+<span class="k">for</span> finding <span class="k">in</span> parser.diagnostics():
+    print(finding[<span class="g">"severity"</span>], finding[<span class="g">"code"</span>], finding[<span class="g">"message"</span>])</code></pre>
     <p>The constructor parses the file straight away; the format follows the extension (<code>.mps</code> reads MPS). <code>LpParser.from_file(path, format="mps")</code> overrides it, <code>LpParser.from_string(text)</code> parses in-memory text, and <code>to_mps_string</code> / <code>save_to_mps</code> write MPS back out.</p>
   </div>
 </section>
@@ -373,6 +379,7 @@ print(analysis[<span class="g">"summary"</span>][<span class="g">"density"</span
       <tr><td>CLI</td><td><code>cargo install --locked lp_parser_rs --features cli,csv,diff,serde,lp-solvers</code></td></tr>
       <tr><td>TUI</td><td><code>cargo install --locked --path tui</code> (from a clone)</td></tr>
       <tr><td>Language server</td><td><code>cargo install --locked lp-lsp</code>, or a prebuilt archive from the <a href="https://github.com/dandxy89/lp_parser_rs/releases">releases page</a></td></tr>
+      <tr><td>Solver helper</td><td><code>cargo install --locked lp-highs</code> (HiGHS for <code>lp-lsp</code> solves; needs cmake, a C++ compiler and libclang)</td></tr>
       <tr><td>Python</td><td><code>pip install parse_lp</code></td></tr>
     </table></div>
     <p style="margin-top:1.25rem;">Develop with <code>cargo insta test --all-features</code> and review snapshot changes with <code>cargo insta review</code>. Pull requests are welcome on <a href="https://github.com/dandxy89/lp_parser_rs">GitHub</a>.</p>
