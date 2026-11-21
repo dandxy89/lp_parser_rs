@@ -16,9 +16,10 @@ Supported specifications: [IBM CPLEX v22.1.1](https://www.ibm.com/docs/en/icos/2
 - Modification: rename, update or remove objectives, constraints, variables, coefficients and RHS values. `ProblemBuilder` builds a problem in code.
 - Variable types: continuous, integer, general, binary, semi-continuous and semi-integer, with lower, upper, double or free bounds.
 - Analysis: statistics, density, sparsity, coefficient ranges, and issue detection with configurable thresholds.
+- Model diagnostics: `LpProblem::diagnostics()` and `diagnostics_with_config()` return coded findings (`ModelDiagnostic`) with a stable `DiagnosticCode`, a severity, a category, and a certainty: *proven* findings are exact, *heuristic* ones are smells that are sometimes intended. The language server, `lp_diff` and `parse_lp` report the same findings.
 - Diff (`diff` feature): structural and numeric comparison of two problems, via `LpProblem::diff` or `diff::compare`.
 - SOS1/SOS2 sets are read, written, diffed and analysed (LP `SOS` section, MPS `SOS` section); external solver adapters may not support them.
-- Python bindings: the `parse_lp` package on PyPI wraps the parser, writers, mutation API and diff; see [`python/README.md`](https://github.com/dandxy89/lp_parser_rs/blob/main/python/README.md).
+- Python bindings: the `parse_lp` package on PyPI wraps the parser, writers, mutation API, diff, analysis and model diagnostics (`LpParser.diagnostics`); see [`python/README.md`](https://github.com/dandxy89/lp_parser_rs/blob/main/python/README.md).
 - Serialisation (`serde` feature): serde support for the model; the CLI uses it for JSON and YAML output.
 - CSV export (`csv` feature): `LpProblem::to_csv` writes one file per section.
 - Memory-mapped input (`mmap` feature): `parser::MappedFile` maps a file instead of reading it into a `String`.
@@ -83,6 +84,18 @@ std::fs::write("modified.lp", write_lp_string(&problem)?)?; // errors on names L
 Available modification methods on `LpProblem`: `update_objective_coefficient`, `rename_objective`, `remove_objective`, `update_constraint_coefficient`, `update_constraint_rhs`, `rename_constraint`, `remove_constraint`, `set_constraint_class`, `rename_variable`, `update_variable_type`, `remove_variable`. The update methods remove a term whose coefficient has magnitude below `1e-10`; the parser itself keeps such coefficients. Also public: `add_variable`, `add_constraint`, `add_objective`, `set_name`. Removing a variable also removes any SOS set it empties.
 
 Writer options: `write_lp_string_with_options(&problem, &LpWriterOptions { include_problem_name, max_line_length, decimal_precision, include_section_spacing })`. `decimal_precision` defaults to `None`, which writes every number in its shortest exact (round-trip) form; `Some(n)` rounds to `n` decimal places.
+
+Model diagnostics report coded findings. Proven findings are exact; heuristic ones can be switched off or tuned through `DiagnosticsConfig`:
+
+```rust
+use lp_parser_rs::{analysis::IssueSeverity, problem::LpProblem};
+
+let problem = LpProblem::parse(&std::fs::read_to_string("problem.lp")?)?;
+let report = problem.diagnostics(); // or diagnostics_with_config(&DiagnosticsConfig { .. })?
+for finding in report.diagnostics.iter().filter(|d| d.severity == IssueSeverity::Error) {
+    println!("{} [{:?}] {}", finding.code.as_str(), finding.certainty, finding.message);
+}
+```
 
 ## Command-Line Interface (`lp_parser`)
 
@@ -290,7 +303,7 @@ See [`tui/README.md`](https://github.com/dandxy89/lp_parser_rs/blob/main/tui/REA
 
 ## Language Server (`lp-lsp`)
 
-A Language Server Protocol implementation for `.lp` files: diagnostics, navigation, rename, hover, completion, inlay hints, code actions, formatting, semantic highlighting and more, for any LSP-capable editor (Neovim, Helix, Zed, VS Code).
+A Language Server Protocol implementation for `.lp` files: diagnostics (syntax and model analysis), navigation, rename, hover, completion, inlay hints, code actions, formatting, semantic highlighting and more, for any LSP-capable editor (Neovim, Helix, Zed, VS Code). The VS Code extension adds a Model Explorer, a coefficient matrix, a dependency graph, a mathematical diff, explanations and solving with HiGHS through the `lp-highs` helper.
 
 ```bash
 cargo install --locked lp-lsp
