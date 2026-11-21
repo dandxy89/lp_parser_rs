@@ -23,7 +23,8 @@ extensions that [`lp_parser_rs`](../rust) supports, and it keeps working while a
 - **Code actions**: quick fixes for the problems it reports, plus refactors such as adding a bound, moving a
   variable between type sections and reordering sections.
 - **Extras**: inlay hints, semantic highlighting, folding, selection ranges, code lens (variable counts on
-  constraints and objectives, usage counts on variables) and signature help for `MAX`, `MIN`, `ABS`, `AND` and `OR`.
+  constraints and objectives, usage counts on variables, and, with `codeLens.actions`, Solve on the objective and
+  Explain on each named constraint) and signature help for `MAX`, `MIN`, `ABS`, `AND` and `OR`.
 - **Commands** (`workspace/executeCommand`): `lp.analyze` (analysis report), `lp.convertToMps` (writes
   `<name>.mps` next to the file, replacing any existing one) and `lp.showModelStats`.
 - **Model and solver requests**: custom `lp/*` requests for editor views (model explorer, coefficient matrix,
@@ -88,6 +89,7 @@ Everything lives under `lp` and is optional.
 | `inlayHints.rangePartners` | `true` | The `_rng` partner of ranged constraints. |
 | `inlayHints.variableTypes` | `true` | A variable's type after its first use. |
 | `inlayHints.normalisedRhs` | `true` | The right-hand side with left-hand-side constants folded in. |
+| `codeLens.actions` | `false` | Solve and Explain lenses. They run the VS Code extension's lp.solve and lp.explainConstraint, so other clients should leave this off. |
 
 ## Custom requests
 
@@ -113,6 +115,8 @@ cannot take the language server down, and it kills the process on cancellation. 
 CPLEX, Gurobi, CBC and GLPK are not supported by the editor.
 
 ## Editor setup
+
+**Restricted mode.** A client that sets `initializationOptions.workspaceTrusted` to `false` (any non-boolean value counts as untrusted) gets `lp/solve` and `lp/solverInfo` that find `lp-highs` only next to `lp-lsp`; `solver.path` and `PATH` are ignored.
 
 **VS Code**: build and install the extension in [`editors/vscode`](editors/vscode).
 

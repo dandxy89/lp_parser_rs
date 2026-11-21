@@ -26,6 +26,7 @@ Prebuilt binaries are on the [releases page](https://github.com/dandxy89/lp_pars
   - *Analysis*: model diagnostics grouped by category, then by code.
 - The status bar shows model size (variables, constraints) and validity (no errors) for the active LP file.
 - The "used in N constraints" code lens opens the references peek view
+- *Solve* (on the objective) and *Explain* (on each named constraint) code lenses, switched by `lp.codeLens.actions`
 - Model views, enabled when the server advertises the matching `lp/*` request (the webviews load no remote resources and run under a strict content security policy):
   - *Show Model Explorer*: objectives, constraints and variables in the Explorer sidebar; click to open the source
   - *Show Coefficient Matrix*: sparse matrix on a canvas, density overview for large models, click a cell to open the row (Shift-click for the column)
@@ -56,9 +57,14 @@ Prebuilt binaries are on the [releases page](https://github.com/dandxy89/lp_pars
 | `lp.semantic.maxFileSizeMb` / `debounceMs` | `20` / `300` | Full-parse scheduling |
 | `lp.format.*` | | `indent`, `lineWidth`, `alignOperators`, `keywordCase` |
 | `lp.inlayHints.*` | `true` | `generatedNames`, `rangePartners`, `variableTypes`, `normalisedRhs` |
+| `lp.codeLens.actions` | `true` | Solve and Explain code lenses |
 
 The solve and infeasibility commands need the `lp-highs` helper. The Marketplace build bundles it for every
 platform except Alpine. Otherwise install it with `cargo install --locked lp-highs` and put it on your `PATH`, or set `lp.solver.path`.
+
+## Workspace trust
+
+Restricted Mode runs only the language server and solver helper bundled with the extension. `lp.server.path`, `lp.solver.path` and `PATH` are ignored until the workspace is trusted, after which the server restarts. If the build has no bundled server, nothing starts and a warning offers *Manage Workspace Trust*.
 
 ## Development
 

@@ -3,7 +3,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError, RwLock};
 use std::time::Duration;
 
@@ -40,6 +40,7 @@ struct ClientCaps {
     inlay_hint_refresh: bool,
     /// `codeAction/resolve` may fill in edits.
     code_action_resolve: bool,
+    code_lens_refresh: bool,
 }
 
 /// Result id and data of the semantic tokens last sent for a document.
@@ -76,6 +77,9 @@ struct State {
     solver_settings: RwLock<SolverSettings>,
     /// `lp.solution` settings.
     solution_settings: RwLock<SolutionSettings>,
+    /// The client's workspace is untrusted: only the helper next to this
+    /// executable may run. Unrestricted unless the client says otherwise.
+    restricted: AtomicBool,
     /// The solver helper found at the last probe.
     solver: RwLock<SolverStatus>,
     /// Last solve result per document.
@@ -294,6 +298,27 @@ impl Backend {
         }
     }
 
+    /// Ask the client to refresh code lenses, which depend on the settings.
+    async fn refresh_code_lenses(&self) {
+        if !self.caps().code_lens_refresh {
+            return;
+        }
+        if let Err(e) = self.client.code_lens_refresh().await {
+            self.log(MessageType::LOG, format!("code lens refresh unsupported: {e}")).await;
+        }
+    }
+
+    /// Whether `initializationOptions` put the server in restricted mode: only
+    /// `workspaceTrusted: true` or no such key leaves it off, so anything
+    /// unexpected fails safe.
+    fn restricted_mode(options: Option<&Value>) -> bool {
+        match options.and_then(|o| o.get("workspaceTrusted")) {
+            None => false,
+            Some(Value::Bool(trusted)) => !trusted,
+            Some(_) => true,
+        }
+    }
+
     async fn load_config(&self) {
         if !self.caps().configuration {
             return;
@@ -308,7 +333,7 @@ impl Backend {
     /// The `lp` section of client settings: `{"lp": {...}}`, or the section
     /// itself as some clients send it. `None` when the settings hold neither.
     fn lp_section(settings: Value) -> Option<Value> {
-        const SECTIONS: [&str; 6] = ["analysis", "semantic", "format", "inlayHints", "solver", "solution"];
+        const SECTIONS: [&str; 7] = ["analysis", "semantic", "format", "inlayHints", "solver", "solution", "codeLens"];
         match settings.get("lp") {
             Some(lp) => Some(lp.clone()),
             None if settings.is_null() || SECTIONS.iter().any(|k| settings.get(k).is_some()) => Some(settings),
@@ -608,6 +633,7 @@ impl LanguageServer for Backend {
                 .and_then(|t| t.code_action.as_ref())
                 .and_then(|c| c.resolve_support.as_ref())
                 .is_some_and(|r| r.properties.iter().any(|p| p == "edit")),
+            code_lens_refresh: workspace.and_then(|w| w.code_lens.as_ref()).and_then(|c| c.refresh_support).unwrap_or(false),
         };
         *write(&self.state.encoding) = encoding;
         *write(&self.state.caps) = client_caps;
@@ -626,7 +652,29 @@ impl LanguageServer for Backend {
         }
         *write(&self.state.roots) = roots;
 
-        match params.initialization_options.map(Self::lp_section) {
+        let mut options = params.initialization_options;
+        let restricted = Self::restricted_mode(options.as_ref());
+        if let Some(trusted) = options.as_ref().and_then(|o| o.get("workspaceTrusted")) {
+            if !trusted.is_boolean() {
+                self.log(
+                    MessageType::WARNING,
+                    format!("workspaceTrusted must be a boolean, got {trusted}: treating the workspace as untrusted"),
+                )
+                .await;
+            }
+            // Not an `lp` setting: keep it out of the section check below.
+            if let Some(object) = options.as_mut().and_then(Value::as_object_mut) {
+                object.remove("workspaceTrusted");
+                if object.is_empty() {
+                    options = None;
+                }
+            }
+        }
+        self.state.restricted.store(restricted, Ordering::Relaxed);
+        if restricted {
+            self.log(MessageType::INFO, "restricted mode: lp.solver.path and PATH are ignored for lp-highs").await;
+        }
+        match options.map(Self::lp_section) {
             Some(Some(options)) => self.apply_config(options).await,
             Some(None) => self.log(MessageType::LOG, "initializationOptions without an `lp` section ignored").await,
             None => {}
@@ -645,6 +693,7 @@ impl LanguageServer for Backend {
     async fn initialized(&self, _: InitializedParams) {
         self.load_config().await;
         self.refresh_solver().await;
+        self.refresh_code_lenses().await;
         self.register_watchers().await;
         let this = self.clone();
         tokio::spawn(async move { this.index_workspace().await });
@@ -728,6 +777,7 @@ impl LanguageServer for Backend {
         for uri in uris {
             self.schedule_semantic(uri, Trigger::Save);
         }
+        self.refresh_code_lenses().await;
     }
 
     async fn did_change_watched_files(&self, params: DidChangeWatchedFilesParams) {
@@ -945,7 +995,9 @@ impl LanguageServer for Backend {
 
     async fn code_lens(&self, params: CodeLensParams) -> Result<Option<Vec<CodeLens>>> {
         let doc = self.document_or_error(&params.text_document.uri)?;
-        self.run(move || Some(code_lens::lenses(&doc))).await
+        let actions = read(&self.state.config).code_lens.actions;
+        let actions = code_lens::Actions { explain: actions, solve: actions && self.solver_available() };
+        self.run(move || Some(code_lens::lenses(&doc, actions))).await
     }
 
     async fn code_lens_resolve(&self, lens: CodeLens) -> Result<CodeLens> {
@@ -1060,7 +1112,18 @@ mod tests {
         let section = json!({ "format": { "indent": 4 } });
         assert_eq!(Backend::lp_section(json!({ "lp": section.clone() })), Some(section.clone()));
         assert_eq!(Backend::lp_section(section.clone()), Some(section));
+        assert_eq!(Backend::lp_section(json!({ "codeLens": { "actions": true } })), Some(json!({ "codeLens": { "actions": true } })));
         assert_eq!(Backend::lp_section(Value::Null), Some(Value::Null));
         assert_eq!(Backend::lp_section(json!({ "python": { "x": 1 } })), None);
+    }
+
+    #[test]
+    fn restricted_mode_comes_from_initialization_options() {
+        for trusted in [None, Some(json!({})), Some(json!({ "workspaceTrusted": true }))] {
+            assert!(!Backend::restricted_mode(trusted.as_ref()), "{trusted:?}");
+        }
+        for untrusted in [json!({ "workspaceTrusted": false }), json!({ "workspaceTrusted": "no" })] {
+            assert!(Backend::restricted_mode(Some(&untrusted)), "{untrusted}");
+        }
     }
 }

@@ -47,6 +47,9 @@ pub const STDERR_TAIL_BYTES: usize = 8 * 1024;
 /// What `lp/solverInfo` says when no helper is found.
 pub const NOT_FOUND: &str = "lp-highs not found next to lp-lsp, on PATH or at lp.solver.path";
 
+/// What `lp/solverInfo` says when no helper is found in restricted mode.
+pub const NOT_FOUND_RESTRICTED: &str = "lp-highs not found next to lp-lsp (restricted mode ignores lp.solver.path and PATH)";
+
 /// `lp.solver`: where the helper is and how long a solve may take.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -303,18 +306,18 @@ mod process {
     use tokio::sync::mpsc::UnboundedSender;
 
     use super::{
-        FailureKind, Helper, MAX_RESPONSE_BYTES, NOT_FOUND, PROBE_TIMEOUT, RequestError, STDERR_TAIL_BYTES, SolverSettings, SolverStatus,
-        hard_limit, parse_info,
+        FailureKind, Helper, MAX_RESPONSE_BYTES, NOT_FOUND, NOT_FOUND_RESTRICTED, PROBE_TIMEOUT, RequestError, STDERR_TAIL_BYTES,
+        SolverSettings, SolverStatus, hard_limit, parse_info,
     };
     use crate::requests::Cancel;
 
     /// Name of the helper binary.
     const BINARY: &str = if cfg!(windows) { "lp-highs.exe" } else { "lp-highs" };
 
-    /// Locate the helper (setting, then next to this executable, then `PATH`)
-    /// and ask it for `info`.
-    pub async fn probe(settings: &SolverSettings) -> SolverStatus {
-        let path = match locate(settings) {
+    /// Locate the helper (setting, then next to this executable, then `PATH`;
+    /// only next to this executable when `restricted`) and ask it for `info`.
+    pub async fn probe(settings: &SolverSettings, restricted: bool) -> SolverStatus {
+        let path = match locate(settings, restricted) {
             Ok(path) => path,
             Err(reason) => return SolverStatus::Unavailable(reason),
         };
@@ -324,12 +327,16 @@ mod process {
         }
     }
 
-    fn locate(settings: &SolverSettings) -> Result<PathBuf, String> {
+    pub(super) fn locate(settings: &SolverSettings, restricted: bool) -> Result<PathBuf, String> {
+        let beside = std::env::current_exe().ok().and_then(|exe| exe.parent().map(|dir| dir.join(BINARY)));
+        if restricted {
+            // Untrusted workspace: neither the setting nor `PATH` may pick the executable.
+            return beside.filter(|candidate| candidate.is_file()).ok_or_else(|| NOT_FOUND_RESTRICTED.to_owned());
+        }
         if let Some(configured) = settings.configured_path() {
             let path = PathBuf::from(configured);
             return if path.is_file() { Ok(path) } else { Err(format!("lp.solver.path '{configured}' is not a file")) };
         }
-        let beside = std::env::current_exe().ok().and_then(|exe| exe.parent().map(|dir| dir.join(BINARY)));
         let on_path = std::env::var_os("PATH")
             .into_iter()
             .flat_map(|paths| std::env::split_paths(&paths).collect::<Vec<_>>())
@@ -574,6 +581,15 @@ mod tests {
         let reason = parse_info(future).expect_err("mismatch");
         assert!(reason.contains("protocol 2") && reason.contains("expects protocol 1"), "{reason}");
         assert!(parse_info(b"not json").expect_err("garbage").contains("invalid JSON"));
+    }
+
+    #[cfg(feature = "server")]
+    #[test]
+    fn restricted_mode_ignores_the_configured_solver_path() {
+        let existing = concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml");
+        let settings = SolverSettings { path: Some(existing.to_owned()), time_limit: 1.0 };
+        assert_eq!(process::locate(&settings, false), Ok(PathBuf::from(existing)));
+        assert_ne!(process::locate(&settings, true), Ok(PathBuf::from(existing)));
     }
 
     #[test]

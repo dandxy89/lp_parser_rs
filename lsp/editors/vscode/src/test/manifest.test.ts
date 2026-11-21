@@ -14,7 +14,9 @@ interface ContributedCommand {
 }
 
 interface Manifest {
+  capabilities: { untrustedWorkspaces: { supported: string; restrictedConfigurations: string[] } };
   contributes: {
+    configuration: { properties: Record<string, { type?: string; default?: unknown }> };
     commands: ContributedCommand[];
     snippets: { language: string; path: string }[];
     menus: {
@@ -115,5 +117,23 @@ describe('package.json contributions', () => {
   it('adds no runtime dependencies beyond the language client', () => {
     const raw = JSON.parse(fs.readFileSync(path.join(extensionRoot, 'package.json'), 'utf8')) as { dependencies: Record<string, string> };
     assert.deepEqual(Object.keys(raw.dependencies), ['vscode-languageclient']);
+  });
+
+  it('supports limited workspace trust and restricts every executable path setting', () => {
+    const { supported, restrictedConfigurations } = manifest.capabilities.untrustedWorkspaces;
+    assert.equal(supported, 'limited');
+    const properties = manifest.contributes.configuration.properties;
+    for (const key of Object.keys(properties).filter((name) => name.endsWith('.path'))) {
+      assert.ok(restrictedConfigurations.includes(key), `${key} is a restricted configuration`);
+    }
+    for (const key of restrictedConfigurations) {
+      assert.ok(key in properties, `${key} is a contributed setting`);
+    }
+  });
+
+  it('contributes lp.codeLens.actions as a boolean on by default', () => {
+    const setting = manifest.contributes.configuration.properties['lp.codeLens.actions'];
+    assert.equal(setting?.type, 'boolean');
+    assert.equal(setting?.default, true);
   });
 });

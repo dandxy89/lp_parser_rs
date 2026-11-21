@@ -15,6 +15,7 @@ import {
   parseModelNames,
   parseSolveResult,
 } from '../pure/protocol';
+import { asDocumentUri, asPosition } from '../pure/commandArgs';
 import { MatrixMode, DETAIL_WINDOW, defaultMode } from '../pure/matrixView';
 import { diffRange, explainRange, solutionRange } from '../pure/ranges';
 import { describeRequestError, isCancellation } from '../pure/requestErrors';
@@ -303,15 +304,39 @@ function createExplainView(context: vscode.ExtensionContext): DocumentView<Expla
   });
 }
 
+/** The entity of one of `kinds` at `position`, if the server can tell. Request failures propagate. */
+async function entityAt(
+  document: vscode.TextDocument,
+  position: { line: number; character: number },
+  kinds: readonly EntityKind[],
+): Promise<{ kind: EntityKind; name: string } | undefined> {
+  const result = parseExplainResult(await lpRequest('lp/explain', { textDocument: textDocument(document), position }));
+  return result !== undefined && kinds.includes(result.kind) ? { kind: result.kind, name: result.name } : undefined;
+}
+
+/** The open LP document for a URI string from a server command. */
+async function documentFor(command: string, uri: string): Promise<vscode.TextDocument> {
+  const valid = asDocumentUri(uri);
+  if (valid === undefined) {
+    throw new Error(`invalid arguments for ${command}`);
+  }
+  const parsed = vscode.Uri.parse(valid);
+  const document =
+    vscode.workspace.textDocuments.find((open) => open.uri.toString() === parsed.toString()) ?? (await vscode.workspace.openTextDocument(parsed));
+  if (document.languageId !== 'lp') {
+    throw new Error(`${command}: ${valid} is not an LP document`);
+  }
+  return document;
+}
+
 /** Names to choose from: the entity under the cursor if the server can tell, else a quick pick over the model. */
 async function pickEntity(document: vscode.TextDocument, kinds: readonly EntityKind[]): Promise<{ kind: EntityKind; name: string } | undefined> {
   const editor = vscode.window.activeTextEditor;
   if (editor !== undefined && editor.document === document) {
     try {
-      const raw = await lpRequest('lp/explain', { textDocument: textDocument(document), position: editor.selection.active });
-      const result = parseExplainResult(raw);
-      if (result !== undefined && kinds.includes(result.kind)) {
-        return { kind: result.kind, name: result.name };
+      const found = await entityAt(document, editor.selection.active, kinds);
+      if (found !== undefined) {
+        return found;
       }
     } catch {
       // The cursor is on nothing explainable: fall back to the list.
@@ -367,6 +392,9 @@ export function registerViews(context: vscode.ExtensionContext): void {
     }
   };
 
+  const solveActive = withDocument(async (document) => void (await solution.open(document)));
+  const explainActive = withDocument(async (document) => explainTarget(document, await pickEntity(document, ['constraint', 'objective'])));
+
   context.subscriptions.push(
     vscode.commands.registerCommand('lp.showMatrix', withDocument(async (document) => void (await matrix.open(document)))),
     vscode.commands.registerCommand('lp.showDependencyGraph', withDocument(async (document) => void (await graph.open(document)))),
@@ -381,9 +409,31 @@ export function registerViews(context: vscode.ExtensionContext): void {
         }
       }),
     ),
-    vscode.commands.registerCommand('lp.solve', withDocument(async (document) => void (await solution.open(document)))),
+    // Also run from code lenses, which pass the document URI; palette and menu runs pass none or a `vscode.Uri`.
+    vscode.commands.registerCommand('lp.solve', async (uri?: unknown): Promise<void> => {
+      if (typeof uri !== 'string') {
+        return solveActive();
+      }
+      await guarded(async () => void (await solution.open(await documentFor('lp.solve', uri))));
+    }),
     vscode.commands.registerCommand('lp.diagnoseInfeasibility', withDocument(async (document) => void (await solution.open(document)))),
-    vscode.commands.registerCommand('lp.explainConstraint', withDocument(async (document) => explainTarget(document, await pickEntity(document, ['constraint', 'objective'])))),
+    vscode.commands.registerCommand('lp.explainConstraint', async (uri?: unknown, position?: unknown): Promise<void> => {
+      if (typeof uri !== 'string') {
+        return explainActive();
+      }
+      await guarded(async () => {
+        const document = await documentFor('lp.explainConstraint', uri);
+        const at = asPosition(position);
+        if (at === undefined) {
+          throw new Error('invalid arguments for lp.explainConstraint');
+        }
+        const target = await entityAt(document, at, ['constraint', 'objective']);
+        if (target === undefined) {
+          throw new Error('nothing to explain at that position.');
+        }
+        await explainTarget(document, target);
+      });
+    }),
     vscode.commands.registerCommand('lp.explainVariable', withDocument(async (document) => explainTarget(document, await pickEntity(document, ['variable'])))),
     // Internal: opened from links inside the explain panel and the other views.
     vscode.commands.registerCommand('lp.explainEntity', async (uri: unknown, kind: unknown, name: unknown) => {

@@ -142,6 +142,10 @@ function handle(message) {
     case 'lp/matrix':
       return reply(matrix(params));
     case 'lp/explain':
+      // By position only line 3 (`c1`) is explainable, like a real model.
+      if (params.position !== undefined && params.position.line !== 3) {
+        return id !== undefined && send({ id, error: { code: -32602, message: 'nothing to explain at that position' } });
+      }
       return reply(explain(params));
     case 'lp/solve':
       return reply(solve(params));

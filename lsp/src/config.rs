@@ -17,6 +17,17 @@ pub struct Config {
     pub format: FormatSettings,
     /// `lp.inlayHints`: per-hint toggles.
     pub inlay_hints: InlayHintSettings,
+    /// `lp.codeLens`: action lenses.
+    pub code_lens: CodeLensSettings,
+}
+
+/// `lp.codeLens`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct CodeLensSettings {
+    /// Solve and Explain lenses. They run the VS Code extension's commands, so
+    /// the server default is off; VS Code sends its own default (on).
+    pub actions: bool,
 }
 
 /// `lp.analysis`.
@@ -380,8 +391,17 @@ mod tests {
         assert_eq!(properties["lp.solution.inlayHints"]["default"], crate::solution::SolutionSettings::default().inlay_hints);
         assert_eq!(properties["lp.solution.showStale"]["default"], crate::solution::SolutionSettings::default().show_stale);
         assert_eq!(properties["lp.solver.path"]["scope"], "machine");
+        // Intentional difference: other clients must opt in to the VS Code-only lens commands.
+        assert_eq!(properties["lp.codeLens.actions"]["default"], true);
+        assert!(!defaults.code_lens.actions);
         for category in ["structural", "numerical", "mathematical", "performance"] {
             assert_eq!(properties["lp.analysis.categories"]["default"][category], true, "{category}");
         }
+    }
+
+    #[test]
+    fn code_lens_actions_are_opt_in_on_the_server() {
+        assert!(!Config::default().code_lens.actions);
+        assert!(Config::from_value(serde_json::json!({ "codeLens": { "actions": true } })).unwrap().code_lens.actions);
     }
 }

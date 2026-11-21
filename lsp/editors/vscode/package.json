@@ -34,6 +34,13 @@
   "activationEvents": [
     "onLanguage:lp"
   ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "In Restricted Mode only the language server and solver helper bundled with the extension run; `lp.server.path`, `lp.solver.path` and `PATH` are not used.",
+      "restrictedConfigurations": ["lp.server.path", "lp.solver.path"]
+    }
+  },
   "contributes": {
     "languages": [
       {
@@ -638,6 +645,11 @@
           ],
           "default": "preserve",
           "description": "Keyword casing."
+        },
+        "lp.codeLens.actions": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Show **Solve** on the objective and **Explain** on each named constraint as code lenses."
         },
         "lp.inlayHints.generatedNames": {
           "type": "boolean",

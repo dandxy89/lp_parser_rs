@@ -7,6 +7,7 @@
 //! future) flips a [`Cancel`] token through a drop guard and the task then
 //! stops the work and closes its progress, instead of leaving it dangling.
 
+use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
@@ -266,7 +267,7 @@ impl Backend {
     /// Probe for the helper with the current settings and remember the answer.
     pub(super) async fn refresh_solver(&self) -> SolverStatus {
         let settings = read(&self.state.solver_settings).clone();
-        let status = solve::probe(&settings).await;
+        let status = solve::probe(&settings, self.state.restricted.load(Ordering::Relaxed)).await;
         *write(&self.state.solver) = status.clone();
         status
     }

@@ -11,6 +11,7 @@ import {
 } from 'vscode-languageclient/node';
 import { publishCapabilities } from './commands';
 import { LpRequest, parseLpCapabilities } from './pure/capabilities';
+import { chooseServer, RESTRICTED_NO_SERVER, ServerChoice } from './pure/serverPath';
 import { createModelClient } from './modelClient';
 import { ModelViews, registerModelViews } from './modelViews';
 import { LpStatusBar } from './statusBar';
@@ -33,6 +34,8 @@ let outputChannel: vscode.OutputChannel | undefined;
 let lpFileWatcher: vscode.FileSystemWatcher | undefined;
 let statusBar: LpStatusBar | undefined;
 let modelViews: ModelViews | undefined;
+/** The restart in flight, so a trust grant and a manual restart do not start two servers. */
+let restarting: Promise<void> | undefined;
 
 /** What `activate` returns: read access for the extension test host. Not a supported public API. */
 export interface LpExtensionApi {
@@ -54,8 +57,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<LpExte
   context.subscriptions.push(
     vscode.commands.registerCommand('lp.restartServer', restartServer),
     vscode.commands.registerCommand('lp.showReferences', showReferences),
+    vscode.workspace.onDidGrantWorkspaceTrust(() => void restartServer()),
     vscode.workspace.onDidChangeConfiguration((event) => {
-      if (event.affectsConfiguration('lp.server.path')) {
+      // In Restricted Mode the setting is ignored, so there is nothing to apply.
+      if (event.affectsConfiguration('lp.server.path') && vscode.workspace.isTrusted) {
         void vscode.window
           .showInformationMessage('The LP server path changed. Restart the language server?', 'Restart')
           .then((choice) => (choice === 'Restart' ? restartServer() : undefined));
@@ -63,8 +68,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<LpExte
     }),
   );
 
-  client = createClient();
-  await startClient(client);
+  await launchClient();
   return {
     explorerRoots: () => modelViews?.explorerRoots() ?? Promise.resolve([]),
     analysisTree: () => modelViews?.analysisTree() ?? [],
@@ -80,22 +84,31 @@ export async function deactivate(): Promise<void> {
   statusBar?.setState('stopped');
 }
 
-type ServerSource = 'setting' | 'bundled' | 'PATH';
-
-/** The server to run: the `lp.server.path` setting, then the binary bundled in the extension, then `PATH`. */
-function serverPath(): { command: string; source: ServerSource } {
-  const context = extensionContext;
-  const configured = vscode.workspace.getConfiguration('lp').get<string>('server.path', '').trim();
-  if (configured.length > 0) {
-    return { command: configured, source: 'setting' };
-  }
+/** The server to run (see `chooseServer`); `undefined` when Restricted Mode leaves none. */
+function serverPath(): ServerChoice | undefined {
   const exe = process.platform === 'win32' ? 'lp-lsp.exe' : 'lp-lsp';
-  const bundled = context.asAbsolutePath(path.join('server', exe));
-  return fs.existsSync(bundled) ? { command: bundled, source: 'bundled' } : { command: 'lp-lsp', source: 'PATH' };
+  const bundled = extensionContext.asAbsolutePath(path.join('server', exe));
+  return chooseServer({
+    configured: vscode.workspace.getConfiguration('lp').get<string>('server.path', ''),
+    bundled,
+    bundledExists: fs.existsSync(bundled),
+    trusted: vscode.workspace.isTrusted,
+  });
 }
 
-function createClient(): LanguageClient {
-  const { command, source } = serverPath();
+/** `undefined` (after telling the user) when Restricted Mode leaves no server that may run. */
+function createClient(): { client: LanguageClient; command: string } | undefined {
+  const choice = serverPath();
+  if (choice === undefined) {
+    outputChannel?.appendLine('Restricted Mode: no bundled server, nothing started');
+    statusBar?.setState('failed');
+    void publishCapabilities(new Set<LpRequest>());
+    void vscode.window
+      .showWarningMessage(RESTRICTED_NO_SERVER, 'Manage Workspace Trust')
+      .then((picked) => (picked === undefined ? undefined : vscode.commands.executeCommand('workbench.trust.manage')));
+    return undefined;
+  }
+  const { command, source } = choice;
   outputChannel?.appendLine(`${process.platform}-${process.arch}; server: ${command} (${source})`);
   const serverOptions: ServerOptions = {
     run: { command, transport: TransportKind.stdio },
@@ -112,6 +125,7 @@ function createClient(): LanguageClient {
       fileEvents: lpFileWatcher,
     },
     outputChannel,
+    initializationOptions: { workspaceTrusted: vscode.workspace.isTrusted },
     middleware: {
       // The client registers every command the server advertises; this hook
       // supplies the active document when a command is run from the palette
@@ -130,10 +144,10 @@ function createClient(): LanguageClient {
     },
   };
 
-  return new LanguageClient(CLIENT_ID, CLIENT_NAME, serverOptions, clientOptions);
+  return { client: new LanguageClient(CLIENT_ID, CLIENT_NAME, serverOptions, clientOptions), command };
 }
 
-async function startClient(languageClient: LanguageClient): Promise<void> {
+async function startClient(languageClient: LanguageClient, command: string): Promise<void> {
   statusBar?.setState('starting');
   try {
     await languageClient.start();
@@ -144,27 +158,43 @@ async function startClient(languageClient: LanguageClient): Promise<void> {
     modelViews?.refresh();
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    outputChannel?.appendLine(`Failed to start '${serverPath().command}': ${message}`);
+    outputChannel?.appendLine(`Failed to start '${command}': ${message}`);
     statusBar?.setState('failed');
     await publishCapabilities(new Set<LpRequest>());
-    void vscode.window.showErrorMessage(`Could not start the LP language server '${serverPath().command}': ${message}. ${INSTALL_HINT}`);
+    void vscode.window.showErrorMessage(`Could not start the LP language server '${command}': ${message}. ${INSTALL_HINT}`);
   }
 }
 
-async function restartServer(): Promise<void> {
-  if (client === undefined) {
+/** Create and start the client; leaves `client` unset when Restricted Mode allows no server. */
+async function launchClient(): Promise<void> {
+  const created = createClient();
+  if (created === undefined) {
     return;
   }
-  const previous = client;
-  // Recreate the client so a changed `lp.server.path` takes effect.
-  client = undefined;
-  try {
-    await previous.dispose();
-  } catch (error) {
-    outputChannel?.appendLine(`Error while stopping the server: ${String(error)}`);
+  client = created.client;
+  await startClient(created.client, created.command);
+}
+
+async function restartServer(): Promise<void> {
+  if (restarting !== undefined) {
+    return restarting;
   }
-  client = createClient();
-  await startClient(client);
+  restarting = (async () => {
+    const previous = client;
+    // Recreate the client so a changed `lp.server.path` or a granted trust takes effect.
+    client = undefined;
+    try {
+      await previous?.dispose();
+    } catch (error) {
+      outputChannel?.appendLine(`Error while stopping the server: ${String(error)}`);
+    }
+    await launchClient();
+  })();
+  try {
+    await restarting;
+  } finally {
+    restarting = undefined;
+  }
 }
 
 /** Arguments for a document command: the active LP document's URI. */

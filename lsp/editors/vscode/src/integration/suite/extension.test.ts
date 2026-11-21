@@ -146,4 +146,22 @@ suite('LP extension host', () => {
     await vscode.window.showTextDocument(editor.document);
     await vscode.commands.executeCommand('workbench.action.files.revert');
   });
+
+  test('lp.solve with a document URI solves that document even when another editor is active', async () => {
+    const other = await vscode.workspace.openTextDocument({ language: 'plaintext', content: 'not a model' });
+    await vscode.window.showTextDocument(other);
+    events.length = 0;
+    await vscode.commands.executeCommand('lp.solve', editor.document.uri.toString());
+    await waitFor('solution data', () => events.find((e) => e.view === 'solution' && e.direction === 'out' && e.type === 'data'), 60_000);
+  });
+
+  test('lp.explainConstraint with a URI and position explains that constraint without a quick pick', async () => {
+    // The cursor is on line 0, which the stand-in cannot explain: only the arguments can find `c1`.
+    editor = await vscode.window.showTextDocument(editor.document);
+    editor.selection = new vscode.Selection(0, 0, 0, 0);
+    events.length = 0;
+    await vscode.commands.executeCommand('lp.explainConstraint', editor.document.uri.toString(), { line: 3, character: 1 });
+    // The panel from the earlier test is reused, so only the data is posted again.
+    await waitFor('explain data', () => events.find((e) => e.view === 'explain' && e.direction === 'out' && e.type === 'data'));
+  });
 });
