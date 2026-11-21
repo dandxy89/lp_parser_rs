@@ -1,0 +1,52 @@
+---
+source: rust/tests/test_diagnostics.rs
+expression: text
+---
+[WARNING] duplicate-row: Constraint 'C4' duplicates constraint 'C2'
+[WARNING] duplicate-row: Constraint 'C8' duplicates constraint 'C6'
+[WARNING] duplicate-row: Constraint 'C14' duplicates constraint 'C11'
+[WARNING] duplicate-row: Constraint 'C17' duplicates constraint 'C16'
+[WARNING] duplicate-row: Constraint 'C20' duplicates constraint 'C19'
+[WARNING] duplicate-row: Constraint 'C24' duplicates constraint 'C22'
+[WARNING] duplicate-row: Constraint 'C27' duplicates constraint 'C26'
+[WARNING] duplicate-row: Constraint 'C30' duplicates constraint 'C29'
+[WARNING] duplicate-row: Constraint 'C34' duplicates constraint 'C32'
+[INFO] row-redundant-by-bounds: Constraint 'C1' always holds given the variable bounds
+[INFO] row-redundant-by-bounds: Constraint 'C2' always holds given the variable bounds
+[INFO] row-redundant-by-bounds: Constraint 'C4' always holds given the variable bounds
+[INFO] row-redundant-by-bounds: Constraint 'C5' always holds given the variable bounds
+[INFO] row-redundant-by-bounds: Constraint 'C6' always holds given the variable bounds
+[INFO] row-redundant-by-bounds: Constraint 'C8' always holds given the variable bounds
+[INFO] row-redundant-by-bounds: Constraint 'C10' always holds given the variable bounds
+[INFO] row-redundant-by-bounds: Constraint 'C11' always holds given the variable bounds
+[INFO] row-redundant-by-bounds: Constraint 'C14' always holds given the variable bounds
+[INFO] row-redundant-by-bounds: Constraint 'C15' always holds given the variable bounds
+[INFO] row-redundant-by-bounds: Constraint 'C16' always holds given the variable bounds
+[INFO] row-redundant-by-bounds: Constraint 'C17' always holds given the variable bounds
+[INFO] row-redundant-by-bounds: Constraint 'C18' always holds given the variable bounds
+[INFO] row-redundant-by-bounds: Constraint 'C19' always holds given the variable bounds
+[INFO] row-redundant-by-bounds: Constraint 'C20' always holds given the variable bounds
+[INFO] row-redundant-by-bounds: Constraint 'C21' always holds given the variable bounds
+[INFO] row-redundant-by-bounds: Constraint 'C22' always holds given the variable bounds
+[INFO] row-redundant-by-bounds: Constraint 'C24' always holds given the variable bounds
+[INFO] row-redundant-by-bounds: Constraint 'C25' always holds given the variable bounds
+[INFO] row-redundant-by-bounds: Constraint 'C26' always holds given the variable bounds
+[INFO] row-redundant-by-bounds: Constraint 'C27' always holds given the variable bounds
+[INFO] row-redundant-by-bounds: Constraint 'C28' always holds given the variable bounds
+[INFO] row-redundant-by-bounds: Constraint 'C29' always holds given the variable bounds
+[INFO] row-redundant-by-bounds: Constraint 'C30' always holds given the variable bounds
+[INFO] row-redundant-by-bounds: Constraint 'C31' always holds given the variable bounds
+[INFO] row-redundant-by-bounds: Constraint 'C32' always holds given the variable bounds
+[INFO] row-redundant-by-bounds: Constraint 'C34' always holds given the variable bounds
+[INFO] row-redundant-by-bounds: Constraint 'C35' always holds given the variable bounds
+[INFO] row-redundant-by-bounds: Constraint 'C36' always holds given the variable bounds
+[INFO] rows-form-range: Constraints 'C1' and 'C2' together bound the same terms between 0 and 5
+[INFO] rows-form-range: Constraints 'C5' and 'C6' together bound the same terms between 0 and 3
+[INFO] rows-form-range: Constraints 'C10' and 'C11' together bound the same terms between 0 and 5
+[INFO] rows-form-range: Constraints 'C15' and 'C16' together bound the same terms between 0 and 7
+[INFO] rows-form-range: Constraints 'C18' and 'C19' together bound the same terms between 0 and 3
+[INFO] rows-form-range: Constraints 'C21' and 'C22' together bound the same terms between 0 and 5
+[INFO] rows-form-range: Constraints 'C25' and 'C26' together bound the same terms between 0 and 3
+[INFO] rows-form-range: Constraints 'C28' and 'C29' together bound the same terms between 0 and 3
+[INFO] rows-form-range: Constraints 'C31' and 'C32' together bound the same terms between 0 and 3
+[INFO] rows-form-range: Constraints 'C35' and 'C36' together bound the same terms between 0 and 80082

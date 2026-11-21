@@ -1,0 +1,10 @@
+---
+source: rust/tests/test_diagnostics.rs
+expression: text
+---
+[INFO] row-redundant-by-bounds: Constraint 'cons0_low' always holds given the variable bounds
+[INFO] row-redundant-by-bounds: Constraint 'cons1_low' always holds given the variable bounds
+[INFO] row-redundant-by-bounds: Constraint 'cons2_low' always holds given the variable bounds
+[INFO] rows-form-range: Constraints 'cons0' and 'cons0_low' together bound the same terms between 0 and 21.1
+[INFO] rows-form-range: Constraints 'cons1' and 'cons1_low' together bound the same terms between 0 and 22.2
+[INFO] rows-form-range: Constraints 'cons2' and 'cons2_low' together bound the same terms between 0 and 23.3

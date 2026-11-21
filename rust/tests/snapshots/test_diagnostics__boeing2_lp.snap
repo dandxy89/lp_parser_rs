@@ -1,0 +1,22 @@
+---
+source: rust/tests/test_diagnostics.rs
+expression: text
+---
+[WARNING] duplicate-row: Constraint 'LF1006B2' duplicates constraint 'LF1006B1'
+[WARNING] duplicate-row: Constraint 'LF1006C2' duplicates constraint 'LF1006C1'
+[WARNING] duplicate-row: Constraint 'LF1100C5' duplicates constraint 'LF1100C4'
+[INFO] row-redundant-by-bounds: Constraint 'REVENUES' always holds given the variable bounds
+[INFO] row-redundant-by-bounds: Constraint 'ACOCOSTS' always holds given the variable bounds
+[INFO] row-redundant-by-bounds: Constraint 'FUELAVAL' always holds given the variable bounds
+[INFO] row-redundant-by-bounds: Constraint 'ACMILES' always holds given the variable bounds
+[INFO] row-redundant-by-bounds: Constraint 'ASMILES' always holds given the variable bounds
+[INFO] row-redundant-by-bounds: Constraint 'RPMILES' always holds given the variable bounds
+[INFO] row-redundant-by-bounds: Constraint 'ATONMILE' always holds given the variable bounds
+[INFO] row-redundant-by-bounds: Constraint 'RTONMILE' always holds given the variable bounds
+[INFO] row-redundant-by-bounds: Constraint 'LF1021B1' always holds given the variable bounds
+[INFO] row-redundant-by-bounds: Constraint 'LF1021C1' always holds given the variable bounds
+[INFO] row-redundant-by-bounds: Constraint 'LF1002B1' always holds given the variable bounds
+[INFO] row-redundant-by-bounds: Constraint 'LF1002C1' always holds given the variable bounds
+[INFO] row-redundant-by-bounds: Constraint 'LF1014C2' always holds given the variable bounds
+[INFO] row-redundant-by-bounds: Constraint 'LF1200C1' always holds given the variable bounds
+[INFO] row-redundant-by-bounds: Constraint 'LF1201C1' always holds given the variable bounds

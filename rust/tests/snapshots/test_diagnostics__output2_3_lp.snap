@@ -1,0 +1,20 @@
+---
+source: rust/tests/test_diagnostics.rs
+expression: text
+---
+[WARNING] duplicate-row: Constraint 'cons7_low' duplicates constraint 'cons5_low'
+[INFO] singleton-row: Constraint 'cons5' has one term and is really the bound x8 <= 12.2
+[INFO] row-redundant-by-bounds: Constraint 'cons0_low' always holds given the variable bounds
+[INFO] row-redundant-by-bounds: Constraint 'cons1_low' always holds given the variable bounds
+[INFO] row-redundant-by-bounds: Constraint 'cons2_low' always holds given the variable bounds
+[INFO] row-redundant-by-bounds: Constraint 'cons3' always holds given the variable bounds
+[INFO] row-redundant-by-bounds: Constraint 'cons3_low' always holds given the variable bounds
+[INFO] row-redundant-by-bounds: Constraint 'cons5_low' always holds given the variable bounds
+[INFO] row-redundant-by-bounds: Constraint 'cons7' always holds given the variable bounds
+[INFO] row-redundant-by-bounds: Constraint 'cons7_low' always holds given the variable bounds
+[INFO] dominated-row: Constraint 'cons7' is implied by constraint 'cons5' and is redundant
+[INFO] rows-form-range: Constraints 'cons0' and 'cons0_low' together bound the same terms between 0 and 21.1
+[INFO] rows-form-range: Constraints 'cons1' and 'cons1_low' together bound the same terms between 0 and 22.2
+[INFO] rows-form-range: Constraints 'cons2' and 'cons2_low' together bound the same terms between 0 and 23.3
+[INFO] rows-form-range: Constraints 'cons3' and 'cons3_low' together bound the same terms between 0 and 11.1
+[INFO] rows-form-range: Constraints 'cons5' and 'cons5_low' together bound the same terms between 0 and 12.2

@@ -1,0 +1,35 @@
+---
+source: rust/tests/test_diagnostics.rs
+expression: text
+---
+[INFO] fixed-variable: Variable '__dummy' is fixed at 0
+[INFO] objective-only-variable: Variable '__dummy' appears only in the objective, so it will sit at its lower bound 0
+[INFO] singleton-row: Constraint '_C325' has one term and is really the bound Choice_5_1_1 = 1
+[INFO] singleton-row: Constraint '_C326' has one term and is really the bound Choice_6_2_1 = 1
+[INFO] singleton-row: Constraint '_C327' has one term and is really the bound Choice_8_4_1 = 1
+[INFO] singleton-row: Constraint '_C328' has one term and is really the bound Choice_4_5_1 = 1
+[INFO] singleton-row: Constraint '_C329' has one term and is really the bound Choice_7_6_1 = 1
+[INFO] singleton-row: Constraint '_C330' has one term and is really the bound Choice_3_1_2 = 1
+[INFO] singleton-row: Constraint '_C331' has one term and is really the bound Choice_9_3_2 = 1
+[INFO] singleton-row: Constraint '_C332' has one term and is really the bound Choice_6_7_2 = 1
+[INFO] singleton-row: Constraint '_C333' has one term and is really the bound Choice_8_3_3 = 1
+[INFO] singleton-row: Constraint '_C334' has one term and is really the bound Choice_1_2_4 = 1
+[INFO] singleton-row: Constraint '_C335' has one term and is really the bound Choice_8_5_4 = 1
+[INFO] singleton-row: Constraint '_C336' has one term and is really the bound Choice_4_8_4 = 1
+[INFO] singleton-row: Constraint '_C337' has one term and is really the bound Choice_7_1_5 = 1
+[INFO] singleton-row: Constraint '_C338' has one term and is really the bound Choice_9_2_5 = 1
+[INFO] singleton-row: Constraint '_C339' has one term and is really the bound Choice_6_4_5 = 1
+[INFO] singleton-row: Constraint '_C340' has one term and is really the bound Choice_2_6_5 = 1
+[INFO] singleton-row: Constraint '_C341' has one term and is really the bound Choice_1_8_5 = 1
+[INFO] singleton-row: Constraint '_C342' has one term and is really the bound Choice_8_9_5 = 1
+[INFO] singleton-row: Constraint '_C343' has one term and is really the bound Choice_5_2_6 = 1
+[INFO] singleton-row: Constraint '_C344' has one term and is really the bound Choice_3_5_6 = 1
+[INFO] singleton-row: Constraint '_C345' has one term and is really the bound Choice_9_8_6 = 1
+[INFO] singleton-row: Constraint '_C346' has one term and is really the bound Choice_2_7_7 = 1
+[INFO] singleton-row: Constraint '_C347' has one term and is really the bound Choice_6_3_8 = 1
+[INFO] singleton-row: Constraint '_C348' has one term and is really the bound Choice_8_7_8 = 1
+[INFO] singleton-row: Constraint '_C349' has one term and is really the bound Choice_7_9_8 = 1
+[INFO] singleton-row: Constraint '_C350' has one term and is really the bound Choice_3_4_9 = 1
+[INFO] singleton-row: Constraint '_C351' has one term and is really the bound Choice_1_5_9 = 1
+[INFO] singleton-row: Constraint '_C352' has one term and is really the bound Choice_6_6_9 = 1
+[INFO] singleton-row: Constraint '_C353' has one term and is really the bound Choice_5_8_9 = 1

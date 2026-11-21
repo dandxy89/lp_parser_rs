@@ -20,6 +20,10 @@
 //!   intentional, but a singleton constraint is really a bound and an unused
 //!   variable can point to a misspelt name.
 //!
+//! For stable codes, a proven/heuristic certainty and the entities involved,
+//! use [`LpProblem::diagnostics`] instead; see [`ModelDiagnostics`]. `analyze`
+//! and its output are unchanged by it.
+//!
 //! # Example
 //!
 //! ```rust
@@ -40,6 +44,15 @@
 //! ```
 
 use std::fmt::{Display, Formatter, Result as FmtResult};
+
+mod diagnostics;
+mod domains;
+mod rows;
+
+pub use diagnostics::{
+    Certainty, DiagnosticCategory, DiagnosticCode, DiagnosticSubject, DiagnosticsConfig, ModelDiagnostic, ModelDiagnostics, RelatedSubject,
+    SubjectSite,
+};
 
 use crate::error::EntityKind;
 use crate::interner::NameId;
