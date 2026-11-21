@@ -1,0 +1,143 @@
+{
+  "LP model skeleton": {
+    "prefix": "lp-model",
+    "description": "Minimal LP model with objective, constraint, bounds, and end marker",
+    "body": [
+      "${1|Minimize,Maximize|}",
+      " obj: ${2:x + y}",
+      "Subject To",
+      " c1: ${3:x + y} >= ${4:1}",
+      "Bounds",
+      " ${5:0} <= ${6:x} <= ${7:10}",
+      "End",
+      "$0"
+    ]
+  },
+  "LP objective": {
+    "prefix": "lp-objective",
+    "description": "Objective function (Minimize or Maximize)",
+    "body": [
+      "${1|Minimize,Maximize|}",
+      " ${2:obj}: ${3:x + y}",
+      "$0"
+    ]
+  },
+  "LP constraint": {
+    "prefix": "lp-constraint",
+    "description": "Named linear constraint for a Subject To section",
+    "body": [
+      " ${1:c1}: ${2:x + y} ${3|<=,>=,=|} ${4:10}",
+      "$0"
+    ]
+  },
+  "LP bounds": {
+    "prefix": "lp-bounds",
+    "description": "Bounds section with a two-sided bound",
+    "body": [
+      "Bounds",
+      " ${1:0} <= ${2:x} <= ${3:10}",
+      "$0"
+    ]
+  },
+  "LP binary": {
+    "prefix": "lp-binary",
+    "description": "Binaries section",
+    "body": [
+      "Binaries",
+      " ${1:b}",
+      "$0"
+    ]
+  },
+  "LP general integer": {
+    "prefix": "lp-general",
+    "description": "Generals section (general integer variables)",
+    "body": [
+      "Generals",
+      " ${1:n}",
+      "$0"
+    ]
+  },
+  "LP semi-continuous": {
+    "prefix": "lp-semi-continuous",
+    "description": "Semi-continuous variable: zero or between its lower and upper bound",
+    "body": [
+      "Bounds",
+      " ${1:2} <= ${2:s} <= ${3:10}",
+      "Semi-continuous",
+      " ${2:s}",
+      "$0"
+    ]
+  },
+  "LP SOS1": {
+    "prefix": "lp-sos1",
+    "description": "Special ordered set of type 1 (at most one non-zero)",
+    "body": [
+      "SOS",
+      " ${1:sos1}: S1:: ${2:x1}:${3:1} ${4:x2}:${5:2}",
+      "$0"
+    ]
+  },
+  "LP SOS2": {
+    "prefix": "lp-sos2",
+    "description": "Special ordered set of type 2 (at most two adjacent non-zeros)",
+    "body": [
+      "SOS",
+      " ${1:sos2}: S2:: ${2:x1}:${3:1} ${4:x2}:${5:2} ${6:x3}:${7:3}",
+      "$0"
+    ]
+  },
+  "LP indicator constraint": {
+    "prefix": "lp-indicator",
+    "description": "Indicator constraint: the linear part holds when the binary takes the given value",
+    "body": [
+      " ${1:ind}: ${2:b} = ${3|1,0|} -> ${4:x + y} <= ${5:10}",
+      "$0"
+    ]
+  },
+  "LP quadratic objective": {
+    "prefix": "lp-quad-objective",
+    "description": "Quadratic objective (the quadratic block is divided by 2)",
+    "body": [
+      "${1|Minimize,Maximize|}",
+      " obj: ${2:2 x + 3 y} + [ ${3:x ^ 2 + 4 x * y + 2 y ^ 2} ] / 2",
+      "$0"
+    ]
+  },
+  "LP quadratic constraint": {
+    "prefix": "lp-quad-constraint",
+    "description": "Quadratic constraint (the quadratic block is not divided)",
+    "body": [
+      " ${1:q1}: ${2:x} + [ ${3:x ^ 2 + y ^ 2} ] <= ${4:4}",
+      "$0"
+    ]
+  },
+  "LP multi-objective (Gurobi)": {
+    "prefix": "lp-multi-obj",
+    "description": "Gurobi multi-objective block with priority and weight",
+    "body": [
+      "${1|Minimize,Maximize|} multi-objectives",
+      " ${2:Cost}: Priority=${3:2} Weight=${4:1}",
+      "  ${5:3 x + 2 y}",
+      " ${6:Time}: Priority=${7:1} Weight=${8:-0.5}",
+      "  ${9:x + y}",
+      "$0"
+    ]
+  },
+  "LP ranged constraint": {
+    "prefix": "lp-ranged",
+    "description": "Ranged constraint: lower <= expression <= upper",
+    "body": [
+      " ${1:r1}: ${2:1} <= ${3:x - z} <= ${4:6}",
+      "$0"
+    ]
+  },
+  "LP lazy constraints": {
+    "prefix": "lp-lazy",
+    "description": "Lazy Constraints section (added by the solver on demand)",
+    "body": [
+      "Lazy Constraints",
+      " ${1:l1}: ${2:x + 2 y} <= ${3:12}",
+      "$0"
+    ]
+  }
+}

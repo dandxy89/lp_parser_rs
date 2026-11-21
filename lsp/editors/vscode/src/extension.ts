@@ -9,6 +9,14 @@ import {
   ServerOptions,
   TransportKind,
 } from 'vscode-languageclient/node';
+import { publishCapabilities } from './commands';
+import { LpRequest, parseLpCapabilities } from './pure/capabilities';
+import { createModelClient } from './modelClient';
+import { ModelViews, registerModelViews } from './modelViews';
+import { LpStatusBar } from './statusBar';
+import { setClientProvider } from './views/lpClient';
+import { registerViews } from './views';
+import { observePanels, PanelEvent } from './views/panel';
 
 const CLIENT_ID = 'lp';
 const CLIENT_NAME = 'LP Language Server';
@@ -23,12 +31,25 @@ let extensionContext: vscode.ExtensionContext;
 let client: LanguageClient | undefined;
 let outputChannel: vscode.OutputChannel | undefined;
 let lpFileWatcher: vscode.FileSystemWatcher | undefined;
+let statusBar: LpStatusBar | undefined;
+let modelViews: ModelViews | undefined;
 
-export async function activate(context: vscode.ExtensionContext): Promise<void> {
+/** What `activate` returns: read access for the extension test host. Not a supported public API. */
+export interface LpExtensionApi {
+  readonly explorerRoots: ModelViews['explorerRoots'];
+  readonly analysisTree: ModelViews['analysisTree'];
+  readonly observePanels: (observer: ((event: PanelEvent) => void) | undefined) => void;
+}
+
+export async function activate(context: vscode.ExtensionContext): Promise<LpExtensionApi> {
   extensionContext = context;
   outputChannel = vscode.window.createOutputChannel(CLIENT_NAME);
   lpFileWatcher = vscode.workspace.createFileSystemWatcher('**/*.lp');
-  context.subscriptions.push(outputChannel, lpFileWatcher);
+  statusBar = new LpStatusBar();
+  context.subscriptions.push(outputChannel, lpFileWatcher, statusBar);
+  modelViews = registerModelViews(context, createModelClient(() => client), statusBar, (message) => outputChannel?.appendLine(message));
+  setClientProvider(() => client);
+  registerViews(context);
 
   context.subscriptions.push(
     vscode.commands.registerCommand('lp.restartServer', restartServer),
@@ -44,6 +65,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   client = createClient();
   await startClient(client);
+  return {
+    explorerRoots: () => modelViews?.explorerRoots() ?? Promise.resolve([]),
+    analysisTree: () => modelViews?.analysisTree() ?? [],
+    observePanels,
+  };
 }
 
 export async function deactivate(): Promise<void> {
@@ -51,6 +77,7 @@ export async function deactivate(): Promise<void> {
     await client.stop();
     client = undefined;
   }
+  statusBar?.setState('stopped');
 }
 
 type ServerSource = 'setting' | 'bundled' | 'PATH';
@@ -107,13 +134,19 @@ function createClient(): LanguageClient {
 }
 
 async function startClient(languageClient: LanguageClient): Promise<void> {
+  statusBar?.setState('starting');
   try {
     await languageClient.start();
     const info = languageClient.initializeResult?.serverInfo;
     outputChannel?.appendLine(`Server started: ${info?.name ?? 'unknown'} ${info?.version ?? 'unknown version'}`);
+    statusBar?.setState('running');
+    await publishCapabilities(parseLpCapabilities(languageClient.initializeResult?.capabilities.experimental));
+    modelViews?.refresh();
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     outputChannel?.appendLine(`Failed to start '${serverPath().command}': ${message}`);
+    statusBar?.setState('failed');
+    await publishCapabilities(new Set<LpRequest>());
     void vscode.window.showErrorMessage(`Could not start the LP language server '${serverPath().command}': ${message}. ${INSTALL_HINT}`);
   }
 }
