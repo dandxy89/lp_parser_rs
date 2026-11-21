@@ -107,7 +107,7 @@ table.keys td:first-child { font-family: var(--mono); color: var(--accent); whit
 #dots { position: fixed; right: 1vw; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: .7em; z-index: 5; }
 #dots button { width: .7em; height: .7em; padding: 0; border-radius: 50%; border: 1px solid var(--muted); background: none; cursor: pointer; }
 #dots button.on { background: var(--accent); border-color: var(--accent); }
-#more { position: fixed; left: 50%; bottom: 1.6vh; transform: translateX(-50%); font: .75em var(--mono); color: var(--muted); z-index: 5; pointer-events: none; }
+#more { position: fixed; left: 50%; bottom: 1.6vh; transform: translateX(-50%); font: .75em var(--mono); color: var(--muted); z-index: 5; cursor: pointer; background: none; border: 0; }
 body.overview #dots, body.overview #more { display: none; }
 @media (max-width: 760px) { #dots, #more { display: none; } .slide.sub { border-top: 1px solid var(--rule); } }
 </style>
@@ -857,9 +857,9 @@ pip install parse-lp</pre>
 </main>
 <div id="bar"></div>
 <div id="dots" aria-label="Slides in this topic"></div>
-<div id="more"></div>
+<button id="more" aria-label="Next slide in topic"></button>
 <nav class="ctrl" aria-label="Slide controls">
-  <button id="prev" aria-label="Previous slide">←</button><span id="count"></span><button id="next" aria-label="Next slide">→</button>
+  <button id="prev" aria-label="Previous topic">←</button><button id="up" aria-label="Previous slide in topic">↑</button><button id="down" aria-label="Next slide in topic">↓</button><span id="count"></span><button id="next" aria-label="Next topic">→</button>
   <button id="notesBtn" aria-label="Toggle speaker notes">notes</button>
 </nav>
 <script>
@@ -906,6 +906,8 @@ document.addEventListener('keydown', (e) => {
   else if (k === 'f' || k === 'F') (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen()).catch((err) => console.warn('fullscreen unavailable:', err.message));
   else if (/^[1-5]$/.test(k) && slides[cur].id === 'cli') tabs[+k - 1].click();
 });
+document.getElementById('up').onclick = () => stepSub(-1);
+document.getElementById('down').onclick = document.getElementById('more').onclick = () => stepSub(1);
 document.getElementById('prev').onclick = () => stepMain(-1);
 document.getElementById('next').onclick = () => stepMain(1);
 document.getElementById('notesBtn').onclick = () => document.body.classList.toggle('notes');
