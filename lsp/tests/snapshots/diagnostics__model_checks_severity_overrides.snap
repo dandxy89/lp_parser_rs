@@ -1,0 +1,32 @@
+---
+source: lsp/tests/diagnostics.rs
+expression: "render(&doc, &compute(&doc, &config))"
+---
+8:1-8:3 warning row-infeasible-by-bounds `c4`
+  | Constraint 'c4' cannot hold: its terms range over [0, 70] given the variable bounds, not >= 100
+  | The model is infeasible. Relax the bounds of the listed variables or the constraint.
+  = 12:1 `z`: ranges over [0, 50]
+  = 13:1 `w`: ranges over [0, 20]
+  data {"category":"mathematical","certainty":"proven"}
+6:1-6:3 hint proportional-row `c2`
+  | Constraint 'c2' is 'c1' scaled by 0.5
+  | The two rows describe the same restriction; remove one.
+  = 5:1 `c1`: the row it is proportional to
+  data {"category":"mathematical","certainty":"proven"}
+7:1-7:3 hint proportional-row `c3`
+  | Constraint 'c3' is 'c1' scaled by 0.5
+  | The two rows describe the same restriction; remove one.
+  = 5:1 `c1`: the row it is proportional to
+  data {"category":"mathematical","certainty":"proven"}
+10:1-10:3 information explicit-zero-coefficient tags=1 `c6`
+  | 'c6' has explicit zero coefficients for x
+  | A zero term has no effect. It may be left over from generated code; remove it or check the intended coefficient.
+  data {"category":"structural","certainty":"proven"}
+9:1-9:3 information row-redundant-by-bounds tags=1 `c5`
+  | Constraint 'c5' always holds given the variable bounds
+  | The bounds on its variables already guarantee it; it can be removed.
+  data {"category":"mathematical","certainty":"proven"}
+10:1-10:3 information row-redundant-by-bounds tags=1 `c6`
+  | Constraint 'c6' always holds given the variable bounds
+  | The bounds on its variables already guarantee it; it can be removed.
+  data {"category":"mathematical","certainty":"proven"}

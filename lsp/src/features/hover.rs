@@ -9,6 +9,7 @@ use tree_sitter::Node;
 use super::docs;
 use crate::document::Document;
 use crate::index::{Entity, EntityKind, Namespace, Role, Symbol, Variable};
+use crate::solution::Solution;
 use crate::syntax::{self, kind};
 
 /// Append a formatted line to a `String`.
@@ -25,10 +26,34 @@ const LISTED_CONSTRAINTS: usize = 5;
 /// Hover at `position`.
 #[must_use]
 pub fn hover(doc: &Document, position: Position) -> Option<Hover> {
+    hover_with(doc, position, None)
+}
+
+/// [`hover`], with the stored `solution` (already filtered for staleness by
+/// the caller) shown for variables, constraints and objectives. The lines
+/// come from [`Solution`], the same fragments `lp/explain` uses.
+#[must_use]
+pub fn hover_with(doc: &Document, position: Position, solution: Option<&Solution>) -> Option<Hover> {
     let offset = doc.offset(position);
+    let current = Some(doc.version);
     let (range, value) = match doc.index().symbol_at(offset) {
-        Some((range, Symbol::Variable(var, _))) => (range, variable(doc, &doc.index().variables[var])),
-        Some((range, Symbol::Entity(entity))) => (range, entity_hover(doc, entity)?),
+        Some((range, Symbol::Variable(var, _))) => {
+            let var = &doc.index().variables[var];
+            let mut text = variable(doc, var);
+            append_solution(&mut text, solution.and_then(|s| s.variable_markdown(&var.name, current)));
+            (range, text)
+        }
+        Some((range, Symbol::Entity(entity))) => {
+            let mut text = entity_hover(doc, entity)?;
+            let e = &doc.index().entities[entity];
+            let line = solution.and_then(|s| match (e.kind, e.name.as_deref()) {
+                (EntityKind::Objective, _) => s.objective_markdown(current),
+                (EntityKind::Constraint | EntityKind::GeneralConstraint, Some(name)) => s.constraint_markdown(name, current),
+                _ => None,
+            });
+            append_solution(&mut text, line);
+            (range, text)
+        }
         Some((range, Symbol::Attribute(attr))) => {
             let (name, summary) = docs::attribute(&doc.index().attributes[attr].name)?;
             (range, format!("**{name}** (objective attribute)\n\n{summary}"))
@@ -36,6 +61,16 @@ pub fn hover(doc: &Document, position: Position) -> Option<Hover> {
         None => token_hover(doc, offset)?,
     };
     Some(Hover { contents: HoverContents::Markup(MarkupContent { kind: MarkupKind::Markdown, value }), range: Some(doc.range(range)) })
+}
+
+fn append_solution(text: &mut String, line: Option<String>) {
+    if let Some(line) = line {
+        if !text.ends_with('\n') {
+            text.push('\n');
+        }
+        text.push_str(&line);
+        text.push('\n');
+    }
 }
 
 /// Keyword and function-name hover from the token under the cursor.

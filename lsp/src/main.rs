@@ -1,5 +1,4 @@
-use lp_lsp::Backend;
-use tower_lsp_server::{LspService, Server};
+use tower_lsp_server::Server;
 
 #[tokio::main]
 async fn main() {
@@ -7,6 +6,6 @@ async fn main() {
         println!("lp-lsp {}", env!("CARGO_PKG_VERSION"));
         return;
     }
-    let (service, socket) = LspService::new(Backend::new);
+    let (service, socket) = lp_lsp::service();
     Server::new(tokio::io::stdin(), tokio::io::stdout(), socket).serve(service).await;
 }

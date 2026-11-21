@@ -1,6 +1,7 @@
 //! Tree-sitter plumbing: parsing, node-kind names and small node helpers.
 
 use std::cell::RefCell;
+use std::ops::Range;
 
 use lp_parser_rs::VariableBounds;
 use tree_sitter::{Language, Node, Parser, Tree, TreeCursor};
@@ -329,6 +330,67 @@ fn read_item(tokens: &mut &[QueryToken], parent: Option<&str>, out: &mut Vec<Que
         }
     }
     Ok(())
+}
+
+/// What a tag marks, from the `@definition.*` / `@reference.*` capture of
+/// `TAGS_QUERY`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum TagRole {
+    /// An objective, constraint or SOS set name (`definition.constant`).
+    DefinesRow,
+    /// A variable declared in `Bounds` or a type section (`definition.variable`).
+    DefinesVariable,
+    /// A variable used in an expression, indicator, SOS entry or general constraint (`reference.variable`).
+    ReferencesVariable,
+}
+
+/// One symbol the grammar's tags query finds.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Tag {
+    /// What it marks.
+    pub role: TagRole,
+    /// The name as written.
+    pub name: String,
+    /// Byte range of the name.
+    pub range: Range<usize>,
+}
+
+/// Symbols of `tree` according to the grammar's `TAGS_QUERY`, in document order.
+/// The index is built by walking the tree; this is the independent reading
+/// the tests hold it against.
+///
+/// # Panics
+/// Never in practice: the bundled query compiles against the bundled grammar.
+#[must_use]
+pub fn tags(tree: &Tree, text: &str) -> Vec<Tag> {
+    use streaming_iterator::StreamingIterator;
+    use tree_sitter::{Query, QueryCursor};
+
+    static QUERY: std::sync::OnceLock<Query> = std::sync::OnceLock::new();
+    let query = QUERY.get_or_init(|| Query::new(&language(), tree_sitter_lp::TAGS_QUERY).expect("bundled tags query compiles"));
+    let names = query.capture_names();
+    let mut out = Vec::new();
+    let mut cursor = QueryCursor::new();
+    let mut matches = cursor.matches(query, tree.root_node(), text.as_bytes());
+    while let Some(found) = matches.next() {
+        let mut name = None;
+        let mut role = None;
+        for capture in found.captures() {
+            match names[capture.index as usize] {
+                "name" => name = Some(capture.node),
+                "definition.constant" => role = Some(TagRole::DefinesRow),
+                "definition.variable" => role = Some(TagRole::DefinesVariable),
+                "reference.variable" => role = Some(TagRole::ReferencesVariable),
+                other => debug_assert!(false, "unexpected tags capture `{other}`"),
+            }
+        }
+        if let (Some(node), Some(role)) = (name, role) {
+            out.push(Tag { role, name: self::text(node, text).to_owned(), range: node.byte_range() });
+        }
+    }
+    out.sort_by_key(|tag| (tag.range.start, tag.range.end));
+    out.dedup();
+    out
 }
 
 /// Grammar symbol ids whose kind and namedness match `kind`/`named` (aliases
@@ -790,6 +852,18 @@ mod tests {
     fn rejects_shapes_it_cannot_mirror() {
         assert!(query_captures("((identifier) @x (#eq? @x \"y\"))").is_err());
         assert!(query_captures("(constraint (linear_expression (term) @t))").is_err());
+    }
+
+    #[test]
+    fn tags_name_rows_and_variables() {
+        let text = "min\n obj: x + 2 y\nst\n c1: x + y <= 4\nbounds\n 0 <= x <= 3\ngenerals\n y\nend\n";
+        let tree = parse(text, None);
+        let tags = tags(&tree, text);
+        let named = |role: TagRole| tags.iter().filter(|t| t.role == role).map(|t| t.name.as_str()).collect::<Vec<_>>();
+        assert_eq!(named(TagRole::DefinesRow), ["obj", "c1"]);
+        assert_eq!(named(TagRole::DefinesVariable), ["x", "y"]);
+        assert_eq!(named(TagRole::ReferencesVariable), ["x", "y", "x", "y"]);
+        assert!(tags.windows(2).all(|w| w[0].range.start <= w[1].range.start), "document order");
     }
 
     #[test]

@@ -1,19 +1,24 @@
 //! Diagnostics: syntax (tree-sitter ERROR/MISSING), index-based checks, semantic
-//! (`lp_parser_rs` errors, only without syntax errors) and analysis issues.
+//! (`lp_parser_rs` errors, only without syntax errors) and coded model
+//! diagnostics (`lp_parser_rs::analysis::ModelDiagnostics`), whose names are
+//! mapped to source ranges through the document index.
 
 use std::collections::HashSet;
 use std::ops::Range;
 
-use lp_parser_rs::analysis::{AnalysisIssue, IssueCategory, IssueSeverity, IssueSubject};
+use lp_highs::protocol::{DiagnosisMethod, Side};
+use lp_parser_rs::analysis::{Certainty, DiagnosticCode, DiagnosticSubject, IssueSeverity, ModelDiagnostic, SubjectSite};
 use lp_parser_rs::{EntityKind as UpstreamKind, LpParseError, VariableBounds};
 use ls_types::{Diagnostic, DiagnosticRelatedInformation, DiagnosticSeverity, DiagnosticTag, NumberOrString};
 use tree_sitter::Node;
 
-use crate::config::Config;
+use crate::config::{AnalysisSettings, Config, SeverityOverride};
 use crate::document::Document;
 use crate::index::{Namespace, Occurrence, Role};
 use crate::position::floor_char_boundary;
+use crate::requests::sites::Sites;
 use crate::semantic::{Model, SemanticResult};
+use crate::solution::Solution;
 use crate::syntax::{self, kind};
 
 /// Diagnostic `code`s. Code actions match on these.
@@ -34,9 +39,21 @@ pub mod codes {
     pub const CONFLICTING_BOUNDS: &str = "conflicting-bounds";
     /// `=<` / `=>` spelling.
     pub const OPERATOR_SPELLING: &str = "operator-spelling";
-    /// Prefix for analysis issues: `analysis/<category>`.
-    pub const ANALYSIS_PREFIX: &str = "analysis/";
 }
+
+/// `source` of every diagnostic the server publishes. Model diagnostics carry
+/// their stable kebab-case `DiagnosticCode` as `code`.
+pub const SOURCE: &str = "lp-lsp";
+
+/// Codes shown faded as unnecessary code.
+const UNNECESSARY: [DiagnosticCode; 6] = [
+    DiagnosticCode::UnusedVariable,
+    DiagnosticCode::DuplicateRow,
+    DiagnosticCode::DominatedRow,
+    DiagnosticCode::RowRedundantByBounds,
+    DiagnosticCode::BinaryRedundantBounds,
+    DiagnosticCode::ExplicitZeroCoefficient,
+];
 
 /// Longest source excerpt quoted in a syntax-error message, in characters.
 const EXCERPT_CHARS: usize = 40;
@@ -44,6 +61,14 @@ const EXCERPT_CHARS: usize = 40;
 /// All diagnostics for `doc` under `config`.
 #[must_use]
 pub fn compute(doc: &Document, config: &Config) -> Vec<Diagnostic> {
+    compute_with(doc, config, None)
+}
+
+/// [`compute`], plus the members of the infeasibility `solution` diagnosed,
+/// while it describes this version of `doc`. After an edit the members are
+/// gone: the next publish no longer includes them.
+#[must_use]
+pub fn compute_with(doc: &Document, config: &Config, solution: Option<&Solution>) -> Vec<Diagnostic> {
     let mut out = Vec::new();
     syntax_diagnostics(doc, &mut out);
     if !doc.has_syntax_errors() {
@@ -56,20 +81,89 @@ pub fn compute(doc: &Document, config: &Config) -> Vec<Diagnostic> {
     if config.analysis.enabled
         && let Some(model) = doc.semantic().and_then(SemanticResult::model)
     {
-        for issue in &model.analysis.issues {
-            // Skip issues the index-based checks already report at the source.
-            let reported = match issue.category {
-                IssueCategory::UnusedVariable => Some(&unused),
-                IssueCategory::InvalidBounds => Some(&conflicting),
-                _ => None,
-            };
-            let subject = issue.subject.as_ref().filter(|s| s.kind == UpstreamKind::Variable);
-            if !reported.zip(subject).is_some_and(|(names, s)| names.contains(s.name.as_str())) {
-                analysis_issue(issue, doc, model, &mut out);
-            }
-        }
+        model_diagnostics(doc, model, &config.analysis, &unused, &conflicting, &mut out);
+    }
+    if let Some(solution) = solution.filter(|s| !s.is_stale(Some(doc.version))) {
+        iis_members(doc, solution, &mut out);
     }
     out
+}
+
+/// `code` of a diagnostic for a constraint or bound in an infeasible core.
+pub const IIS_MEMBER: &str = "solver/iis-member";
+
+/// `solver/iis-member` diagnostics for the constraints and bounds an
+/// infeasibility diagnosis names, at their source sites. Members without a
+/// site in the document are skipped.
+fn iis_members(doc: &Document, solution: &Solution, out: &mut Vec<Diagnostic>) {
+    let Some(infeasibility) = &solution.infeasibility else { return };
+    let proven = infeasibility.method == DiagnosisMethod::Iis;
+    // An elastic relaxation is one minimum-violation repair, not a proof that
+    // these rows belong to an infeasible core.
+    let (certainty, severity) = if proven { ("proven", DiagnosticSeverity::WARNING) } else { ("heuristic", DiagnosticSeverity::HINT) };
+    let side_label = |side: Side| match side {
+        Side::Lower => "lower side",
+        Side::Upper => "upper side",
+        Side::Boxed => "both sides",
+        Side::Free => "free",
+    };
+    let data = serde_json::json!({ "category": "solver", "certainty": certainty });
+    let mut push = |range: Range<usize>, message: String| {
+        let mut d = diagnostic(doc, range, severity, IIS_MEMBER, message);
+        d.data = Some(data.clone());
+        out.push(d);
+    };
+    let model = doc.semantic().and_then(SemanticResult::model);
+    for member in &infeasibility.constraints {
+        // The solver reports unnamed rows under generated names (`C1`), which the
+        // index does not hold: resolve through the model's byte offsets first.
+        let by_model = model.and_then(|m| m.problem.name_id(&member.name).and_then(|id| Sites::new(doc, &m.problem).constraint(id)));
+        let entity = match by_model {
+            Some(site) => &doc.index().entities[site.entity],
+            None => match doc.index().entities_named(&member.name, Namespace::Constraint).next() {
+                Some((_, entity)) => entity,
+                None => continue,
+            },
+        };
+        let violation = member.violation.map_or_else(String::new, |v| format!(", violated by {v}"));
+        push(
+            entity.name_range.clone().unwrap_or_else(|| entity.range.clone()),
+            if proven {
+                format!(
+                    "`{}` ({}) is part of the irreducible infeasible subsystem that makes the model infeasible{violation}",
+                    member.name,
+                    side_label(member.side)
+                )
+            } else {
+                format!(
+                    "`{}` ({}) is relaxed by the elastic diagnosis to restore feasibility{violation}",
+                    member.name,
+                    side_label(member.side)
+                )
+            },
+        );
+    }
+    for member in &infeasibility.bounds {
+        let Some(variable) = doc.index().variable(&member.variable) else { continue };
+        let site = variable.occurrences.iter().rev().find(|o| o.role == Role::Bound).unwrap_or_else(|| variable.definition());
+        let gap = member.gap.map_or_else(String::new, |g| format!(", lower bound exceeds upper by {g}"));
+        push(
+            site.range.clone(),
+            if proven {
+                format!(
+                    "The bound on `{}` ({}) is part of the irreducible infeasible subsystem that makes the model infeasible{gap}",
+                    member.variable,
+                    side_label(member.side)
+                )
+            } else {
+                format!(
+                    "The bound on `{}` ({}) is relaxed by the elastic diagnosis to restore feasibility{gap}",
+                    member.variable,
+                    side_label(member.side)
+                )
+            },
+        );
+    }
 }
 
 fn diagnostic(doc: &Document, range: Range<usize>, severity: DiagnosticSeverity, code: &str, message: String) -> Diagnostic {
@@ -77,7 +171,7 @@ fn diagnostic(doc: &Document, range: Range<usize>, severity: DiagnosticSeverity,
         range: doc.range(range),
         severity: Some(severity),
         code: Some(NumberOrString::String(code.to_owned())),
-        source: Some("lp".to_owned()),
+        source: Some(SOURCE.to_owned()),
         message,
         ..Diagnostic::default()
     }
@@ -287,31 +381,85 @@ fn bound_entries(doc: &Document) -> Vec<(Range<usize>, Node<'_>, Option<Variable
     out
 }
 
-fn analysis_issue(issue: &AnalysisIssue, doc: &Document, model: &Model, out: &mut Vec<Diagnostic>) {
-    let severity = match issue.severity {
-        IssueSeverity::Error => DiagnosticSeverity::ERROR,
-        IssueSeverity::Warning => DiagnosticSeverity::WARNING,
-        IssueSeverity::Info => DiagnosticSeverity::INFORMATION,
-    };
-    let code = format!("{}{}", codes::ANALYSIS_PREFIX, issue.category.to_string().to_lowercase().replace(' ', "-"));
-    let range = issue.subject.as_ref().and_then(|s| subject_range(doc, model, s)).unwrap_or_else(|| sense_range(doc));
-    // Coefficient issues carry the location name as details; it is the subject already.
-    let message = match &issue.details {
-        Some(details) if issue.subject.as_ref().is_none_or(|s| s.variable.is_none()) => format!("{}\n{details}", issue.message),
-        _ => issue.message.clone(),
-    };
-    let d = diagnostic(doc, range, severity, &code, message);
-    // Both halves of a ranged constraint repeat the same coefficient issue.
-    if out.last() != Some(&d) {
-        out.push(d);
+/// Publish the model's coded diagnostics that `settings` allow. Findings the
+/// index-based checks already report at the source (`unused`, `conflicting`:
+/// variable names) are not repeated.
+fn model_diagnostics(
+    doc: &Document,
+    model: &Model,
+    settings: &AnalysisSettings,
+    unused: &HashSet<&str>,
+    conflicting: &HashSet<&str>,
+    out: &mut Vec<Diagnostic>,
+) {
+    for finding in &model.diagnostics.diagnostics {
+        if !settings.publishes(finding.code) {
+            continue;
+        }
+        let covered = match finding.code {
+            DiagnosticCode::UnusedVariable => Some(unused),
+            DiagnosticCode::InvalidBounds => Some(conflicting),
+            _ => None,
+        };
+        let subject = finding.subject.as_ref().filter(|s| s.kind == UpstreamKind::Variable);
+        if covered.zip(subject).is_some_and(|(names, s)| names.contains(s.name.as_str())) {
+            continue;
+        }
+        out.push(model_diagnostic(finding, doc, model, settings));
     }
 }
 
-/// Source range of an issue's subject: a variable's definition, or an
+/// One [`ModelDiagnostic`] as an LSP diagnostic: `code`, `source`, severity
+/// (error, warning, information; heuristic information is a hint), the
+/// `UNNECESSARY` tag, `relatedInformation` for the other entities involved and
+/// `data` = `{ category, certainty }`.
+fn model_diagnostic(finding: &ModelDiagnostic, doc: &Document, model: &Model, settings: &AnalysisSettings) -> Diagnostic {
+    let range = finding.subject.as_ref().and_then(|s| subject_range(doc, model, s)).unwrap_or_else(|| sense_range(doc));
+    let message = match &finding.explanation {
+        Some(explanation) => format!("{}\n{explanation}", finding.message),
+        None => finding.message.clone(),
+    };
+    let related: Vec<DiagnosticRelatedInformation> =
+        finding.related.iter().filter_map(|r| Some(related(doc, subject_range(doc, model, &r.subject)?, r.note.clone()))).collect();
+    let mut d = diagnostic(doc, range, severity(finding, settings), finding.code.as_str(), message);
+    d.related_information = (!related.is_empty()).then_some(related);
+    d.tags = UNNECESSARY.contains(&finding.code).then(|| vec![DiagnosticTag::UNNECESSARY]);
+    d.data = Some(serde_json::json!({ "category": finding.category, "certainty": finding.certainty }));
+    d
+}
+
+/// Default mapping, unless `lp.analysis.severityOverrides` names the code.
+fn severity(finding: &ModelDiagnostic, settings: &AnalysisSettings) -> DiagnosticSeverity {
+    match settings.severity_override(finding.code) {
+        Some(SeverityOverride::Error) => DiagnosticSeverity::ERROR,
+        Some(SeverityOverride::Warning) => DiagnosticSeverity::WARNING,
+        Some(SeverityOverride::Information) => DiagnosticSeverity::INFORMATION,
+        Some(SeverityOverride::Hint) => DiagnosticSeverity::HINT,
+        // `publishes` already dropped `off`; keep the default if it slips through.
+        Some(SeverityOverride::Off) | None => match finding.severity {
+            IssueSeverity::Error => DiagnosticSeverity::ERROR,
+            IssueSeverity::Warning => DiagnosticSeverity::WARNING,
+            IssueSeverity::Info if finding.certainty == Certainty::Heuristic => DiagnosticSeverity::HINT,
+            IssueSeverity::Info => DiagnosticSeverity::INFORMATION,
+        },
+    }
+}
+
+/// Source range of a subject, found by name in the document index: a
+/// variable's definition, bound or type declaration (by `site`), or an
 /// entity's label (whole entity if unnamed), narrowed to `variable` inside it.
-fn subject_range(doc: &Document, model: &Model, subject: &IssueSubject) -> Option<Range<usize>> {
+/// `None` when the name has no site in this document.
+fn subject_range(doc: &Document, model: &Model, subject: &DiagnosticSubject) -> Option<Range<usize>> {
     let (namespace, offset) = match subject.kind {
-        UpstreamKind::Variable => return doc.index().variable(&subject.name).map(|v| v.definition().range.clone()),
+        UpstreamKind::Variable => {
+            let variable = doc.index().variable(&subject.name)?;
+            let found = match subject.site {
+                SubjectSite::Bound => variable.occurrences.iter().rev().find(|o| o.role == Role::Bound),
+                SubjectSite::TypeDeclaration => variable.occurrences.iter().find(|o| o.role.is_type_declaration()),
+                _ => None,
+            };
+            return Some(found.unwrap_or_else(|| variable.definition()).range.clone());
+        }
         UpstreamKind::Constraint => {
             let constraint = model.problem.name_id(&subject.name).and_then(|id| model.problem.constraints.get(&id));
             (Namespace::Constraint, constraint.and_then(lp_parser_rs::model::Constraint::byte_offset))
@@ -348,7 +496,7 @@ fn sense_range(doc: &Document) -> Range<usize> {
 mod tests {
     use std::sync::Arc;
 
-    use lp_parser_rs::analysis::AnalysisConfig;
+    use lp_parser_rs::analysis::{AnalysisConfig, DiagnosticsConfig};
 
     use super::*;
     use crate::position::Encoding;
@@ -359,6 +507,66 @@ mod tests {
         let mut doc = Document::new("file:///test.lp".parse().unwrap(), text.to_owned(), 1, Encoding::Utf16);
         doc.semantic_result = Some(Arc::new(crate::semantic::run(text, 1, &AnalysisConfig::default())));
         doc
+    }
+
+    fn iis_member_diagnostics(method: DiagnosisMethod) -> Vec<Diagnostic> {
+        iis_diagnostics(&document(CLEAN), method, &["c1"])
+    }
+
+    fn iis_diagnostics(doc: &Document, method: DiagnosisMethod, names: &[&str]) -> Vec<Diagnostic> {
+        use lp_highs::protocol::{Infeasibility, InfeasibleConstraint, SolveOutcome, SolverId, Timings};
+
+        let outcome = SolveOutcome {
+            solver: SolverId { name: "HiGHS".into(), version: "1".into(), helper: "lp-highs".into() },
+            status: "Infeasible".into(),
+            objective_value: None,
+            mip_gap: None,
+            timings: Timings { build_ms: 0, solve_ms: 0, extract_ms: 0 },
+            variables: Vec::new(),
+            constraints: Vec::new(),
+            skipped: lp_highs::protocol::Skipped::default(),
+            infeasibility: Some(Infeasibility {
+                method,
+                constraints: names
+                    .iter()
+                    .map(|name| InfeasibleConstraint { name: (*name).into(), side: Side::Upper, violation: Some(2.0) })
+                    .collect(),
+                bounds: Vec::new(),
+                total_violation: None,
+            }),
+            log: None,
+        };
+        let solution = Solution::new(Some(1), &outcome);
+        let mut out = Vec::new();
+        iis_members(doc, &solution, &mut out);
+        out
+    }
+
+    #[test]
+    fn iis_members_are_proven_and_elastic_members_are_heuristic() {
+        let iis = iis_member_diagnostics(DiagnosisMethod::Iis);
+        assert_eq!(iis.len(), 1);
+        assert_eq!(iis[0].severity, Some(DiagnosticSeverity::WARNING));
+        assert_eq!(iis[0].data.as_ref().unwrap()["certainty"], "proven");
+        assert!(iis[0].message.contains("irreducible infeasible subsystem"), "{}", iis[0].message);
+
+        let elastic = iis_member_diagnostics(DiagnosisMethod::Elastic);
+        assert_eq!(elastic.len(), 1);
+        assert_eq!(elastic[0].severity, Some(DiagnosticSeverity::HINT));
+        assert_eq!(elastic[0].data.as_ref().unwrap()["certainty"], "heuristic");
+        assert_eq!(elastic[0].message, "`c1` (upper side) is relaxed by the elastic diagnosis to restore feasibility, violated by 2");
+    }
+
+    #[test]
+    fn unnamed_iis_members_resolve_through_their_generated_names() {
+        let doc = document("Minimize\n obj: x\nSubject To\n x >= 3\n x <= 1\nEnd\n");
+        for (method, certainty) in [(DiagnosisMethod::Iis, "proven"), (DiagnosisMethod::Elastic, "heuristic")] {
+            let out = iis_diagnostics(&doc, method, &["C1", "C2"]);
+            assert_eq!(out.len(), 2, "{certainty}: {out:?}");
+            let covered: Vec<&str> = out.iter().map(|d| doc.slice(doc.byte_range(d.range))).collect();
+            assert!(covered[0].contains("x >= 3") && covered[1].contains("x <= 1"), "{covered:?}");
+            assert!(out.iter().all(|d| d.data.as_ref().unwrap()["certainty"] == certainty));
+        }
     }
 
     fn without_analysis() -> Config {
@@ -373,7 +581,7 @@ mod tests {
             .into_iter()
             .map(|d| {
                 let Some(NumberOrString::String(code)) = d.code else { panic!("string code expected") };
-                assert_eq!(d.source.as_deref(), Some("lp"));
+                assert_eq!(d.source.as_deref(), Some(SOURCE));
                 (code, doc.slice(doc.byte_range(d.range)).to_owned(), d.message)
             })
             .collect()
@@ -591,7 +799,7 @@ mod tests {
         assert_eq!(conflicts[0].message, "`x` has lower bound 5 above upper bound 2");
         assert_eq!(conflicts[0].related_information.as_ref().unwrap().len(), 1);
         // The upstream invalid-bounds issue for `x` is not repeated.
-        assert_eq!(only(&doc, "analysis/invalid-bounds"), []);
+        assert_eq!(only(&doc, "invalid-bounds"), []);
 
         let cases = [
             ("x = 5", false),
@@ -618,38 +826,218 @@ mod tests {
         assert_eq!(only(&document(CLEAN), codes::OPERATOR_SPELLING), []);
     }
 
-    #[test]
-    fn analysis_issues_are_located_at_their_subject() {
-        let text =
-            "min\n obj: x + y + z\nst\n 2 <= 1e12 x + y + z <= 8\n c2: x + 1e-12 y + z >= 1\n c3: x + y - z <= 4\nbounds\n z = 5\nend\n";
-        let doc = document(text);
-        let diagnostics = compute(&doc, &Config::default());
-        let at = |needle: &str| -> Vec<(Option<NumberOrString>, String)> {
-            diagnostics.iter().filter(|d| d.message.contains(needle)).map(|d| (d.code.clone(), covered(&doc, d))).collect()
-        };
-        let code = |c: &str| Some(NumberOrString::String(c.to_owned()));
-        // Unnamed ranged constraint (two generated halves): one diagnostic on the variable.
-        assert_eq!(at("Large coefficient ("), [(code("analysis/numerical-scaling"), "x".to_owned())]);
-        let small = diagnostics.iter().find(|d| d.message.contains("Small coefficient (")).unwrap();
-        assert_eq!(doc.byte_range(small.range).start, text.find("1e-12 y").unwrap() + 6);
-        assert_eq!(at("fixed"), [(code("analysis/fixed-variable"), "z".to_owned())]);
-        // Problem-wide issues go on the sense keyword.
-        let over = diagnostics.iter().find(|d| d.message.contains("over-constrained")).unwrap();
-        assert_eq!((over.severity, covered(&doc, over)), (Some(DiagnosticSeverity::WARNING), "min".to_owned()));
+    const MODEL: &str = "min\n obj: x + y + z + w\nst\n c1: 2 x + 4 y <= 100\n c2: x + 2 y <= 50\n c3: x + 2 y <= 50\n c4: z + w >= 100\n c5: 1e12 x + y >= 1\nbounds\n z <= 50\n w <= 20\n -5 <= v <= 5\nbinaries\n b\nend\n";
 
-        let disabled = compute(&doc, &without_analysis());
-        assert!(disabled.iter().all(|d| !matches!(&d.code, Some(NumberOrString::String(c)) if c.starts_with(codes::ANALYSIS_PREFIX))));
+    #[allow(clippy::unnecessary_wraps, reason = "compared with `Diagnostic::code`")]
+    fn code(c: &str) -> Option<NumberOrString> {
+        Some(NumberOrString::String(c.to_owned()))
+    }
+
+    #[test]
+    fn model_diagnostics_map_to_lsp_diagnostics() {
+        let doc = document(MODEL);
+        let diagnostics = compute(&doc, &Config::default());
+        let of = |c: &str| diagnostics.iter().filter(|d| d.code == code(c)).collect::<Vec<_>>();
+
+        // Proven error: code, source, severity, range, related information and data.
+        let [infeasible] = of("row-infeasible-by-bounds")[..] else { panic!("one row-infeasible-by-bounds: {diagnostics:?}") };
+        assert_eq!(infeasible.source.as_deref(), Some(SOURCE));
+        assert_eq!(infeasible.severity, Some(DiagnosticSeverity::ERROR));
+        assert_eq!(covered(&doc, infeasible), "c4");
+        assert!(infeasible.message.starts_with("Constraint 'c4' cannot hold"), "{}", infeasible.message);
+        assert!(infeasible.message.contains('\n'), "the explanation follows the message");
+        let related: Vec<(&str, &str)> = infeasible
+            .related_information
+            .as_ref()
+            .unwrap()
+            .iter()
+            .map(|r| (doc.slice(doc.byte_range(r.location.range)), r.message.as_str()))
+            .collect();
+        // Each related variable is anchored at its definition.
+        assert_eq!(related, [("z", "ranges over [0, 50]"), ("w", "ranges over [0, 20]")]);
+        assert_eq!(infeasible.data, Some(serde_json::json!({ "category": "mathematical", "certainty": "proven" })));
+        assert_eq!(infeasible.tags, None);
+
+        // Related constraint is anchored at its label.
+        let proportional = of("proportional-row");
+        assert_eq!(proportional.len(), 2);
+        assert_eq!(covered(&doc, proportional[0]), "c2");
+        let first = &proportional[0].related_information.as_ref().unwrap()[0];
+        assert_eq!(doc.slice(doc.byte_range(first.location.range)), "c1");
+        assert_eq!(proportional[0].severity, Some(DiagnosticSeverity::WARNING));
+
+        // Heuristic warning keeps its severity; heuristic information is a hint.
+        let [large] = of("large-coefficient")[..] else { panic!("one large-coefficient") };
+        assert_eq!(large.severity, Some(DiagnosticSeverity::WARNING));
+        assert_eq!(large.data, Some(serde_json::json!({ "category": "numerical", "certainty": "heuristic" })));
+        assert_eq!(covered(&doc, large), "x", "narrowed to the term inside the constraint");
+        // Problem-wide findings sit on the sense keyword.
+        let [range] = of("coefficient-range")[..] else { panic!("one coefficient-range") };
+        assert_eq!((range.severity, covered(&doc, range)), (Some(DiagnosticSeverity::HINT), "min".to_owned()));
+
+        // Retired prefix and duplicated checks are gone.
+        assert!(diagnostics.iter().all(|d| !matches!(&d.code, Some(NumberOrString::String(c)) if c.starts_with("analysis/"))));
+        assert_eq!(of("unused-variable"), Vec::<&Diagnostic>::new(), "deduplicated against unused-declaration");
+        assert_eq!(of("unused-declaration").len(), 2);
+    }
+
+    #[test]
+    fn unnecessary_tag_marks_redundant_findings() {
+        let doc = document("min\n obj: x + y\nst\n c1: x + y >= 2\n c2: x + y >= 2\n z0: 0 x + y >= 0\nbounds\n x >= 0\nend\n");
+        let diagnostics = compute(&doc, &Config::default());
+        for finding in ["duplicate-row", "explicit-zero-coefficient", "row-redundant-by-bounds"] {
+            let hits: Vec<&Diagnostic> = diagnostics.iter().filter(|d| d.code == code(finding)).collect();
+            assert!(!hits.is_empty(), "{finding} fires: {diagnostics:?}");
+            assert!(hits.iter().all(|d| d.tags == Some(vec![DiagnosticTag::UNNECESSARY])), "{finding}");
+        }
+        // Other codes are not faded.
+        assert!(diagnostics.iter().filter(|d| d.code == code("empty-row")).all(|d| d.tags.is_none()));
+    }
+
+    #[test]
+    fn variable_sites_choose_bound_type_or_definition() {
+        // A binary with a bound outside [0, 1]: anchored at the bound entry.
+        let doc = document("min\n obj: b + x\nst\n c1: b + x >= 1\nbinaries\n b\nbounds\n b <= 5\nend\n");
+        let hits = only(&doc, "binary-bound-outside-unit");
+        assert_eq!(hits.len(), 1, "{:?}", compute(&doc, &Config::default()));
+        assert_eq!(doc.byte_range(hits[0].range).start, doc.text.find("b <= 5").unwrap());
+        assert_eq!(hits[0].severity, Some(DiagnosticSeverity::WARNING));
+
+        // An indicator on a continuous variable: anchored at its first use.
+        let doc = document("min\n obj: x\nst\n c1: x >= 1\n c2: i = 1 -> x <= 2\nend\n");
+        let hits = only(&doc, "indicator-not-binary");
+        assert_eq!(hits.len(), 1, "{:?}", compute(&doc, &Config::default()));
+        assert_eq!(hits[0].severity, Some(DiagnosticSeverity::ERROR));
+        assert_eq!(covered(&doc, &hits[0]), "i");
+
+        // Direct site resolution, including the fallback to the definition.
+        let model = doc.semantic().unwrap().model().unwrap();
+        let bound = DiagnosticSubject::variable("x", SubjectSite::Bound);
+        assert_eq!(subject_range(&doc, model, &bound), Some(doc.index().variable("x").unwrap().definition().range.clone()));
+        assert_eq!(subject_range(&doc, model, &DiagnosticSubject::variable("nope", SubjectSite::Definition)), None);
+    }
+
+    #[test]
+    fn index_checks_still_win_over_duplicate_model_findings() {
+        let doc = document("min\n obj: x\nst\n c1: x >= 1\nbounds\n x >= 5\n x <= 2\n w <= 4\nend\n");
+        let diagnostics = compute(&doc, &Config::default());
+        let codes: Vec<String> = diagnostics
+            .iter()
+            .filter_map(|d| match &d.code {
+                Some(NumberOrString::String(c)) => Some(c.clone()),
+                _ => None,
+            })
+            .collect();
+        assert!(codes.contains(&"conflicting-bounds".to_owned()), "{codes:?}");
+        assert!(!codes.contains(&"invalid-bounds".to_owned()), "{codes:?}");
+        assert!(codes.contains(&"unused-declaration".to_owned()) && !codes.contains(&"unused-variable".to_owned()), "{codes:?}");
+    }
+
+    #[test]
+    fn settings_select_and_reshape_model_diagnostics() {
+        let doc = document(MODEL);
+        let codes = |config: &Config| -> Vec<(String, Option<DiagnosticSeverity>)> {
+            compute(&doc, config)
+                .into_iter()
+                .filter_map(|d| match d.code {
+                    Some(NumberOrString::String(c)) => Some((c, d.severity)),
+                    _ => None,
+                })
+                .collect()
+        };
+        let configured = |value: serde_json::Value| Config::from_value(serde_json::json!({ "analysis": value })).unwrap();
+        let has = |found: &[(String, Option<DiagnosticSeverity>)], c: &str| found.iter().any(|(code, _)| code == c);
+
+        let all = codes(&Config::default());
+        assert!(has(&all, "large-coefficient") && has(&all, "proportional-row"));
+
+        let off = codes(&without_analysis());
+        assert!(!has(&off, "proportional-row") && !has(&off, "row-infeasible-by-bounds"));
+        assert!(has(&off, "unused-declaration"), "index-based checks are not analysis");
+
+        let no_numerical = codes(&configured(serde_json::json!({ "categories": { "numerical": false } })));
+        assert!(!has(&no_numerical, "large-coefficient") && !has(&no_numerical, "coefficient-range"));
+        assert!(has(&no_numerical, "proportional-row"));
+
+        let no_heuristics = codes(&configured(serde_json::json!({ "heuristics": false })));
+        assert!(!has(&no_heuristics, "large-coefficient") && has(&no_heuristics, "row-infeasible-by-bounds"));
+
+        let overridden = codes(&configured(serde_json::json!({
+            "heuristics": false,
+            "severityOverrides": { "large-coefficient": "hint", "proportional-row": "off", "row-infeasible-by-bounds": "information" }
+        })));
+        assert!(overridden.contains(&("large-coefficient".into(), Some(DiagnosticSeverity::HINT))), "{overridden:?}");
+        assert!(!has(&overridden, "proportional-row"));
+        assert!(overridden.contains(&("row-infeasible-by-bounds".into(), Some(DiagnosticSeverity::INFORMATION))));
+    }
+
+    #[test]
+    fn analysis_thresholds_and_truncation_reach_the_model_diagnostics() {
+        let text = "min\n obj: x\nst\n c1: x >= 1\n c2: x >= 2\n c3: x >= 3\nend\n";
+        let mut doc = Document::new("file:///t.lp".parse().unwrap(), text.to_owned(), 1, crate::position::Encoding::Utf16);
+        let config = Config::from_value(serde_json::json!({ "analysis": { "maxPerCode": 1, "largeRhsThreshold": 1.5 } })).unwrap();
+        doc.semantic_result = Some(Arc::new(crate::semantic::run_with(text, 1, &config.analysis.diagnostics_config())));
+        let diagnostics = compute(&doc, &config);
+        let large_rhs = diagnostics.iter().filter(|d| d.code == code("large-rhs")).count();
+        assert_eq!(large_rhs, 1, "capped per code: {diagnostics:?}");
+        assert!(diagnostics.iter().any(|d| d.code == code("diagnostics-truncated")), "{diagnostics:?}");
+    }
+
+    #[test]
+    fn ranged_constraint_halves_are_not_reported_against_each_other() {
+        let doc = document("min\n obj: x + y\nst\n c1: 2 <= x + y <= 8\nend\n");
+        let rows: Vec<String> = compute(&doc, &Config::default())
+            .into_iter()
+            .filter_map(|d| match d.code {
+                Some(NumberOrString::String(c))
+                    if ["duplicate-row", "proportional-row", "dominated-row", "contradictory-rows", "rows-form-range"]
+                        .contains(&c.as_str()) =>
+                {
+                    Some(c)
+                }
+                _ => None,
+            })
+            .collect();
+        assert_eq!(rows, Vec::<String>::new());
     }
 
     #[test]
     fn subject_range_resolves_labels_and_variables() {
         let doc = document("min\n obj: x + y\nst\n c1: x + y >= 1\n e1: 0 x >= -1\nend\n");
         let model = doc.semantic().unwrap().model().unwrap();
-        let range = subject_range(&doc, model, &IssueSubject::constraint("e1")).unwrap();
+        let range = subject_range(&doc, model, &DiagnosticSubject::constraint("e1")).unwrap();
         assert_eq!(doc.slice(range), "e1");
-        let objective = IssueSubject { kind: UpstreamKind::Objective, name: "obj".into(), variable: Some("y".into()) };
+        let objective = DiagnosticSubject::objective("obj").with_variable("y");
         let range = subject_range(&doc, model, &objective).unwrap();
         assert_eq!(range.start, doc.text.find("+ y").unwrap() + 2);
-        assert_eq!(subject_range(&doc, model, &IssueSubject::constraint("nope")), None);
+        assert_eq!(subject_range(&doc, model, &DiagnosticSubject::constraint("nope")), None);
+        // Generated names resolve through the model's byte offset.
+        let unnamed = document("min\n obj: x\nst\n x + 0 y >= 1\nend\n");
+        let model = unnamed.semantic().unwrap().model().unwrap();
+        let generated = model.problem.constraints.values().next().unwrap().name();
+        let name = model.problem.resolve(generated).to_owned();
+        assert!(subject_range(&unnamed, model, &DiagnosticSubject::constraint(name)).is_some());
+    }
+
+    #[test]
+    fn cached_analysis_is_current_only_for_its_version_and_settings() {
+        let result = crate::semantic::run_with(CLEAN, 3, &DiagnosticsConfig::default());
+        assert!(result.is_current(3, &DiagnosticsConfig::default()));
+        assert!(!result.is_current(4, &DiagnosticsConfig::default()), "an edit invalidates it");
+        let mut other = DiagnosticsConfig::default();
+        other.max_per_code = 5;
+        assert!(!result.is_current(3, &other), "a setting that feeds the analysis invalidates it");
+
+        // A parse error does not depend on the analysis settings.
+        let failed = crate::semantic::run_with("min\n obj: x\nst\n c1: [ x ^ 3 ] <= 4\nend\n", 3, &DiagnosticsConfig::default());
+        assert!(failed.model().is_none() && failed.is_current(3, &other));
+    }
+
+    #[test]
+    fn invalid_analysis_config_is_reported_not_ignored() {
+        let mut bad = DiagnosticsConfig::default();
+        bad.max_per_code = 0;
+        let result = crate::semantic::run_with(CLEAN, 1, &bad);
+        assert!(result.outcome.is_err());
     }
 }

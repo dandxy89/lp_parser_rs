@@ -7,7 +7,8 @@ use ls_types::{DocumentSymbol, OneOf, SymbolKind, WorkspaceSymbol};
 
 use crate::document::Document;
 use crate::features::folding;
-use crate::index::{Entity, EntityKind};
+use crate::index::{Entity, EntityKind, Role};
+use crate::syntax::kind;
 
 /// Maximum number of workspace symbols returned.
 const MAX_WORKSPACE_SYMBOLS: usize = 500;
@@ -37,12 +38,67 @@ pub fn document_symbols(doc: &Document) -> Vec<DocumentSymbol> {
         let mut children = Vec::new();
         while let Some(entity) = entities.next_if(|e| e.range.start < range.end) {
             debug_assert!(range.start <= entity.range.start && entity.range.end <= range.end, "entity outside its section");
-            children.push(entity_symbol(doc, entity));
+            let mut symbol = entity_symbol(doc, entity);
+            if entity.kind == EntityKind::Constraint
+                && let Some(detail) = constraint_detail(doc, entity)
+            {
+                symbol.detail = Some(detail);
+            }
+            children.push(symbol);
+        }
+        // Bounds and type sections list the variables they declare.
+        if let Some(role) = declaration_role(section.kind) {
+            children.extend(declared_variables(doc, role, &range));
         }
         out.push(symbol(name, detail, SymbolKind::NAMESPACE, doc, range, selection, children));
     }
     debug_assert!(entities.peek().is_none(), "every entity belongs to a section");
     out
+}
+
+/// The variable-declaration role of a section kind, for sections that hold
+/// variables rather than entities.
+fn declaration_role(section_kind: &str) -> Option<Role> {
+    match section_kind {
+        kind::BOUNDS_SECTION => Some(Role::Bound),
+        kind::GENERALS_SECTION => Some(Role::Generals),
+        kind::INTEGERS_SECTION => Some(Role::Integers),
+        kind::BINARIES_SECTION => Some(Role::Binaries),
+        kind::SEMI_CONTINUOUS_SECTION => Some(Role::SemiContinuous),
+        _ => None,
+    }
+}
+
+/// One `VARIABLE` symbol per declaration of a variable inside `section`, in
+/// document order.
+fn declared_variables(doc: &Document, role: Role, section: &Range<usize>) -> Vec<DocumentSymbol> {
+    let mut found: Vec<(&str, Range<usize>)> = doc
+        .index()
+        .variables
+        .iter()
+        .flat_map(|variable| {
+            variable
+                .occurrences
+                .iter()
+                .filter(move |o| o.role == role && section.start <= o.range.start && o.range.end <= section.end)
+                .map(move |o| (variable.name.as_str(), o.range.clone()))
+        })
+        .collect();
+    found.sort_by_key(|(_, range)| range.start);
+    found
+        .into_iter()
+        .map(|(name, range)| symbol(name.to_owned(), None, SymbolKind::VARIABLE, doc, range.clone(), range, Vec::new()))
+        .collect()
+}
+
+/// Operator and right-hand side of a constraint (`<= 10`): the text from its
+/// last comparison operator to its end, whitespace collapsed.
+fn constraint_detail(doc: &Document, entity: &Entity) -> Option<String> {
+    let node = doc.node(entity.range.clone(), entity.node_kind)?;
+    let mut cursor = node.walk();
+    let operator = node.children(&mut cursor).filter(|child| child.kind() == kind::COMPARISON_OPERATOR).last()?;
+    let text = doc.slice(operator.start_byte()..node.end_byte());
+    Some(text.split_whitespace().collect::<Vec<_>>().join(" "))
 }
 
 /// Fuzzy search over constraint, objective, SOS and variable names.
@@ -201,7 +257,7 @@ mod tests {
                 ("Objectives".to_owned(), Some("Maximize".to_owned()), vec!["obj".to_owned()]),
                 ("Subject To".to_owned(), None, vec!["c1".to_owned(), "-3 x + 4 y + 5 z + 6 w + 7 v + 8 u >= 2".to_owned()]),
                 ("General Constraints".to_owned(), None, vec!["g1".to_owned()]),
-                ("Bounds".to_owned(), None, vec![]),
+                ("Bounds".to_owned(), None, vec!["x".to_owned()]),
                 ("SOS".to_owned(), None, vec!["s1".to_owned()]),
             ]
         );
@@ -215,6 +271,65 @@ mod tests {
                 assert!(child.range.start <= child.selection_range.start && child.selection_range.end <= child.range.end);
             }
         }
+    }
+
+    fn outline(text: &str) -> Vec<DocumentSymbol> {
+        document_symbols(&doc("file:///o.lp", text))
+    }
+
+    #[test]
+    fn variables_nest_under_their_declaring_sections() {
+        let text = "Minimize\n obj: x + y + z + b + s + n\nSubject To\n c1: x + y >= 1\nBounds\n 0 <= x <= 4\n y <= 9\nGenerals\n n\nIntegers\n y\nBinaries\n b\nSemi-Continuous\n s\nEnd\n";
+        let symbols = outline(text);
+        let children = |name: &str| -> Vec<(String, SymbolKind)> {
+            symbols
+                .iter()
+                .find(|s| s.name.eq_ignore_ascii_case(name))
+                .unwrap_or_else(|| panic!("no section {name}"))
+                .children
+                .iter()
+                .flatten()
+                .map(|c| (c.name.clone(), c.kind))
+                .collect()
+        };
+        let var = |n: &str| (n.to_owned(), SymbolKind::VARIABLE);
+        assert_eq!(children("Bounds"), [var("x"), var("y")]);
+        assert_eq!(children("Generals"), [var("n")]);
+        assert_eq!(children("Integers"), [var("y")]);
+        assert_eq!(children("Binaries"), [var("b")]);
+        assert_eq!(children("Semi-Continuous"), [var("s")]);
+        // Variables stay inside their section and the selection inside the variable.
+        for section in &symbols {
+            for child in section.children.iter().flatten() {
+                assert!(section.range.start <= child.range.start && child.range.end <= section.range.end);
+                assert!(child.range.start <= child.selection_range.start && child.selection_range.end <= child.range.end);
+            }
+        }
+        // Sections that hold entities gain no variable children.
+        let subject_to = symbols.iter().find(|s| s.name == "Subject To").unwrap();
+        assert!(subject_to.children.iter().flatten().all(|c| c.kind != SymbolKind::VARIABLE));
+    }
+
+    #[test]
+    fn repeated_bounds_list_each_declaration() {
+        let symbols = outline("Minimize\n obj: x\nSubject To\n c1: x >= 0\nBounds\n x >= 1\n x <= 4\nEnd\n");
+        let bounds = symbols.iter().find(|s| s.name == "Bounds").unwrap();
+        assert_eq!(bounds.children.iter().flatten().map(|c| c.name.as_str()).collect::<Vec<_>>(), ["x", "x"]);
+    }
+
+    #[test]
+    fn constraint_detail_is_operator_and_rhs() {
+        let text = "Minimize\n obj: x\nSubject To\n c1: x + y <= 10\n c2: x >= -2.5\n r1: 1 <= x - y <= 6\n e: x + y = 3\n ind: b = 1 -> x + y <= 5\nBinaries\n b\nEnd\n";
+        let symbols = outline(text);
+        let section = symbols.iter().find(|s| s.name == "Subject To").unwrap();
+        let details: Vec<(&str, Option<&str>)> =
+            section.children.iter().flatten().map(|c| (c.name.as_str(), c.detail.as_deref())).collect();
+        assert_eq!(
+            details,
+            [("c1", Some("<= 10")), ("c2", Some(">= -2.5")), ("r1", Some("<= 6")), ("e", Some("= 3")), ("ind", Some("<= 5"))]
+        );
+        // Objectives keep their kind label.
+        assert_eq!(symbols[0].children.as_ref().unwrap()[0].detail.as_deref(), Some("objective"));
     }
 
     #[test]
@@ -270,5 +385,77 @@ mod tests {
         let prefixed = matches.iter().take_while(|s| s.name.starts_with("v5")).count();
         assert_eq!((prefixed, matches[0].name.as_str()), (111, "v5"));
         assert!(matches[prefixed..].iter().all(|s| !s.name.starts_with("v5")));
+    }
+
+    /// Replace `${n:default}`, `${n|a,b|}` and bare `$n` tab stops by their defaults.
+    fn fill_placeholders(body: &str) -> String {
+        let mut out = String::new();
+        let mut chars = body.chars().peekable();
+        while let Some(c) = chars.next() {
+            if c != '$' {
+                out.push(c);
+                continue;
+            }
+            match chars.peek() {
+                Some('{') => {
+                    chars.next();
+                    let mut inner = String::new();
+                    for next in chars.by_ref() {
+                        if next == '}' {
+                            break;
+                        }
+                        inner.push(next);
+                    }
+                    let rest = inner.trim_start_matches(|d: char| d.is_ascii_digit());
+                    if let Some(default) = rest.strip_prefix(':') {
+                        out.push_str(default);
+                    } else if let Some(choices) = rest.strip_prefix('|') {
+                        out.push_str(choices.trim_end_matches('|').split(',').next().expect("a choice"));
+                    }
+                }
+                Some(d) if d.is_ascii_digit() => while chars.next_if(char::is_ascii_digit).is_some() {},
+                _ => out.push('$'),
+            }
+        }
+        out
+    }
+
+    /// Wrap a filled snippet in the smallest model that can hold it.
+    fn wrap_snippet(body: &str) -> String {
+        let model = "Minimize\n obj: x + y\nSubject To\n c1: x + y >= 1\n";
+        let first = body.lines().next().unwrap_or_default();
+        if first.starts_with("Minimize") || first.starts_with("Maximize") {
+            let mut text = body.to_owned();
+            if !body.contains("Subject To") {
+                text.push_str("Subject To\n c1: x + y >= 1\n");
+            }
+            if !body.contains("End") {
+                text.push_str("End\n");
+            }
+            text
+        } else if first.starts_with(' ') {
+            format!("Minimize\n obj: x + y\nSubject To\n{body}End\n")
+        } else {
+            format!("{model}{body}End\n")
+        }
+    }
+
+    #[test]
+    fn filled_snippets_parse_without_errors() {
+        let snippets: serde_json::Value =
+            serde_json::from_str(include_str!("../../editors/vscode/snippets/lp.json")).expect("snippets are JSON");
+        let snippets = snippets.as_object().expect("an object of snippets");
+        assert!(snippets.len() >= 12, "only {} snippets", snippets.len());
+        for (name, snippet) in snippets {
+            let lines: Vec<&str> =
+                snippet["body"].as_array().expect("body is an array").iter().map(|l| l.as_str().expect("line")).collect();
+            let text = wrap_snippet(&fill_placeholders(&lines.join("\n")));
+            assert!(!text.contains('$'), "{name}: unexpanded placeholder in {text}");
+            if let Err(error) = lp_parser_rs::problem::LpProblem::parse(&text) {
+                panic!("{name}: LpProblem::parse failed: {error}\n{text}");
+            }
+            let parsed = doc("file:///snippet.lp", &text);
+            assert!(!parsed.has_syntax_errors(), "{name}: tree-sitter ERROR/MISSING node in\n{text}");
+        }
     }
 }

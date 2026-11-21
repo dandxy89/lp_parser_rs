@@ -15,11 +15,22 @@ use tree_sitter::Node;
 use crate::config::InlayHintSettings;
 use crate::document::Document;
 use crate::index::{EntityKind, Role, Symbol, Variable};
+use crate::requests::sites::Sites;
+use crate::solution::Solution;
 use crate::syntax::{self, kind};
 
 /// Hints within `range`.
 #[must_use]
 pub fn hints(doc: &Document, range: LspRange, settings: &InlayHintSettings) -> Vec<InlayHint> {
+    hints_with(doc, range, settings, None)
+}
+
+/// [`hints`], plus the values of the stored `solution` (already filtered for
+/// staleness and `lp.solution.inlayHints` by the caller): a variable's value
+/// at its first use, a constraint's activity and the objective value at the
+/// end of the entity.
+#[must_use]
+pub fn hints_with(doc: &Document, range: LspRange, settings: &InlayHintSettings, solution: Option<&Solution>) -> Vec<InlayHint> {
     let bytes = doc.byte_range(range);
     debug_assert!(bytes.start <= bytes.end && bytes.end <= doc.text.len(), "byte range must lie within the document");
     let entities = overlapping_entities(doc, &bytes);
@@ -37,9 +48,67 @@ pub fn hints(doc: &Document, range: LspRange, settings: &InlayHintSettings) -> V
         variable_type_hints(doc, &bytes, &mut hints);
     }
 
+    if let Some(solution) = solution {
+        solution_hints(doc, &bytes, overlapping_entities(doc, &bytes), solution, &mut hints);
+    }
+
     hints.retain(|(offset, _)| bytes.contains(offset) || *offset == bytes.end);
     hints.sort_by_key(|(offset, _)| *offset);
     hints.into_iter().map(|(_, hint)| hint).collect()
+}
+
+/// Solve values: variables at their first use, rows and the objective at the
+/// end of the entity. A stale solution carries `(stale)` in the tooltip.
+fn solution_hints(doc: &Document, bytes: &Range<usize>, entities: Range<usize>, solution: &Solution, out: &mut Vec<(usize, InlayHint)>) {
+    let current = Some(doc.version);
+    let stale = if solution.is_stale(current) { " (stale: the document changed since the solve)" } else { "" };
+    let model = doc.semantic().and_then(|s| s.model());
+    let sites = model.map(|m| Sites::new(doc, &m.problem));
+    for (i, entity) in doc.index().entities.iter().enumerate().skip(entities.start).take(entities.len()) {
+        // Unnamed rows are solved under their generated names.
+        let generated;
+        let name = match (&entity.name, &sites) {
+            (Some(name), _) => Some(name.as_str()),
+            (None, Some(sites)) => {
+                generated = sites.entity_name(i);
+                generated.as_deref()
+            }
+            (None, None) => None,
+        };
+        let (label, tooltip) = match (entity.kind, name) {
+            (EntityKind::Objective, _) => match solution.objective_value.filter(|v| v.is_finite()) {
+                Some(value) => (format!("= {value}"), format!("Objective value of the last solve{stale}")),
+                None => continue,
+            },
+            (EntityKind::Constraint | EntityKind::GeneralConstraint, Some(name)) => match solution.constraint(name) {
+                Some(c) if c.activity.is_finite() => {
+                    (format!("activity {}", c.activity), format!("`{name}`: activity {}, slack {}{stale}", c.activity, c.slack))
+                }
+                _ => continue,
+            },
+            _ => continue,
+        };
+        out.push(hint(doc, entity.range.end, label, tooltip, true, false));
+    }
+
+    let sites = doc.index().sites();
+    let start = sites.partition_point(|(range, _)| range.end < bytes.start);
+    for (range, symbol) in sites[start..].iter().take_while(|(range, _)| range.start <= bytes.end) {
+        let Symbol::Variable(var, occurrence) = *symbol else { continue };
+        let variable = &doc.index().variables[var];
+        if variable.occurrences.iter().position(|o| !o.role.is_declaration()) != Some(occurrence) {
+            continue;
+        }
+        let Some(v) = solution.variable(&variable.name).filter(|v| v.value.is_finite()) else { continue };
+        out.push(hint(
+            doc,
+            range.end,
+            format!("= {}", v.value),
+            format!("Value of `{}` in the last solve{stale}", variable.name),
+            true,
+            false,
+        ));
+    }
 }
 
 /// Indices of entities overlapping `bytes`. Entities are disjoint and sorted
@@ -432,5 +501,35 @@ mod tests {
         let _hints = hints(&d, d.full_range(), &InlayHintSettings::default());
         let d = doc("");
         assert_eq!(labels(&d, &InlayHintSettings::default()), []);
+    }
+
+    #[test]
+    fn unnamed_rows_get_activity_hints_under_their_generated_names() {
+        use lp_highs::protocol::{ConstraintSolution, Skipped, SolveOutcome, SolverId, Timings};
+
+        let doc = doc("Minimize\n obj: x\nSubject To\n x >= 3\nEnd\n");
+        let outcome = SolveOutcome {
+            solver: SolverId { name: "HiGHS".into(), version: "1".into(), helper: "lp-highs".into() },
+            status: "Optimal".into(),
+            objective_value: None,
+            mip_gap: None,
+            timings: Timings::default(),
+            variables: Vec::new(),
+            constraints: vec![ConstraintSolution { name: "C1".into(), activity: 3.0, dual: None, slack: 0.0, binding: true }],
+            skipped: Skipped::default(),
+            infeasibility: None,
+            log: None,
+        };
+        let solution = Solution::new(Some(1), &outcome);
+        let settings = InlayHintSettings { generated_names: false, range_partners: false, variable_types: false, normalised_rhs: false };
+        let hints = hints_with(&doc, doc.full_range(), &settings, Some(&solution));
+        let labels: Vec<String> = hints
+            .into_iter()
+            .filter_map(|h| match h.label {
+                InlayHintLabel::String(s) => Some(s),
+                InlayHintLabel::LabelParts(_) => None,
+            })
+            .collect();
+        assert_eq!(labels, vec!["activity 3".to_owned()]);
     }
 }

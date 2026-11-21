@@ -5,7 +5,9 @@ Usage: smoke.py [path/to/lp-lsp] [--allow-null-formatting]
 
 Opens a small LP file with a duplicate constraint name and messy spacing,
 checks that diagnostics are pushed and that formatting answers with a list of
-edits, then shuts the server down. Exits non-zero on any failure.
+edits, exercises the custom `lp/*` requests on a clean model (advertised
+capabilities, model, explain, graph, matrix, diff, solverInfo, an error path),
+then shuts the server down. Exits non-zero on any failure.
 """
 
 import json
@@ -26,6 +28,20 @@ Bounds
    x <= 10
 End
 """
+
+
+CLEAN_URI = "file:///smoke/clean.lp"
+CLEAN_TEXT = """Minimize
+ obj: 3 x + 2 y
+Subject To
+ c1: x + y >= 2
+ c2: x - y <= 8
+Bounds
+ x <= 10
+End
+"""
+
+LP_REQUESTS = ["lp/model", "lp/explain", "lp/graph", "lp/matrix", "lp/diff", "lp/solve", "lp/solverInfo"]
 
 
 def fail(message: str) -> None:
@@ -152,6 +168,50 @@ def main() -> None:
         print(f"formatting: {json.dumps(edits)}")
         if not isinstance(edits, list) and not (edits is None and allow_null_formatting):
             fail(f"formatting result is not a list: {edits!r}")
+
+        lp = capabilities.get("experimental", {}).get("lp")
+        if not lp or lp.get("protocol") != 1 or lp.get("requests") != LP_REQUESTS:
+            fail(f"custom requests not advertised: {lp!r}")
+        if not isinstance(lp.get("solver"), bool):
+            fail(f"experimental.lp.solver is not a boolean: {lp!r}")
+        send(proc, {
+            "method": "textDocument/didOpen",
+            "params": {"textDocument": {"uri": CLEAN_URI, "languageId": "lp", "version": 1, "text": CLEAN_TEXT}},
+        })
+
+        def call(request_id: int, method: str, params: dict) -> dict:
+            send(proc, {"id": request_id, "method": method, "params": params})
+            return wait_for(proc, inbox, response_to(request_id), f"{method} response")
+
+        def result(request_id: int, method: str, params: dict) -> dict:
+            response = call(request_id, method, params)
+            if "error" in response:
+                fail(f"{method} failed: {response['error']}")
+            return response["result"]
+
+        doc = {"textDocument": {"uri": CLEAN_URI}}
+        model = result(10, "lp/model", doc)
+        if (model["uri"], model["version"], model["summary"]["constraints"], model["summary"]["variables"]) != (CLEAN_URI, 1, 2, 2):
+            fail(f"unexpected lp/model result: {model!r}")
+        explained = result(11, "lp/explain", {**doc, "target": {"kind": "constraint", "name": "c1"}})
+        if explained["name"] != "c1" or len(explained["terms"]) != 2:
+            fail(f"unexpected lp/explain result: {explained!r}")
+        graph = result(12, "lp/graph", doc)
+        if len(graph["nodes"]) != 5 or graph["components"]["count"] != 1:
+            fail(f"unexpected lp/graph result: {graph!r}")
+        matrix = result(13, "lp/matrix", {**doc, "mode": "entries"})
+        if matrix["shape"]["nonzeros"] != 6:
+            fail(f"unexpected lp/matrix result: {matrix!r}")
+        diff = result(14, "lp/diff", {**doc, "against": {"text": CLEAN_TEXT.replace("<= 8", "<= 9"), "label": "old"}})
+        if diff["identical"] or diff["constraints"]["modified"][0]["name"] != "c2":
+            fail(f"unexpected lp/diff result: {diff!r}")
+        solver = result(15, "lp/solverInfo", {})
+        if not isinstance(solver.get("available"), bool):
+            fail(f"unexpected lp/solverInfo result: {solver!r}")
+        print(f"custom requests ok (solver available: {solver['available']})")
+        rejected = call(16, "lp/explain", {**doc, "target": {"kind": "variable", "name": "nope"}})
+        if rejected.get("error", {}).get("code") != -32602:
+            fail(f"unknown explain target should be -32602, got {rejected!r}")
 
         send(proc, {"id": 3, "method": "shutdown"})
         shutdown = wait_for(proc, inbox, response_to(3), "shutdown response")
