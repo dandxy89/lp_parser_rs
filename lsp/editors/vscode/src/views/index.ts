@@ -21,6 +21,7 @@ import { diffRange, explainRange, solutionRange } from '../pure/ranges';
 import { describeRequestError, isCancellation } from '../pure/requestErrors';
 import { DocumentView } from './documentView';
 import { activeLpDocument, isStale, lpRequest, revealRange } from './lpClient';
+import { findSimilarConstraints } from './similarRows';
 
 /** Largest comparison text the extension will send (the server has its own limit). */
 const MAX_DIFF_BYTES = 64 * 1024 * 1024;
@@ -444,4 +445,5 @@ export function registerViews(context: vscode.ExtensionContext): void {
       await guarded(() => explainTarget(document, { kind, name }));
     }),
   );
+  context.subscriptions.push(vscode.commands.registerCommand('lp.findSimilarConstraints', withDocument(findSimilarConstraints)));
 }

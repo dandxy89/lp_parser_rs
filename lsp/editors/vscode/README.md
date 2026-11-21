@@ -20,10 +20,11 @@ Prebuilt binaries are on the [releases page](https://github.com/dandxy89/lp_pars
 - Diagnostics (syntax errors and model analysis), hover, completion, signature help
 - Go to definition, declaration and type definition, references, highlights, rename, linked editing, call hierarchy, document and workspace symbols
 - Formatting, folding, selection ranges, semantic tokens, inlay hints, code lenses and quick fixes
-- Commands (palette category LP): *Analyse Model*, *Convert to MPS*, *Show Model Statistics*, *Restart Language Server*
+- Commands (palette category LP): *Analyse Model*, *Convert to MPS*, *Show Model Statistics*, *Find Similar Constraints*, *Restart Language Server*
 - **LP activity bar view** (needs a server that advertises `lp/model`):
   - *Model Explorer*: objectives, constraints, variables grouped by type, and special rows (indicator, quadratic, SOS, lazy and user cuts), each with counts. Expand a constraint for its coefficients or a variable for the rows that use it; click any entry to jump to its source. The toolbar filters by name.
   - *Analysis*: model diagnostics grouped by category, then by code.
+  - *Find Similar Constraints* (palette, or the LP editor context menu): lists the duplicate and proportional rows the server reported, for the constraint under the cursor or else the whole model, and jumps to the row you pick. It shows the last published analysis, and the `lp.analysis` settings can hide these findings.
 - Hover, the Model Explorer tooltips and the explain view show `\ @description` comments written above an entry.
 - The status bar shows model size (variables, constraints) and validity (no errors) for the active LP file.
 - The "used in N constraints" code lens opens the references peek view

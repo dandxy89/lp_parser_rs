@@ -196,6 +196,11 @@
         "enablement": "lp.supports.explain"
       },
       {
+        "command": "lp.findSimilarConstraints",
+        "title": "Find Similar Constraints",
+        "category": "LP"
+      },
+      {
         "command": "lp.diagnoseInfeasibility",
         "title": "Diagnose Infeasibility",
         "category": "LP",
@@ -278,6 +283,10 @@
           "when": "editorLangId == lp"
         },
         {
+          "command": "lp.findSimilarConstraints",
+          "when": "editorLangId == lp"
+        },
+        {
           "command": "lp.diagnoseInfeasibility",
           "when": "editorLangId == lp"
         }
@@ -292,6 +301,11 @@
           "command": "lp.explainVariable",
           "when": "editorLangId == lp && lp.supports.explain",
           "group": "lp@2"
+        },
+        {
+          "command": "lp.findSimilarConstraints",
+          "when": "editorLangId == lp",
+          "group": "lp@3"
         }
       ]
     },

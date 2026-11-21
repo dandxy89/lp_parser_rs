@@ -21,6 +21,7 @@ interface Manifest {
     snippets: { language: string; path: string }[];
     menus: {
       commandPalette: { command: string; when?: string }[];
+      'editor/context': { command: string; when?: string; group?: string }[];
       'view/title': { command: string; when: string }[];
     };
     viewsContainers: { activitybar: { id: string; icon: string }[] };
@@ -55,6 +56,17 @@ describe('package.json contributions', () => {
       const entry = palette.find((item) => item.command === feature.command);
       assert.equal(entry?.when, 'editorLangId == lp', `${feature.command}: palette entry`);
     }
+  });
+
+  it('contributes Find Similar Constraints without enablement, in the palette and the editor menu', () => {
+    const command = 'lp.findSimilarConstraints';
+    const contributed = manifest.contributes.commands.find((entry) => entry.command === command);
+    assert.equal(contributed?.title, 'Find Similar Constraints');
+    assert.equal(contributed?.category, 'LP');
+    assert.equal(contributed?.enablement, undefined);
+    assert.equal(manifest.contributes.menus.commandPalette.find((item) => item.command === command)?.when, 'editorLangId == lp');
+    const context = manifest.contributes.menus['editor/context'].find((item) => item.command === command);
+    assert.deepEqual([context?.when, context?.group], ['editorLangId == lp', 'lp@3']);
   });
 
   it('registers snippets for the lp language from a file that exists', () => {

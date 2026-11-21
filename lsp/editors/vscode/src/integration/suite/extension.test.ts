@@ -55,6 +55,7 @@ suite('LP extension host', () => {
       'lp.diagnoseInfeasibility',
       'lp.explainConstraint',
       'lp.explainVariable',
+      'lp.findSimilarConstraints',
       'lp.explainEntity',
       'lp.restartServer',
     ];
